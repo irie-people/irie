@@ -1,0 +1,6 @@
+/irie
+dist/
+.env*
+.npmrc
+.clean-room/
+.claude/settings.local.json
