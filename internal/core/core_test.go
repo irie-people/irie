@@ -386,6 +386,51 @@ func TestKilledSlotIsRepairedWithin2s(t *testing.T) {
 	testutil.Eventually(t, 2*time.Second, "placeholder did not come back after killing a shown agent", placeholderBack)
 }
 
+// supervised returns the pid of the process that the supervisor running in
+// target's pane started.
+func (c *coreEnv) supervised(target string) int {
+	c.t.Helper()
+	sup := c.Tmux(c.t, "display-message", "-p", "-t", target, "#{pane_pid}")
+	out, err := exec.Command("ps", "-A", "-o", "pid=", "-o", "ppid=").Output()
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[1] == sup {
+			pid, _ := strconv.Atoi(f[0])
+			return pid
+		}
+	}
+	return 0
+}
+
+func kill(t *testing.T, pid int) {
+	t.Helper()
+	if p, err := os.FindProcess(pid); err == nil {
+		p.Kill()
+	}
+	testutil.Eventually(t, 2*time.Second, "killed process still running", func() bool {
+		return exec.Command("kill", "-0", strconv.Itoa(pid)).Run() != nil
+	})
+}
+
+func TestSidebarComesBackWithin2s(t *testing.T) {
+	c := setup(t)
+	old := c.supervised(tmux.Sidebar)
+	if old == 0 {
+		t.Fatal("no sidebar process under its supervisor")
+	}
+	kill(t, old)
+	testutil.Eventually(t, 2*time.Second, "the supervisor did not restart the sidebar", func() bool {
+		pid := c.supervised(tmux.Sidebar)
+		return pid != 0 && pid != old
+	})
+	testutil.Eventually(t, 2*time.Second, "the new sidebar did not draw", func() bool {
+		out, _ := c.TryTmux("capture-pane", "-p", "-t", tmux.Sidebar)
+		return strings.HasPrefix(strings.TrimSpace(out), "Irie")
+	})
+}
+
 func TestCoreRestartGivesTheSameRows(t *testing.T) {
 	c := setup(t)
 	c.spawn("task a")
@@ -394,27 +439,11 @@ func TestCoreRestartGivesTheSameRows(t *testing.T) {
 	before := c.list()
 
 	// Kill the core under its supervisor; the supervisor starts a new one.
-	sup, _ := strconv.Atoi(c.Tmux(t, "display-message", "-p", "-t", tmux.AgentsSession+":core", "#{pane_pid}"))
-	var corePID int
-	out, err := exec.Command("ps", "-A", "-o", "pid=", "-o", "ppid=").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		f := strings.Fields(line)
-		if len(f) == 2 && f[1] == strconv.Itoa(sup) {
-			corePID, _ = strconv.Atoi(f[0])
-		}
-	}
+	corePID := c.supervised(tmux.AgentsSession + ":core")
 	if corePID == 0 {
 		t.Fatal("core process not found under its supervisor")
 	}
-	if p, err := os.FindProcess(corePID); err == nil {
-		p.Kill()
-	}
-	testutil.Eventually(t, 2*time.Second, "old core still answers", func() bool {
-		return exec.Command("kill", "-0", strconv.Itoa(corePID)).Run() != nil
-	})
+	kill(t, corePID)
 	var after []ipc.Session
 	testutil.Eventually(t, 10*time.Second, "core did not come back", func() bool {
 		var r ipc.ListResult
@@ -433,6 +462,63 @@ func TestCoreRestartGivesTheSameRows(t *testing.T) {
 			t.Errorf("row %d: before %+v, after %+v", i, x, y)
 		}
 	}
+}
+
+// TestTheSidebarSpawnsAndShows drives the real sidebar the way the manual
+// check does. A client attached from inside a second private server stands
+// in for the terminal.
+func TestTheSidebarSpawnsAndShows(t *testing.T) {
+	c := setup(t)
+	term := c.Socket + "-term"
+	termTmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", term}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("tmux -L %s %q: %v\n%s", term, args, err, out)
+		}
+		return string(out)
+	}
+	termTmux("-f", "/dev/null", "new-session", "-d", "-s", "t", "-x", "100", "-y", "20", "--", c.bin, "attach", "--nested")
+	t.Cleanup(func() { exec.Command("tmux", "-L", term, "kill-server").Run() })
+	screen := func() string { return termTmux("capture-pane", "-p", "-t", "t") }
+	active := func() string {
+		return c.Tmux(t, "display-message", "-p", "-t", tmux.MainSession+":0", "#{pane_index}")
+	}
+
+	testutil.Eventually(t, 5*time.Second, "the sidebar and placeholder did not appear", func() bool {
+		s := screen()
+		return strings.HasPrefix(strings.TrimSpace(s), "Irie") && strings.Contains(s, "type a new task") && strings.Contains(s, "›")
+	})
+
+	dir := t.TempDir()
+	termTmux("send-keys", "-t", "t", "-l", "@"+dir+" say hello")
+	termTmux("send-keys", "-t", "t", "Enter")
+	var s ipc.Session
+	testutil.Eventually(t, 5*time.Second, "typing a task did not spawn it", func() bool {
+		if ls := c.list(); len(ls) == 1 {
+			s = ls[0]
+		}
+		return s.ID != ""
+	})
+	if s.Cwd != dir || s.Name != "say-hello" {
+		t.Errorf("spawned %+v, want say-hello in %s", s, dir)
+	}
+	testutil.Eventually(t, 5*time.Second, "the row did not appear", func() bool {
+		return strings.Contains(screen(), "say-hello")
+	})
+
+	// Enter on the new row shows it and focuses it.
+	termTmux("send-keys", "-t", "t", "Enter")
+	testutil.Eventually(t, 5*time.Second, "Enter did not show the session", func() bool {
+		slot := c.slot()
+		return slot != nil && slot["pane_id"] == s.Pane && active() == "1" && strings.Contains(screen(), "ready")
+	})
+
+	// The focus key toggles back to the sidebar.
+	termTmux("send-keys", "-t", "t", "C-]")
+	testutil.Eventually(t, 2*time.Second, "C-] did not move focus to the sidebar", func() bool {
+		return active() == "0"
+	})
 }
 
 func TestSubscribeSendsSnapshotThenUpdates(t *testing.T) {
