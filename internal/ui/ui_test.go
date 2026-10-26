@@ -138,7 +138,7 @@ func TestHeaderAndCommandBarArePinned(t *testing.T) {
 				t.Errorf("34×%d, %d rows: %d lines, want %d", h, n, len(lines), h)
 				continue
 			}
-			if !strings.HasPrefix(strings.TrimSpace(lines[0]), "Irie") {
+			if !strings.Contains(lines[0], "☀ Irie") {
 				t.Errorf("34×%d, %d rows: first line %q is not the header", h, n, lines[0])
 			}
 			if !strings.HasPrefix(lines[h-1], barPrompt) {
@@ -149,8 +149,8 @@ func TestHeaderAndCommandBarArePinned(t *testing.T) {
 					t.Errorf("34×%d: line %d is %d columns: %q", h, i, w, l)
 				}
 			}
-			if n > 0 && !strings.Contains(lines[1], "task-000") {
-				t.Errorf("34×%d: line 1 = %q, want the first row", h, lines[1])
+			if top := m.listTop(); n > 0 && !strings.Contains(lines[top], "task-000") {
+				t.Errorf("34×%d: line %d = %q, want the first row", h, top, lines[top])
 			}
 		}
 	}
@@ -212,7 +212,7 @@ func TestWheelMovesTheOffsetNotTheSelection(t *testing.T) {
 	if m.sel != sel {
 		t.Errorf("selection moved %d → %d", sel, m.sel)
 	}
-	if strings.Contains(screen(t, m)[1], "task-000") {
+	if strings.Contains(screen(t, m)[m.listTop()], "task-000") {
 		t.Error("first row still on top after scrolling")
 	}
 	m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelUp})
@@ -288,7 +288,7 @@ func TestEnterShowsWithFocusAndSpaceWithout(t *testing.T) {
 
 func TestClickShowsTheRow(t *testing.T) {
 	m, b := newModel(t, 34, 24, 3)
-	m = send(m, tea.MouseClickMsg{X: 3, Y: 3, Button: tea.MouseLeft})
+	m = send(m, tea.MouseClickMsg{X: 3, Y: m.listTop() + 2, Button: tea.MouseLeft})
 	if want := []showCall{{"s000000000002", true}}; !reflect.DeepEqual(b.shows, want) {
 		t.Errorf("shows = %+v, want %+v", b.shows, want)
 	}
@@ -370,8 +370,8 @@ func TestLongNamesAreCut(t *testing.T) {
 	long := ipc.Session{ID: "s1", Name: "a-very-long-session-name-that-will-not-fit", State: ipc.StateWorking, Created: now}
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &long}})
 	lines := screen(t, m)
-	if !strings.Contains(lines[1], "…") {
-		t.Errorf("row = %q, want an ellipsis", lines[1])
+	if row := lines[m.listTop()]; !strings.Contains(row, "…") {
+		t.Errorf("row = %q, want an ellipsis", row)
 	}
 	if !strings.Contains(strings.Join(lines, "\n"), "a-very-long-session-name-that") {
 		t.Errorf("full name not in the status strip:\n%s", strings.Join(lines, "\n"))
@@ -391,6 +391,42 @@ func TestHeaderCounts(t *testing.T) {
 	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 10})
 	if got := screen(t, m)[0]; !strings.Contains(got, "●2") || strings.Contains(got, "working") {
 		t.Errorf("narrow header = %q", got)
+	}
+}
+
+func TestZeroCountsAreNotRed(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 2)
+	header := strings.Split(m.View().Content, "\n")[0]
+	if strings.Contains(header, "\x1b[31m") {
+		t.Errorf("header %q has red with nothing needing you", header)
+	}
+}
+
+func TestRulesNeedRoom(t *testing.T) {
+	isRule := func(l string) bool { return strings.Contains(l, "────") }
+	m, _ := newModel(t, 34, 9, 3)
+	for i, l := range screen(t, m) {
+		if isRule(l) {
+			t.Errorf("height 9: line %d is a rule", i)
+		}
+	}
+	m, _ = newModel(t, 34, 10, 3)
+	lines := screen(t, m)
+	if !isRule(lines[1]) || !isRule(lines[len(lines)-3]) {
+		t.Errorf("height 10: no rules under the header and above the status strip:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[2], "task-000") {
+		t.Errorf("height 10: line 2 = %q, want the first row", lines[2])
+	}
+}
+
+func TestSelectionHasAnEdge(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 3)
+	if row := screen(t, m)[m.listTop()]; !strings.HasPrefix(row, "▌● task-000") {
+		t.Errorf("selected row = %q", row)
+	}
+	if row := screen(t, m)[m.listTop()+1]; !strings.HasPrefix(row, " ● task-001") {
+		t.Errorf("other row = %q", row)
 	}
 }
 
@@ -459,5 +495,21 @@ func TestAge(t *testing.T) {
 		if got := age(c.d); got != c.want {
 			t.Errorf("age(%v) = %q, want %q", c.d, got, c.want)
 		}
+	}
+}
+
+func TestPlaceholderShowsTheMarkWhenThereIsRoom(t *testing.T) {
+	view := func(w, h int) string {
+		next, _ := placeholder{focusKey: keyLabel("C-]")}.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		return ansiRE.ReplaceAllString(next.(placeholder).View().Content, "")
+	}
+	tall := view(80, 30)
+	for _, want := range []string{"( ☀ )", "～～～", "Irie", "[Ctrl+]]", "[Tab]", "[↑][↓]", "show it, stay in the sidebar"} {
+		if !strings.Contains(tall, want) {
+			t.Errorf("80×30 placeholder lacks %q:\n%s", want, tall)
+		}
+	}
+	if short := view(80, 14); strings.Contains(short, "☀") || !strings.Contains(short, "[Tab]") {
+		t.Errorf("80×14 placeholder:\n%s", short)
 	}
 }

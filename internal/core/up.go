@@ -33,8 +33,8 @@ func hello(p paths.Paths, timeout time.Duration) (string, error) {
 }
 
 // Up is `irie up`. It is idempotent: it starts the server and the core when
-// the socket does not answer, and replaces a core or sidebar that runs
-// another version. Agents are untouched.
+// the socket does not answer, and replaces a core, sidebar or placeholder
+// that runs another version. Agents are untouched.
 func Up(cfg config.Config, p paths.Paths, bin, version string) error {
 	if err := p.EnsureRuntime(); err != nil {
 		return err
@@ -84,11 +84,23 @@ func Up(cfg config.Config, p paths.Paths, bin, version string) error {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	// Irie's own panes are restarted when they run another version; agent
+	// panes never are.
+	var restart [][]string
 	if ui := snap.Sidebar(); ui != nil && ui.Role == tmux.RoleUI && ui.Version != version {
-		if _, err := r.RunList([][]string{
-			{"respawn-pane", "-k", "-t", ui.ID, "--", bin, "ui", "--supervise"},
-			{"set-option", "-p", "-t", ui.ID, tmux.OptVersion, version},
-		}); err != nil {
+		restart = append(restart,
+			[]string{"respawn-pane", "-k", "-t", ui.ID, "--", bin, "ui", "--supervise"},
+			[]string{"set-option", "-p", "-t", ui.ID, tmux.OptVersion, version})
+	}
+	for _, p := range snap.ByRole(tmux.RolePlaceholder) {
+		if p.Version != version {
+			restart = append(restart,
+				[]string{"respawn-pane", "-k", "-t", p.ID, "--", bin, "placeholder"},
+				[]string{"set-option", "-p", "-t", p.ID, tmux.OptVersion, version})
+		}
+	}
+	if len(restart) > 0 {
+		if _, err := r.RunList(restart); err != nil {
 			return err
 		}
 	}

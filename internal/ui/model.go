@@ -55,7 +55,7 @@ const (
 )
 
 const (
-	barPrompt   = "› "
+	barPrompt   = " › "
 	maxBarLines = 8
 	// The textarea keeps at most this many lines and silently drops the
 	// rest of a longer paste, so such a paste is refused instead.
@@ -114,6 +114,11 @@ func New(b Backend, o Options) Model {
 	bar.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "ctrl+j"))
 	styles := textarea.DefaultStyles(true)
 	styles.Focused.CursorLine = lipgloss.NewStyle()
+	styles.Focused.Prompt = lipgloss.NewStyle().Foreground(sun)
+	styles.Blurred.Prompt = styleDim
+	styles.Focused.Placeholder = styleDim
+	styles.Blurred.Placeholder = styleDim
+	styles.Cursor.Color = sun
 	styles.Cursor.Blink = false
 	bar.SetStyles(styles)
 
@@ -129,26 +134,43 @@ func tick() tea.Cmd {
 func (m Model) Init() tea.Cmd { return tick() }
 
 // Heights. The header and the command bar are pinned; the list takes the
-// rest. Below 6 rows the status strip is hidden and the bar is one line.
+// rest. Thin rules frame the list once the pane has room for them. Below 6
+// rows the status strip is hidden and the bar is one line.
 
 func (m Model) statusVisible() bool { return m.height >= 6 }
+
+func (m Model) ruled() bool { return m.height >= 10 }
+
+// chrome is the number of rows that are neither the list nor the bar.
+func (m Model) chrome() int {
+	n := 1
+	if m.statusVisible() {
+		n++
+	}
+	if m.ruled() {
+		n += 2
+	}
+	return n
+}
+
+// listTop is the screen row of the first list row.
+func (m Model) listTop() int {
+	if m.ruled() {
+		return 2
+	}
+	return 1
+}
 
 func (m Model) maxBar() int {
 	if !m.statusVisible() {
 		return 1
 	}
-	return max(1, min(maxBarLines, m.height-3))
+	return max(1, min(maxBarLines, m.height-m.chrome()-1))
 }
 
 func (m Model) barHeight() int { return min(max(m.bar.Height(), 1), m.maxBar()) }
 
-func (m Model) listHeight() int {
-	h := m.height - 1 - m.barHeight()
-	if m.statusVisible() {
-		h--
-	}
-	return max(h, 0)
-}
+func (m Model) listHeight() int { return max(m.height-m.chrome()-m.barHeight(), 0) }
 
 func (m *Model) setFocus(f focusArea) {
 	m.focus = f
@@ -326,7 +348,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft {
 			break
 		}
-		if row := msg.Y - 1; row >= 0 && row < m.listHeight() {
+		if row := msg.Y - m.listTop(); row >= 0 && row < m.listHeight() {
 			if i := m.offset + row; i < len(m.sessions) {
 				m.sel = i
 				m.setFocus(focusList)

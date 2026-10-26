@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -11,12 +12,22 @@ import (
 	"github.com/irie-hq/irie/internal/ipc"
 )
 
+// Irie's colours are the deep green and warm sun of its icon (DESIGN §7.2).
+// State colours (DESIGN §5.3) come from the terminal's own palette, so they
+// follow its theme.
 var (
-	styleTitle    = lipgloss.NewStyle().Bold(true)
-	styleDim      = lipgloss.NewStyle().Faint(true)
-	styleRed      = lipgloss.NewStyle().Foreground(lipgloss.Red)
-	styleSelected = lipgloss.NewStyle().Reverse(true)
-	styleMarked   = lipgloss.NewStyle().Bold(true)
+	sun       = lipgloss.Color("#F2B544")
+	deepGreen = lipgloss.Color("#1E5A42")
+	onGreen   = lipgloss.Color("#EAF6EF")
+	ruleGreen = lipgloss.Color("#3D5247")
+	sea       = lipgloss.Color("#2E9E77")
+	deepSea   = lipgloss.Color("#1D7357")
+
+	styleTitle = lipgloss.NewStyle().Foreground(sun).Bold(true)
+	styleBold  = lipgloss.NewStyle().Bold(true)
+	styleDim   = lipgloss.NewStyle().Faint(true)
+	styleRule  = lipgloss.NewStyle().Foreground(ruleGreen)
+	styleRed   = lipgloss.NewStyle().Foreground(lipgloss.Red)
 )
 
 // cut shortens s to w columns, ending in an ellipsis when it had to cut.
@@ -38,10 +49,6 @@ func cut(s string, w int) string {
 		used += rw
 	}
 	return b.String() + "…"
-}
-
-func pad(s string, w int) string {
-	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
 }
 
 // age is a row's age: now, 42s, 3m, 2h, 5d.
@@ -66,25 +73,36 @@ func (m Model) home2tilde(p string) string {
 	return p
 }
 
-// glyph returns a row's state glyph and its style (DESIGN §5.3).
-func glyph(s ipc.Session) (string, lipgloss.Style) {
+// state returns a row's glyph and colour (DESIGN §5.3). A nil colour is the
+// terminal's own; a dim row is drawn faint.
+func state(s ipc.Session) (glyph string, c color.Color, dim bool) {
 	if s.State == ipc.StateExited {
 		if s.ExitCode != nil && *s.ExitCode != 0 {
-			return "·", styleRed
+			return "·", lipgloss.Red, true
 		}
-		return "·", styleDim
+		return "·", nil, true
 	}
-	return "●", lipgloss.NewStyle()
+	return "●", nil, false
 }
 
+func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
+
 func (m Model) header() string {
-	title := styleTitle.Render("Irie")
+	title := " " + styleTitle.Render("☀ Irie")
+	right := ""
 	switch m.conn {
-	case connecting:
-		return title
 	case offline:
-		return title + "  " + styleRed.Render(cut("core offline", m.width-6))
+		right = styleRed.Render("core offline")
+	case online:
+		right = m.counts(m.width - lipgloss.Width(title) - 2)
 	}
+	return title + spaces(m.width-lipgloss.Width(title)-lipgloss.Width(right)-1) + right
+}
+
+// counts renders the state counts in at most w columns: with labels when
+// they fit, else glyphs and numbers. A zero count is faint, so colour only
+// ever means that something is there.
+func (m Model) counts(w int) string {
 	working := 0
 	for _, s := range m.sessions {
 		if s.State == ipc.StateWorking {
@@ -94,43 +112,74 @@ func (m Model) header() string {
 	// Needs you, done, paused and frozen come from hooks, gates and freezes,
 	// which this version does not have yet.
 	needs, done, paused, frozen := 0, 0, 0, 0
-	long := []string{
-		fmt.Sprintf("●%d working", working),
-		styleRed.Render(fmt.Sprintf("●%d needs you", needs)),
-		fmt.Sprintf("✓%d done", done),
-		fmt.Sprintf("‖%d paused", paused),
-		fmt.Sprintf("◆%d frozen", frozen),
+	all := []struct {
+		glyph, label string
+		n            int
+		c            color.Color
+	}{
+		{"●", "working", working, nil},
+		{"●", "needs you", needs, lipgloss.Red},
+		{"✓", "done", done, lipgloss.Green},
+		{"‖", "paused", paused, lipgloss.Yellow},
+		{"◆", "frozen", frozen, lipgloss.Cyan},
 	}
-	short := []string{
-		fmt.Sprintf("●%d", working),
-		styleRed.Render(fmt.Sprintf("●%d", needs)),
-		fmt.Sprintf("✓%d", done),
-		fmt.Sprintf("‖%d", paused),
-		fmt.Sprintf("◆%d", frozen),
-	}
-	for _, counts := range []string{strings.Join(long, "  "), strings.Join(short, " ")} {
-		if line := title + "  " + counts; lipgloss.Width(line) <= m.width {
+	for _, long := range []bool{true, false} {
+		var parts []string
+		for _, x := range all {
+			text := fmt.Sprintf("%s%d", x.glyph, x.n)
+			if long {
+				text += " " + x.label
+			}
+			st := lipgloss.NewStyle().Foreground(x.c)
+			if x.n == 0 {
+				st = styleDim
+			}
+			parts = append(parts, st.Render(text))
+		}
+		sep := " "
+		if long {
+			sep = "  "
+		}
+		if line := strings.Join(parts, sep); lipgloss.Width(line) <= w {
 			return line
 		}
 	}
-	return title
+	return ""
+}
+
+func (m Model) rule() string {
+	return " " + styleRule.Render(strings.Repeat("─", max(0, m.width-2))) + " "
 }
 
 func (m Model) row(i int) string {
 	s := m.sessions[i]
-	g, gs := glyph(s)
+	g, c, dim := state(s)
 	a := age(m.now().Sub(s.Created))
-	nameW := m.width - 3 - lipgloss.Width(a) - 2
+	nameW := m.width - 5 - lipgloss.Width(a)
 	name := cut(s.Name, nameW)
-	gap := strings.Repeat(" ", max(0, nameW-lipgloss.Width(name)))
-	switch {
-	case i == m.sel && m.focus == focusList:
-		return styleSelected.Render(" " + g + " " + name + gap + " " + a + " ")
-	case i == m.sel:
-		// The selection stays visible, quieter, while the bar has focus.
-		return " " + gs.Render(g) + " " + styleMarked.Render(name) + gap + " " + styleDim.Render(a)
+	gap := spaces(nameW - lipgloss.Width(name))
+	if i == m.sel && m.focus == focusList {
+		// The selection is a deep-green bar with a sun-coloured edge.
+		bar := lipgloss.NewStyle().Background(deepGreen)
+		text := bar.Foreground(onGreen)
+		gc := c
+		if gc == nil {
+			gc = onGreen
+		}
+		return bar.Foreground(sun).Render("▌") + bar.Foreground(gc).Render(g) +
+			text.Render(" "+name+gap+" ") + text.Faint(true).Render(a) + text.Render(" ")
 	}
-	return " " + gs.Render(g) + " " + name + gap + " " + styleDim.Render(a)
+	gs, ns := lipgloss.NewStyle().Foreground(c), lipgloss.NewStyle()
+	if dim {
+		gs, ns = gs.Faint(true), ns.Faint(true)
+	}
+	edge := " "
+	if i == m.sel {
+		// Quieter while the command bar has focus.
+		edge = styleTitle.Faint(true).Render("▌")
+		ns = ns.Bold(true)
+	}
+	return edge + gs.Render(g) + " " + ns.Render(name) + gap + " " + styleDim.Render(a) + " "
 }
 
 func (m Model) statusLine() string {
@@ -139,14 +188,14 @@ func (m Model) statusLine() string {
 		if m.statusErr {
 			st = styleRed
 		}
-		return st.Render(cut(m.status, m.width))
+		return " " + st.Render(cut(m.status, m.width-2))
 	}
 	if m.sel < 0 {
 		hint := "Tab: type a task"
 		if m.focus == focusBar {
 			hint = "Enter: start  Ctrl+J: new line"
 		}
-		return styleDim.Render(cut(hint, m.width))
+		return " " + styleDim.Render(cut(hint, m.width-2))
 	}
 	s := m.sessions[m.sel]
 	text := s.Name
@@ -156,7 +205,7 @@ func (m Model) statusLine() string {
 	if s.Cwd != "" {
 		text += " · " + m.home2tilde(s.Cwd)
 	}
-	return styleDim.Render(cut(text, m.width))
+	return " " + styleDim.Render(cut(text, m.width-2))
 }
 
 func (m Model) View() tea.View {
@@ -167,12 +216,18 @@ func (m Model) View() tea.View {
 		return v
 	}
 	lines := []string{m.header()}
+	if m.ruled() {
+		lines = append(lines, m.rule())
+	}
 	for i := range m.listHeight() {
 		if r := m.offset + i; r < len(m.sessions) {
 			lines = append(lines, m.row(r))
 		} else {
 			lines = append(lines, "")
 		}
+	}
+	if m.ruled() {
+		lines = append(lines, m.rule())
 	}
 	if m.statusVisible() {
 		lines = append(lines, m.statusLine())

@@ -36,23 +36,63 @@ func (p placeholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return p, nil
 }
 
+// mark is the icon's picture in text: a sun rising over two waves.
+func mark() string {
+	sunStyle := lipgloss.NewStyle().Foreground(sun)
+	return lipgloss.JoinVertical(lipgloss.Center,
+		sunStyle.Render(`\ | /`),
+		sunStyle.Render(`— ( ☀ ) —`),
+		lipgloss.NewStyle().Foreground(sea).Render(strings.Repeat("～", 9)),
+		lipgloss.NewStyle().Foreground(deepSea).Render(strings.Repeat("～", 7)),
+	)
+}
+
+// keycap draws a key as [Key].
+func keycap(k string) string {
+	return styleDim.Render("[") + styleBold.Render(k) + styleDim.Render("]")
+}
+
+// markMinHeight is the slot height below which only the keys are shown.
+const markMinHeight = 20
+
 func (p placeholder) View() tea.View {
-	keys := [][2]string{
-		{"Tab", "type a new task"},
-		{"↑ ↓", "pick a session"},
-		{"Enter", "show it here"},
-		{"Space", "show it, stay in the sidebar"},
+	type key struct {
+		caps []string
+		what string
 	}
-	width := lipgloss.Width(p.focusKey)
-	for _, k := range keys {
-		width = max(width, lipgloss.Width(k[0]))
+	inSidebar := []key{
+		{[]string{"Tab"}, "type a new task"},
+		{[]string{"↑", "↓"}, "pick a session"},
+		{[]string{"Enter"}, "show it here"},
+		{[]string{"Space"}, "show it, stay in the sidebar"},
 	}
-	key := func(k, what string) string { return styleTitle.Render(pad(k, width)) + "  " + styleDim.Render(what) }
-	lines := []string{styleTitle.Render("Irie"), "", key(p.focusKey, "move between the sidebar and here"), "", "In the sidebar:"}
-	for _, k := range keys {
-		lines = append(lines, key(k[0], k[1]))
+	focus := key{[]string{p.focusKey}, "move between the sidebar and here"}
+	width := 0
+	for _, k := range append([]key{focus}, inSidebar...) {
+		w := 0
+		for _, c := range k.caps {
+			w += lipgloss.Width(c) + 2
+		}
+		width = max(width, w)
 	}
-	v := tea.NewView(lipgloss.Place(p.w, p.h, lipgloss.Center, lipgloss.Center, lipgloss.JoinVertical(lipgloss.Left, lines...)))
+	line := func(k key) string {
+		var caps string
+		for _, c := range k.caps {
+			caps += keycap(c)
+		}
+		return caps + spaces(width-lipgloss.Width(caps)) + "  " + styleDim.Render(k.what)
+	}
+	keys := []string{line(focus), "", styleDim.Render("In the sidebar:")}
+	for _, k := range inSidebar {
+		keys = append(keys, line(k))
+	}
+
+	var parts []string
+	if p.h >= markMinHeight {
+		parts = append(parts, mark(), "")
+	}
+	parts = append(parts, styleTitle.Render("Irie"), "", lipgloss.JoinVertical(lipgloss.Left, keys...))
+	v := tea.NewView(lipgloss.Place(p.w, p.h, lipgloss.Center, lipgloss.Center, lipgloss.JoinVertical(lipgloss.Center, parts...)))
 	v.AltScreen = true
 	return v
 }

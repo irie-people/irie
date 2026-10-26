@@ -117,6 +117,13 @@ func TestPlanCreatesPanesWithRoles(t *testing.T) {
 	}
 }
 
+func TestPlanRecordsThePlaceholdersVersion(t *testing.T) {
+	cmds := fmt.Sprint(Plan(drop(sound(), "%2"), want))
+	if !strings.Contains(cmds, "/opt/irie/bin/irie placeholder") || !strings.Contains(cmds, "@irie_version v1") {
+		t.Errorf("plan = %s", cmds)
+	}
+}
+
 func TestSwapInCommands(t *testing.T) {
 	cmds, err := SwapIn(sound(), "%3", true)
 	if err != nil {

@@ -224,6 +224,9 @@ func TestUpReplacesACoreAndSidebarOfAnotherVersion(t *testing.T) {
 	if pid, v := format(tmux.Sidebar, "#{pane_pid}"), format(tmux.Sidebar, "#{@irie_version}"); pid == uiPID || v != version {
 		t.Errorf("sidebar pid %s (was %s) at version %q, want a new pane at %q", pid, uiPID, v, version)
 	}
+	if v := format(tmux.Slot, "#{@irie_role} #{@irie_version}"); v != tmux.RolePlaceholder+" "+version {
+		t.Errorf("placeholder = %q, want one at version %s", v, version)
+	}
 	if p := c.pane(a.Pane); p == nil || p["@irie_session"] != a.ID {
 		t.Errorf("the agent did not survive the upgrade: %v", p)
 	}
@@ -427,7 +430,7 @@ func TestSidebarComesBackWithin2s(t *testing.T) {
 	})
 	testutil.Eventually(t, 2*time.Second, "the new sidebar did not draw", func() bool {
 		out, _ := c.TryTmux("capture-pane", "-p", "-t", tmux.Sidebar)
-		return strings.HasPrefix(strings.TrimSpace(out), "Irie")
+		return strings.Contains(out, "☀ Irie")
 	})
 }
 
@@ -487,7 +490,7 @@ func TestTheSidebarSpawnsAndShows(t *testing.T) {
 
 	testutil.Eventually(t, 5*time.Second, "the sidebar and placeholder did not appear", func() bool {
 		s := screen()
-		return strings.HasPrefix(strings.TrimSpace(s), "Irie") && strings.Contains(s, "type a new task") && strings.Contains(s, "›")
+		return strings.Contains(s, "☀ Irie") && strings.Contains(s, "type a new task") && strings.Contains(s, "›")
 	})
 
 	dir := t.TempDir()

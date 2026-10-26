@@ -11,7 +11,7 @@ import (
 type Want struct {
 	Bin          string // irie binary run by the panes Plan creates
 	SidebarWidth int
-	Version      string // recorded on a sidebar pane Plan starts
+	Version      string // recorded on the sidebar and placeholder panes Plan starts
 }
 
 func (w Want) ui() []string          { return []string{w.Bin, "ui", "--supervise"} }
@@ -73,7 +73,11 @@ func Plan(s Snapshot, w Want) [][]string {
 		if ps := s.ByRole(RolePlaceholder); len(ps) > 0 {
 			return [][]string{{"join-pane", "-h", "-d", "-s", ps[0].ID, "-t", ui.ID}}
 		}
-		return [][]string{append([]string{"split-window", "-h", "-d", "-t", ui.ID, "--"}, w.placeholder()...), setOption(Slot, OptRole, RolePlaceholder)}
+		return [][]string{
+			append([]string{"split-window", "-h", "-d", "-t", ui.ID, "--"}, w.placeholder()...),
+			setOption(Slot, OptRole, RolePlaceholder),
+			setOption(Slot, OptVersion, w.Version),
+		}
 	}
 	if len(main) > 2 {
 		extra := main[2]
@@ -125,6 +129,7 @@ func Plan(s Snapshot, w Want) [][]string {
 		return [][]string{
 			append([]string{"new-window", "-d", "-t", AgentsSession + ":", "-n", name, "--"}, w.placeholder()...),
 			setOption(AgentsSession+":="+name, OptRole, RolePlaceholder),
+			setOption(AgentsSession+":="+name, OptVersion, w.Version),
 		}
 	}
 	keep := placeholders[0].ID
@@ -136,7 +141,7 @@ func Plan(s Snapshot, w Want) [][]string {
 			return [][]string{{"kill-pane", "-t", p.ID}}
 		}
 		if p.Dead {
-			return [][]string{append([]string{"respawn-pane", "-k", "-t", p.ID, "--"}, w.placeholder()...)}
+			return [][]string{append([]string{"respawn-pane", "-k", "-t", p.ID, "--"}, w.placeholder()...), setOption(p.ID, OptVersion, w.Version)}
 		}
 	}
 
