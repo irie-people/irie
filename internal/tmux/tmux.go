@@ -1,0 +1,288 @@
+// Package tmux drives Irie's private tmux server (DESIGN §2.3): a runner
+// that always passes -L, the generated tmux.conf, pane snapshots, layout
+// repair and the swap-in.
+package tmux
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// Sessions and fixed targets of Irie's server.
+const (
+	MainSession   = "irie"        // what the user sees
+	AgentsSession = "irie-agents" // never attached
+	CoreWindow    = "core"
+	Sidebar       = "irie:0.0"
+	Slot          = "irie:0.1"
+)
+
+// Pane roles, kept in the @irie_role pane option.
+const (
+	RoleUI          = "ui"
+	RoleCore        = "core"
+	RolePlaceholder = "placeholder"
+	RoleAgent       = "agent"
+	RoleMirror      = "mirror"
+)
+
+// Pane user options. They travel with a pane through swaps, so a restarted
+// core rebuilds its registry from them.
+const (
+	OptSession  = "@irie_session"
+	OptAgent    = "@irie_agent"
+	OptRole     = "@irie_role"
+	OptName     = "@irie_name"
+	OptCreated  = "@irie_created"
+	OptVendorID = "@irie_vendor_id"
+	OptVersion  = "@irie_version"
+)
+
+// ErrNoServer means the server is not running.
+var ErrNoServer = errors.New("tmux: no server running")
+
+// Find returns the tmux binary: the configured path, else tmux on PATH, else
+// the usual install dirs (a GUI launch may lack the user's PATH).
+func Find(configured string) (string, error) {
+	if configured != "" {
+		if isExec(configured) {
+			return configured, nil
+		}
+		return "", fmt.Errorf("tmux.path %s is not an executable", configured)
+	}
+	if p, err := exec.LookPath("tmux"); err == nil {
+		return p, nil
+	}
+	for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"} {
+		if p := filepath.Join(dir, "tmux"); isExec(p) {
+			return p, nil
+		}
+	}
+	return "", errors.New("tmux not found: install it or set tmux.path")
+}
+
+func isExec(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
+}
+
+// Runner runs tmux commands against one server.
+type Runner struct {
+	Bin    string // tmux binary
+	Socket string // -L socket name
+}
+
+func (r *Runner) command(args ...string) *exec.Cmd {
+	cmd := exec.Command(r.Bin, append([]string{"-L", r.Socket}, args...)...)
+	// TMUX would make tmux guess targets from the caller's own pane.
+	cmd.Env = WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE")
+	return cmd
+}
+
+// Run runs one tmux command and returns its output.
+func (r *Runner) Run(args ...string) (string, error) {
+	cmd := r.command(args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if strings.Contains(msg, "no server running") || strings.Contains(msg, "error connecting to") {
+			return "", ErrNoServer
+		}
+		return string(out), fmt.Errorf("tmux %s: %s", strings.Join(args, " "), msg)
+	}
+	return string(out), nil
+}
+
+// RunList runs commands as one tmux command list, so no client draws the
+// state between them.
+func (r *Runner) RunList(cmds [][]string) (string, error) {
+	return r.Run(listArgs(cmds)...)
+}
+
+// listArgs joins commands with ";" arguments. tmux reads an argument that
+// ends in ";" as the end of a command, so such a semicolon is escaped.
+func listArgs(cmds [][]string) []string {
+	var args []string
+	for i, c := range cmds {
+		if i > 0 {
+			args = append(args, ";")
+		}
+		for _, a := range c {
+			if strings.HasSuffix(a, ";") {
+				a = a[:len(a)-1] + `\;`
+			}
+			args = append(args, a)
+		}
+	}
+	return args
+}
+
+// StartServer starts the server with conf and a detached irie-agents
+// session whose core window runs cmd.
+func (r *Runner) StartServer(conf string, cmd []string) error {
+	args := []string{"-f", conf, "new-session", "-d", "-s", AgentsSession, "-n", CoreWindow, "-x", "80", "-y", "24", "--"}
+	_, err := r.Run(append(args, cmd...)...)
+	return err
+}
+
+// SocketPath returns the running server's socket path.
+func (r *Runner) SocketPath() (string, error) {
+	out, err := r.Run("list-sessions", "-F", "#{socket_path}")
+	if err != nil {
+		return "", err
+	}
+	line, _, _ := strings.Cut(out, "\n")
+	return strings.TrimSpace(line), nil
+}
+
+// WithoutEnv returns env without the named variables.
+func WithoutEnv(env []string, names ...string) []string {
+	out := make([]string, 0, len(env))
+outer:
+	for _, kv := range env {
+		for _, n := range names {
+			if strings.HasPrefix(kv, n+"=") {
+				continue outer
+			}
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
+// Pane is one row of list-panes.
+type Pane struct {
+	Session      string
+	WindowID     string
+	WindowIndex  int
+	WindowPanes  int
+	WindowWidth  int
+	WindowHeight int
+	ID           string
+	Index        int
+	PID          int
+	Dead         bool
+	DeadStatus   int
+	Width        int
+	Height       int
+
+	// Irie's pane options.
+	Role        string
+	IrieSession string
+	Agent       string
+	Name        string
+	Created     string
+	VendorID    string
+	Version     string
+}
+
+var paneFormat = []string{
+	"session_name", "window_id", "window_index", "window_panes", "window_width", "window_height",
+	"pane_id", "pane_index", "pane_pid", "pane_dead", "pane_dead_status", "pane_width", "pane_height",
+	OptRole, OptSession, OptAgent, OptName, OptCreated, OptVersion, OptVendorID,
+}
+
+// Snapshot is every pane of the server at one moment.
+type Snapshot struct {
+	Panes []Pane
+}
+
+// Snapshot lists every pane. It returns ErrNoServer when the server is down.
+func (r *Runner) Snapshot() (Snapshot, error) {
+	out, err := r.Run("list-panes", "-a", "-F", "#{"+strings.Join(paneFormat, "}\t#{")+"}")
+	if err != nil {
+		return Snapshot{}, err
+	}
+	var s Snapshot
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) != len(paneFormat) {
+			continue
+		}
+		n := func(i int) int { v, _ := strconv.Atoi(f[i]); return v }
+		s.Panes = append(s.Panes, Pane{
+			Session: f[0], WindowID: f[1], WindowIndex: n(2), WindowPanes: n(3), WindowWidth: n(4), WindowHeight: n(5),
+			ID: f[6], Index: n(7), PID: n(8), Dead: f[9] == "1", DeadStatus: n(10), Width: n(11), Height: n(12),
+			Role: f[13], IrieSession: f[14], Agent: f[15], Name: f[16], Created: f[17], Version: f[18], VendorID: f[19],
+		})
+	}
+	return s, nil
+}
+
+// HasSession reports whether the session has any pane.
+func (s Snapshot) HasSession(name string) bool {
+	for _, p := range s.Panes {
+		if p.Session == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Window returns the panes of session:index in pane order.
+func (s Snapshot) Window(session string, index int) []Pane {
+	var out []Pane
+	for _, p := range s.Panes {
+		if p.Session == session && p.WindowIndex == index {
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Index < out[j].Index })
+	return out
+}
+
+// WindowOf returns the panes of the window with the given id.
+func (s Snapshot) WindowOf(windowID string) []Pane {
+	var out []Pane
+	for _, p := range s.Panes {
+		if p.WindowID == windowID {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (s Snapshot) at(index int) *Pane {
+	for _, p := range s.Window(MainSession, 0) {
+		if p.Index == index {
+			return &p
+		}
+	}
+	return nil
+}
+
+// Sidebar returns the pane at irie:0.0, whatever it runs.
+func (s Snapshot) Sidebar() *Pane { return s.at(0) }
+
+// SlotPane returns the pane at irie:0.1, whatever it runs.
+func (s Snapshot) SlotPane() *Pane { return s.at(1) }
+
+// Pane returns the pane with the given id.
+func (s Snapshot) Pane(id string) *Pane {
+	for _, p := range s.Panes {
+		if p.ID == id {
+			return &p
+		}
+	}
+	return nil
+}
+
+// ByRole returns the panes with the given @irie_role.
+func (s Snapshot) ByRole(role string) []Pane {
+	var out []Pane
+	for _, p := range s.Panes {
+		if p.Role == role {
+			out = append(out, p)
+		}
+	}
+	return out
+}

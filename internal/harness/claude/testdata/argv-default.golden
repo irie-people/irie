@@ -1,0 +1,12 @@
+[
+  "claude",
+  "--model",
+  "claude-opus-5-5",
+  "--effort",
+  "max",
+  "--permission-mode",
+  "auto",
+  "--session-id",
+  "6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f",
+  "describe this repo in one paragraph"
+]

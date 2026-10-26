@@ -1,0 +1,142 @@
+package ipc
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// API is the protocol version. Additions keep backwards compatibility.
+const API = 1
+
+// Ops this version serves.
+const (
+	OpHello     = "hello"
+	OpList      = "list"
+	OpSubscribe = "subscribe"
+	OpSpawn     = "spawn"
+	OpShow      = "show"
+)
+
+// Error codes.
+const (
+	CodeBadRequest = "bad_request"
+	CodeBadArgs    = "bad_args"
+	CodeUnknownOp  = "unknown_op"
+	CodeNotFound   = "not_found"
+	CodeInternal   = "internal"
+)
+
+// Session states (DESIGN §5.3). Before hooks exist only the process facts are
+// known: a live pane is working and a dead one has exited.
+const (
+	StateWorking = "working"
+	StateExited  = "exited"
+)
+
+// Session is one row of the session list.
+type Session struct {
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Agent    string    `json:"agent,omitempty"` // "main"
+	State    string    `json:"state"`
+	ExitCode *int      `json:"exit_code,omitempty"`
+	Created  time.Time `json:"created"`
+	Cwd      string    `json:"cwd,omitempty"`
+	Profile  string    `json:"profile,omitempty"`
+	VendorID string    `json:"vendor_id,omitempty"`
+	Pane     string    `json:"pane,omitempty"`
+	Shown    bool      `json:"shown,omitempty"`
+}
+
+// Header is the part of a snapshot that is not a row.
+type Header struct {
+	Version string `json:"version,omitempty"`
+}
+
+type HelloArgs struct {
+	Client  string `json:"client"`
+	API     int    `json:"api"`
+	Version string `json:"version,omitempty"`
+}
+
+type HelloResult struct {
+	Version  string   `json:"version"`
+	API      int      `json:"api"`
+	Features []string `json:"features"`
+}
+
+type ListResult struct {
+	Sessions []Session `json:"sessions"`
+}
+
+type SubscribeArgs struct {
+	Events  bool   `json:"events,omitempty"`
+	Session string `json:"session,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+}
+
+type SpawnArgs struct {
+	Task    string `json:"task"`
+	Cwd     string `json:"cwd,omitempty"`
+	InPlace bool   `json:"in_place,omitempty"`
+	Name    string `json:"name,omitempty"`
+}
+
+type SpawnResult struct {
+	Session Session `json:"session"`
+}
+
+type ShowArgs struct {
+	Session string `json:"session"`
+	Agent   string `json:"agent,omitempty"`
+	Focus   bool   `json:"focus"`
+}
+
+// Frame types streamed after subscribe.
+const (
+	FrameSnapshot = "snapshot"
+	FrameUpsert   = "upsert"
+	FrameRemove   = "remove"
+)
+
+// Frame is one streamed message. Which fields are set depends on T.
+type Frame struct {
+	T        string    `json:"t"`
+	Sessions []Session `json:"sessions,omitempty"` // snapshot
+	Header   *Header   `json:"header,omitempty"`   // snapshot
+	Session  *Session  `json:"session,omitempty"`  // upsert
+	ID       string    `json:"id,omitempty"`       // remove
+}
+
+// MarshalJSON writes only the fields of the frame's type, and always lists
+// the sessions of a snapshot, even when there are none.
+func (f Frame) MarshalJSON() ([]byte, error) {
+	switch f.T {
+	case FrameSnapshot:
+		h := f.Header
+		if h == nil {
+			h = &Header{}
+		}
+		s := f.Sessions
+		if s == nil {
+			s = []Session{}
+		}
+		return json.Marshal(struct {
+			T        string    `json:"t"`
+			Sessions []Session `json:"sessions"`
+			Header   *Header   `json:"header"`
+		}{f.T, s, h})
+	case FrameUpsert:
+		return json.Marshal(struct {
+			T       string   `json:"t"`
+			Session *Session `json:"session"`
+		}{f.T, f.Session})
+	case FrameRemove:
+		return json.Marshal(struct {
+			T  string `json:"t"`
+			ID string `json:"id"`
+		}{f.T, f.ID})
+	}
+	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)
+}

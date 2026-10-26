@@ -1,0 +1,324 @@
+// Package core is `irie core`, the one process that owns Irie's state and
+// drives tmux (DESIGN §2.1). It keeps the layout, spawns and shows sessions,
+// and serves the socket API. Its registry lives in tmux pane options, so a
+// restarted core rebuilds it from tmux.
+package core
+
+import (
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"reflect"
+	"regexp"
+	"sort"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/irie-hq/irie/internal/config"
+	"github.com/irie-hq/irie/internal/host"
+	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/paths"
+	"github.com/irie-hq/irie/internal/tmux"
+)
+
+// Options configure a core.
+type Options struct {
+	Config  config.Config
+	Paths   paths.Paths
+	Bin     string // the irie binary the core's panes run
+	Version string
+	Log     *slog.Logger
+}
+
+// Core is the running core.
+type Core struct {
+	cfg     config.Config
+	paths   paths.Paths
+	tmux    *tmux.Runner
+	bin     string
+	version string
+	log     *slog.Logger
+
+	mu        sync.Mutex // guards everything below, and serialises tmux calls
+	sessions  map[string]*session
+	snap      tmux.Snapshot
+	published map[string]ipc.Session // what subscribers last heard
+	subs      map[*subscriber]bool
+}
+
+// session is one registry entry. Everything in it comes from tmux pane
+// options and the session's spec.json.
+type session struct {
+	id       string
+	name     string
+	agent    string
+	created  time.Time
+	cwd      string
+	profile  string
+	vendorID string
+	pane     string
+	dead     bool
+	exitCode int
+	shown    bool
+}
+
+func (x *session) wire() ipc.Session {
+	s := ipc.Session{
+		ID: x.id, Name: x.name, Agent: x.agent, State: ipc.StateWorking, Created: x.created,
+		Cwd: x.cwd, Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown,
+	}
+	if x.dead {
+		code := x.exitCode
+		s.State, s.ExitCode = ipc.StateExited, &code
+	}
+	return s
+}
+
+func newCore(o Options, r *tmux.Runner) *Core {
+	return &Core{
+		cfg: o.Config, paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log,
+		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
+	}
+}
+
+// Run is `irie core`. It holds core.lock, builds the layout, then serves the
+// socket and polls tmux once a second until it is told to stop.
+func Run(o Options) error {
+	if err := o.Paths.EnsureRuntime(); err != nil {
+		return err
+	}
+	if err := o.Paths.EnsureState(); err != nil {
+		return err
+	}
+	lock, err := lockFile(o.Paths.CoreLock(), 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("core.lock: %w", err)
+	}
+	defer lock.Close()
+	bin, err := tmux.Find(o.Config.Tmux.Path)
+	if err != nil {
+		return err
+	}
+	c := newCore(o, &tmux.Runner{Bin: bin, Socket: o.Config.Tmux.Socket})
+	c.log.Info("core starting", "version", c.version, "pid", os.Getpid())
+
+	// The layout and the registry are in place before the first hello.
+	c.tick()
+
+	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
+	l, err := ipc.Listen(o.Paths.Socket())
+	if err != nil {
+		return err
+	}
+	defer l.Close()
+	go ipc.Serve(l, c)
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			c.tick()
+		case s := <-stop:
+			c.log.Info("core stopping", "signal", s.String())
+			return nil
+		}
+	}
+}
+
+func (c *Core) want() tmux.Want {
+	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg.UI.SidebarWidth, Version: c.version}
+}
+
+// tick polls tmux, repairs the layout and tells subscribers what changed.
+func (c *Core) tick() {
+	c.mu.Lock()
+	if err := c.refresh(); err != nil {
+		c.log.Warn("poll", "err", err)
+	}
+	frames := c.changes()
+	c.mu.Unlock()
+	c.publish(frames)
+}
+
+// refresh takes a snapshot, repairs the layout until it is sound and
+// updates the registry. The caller holds c.mu.
+func (c *Core) refresh() error {
+	snap, err := c.tmux.Snapshot()
+	if err != nil {
+		return err
+	}
+	for range 10 {
+		cmds := tmux.Plan(snap, c.want())
+		if cmds == nil {
+			break
+		}
+		c.log.Info("repair", "cmds", cmds)
+		if _, err := c.tmux.RunList(cmds); err != nil {
+			c.log.Warn("repair", "err", err)
+			break
+		}
+		if snap, err = c.tmux.Snapshot(); err != nil {
+			return err
+		}
+	}
+	c.snap = snap
+	c.sync(snap)
+	return nil
+}
+
+var sessionID = regexp.MustCompile(`^s[0-9a-z]{12}$`)
+
+// sync brings the registry in line with the agent panes in s.
+func (c *Core) sync(s tmux.Snapshot) {
+	slot := s.SlotPane()
+	seen := map[string]bool{}
+	for _, p := range s.ByRole(tmux.RoleAgent) {
+		if !sessionID.MatchString(p.IrieSession) || seen[p.IrieSession] {
+			continue
+		}
+		seen[p.IrieSession] = true
+		x := c.sessions[p.IrieSession]
+		if x == nil {
+			x = c.adopt(p)
+			c.sessions[x.id] = x
+		}
+		x.pane, x.dead, x.exitCode = p.ID, p.Dead, p.DeadStatus
+		x.shown = slot != nil && slot.ID == p.ID
+	}
+	for id := range c.sessions {
+		if !seen[id] {
+			delete(c.sessions, id)
+		}
+	}
+}
+
+// adopt rebuilds a registry entry from an agent pane, as a restarted core
+// does for every session.
+func (c *Core) adopt(p tmux.Pane) *session {
+	created, _ := time.Parse(time.RFC3339Nano, p.Created)
+	x := &session{id: p.IrieSession, name: p.Name, agent: p.Agent, created: created, vendorID: p.VendorID}
+	if x.name == "" {
+		x.name = x.id
+	}
+	if spec, err := host.ReadSpec(c.paths.SpecFile(x.id)); err == nil {
+		x.cwd, x.profile = spec.Cwd, spec.Profile
+	}
+	return x
+}
+
+// list returns the rows in creation order. The caller holds c.mu.
+func (c *Core) list() []ipc.Session {
+	out := make([]ipc.Session, 0, len(c.sessions))
+	for _, x := range c.sessions {
+		out = append(out, x.wire())
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Created.Equal(out[j].Created) {
+			return out[i].Created.Before(out[j].Created)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+// changes returns frames for the rows that changed since the last call.
+// The caller holds c.mu.
+func (c *Core) changes() []ipc.Frame {
+	var frames []ipc.Frame
+	now := map[string]ipc.Session{}
+	for _, s := range c.list() {
+		now[s.ID] = s
+		if old, ok := c.published[s.ID]; !ok || !reflect.DeepEqual(old, s) {
+			frames = append(frames, ipc.Frame{T: ipc.FrameUpsert, Session: &s})
+		}
+	}
+	for id := range c.published {
+		if _, ok := now[id]; !ok {
+			frames = append(frames, ipc.Frame{T: ipc.FrameRemove, ID: id})
+		}
+	}
+	c.published = now
+	return frames
+}
+
+// Call answers one request (ipc.Handler).
+func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
+	switch op {
+	case ipc.OpHello:
+		var a ipc.HelloArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow}}, nil
+	case ipc.OpList:
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return ipc.ListResult{Sessions: c.list()}, nil
+	case ipc.OpSpawn:
+		var a ipc.SpawnArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.spawn(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.SpawnResult{Session: s}, nil
+	case ipc.OpShow:
+		var a ipc.ShowArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.show(a)
+	}
+	return nil, ipc.Errorf(ipc.CodeUnknownOp, "unknown op %q", op)
+}
+
+func decode(raw json.RawMessage, v any) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(raw, v); err != nil {
+		return ipc.Errorf(ipc.CodeBadArgs, "bad args: %v", err)
+	}
+	return nil
+}
+
+// show swaps a session into the slot, and focuses it when asked.
+func (c *Core) show(a ipc.ShowArgs) error {
+	if a.Agent != "" && a.Agent != "main" {
+		return ipc.Errorf(ipc.CodeNotFound, "session %s has no agent %q", a.Session, a.Agent)
+	}
+	c.mu.Lock()
+	err := c.swapIn(a.Session, a.Focus)
+	frames := c.changes()
+	c.mu.Unlock()
+	c.publish(frames)
+	return err
+}
+
+func (c *Core) swapIn(id string, focus bool) error {
+	if err := c.refresh(); err != nil {
+		return err
+	}
+	x := c.sessions[id]
+	if x == nil {
+		return ipc.Errorf(ipc.CodeNotFound, "no session %q", id)
+	}
+	cmds, err := tmux.SwapIn(c.snap, x.pane, focus)
+	if err != nil {
+		return err
+	}
+	if len(cmds) > 0 {
+		if _, err := c.tmux.RunList(cmds); err != nil {
+			return err
+		}
+	}
+	return c.refresh()
+}

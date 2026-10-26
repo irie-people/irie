@@ -46,7 +46,39 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | https://raw.githubusercontent.com/steipete/CodexBar/main/docs/cli.md | `usage --format json` and `guard`: subscription-window input for post-v1 routing (DESIGN §6.2) |
 | 2026-10-26 | https://github.com/NousResearch/hermes-agent/issues/142082 | Request for a pre-load memory admission check: post-v1 RAM admission (DESIGN §6.2) |
 | 2026-10-26 | https://github.com/charmbracelet/bubbletea (README, UPGRADE_GUIDE_V2.md) ; https://github.com/charmbracelet/bubbles ; https://github.com/charmbracelet/lipgloss | Bubble Tea v2 stack and module paths: UI dependencies (DESIGN §8.1) |
+| 2026-10-26 | Source of Bubble Tea v2.1.0, Bubbles v2.2.1, Lip Gloss v2.0.6 and ultraviolet (Go module cache; https://github.com/charmbracelet/bubbletea, https://github.com/charmbracelet/bubbles, https://github.com/charmbracelet/lipgloss, https://github.com/charmbracelet/ultraviolet; MIT) | API only, no code copied: `Model`/`View`, key and mouse messages and key names, Lip Gloss styles. Textarea: `CharLimit` 0, `DynamicHeight`, `MaxHeight` (which also stops input unless `MaxContentHeight` is set) and its 10,000-line cap, hence refusing longer pastes: the sidebar and command bar (M1) |
+| 2026-10-26 | Source and docs of github.com/BurntSushi/toml v1.6.0 (MIT) | API only: `MetaData.Undecoded` to name unknown keys; `Primitive` and `PrimitiveDecode` so a partial profile keeps its defaults (maps decode into fresh values); duration strings: config (M1) |
+| 2026-10-26 | tmux 3.7b manual page (local `man tmux`), https://github.com/tmux/tmux | Exact window targets (`session:=name`), commands given as argv without `sh -c`, command lists, `default-size`, `resize-window` setting `window-size manual`, `join-pane`, `break-pane`, `respawn-pane -k`, `set-option -p`, the `window-resized` hook, `list-panes -a -F`: runner, layout repair, swap-in and the spawn command list (M1) |
+| 2026-10-26 | Go standard library docs and source, go1.27.3 (https://go.dev/src/syscall/ ; BSD-3-Clause) | `SysProcAttr.Foreground` and `Ctty`, `ForkExec`, `Wait4`; `syscall_bsd.go` reports a SIGSTOP stop as `Continued`, not `Stopped`, so the pane host reads the wait status bits itself (M1) |
+| 2026-10-26 | https://specifications.freedesktop.org/basedir/latest/ | XDG defaults, relative values ignored, a runtime dir owned by the user with mode 0700: paths (M1) |
+| 2026-10-26 | https://www.rfc-editor.org/rfc/rfc9562.html | UUID version 4 layout and text form: pre-assigned Claude Code session ids (M1) |
+| 2026-10-26 | https://www.crockford.com/base32.html | Base32 alphabet, written in lower case, for time-sortable session ids (M1) |
 
 ## Third-party code
 
-None yet. Any added later is listed here with its origin, commit and license.
+No third-party code is copied into the repository. These Go modules are compiled into `irie`, fetched by the Go toolchain at the versions pinned in `go.mod` and checked against `go.sum` (`go mod verify`). Bubble Tea, Bubbles, Lip Gloss and TOML are direct dependencies (DESIGN §8.1); the rest come in through them.
+
+| Module | Version | License | Why |
+|---|---|---|---|
+| charm.land/bubbletea/v2 (github.com/charmbracelet/bubbletea) | v2.1.0 | MIT | Direct: sidebar and placeholder |
+| charm.land/bubbles/v2 (github.com/charmbracelet/bubbles) | v2.2.1 | MIT | Direct: command bar textarea, key bindings |
+| charm.land/lipgloss/v2 (github.com/charmbracelet/lipgloss) | v2.0.6 | MIT | Direct: styles and layout |
+| github.com/BurntSushi/toml | v1.6.0 | MIT | Direct: config.toml |
+| github.com/atotto/clipboard | v0.1.4 | BSD-3-Clause | Indirect, via the Bubbles textarea |
+| github.com/charmbracelet/colorprofile | v0.4.3 | MIT | Indirect |
+| github.com/charmbracelet/ultraviolet | v0.0.0-20261008173134-6b8d4baf91b4 | MIT | Indirect |
+| github.com/charmbracelet/x/ansi | v0.11.9 | MIT | Indirect |
+| github.com/charmbracelet/x/term | v0.2.2 | MIT | Indirect |
+| github.com/charmbracelet/x/termios | v0.1.1 | MIT | Indirect |
+| github.com/charmbracelet/x/windows | v0.2.2 | MIT | Indirect |
+| github.com/clipperhouse/displaywidth | v0.11.0 | MIT | Indirect |
+| github.com/clipperhouse/uax29/v2 | v2.7.0 | MIT | Indirect |
+| github.com/lucasb-eyer/go-colorful | v1.4.1 | MIT | Indirect |
+| github.com/mattn/go-runewidth | v0.0.30 | MIT | Indirect |
+| github.com/muesli/cancelreader | v0.2.2 | MIT | Indirect |
+| github.com/rivo/uniseg | v0.4.7 | MIT | Indirect |
+| github.com/xo/terminfo | v1.0.0 | MIT | Indirect |
+| golang.org/x/sync | v0.22.0 | BSD-3-Clause | Indirect |
+| golang.org/x/sys | v0.47.0 | BSD-3-Clause | Indirect; Irie's own code imports it from M6 |
+
+`go.sum` also lists modules that only those dependencies' own tests use (github.com/MakeNowJust/heredoc, github.com/aymanbagabas/go-udiff, github.com/charmbracelet/x/exp/golden, golang.org/x/exp and others). They are not compiled into `irie`.
