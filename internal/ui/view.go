@@ -74,15 +74,33 @@ func (m Model) home2tilde(p string) string {
 }
 
 // state returns a row's glyph and colour (DESIGN §5.3). A nil colour is the
-// terminal's own; a dim row is drawn faint.
-func state(s ipc.Session) (glyph string, c color.Color, dim bool) {
-	if s.State == ipc.StateExited {
+// terminal's own; a dim row is drawn faint. A loud row, one that needs you,
+// takes the colour for its name too. Each state has its own glyph, so colour
+// is never the only cue.
+func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool) {
+	switch s.State {
+	case ipc.StateFailed:
+		return "✕", lipgloss.Red, false, true
+	case ipc.StateExited:
 		if s.ExitCode != nil && *s.ExitCode != 0 {
-			return "·", lipgloss.Red, true
+			return "·", lipgloss.Red, true, false
 		}
-		return "·", nil, true
+		return "·", nil, true, false
+	case ipc.StateNeedsYou:
+		return "●", lipgloss.Red, false, true
+	case ipc.StateStalled:
+		return "!", lipgloss.Red, false, true
+	case ipc.StateStarting:
+		return "◌", nil, true, false
+	case ipc.StateDone:
+		if m.redOnDone {
+			return "✓", lipgloss.Red, false, true
+		}
+		return "✓", lipgloss.Green, false, false
+	case ipc.StateIdle:
+		return "○", nil, true, false
 	}
-	return "●", nil, false
+	return "●", nil, false, false
 }
 
 func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
@@ -103,15 +121,20 @@ func (m Model) header() string {
 // they fit, else glyphs and numbers. A zero count is faint, so colour only
 // ever means that something is there.
 func (m Model) counts(w int) string {
-	working := 0
+	working, needs, done := 0, 0, 0
 	for _, s := range m.sessions {
-		if s.State == ipc.StateWorking {
+		switch s.State {
+		case ipc.StateWorking:
 			working++
+		case ipc.StateNeedsYou, ipc.StateStalled:
+			needs++
+		case ipc.StateDone:
+			done++
 		}
 	}
-	// Needs you, done, paused and frozen come from hooks, gates and freezes,
-	// which this version does not have yet.
-	needs, done, paused, frozen := 0, 0, 0, 0
+	// Paused and frozen come from gates and freezes, which this version does
+	// not have yet.
+	paused, frozen := 0, 0
 	all := []struct {
 		glyph, label string
 		n            int
@@ -153,7 +176,7 @@ func (m Model) rule() string {
 
 func (m Model) row(i int) string {
 	s := m.sessions[i]
-	g, c, dim := state(s)
+	g, c, dim, loud := m.state(s)
 	a := age(m.now().Sub(s.Created))
 	nameW := m.width - 5 - lipgloss.Width(a)
 	name := cut(s.Name, nameW)
@@ -170,6 +193,9 @@ func (m Model) row(i int) string {
 			text.Render(" "+name+gap+" ") + text.Faint(true).Render(a) + text.Render(" ")
 	}
 	gs, ns := lipgloss.NewStyle().Foreground(c), lipgloss.NewStyle()
+	if loud {
+		ns = ns.Foreground(c)
+	}
 	if dim {
 		gs, ns = gs.Faint(true), ns.Faint(true)
 	}
@@ -197,15 +223,25 @@ func (m Model) statusLine() string {
 		}
 		return " " + styleDim.Render(cut(hint, m.width-2))
 	}
+	// What the selected row is doing or needs, else what Irie cannot do for
+	// it, then its full name and directory.
 	s := m.sessions[m.sel]
-	text := s.Name
-	if s.State == ipc.StateExited && s.ExitCode != nil {
-		text = fmt.Sprintf("exited %d · %s", *s.ExitCode, s.Name)
+	var parts []string
+	switch {
+	case s.Detail != "":
+		parts = append(parts, s.Detail)
+	case len(s.Warnings) > 0:
+		parts = append(parts, s.Warnings[0])
 	}
+	parts = append(parts, s.Name)
 	if s.Cwd != "" {
-		text += " · " + m.home2tilde(s.Cwd)
+		parts = append(parts, m.home2tilde(s.Cwd))
 	}
-	return " " + styleDim.Render(cut(text, m.width-2))
+	st := styleDim
+	if _, c, _, loud := m.state(s); loud {
+		st = lipgloss.NewStyle().Foreground(c)
+	}
+	return " " + st.Render(cut(strings.Join(parts, " · "), m.width-2))
 }
 
 func (m Model) View() tea.View {

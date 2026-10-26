@@ -2,10 +2,12 @@
 package claude
 
 import (
+	"encoding/json"
 	"errors"
 	"maps"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/harness"
@@ -18,19 +20,33 @@ const InlineMax = 100 << 10
 // TaskFile is the file in the session dir that holds the task verbatim.
 const TaskFile = "task.md"
 
+// SettingsFile is the file in the session dir passed with --settings. It
+// adds Irie's hooks for this session only; Claude Code merges hook lists, so
+// the user's own hooks still run.
+const SettingsFile = "claude-settings.json"
+
 type Harness struct{}
 
 func (Harness) ID() string { return "claude-code" }
 
 // Launch builds:
 //
-//	<command> <args...> --model M --effort E --permission-mode P --session-id <uuid> <task>
+//	<command> <args...> --model M --effort E --permission-mode P \
+//	    --settings <dir>/claude-settings.json --session-id <uuid> [--name <slug>] <task>
 //
 // The profile's own args come right after the command. A flag whose value is
-// empty in the profile is left out.
+// empty in the profile is left out, and --name only goes to a CLI whose
+// --help lists it.
 func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[string][]byte, error) {
 	if s.VendorID == "" {
 		return nil, nil, nil, errors.New("claude: no session id")
+	}
+	if s.Bin == "" {
+		return nil, nil, nil, errors.New("claude: no irie binary for the hooks")
+	}
+	settings, err := Settings(s.Bin, s.HoldMax, AtLeast(s.Probe.Version, MinVersion))
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	command := p.Command
 	if command == "" {
@@ -42,12 +58,16 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 			argv = append(argv, f[0], f[1])
 		}
 	}
-	argv = append(argv, "--session-id", s.VendorID, TaskArg(s.Task, s.Dir))
+	argv = append(argv, "--settings", filepath.Join(s.Dir, SettingsFile), "--session-id", s.VendorID)
+	if s.Probe.Flags["--name"] && s.Name != "" {
+		argv = append(argv, "--name", s.Name)
+	}
+	argv = append(argv, TaskArg(s.Task, s.Dir))
 	env := maps.Clone(p.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
-	return argv, env, map[string][]byte{TaskFile: []byte(s.Task)}, nil
+	return argv, env, map[string][]byte{TaskFile: []byte(s.Task), SettingsFile: settings}, nil
 }
 
 // TaskArg is the task argument: the task itself when it fits, otherwise a
@@ -62,4 +82,72 @@ func TaskArg(task, dir string) string {
 		return " " + task
 	}
 	return task
+}
+
+// heldExtra is how far the tool hooks' timeout sits above hold.max, so the
+// shim always releases a held call itself before Claude Code gives up on it.
+const heldExtra = 120 * time.Second
+
+// hooks is the hook table of DESIGN §3.3. A zero timeout is hold.max plus
+// heldExtra.
+var hooks = []struct {
+	event, matcher string
+	timeout        time.Duration
+	block          bool // onFailure: "block", so a failed or timed-out hook never lets the call through
+}{
+	{"SessionStart", "", 10 * time.Second, false},
+	{"UserPromptSubmit", "", 10 * time.Second, false},
+	{"PreToolUse", "*", 0, true},
+	{"PostToolUse", "*", 0, false},
+	{"PostToolUseFailure", "*", 0, false},
+	{"PermissionRequest", "*", 10 * time.Second, false},
+	{"Notification", "", 10 * time.Second, false},
+	{"Elicitation", "", 10 * time.Second, false},
+	{"Stop", "", 10 * time.Second, false},
+	{"StopFailure", "", 10 * time.Second, false},
+	{"SubagentStart", "", 10 * time.Second, false},
+	{"SubagentStop", "", 10 * time.Second, false},
+	{"SessionEnd", "", time.Second, false},
+}
+
+type hookCommand struct {
+	Type      string `json:"type"`
+	Command   string `json:"command"`
+	Timeout   int    `json:"timeout"` // seconds
+	OnFailure string `json:"onFailure,omitempty"`
+}
+
+type matcherGroup struct {
+	Matcher string        `json:"matcher,omitempty"`
+	Hooks   []hookCommand `json:"hooks"`
+}
+
+// Settings returns the settings file that sends every hook of the table to
+// `<bin> hook`. onFailure goes only to a Claude Code that knows it.
+func Settings(bin string, holdMax time.Duration, onFailure bool) ([]byte, error) {
+	command := shellQuote(bin) + " hook"
+	file := struct {
+		Hooks map[string][]matcherGroup `json:"hooks"`
+	}{Hooks: map[string][]matcherGroup{}}
+	for _, h := range hooks {
+		timeout := h.timeout
+		if timeout == 0 {
+			timeout = holdMax + heldExtra
+		}
+		c := hookCommand{Type: "command", Command: command, Timeout: int(timeout / time.Second)}
+		if h.block && onFailure {
+			c.OnFailure = "block"
+		}
+		file.Hooks[h.event] = []matcherGroup{{Matcher: h.matcher, Hooks: []hookCommand{c}}}
+	}
+	b, err := json.MarshalIndent(file, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}
+
+// shellQuote quotes s for sh, which runs a command hook.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

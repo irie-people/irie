@@ -11,19 +11,24 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 	"unsafe"
 )
 
-// Spec is spec.json: what the host runs.
+// Spec is spec.json: what the host runs. The core also keeps facts about
+// the launch in it, which the host ignores.
 type Spec struct {
-	Session string            `json:"session"`
-	Profile string            `json:"profile,omitempty"`
-	Argv    []string          `json:"argv"`
-	Env     map[string]string `json:"env,omitempty"` // added to the pane's environment
-	Cwd     string            `json:"cwd"`
+	Session  string            `json:"session"`
+	Profile  string            `json:"profile,omitempty"`
+	Harness  string            `json:"harness,omitempty"`
+	Argv     []string          `json:"argv"`
+	Env      map[string]string `json:"env,omitempty"`   // added to the pane's environment
+	Unset    []string          `json:"unset,omitempty"` // removed from it, such as TMUX
+	Cwd      string            `json:"cwd"`
+	Warnings []string          `json:"warnings,omitempty"` // what Irie cannot do for this session
 }
 
 // Exit is exit.json, written when the agent exits.
@@ -38,6 +43,19 @@ const ExitFile = "exit.json"
 
 // WriteSpec writes s to path with mode 0600.
 func WriteSpec(path string, s Spec) error { return writeJSON(path, s) }
+
+// ReadExit reads an exit file.
+func ReadExit(path string) (Exit, error) {
+	var x Exit
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return x, err
+	}
+	if err := json.Unmarshal(b, &x); err != nil {
+		return x, fmt.Errorf("%s: %w", path, err)
+	}
+	return x, nil
+}
 
 // ReadSpec reads a spec file.
 func ReadSpec(path string) (Spec, error) {
@@ -84,8 +102,8 @@ func Run(specPath string) int {
 		return x.Code
 	}
 
-	env := environ(os.Environ(), spec.Env, spec.Cwd)
-	path, err := lookPath(spec.Argv[0], env)
+	env := environ(os.Environ(), spec.Env, spec.Unset, spec.Cwd)
+	path, err := LookPath(spec.Argv[0], env)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "irie: %s: command not found\n", spec.Argv[0])
 		return finish(Exit{Code: 127})
@@ -178,8 +196,9 @@ func setForeground(fd, pgid int) error {
 	return nil
 }
 
-// environ returns base with extra set, and PWD set to cwd as a shell would.
-func environ(base []string, extra map[string]string, cwd string) []string {
+// environ returns base without the unset names and with extra set, and PWD
+// set to cwd as a shell would.
+func environ(base []string, extra map[string]string, unset []string, cwd string) []string {
 	set := map[string]string{}
 	for k, v := range extra {
 		set[k] = v
@@ -190,7 +209,7 @@ func environ(base []string, extra map[string]string, cwd string) []string {
 	env := make([]string, 0, len(base)+len(set))
 	for _, kv := range base {
 		k, _, _ := strings.Cut(kv, "=")
-		if _, ok := set[k]; !ok {
+		if _, ok := set[k]; !ok && !slices.Contains(unset, k) {
 			env = append(env, kv)
 		}
 	}
@@ -200,8 +219,8 @@ func environ(base []string, extra map[string]string, cwd string) []string {
 	return env
 }
 
-// lookPath finds name like a shell would, but in env's PATH.
-func lookPath(name string, env []string) (string, error) {
+// LookPath finds name like a shell would, but in env's PATH.
+func LookPath(name string, env []string) (string, error) {
 	if strings.Contains(name, "/") {
 		if isExecutable(name) {
 			return name, nil

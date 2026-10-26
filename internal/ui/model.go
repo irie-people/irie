@@ -62,17 +62,19 @@ const (
 	maxBarContent = 10000
 )
 
-// Options are the model's outside dependencies.
+// Options are the model's outside dependencies and settings.
 type Options struct {
-	Now  func() time.Time
-	Home string // for ~ paths
+	Now       func() time.Time
+	Home      string // for ~ paths
+	RedOnDone bool   // ui.red_on_done: done rows are red, not green
 }
 
 // Model is the sidebar's Bubble Tea model.
 type Model struct {
-	backend Backend
-	now     func() time.Time
-	home    string
+	backend   Backend
+	now       func() time.Time
+	home      string
+	redOnDone bool
 
 	width, height int
 	conn          connState
@@ -122,7 +124,7 @@ func New(b Backend, o Options) Model {
 	styles.Cursor.Blink = false
 	bar.SetStyles(styles)
 
-	m := Model{backend: b, now: o.Now, home: o.Home, sel: -1, focus: focusBar, bar: bar}
+	m := Model{backend: b, now: o.Now, home: o.Home, redOnDone: o.RedOnDone, sel: -1, focus: focusBar, bar: bar}
 	m.bar.Focus()
 	return m
 }

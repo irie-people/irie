@@ -26,9 +26,11 @@ func (b socketBackend) Show(id string, focus bool) error {
 }
 
 // Run is `irie ui`: the sidebar, fed by the core at socket.
-func Run(socket string) error {
-	home, _ := os.UserHomeDir()
-	p := tea.NewProgram(New(socketBackend{socket}, Options{Home: home}))
+func Run(socket string, o Options) error {
+	if o.Home == "" {
+		o.Home, _ = os.UserHomeDir()
+	}
+	p := tea.NewProgram(New(socketBackend{socket}, o))
 	go follow(p, socket)
 	_, err := p.Run()
 	return err

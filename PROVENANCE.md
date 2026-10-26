@@ -53,10 +53,17 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | https://specifications.freedesktop.org/basedir/latest/ | XDG defaults, relative values ignored, a runtime dir owned by the user with mode 0700: paths (M1) |
 | 2026-10-26 | https://www.rfc-editor.org/rfc/rfc9562.html | UUID version 4 layout and text form: pre-assigned Claude Code session ids (M1) |
 | 2026-10-26 | https://www.crockford.com/base32.html | Base32 alphabet, written in lower case, for time-sortable session ids (M1) |
+| 2026-10-26 | https://code.claude.com/docs/en/hooks.md (read again for M2) | The settings shape (event, matcher groups, command handlers), `timeout` in seconds, `onFailure: "block"` from 2.1.295, shell form run with `sh -c`, matcher rules, hooks run without a terminal, plain stdout on SessionStart and UserPromptSubmit becoming context (so the shim prints nothing unless it has something to say), `hookSpecificOutput` with `additionalContext` and `permissionDecision`, and each event's input: PermissionRequest without `tool_use_id`, `duration_ms`, PostToolUseFailure's and StopFailure's `error`, the Notification types, SubagentStop's `agent_transcript_path` and its firing for Claude Code's own agents, SessionEnd's `reason` and 1.5 s budget: the settings file, `Normalize`, `Respond`, the shim and the fake agent (M2) |
+| 2026-10-26 | https://code.claude.com/docs/en/cli-reference.md ; https://code.claude.com/docs/en/settings.md (read again for M2) | `--settings` takes a path or inline JSON and sits above the user's files, whose hook lists merge with it; `-v, --version`; `-n, --name`; `--help` does not list every flag: the settings flag, the version check, optional flags, and the flags the fake agent accepts (M2) |
+| 2026-10-26 | Output of `claude --version` and `claude --help` (Claude Code 2.1.310, run locally; neither starts a session) | The version line `2.1.310 (Claude Code)` and `-n, --name <name>` in the options: parsing the version and finding optional flags (M2) |
+| 2026-10-26 | tmux 3.7b manual page (local `man tmux`), https://github.com/tmux/tmux | `capture-pane -p -J -S`, which also reads a dead pane kept by `remain-on-exit`, and its "Pane is dead" line: the screen tail of a stalled or failed spawn (M2) |
+| 2026-10-26 | https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html (§2.2.2 Single-Quotes) | Single quotes keep every character but a single quote: quoting the irie path in hook commands (M2) |
+| 2026-10-26 | https://www.rfc-editor.org/rfc/rfc3339 | Timestamp format: the envelope's `ts`, in UTC with milliseconds (M2) |
+| 2026-10-26 | Go standard library docs, go1.27.3 (https://pkg.go.dev/os/exec ; https://pkg.go.dev/encoding/json ; https://pkg.go.dev/syscall ; BSD-3-Clause) | `Cmd.Cancel` and `Cmd.WaitDelay` with `Setpgid` and `Setsid` to time out a process group; `Decoder.UseNumber` and `DisallowUnknownFields`: the version probe, the shim, the fake agent's hook runs and strict journal checks in tests (M2) |
 
 ## Third-party code
 
-No third-party code is copied into the repository. These Go modules are compiled into `irie`, fetched by the Go toolchain at the versions pinned in `go.mod` and checked against `go.sum` (`go mod verify`). Bubble Tea, Bubbles, Lip Gloss and TOML are direct dependencies (DESIGN §8.1); the rest come in through them.
+No third-party code is copied into the repository. These Go modules are compiled into `irie`, fetched by the Go toolchain at the versions pinned in `go.mod` and checked against `go.sum` (`go mod verify`). Bubble Tea, Bubbles, Lip Gloss and TOML are direct dependencies (DESIGN §8.1); the rest come in through them. M2 adds no dependency.
 
 | Module | Version | License | Why |
 |---|---|---|---|

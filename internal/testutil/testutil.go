@@ -1,6 +1,6 @@
-// Package testutil holds helpers shared by Irie's tests: a once-per-package
-// build of the irie binary, short directories for unix sockets, isolated XDG
-// environments and private tmux servers.
+// Package testutil holds helpers shared by Irie's tests: once-per-package
+// builds of the irie binary and the fake agent, short directories for unix
+// sockets, isolated XDG environments and private tmux servers.
 package testutil
 
 import (
@@ -10,21 +10,28 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
 
+type build struct {
+	once sync.Once
+	bin  string
+	err  error
+}
+
 var (
-	buildOnce sync.Once
-	buildDir  string
-	buildBin  string
-	buildErr  error
+	buildMu  sync.Mutex
+	buildDir string
+	builds   = map[string]*build{}
 )
 
-// Main runs a package's tests, then removes the binary BuildIrie made.
-// Packages that call BuildIrie use it as their TestMain.
+// Main runs a package's tests, then removes the binaries BuildIrie and
+// BuildFakeAgent made. Packages that call them use it as their TestMain.
 func Main(m *testing.M) {
 	code := m.Run()
 	if buildDir != "" {
@@ -33,29 +40,54 @@ func Main(m *testing.M) {
 	os.Exit(code)
 }
 
+// buildOnce builds the Go package pkg once per test binary, into a temp dir
+// shared by every build, and returns the binary's path.
+func buildOnce(t testing.TB, pkg, name string) string {
+	t.Helper()
+	buildMu.Lock()
+	b := builds[pkg]
+	if b == nil {
+		b = &build{}
+		builds[pkg] = b
+	}
+	buildMu.Unlock()
+	b.once.Do(func() {
+		goBin, err := exec.LookPath("go")
+		if err != nil {
+			b.err = err
+			return
+		}
+		buildMu.Lock()
+		if buildDir == "" {
+			buildDir, b.err = os.MkdirTemp("", "irie-bin-")
+		}
+		dir := buildDir
+		buildMu.Unlock()
+		if b.err != nil {
+			return
+		}
+		b.bin = filepath.Join(dir, name)
+		if out, err := exec.Command(goBin, "build", "-o", b.bin, pkg).CombinedOutput(); err != nil {
+			b.err = fmt.Errorf("go build %s: %v\n%s", pkg, err, out)
+		}
+	})
+	if b.err != nil {
+		t.Fatal(b.err)
+	}
+	return b.bin
+}
+
 // BuildIrie builds ./cmd/irie once per test binary and returns its path.
 func BuildIrie(t testing.TB) string {
 	t.Helper()
-	buildOnce.Do(func() {
-		goBin, err := exec.LookPath("go")
-		if err != nil {
-			buildErr = err
-			return
-		}
-		buildDir, buildErr = os.MkdirTemp("", "irie-bin-")
-		if buildErr != nil {
-			return
-		}
-		buildBin = filepath.Join(buildDir, "irie")
-		out, err := exec.Command(goBin, "build", "-o", buildBin, "github.com/irie-hq/irie/cmd/irie").CombinedOutput()
-		if err != nil {
-			buildErr = fmt.Errorf("go build ./cmd/irie: %v\n%s", err, out)
-		}
-	})
-	if buildErr != nil {
-		t.Fatal(buildErr)
-	}
-	return buildBin
+	return buildOnce(t, "github.com/irie-hq/irie/cmd/irie", "irie")
+}
+
+// BuildFakeAgent builds the fake agent, Claude Code's stand-in, once per test
+// binary and returns its path.
+func BuildFakeAgent(t testing.TB) string {
+	t.Helper()
+	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/fakeagent", "fakeagent")
 }
 
 // ShortDir returns a new directory under /tmp. Its path stays short enough for
@@ -127,8 +159,26 @@ func NewEnv(t *testing.T) *Env {
 		os.Unsetenv(k)
 	}
 	// Registered after the Setenv calls, so it runs before they are undone.
-	t.Cleanup(func() { e.tmuxCmd("kill-server").Run() })
+	t.Cleanup(e.killServer)
 	return e
+}
+
+// killServer kills the private tmux server and waits for its panes' first
+// processes to exit, so none of them writes into a temp dir, such as an
+// agent host's exit.json, while the temp dirs are being removed.
+func (e *Env) killServer() {
+	out, _ := e.tmuxCmd("list-panes", "-a", "-F", "#{pane_pid}").Output()
+	e.tmuxCmd("kill-server").Run()
+	deadline := time.Now().Add(5 * time.Second)
+	for _, f := range strings.Fields(string(out)) {
+		pid, err := strconv.Atoi(f)
+		if err != nil {
+			continue
+		}
+		for syscall.Kill(pid, 0) == nil && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 }
 
 // WriteConfig writes config.toml with the test's tmux socket and extra TOML.

@@ -1,7 +1,8 @@
 // Package core is `irie core`, the one process that owns Irie's state and
 // drives tmux (DESIGN §2.1). It keeps the layout, spawns and shows sessions,
-// and serves the socket API. Its registry lives in tmux pane options, so a
-// restarted core rebuilds it from tmux.
+// takes the agents' hook events, and serves the socket API. Its registry
+// lives in tmux pane options and each row's state is derived from the
+// journal, so a restarted core rebuilds both.
 package core
 
 import (
@@ -18,8 +19,10 @@ import (
 	"time"
 
 	"github.com/irie-hq/irie/internal/config"
+	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/journal"
 	"github.com/irie-hq/irie/internal/paths"
 	"github.com/irie-hq/irie/internal/tmux"
 )
@@ -47,10 +50,12 @@ type Core struct {
 	snap      tmux.Snapshot
 	published map[string]ipc.Session // what subscribers last heard
 	subs      map[*subscriber]bool
+	journal   *journal.Journal
+	history   map[string][]event.Event // journal events of sessions not adopted yet
 }
 
-// session is one registry entry. Everything in it comes from tmux pane
-// options and the session's spec.json.
+// session is one registry entry. Its facts come from tmux pane options and
+// the session's spec.json, its state from its events.
 type session struct {
 	id       string
 	name     string
@@ -58,22 +63,22 @@ type session struct {
 	created  time.Time
 	cwd      string
 	profile  string
+	harness  string
 	vendorID string
+	warnings []string
 	pane     string
 	dead     bool
 	exitCode int
 	shown    bool
+	track    track
 }
 
 func (x *session) wire() ipc.Session {
 	s := ipc.Session{
-		ID: x.id, Name: x.name, Agent: x.agent, State: ipc.StateWorking, Created: x.created,
+		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
 		Cwd: x.cwd, Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown,
 	}
-	if x.dead {
-		code := x.exitCode
-		s.State, s.ExitCode = ipc.StateExited, &code
-	}
+	x.track.describe(&s, x.dead, x.exitCode)
 	return s
 }
 
@@ -81,6 +86,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 	return &Core{
 		cfg: o.Config, paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log,
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
+		history: map[string][]event.Event{},
 	}
 }
 
@@ -104,8 +110,14 @@ func Run(o Options) error {
 	}
 	c := newCore(o, &tmux.Runner{Bin: bin, Socket: o.Config.Tmux.Socket})
 	c.log.Info("core starting", "version", c.version, "pid", os.Getpid())
+	if c.journal, err = journal.Open(o.Paths.Journal(), journal.Options{KeepDays: o.Config.Journal.KeepDays}); err != nil {
+		return fmt.Errorf("journal: %w", err)
+	}
+	defer c.journal.Close()
+	c.loadHistory()
 
-	// The layout and the registry are in place before the first hello.
+	// The layout, the registry and the rows' states are in place before the
+	// first hello.
 	c.tick()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
@@ -135,12 +147,14 @@ func (c *Core) want() tmux.Want {
 	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg.UI.SidebarWidth, Version: c.version}
 }
 
-// tick polls tmux, repairs the layout and tells subscribers what changed.
+// tick polls tmux, repairs the layout, records what tmux and the clock say
+// and tells subscribers what changed.
 func (c *Core) tick() {
 	c.mu.Lock()
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.observe(time.Now())
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -199,7 +213,7 @@ func (c *Core) sync(s tmux.Snapshot) {
 }
 
 // adopt rebuilds a registry entry from an agent pane, as a restarted core
-// does for every session.
+// does for every session, and replays the session's journal into its state.
 func (c *Core) adopt(p tmux.Pane) *session {
 	created, _ := time.Parse(time.RFC3339Nano, p.Created)
 	x := &session{id: p.IrieSession, name: p.Name, agent: p.Agent, created: created, vendorID: p.VendorID}
@@ -207,9 +221,64 @@ func (c *Core) adopt(p tmux.Pane) *session {
 		x.name = x.id
 	}
 	if spec, err := host.ReadSpec(c.paths.SpecFile(x.id)); err == nil {
-		x.cwd, x.profile = spec.Cwd, spec.Profile
+		x.cwd, x.profile, x.harness, x.warnings = spec.Cwd, spec.Profile, spec.Harness, spec.Warnings
 	}
+	if x.harness == "" {
+		x.harness = c.cfg.Profiles[x.profile].Harness
+	}
+	for _, e := range c.history[x.id] {
+		x.track.apply(e)
+	}
+	delete(c.history, x.id)
 	return x
+}
+
+// loadHistory reads the journal of the sessions tmux has, from the day the
+// oldest of them was created, for adopt to replay.
+func (c *Core) loadHistory() {
+	snap, err := c.tmux.Snapshot()
+	if err != nil {
+		return
+	}
+	ids, oldest := map[string]bool{}, time.Now()
+	for _, p := range snap.ByRole(tmux.RoleAgent) {
+		ids[p.IrieSession] = true
+		if t, err := time.Parse(time.RFC3339Nano, p.Created); err == nil && t.Before(oldest) {
+			oldest = t
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	evs, err := journal.Read(c.paths.Journal(), oldest)
+	if err != nil {
+		c.log.Warn("journal", "err", err)
+	}
+	for _, e := range evs {
+		if ids[e.Session] {
+			c.history[e.Session] = append(c.history[e.Session], e)
+		}
+	}
+}
+
+// record journals one event of session x, folds it into x's state and sends
+// it to the subscribers that asked for events. The caller holds c.mu.
+func (c *Core) record(x *session, e event.Event) {
+	e.Session = x.id
+	if e.Harness == "" {
+		e.Harness = x.harness
+	}
+	if e.Data == nil {
+		e.Data = map[string]any{}
+	}
+	var err error
+	if e, err = c.journal.Append(e); err != nil {
+		c.log.Warn("journal", "kind", e.Kind, "err", err)
+	}
+	x.track.apply(e)
+	for s := range c.subs {
+		s.event(e)
+	}
 }
 
 // list returns the rows in creation order. The caller holds c.mu.
@@ -255,7 +324,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook}}, nil
 	case ipc.OpList:
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -276,6 +345,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return nil, c.show(a)
+	case ipc.OpHook:
+		var a ipc.HookArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.hook(a)
 	}
 	return nil, ipc.Errorf(ipc.CodeUnknownOp, "unknown op %q", op)
 }
@@ -303,6 +378,8 @@ func (c *Core) show(a ipc.ShowArgs) error {
 	return err
 }
 
+// swapIn shows a session, and records that the user viewed it. The caller
+// holds c.mu.
 func (c *Core) swapIn(id string, focus bool) error {
 	if err := c.refresh(); err != nil {
 		return err
@@ -320,5 +397,6 @@ func (c *Core) swapIn(id string, focus bool) error {
 			return err
 		}
 	}
+	c.record(x, event.Event{Source: event.SourceUser, Kind: event.UIShown, Data: map[string]any{"focus": focus}})
 	return c.refresh()
 }

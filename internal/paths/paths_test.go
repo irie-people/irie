@@ -32,6 +32,7 @@ func TestXDGOverridesAreHonoured(t *testing.T) {
 		{"tmux.conf", p.TmuxConf(), "/home/alice/xdg/state/irie/tmux.conf"},
 		{"session", p.Session("s0k3j9x2m4a7q"), "/home/alice/xdg/state/irie/sessions/s0k3j9x2m4a7q"},
 		{"scratch", p.Scratch(), "/home/alice/xdg/data/irie/scratch"},
+		{"journal", p.Journal(), "/home/alice/xdg/state/irie/journal"},
 		{"socket", p.Socket(), "/run/user/1000/irie/core.sock"},
 		{"lock", p.CoreLock(), "/run/user/1000/irie/core.lock"},
 	} {

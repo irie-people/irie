@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/testutil"
 )
 
@@ -105,6 +106,7 @@ func TestSubscribeStreamsFrames(t *testing.T) {
 	h.frames <- Frame{T: FrameSnapshot, Sessions: []Session{{ID: "s1", Name: "one"}}, Header: &Header{Version: "v"}}
 	h.frames <- Frame{T: FrameUpsert, Session: &Session{ID: "s2", Name: "two"}}
 	h.frames <- Frame{T: FrameRemove, ID: "s1"}
+	h.frames <- Frame{T: FrameEvent, Event: &event.Event{V: 1, Seq: 9, Session: "s0k3j9x2m4a7q", Kind: event.TurnEnded, Data: map[string]any{}}}
 
 	f := <-frames
 	if f.T != FrameSnapshot || len(f.Sessions) != 1 || f.Sessions[0].Name != "one" || f.Header == nil || f.Header.Version != "v" {
@@ -115,6 +117,9 @@ func TestSubscribeStreamsFrames(t *testing.T) {
 	}
 	if f = <-frames; f.T != FrameRemove || f.ID != "s1" {
 		t.Errorf("third frame = %+v", f)
+	}
+	if f = <-frames; f.T != FrameEvent || f.Event == nil || f.Event.Seq != 9 || f.Event.Kind != event.TurnEnded {
+		t.Errorf("fourth frame = %+v", f)
 	}
 
 	c.Close()
@@ -135,6 +140,16 @@ func TestEmptySnapshotListsNoSessions(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"sessions":[]`) {
 		t.Errorf("snapshot = %s", b)
+	}
+}
+
+func TestEventFrameCarriesTheEnvelopeOnly(t *testing.T) {
+	b, err := json.Marshal(Frame{T: FrameEvent, Event: &event.Event{V: 1, Seq: 3, Kind: event.ToolStarted, Data: map[string]any{"tool": "Bash"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(b), `{"t":"event","event":{"v":1,"seq":3,`) || strings.Contains(string(b), "sessions") {
+		t.Errorf("event frame = %s", b)
 	}
 }
 

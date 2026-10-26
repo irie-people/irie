@@ -5,18 +5,27 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/ipc"
 )
 
-// frameGap spaces frames to a client: at most 10 a second (DESIGN §2.4).
+// frameGap spaces frames of rows to a client: at most 10 a second (DESIGN
+// §2.4).
 const frameGap = 100 * time.Millisecond
+
+// maxQueue is the most event frames kept for a client that reads slowly;
+// later ones are dropped.
+const maxQueue = 10000
 
 // subscriber coalesces changes for one client. Between two frames it only
 // remembers which rows changed; a frame then carries their latest state, as
-// one upsert or remove, or as a snapshot when several rows changed.
+// one upsert or remove, or as a snapshot when several rows changed. Event
+// frames, for a client that asked for them, are never coalesced.
 type subscriber struct {
 	c       *Core
 	session string // only this session, when set
+	agent   string // only this agent's events, when set
+	events  bool   // event frames too
 	out     chan ipc.Frame
 	wake    chan struct{}
 	done    chan struct{}
@@ -24,6 +33,7 @@ type subscriber struct {
 	mu    sync.Mutex
 	full  bool
 	dirty map[string]bool
+	queue []ipc.Frame // event frames not sent yet
 }
 
 // Subscribe starts a stream of frames for one client (ipc.Handler).
@@ -33,7 +43,7 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 		return nil, nil, err
 	}
 	sub := &subscriber{
-		c: c, session: a.Session,
+		c: c, session: a.Session, agent: a.Agent, events: a.Events,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
 		full: true, dirty: map[string]bool{},
 	}
@@ -92,6 +102,23 @@ func (s *subscriber) note(frames []ipc.Frame) {
 	}
 }
 
+// event queues an event frame for a client that wants it. The caller holds
+// s.c.mu.
+func (s *subscriber) event(e event.Event) {
+	if !s.events || s.session != "" && e.Session != s.session || s.agent != "" && e.Agent != s.agent {
+		return
+	}
+	s.mu.Lock()
+	if len(s.queue) < maxQueue {
+		s.queue = append(s.queue, ipc.Frame{T: ipc.FrameEvent, Event: &e})
+	}
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 func (s *subscriber) loop() {
 	defer close(s.out)
 	for {
@@ -101,9 +128,16 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty := s.full, s.dirty
-		s.full, s.dirty = false, map[string]bool{}
+		full, dirty, queue := s.full, s.dirty, s.queue
+		s.full, s.dirty, s.queue = false, map[string]bool{}, nil
 		s.mu.Unlock()
+		for _, f := range queue {
+			select {
+			case s.out <- f:
+			case <-s.done:
+				return
+			}
+		}
 		if !full && len(dirty) == 0 {
 			continue
 		}

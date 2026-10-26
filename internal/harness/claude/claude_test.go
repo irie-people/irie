@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/harness"
@@ -20,7 +23,11 @@ var update = flag.Bool("update", false, "rewrite the golden files")
 const (
 	sessionDir = "/home/alice/.local/state/irie/sessions/s0k3j9x2m4a7q"
 	vendorID   = "6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f"
+	irieBin    = "/home/alice/.local/bin/irie"
 )
+
+// current is what probing a recent Claude Code finds.
+var current = harness.Probe{Version: "2.1.310", Flags: map[string]bool{"--name": true}}
 
 func spawnOf(task string) harness.Spawn {
 	return harness.Spawn{
@@ -30,18 +37,43 @@ func spawnOf(task string) harness.Spawn {
 		Cwd:      "/home/alice/code/website",
 		Dir:      sessionDir,
 		VendorID: vendorID,
+		Bin:      irieBin,
+		HoldMax:  24 * time.Hour,
+		Probe:    current,
 	}
 }
 
 func defaultProfile() config.Profile { return config.Default().Profiles["claude"] }
 
-func launch(t *testing.T, p config.Profile, task string) ([]string, map[string]string, map[string][]byte) {
+func launchSpawn(t *testing.T, p config.Profile, s harness.Spawn) ([]string, map[string]string, map[string][]byte) {
 	t.Helper()
-	argv, env, files, err := Harness{}.Launch(p, spawnOf(task))
+	argv, env, files, err := Harness{}.Launch(p, s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return argv, env, files
+}
+
+func launch(t *testing.T, p config.Profile, task string) ([]string, map[string]string, map[string][]byte) {
+	t.Helper()
+	return launchSpawn(t, p, spawnOf(task))
+}
+
+func golden(t *testing.T, name string, got []byte) {
+	t.Helper()
+	path := filepath.Join("testdata", name)
+	if *update {
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("%s:\n%s\nwant:\n%s", name, got, want)
+	}
 }
 
 func TestArgvGoldenForDefaultProfile(t *testing.T) {
@@ -51,25 +83,154 @@ func TestArgvGoldenForDefaultProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got = append(got, '\n')
-	golden := filepath.Join("testdata", "argv-default.golden")
-	if *update {
-		if err := os.WriteFile(golden, got, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Errorf("argv:\n%s\nwant:\n%s", got, want)
-	}
+	golden(t, "argv-default.golden", append(got, '\n'))
 	if len(env) != 0 {
 		t.Errorf("env = %v, want none", env)
 	}
 	if string(files["task.md"]) != task {
 		t.Errorf("task.md = %q", files["task.md"])
+	}
+}
+
+func TestSettingsFileGolden(t *testing.T) {
+	_, _, files := launch(t, defaultProfile(), "x")
+	golden(t, "settings-default.golden", files[SettingsFile])
+}
+
+// hookEntry is one handler of the settings file, flattened.
+type hookEntry struct {
+	matcher   string
+	command   string
+	timeout   int
+	onFailure string
+}
+
+func settingsHooks(t *testing.T, b []byte) map[string][]hookEntry {
+	t.Helper()
+	var s struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Type      string `json:"type"`
+				Command   string `json:"command"`
+				Timeout   int    `json:"timeout"`
+				OnFailure string `json:"onFailure"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&s); err != nil {
+		t.Fatalf("settings file: %v\n%s", err, b)
+	}
+	out := map[string][]hookEntry{}
+	for ev, groups := range s.Hooks {
+		for _, g := range groups {
+			for _, h := range g.Hooks {
+				if h.Type != "command" {
+					t.Errorf("%s: handler type %q", ev, h.Type)
+				}
+				out[ev] = append(out[ev], hookEntry{g.Matcher, h.Command, h.Timeout, h.OnFailure})
+			}
+		}
+	}
+	return out
+}
+
+// TestSettingsHooksFollowTheDesign checks the hook table of DESIGN §3.3.
+func TestSettingsHooksFollowTheDesign(t *testing.T) {
+	s := spawnOf("x")
+	s.HoldMax = 2 * time.Hour
+	_, _, files := launchSpawn(t, defaultProfile(), s)
+	got := settingsHooks(t, files[SettingsFile])
+	held := int((2*time.Hour + 120*time.Second) / time.Second)
+	want := map[string]hookEntry{
+		"SessionStart":       {"", "", 10, ""},
+		"UserPromptSubmit":   {"", "", 10, ""},
+		"PreToolUse":         {"*", "", held, "block"},
+		"PostToolUse":        {"*", "", held, ""},
+		"PostToolUseFailure": {"*", "", held, ""},
+		"PermissionRequest":  {"*", "", 10, ""},
+		"Notification":       {"", "", 10, ""},
+		"Elicitation":        {"", "", 10, ""},
+		"Stop":               {"", "", 10, ""},
+		"StopFailure":        {"", "", 10, ""},
+		"SubagentStart":      {"", "", 10, ""},
+		"SubagentStop":       {"", "", 10, ""},
+		"SessionEnd":         {"", "", 1, ""},
+	}
+	if len(got) != len(want) {
+		t.Errorf("events %v, want the %d of the design", slices.Sorted(maps.Keys(got)), len(want))
+	}
+	for ev, w := range want {
+		hs := got[ev]
+		if len(hs) != 1 {
+			t.Errorf("%s: %d handlers, want 1", ev, len(hs))
+			continue
+		}
+		h := hs[0]
+		if h.matcher != w.matcher || h.timeout != w.timeout || h.onFailure != w.onFailure {
+			t.Errorf("%s = %+v, want matcher %q timeout %d onFailure %q", ev, h, w.matcher, w.timeout, w.onFailure)
+		}
+		if h.command != "'"+irieBin+"' hook" {
+			t.Errorf("%s command = %q", ev, h.command)
+		}
+	}
+}
+
+func TestHookCommandSurvivesTheShell(t *testing.T) {
+	for _, bin := range []string{"/home/alice/My Tools/irie", "/home/alice/it's/irie", `/home/alice/$HOME/"x"/irie`} {
+		s := spawnOf("x")
+		s.Bin = bin
+		_, _, files := launchSpawn(t, defaultProfile(), s)
+		cmd := settingsHooks(t, files[SettingsFile])["Stop"][0].command
+		// Claude Code runs a command hook with sh -c; printf stands in for irie.
+		out, err := exec.Command("/bin/sh", "-c", "set -- "+strings.TrimSuffix(cmd, " hook")+`; printf '%s' "$1"`).Output()
+		if err != nil {
+			t.Fatalf("%q: %v", cmd, err)
+		}
+		if string(out) != bin || !strings.HasSuffix(cmd, " hook") {
+			t.Errorf("command %q runs %q, want %q", cmd, out, bin)
+		}
+	}
+}
+
+func TestAnOldClaudeGetsNoOnFailure(t *testing.T) {
+	for _, p := range []harness.Probe{{Version: "2.1.294"}, {}} {
+		s := spawnOf("x")
+		s.Probe = p
+		_, _, files := launchSpawn(t, defaultProfile(), s)
+		if bytes.Contains(files[SettingsFile], []byte("onFailure")) {
+			t.Errorf("version %q: settings carry onFailure", p.Version)
+		}
+	}
+	_, _, files := launch(t, defaultProfile(), "x")
+	if !bytes.Contains(files[SettingsFile], []byte(`"onFailure": "block"`)) {
+		t.Error("a recent Claude Code gets no onFailure")
+	}
+}
+
+func TestNameNeedsTheFlag(t *testing.T) {
+	argv, _, _ := launch(t, defaultProfile(), "x")
+	if i := slices.Index(argv, "--name"); i < 0 || argv[i+1] != "describe-this-repo" {
+		t.Errorf("argv = %q, want --name describe-this-repo", argv)
+	}
+	s := spawnOf("x")
+	s.Probe = harness.Probe{Version: "2.1.310"}
+	argv, _, _ = launchSpawn(t, defaultProfile(), s)
+	if slices.Contains(argv, "--name") {
+		t.Errorf("argv = %q: --name without the flag in --help", argv)
+	}
+}
+
+func TestSettingsArePassedWithTheSessionsFile(t *testing.T) {
+	argv, _, files := launch(t, defaultProfile(), "x")
+	i := slices.Index(argv, "--settings")
+	if i < 0 || argv[i+1] != sessionDir+"/claude-settings.json" {
+		t.Errorf("argv = %q", argv)
+	}
+	if _, ok := files["claude-settings.json"]; !ok {
+		t.Errorf("files = %v", slices.Sorted(maps.Keys(files)))
 	}
 }
 
@@ -150,7 +311,8 @@ func TestProfileArgsFollowTheCommand(t *testing.T) {
 func TestEmptyValuesAreLeftOut(t *testing.T) {
 	p := config.Profile{Harness: "claude-code"}
 	argv, _, _ := launch(t, p, "x")
-	if want := []string{"claude", "--session-id", vendorID, "x"}; !reflect.DeepEqual(argv, want) {
+	want := []string{"claude", "--settings", sessionDir + "/claude-settings.json", "--session-id", vendorID, "--name", "describe-this-repo", "x"}
+	if !reflect.DeepEqual(argv, want) {
 		t.Errorf("argv = %q, want %q", argv, want)
 	}
 }
@@ -168,11 +330,16 @@ func TestProfileEnvIsPassed(t *testing.T) {
 	}
 }
 
-func TestVendorIDIsRequired(t *testing.T) {
-	s := spawnOf("x")
-	s.VendorID = ""
-	if _, _, _, err := (Harness{}).Launch(defaultProfile(), s); err == nil {
-		t.Error("no error without a vendor id")
+func TestVendorIDAndBinAreRequired(t *testing.T) {
+	for _, edit := range []func(*harness.Spawn){
+		func(s *harness.Spawn) { s.VendorID = "" },
+		func(s *harness.Spawn) { s.Bin = "" },
+	} {
+		s := spawnOf("x")
+		edit(&s)
+		if _, _, _, err := (Harness{}).Launch(defaultProfile(), s); err == nil {
+			t.Errorf("no error for %+v", s)
+		}
 	}
 }
 

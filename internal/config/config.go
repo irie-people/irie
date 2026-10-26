@@ -1,6 +1,6 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
-// the ui, spawn, profiles and tmux sections.
+// the ui, spawn, profiles, tmux, journal and hold sections.
 package config
 
 import (
@@ -24,6 +24,8 @@ type Config struct {
 	Spawn    Spawn              `toml:"spawn"`
 	Profiles map[string]Profile `toml:"profiles"`
 	Tmux     Tmux               `toml:"tmux"`
+	Journal  Journal            `toml:"journal"`
+	Hold     Hold               `toml:"hold"`
 }
 
 type UI struct {
@@ -57,6 +59,17 @@ type Tmux struct {
 	Socket string `toml:"socket"` // tmux -L name
 }
 
+type Journal struct {
+	KeepDays  int    `toml:"keep_days"`
+	ToolInput string `toml:"tool_input"` // summary | none
+}
+
+// Hold is how long a paused agent may be held. Hook timeouts are set above
+// it, so a harness never lets a held call through on its own.
+type Hold struct {
+	Max time.Duration `toml:"max"`
+}
+
 // Harnesses lists the harness ids this version can launch.
 var Harnesses = []string{"claude-code"}
 
@@ -81,7 +94,9 @@ func Default() Config {
 				Env:            map[string]string{},
 			},
 		},
-		Tmux: Tmux{Socket: "irie"},
+		Tmux:    Tmux{Socket: "irie"},
+		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
+		Hold:    Hold{Max: 24 * time.Hour},
 	}
 }
 
@@ -104,7 +119,9 @@ func Load(path string) (Config, error) {
 		Spawn    *Spawn                    `toml:"spawn"`
 		Profiles map[string]toml.Primitive `toml:"profiles"`
 		Tmux     *Tmux                     `toml:"tmux"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Tmux: &c.Tmux}
+		Journal  *Journal                  `toml:"journal"`
+		Hold     *Hold                     `toml:"hold"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -178,6 +195,15 @@ func (c Config) Validate() error {
 	}
 	if c.Tmux.Path != "" && !filepath.IsAbs(c.Tmux.Path) {
 		bad("tmux.path = %q: must be an absolute path", c.Tmux.Path)
+	}
+	if c.Journal.KeepDays < 1 {
+		bad("journal.keep_days = %d: must be at least 1", c.Journal.KeepDays)
+	}
+	if c.Journal.ToolInput != "summary" && c.Journal.ToolInput != "none" {
+		bad("journal.tool_input = %q: must be summary or none", c.Journal.ToolInput)
+	}
+	if c.Hold.Max <= 0 {
+		bad("hold.max = %v: must be positive", c.Hold.Max)
 	}
 	return errors.Join(errs...)
 }

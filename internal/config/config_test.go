@@ -45,6 +45,12 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Tmux{Path: "", Socket: "irie"}); c.Tmux != want {
 		t.Errorf("tmux = %+v, want %+v", c.Tmux, want)
 	}
+	if want := (Journal{KeepDays: 30, ToolInput: "summary"}); c.Journal != want {
+		t.Errorf("journal = %+v, want %+v", c.Journal, want)
+	}
+	if want := (Hold{Max: 24 * time.Hour}); c.Hold != want {
+		t.Errorf("hold = %+v, want %+v", c.Hold, want)
+	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("defaults do not validate: %v", err)
 	}
@@ -90,6 +96,13 @@ model = "claude-haiku-5-5"
 [tmux]
 path = "/opt/homebrew/bin/tmux"
 socket = "irie-alt"
+
+[journal]
+keep_days = 7
+tool_input = "none"
+
+[hold]
+max = "2h"
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -118,6 +131,12 @@ socket = "irie-alt"
 	if want := (Tmux{Path: "/opt/homebrew/bin/tmux", Socket: "irie-alt"}); c.Tmux != want {
 		t.Errorf("tmux = %+v, want %+v", c.Tmux, want)
 	}
+	if want := (Journal{KeepDays: 7, ToolInput: "none"}); c.Journal != want {
+		t.Errorf("journal = %+v, want %+v", c.Journal, want)
+	}
+	if want := (Hold{Max: 2 * time.Hour}); c.Hold != want {
+		t.Errorf("hold = %+v, want %+v", c.Hold, want)
+	}
 	// The defaults themselves are untouched.
 	if Default().Profiles["claude"].Model != "claude-opus-5-5" {
 		t.Error("loading a file changed the defaults")
@@ -142,6 +161,8 @@ func TestUnknownKeyIsNamed(t *testing.T) {
 		{"[profiles.claude]\nmodle = \"x\"\n", "profiles.claude.modle"},
 		{"[spawn]\nreadytimeout = \"5s\"\n", "spawn.readytimeout"},
 		{"top_level = 1\n", "top_level"},
+		{"[journal]\nkeepdays = 3\n", "journal.keepdays"},
+		{"[hold]\nmaximum = \"1h\"\n", "hold.maximum"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
@@ -166,6 +187,9 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[tmux]\nsocket = \"a/b\"\n", "socket"},
 		{"[tmux]\npath = \"tmux\"\n", "path"},
 		{"[ui]\nsidebar_width = \"wide\"\n", "sidebar_width"},
+		{"[journal]\nkeep_days = 0\n", "keep_days"},
+		{"[journal]\ntool_input = \"everything\"\n", "tool_input"},
+		{"[hold]\nmax = \"0s\"\n", "hold.max"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
@@ -183,7 +207,7 @@ func TestPrintRoundTrips(t *testing.T) {
 	if err := Default().Write(&buf); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`} {
+	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("printed config lacks %s:\n%s", want, buf.String())
 		}

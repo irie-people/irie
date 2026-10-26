@@ -13,6 +13,7 @@ import (
 
 	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/core"
+	"github.com/irie-hq/irie/internal/hook"
 	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/paths"
 	"github.com/irie-hq/irie/internal/ui"
@@ -24,6 +25,7 @@ const usage = `usage: irie [command]
   irie                    start Irie if needed and attach to it (same as attach)
   irie up                 start the server, core and sidebar if needed
   irie attach [--nested]  attach this terminal to Irie
+  irie ctl <command>      script Irie: list, spawn, show, watch (irie ctl for help)
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
 
@@ -31,6 +33,7 @@ Used by Irie itself:
   irie core [--supervise]   the core
   irie ui [--supervise]     the sidebar
   irie host --spec <file>   the first process of an agent pane
+  irie hook                 the shim an agent runs for each hook event
   irie placeholder          what the slot shows when no session is shown
 `
 
@@ -50,7 +53,9 @@ func run(args []string) int {
 	case "core":
 		return supervised("core", args, func(o core.Options) error { return core.Run(o) })
 	case "ui":
-		return supervised("ui", args, func(o core.Options) error { return ui.Run(o.Paths.Socket()) })
+		return supervised("ui", args, func(o core.Options) error {
+			return ui.Run(o.Paths.Socket(), ui.Options{RedOnDone: o.Config.UI.RedOnDone})
+		})
 	case "host":
 		fs := flag.NewFlagSet("host", flag.ContinueOnError)
 		spec := fs.String("spec", "", "spec file")
@@ -62,6 +67,10 @@ func run(args []string) int {
 	case "placeholder":
 		cfg, _, _ := load()
 		err = ui.Placeholder(cfg.UI.FocusKey)
+	case "hook":
+		return hook.Run(os.Stdin, os.Stdout, os.Getenv)
+	case "ctl":
+		err = ctl(args)
 	case "version":
 		fmt.Println("irie", version.String())
 	case "config":

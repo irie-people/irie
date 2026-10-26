@@ -397,7 +397,7 @@ func TestHeaderCounts(t *testing.T) {
 func TestZeroCountsAreNotRed(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 2)
 	header := strings.Split(m.View().Content, "\n")[0]
-	if strings.Contains(header, "\x1b[31m") {
+	if red.MatchString(header) {
 		t.Errorf("header %q has red with nothing needing you", header)
 	}
 }
@@ -511,5 +511,126 @@ func TestPlaceholderShowsTheMarkWhenThereIsRoom(t *testing.T) {
 	}
 	if short := view(80, 14); strings.Contains(short, "☀") || !strings.Contains(short, "[Tab]") {
 		t.Errorf("80×14 placeholder:\n%s", short)
+	}
+}
+
+func code(n int) *int { return &n }
+
+// everyState is one row per state of DESIGN §5.3.
+func everyState() []ipc.Session {
+	rows := []ipc.Session{
+		{Name: "failed-row", State: ipc.StateFailed, ExitCode: code(1), Reason: "exited before it was ready", Detail: "failed: exit 1 · error: unknown option"},
+		{Name: "exited-ok", State: ipc.StateExited, ExitCode: code(0), Detail: "exited 0"},
+		{Name: "exited-bad", State: ipc.StateExited, ExitCode: code(2), Detail: "exited 2"},
+		{Name: "needs-row", State: ipc.StateNeedsYou, Reason: "question", Detail: "asks: Which colour should the button be?"},
+		{Name: "stalled-row", State: ipc.StateStalled, Reason: "stalled", Detail: "stalled: no hooks within 30s · Do you trust the files in this folder?"},
+		{Name: "working-row", State: ipc.StateWorking, Detail: "Bash · go test ./..."},
+		{Name: "starting-row", State: ipc.StateStarting},
+		{Name: "done-row", State: ipc.StateDone},
+		{Name: "idle-row", State: ipc.StateIdle},
+	}
+	for i := range rows {
+		rows[i].ID = fmt.Sprintf("s%012d", i)
+		rows[i].Created = now.Add(-time.Duration(len(rows)-i) * time.Minute)
+	}
+	return rows
+}
+
+func statesModel(t *testing.T, o Options) Model {
+	t.Helper()
+	o.Now = func() time.Time { return now }
+	m := New(&fakeBackend{}, o)
+	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 24})
+	return send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: everyState(), Header: &ipc.Header{}}})
+}
+
+// rowLine returns the raw (styled) screen line of the row named name.
+func rowLine(t *testing.T, m Model, name string) string {
+	t.Helper()
+	for _, l := range strings.Split(m.View().Content, "\n") {
+		if strings.Contains(ansiRE.ReplaceAllString(l, ""), name) {
+			return l
+		}
+	}
+	t.Fatalf("no row %s", name)
+	return ""
+}
+
+func TestEveryStateHasItsGlyph(t *testing.T) {
+	m := statesModel(t, Options{})
+	m = send(m, keyMsg("tab")) // the selection bar would hide nothing, but keep rows plain
+	for name, glyph := range map[string]string{
+		"failed-row": "✕", "exited-ok": "·", "exited-bad": "·", "needs-row": "●", "stalled-row": "!",
+		"working-row": "●", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
+	} {
+		plain := strings.TrimLeft(ansiRE.ReplaceAllString(rowLine(t, m, name), ""), " ▌")
+		if !strings.HasPrefix(plain, glyph+" "+name) {
+			t.Errorf("row %q, want glyph %s", plain, glyph)
+		}
+	}
+}
+
+// sgr matches an SGR sequence that sets the basic colour n, alone or with
+// other attributes such as faint.
+func sgr(n int) *regexp.Regexp {
+	return regexp.MustCompile(fmt.Sprintf(`\x1b\[(?:[0-9]+;)*%d(?:;[0-9]+)*m`, n))
+}
+
+var red, green = sgr(31), sgr(32)
+
+func TestRedMarksOnlyTheRowsThatNeedYou(t *testing.T) {
+	m := statesModel(t, Options{})
+	m = send(m, keyMsg("tab"))
+	for name, wantRed := range map[string]bool{
+		"failed-row": true, "exited-bad": true, "needs-row": true, "stalled-row": true,
+		"exited-ok": false, "working-row": false, "starting-row": false, "done-row": false, "idle-row": false,
+	} {
+		if got := red.MatchString(rowLine(t, m, name)); got != wantRed {
+			t.Errorf("%s: red %v, want %v: %q", name, got, wantRed, rowLine(t, m, name))
+		}
+	}
+	if !green.MatchString(rowLine(t, m, "done-row")) {
+		t.Errorf("done row is not green: %q", rowLine(t, m, "done-row"))
+	}
+	// ui.red_on_done shows done in red instead.
+	m = statesModel(t, Options{RedOnDone: true})
+	m = send(m, keyMsg("tab"))
+	if !red.MatchString(rowLine(t, m, "done-row")) {
+		t.Errorf("red_on_done: done row %q", rowLine(t, m, "done-row"))
+	}
+}
+
+func TestHeaderCountsWhatNeedsYou(t *testing.T) {
+	m := statesModel(t, Options{})
+	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	header := screen(t, m)[0]
+	for _, want := range []string{"●1 working", "●2 needs you", "✓1 done"} {
+		if !strings.Contains(header, want) {
+			t.Errorf("header %q lacks %q", header, want)
+		}
+	}
+	if raw := strings.Split(m.View().Content, "\n")[0]; !red.MatchString(raw) {
+		t.Errorf("header %q: the needs-you count is not red", raw)
+	}
+}
+
+func TestStatusStripShowsWhyAndWhat(t *testing.T) {
+	m := statesModel(t, Options{})
+	status := func() string { return screen(t, m)[len(screen(t, m))-2] }
+	for i, want := range []string{
+		"failed: exit 1", "exited 0", "exited 2", "asks: Which colour", "stalled: no hooks", "Bash · go test", "starting-row", "done-row", "idle-row",
+	} {
+		m.sel = i
+		if !strings.Contains(status(), want) {
+			t.Errorf("row %d: status strip %q, want %q", i, status(), want)
+		}
+	}
+	// A warning shows when there is nothing more pressing to say.
+	rows := everyState()
+	rows[6].Warnings = []string{"pause off: Claude Code 2.1.200 is older than 2.1.295"}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[6]}})
+	m.sel = 6
+	if !strings.Contains(status(), "pause off: Claude Code 2.1.200") {
+		t.Errorf("status strip %q, want the warning", status())
 	}
 }

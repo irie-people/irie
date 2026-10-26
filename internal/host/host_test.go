@@ -27,6 +27,13 @@ type hostEnv struct {
 // tmux server that uses Irie's generated tmux.conf.
 func startHost(t *testing.T, argv ...string) *hostEnv {
 	t.Helper()
+	return startHostSpec(t, Spec{Argv: argv})
+}
+
+// startHostSpec is startHost for a spec of its own. The session, cwd and a
+// marker variable are filled in.
+func startHostSpec(t *testing.T, spec Spec) *hostEnv {
+	t.Helper()
 	testutil.NeedTmux(t)
 	bin := testutil.BuildIrie(t)
 	e := testutil.NewEnv(t)
@@ -34,7 +41,7 @@ func startHost(t *testing.T, argv ...string) *hostEnv {
 	if err := os.MkdirAll(h.dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	spec := Spec{Session: "s0k3j9x2m4a7q", Argv: argv, Cwd: t.TempDir(), Env: map[string]string{"IRIE_TEST_MARK": "1"}}
+	spec.Session, spec.Cwd, spec.Env = "s0k3j9x2m4a7q", t.TempDir(), map[string]string{"IRIE_TEST_MARK": "1"}
 	if err := WriteSpec(filepath.Join(h.dir, "spec.json"), spec); err != nil {
 		t.Fatal(err)
 	}
@@ -190,5 +197,19 @@ func TestStopsTheHostDidNotCauseAreContinued(t *testing.T) {
 			}
 		}
 		return false
+	})
+}
+
+func TestUnsetVariablesNeverReachTheAgent(t *testing.T) {
+	script := `printf '%s|%s|%s\n' "${TMUX-unset}" "${TMUX_PANE-unset}" "$IRIE_TEST_MARK"; sleep 600`
+	h := startHostSpec(t, Spec{Argv: []string{"/bin/sh", "-c", script}, Unset: []string{"TMUX", "TMUX_PANE"}})
+	testutil.Eventually(t, 5*time.Second, "the agent did not print its env", func() bool {
+		return strings.Contains(h.Tmux(t, "capture-pane", "-p", "-t", "h:0.0"), "unset|unset|1")
+	})
+	// Without Unset the pane's own tmux variables reach the agent.
+	h = startHostSpec(t, Spec{Argv: []string{"/bin/sh", "-c", script}})
+	testutil.Eventually(t, 5*time.Second, "the agent did not print its env", func() bool {
+		screen := h.Tmux(t, "capture-pane", "-p", "-t", "h:0.0")
+		return strings.Contains(screen, "|1") && !strings.Contains(screen, "unset")
 	})
 }

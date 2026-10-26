@@ -6,12 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/irie-hq/irie/internal/config"
+	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/harness"
 	"github.com/irie-hq/irie/internal/harness/claude"
 	"github.com/irie-hq/irie/internal/host"
@@ -136,7 +140,8 @@ func (c *Core) workdir(requested, name string) (string, error) {
 
 // spawn runs the spawn pipeline (DESIGN §4.2): the task never travels
 // through tmux and is never typed into a TUI. It goes to the agent as an
-// argument, or as a file when it is large.
+// argument, or as a file when it is large. Whether the agent then comes up,
+// fails or stalls, observe and the hooks tell.
 func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	if strings.TrimSpace(a.Task) == "" {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "empty task")
@@ -147,9 +152,14 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	if err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", profileName, err)
 	}
+	// Probing runs the CLI, so it happens before taking the lock.
+	var probe harness.Probe
+	if p, ok := h.(harness.Prober); ok {
+		probe = p.Probe(profile, c.agentEnv(profile))
+	}
 
 	c.mu.Lock()
-	x, err := c.launch(a, profileName, h)
+	x, err := c.launch(a, profileName, h, probe)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -161,9 +171,20 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	return x.wire(), nil
 }
 
-// launch writes the session's files and creates its window. The caller
-// holds c.mu.
-func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness) (*session, error) {
+// agentEnv is, as near as the core can tell, the environment an agent of
+// profile p starts with: the core's own without tmux's variables, and the
+// profile's.
+func (c *Core) agentEnv(p config.Profile) []string {
+	env := tmux.WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE")
+	for _, k := range slices.Sorted(maps.Keys(p.Env)) {
+		env = append(env, k+"="+p.Env[k])
+	}
+	return env
+}
+
+// launch writes the session's files, creates its window and records the
+// spawn. The caller holds c.mu.
+func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness, probe harness.Probe) (*session, error) {
 	if err := c.refresh(); err != nil {
 		return nil, err
 	}
@@ -182,7 +203,7 @@ func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness) (*
 	}
 	x := &session{
 		id: id, name: name, agent: "main", created: time.Now().UTC().Truncate(time.Millisecond),
-		cwd: cwd, profile: profileName, vendorID: harness.NewUUID(),
+		cwd: cwd, profile: profileName, harness: h.ID(), vendorID: harness.NewUUID(), warnings: probe.Warnings,
 	}
 
 	dir := c.paths.Session(id)
@@ -191,6 +212,7 @@ func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness) (*
 	}
 	argv, env, files, err := h.Launch(c.cfg.Profiles[profileName], harness.Spawn{
 		Session: id, Name: name, Task: a.Task, Cwd: cwd, Dir: dir, VendorID: x.vendorID,
+		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: probe,
 	})
 	if err != nil {
 		return nil, err
@@ -200,8 +222,20 @@ func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness) (*
 			return nil, err
 		}
 	}
+	// Irie's own variables let the agent's hooks find the core. tmux's are
+	// removed, so an agent's own tmux commands cannot reach Irie's server.
+	if env == nil {
+		env = map[string]string{}
+	}
+	env["IRIE_SESSION"], env["IRIE_SOCKET"], env["IRIE_BIN"] = id, c.paths.Socket(), c.bin
+	var unset []string
+	if c.cfg.Spawn.HideTmux {
+		unset = []string{"TMUX", "TMUX_PANE"}
+	}
 	spec := c.paths.SpecFile(id)
-	if err := host.WriteSpec(spec, host.Spec{Session: id, Profile: profileName, Argv: argv, Env: env, Cwd: cwd}); err != nil {
+	if err := host.WriteSpec(spec, host.Spec{
+		Session: id, Profile: profileName, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: cwd, Warnings: probe.Warnings,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -233,5 +267,8 @@ func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness) (*
 	}
 	x.pane = strings.TrimSpace(out)
 	c.sessions[id] = x
+	c.record(x, event.Event{Source: event.SourceIrie, Kind: event.SpawnRequested, Data: map[string]any{
+		"task_bytes": len(a.Task), "cwd": cwd, "profile": profileName,
+	}})
 	return x, nil
 }

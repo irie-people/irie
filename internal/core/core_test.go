@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,38 +23,70 @@ import (
 
 func TestMain(m *testing.M) { testutil.Main(m) }
 
-// testProfile stands in for Claude Code: Irie's flags after the args become
-// the shell's positional parameters and are ignored.
-const testProfile = `
-[spawn]
-default_profile = "test"
+// agentConfig makes the fake agent, Claude Code's stand-in (DESIGN §8.1),
+// the default agent.
+type agentConfig struct {
+	command      string            // the agent's command; the fake agent when empty
+	mode         string            // profiles.fake.permission_mode; auto when empty
+	readyTimeout string            // spawn.ready_timeout
+	env          map[string]string // profiles.fake.env
+}
 
-[profiles.test]
-command = "/bin/sh"
-args = ["-c", "echo ready; sleep 600"]
-`
+func (a agentConfig) toml(fake string) string {
+	command, mode := a.command, a.mode
+	if command == "" {
+		command = fake
+	}
+	if mode == "" {
+		mode = "auto"
+	}
+	var b strings.Builder
+	b.WriteString("[spawn]\ndefault_profile = \"fake\"\n")
+	if a.readyTimeout != "" {
+		fmt.Fprintf(&b, "ready_timeout = %q\n", a.readyTimeout)
+	}
+	fmt.Fprintf(&b, "\n[profiles.fake]\ncommand = %q\nmodel = \"claude-opus-5-5\"\neffort = \"max\"\npermission_mode = %q\n", command, mode)
+	if len(a.env) > 0 {
+		var kv []string
+		for _, k := range slices.Sorted(maps.Keys(a.env)) {
+			kv = append(kv, fmt.Sprintf("%s = %q", k, a.env[k]))
+		}
+		b.WriteString("env = { " + strings.Join(kv, ", ") + " }\n")
+	}
+	return b.String()
+}
 
 type coreEnv struct {
 	*testutil.Env
 	t     *testing.T
 	bin   string
+	fake  string
 	paths paths.Paths
 }
 
-func setup(t *testing.T) *coreEnv {
+func setup(t *testing.T) *coreEnv { return setupWith(t, agentConfig{}) }
+
+// setupWith starts Irie in a private tmux server with a as its agent.
+func setupWith(t *testing.T, a agentConfig) *coreEnv {
+	c := prepare(t, a)
+	c.up()
+	return c
+}
+
+// prepare is setupWith without starting Irie.
+func prepare(t *testing.T, a agentConfig) *coreEnv {
 	t.Helper()
 	testutil.NeedTmux(t)
 	bin := testutil.BuildIrie(t)
+	fake := testutil.BuildFakeAgent(t)
 	e := testutil.NewEnv(t)
 	t.Setenv("IRIE_BIN", bin)
-	e.WriteConfig(t, testProfile)
+	e.WriteConfig(t, a.toml(fake))
 	p, err := paths.FromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &coreEnv{Env: e, t: t, bin: bin, paths: p}
-	c.up()
-	return c
+	return &coreEnv{Env: e, t: t, bin: bin, fake: fake, paths: p}
 }
 
 func (c *coreEnv) up() {
@@ -190,6 +224,7 @@ func TestUpBuildsTheLayout(t *testing.T) {
 func TestUpReplacesACoreAndSidebarOfAnotherVersion(t *testing.T) {
 	c := setup(t)
 	a := c.spawn("keep running")
+	c.waitState(a.ID, ipc.StateWorking)
 	format := func(target, f string) string {
 		return c.Tmux(t, "display-message", "-p", "-t", target, f)
 	}
@@ -279,7 +314,7 @@ func TestSpawnCreatesAnAgentWindow(t *testing.T) {
 	if err := json.Unmarshal(b, &spec); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(spec.Argv[:3], []string{"/bin/sh", "-c", "echo ready; sleep 600"}) || spec.Argv[len(spec.Argv)-1] != task {
+	if spec.Argv[0] != c.fake || !slices.Contains(spec.Argv, "--settings") || spec.Argv[len(spec.Argv)-1] != task {
 		t.Errorf("spec argv = %q", spec.Argv)
 	}
 	// No @ token: a new scratch dir under the data dir.
@@ -287,11 +322,12 @@ func TestSpawnCreatesAnAgentWindow(t *testing.T) {
 		t.Errorf("cwd = %q, want a scratch dir", spec.Cwd)
 	}
 
-	testutil.Eventually(t, 5*time.Second, "agent did not print ready", func() bool {
+	testutil.Eventually(t, 5*time.Second, "the agent did not draw", func() bool {
 		out, _ := c.TryTmux("capture-pane", "-p", "-t", p["pane_id"])
-		return strings.Contains(out, "ready")
+		return strings.Contains(out, "fakeagent")
 	})
-	if ls := c.list(); len(ls) != 1 || ls[0].ID != s.ID || ls[0].State != ipc.StateWorking {
+	c.waitState(s.ID, ipc.StateWorking)
+	if ls := c.list(); len(ls) != 1 || ls[0].ID != s.ID {
 		t.Errorf("list = %+v", ls)
 	}
 
@@ -436,8 +472,10 @@ func TestSidebarComesBackWithin2s(t *testing.T) {
 
 func TestCoreRestartGivesTheSameRows(t *testing.T) {
 	c := setup(t)
-	c.spawn("task a")
+	a := c.spawn("task a")
 	b := c.spawn("task b")
+	c.waitState(a.ID, ipc.StateWorking)
+	c.waitState(b.ID, ipc.StateWorking)
 	c.show(b.ID, false)
 	before := c.list()
 
@@ -514,7 +552,7 @@ func TestTheSidebarSpawnsAndShows(t *testing.T) {
 	termTmux("send-keys", "-t", "t", "Enter")
 	testutil.Eventually(t, 5*time.Second, "Enter did not show the session", func() bool {
 		slot := c.slot()
-		return slot != nil && slot["pane_id"] == s.Pane && active() == "1" && strings.Contains(screen(), "ready")
+		return slot != nil && slot["pane_id"] == s.Pane && active() == "1" && strings.Contains(screen(), "fakeagent")
 	})
 
 	// The focus key toggles back to the sidebar.

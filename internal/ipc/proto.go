@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/irie-hq/irie/internal/event"
 )
 
 // API is the protocol version. Additions keep backwards compatibility.
@@ -16,6 +18,7 @@ const (
 	OpSubscribe = "subscribe"
 	OpSpawn     = "spawn"
 	OpShow      = "show"
+	OpHook      = "hook"
 )
 
 // Error codes.
@@ -27,11 +30,16 @@ const (
 	CodeInternal   = "internal"
 )
 
-// Session states (DESIGN §5.3). Before hooks exist only the process facts are
-// known: a live pane is working and a dead one has exited.
+// Session states (DESIGN §5.3), derived from the session's events.
 const (
-	StateWorking = "working"
-	StateExited  = "exited"
+	StateFailed   = "failed"
+	StateExited   = "exited"
+	StateNeedsYou = "needs_you"
+	StateStalled  = "stalled"
+	StateWorking  = "working"
+	StateStarting = "starting"
+	StateDone     = "done"
+	StateIdle     = "idle"
 )
 
 // Session is one row of the session list.
@@ -40,6 +48,10 @@ type Session struct {
 	Name     string    `json:"name"`
 	Agent    string    `json:"agent,omitempty"` // "main"
 	State    string    `json:"state"`
+	Reason   string    `json:"reason,omitempty"`   // why it needs you, stalled or failed
+	Detail   string    `json:"detail,omitempty"`   // one line for the status strip
+	Tail     []string  `json:"tail,omitempty"`     // the last screen lines of a stalled or failed spawn
+	Warnings []string  `json:"warnings,omitempty"` // what Irie cannot do for this session
 	ExitCode *int      `json:"exit_code,omitempty"`
 	Created  time.Time `json:"created"`
 	Cwd      string    `json:"cwd,omitempty"`
@@ -93,20 +105,37 @@ type ShowArgs struct {
 	Focus   bool   `json:"focus"`
 }
 
+// HookArgs carry one hook event from the shim: the harness's own payload,
+// whose strings the shim has capped.
+type HookArgs struct {
+	Harness string          `json:"harness"`
+	Session string          `json:"session"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// HookResult is what the shim tells the agent: context for it, or a reason
+// to deny the call. Both are empty when there is nothing to say.
+type HookResult struct {
+	Context string `json:"context,omitempty"`
+	Deny    string `json:"deny,omitempty"`
+}
+
 // Frame types streamed after subscribe.
 const (
 	FrameSnapshot = "snapshot"
 	FrameUpsert   = "upsert"
 	FrameRemove   = "remove"
+	FrameEvent    = "event" // only with SubscribeArgs.Events
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
 type Frame struct {
-	T        string    `json:"t"`
-	Sessions []Session `json:"sessions,omitempty"` // snapshot
-	Header   *Header   `json:"header,omitempty"`   // snapshot
-	Session  *Session  `json:"session,omitempty"`  // upsert
-	ID       string    `json:"id,omitempty"`       // remove
+	T        string       `json:"t"`
+	Sessions []Session    `json:"sessions,omitempty"` // snapshot
+	Header   *Header      `json:"header,omitempty"`   // snapshot
+	Session  *Session     `json:"session,omitempty"`  // upsert
+	ID       string       `json:"id,omitempty"`       // remove
+	Event    *event.Event `json:"event,omitempty"`    // event
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
@@ -137,6 +166,11 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T  string `json:"t"`
 			ID string `json:"id"`
 		}{f.T, f.ID})
+	case FrameEvent:
+		return json.Marshal(struct {
+			T     string       `json:"t"`
+			Event *event.Event `json:"event"`
+		}{f.T, f.Event})
 	}
 	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)
 }
