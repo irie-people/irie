@@ -4,3 +4,4 @@ dist/
 .npmrc
 .clean-room/
 .claude/settings.local.json
+.claude/worktrees/

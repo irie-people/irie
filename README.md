@@ -20,6 +20,10 @@ Run every coding agent you have, from any supplier, on any model, cloud or local
 
 Early and unreleased. Nothing to install yet.
 
+## Free, and paid back
+
+**Get the value you'd pay for, free, today.** If Irie ever makes money (donations, sponsorships, grants), it all goes back to the people who build it, after running costs, in proportion to the value of what they contributed. The founder started with zero Steak and earns it the same way as everyone else. The record is public: [irie-hq/stake](https://github.com/irie-hq/stake).
+
 ## License
 
 [Apache-2.0](LICENSE). Built from public documentation; every source is listed in [PROVENANCE.md](PROVENANCE.md).

@@ -14,7 +14,11 @@ Nothing in the repository should identify a person: no names, usernames, emails,
 
 ## Commits
 
-Commit in UTC: `TZ=UTC git commit`.
+Commit in UTC: `TZ=UTC git commit`. Sign off every commit (`git commit -s`, the DCO).
+
+## Stake
+
+Contributions earn Steak under [irie-hq/stake](https://github.com/irie-hq/stake). Agree anything sizeable in an issue first, and say when an agent wrote part of a change.
 
 ## Stack
 
