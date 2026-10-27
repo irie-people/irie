@@ -102,8 +102,8 @@ struct SidebarView: View {
                         .padding(.bottom, 8)
                     }
                 }
-                // The line from the selected card shows while the card's
-                // middle is in sight here (TabLink.swift).
+                // The lines from the selected card show while the stretch
+                // of its edge they open is in sight here (TabLink.swift).
                 .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { $0.list = $1 }
                 .onChange(of: store.selection) {
                     if let id = store.selection { proxy.scrollTo(id) }
@@ -151,7 +151,7 @@ struct SidebarView: View {
 /// washed in its agent's colour while it works, tinted and edged in red
 /// while it needs you. The selected card stands up from the others, on a
 /// gentle shadow, filled with the selection and edged in its session's
-/// colour, which a line carries on to the terminal's frame (TabLink.swift).
+/// colour, which two lines carry on to the terminal's frame (TabLink.swift).
 /// A selected working card is a gradient, from the selection by its mark to
 /// the colour round its terminal at the trailing end.
 private struct SessionCard: View {
@@ -214,8 +214,7 @@ private struct SessionCard: View {
         .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
         .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
             if selected {
-                ends.card = bounds
-                ends.color = edge
+                ends.card = .init(bounds: bounds, color: edge, width: edgeWidth, ground: trailingGround)
             }
         }
         .contentShape(shape)
@@ -302,8 +301,13 @@ private struct SessionCard: View {
 
     private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
+    /// A selected card's ground at its trailing edge, bottom first: the fill,
+    /// then the full ends of its wash and of its deep end. The lines from it
+    /// paint these over its edge where they open it (TabLink.swift).
+    private var trailingGround: [Color] { [fill] + [Look.agentWash(session), deep].compactMap { $0 } }
+
     /// Round the selected card, the colour of the terminal's frame and the
-    /// line between them; a faint accent round the one under the pointer;
+    /// lines between them; a faint accent round the one under the pointer;
     /// red round one that needs you. The rest have none: a working card's
     /// agent shows in its mark and its wash.
     private var edge: Color {
@@ -312,9 +316,10 @@ private struct SessionCard: View {
         return look.loud ? Theme.needs.opacity(0.5) : .clear
     }
 
-    /// The selected card's edge is as wide as the line from it, and bolder
+    /// The selected card's edge is as wide as the lines from it, and bolder
     /// while the list has the keyboard, so its colour always matches the
-    /// line's and the frame's while its width tells where the keyboard is.
+    /// lines' and the frame's while its width tells where the keyboard is.
+    /// The lines narrow from it as they curve away.
     private var edgeWidth: CGFloat { selected ? (listFocused ? 2.5 : TabLink.width) : 1 }
 
     private var spoken: String {

@@ -9,7 +9,7 @@ import SwiftUI
 enum Snapshot {
     static func run(into dir: String) -> Never {
         NSApplication.shared.setActivationPolicy(.accessory)
-        // The terminal view, with the frame and the line from the selected
+        // The terminal view, with the frame and the lines from the selected
         // card, whichever view the app has saved, which a volatile domain
         // leaves untouched.
         UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)

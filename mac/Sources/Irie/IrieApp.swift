@@ -185,7 +185,7 @@ struct ContentView: View {
                     }
                 }
         }
-        // The line from the selected card to the terminal, over both columns.
+        // The lines from the selected card to the terminal, over both columns.
         .overlayPreferenceValue(TabLinkKey.self) { TabLink(ends: $0) }
         .tint(Theme.accent)
         .sheet(isPresented: $store.newTaskSheet) {
