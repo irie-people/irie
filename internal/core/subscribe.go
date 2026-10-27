@@ -21,8 +21,9 @@ const maxQueue = 10000
 // remembers which rows changed; a frame then carries their latest state, as
 // one upsert or remove, or as a snapshot when several rows changed. Event
 // frames, for a client that asked for them, are never coalesced. A client
-// that sees every session also gets the sessions outside Irie and the closed
-// sessions, after its first snapshot and whenever they change. A client that
+// that sees every session also gets the sessions outside Irie, the closed
+// sessions and the history's labels, after its first snapshot and whenever
+// they change. A client that
 // follows one session's conversation gets all of it, then what changed.
 type subscriber struct {
 	c            *Core
@@ -41,6 +42,7 @@ type subscriber struct {
 	queue   []ipc.Frame // event frames not sent yet
 	outside bool        // an outside frame is due
 	closed  bool        // a closed frame is due
+	hist    bool        // a history frame is due
 	talk    bool        // a conversation frame may be due
 
 	talkSent bool   // the conversation's first frame went out; only loop uses it
@@ -63,7 +65,7 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	sub := &subscriber{
 		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
-		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "", talk: a.Conversation,
+		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "", hist: a.Session == "", talk: a.Conversation,
 	}
 	c.mu.Lock()
 	if a.Conversation {
@@ -174,6 +176,21 @@ func (s *subscriber) noteClosed() {
 	}
 }
 
+// noteHistory marks a history frame due, for a client that sees every
+// session.
+func (s *subscriber) noteHistory() {
+	if s.session != "" {
+		return
+	}
+	s.mu.Lock()
+	s.hist = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // noteHeader tells the subscriber that the header changed.
 func (s *subscriber) noteHeader() {
 	s.mu.Lock()
@@ -222,8 +239,8 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, header, queue, outside, closed, talk := s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.talk
-		s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.talk = false, map[string]bool{}, false, nil, false, false, false
+		full, dirty, header, queue, outside, closed, hist, talk := s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.hist, s.talk
+		s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.hist, s.talk = false, map[string]bool{}, false, nil, false, false, false, false
 		s.mu.Unlock()
 		for _, f := range queue {
 			select {
@@ -252,6 +269,11 @@ func (s *subscriber) loop() {
 		}
 		if closed {
 			frames = append(frames, s.closedFrame())
+		}
+		if hist {
+			s.c.mu.Lock()
+			frames = append(frames, s.c.historyFrame())
+			s.c.mu.Unlock()
 		}
 		if talk {
 			if f, ok := s.conversationFrame(); ok {

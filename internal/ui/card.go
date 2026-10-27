@@ -358,6 +358,10 @@ func (m Model) detailRows() (string, [][]piece) {
 		}
 		return rows
 	}
+	if mn := m.menu; mn != nil {
+		// What the highlighted answer to an undo's question will do.
+		return "", words(mn.choice.Options[mn.at].Detail, p.muted)
+	}
 	if m.status != "" {
 		c := p.muted
 		if m.statusErr {

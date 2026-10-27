@@ -346,8 +346,9 @@ func (v listView) String() string {
 }
 
 // Heights. The header and the command bar are pinned; the list takes the
-// rest. From 10 rows a tab bar sits under the header and the command bar
-// sits in a box; from 24 rows the status strip becomes the details card;
+// rest. From 10 rows the header gains its second line, what undo and redo
+// would do, a tab bar sits under it and the command bar sits in a box;
+// from 24 rows the status strip becomes the details card;
 // below 6 the status strip is hidden and the bar is one line. Sessions are
 // cards while the pane is at least 24 columns wide and the list has 8 rows,
 // else one-line rows.
@@ -366,6 +367,13 @@ func (m Model) details() bool { return m.height >= 24 }
 // tabbed reports whether the tab bar shows, and the bar has its box.
 func (m Model) tabbed() bool { return m.height >= 10 }
 
+// headerLines is 2 when the header shows the history's line (undo.go),
+// else 1.
+func (m Model) headerLines() int { return 1 + b2i(m.tabbed()) }
+
+// tabsTop is the screen row of the tab bar, under the header.
+func (m Model) tabsTop() int { return m.headerLines() }
+
 // statusHeight is the status strip's lines, or the details card's.
 func (m Model) statusHeight() int {
 	switch {
@@ -380,7 +388,7 @@ func (m Model) statusHeight() int {
 // chrome is the number of rows that are neither the list nor the bar's
 // text.
 func (m Model) chrome() int {
-	n := 1 + m.statusHeight()
+	n := m.headerLines() + m.statusHeight()
 	if m.tabbed() {
 		n += 3 // the tab bar and the box around the command bar
 	}
@@ -395,12 +403,7 @@ func (m Model) compact() bool {
 }
 
 // listTop is the screen row of the list's first line.
-func (m Model) listTop() int {
-	if m.tabbed() {
-		return 2
-	}
-	return 1
-}
+func (m Model) listTop() int { return m.headerLines() + b2i(m.tabbed()) }
 
 func (m Model) maxBar() int {
 	if !m.statusVisible() {
@@ -532,7 +535,7 @@ func (m Model) at(y int) (int, int, bool) {
 // hoverAt is the key of what the pointer at x, y is over: an entry of the
 // list, between the margins, or a tab other than the one in use.
 func (m Model) hoverAt(x, y int) string {
-	if m.tabbed() && y == 1 {
+	if m.tabbed() && y == m.tabsTop() {
 		if v, ok := tabAt(x); ok && v != m.view {
 			return tabKey(v)
 		}
