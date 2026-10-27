@@ -16,6 +16,29 @@ struct TerminalArea: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            main
+            PhraseBar()
+        }
+        .background(Theme.ground.ignoresSafeArea())
+        .toolbarBackground(Theme.ground, for: .windowToolbar)
+        .navigationTitle(selected?.name ?? "Irie")
+        // Never empty: the title moves when a subtitle appears or goes.
+        .navigationSubtitle(selected.map(subtitle) ?? "No session")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.openInGhostty()
+                } label: {
+                    Label("Open in Ghostty", systemImage: "macwindow.on.rectangle")
+                }
+                .help("Open the terminal in a Ghostty window too")
+                .disabled(store.attach == nil)
+            }
+        }
+    }
+
+    private var main: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
             // restart, so a flap gets a banner, not a reattach.
@@ -46,22 +69,6 @@ struct TerminalArea: View {
                     .overlay(Capsule().strokeBorder(Theme.edge, lineWidth: 1))
                     .padding(.top, 8)
                     .accessibilityAddTraits(.isStaticText)
-            }
-        }
-        .background(Theme.ground.ignoresSafeArea())
-        .toolbarBackground(Theme.ground, for: .windowToolbar)
-        .navigationTitle(selected?.name ?? "Irie")
-        // Never empty: the title moves when a subtitle appears or goes.
-        .navigationSubtitle(selected.map(subtitle) ?? "No session")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    store.openInGhostty()
-                } label: {
-                    Label("Open in Ghostty", systemImage: "macwindow.on.rectangle")
-                }
-                .help("Open the terminal in a Ghostty window too")
-                .disabled(store.attach == nil)
             }
         }
     }
