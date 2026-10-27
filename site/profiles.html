@@ -102,6 +102,7 @@
     <li>For any other setting, restart the core yourself. Your agents keep running.</li>
   </ul>
 <pre><code>tmux -L irie respawn-pane -k -t irie-agents:core</code></pre>
+  <p>Run <code>irie config print</code> first: a core can’t start with a file that has an error in it, and the list then shows <code>core offline</code> until you fix it.</p>
   <p>The list reads <code>ui.red_on_done</code> when it starts. After changing that one, restart the list as well:</p>
 <pre><code>tmux -L irie respawn-pane -k -t irie:0.0</code></pre>
 
