@@ -197,7 +197,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
-| `status` | `session`, `payload`: Claude Code's status line JSON | none | M10 (§6.3) |
+| `status` | `session`, `payload`: Claude Code's status line JSON | `state`, `subagents[]`: the session's, for Irie's own status line | M10 (§6.3) |
 | `local` | `start?` | the local server, the machine's memory, and each model weighed against it | M10 (§6.3) |
 | `route` | `task`, `parent?` | where `+auto` would run it: class, choice, reason, every profile weighed | M10 (§6.4) |
 | `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |
@@ -766,7 +766,7 @@ default_profile = "auto"      # auto = the lowest cost per success among profile
 default_cwd = ""              # "" = new scratch dir per task
 ready_timeout = "30s"
 hide_tmux = true              # remove TMUX/TMUX_PANE from agent env
-close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it)
+close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it; status, report and question sessions are left open)
 close_delay = "30s"           # how long a finished session waits; a new prompt, or anything it needs from you, cancels the close
 
 [profiles.claude]             # the strongest: hard work and orchestration
@@ -932,9 +932,9 @@ Every session costs something, and the spawn list says what before a task starts
 | Memory | What the session's processes take, measured | The same, plus what its model takes: weights, the context cache at the server's context, and working room |
 
 **Status line.** With `usage.status_line` (on by default), Irie's settings file makes `irie statusline` the session's status line.
-- **Forwarding.** It forwards each update to the core (op `status`). The call takes at most 300 ms and never fails.
+- **Forwarding.** It forwards each update to the core (op `status`), which answers with the session's state and running subagents. The call takes at most 300 ms and never fails.
 - **The user's own.** It then `exec`s the user's own status line on the same input. It finds it where Claude Code would: the project's local settings at the repo's main checkout, the shared project settings in the cwd, then the user's in `CLAUDE_CONFIG_DIR` or `~/.claude`. Their `padding`, `refreshInterval` and `hideVimModeIndicator` are kept.
-- **No status line of their own.** It prints a short line instead (`$1.23 · ctx 41% · 5h 62%`), because any status line hides Claude Code's footer hints.
+- **No status line of their own.** It prints a short line instead, because any status line hides Claude Code's footer hints: the session's state in the marks and colours of §5.3, then the cost, the context with a bar, and the plan's use (`✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41% · 5h 62%`). A turn that ended while subagents still run is not done: the line says `◐ waiting on 2 helpers: Explore, dev`, and while the turn runs `◐ working + 2 helpers`. Shares turn yellow from 70% and red from 90%; the rest is faint. Parts drop from the end to fit `COLUMNS`. It re-runs every 2 s (`refreshInterval`), since Claude Code's updates stop while the session is idle, as when it waits on background subagents.
 - **Restarts.** The last update is kept in the session's `status.json`, so a restarted core still knows it.
 
 **Memory.**

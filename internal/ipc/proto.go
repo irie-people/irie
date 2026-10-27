@@ -401,6 +401,13 @@ type StatusArgs struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+// StatusReply is the session's state and running subagents, which Irie's
+// own status line shows.
+type StatusReply struct {
+	State     string     `json:"state"`
+	Subagents []Subagent `json:"subagents,omitempty"`
+}
+
 type ShowArgs struct {
 	Session string `json:"session"`
 	Agent   string `json:"agent,omitempty"`

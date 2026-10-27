@@ -1,20 +1,24 @@
 // Package statusline is `irie statusline`, the status line command Irie
 // gives Claude Code sessions (DESIGN §6.3). Claude Code runs it with the
 // session's status as JSON on stdin; it forwards that to the core, which
-// learns the session's cost, context and the plan's use from it, then runs
-// the user's own status line on the same input, or prints a short line of
-// its own. When Irie is down the user's status line still runs.
+// learns the session's cost, context and the plan's use from it and answers
+// with the session's state, then runs the user's own status line on the
+// same input, or prints a short line of its own. When Irie is down the
+// user's status line still runs.
 package statusline
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
 
@@ -91,24 +95,183 @@ func (w *window) get() *Window {
 	return out
 }
 
-// Line is Irie's own status line, for a user who has none: what the session
-// has cost, how full its context is and how much of the plan is used, such
-// as "$1.23 · ctx 41% · 5h 62% · 7d 18%".
-func Line(u Usage) string {
-	var parts []string
+// Line is Irie's own status line, for a user who has none: the session's
+// state when the core gave it, then what the session has cost, how full its
+// context is and how much of the plan is used, such as
+// "✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41% · 5h 62% · 7d 18%". The state has the
+// sidebar's marks and colours (DESIGN §5.3); the rest is faint until a
+// share runs high. Parts drop from the end to fit in width columns; 0 is
+// no limit.
+func Line(u Usage, st *ipc.StatusReply, width int) string {
+	var parts []seg
+	if st != nil {
+		if s := state(*st); s.width > 0 {
+			parts = append(parts, s)
+		}
+	}
 	if u.CostUSD != nil && *u.CostUSD >= 0.005 {
-		parts = append(parts, fmt.Sprintf("$%.2f", *u.CostUSD))
+		var s seg
+		s.add(faint, fmt.Sprintf("$%.2f", *u.CostUSD))
+		parts = append(parts, s)
 	}
 	if u.Context != nil {
-		parts = append(parts, fmt.Sprintf("ctx %.0f%%", *u.Context))
+		parts = append(parts, share("ctx", *u.Context, true))
 	}
 	if u.FiveHour != nil {
-		parts = append(parts, fmt.Sprintf("5h %.0f%%", u.FiveHour.Used))
+		parts = append(parts, share("5h", u.FiveHour.Used, false))
 	}
 	if u.SevenDay != nil {
-		parts = append(parts, fmt.Sprintf("7d %.0f%%", u.SevenDay.Used))
+		parts = append(parts, share("7d", u.SevenDay.Used, false))
 	}
-	return strings.Join(parts, " · ")
+	for width > 0 && len(parts) > 1 && lineWidth(parts) > width {
+		parts = parts[:len(parts)-1]
+	}
+	var b strings.Builder
+	for i, p := range parts {
+		if i > 0 {
+			b.WriteString(paint(faint, sep))
+		}
+		b.WriteString(p.text)
+	}
+	return b.String()
+}
+
+// state leads the line with the session's state. A turn that ended while
+// its helpers still run is not done: the line says what it waits on.
+func state(r ipc.StatusReply) seg {
+	var s seg
+	n := len(r.Subagents)
+	switch r.State {
+	case ipc.StateNeedsYou:
+		who := ""
+		for _, sa := range r.Subagents {
+			if sa.NeedsYou {
+				who = cmp.Or(sa.Type, "a helper") + " "
+				break
+			}
+		}
+		s.add(red, "● "+who+"needs you")
+	case ipc.StateStalled:
+		s.add(red, "● stalled")
+	case ipc.StateStarting:
+		s.add("", "◌ starting")
+	case ipc.StateWorking:
+		if n == 0 {
+			s.add("", "◐ working")
+		} else {
+			s.add("", "◐ working + "+helpers(n))
+		}
+	case ipc.StateDone, ipc.StateIdle:
+		if n == 0 {
+			s.add(green, "✓ done")
+		} else if k := kinds(r.Subagents); k != "" {
+			s.add("", "◐ waiting on "+helpers(n)+": "+k)
+		} else {
+			s.add("", "◐ waiting on "+helpers(n))
+		}
+	}
+	return s
+}
+
+func helpers(n int) string {
+	if n == 1 {
+		return "1 helper"
+	}
+	return fmt.Sprintf("%d helpers", n)
+}
+
+// kinds names the helpers' kinds, oldest first, such as "Explore ×2, dev".
+func kinds(subs []ipc.Subagent) string {
+	var names []string
+	count := map[string]int{}
+	for _, sa := range subs {
+		if sa.Type == "" {
+			continue
+		}
+		if count[sa.Type] == 0 {
+			names = append(names, sa.Type)
+		}
+		count[sa.Type]++
+	}
+	var out []string
+	for i, name := range names {
+		if i == maxKinds {
+			return strings.Join(out, ", ") + fmt.Sprintf(" and %d more", len(names)-maxKinds)
+		}
+		if count[name] > 1 {
+			name += fmt.Sprintf(" ×%d", count[name])
+		}
+		out = append(out, name)
+	}
+	return strings.Join(out, ", ")
+}
+
+// maxKinds is how many kinds of helper the line names.
+const maxKinds = 3
+
+// share is a percentage with its label, such as "5h 62%"; the context's
+// has a bar of eight cells as well. It turns yellow from 70% and red from
+// 90%.
+func share(label string, pct float64, bar bool) seg {
+	style := faint
+	switch {
+	case pct >= 90:
+		style = red
+	case pct >= 70:
+		style = yellow
+	}
+	var s seg
+	s.add(faint, label+" ")
+	if bar {
+		full := int(math.Round(min(max(pct, 0), 100) / 100 * cells))
+		s.add(style, strings.Repeat("▰", full))
+		s.add(faint, strings.Repeat("▱", cells-full)+" ")
+	}
+	s.add(style, fmt.Sprintf("%.0f%%", pct))
+	return s
+}
+
+const cells = 8
+
+// SGR styles. The colours are the terminal's own, as the sidebar's are.
+const (
+	faint  = "2"
+	red    = "31"
+	green  = "32"
+	yellow = "33"
+)
+
+const sep = " · "
+
+// seg is one part of the line: its text with its styles, and the columns
+// it takes.
+type seg struct {
+	text  string
+	width int
+}
+
+// add appends s in a style; "" is the terminal's own.
+func (p *seg) add(style, s string) {
+	p.width += utf8.RuneCountInString(s)
+	p.text += paint(style, s)
+}
+
+func paint(style, s string) string {
+	if style == "" || s == "" {
+		return s
+	}
+	return "\x1b[" + style + "m" + s + "\x1b[0m"
+}
+
+func lineWidth(parts []seg) int {
+	w := 0
+	for i, p := range parts {
+		if i > 0 {
+			w += utf8.RuneCountInString(sep)
+		}
+		w += p.width
+	}
+	return w
 }
 
 // Timeouts for forwarding a status to the core: Claude Code cancels a
@@ -136,32 +299,39 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 		return 2
 	}
 	raw, _ := io.ReadAll(io.LimitReader(stdin, maxInput))
-	forward(raw, getenv)
+	st := forward(raw, getenv)
 	if then != "" {
 		err := execShell(then, raw)
 		fmt.Fprintln(stderr, "irie statusline:", err)
 		return 1
 	}
 	if u, err := Parse(raw); err == nil {
-		fmt.Fprint(stdout, Line(u))
+		// Claude Code gives the terminal's width in COLUMNS.
+		width, _ := strconv.Atoi(getenv("COLUMNS"))
+		fmt.Fprint(stdout, Line(u, st, width))
 	}
 	return 0
 }
 
-// forward gives the core one status of the session the environment names.
-// It never fails: without Irie the status line goes on.
-func forward(raw []byte, getenv func(string) string) {
+// forward gives the core one status of the session the environment names,
+// and returns the core's answer: the session's state and helpers. It never
+// fails: without Irie the status line goes on, with no state.
+func forward(raw []byte, getenv func(string) string) *ipc.StatusReply {
 	session, socket := getenv("IRIE_SESSION"), getenv("IRIE_SOCKET")
 	if session == "" || socket == "" || !json.Valid(raw) {
-		return
+		return nil
 	}
 	c, err := ipc.Dial(socket, connectTimeout)
 	if err != nil {
-		return
+		return nil
 	}
 	defer c.Close()
 	c.Timeout = replyTimeout
-	c.Call(ipc.OpStatus, ipc.StatusArgs{Session: session, Payload: raw}, nil)
+	var r ipc.StatusReply
+	if c.Call(ipc.OpStatus, ipc.StatusArgs{Session: session, Payload: raw}, &r) != nil {
+		return nil
+	}
+	return &r
 }
 
 // execShell replaces this process with `sh -c command`, whose stdin holds

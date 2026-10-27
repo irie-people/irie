@@ -536,7 +536,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return nil, c.status(a)
+		return c.status(a)
 	case ipc.OpRate:
 		var a ipc.RateArgs
 		if err := decode(raw, &a); err != nil {
