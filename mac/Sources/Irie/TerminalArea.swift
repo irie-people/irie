@@ -63,6 +63,7 @@ struct TerminalArea: View {
         }
         if let p = s.profile, !p.isEmpty { parts.append(p) }
         if let b = s.branch, !b.isEmpty { parts.append(b) }
+        if let t = s.tokens { parts.append("\(Tokens.short(t.total)) tokens") }
         return parts.joined(separator: " · ")
     }
 }

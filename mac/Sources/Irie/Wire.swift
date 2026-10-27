@@ -25,11 +25,42 @@ struct Session: Codable, Identifiable, Equatable {
     var pane: String?
     var shown: Bool?
     var subagents: [Subagent]?
+    var tokens: Tokens?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, agent, state, reason, detail, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents
+        case id, name, agent, state, reason, detail, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, tokens
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
+    }
+}
+
+/// What a session's model calls have used, each reply counted once.
+struct Tokens: Codable, Equatable {
+    var input: Int64
+    var output: Int64
+    var cacheRead: Int64
+    var cacheWrite: Int64
+
+    var total: Int64 { input + output + cacheRead + cacheWrite }
+
+    /// 48.2k tokens: 1.2k in, 3.4k out, 40k cache read, 3.6k cache write
+    var breakdown: String {
+        "\(Self.short(total)) tokens: \(Self.short(input)) in, \(Self.short(output)) out, "
+            + "\(Self.short(cacheRead)) cache read, \(Self.short(cacheWrite)) cache write"
+    }
+
+    static func short(_ n: Int64) -> String {
+        switch n {
+        case ..<1000: return "\(n)"
+        case ..<1_000_000: return String(format: n < 10000 ? "%.1fk" : "%.0fk", Double(n) / 1000)
+        default: return String(format: n < 10_000_000 ? "%.1fM" : "%.0fM", Double(n) / 1_000_000)
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case input, output
+        case cacheRead = "cache_read"
+        case cacheWrite = "cache_write"
     }
 }
 

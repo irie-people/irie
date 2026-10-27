@@ -116,6 +116,19 @@ func TestRunningSubagentsAreListedUntilTheyStop(t *testing.T) {
 	}
 }
 
+func TestTheTranscriptsAreRecordedForTheTokenTally(t *testing.T) {
+	s := newScript()
+	var tr track
+	tr.apply(s.hook(event.SessionStarted, "transcript", "/home/alice/transcripts/main.jsonl"))
+	tr.apply(s.sub(event.SubagentStarted, "agent_type", "Explore"))
+	tr.apply(s.sub(event.SubagentFinished, "transcript", "/home/alice/transcripts/main/agent-a1b2c3.jsonl"))
+	tr.apply(s.hook(event.SessionStarted, "transcript", "/home/alice/transcripts/main.jsonl")) // resumed: named again
+	want := []string{"/home/alice/transcripts/main.jsonl", "/home/alice/transcripts/main/agent-a1b2c3.jsonl"}
+	if !slices.Equal(tr.transcripts, want) {
+		t.Errorf("transcripts %q, want %q", tr.transcripts, want)
+	}
+}
+
 func TestNeedsYouIsClearedByTheNextPromptOrToolEvent(t *testing.T) {
 	s := newScript()
 	var tr track

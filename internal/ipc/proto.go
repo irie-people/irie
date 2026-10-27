@@ -76,6 +76,19 @@ type Session struct {
 	Shown    bool      `json:"shown,omitempty"`
 	// Subagents are the session's running subagents, oldest first.
 	Subagents []Subagent `json:"subagents,omitempty"`
+	// Tokens is what the session's model calls have used, from its
+	// transcripts; nil until Irie has read any usage.
+	Tokens *Tokens `json:"tokens,omitempty"`
+}
+
+// Tokens counts a session's model usage: each reply once, from the usage
+// Claude Code records in the session's transcript and its finished
+// subagents' transcripts.
+type Tokens struct {
+	Input      int64 `json:"input"`
+	Output     int64 `json:"output"`
+	CacheRead  int64 `json:"cache_read"`
+	CacheWrite int64 `json:"cache_write"`
 }
 
 // Subagent is a subagent at work in a session (DESIGN §4.4): its hooks

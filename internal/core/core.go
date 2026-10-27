@@ -84,16 +84,28 @@ type session struct {
 	exitCode int
 	shown    bool
 	track    track
+	tally    tokenTally // read from the transcripts track names
+	tokens   *ipc.Tokens
 }
 
 func (x *session) wire() ipc.Session {
 	s := ipc.Session{
 		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
-		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown,
+		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
 	}
 	x.track.describe(&s, x.dead, x.exitCode)
 	return s
+}
+
+// countTokens catches each session's tally up with its transcripts. The
+// caller holds c.mu.
+func (c *Core) countTokens() {
+	for _, x := range c.sessions {
+		if t, ok := x.tally.update(x.track.transcripts); ok {
+			x.tokens = &t
+		}
+	}
 }
 
 func newCore(o Options, r *tmux.Runner) *Core {
@@ -171,6 +183,7 @@ func (c *Core) tick() {
 		c.log.Warn("poll", "err", err)
 	}
 	c.observe(time.Now())
+	c.countTokens()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

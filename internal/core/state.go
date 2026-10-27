@@ -25,6 +25,10 @@ type track struct {
 	viewed    bool                   // shown since the turn ended
 	tools     map[string]event.Event // running tools' tool.started, by tool_use_id
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
+
+	// The session's transcripts, then its finished subagents', in the
+	// order the hooks named them: what the token tally reads.
+	transcripts []string
 }
 
 const (
@@ -46,6 +50,7 @@ func (t *track) apply(e event.Event) {
 		t.exited = &e
 	case event.SessionStarted:
 		t.started = true
+		t.addTranscript(e.Str("transcript"))
 	case event.PromptSubmitted:
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
 	case event.ToolStarted:
@@ -86,11 +91,18 @@ func (t *track) apply(e event.Event) {
 		delete(t.needs, e.Agent)
 		t.stopTools(e.Agent)
 		delete(t.subs, e.Agent)
+		t.addTranscript(e.Str("transcript"))
 	case event.SessionEnded:
 		t.ended = &e
 		t.subs = nil
 	case event.UIShown:
 		t.viewed = true
+	}
+}
+
+func (t *track) addTranscript(path string) {
+	if path != "" && !slices.Contains(t.transcripts, path) {
+		t.transcripts = append(t.transcripts, path)
 	}
 }
 

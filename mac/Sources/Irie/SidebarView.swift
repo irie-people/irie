@@ -134,9 +134,11 @@ private struct SessionCard: View {
                 if hovering {
                     QuickActions(session: session)
                 } else {
-                    Text(Age.short(session.created, now: now))
+                    Text([session.tokens.map { Tokens.short($0.total) }, Age.short(session.created, now: now)]
+                        .compactMap { $0 }.joined(separator: " · "))
                         .font(.system(size: 11)).monospacedDigit()
                         .foregroundStyle(.tertiary)
+                        .help(session.tokens?.breakdown ?? "")
                 }
             }
             .frame(minHeight: 20)
@@ -271,6 +273,9 @@ private struct Details: View {
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1).truncationMode(.middle)
+            }
+            if let t = session.tokens {
+                Text(t.breakdown).font(.system(size: 10.5)).monospacedDigit().foregroundStyle(.secondary)
             }
             ForEach(session.warnings ?? [], id: \.self) { w in
                 Label(w, systemImage: "exclamationmark.triangle.fill")

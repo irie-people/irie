@@ -8,6 +8,7 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 
 - **A sidebar of sessions** grouped into Needs you, Working and Done, with counts in the header. Rows are one line. A session that needs you adds what it asks, in red. The selected row opens up to show its current step, profile, branch, folder, warnings and the last screen of a spawn that went wrong.
 - **Helpers under their session.** A session's running subagents are listed under its card, each with its kind and current tool, and in red when it needs you. The core reports them in each row's `subagents`, kept from the agent's SubagentStart and SubagentStop hooks.
+- **Tokens per session.** Each card shows the session's token count beside its age; hovering, or selecting the card, gives the split into input, output, cache read and cache write. The core reads each row's `tokens` from the session's transcript and its finished subagents' transcripts. It counts each reply once, because a reply spans several lines that all repeat its usage.
 - **The shown agent's live terminal** on the right. Selecting a row swaps that agent in, and Return (or **Type to it**) moves the keyboard there.
 - **A task bar** at the foot of the sidebar. It takes the same `@repo`, `@repo!` and `+profile` words as the terminal sidebar (DESIGN §4.2).
 - **Right-click on a row:** show and type to it, open it in Ghostty, show the folder in Finder, copy the folder path, branch name or session ID.
