@@ -31,6 +31,8 @@ const ctlUsage = `usage: irie ctl <command>
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short
   irie ctl show [--focus] SESSION        show a session in the slot
+  irie ctl send SESSION TEXT...          type a message to a session's agent, as
+                                         a person would; TEXT - reads stdin
   irie ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -74,6 +76,8 @@ func ctl(args []string) error {
 		return ctlShow(args[1:])
 	case "conversation":
 		return ctlConversation(args[1:])
+	case "send":
+		return ctlSend(args[1:])
 	case "watch":
 		return ctlWatch(args[1:])
 	case "move":
@@ -452,4 +456,23 @@ func conversationLine(it ipc.Item) string {
 		line += fmt.Sprintf(" +%d −%d", it.Added, it.Removed)
 	}
 	return line
+}
+
+func ctlSend(args []string) error {
+	if len(args) < 2 {
+		return errors.New("usage: irie ctl send SESSION TEXT...")
+	}
+	text := strings.Join(args[1:], " ")
+	if text == "-" {
+		b, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		text = string(b)
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
 }

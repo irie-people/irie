@@ -51,6 +51,7 @@ type Core struct {
 	log     *slog.Logger
 
 	spawnMu  sync.Mutex   // one spawn at a time, taken before mu
+	sendMu   sync.Mutex   // one message typed to an agent at a time, taken before mu
 	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
 	http     *http.Client // for local servers
 	sampling atomic.Bool  // a memory sample is running
@@ -414,7 +415,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen,
 		}}, nil
@@ -480,6 +481,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		items, notes := c.complete(a.Text)
 		return ipc.CompleteResult{Items: items, Notes: notes}, nil
+	case ipc.OpSend:
+		var a ipc.SendArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.send(a)
 	case ipc.OpConversation:
 		var a ipc.ConversationArgs
 		if err := decode(raw, &a); err != nil {

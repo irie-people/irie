@@ -33,6 +33,9 @@ type Conversation struct {
 	// Needs is what the session waits on you for now: a permission, a
 	// question, a plan, or a turn that failed. It is null when nothing is.
 	Needs *Item `json:"needs"`
+	// Pending are the messages sent to the agent that its transcript does
+	// not have yet, oldest first; a view shows them after the items.
+	Pending []Item `json:"pending"`
 }
 
 // Item kinds.
@@ -81,4 +84,17 @@ type Item struct {
 	Options   []string `json:"options,omitempty"`    // a question's choices
 	Reason    string   `json:"reason,omitempty"`     // a need's reason, as a row's
 	Queued    bool     `json:"queued,omitempty"`     // a message typed while the agent worked
+	Pending   bool     `json:"pending,omitempty"`    // a message sent that the agent has not taken yet
+}
+
+// OpSend is an addition to the ops of DESIGN §2.4: it types a message to a
+// session's agent the way a person would, a bracketed paste and Enter
+// (DESIGN §4.7). It refuses with CodeBusy while the agent waits on you in
+// its terminal, or cannot take a message.
+const OpSend = "send"
+
+// SendArgs carry the message to type to a session's agent.
+type SendArgs struct {
+	Session string `json:"session"`
+	Text    string `json:"text"`
 }
