@@ -1,10 +1,28 @@
 import AppKit
 import SwiftUI
 
+/// Starts the app, or with `--snapshot DIR` draws its window offscreen from
+/// fixture sessions and exits (Snapshot.swift).
 @main
+enum Launch {
+    static func main() {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--snapshot") {
+            let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
+            MainActor.assumeIsolated { Snapshot.run(into: dir) }
+        }
+        IrieApp.main()
+    }
+}
+
 struct IrieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
+
+    /// The compact title bar: one short row for the traffic lights, the
+    /// sidebar's counts and the shown session's name. The scene's
+    /// windowToolbarStyle below says the same for SwiftUI.
+    static let toolbarStyle: NSWindow.ToolbarStyle = .unifiedCompact
 
     var body: some Scene {
         Window("Irie", id: "main") {
@@ -14,7 +32,9 @@ struct IrieApp: App {
                 .task { store.start() }
         }
         .defaultSize(width: 1200, height: 760)
+        .windowToolbarStyle(.unifiedCompact)
         .commands {
+            SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("New Task") { NotificationCenter.default.post(name: .irieNewTask, object: nil) }
                     .keyboardShortcut("n")
@@ -98,6 +118,13 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
+                .toolbar {
+                    // Room between the sidebar's edge and the title, which
+                    // the title bar would otherwise set almost against it.
+                    ToolbarItem(placement: .navigation) {
+                        Color.clear.frame(width: 6, height: 1).accessibilityHidden(true)
+                    }
+                }
         }
         .tint(Theme.deepGreen)
         .onAppear { keys.install(store) }

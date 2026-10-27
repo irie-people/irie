@@ -22,15 +22,17 @@ const maxQueue = 10000
 // one upsert or remove, or as a snapshot when several rows changed. Event
 // frames, for a client that asked for them, are never coalesced. A client
 // that sees every session also gets the sessions outside Irie and the closed
-// sessions, after its first snapshot and whenever they change.
+// sessions, after its first snapshot and whenever they change. A client that
+// follows one session's conversation gets all of it, then what changed.
 type subscriber struct {
-	c       *Core
-	session string // only this session, when set
-	agent   string // only this agent's events, when set
-	events  bool   // event frames too
-	out     chan ipc.Frame
-	wake    chan struct{}
-	done    chan struct{}
+	c            *Core
+	session      string // only this session, when set
+	agent        string // only this agent's events, when set
+	events       bool   // event frames too
+	conversation bool   // the session's conversation frames too
+	out          chan ipc.Frame
+	wake         chan struct{}
+	done         chan struct{}
 
 	mu      sync.Mutex
 	full    bool
@@ -38,6 +40,10 @@ type subscriber struct {
 	queue   []ipc.Frame // event frames not sent yet
 	outside bool        // an outside frame is due
 	closed  bool        // a closed frame is due
+	talk    bool        // a conversation frame may be due
+
+	talkSent bool   // the conversation's first frame went out; only loop uses it
+	talkSeen uint64 // the conversation's version the client has; only loop uses it
 }
 
 // Subscribe starts a stream of frames for one client (ipc.Handler).
@@ -49,13 +55,25 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	if a.View != "" && a.View != ipc.ViewApp {
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "unknown view %q", a.View)
 	}
+	if a.Conversation && a.Session == "" {
+		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "a conversation needs a session")
+	}
 	app := a.View == ipc.ViewApp
 	sub := &subscriber{
-		c: c, session: a.Session, agent: a.Agent, events: a.Events,
+		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
-		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "",
+		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "", talk: a.Conversation,
 	}
 	c.mu.Lock()
+	if a.Conversation {
+		x := c.sessions[a.Session]
+		if x == nil {
+			c.mu.Unlock()
+			return nil, nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		}
+		x.convSubs++
+		c.conversationOf(x)
+	}
 	c.subs[sub] = true
 	if app {
 		c.appViews++
@@ -74,6 +92,9 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 			delete(c.subs, sub)
 			if app {
 				c.appViews--
+			}
+			if x := c.sessions[sub.session]; x != nil && sub.conversation {
+				x.convSubs--
 			}
 			c.mu.Unlock()
 			close(sub.done)
@@ -152,6 +173,17 @@ func (s *subscriber) noteClosed() {
 	}
 }
 
+// noteConversation marks a conversation frame due.
+func (s *subscriber) noteConversation() {
+	s.mu.Lock()
+	s.talk = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // event queues an event frame for a client that wants it. The caller holds
 // s.c.mu.
 func (s *subscriber) event(e event.Event) {
@@ -178,8 +210,8 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, queue, outside, closed := s.full, s.dirty, s.queue, s.outside, s.closed
-		s.full, s.dirty, s.queue, s.outside, s.closed = false, map[string]bool{}, nil, false, false
+		full, dirty, queue, outside, closed, talk := s.full, s.dirty, s.queue, s.outside, s.closed, s.talk
+		s.full, s.dirty, s.queue, s.outside, s.closed, s.talk = false, map[string]bool{}, nil, false, false, false
 		s.mu.Unlock()
 		for _, f := range queue {
 			select {
@@ -197,6 +229,11 @@ func (s *subscriber) loop() {
 		}
 		if closed {
 			frames = append(frames, s.closedFrame())
+		}
+		if talk {
+			if f, ok := s.conversationFrame(); ok {
+				frames = append(frames, f)
+			}
 		}
 		if len(frames) == 0 {
 			continue
@@ -248,4 +285,25 @@ func (s *subscriber) closedFrame() ipc.Frame {
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
 	return ipc.Frame{T: ipc.FrameClosed, Closed: s.c.closedList()}
+}
+
+// conversationFrame carries the session's conversation: all of it the first
+// time, then what changed since the last frame.
+func (s *subscriber) conversationFrame() (ipc.Frame, bool) {
+	s.c.mu.Lock()
+	defer s.c.mu.Unlock()
+	x := s.c.sessions[s.session]
+	if x == nil || x.conv == nil {
+		return ipc.Frame{}, false
+	}
+	var cv ipc.Conversation
+	ok := true
+	if !s.talkSent {
+		cv, s.talkSent = x.conv.all(resetLimit), true
+	} else {
+		cv, ok = x.conv.since(s.talkSeen)
+	}
+	s.talkSeen = x.conv.ver
+	cv.Session = x.id
+	return ipc.Frame{T: ipc.FrameConversation, Conversation: &cv}, ok
 }

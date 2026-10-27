@@ -28,6 +28,10 @@ case ${XDG_DATA_HOME:-} in
 /*) data=$XDG_DATA_HOME/irie ;;
 *) data=$HOME/.local/share/irie ;;
 esac
+case ${XDG_CONFIG_HOME:-} in
+/*) conf=$XDG_CONFIG_HOME/irie/config.toml ;;
+*) conf=$HOME/.config/irie/config.toml ;;
+esac
 bin=$data/bin/irie
 app=${HOME:?}/Applications/Irie.app
 appstamp=$data/bin/app.commit
@@ -39,6 +43,13 @@ rev() { go version -m "$1" 2>/dev/null | sed -n 's/^[[:space:]]*build[[:space:]]
 
 # running says whether a core answers.
 running() { "$1" ctl list >/dev/null 2>&1; }
+
+# agents lists every agent pane with its process, so that an install can
+# show it disturbed none (DESIGN §2.1, principle 6).
+agents() {
+	tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},agent}' \
+		-F '#{pane_id} #{pane_pid} #{pane_dead} #{@irie_name}' 2>/dev/null | sort || true
+}
 
 mkdir -p "$data/bin"
 lock=$data/bin/live.lock
@@ -81,8 +92,10 @@ fi
 
 # A build put in by hand skips the branch, so the running core's own build
 # must be in this checkout as well.
-sock=$({ "$bin" config print 2>/dev/null || true; } |
-	sed -n '/^\[tmux\]/,/^\[/s/^[[:space:]]*socket[[:space:]]*=[[:space:]]*"\(.*\)"$/\1/p')
+# The tmux socket: from the installed build, or before the first install
+# from the config file itself.
+sock=$({ "$bin" config print 2>/dev/null || cat "$conf" 2>/dev/null || true; } |
+	sed -n '/^\[tmux\]/,/^\[/s/^[[:space:]]*socket[[:space:]]*=[[:space:]]*"\(.*\)"$/\1/p' | head -1)
 core=$(tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
 corebin=
 if [ -n "$core" ]; then
@@ -103,7 +116,7 @@ go test ./...
 gonew=1
 installed=$(rev "$bin")
 if [ -n "$installed" ] && { [ -z "$corebin" ] || [ "$corebin" = "$bin" ]; } &&
-	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal 2>/dev/null; then
+	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal ':(exclude)*_test.go' 2>/dev/null; then
 	gonew=
 fi
 if [ -n "$gonew" ]; then go build -o "$bin.new" ./cmd/irie; fi
@@ -116,6 +129,8 @@ if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/d
 		newapp=mac/build/Irie.app
 	fi
 fi
+
+before=$(agents)
 
 # The rename leaves running processes on the old file, which .prev keeps.
 up=
@@ -160,6 +175,18 @@ if [ -n "$newapp" ]; then
 fi
 
 git update-ref refs/heads/live "$head"
+
+# Every agent must still run the process it ran before the install.
+after=$(agents)
+changed=$(printf '%s\n' "$before" | while read -r line; do
+	if [ -n "$line" ] && ! printf '%s\n' "$after" | grep -qxF "$line"; then echo "$line"; fi
+done)
+if [ -n "$changed" ]; then
+	say "an agent's process changed during the install, which must never happen (DESIGN §2.1, principle 6):"
+	printf '%s\n' "$changed" | while read -r pane pid dead name; do say "  $name: pane $pane, pid $pid, dead $dead before"; done
+	exit 1
+fi
+
 what=$(git log -1 --format='%h %s')
 if [ -z "$gonew" ]; then
 	say "$what is live; the Go code did not change, so the core kept running"

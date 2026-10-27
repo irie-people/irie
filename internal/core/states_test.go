@@ -229,6 +229,23 @@ func TestRedUntilAnswered(t *testing.T) {
 	if r.Reason != "rate_limit" || !strings.Contains(r.Detail, "rate_limit") {
 		t.Errorf("rate-limited row = %+v", r)
 	}
+
+	// Tool calls and what they ask are in plain words too.
+	said := map[string]string{}
+	for _, e := range c.journal() {
+		if p := e.Str("phrase"); p != "" {
+			said[p] = e.Kind
+		}
+	}
+	for p, kind := range map[string]string{
+		"Deleting build":                           event.ToolStarted,
+		"Asks: may it run rm -rf build?":           event.InputNeeded,
+		"Asks: which colour should the button be?": event.InputNeeded,
+	} {
+		if said[p] != kind {
+			t.Errorf("no %s says %q: %v", kind, p, said)
+		}
+	}
 }
 
 // TestTheManualCheck follows M2's manual check with the fake agent: an agent

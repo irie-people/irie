@@ -128,19 +128,24 @@ cat '`+list+`'
 
 func TestListOutsideSaysWhatWentWrong(t *testing.T) {
 	defer func(d time.Duration) { outsideTimeout = d }(outsideTimeout)
-	outsideTimeout = 300 * time.Millisecond
-	for _, c := range []struct{ name, cli, want string }{
-		{"missing", "/home/alice/no/such/claude", "not found"},
-		{"old", shellScript(t, "echo \"error: unknown option '--json'\" >&2; exit 1"), "unknown option '--json'"},
-		{"bad JSON", shellScript(t, "echo '[{'"), "bad JSON"},
-		{"hangs", shellScript(t, "exec sleep 30"), "did not answer within 300ms"},
+	// Only "hangs" waits out the timeout. The others get a long one, so a
+	// loaded machine that is slow to start their shell is not a hang.
+	for _, c := range []struct {
+		name, cli, want string
+		timeout         time.Duration
+	}{
+		{"missing", "/home/alice/no/such/claude", "not found", time.Minute},
+		{"old", shellScript(t, "echo \"error: unknown option '--json'\" >&2; exit 1"), "unknown option '--json'", time.Minute},
+		{"bad JSON", shellScript(t, "echo '[{'"), "bad JSON", time.Minute},
+		{"hangs", shellScript(t, "exec sleep 30"), "did not answer within 300ms", 300 * time.Millisecond},
 	} {
+		outsideTimeout = c.timeout
 		start := time.Now()
 		_, err := listOutside(c.cli, os.Environ())
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want an error with %q", c.name, err, c.want)
 		}
-		if d := time.Since(start); d > 3*time.Second {
+		if d := time.Since(start); c.timeout < time.Second && d > 3*time.Second {
 			t.Errorf("%s: took %v", c.name, d)
 		}
 	}

@@ -163,6 +163,8 @@ type SubscribeArgs struct {
 	Session string `json:"session,omitempty"`
 	Agent   string `json:"agent,omitempty"`
 	View    string `json:"view,omitempty"` // "" or ViewApp
+	// Conversation adds the session's conversation frames; it needs Session.
+	Conversation bool `json:"conversation,omitempty"`
 }
 
 // AttachInfoResult is how to attach a tmux client to the session that holds
@@ -249,6 +251,8 @@ type Frame struct {
 	Outside  []OutsideSession `json:"outside,omitempty"`  // outside
 	Problem  string           `json:"problem,omitempty"`  // outside: why the list may be old
 	Closed   []ClosedSession  `json:"closed,omitempty"`   // closed
+
+	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
@@ -303,6 +307,20 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 		return json.Marshal(struct {
 			T      string          `json:"t"`
 			Closed []ClosedSession `json:"closed"`
+		}{f.T, c})
+	case FrameConversation:
+		c := f.Conversation
+		if c == nil {
+			c = &Conversation{}
+		}
+		if c.Items == nil {
+			cc := *c
+			cc.Items = []Item{}
+			c = &cc
+		}
+		return json.Marshal(struct {
+			T            string        `json:"t"`
+			Conversation *Conversation `json:"conversation"`
 		}{f.T, c})
 	}
 	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)

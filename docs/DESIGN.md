@@ -68,6 +68,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
 4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
+6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
 
 ### 2.2 Processes
 
@@ -177,6 +178,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
   - `{"t":"closed","closed":[…]}`: the closed sessions that `reopen` can bring back, the last closed first (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
+  - `{"t":"conversation","conversation":{…}}`, sent only when `conversation:true` was requested for one session: its whole conversation first (`reset`), then the items that changed and what it waits on you for (§4.7).
 - Frames to the UI are coalesced to at most 10 per second.
 - The API version is `1`. Additions keep backwards compatibility.
 
@@ -184,7 +186,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 |---|---|---|---|
 | `hello` | `client`, `api` | `version`, `api`, `features[]`, which name the ops served, `move` among them | M1 |
 | `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
-| `subscribe` | `events?`, `session?`, `agent?`, `view?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed | M1 (`view`: Mac app) |
+| `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session` | M1 (`view`: Mac app; `conversation`: §4.7) |
 | `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?`, `name?`, `force?` | `session` | M1 (`repo`, `profile` M3; `force` M10) |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
@@ -198,6 +200,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `preflight` | `profile` | `ok`, `problems[]` | M10 |
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
 | `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle | Sessions outside Irie (§4.6) |
+| `conversation` | `session`, `limit?` | `session`, `transcript?`, `items[]`, `needs?`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7) | Conversation view (§4.7) |
 
 ### 2.5 Observation
 
@@ -574,6 +577,29 @@ If the outside copy stopped but Irie could not start the session, the error says
 
 **Tests:** parsing, with warnings on stderr and unknown statuses; leaving out Irie's own by vendor id and by pid; outside frames only on a change; the order kept across status changes; refusals of busy, waiting and unknown sessions; a move of each kind, its resume argv and readiness; the resume argv golden; the sidebar's group at three heights, and a single `m` moving nothing; and an agent of a server started with `CLAUDECODE=1` and a pane id inheriting neither.
 
+### 4.7 Conversation view
+
+People who never open a terminal read an agent's work as a conversation: your messages, its replies, and one line per tool call in plain words. The core reads it from the session's Claude Code transcript and serves it to any view (`conversation`, and `subscribe` with `conversation: true`); the Mac app shows it instead of the raw terminal ([MAC.md](MAC.md)).
+
+**Plain words.** `core.Phrase(tool, input)` says a tool call as it runs: "Running the tests", "Editing main.rs", "Reading Store.swift", "Searching for “Theme”", or for a question what it asks ("Asks: which colour should the button be?"). `PhraseDone` says it once it has run ("Ran the tests"), and `PhraseAsk` what a permission prompt asks ("Asks: may it run rm -rf build?"). A call that failed says what it tried ("Couldn't build the project"). A Bash command is read for its words, never run: its busiest simple command speaks for it, and a command without words of its own uses the description Claude Code's model gave it. The core records each `tool.started`'s phrase, and an `input.needed`'s, as `phrase` in the event (§5.2), so the sidebar's rows can show it.
+
+**Source.** The session's transcripts are the paths its `SessionStart` hooks gave, oldest first, so a conversation goes on across `/clear` with a "new conversation" note. A session with none, such as one started before Irie read hooks, is looked for where Claude Code's sessions docs say it keeps a transcript: in its config directory (`CLAUDE_CONFIG_DIR`, or its default folder in your home), under `projects`, in a folder named after the working directory with every character but letters and digits made `-`, as `<session id>.jsonl`. When that is missing too, the conversation has no `transcript`, and a view says so and offers the terminal. Each transcript is read on from where the last read stopped, like the token tally's, once a second and at every hook event, while a client follows it.
+
+**Items.** Each has an id, a kind and a time:
+- `user`: a message from you, a slash command (`/model opus`) or a shell command (`! ls`). One typed while the agent worked is `queued`, from the transcript's `queued_command` lines.
+- `text`: the agent's reply, in Markdown.
+- `tool`: the phrase; the exact command, path, pattern or URL as `detail`; `running`, `ok`, `error` (with the start of its output) or `stopped` once the turn ended without a result; how long it ran; the lines an edit added and removed, from the result's `structuredPatch` or else from its input; and a `group` (read, edit or search) for a view to gather like calls into one line.
+- `agent`: a subagent, with its kind, its task as `detail`, and when it is done, its time and number of tool calls.
+- `note`: an interruption, a compaction, a new conversation.
+
+Left out: the model's thinking, expanded skills and other meta lines, Claude Code's reminders to the model, the output of local commands, notices of background tasks, subagents' own lines (sidechains), messages from other agents, and any line Irie does not understand, because the format is Claude Code's own and changes between versions.
+
+**What it waits on you for.** `needs` comes from the session's state, not the transcript: the phrase of its newest need, with a question's choices or the plan to approve read from the open call in the transcript. It is null when nothing is asked.
+
+**Frames.** A follower's first frame carries the newest 1,000 items with `reset`; later ones carry only the items that changed, which a client replaces by id or appends, plus `needs`. A transcript that shrank was replaced: the conversation starts over with a `reset`.
+
+**Tests:** each kind of transcript line, read in halves, across `/clear` and replacement; stopped calls; finding the transcript Claude Code keeps; the op, the frames and `needs` with the fake agent.
+
 ---
 
 ## 5. Data and config
@@ -607,9 +633,9 @@ One JSON object per journal line and per `event` frame:
 | `spawn.failed` | `reason`, `exit`, `tail` | irie, host | error |
 | `session.started` | `transcript`, `model`, `permission_mode` | SessionStart | `session/new` |
 | `prompt.submitted` | `chars` | UserPromptSubmit | user message / working |
-| `tool.started` | `tool`, `summary` | PreToolUse | `tool_call` pending / working |
+| `tool.started` | `tool`, `summary`, `phrase` (the call in plain words: "Running the tests") | PreToolUse | `tool_call` pending / working |
 | `tool.finished`, `tool.failed` | `tool`, `ms` | PostToolUse, PostToolUseFailure | `tool_call_update` completed / failed |
-| `input.needed` | `reason`: `permission`, `question`, `plan`, `elicitation`, `stalled` | PermissionRequest, Notification, PreToolUse(AskUserQuestion, ExitPlanMode), Elicitation, readiness timer | `request_permission` / blocked |
+| `input.needed` | `reason`: `permission`, `question`, `plan`, `elicitation`, `stalled`; `phrase` for a permission, a question or a plan ("Asks: may it run rm -rf build?") | PermissionRequest, Notification, PreToolUse(AskUserQuestion, ExitPlanMode), Elicitation, readiness timer | `request_permission` / blocked |
 | `turn.ended` | none | Stop | stop reason `end_turn` / done |
 | `turn.failed` | `error` | StopFailure | error |
 | `subagent.started`, `subagent.finished` | `agent_type`, `transcript` | SubagentStart, SubagentStop | none (an ACP RFD covers subagents) |
