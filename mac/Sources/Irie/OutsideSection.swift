@@ -325,7 +325,7 @@ struct OutsideDetails: View {
 
     var body: some View {
         let look = Look(outside: outside)
-        VStack(alignment: .leading, spacing: 4) {
+        WholeLines(spacing: 4) {
             HStack(spacing: 6) {
                 StateMark(look: look)
                 Text(outside.doing)
@@ -338,6 +338,7 @@ struct OutsideDetails: View {
                 if let v = outside.vendorId {
                     Button("Copy Session ID") { store.copy(v, what: "session ID") }
                 }
+                DetailsFold()
             }
             .controlSize(.small)
             line(outside.label, color: Theme.ink)
