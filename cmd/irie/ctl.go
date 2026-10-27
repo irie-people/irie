@@ -35,6 +35,10 @@ const ctlUsage = `usage: irie ctl <command>
                                          spawn.close_when_done a finished session
                                          closes itself and the sidebar has no Done
                                          group: look here instead
+  irie ctl dog [--json]                  the jots that are not through: those whose
+                                         turn is over but whose work is not committed,
+                                         or not yet in their repo's land branch
+                                         (dog.land), with those closed in the last day
   irie ctl reopen [SESSION]              bring a closed session back, by id or name
                                          (the one closed last with none), carrying
                                          on its conversation; prints its new id
@@ -89,6 +93,8 @@ func ctl(args []string) error {
 		return ctlHistory(args[1:])
 	case "reopen":
 		return ctlReopen(args[1:])
+	case "dog":
+		return ctlDog(args[1:])
 	case "show":
 		return ctlShow(args[1:])
 	case "rename":

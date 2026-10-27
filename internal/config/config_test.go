@@ -107,6 +107,9 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Hold{Max: 24 * time.Hour}); c.Hold != want {
 		t.Errorf("hold = %+v, want %+v", c.Hold, want)
 	}
+	if want := (Dog{Watch: true, Nudges: 2, Land: map[string]string{}}); !reflect.DeepEqual(c.Dog, want) {
+		t.Errorf("dog = %+v, want %+v", c.Dog, want)
+	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("defaults do not validate: %v", err)
 	}
@@ -197,6 +200,11 @@ max = "2h"
 
 [usage]
 status_line = false
+
+[dog]
+watch = false
+nudges = 5
+land = { web = "live", "~/code/api" = "main" }
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -264,6 +272,9 @@ status_line = false
 	}
 	if want := (Hold{Max: 2 * time.Hour}); c.Hold != want {
 		t.Errorf("hold = %+v, want %+v", c.Hold, want)
+	}
+	if want := (Dog{Watch: false, Nudges: 5, Land: map[string]string{"web": "live", "~/code/api": "main"}}); !reflect.DeepEqual(c.Dog, want) {
+		t.Errorf("dog = %+v, want %+v", c.Dog, want)
 	}
 	// The defaults themselves are untouched.
 	if d := Default(); d.Profiles["claude"].Model != "claude-opus-5-5" || len(d.Worktree.Copy) != 2 || len(d.Repos.Aliases) != 0 {
@@ -444,6 +455,12 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[route.accuracy]\nlocal = { tiny = 0.5 }\n", "route.accuracy.local.tiny"},
 		{"[route.accuracy]\nlocal = { small = 2 }\n", "route.accuracy.local.small"},
 		{"[route.cost]\nlocal = -1\n", "route.cost.local"},
+		{"[dog]\nnudges = -1\n", "dog.nudges"},
+		{"[dog]\nland = { irie = \"\" }\n", "dog.land.irie"},
+		{"[dog]\nland = { irie = \"-x\" }\n", "dog.land.irie"},
+		{"[dog]\nland = { irie = \"a..b\" }\n", "dog.land.irie"},
+		{"[dog]\nland = { irie = \"live now\" }\n", "dog.land.irie"},
+		{"[dog]\nland = { \" \" = \"live\" }\n", "dog.land"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {

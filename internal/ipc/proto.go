@@ -3,6 +3,8 @@ package ipc
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/irie-hq/irie/internal/event"
@@ -56,6 +58,9 @@ const (
 	// OpTheme gives the core the Mac app's palette, which the agents'
 	// colours on Irie's status line follow (DESIGN §6.3).
 	OpTheme = "theme"
+	// OpDog lists the jots that are not through: what each left that has
+	// not landed, by the jot dog's last look (DESIGN §4.8).
+	OpDog = "dog"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -142,6 +147,63 @@ type Session struct {
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
+
+	// Loose is what its jot left that has not landed, by the jot dog's
+	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
+	// through or the dog does not watch it.
+	Loose *Loose `json:"loose,omitempty"`
+}
+
+// Loose is what a jot left that has not landed (DESIGN §4.8).
+type Loose struct {
+	Dirty  int          `json:"dirty,omitempty"`  // files not committed
+	Ahead  int          `json:"ahead,omitempty"`  // its own commits not in the land branch
+	Land   string       `json:"land,omitempty"`   // that branch, when its repo has one (dog.land)
+	Where  []LoosePlace `json:"where"`            // the worktrees that hold them
+	Nudged int          `json:"nudged,omitempty"` // how often the dog sent it back to finish since your last prompt
+}
+
+// Words says what is left in plain words, such as "3 files not committed ·
+// 2 commits not in live".
+func (l Loose) Words() string {
+	var parts []string
+	if l.Dirty > 0 {
+		parts = append(parts, counted(l.Dirty, "file")+" not committed")
+	}
+	if l.Ahead > 0 {
+		parts = append(parts, counted(l.Ahead, "commit")+" not in "+l.Land)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func counted(n int, thing string) string {
+	if n == 1 {
+		return "1 " + thing
+	}
+	return strconv.Itoa(n) + " " + thing + "s"
+}
+
+// LoosePlace is a worktree that holds work of a jot that has not landed.
+type LoosePlace struct {
+	Path   string `json:"path"`
+	Branch string `json:"branch,omitempty"`
+	Dirty  int    `json:"dirty,omitempty"`
+	Ahead  int    `json:"ahead,omitempty"`
+}
+
+// DogResult lists the jots that are not through: the open ones in the
+// list's order, then those closed in the last day, the last closed first.
+type DogResult struct {
+	Jots []Jot `json:"jots"`
+}
+
+// Jot is a jot that is not through.
+type Jot struct {
+	ID     string     `json:"id"`
+	Name   string     `json:"name"`
+	State  string     `json:"state"`            // its row's state, or closed
+	Closed *time.Time `json:"closed,omitempty"` // when it was closed
+	Loose  Loose      `json:"loose"`
 }
 
 // Tokens counts a session's model usage: each reply once, from the usage
@@ -510,6 +572,9 @@ type HookArgs struct {
 type HookResult struct {
 	Context string `json:"context,omitempty"`
 	Deny    string `json:"deny,omitempty"`
+	// Unfinished answers a Stop: what is left of the jot, which its agent
+	// goes on to finish (DESIGN §4.8).
+	Unfinished string `json:"unfinished,omitempty"`
 }
 
 // Frame types streamed after subscribe.
