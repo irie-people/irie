@@ -170,7 +170,7 @@ if [ -n "$newapp" ]; then
 	ditto "$newapp" "$app"
 	echo "$head" >"$appstamp"
 	if [ -n "$pids" ]; then
-		if [ -n "$front" ]; then open "$app"; else open -g "$app"; fi
+		if [ -n "$front" ]; then open "$app"; else open -g "$app" --args --background; fi
 	fi
 fi
 
