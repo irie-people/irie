@@ -229,9 +229,10 @@ private struct SessionCard: View {
     }
 
     /// Its own colour across the card while it works, fullest by the mark and
-    /// fading toward the trailing slot. The selection's fill replaces it.
+    /// fading into the fill toward the trailing slot. A selected card keeps
+    /// it, over the selection's fill and edged in the accent.
     private var wash: LinearGradient? {
-        guard !selected, let c = Look.agentWash(session) else { return nil }
+        guard let c = Look.agentWash(session) else { return nil }
         return LinearGradient(colors: [c, c.opacity(0.5)], startPoint: .leading, endPoint: .trailing)
     }
 
