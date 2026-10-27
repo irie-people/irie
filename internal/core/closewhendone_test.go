@@ -39,6 +39,17 @@ func TestCloseWhenDoneWaitsForAnotherPrompt(t *testing.T) {
 	testutil.Eventually(t, 10*time.Second, "the session never closed", func() bool { _, ok := c.row(a.ID); return !ok })
 }
 
+func TestCloseWhenDoneLeavesAPausedSession(t *testing.T) {
+	c := setupWith(t, agentConfig{spawn: "close_when_done = true\nclose_delay = \"2s\"\n"})
+	a := c.spawn("prompt,stop")
+	c.waitState(a.ID, ipc.StateDone)
+	c.freeze(a.ID, true)
+	time.Sleep(3 * time.Second)
+	if _, ok := c.row(a.ID); !ok {
+		t.Fatal("close_when_done closed a session the user paused")
+	}
+}
+
 func TestASessionStaysOpenByDefault(t *testing.T) {
 	c := setup(t)
 	a := c.spawn("prompt,stop")

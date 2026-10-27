@@ -44,6 +44,9 @@ final class Store: ObservableObject {
     /// typed so far.
     @Published var renaming: String?
     @Published var renameText = ""
+    /// The card a drag holds, and where it would land (Controls.swift).
+    @Published var dragging: String?
+    @Published var dropMark: DropMark?
     /// Bumped when the terminal should take keyboard focus.
     @Published var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
@@ -155,7 +158,9 @@ final class Store: ObservableObject {
         case "upsert":
             guard let s = f.session else { return }
             if let i = sessions.firstIndex(where: { $0.id == s.id }) {
+                let moved = sessions[i].order != s.order
                 sessions[i] = s
+                if moved { sessions.sort(by: Self.before) }
             } else {
                 sessions.append(s)
                 sessions.sort(by: Self.before)
@@ -227,8 +232,20 @@ final class Store: ObservableObject {
         taskRepo = "irie"
     }
 
-    private static func before(_ a: Session, _ b: Session) -> Bool {
-        a.created != b.created ? a.created < b.created : a.id < b.id
+    /// The list's order, which the core keeps and the user sets: a new
+    /// session goes last, Promote puts one first, and a drag puts one where
+    /// it is dropped. A core without it sends no order: the order they
+    /// started.
+    static func before(_ a: Session, _ b: Session) -> Bool {
+        if let x = a.order, let y = b.order, x != y { return x < y }
+        return a.created != b.created ? a.created < b.created : a.id < b.id
+    }
+
+    /// Changes the rows at once, ahead of the core's frames, which then
+    /// confirm or correct them (Controls.swift).
+    func preview(_ change: (inout [Session]) -> Void) {
+        change(&sessions)
+        sessions.sort(by: Self.before)
     }
 
     // MARK: Keyboard

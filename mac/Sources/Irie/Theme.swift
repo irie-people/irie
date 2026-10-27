@@ -166,6 +166,9 @@ enum Theme {
     /// Corners: cards and fields, and the terminal's frame and the task bar.
     static let radius: CGFloat = 14
     static let frameRadius: CGFloat = 16
+    /// How far text sits in from the edge of a card or a field, so the text
+    /// of everything down a column starts on one line.
+    static let inset: CGFloat = 12
 
     /// Rounded type, as the cards use.
     static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
