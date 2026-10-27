@@ -125,6 +125,7 @@ final class Store: ObservableObject {
                 attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
                 link = .online(version: hello.version)
                 canPickModel = hello.features.contains("spawn-model")
+                if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
                 // The store lives as long as the app.
                 try await client.subscribe { frame in
@@ -136,6 +137,12 @@ final class Store: ObservableObject {
             }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
+    }
+
+    /// Tells the core the palette in use: the agents' colours on Irie's
+    /// status line follow it, so they match the cards.
+    func sendTheme(_ id: String) {
+        Task { _ = try? await client.call("theme", ThemeArgs(theme: id), timeout: 2, as: Empty.self) }
     }
 
     private static func describe(_ error: Error) -> String {
