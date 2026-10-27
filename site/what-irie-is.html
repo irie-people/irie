@@ -109,7 +109,7 @@
     <li>Shows an agent’s live screen, or for Claude Code, its conversation in plain words.</li>
     <li>Picks a <dfn>profile</dfn>, the recipe for which agent and AI <dfn>model</dfn> to start, when a task names none. It takes the lowest cost per success among the profiles accurate enough for the task.</li>
     <li>Runs small tasks on a model on your own computer, through Ollama, once you set that up.</li>
-    <li>Freezes an agent and everything it started at once, puts one session ahead of the rest, and renames, closes and reopens sessions.</li>
+    <li>Freezes an agent and everything it started at once, puts one session ahead of the rest, and renames, closes and reopens sessions. Undo and redo take back a start, a close or a reopen.</li>
     <li>Lists the Claude Code sessions running outside Irie, and moves one in when you ask.</li>
     <li>Lets scripts do most of this with <code>irie ctl</code>.</li>
   </ul>
@@ -184,6 +184,7 @@
         <tr><td><code>~/.config/irie/config.toml</code></td><td>Your settings, if you made the file.</td><td>Yours to keep</td></tr>
         <tr><td><code>~/.local/state/irie/journal/</code></td><td>A file a day of events: each task’s start, each step an agent took, with a line such as the command it ran, and what you did.</td><td>30 days</td></tr>
         <tr><td><code>~/.local/state/irie/sessions/&lt;id&gt;/</code></td><td>For each session: its task, <code>task.md</code>; exactly how it was started, <code>spec.json</code>; Irie’s hooks for it, <code>claude-settings.json</code>; its host’s process ids, <code>host.json</code>; its last reply, <code>result.md</code>; its last status line, <code>status.json</code>; and how it ended, <code>exit.json</code>.</td><td>Until you remove them</td></tr>
+        <tr><td><code>~/.local/state/irie/state.json</code></td><td>Your undo and redo history: the starts, closes and reopens you can take back.</td><td>The last 100 steps</td></tr>
         <tr><td><code>~/.local/state/irie/core.log</code>, <code>ui.log</code></td><td>What the core and the list did, with their errors.</td><td>Until you remove them</td></tr>
         <tr><td><code>~/.local/state/irie/local.json</code></td><td>The local model <code>irie setup local</code> chose, and how much memory models took.</td><td>Until you remove it</td></tr>
         <tr><td><code>~/.local/state/irie/tmux.conf</code></td><td>Irie’s tmux settings.</td><td>Written again as needed</td></tr>
@@ -252,7 +253,7 @@
   <ul class="rules">
     <li>Pausing an agent at its next step. The Mac app’s Pause button freezes the session instead. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></li>
     <li>Sending an agent a note it reads at its next step. <a class="tag" href="roadmap.html#m7" data-m="7">Planned</a></li>
-    <li>Parking sessions, and undo and redo in the list. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></li>
+    <li>Parking sessions, and undoing more than a start, a close or a reopen. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></li>
     <li>A live view of each helper an agent starts. Today a helper is one line under its session. <a class="tag" href="roadmap.html#m8" data-m="8">Planned</a></li>
     <li>Opening Irie from the Mac app or Spotlight. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></li>
     <li>tmux telling Irie of changes at once. Today Irie asks it once a second. <a class="tag" href="roadmap.html#m11" data-m="11">Planned</a></li>
