@@ -94,7 +94,7 @@ Before the palettes, the app did not follow §5.3:
 - The done count also counted idle and exited sessions, which the terminal sidebar does not.
 - Frozen, paused and pausing had no look at all. The core derives them from milestones 5 and 6, and they are drawn now.
 
-The app does not read `ui.red_on_done` yet, because the core does not pass the config on, so done is always green here.
+With `ui.red_on_done` set, the core's header says so and the app draws done in red, as the terminal sidebar does.
 
 ## 6. Not yet
 

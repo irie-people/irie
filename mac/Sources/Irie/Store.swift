@@ -29,6 +29,9 @@ final class Store: ObservableObject {
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     @Published private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
+    /// ui.red_on_done, from the core: done sessions are drawn red. Look keeps
+    /// it for the marks; this draws the views again when it changes.
+    @Published private(set) var redOnDone = false
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
@@ -131,6 +134,10 @@ final class Store: ObservableObject {
     }
 
     private func apply(_ f: Frame) {
+        if let h = f.header, (h.redOnDone ?? false) != Look.redOnDone {
+            Look.redOnDone = h.redOnDone ?? false
+            redOnDone = Look.redOnDone
+        }
         switch f.t {
         case "snapshot":
             sessions = (f.sessions ?? []).sorted(by: Self.before)

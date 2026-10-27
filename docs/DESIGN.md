@@ -179,7 +179,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"snapshot","sessions":[…],"header":{…}}`
   - `{"t":"upsert","session":{…}}` and `{"t":"remove","id":"…"}`
   - `{"t":"history","undo":"…","redo":"…"}`
-  - `{"t":"header","header":{…}}` when the plan's use or the machine's memory changes (§6.3). A snapshot carries the header too.
+  - `{"t":"header","header":{…}}` when the plan's use or the machine's memory changes (§6.3). A snapshot carries the header too. The header also says `red_on_done` when `ui.red_on_done` is set, so every sidebar draws done in red (§5.3).
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
   - `{"t":"closed","closed":[…]}`: the closed sessions that `reopen` can bring back, the last closed first (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.

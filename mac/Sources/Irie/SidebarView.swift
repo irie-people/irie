@@ -508,7 +508,7 @@ private struct Counts: View {
             case .online:
                 count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
                 count([.working], mark: .working, color: Theme.ink, label: "working")
-                count([.done], mark: .done, color: Theme.done, label: "done, not yet seen")
+                count([.done], mark: .done, color: Look.doneColor, label: "done, not yet seen")
                 if store.sessions.contains(where: { [.paused, .pausing].contains(Look($0)) }) {
                     count([.paused, .pausing], mark: .paused, color: Theme.paused, label: "paused")
                 }

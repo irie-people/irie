@@ -146,9 +146,12 @@ type Subagent struct {
 
 // Header is what the sidebar shows that is not a row.
 type Header struct {
-	Version string  `json:"version,omitempty"`
-	Plan    *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
-	Memory  *Memory `json:"memory,omitempty"` // the machine's memory
+	Version string `json:"version,omitempty"`
+	// RedOnDone is ui.red_on_done: a done session is drawn red, not green
+	// (DESIGN §5.3), in every sidebar.
+	RedOnDone bool    `json:"red_on_done,omitempty"`
+	Plan      *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
+	Memory    *Memory `json:"memory,omitempty"` // the machine's memory
 }
 
 // Window is one window of a plan's use, such as the five hours.
