@@ -24,7 +24,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "claude", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -39,8 +39,51 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if got := c.Profiles["claude"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("profiles.claude = %+v, want %+v", got, want)
 	}
-	if len(c.Profiles) != 1 {
-		t.Errorf("default profiles = %v, want only claude", c.Profiles)
+	wantSonnet := Profile{
+		Harness:        "claude-code",
+		Command:        "claude",
+		Model:          "claude-sonnet-5-5",
+		Effort:         "medium",
+		PermissionMode: "auto",
+		Args:           []string{},
+		Env:            map[string]string{},
+	}
+	if got := c.Profiles["sonnet"]; !reflect.DeepEqual(got, wantSonnet) {
+		t.Errorf("profiles.sonnet = %+v, want %+v", got, wantSonnet)
+	}
+	wantLocal := Profile{
+		Harness: "claude-code",
+		Command: "claude",
+		Args:    []string{},
+		Env:     map[string]string{},
+		Local:   &LocalModel{Runtime: "ollama", MinContext: 65536, Enforce: true},
+	}
+	if got := c.Profiles["local"]; !reflect.DeepEqual(got, wantLocal) {
+		t.Errorf("profiles.local = %+v, want %+v", got, wantLocal)
+	}
+	wantHaiku := Profile{Harness: "claude-code", Command: "claude", Model: "claude-haiku-5-5", PermissionMode: "auto", Args: []string{}, Env: map[string]string{}}
+	if got := c.Profiles["haiku"]; !reflect.DeepEqual(got, wantHaiku) {
+		t.Errorf("profiles.haiku = %+v, want %+v", got, wantHaiku)
+	}
+	if len(c.Profiles) != 4 {
+		t.Errorf("default profiles = %v, want claude, sonnet, haiku and local", c.Profiles)
+	}
+	r := c.Route
+	if !reflect.DeepEqual(r.Profiles, []string{"local", "haiku", "sonnet", "claude"}) || r.MinAccuracy != 0.85 || r.PriorWeight != 10 ||
+		r.Pressure != 80 || !r.Failover || !r.Delegate || r.DelegateMode != "acceptEdits" {
+		t.Errorf("route = %+v", r)
+	}
+	if r.Accuracy["claude"]["hard"] != 0.9 || r.Accuracy["local"]["small"] != 0.85 || r.Cost["sonnet"] != 0.25 || r.Cost["local"] != 0 {
+		t.Errorf("route priors = %v, %v", r.Accuracy, r.Cost)
+	}
+	if len(r.Words.Small) == 0 || len(r.Words.Hard) == 0 {
+		t.Errorf("route words = %+v", r.Words)
+	}
+	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}}); !reflect.DeepEqual(c.Local, want) {
+		t.Errorf("local = %+v, want %+v", c.Local, want)
+	}
+	if want := (Usage{StatusLine: true}); c.Usage != want {
+		t.Errorf("usage = %+v, want %+v", c.Usage, want)
 	}
 	if want := (Repos{Roots: []string{}, Aliases: map[string]string{}}); !reflect.DeepEqual(c.Repos, want) {
 		t.Errorf("repos = %+v, want %+v", c.Repos, want)
@@ -111,6 +154,19 @@ harness = "generic"
 command = "aider"
 args = ["--model", "ollama_chat/gpt-oss:20b"]
 task = "paste"
+cost = "free, 50 requests a day"
+
+[profiles.small]
+model = "qwen3.5:4b"
+local = { runtime = "ollama", min_context = 32768, enforce = false }
+
+[local]
+ollama = "/home/alice/bin/ollama"
+port = 11500
+context = 131072
+kv_cache = "q4_0"
+memory_gib = 24
+env = { OLLAMA_MODELS = "/home/alice/models" }
 
 [repos]
 roots = ["~/code", "/home/alice/src"]
@@ -133,6 +189,9 @@ tool_input = "none"
 
 [hold]
 max = "2h"
+
+[usage]
+status_line = false
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -164,9 +223,27 @@ max = "2h"
 		Args:    []string{"--model", "ollama_chat/gpt-oss:20b"},
 		Env:     map[string]string{},
 		Task:    "paste",
+		Cost:    "free, 50 requests a day",
 	}
 	if got := c.Profiles["aider"]; !reflect.DeepEqual(got, wantAider) {
 		t.Errorf("profiles.aider = %+v, want %+v", got, wantAider)
+	}
+	wantSmall := Profile{
+		Harness: "claude-code",
+		Model:   "qwen3.5:4b",
+		Args:    []string{},
+		Env:     map[string]string{},
+		Local:   &LocalModel{Runtime: "ollama", MinContext: 32768, Enforce: false},
+	}
+	if got := c.Profiles["small"]; !reflect.DeepEqual(got, wantSmall) {
+		t.Errorf("profiles.small = %+v, want %+v", got, wantSmall)
+	}
+	wantLocal := Local{Ollama: "/home/alice/bin/ollama", Port: 11500, Context: 131072, KVCache: "q4_0", MemoryGiB: 24, Env: map[string]string{"OLLAMA_MODELS": "/home/alice/models"}}
+	if !reflect.DeepEqual(c.Local, wantLocal) {
+		t.Errorf("local = %+v, want %+v", c.Local, wantLocal)
+	}
+	if c.Usage.StatusLine {
+		t.Error("usage.status_line = true, want false")
 	}
 	if want := (Repos{Roots: []string{"~/code", "/home/alice/src"}, Aliases: map[string]string{"web": "~/code/website"}}); !reflect.DeepEqual(c.Repos, want) {
 		t.Errorf("repos = %+v, want %+v", c.Repos, want)
@@ -210,6 +287,74 @@ func TestPartialProfileKeepsDefaults(t *testing.T) {
 	}
 }
 
+func TestPartialLocalTableKeepsDefaults(t *testing.T) {
+	c, err := Load(writeFile(t, `
+[profiles.mine]
+model = "qwen3.5:9b"
+local = { runtime = "ollama" }
+
+[profiles.local]
+model = "qwen3.5:4b"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := c.Profiles["mine"].Local, (&LocalModel{Runtime: "ollama", MinContext: 65536, Enforce: true}); !reflect.DeepEqual(got, want) {
+		t.Errorf("profiles.mine.local = %+v, want %+v", got, want)
+	}
+	// Setting the built-in local profile's model keeps it local.
+	if p := c.Profiles["local"]; p.Model != "qwen3.5:4b" || p.Local == nil || p.Local.Runtime != "ollama" {
+		t.Errorf("profiles.local = %+v", p)
+	}
+	if c.Profiles["claude"].Local != nil || c.Profiles["sonnet"].Local != nil {
+		t.Error("a cloud profile became local")
+	}
+	// The defaults' local table is not shared with a loaded config.
+	if Default().Profiles["local"].Local == c.Profiles["local"].Local {
+		t.Error("loading shares the default local table")
+	}
+}
+
+func TestPartialRouteTablesKeepTheirDefaults(t *testing.T) {
+	c, err := Load(writeFile(t, `
+[spawn]
+default_profile = "claude"
+
+[route]
+min_accuracy = 0.9
+profiles = ["haiku", "claude"]
+
+[route.accuracy]
+local = { small = 0.95 }
+
+[route.cost]
+sonnet = 0.3
+
+[route.words]
+small = ["chore"]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := c.Route
+	if c.Spawn.DefaultProfile != "claude" || r.MinAccuracy != 0.9 || !reflect.DeepEqual(r.Profiles, []string{"haiku", "claude"}) {
+		t.Errorf("route = %+v, spawn = %+v", r, c.Spawn)
+	}
+	// One class of one profile changes; the rest keep their starting guesses.
+	if r.Accuracy["local"]["small"] != 0.95 || r.Accuracy["local"]["medium"] != 0.40 || r.Accuracy["claude"]["hard"] != 0.9 {
+		t.Errorf("accuracy = %v", r.Accuracy)
+	}
+	if r.Cost["sonnet"] != 0.3 || r.Cost["claude"] != 1 {
+		t.Errorf("cost = %v", r.Cost)
+	}
+	if !reflect.DeepEqual(r.Words.Small, []string{"chore"}) || len(r.Words.Hard) == 0 {
+		t.Errorf("words = %+v", r.Words)
+	}
+	if p, ok := r.Prior("haiku"); !ok || p.Cost != 0.02 || p.Accuracy["small"] != 0.92 {
+		t.Errorf("prior = %+v, %v", p, ok)
+	}
+}
+
 func TestUnknownKeyIsNamed(t *testing.T) {
 	for _, c := range []struct{ body, key string }{
 		{"[ui]\nsidebar_widht = 30\n", "ui.sidebar_widht"},
@@ -221,6 +366,9 @@ func TestUnknownKeyIsNamed(t *testing.T) {
 		{"[hold]\nmaximum = \"1h\"\n", "hold.maximum"},
 		{"[repos]\nroot = []\n", "repos.root"},
 		{"[worktree]\nbranchprefix = \"x/\"\n", "worktree.branchprefix"},
+		{"[local]\ncontext_length = 1\n", "local.context_length"},
+		{"[usage]\nstatusline = true\n", "usage.statusline"},
+		{"[profiles.local]\nlocal = { runtime = \"ollama\", min_ctx = 1 }\n", "profiles.local.local.min_ctx"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
@@ -264,6 +412,31 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[profiles.claude]\ntask = \"paste\"\n", "task"},
 		{"[profiles.g]\nharness = \"generic\"\n", "profiles.g.command"},
 		{"[profiles.g]\nharness = \"generic\"\ncommand = \"aider\"\nmodel = \"claude-opus-5-5\"\n", "profiles.g.model"},
+		{"[profiles.local]\nlocal = { runtime = \"lmstudio\" }\n", "profiles.local.local.runtime"},
+		{"[profiles.g]\nharness = \"generic\"\ncommand = \"aider\"\nlocal = { runtime = \"ollama\" }\n", "only the claude-code harness"},
+		{"[profiles.local]\nlocal = { runtime = \"ollama\", min_context = 0 }\n", "min_context"},
+		{"[profiles.local]\nlocal = { runtime = \"ollama\", min_context = 200000 }\n", "above local.context"},
+		{"[profiles.claude]\ncost = \"a\\nb\"\n", "profiles.claude.cost: must be one line"},
+		{"[local]\nollama = \"ollama\"\n", "local.ollama"},
+		{"[local]\nurl = \"127.0.0.1:11434\"\n", "local.url"},
+		{"[local]\nurl = \"ftp://127.0.0.1\"\n", "local.url"},
+		{"[local]\nport = 0\n", "local.port"},
+		{"[local]\nport = 70000\n", "local.port"},
+		{"[local]\ncontext = 100\n", "local.context"},
+		{"[local]\nkv_cache = \"q2\"\n", "local.kv_cache"},
+		{"[local]\nmemory_gib = -1\n", "local.memory_gib"},
+		{"[local.env]\nOLLAMA_HOST = \"0.0.0.0:1\"\n", "OLLAMA_HOST"},
+		{"[profiles.auto]\nmodel = \"x\"\n", "auto is Irie's router"},
+		{"[route]\nprofiles = [\"nope\"]\n", "route.profiles: \"nope\" is not a profile"},
+		{"[profiles.mine]\nmodel = \"x\"\n\n[route]\nprofiles = [\"mine\"]\n", "needs route.accuracy.mine"},
+		{"[route]\nmin_accuracy = 0\n", "route.min_accuracy"},
+		{"[route]\nmin_accuracy = 1.5\n", "route.min_accuracy"},
+		{"[route]\nprior_weight = -1\n", "route.prior_weight"},
+		{"[route]\npressure = 120\n", "route.pressure"},
+		{"[route]\ndelegate_mode = \"yolo\"\n", "route.delegate_mode"},
+		{"[route.accuracy]\nlocal = { tiny = 0.5 }\n", "route.accuracy.local.tiny"},
+		{"[route.accuracy]\nlocal = { small = 2 }\n", "route.accuracy.local.small"},
+		{"[route.cost]\nlocal = -1\n", "route.cost.local"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
@@ -281,7 +454,7 @@ func TestPrintRoundTrips(t *testing.T) {
 	if err := Default().Write(&buf); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`, `branch_prefix = "irie/"`, `submodules = true`} {
+	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`, `branch_prefix = "irie/"`, `submodules = true`, `runtime = "ollama"`, `kv_cache = "q8_0"`, `status_line = true`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("printed config lacks %s:\n%s", want, buf.String())
 		}

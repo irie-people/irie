@@ -371,21 +371,33 @@ func (c *Core) reopenJob(r closedRecord) (job, error) {
 	if fi, err := os.Stat(spec.Cwd); err != nil || !fi.IsDir() {
 		return job{}, ipc.Errorf(ipc.CodeBadArgs, "%s ran in %s, which is gone", r.Name, spec.Cwd)
 	}
-	profile, ok := c.cfg.Profiles[spec.Profile]
+	profile, ok := c.profile(spec.Profile)
 	if !ok {
 		return job{}, ipc.Errorf(ipc.CodeNotFound, "%s ran on +%s, which is no longer a profile; the profiles are %s", r.Name, spec.Profile, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "))
+	}
+	// The mode the spawn chose, such as a delegated task's, stays.
+	if i := slices.Index(spec.Argv, "--permission-mode"); i >= 0 && i+1 < len(spec.Argv) {
+		profile.PermissionMode = spec.Argv[i+1]
 	}
 	h, err := harnessFor(profile.Harness)
 	if err != nil {
 		return job{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", spec.Profile, err)
 	}
+	// A local profile's model is checked, and may be loaded, as for a spawn.
+	var warnings []string
+	if profile.Local != nil {
+		if warnings, err = c.prepareLocal(spec.Profile, &profile, false); err != nil {
+			return job{}, err
+		}
+	}
 	var probe harness.Probe
 	if p, ok := h.(harness.Prober); ok {
 		probe = p.Probe(profile, c.agentEnv(profile))
 	}
+	probe.Warnings = append(warnings, probe.Warnings...)
 	j := job{
 		place:   place{cwd: spec.Cwd, repo: spec.Repo, worktree: spec.Worktree, branch: spec.Branch, copied: spec.Copied},
-		profile: spec.Profile, h: h, probe: probe, reopen: &r, data: map[string]any{"reopen": true},
+		profile: spec.Profile, run: profile, h: h, probe: probe, reopen: &r, data: map[string]any{"reopen": true},
 	}
 	if _, resumes := h.(harness.Resumer); r.Resume && resumes {
 		j.resume = r.VendorID

@@ -65,6 +65,13 @@ const (
 	// UIShown records that the user showed a session, which turns a done
 	// session idle (DESIGN §5.3). It is an addition to the table of §5.2.
 	UIShown = "ui.shown"
+	// Outcomes teach the router how accurate each profile is (DESIGN §6.4):
+	// the user's rating of a session, and a task run again on a more
+	// accurate profile, which says the first session fell short. A
+	// failover carries a task on after a usage limit.
+	OutcomeRated     = "outcome.rated"
+	OutcomeEscalated = "outcome.escalated"
+	RouteFailover    = "route.failover"
 )
 
 var kinds = map[string]bool{}
@@ -75,6 +82,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIClosed, UIReopened, UIUndo, UIRedo, UIShown,
+		OutcomeRated, OutcomeEscalated, RouteFailover,
 	} {
 		kinds[k] = true
 	}

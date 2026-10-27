@@ -31,6 +31,7 @@ const (
 	RolePlaceholder = "placeholder"
 	RoleAgent       = "agent"
 	RoleMirror      = "mirror"
+	RoleRuntime     = "runtime" // Irie's own Ollama server (DESIGN §6.3), in its own window of irie-agents
 	// RoleClosing is an agent pane of a closed session while its agent
 	// ends. It is out of the slot, alone in its window and in no row.
 	RoleClosing = "closing"
@@ -82,22 +83,35 @@ type Runner struct {
 	Socket string // -L socket name
 }
 
-func (r *Runner) command(args ...string) *exec.Cmd {
-	cmd := exec.Command(r.Bin, append([]string{"-L", r.Socket}, args...)...)
+// command builds a tmux command. Only start may start the server: every
+// other command gets -N, so one that would start a server, such as the
+// new-session of a layout repair that runs while the server goes away,
+// fails instead of bringing a server back without its core.
+func (r *Runner) command(start bool, args ...string) *exec.Cmd {
+	flags := []string{"-L", r.Socket}
+	if !start {
+		flags = append(flags, "-N")
+	}
+	cmd := exec.Command(r.Bin, append(flags, args...)...)
 	// TMUX would make tmux guess targets from the caller's own pane.
 	cmd.Env = WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE")
 	return cmd
 }
 
-// Run runs one tmux command and returns its output.
-func (r *Runner) Run(args ...string) (string, error) {
-	cmd := r.command(args...)
+// Run runs one tmux command and returns its output. It never starts the
+// server.
+func (r *Runner) Run(args ...string) (string, error) { return r.run(false, args...) }
+
+func (r *Runner) run(start bool, args ...string) (string, error) {
+	cmd := r.command(start, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
-		if strings.Contains(msg, "no server running") || strings.Contains(msg, "error connecting to") {
+		// With -N tmux says "Error connecting to"; without, "error
+		// connecting to" or "no server running".
+		if low := strings.ToLower(msg); strings.Contains(low, "no server running") || strings.Contains(low, "error connecting to") {
 			return "", ErrNoServer
 		}
 		return string(out), fmt.Errorf("tmux %s: %s", strings.Join(args, " "), msg)
@@ -130,10 +144,11 @@ func listArgs(cmds [][]string) []string {
 }
 
 // StartServer starts the server with conf and a detached irie-agents
-// session whose core window runs cmd.
+// session whose core window runs cmd. It is the one command that may start
+// the server.
 func (r *Runner) StartServer(conf string, cmd []string) error {
 	args := []string{"-f", conf, "new-session", "-d", "-s", AgentsSession, "-n", CoreWindow, "-x", "80", "-y", "24", "--"}
-	_, err := r.Run(append(args, cmd...)...)
+	_, err := r.run(true, append(args, cmd...)...)
 	return err
 }
 

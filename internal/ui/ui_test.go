@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/route"
 )
 
 var now = time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC)
@@ -29,8 +30,28 @@ type fakeBackend struct {
 	spawned   *ipc.Session // what Spawn returns, when set
 	completes []string
 	items     map[string][]string // Complete's answers
+	notes     map[string][]string // and its notes
 	moves     []string            // the vendor ids Move was given
 	moveErr   error
+	rates     []string // id verdict
+	tools     []string
+	routes    []string
+	choice    route.Choice // what Route returns
+}
+
+func (f *fakeBackend) Rate(id, verdict string) error {
+	f.rates = append(f.rates, id+" "+verdict)
+	return nil
+}
+
+func (f *fakeBackend) Tool(name string) (ipc.Session, error) {
+	f.tools = append(f.tools, name)
+	return ipc.Session{ID: "s0000000tool0", Name: name}, nil
+}
+
+func (f *fakeBackend) Route(task string) (route.Choice, error) {
+	f.routes = append(f.routes, task)
+	return f.choice, nil
 }
 
 func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
@@ -49,9 +70,9 @@ func (f *fakeBackend) Show(id string, focus bool) error {
 	return nil
 }
 
-func (f *fakeBackend) Complete(text string) ([]string, error) {
+func (f *fakeBackend) Complete(text string) (ipc.CompleteResult, error) {
 	f.completes = append(f.completes, text)
-	return f.items[text], nil
+	return ipc.CompleteResult{Items: f.items[text], Notes: f.notes[text]}, nil
 }
 
 func sessions(n int) []ipc.Session {
@@ -954,5 +975,142 @@ func TestStatusStripShowsWhyAndWhat(t *testing.T) {
 	m.sel = 6
 	if !strings.Contains(status(), "pause off: Claude Code 2.1.200") {
 		t.Errorf("status strip %q, want the warning", status())
+	}
+}
+
+func TestTabSaysWhatAProfileCosts(t *testing.T) {
+	m, b := newModel(t, 60, 24, 0)
+	b.items = map[string][]string{"+lo": {"+local"}, "+": {"+claude", "+local", "+sonnet"}}
+	b.notes = map[string][]string{
+		"+lo": {"qwen3.5:9b · local, $0 · ~8.4 GB"},
+		"+":   {"opus-5-5 max · plan 5h 62%", "qwen3.5:9b · local, $0 · ~8.4 GB", "sonnet-5-5 medium"},
+	}
+	m = typeText(m, "+lo")
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "+local " {
+		t.Errorf("bar = %q", v)
+	}
+	if m.status != "qwen3.5:9b · local, $0 · ~8.4 GB" {
+		t.Errorf("status = %q, want what +local runs and costs", m.status)
+	}
+	// Several candidates are listed by name.
+	m.bar.Reset()
+	m = typeText(m, "+")
+	m = send(m, keyMsg("tab"))
+	if m.status != "+claude  +local  +sonnet" {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+func TestStatusStripSaysWhatASessionCosts(t *testing.T) {
+	m, _ := newModel(t, 80, 24, 2)
+	cost, ctx := 1.234, 41.0
+	rows := sessions(2)
+	rows[0].CostUSD, rows[0].Context, rows[0].Memory = &cost, &ctx, 640_000_000
+	rows[1].Local, rows[1].Model, rows[1].Memory = true, "qwen3.5:9b", 512_000_000
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
+	m = send(m, keyMsg("esc"))
+	status := func() string { s := screen(t, m); return s[len(s)-2] }
+	m.sel = 0
+	if !strings.Contains(status(), "$1.23 ctx 41% 640 MB · task-000") {
+		t.Errorf("status strip %q", status())
+	}
+	m.sel = 1
+	if !strings.Contains(status(), "local 512 MB · task-001") {
+		t.Errorf("status strip %q", status())
+	}
+}
+
+func TestColonCommands(t *testing.T) {
+	m, b := newModel(t, 60, 24, 2)
+	enter := func(line string) {
+		m.setFocus(focusBar)
+		m.bar.Reset()
+		m = typeText(m, line)
+		m = send(m, keyMsg("enter"))
+	}
+	// Local setup runs in a session of its own, shown with the focus, so
+	// its questions can be answered.
+	enter(":setup local")
+	if !reflect.DeepEqual(b.tools, []string{"setup"}) || len(b.shows) != 1 || !b.shows[0].focus || b.shows[0].id != "s0000000tool0" {
+		t.Errorf("tools %v, shows %+v", b.tools, b.shows)
+	}
+	if len(b.spawns) != 0 {
+		t.Errorf("a command spawned a task: %+v", b.spawns)
+	}
+	enter(":models")
+	if !reflect.DeepEqual(b.tools, []string{"setup", "models"}) {
+		t.Errorf("tools %v", b.tools)
+	}
+	// A rating goes to the selected session.
+	m.sel = 1
+	enter(":rate bad")
+	if !reflect.DeepEqual(b.rates, []string{m.sessions[1].ID + " bad"}) || !strings.Contains(m.status, "rated task-001 bad") {
+		t.Errorf("rates %v, status %q", b.rates, m.status)
+	}
+	// A dry run of the router says where the task would go.
+	b.choice = route.Choice{Class: route.Small, Profile: "local", Reason: "small: local is the cheapest per success"}
+	enter(":route fix the typo")
+	if !reflect.DeepEqual(b.routes, []string{"fix the typo"}) || m.status != "small: local is the cheapest per success" {
+		t.Errorf("routes %v, status %q", b.routes, m.status)
+	}
+	enter(":bogus")
+	if !m.statusErr || !strings.Contains(m.status, ":setup, :models") {
+		t.Errorf("unknown command: %q", m.status)
+	}
+}
+
+func TestPlusAndMinusRateTheSelectedRow(t *testing.T) {
+	m, b := newModel(t, 60, 24, 3)
+	m = send(m, keyMsg("esc"))
+	m.sel = 2
+	m = send(m, keyMsg("+"))
+	m = send(m, keyMsg("-"))
+	if want := []string{m.sessions[2].ID + " good", m.sessions[2].ID + " bad"}; !reflect.DeepEqual(b.rates, want) {
+		t.Errorf("rates = %v, want %v", b.rates, want)
+	}
+	if !strings.Contains(m.status, "the router learns from it") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+func TestStatusStripSaysHowASessionWasRouted(t *testing.T) {
+	m, _ := newModel(t, 90, 24, 2)
+	rows := sessions(2)
+	rows[0].Routed, rows[0].Class, rows[0].Profile, rows[0].Rated = true, route.Small, "local", ipc.Good
+	rows[1].Parent = rows[0].ID
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
+	m = send(m, keyMsg("esc"))
+	status := func() string { s := screen(t, m); return s[len(s)-2] }
+	m.sel = 0
+	if !strings.Contains(status(), "small→local rated good · task-000") {
+		t.Errorf("status strip %q", status())
+	}
+	m.sel = 1
+	if !strings.Contains(status(), "↳ delegated · task-001") {
+		t.Errorf("status strip %q", status())
+	}
+}
+
+func TestHeaderShowsPlanUseAndLowMemory(t *testing.T) {
+	m, _ := newModel(t, 90, 24, 0)
+	header := func() string { return screen(t, m)[0] }
+	if strings.Contains(header(), "5h") || strings.Contains(header(), "mem") {
+		t.Fatalf("header %q before any use is known", header())
+	}
+	h := ipc.Header{Plan: &ipc.Plan{FiveHour: &ipc.Window{Used: 62}}, Memory: &ipc.Memory{Total: 18 << 30, Available: 1 << 30, Low: true}}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &h}})
+	if !strings.Contains(header(), "mem low 5h62%") || !strings.Contains(header(), "◐0 working") {
+		t.Errorf("header %q", header())
+	}
+	// Narrow, the counts lose their labels first, then the plan goes.
+	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 24})
+	if got := header(); !strings.Contains(got, "mem low") || !strings.Contains(got, "◐0") {
+		t.Errorf("narrow header %q", got)
+	}
+	// A snapshot carries the header too.
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Header: &ipc.Header{}}})
+	if strings.Contains(header(), "mem low") {
+		t.Errorf("header %q after memory recovered", header())
 	}
 }

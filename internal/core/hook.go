@@ -20,7 +20,9 @@ import (
 var toolInputKeys = []string{"summary", "question"}
 
 // hook takes one hook event from the shim (DESIGN §3.3) and records it.
-// Nothing holds a call yet and there are no notes, so the reply is empty.
+// Nothing holds a call yet. A session that starts may be told it can
+// delegate (DESIGN §6.4); a turn's last message is kept whole for
+// delegation; a turn stopped at a usage limit may fail over.
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	h, err := harnessFor(a.Harness)
 	if err != nil {
@@ -41,6 +43,8 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		c.mu.Unlock()
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
+	var reply ipc.HookResult
+	failover := false
 	for _, e := range evs {
 		input := call.Input
 		if c.cfg.Journal.ToolInput == "none" {
@@ -52,13 +56,26 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		if p := eventPhrase(e, call.Tool, input); p != "" {
 			e.Data["phrase"] = p
 		}
+		// The journal cuts strings, so the whole message is kept first.
+		if msg := e.Str("message"); e.Kind == event.TurnEnded && e.Agent == event.Main && msg != "" {
+			c.saveResult(x, msg)
+		}
 		c.record(x, e)
+		switch {
+		case e.Kind == event.SessionStarted:
+			reply.Context = c.delegateHint(x)
+		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg.Route.Failover:
+			failover = true
+		}
 	}
 	c.followConversation(x)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	return ipc.HookResult{}, nil
+	if failover {
+		go c.failover(a.Session)
+	}
+	return reply, nil
 }
 
 // eventPhrase is what an event of a tool call says in plain words (Phrase):

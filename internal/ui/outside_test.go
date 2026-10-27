@@ -331,3 +331,32 @@ func TestOneMMovesNothing(t *testing.T) {
 		t.Errorf("m on a busy row: status %q, moves %v", m.status, b.moves)
 	}
 }
+
+// TestRatingLeavesOutsideRowsAlone: + and - rate Irie's own sessions. A
+// row outside Irie, or the group's header, has nothing to rate.
+func TestRatingLeavesOutsideRowsAlone(t *testing.T) {
+	m, b := withOutside(t, 120, 24, 1, 2)
+	m = send(m, keyMsg("end"))
+	m = send(m, keyMsg("+"))
+	m = send(m, keyMsg("-"))
+	m = send(m, keyMsg("up"))
+	m = send(m, keyMsg("up")) // the group's header
+	m = send(m, keyMsg("+"))
+	if len(b.rates) != 0 {
+		t.Fatalf("rates %v on the Outside Irie group", b.rates)
+	}
+	m = send(m, keyMsg("end"))
+	m = send(m, keyMsg(":"))
+	m = typeText(m, "rate good")
+	m = send(m, keyMsg("enter"))
+	if len(b.rates) != 0 || !m.statusErr || !strings.Contains(m.status, "no session to rate") {
+		t.Errorf(":rate on an outside row: rates %v, status %q", b.rates, m.status)
+	}
+	// Irie's own row still takes one.
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("home"))
+	m = send(m, keyMsg("+"))
+	if want := []string{m.sessions[0].ID + " good"}; !reflect.DeepEqual(b.rates, want) {
+		t.Errorf("rates %v, want %v", b.rates, want)
+	}
+}

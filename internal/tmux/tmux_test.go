@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -269,6 +270,31 @@ func run(t *testing.T, r *Runner, args ...string) string {
 		t.Fatalf("tmux %q: %v", args, err)
 	}
 	return strings.TrimSpace(out)
+}
+
+func TestOnlyStartServerStartsTheServer(t *testing.T) {
+	bin := testutil.NeedTmux(t)
+	e := testutil.NewEnv(t)
+	r := &Runner{Bin: bin, Socket: e.Socket}
+	// A layout repair with the server gone, as while it goes away under a
+	// running core, fails and starts no server.
+	plan := Plan(Snapshot{}, Want{Bin: fakeBin(t), SidebarWidth: 34, Version: "v1"})
+	if _, err := r.RunList(plan); !errors.Is(err, ErrNoServer) {
+		t.Errorf("a repair with no server: %v, want ErrNoServer", err)
+	}
+	if _, err := r.Snapshot(); !errors.Is(err, ErrNoServer) {
+		t.Fatalf("a server runs after the repair: %v", err)
+	}
+	conf := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(conf, []byte(Conf(ConfOptions{FocusKey: "C-]", SidebarWidth: 34})), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.StartServer(conf, []string{fakeBin(t), "core"}); err != nil {
+		t.Fatal(err)
+	}
+	if s, err := r.Snapshot(); err != nil || !s.HasSession(AgentsSession) {
+		t.Errorf("after StartServer: %v, %+v", err, s)
+	}
 }
 
 func TestConfLoadsIntoTmux(t *testing.T) {
