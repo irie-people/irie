@@ -17,14 +17,59 @@ type tokenTally struct {
 }
 
 type transcriptCount struct {
-	offset  int64
-	partial []byte                // an unfinished last line
-	byID    map[string]ipc.Tokens // usage per message id
-	sum     ipc.Tokens
+	follower
+	byID map[string]ipc.Tokens // usage per message id
+	sum  ipc.Tokens
 }
 
 // maxRead caps one read, so a long transcript is caught up over a few ticks.
 const maxRead = 8 << 20
+
+// follower reads a growing JSONL file, such as a transcript, a line at a
+// time from where its last read stopped. The token tally and the
+// conversations read transcripts this way.
+type follower struct {
+	offset  int64
+	partial []byte // an unfinished last line
+}
+
+// read calls line for each complete line the file gained since the last
+// read, reading at most maxRead bytes. A file that shrank was replaced:
+// reset is called first, and the file is read from its start.
+func (f *follower) read(path string, reset func(), line func([]byte)) {
+	fh, err := os.Open(path)
+	if err != nil {
+		return // not written yet, or gone
+	}
+	defer fh.Close()
+	st, err := fh.Stat()
+	if err != nil {
+		return
+	}
+	if st.Size() < f.offset {
+		*f = follower{}
+		reset()
+	}
+	if st.Size() == f.offset {
+		return
+	}
+	buf := make([]byte, min(st.Size()-f.offset, maxRead))
+	n, _ := fh.ReadAt(buf, f.offset)
+	if n == 0 {
+		return
+	}
+	f.offset += int64(n)
+	data := append(f.partial, buf[:n]...)
+	end := bytes.LastIndexByte(data, '\n')
+	if end < 0 {
+		f.partial = data
+		return
+	}
+	f.partial = append([]byte(nil), data[end+1:]...)
+	for _, l := range bytes.Split(data[:end], []byte{'\n'}) {
+		line(l)
+	}
+}
 
 // update reads what the transcripts gained since the last call and returns
 // the totals, or false while none of them has any usage.
@@ -50,38 +95,8 @@ func (t *tokenTally) update(paths []string) (ipc.Tokens, bool) {
 }
 
 func (f *transcriptCount) read(path string) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return // not written yet, or gone
-	}
-	defer fh.Close()
-	st, err := fh.Stat()
-	if err != nil {
-		return
-	}
-	if st.Size() < f.offset {
-		// Replaced or cut short: count it again from the start.
-		*f = transcriptCount{byID: map[string]ipc.Tokens{}}
-	}
-	if st.Size() == f.offset {
-		return
-	}
-	buf := make([]byte, min(st.Size()-f.offset, maxRead))
-	n, _ := fh.ReadAt(buf, f.offset)
-	if n == 0 {
-		return
-	}
-	f.offset += int64(n)
-	data := append(f.partial, buf[:n]...)
-	end := bytes.LastIndexByte(data, '\n')
-	if end < 0 {
-		f.partial = data
-		return
-	}
-	f.partial = append([]byte(nil), data[end+1:]...)
-	for _, line := range bytes.Split(data[:end], []byte{'\n'}) {
-		f.line(line)
-	}
+	// Replaced or cut short: count it again from the start.
+	f.follower.read(path, func() { f.byID, f.sum = map[string]ipc.Tokens{}, ipc.Tokens{} }, f.line)
 }
 
 func (f *transcriptCount) line(b []byte) {

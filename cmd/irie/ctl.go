@@ -31,6 +31,10 @@ const ctlUsage = `usage: irie ctl <command>
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short
   irie ctl show [--focus] SESSION        show a session in the slot
+  irie ctl conversation [--json] [--follow] SESSION
+                                         print a session's conversation, read
+                                         from its transcript; --follow keeps
+                                         printing what changes
   irie ctl watch [--session SESSION]     print events as NDJSON until interrupted
   irie ctl move [--wait] [+PROFILE] SESSION
                                          carry an idle Claude Code session that
@@ -68,6 +72,8 @@ func ctl(args []string) error {
 		return ctlSpawn(args[1:])
 	case "show":
 		return ctlShow(args[1:])
+	case "conversation":
+		return ctlConversation(args[1:])
 	case "watch":
 		return ctlWatch(args[1:])
 	case "move":
@@ -361,4 +367,89 @@ func ctlWatch(args []string) error {
 		}
 	}
 	return errors.New("the core went away")
+}
+
+func ctlConversation(args []string) error {
+	fs := flag.NewFlagSet("ctl conversation", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print each conversation or frame as JSON")
+	follow := fs.Bool("follow", false, "keep printing what changes")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: irie ctl conversation [--json] [--follow] SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	print := func(cv ipc.Conversation) error {
+		if *asJSON {
+			return json.NewEncoder(os.Stdout).Encode(cv)
+		}
+		if cv.Reset && len(cv.Items) == 0 && cv.Transcript == "" {
+			fmt.Println("(no transcript: this session started before Irie followed transcripts; its terminal has everything)")
+		}
+		for _, it := range cv.Items {
+			fmt.Println(conversationLine(it))
+		}
+		if cv.Needs != nil {
+			fmt.Println(conversationLine(*cv.Needs))
+		}
+		return nil
+	}
+	if !*follow {
+		var cv ipc.Conversation
+		if err := ipc.Call(sock, 10*time.Second, ipc.OpConversation, ipc.ConversationArgs{Session: fs.Arg(0)}, &cv); err != nil {
+			return err
+		}
+		return print(cv)
+	}
+	c, err := ipc.Dial(sock, time.Second)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	frames, err := c.Subscribe(ipc.SubscribeArgs{Session: fs.Arg(0), Conversation: true})
+	if err != nil {
+		return err
+	}
+	for f := range frames {
+		if f.T == ipc.FrameConversation && f.Conversation != nil {
+			if err := print(*f.Conversation); err != nil {
+				return err
+			}
+		}
+	}
+	return errors.New("the core went away")
+}
+
+// conversationLine is one item of a conversation as a line of text.
+func conversationLine(it ipc.Item) string {
+	first := func(s string) string {
+		line, rest, _ := strings.Cut(strings.TrimSpace(s), "\n")
+		if strings.TrimSpace(rest) != "" {
+			line += " …"
+		}
+		return line
+	}
+	switch it.Kind {
+	case ipc.ItemUser:
+		return "You: " + first(it.Text)
+	case ipc.ItemText:
+		return "Claude: " + first(it.Text)
+	case ipc.ItemNote:
+		return "— " + it.Text
+	case ipc.ItemNeeds:
+		return "● " + it.Text
+	}
+	mark := map[string]string{ipc.ItemRunning: "…", ipc.ItemOK: "✓", ipc.ItemError: "✕", ipc.ItemStopped: "·"}[it.State]
+	line := "  ▸ " + it.Phrase + "  " + mark
+	if it.Ms > 0 {
+		line += " " + (time.Duration(it.Ms) * time.Millisecond).Round(time.Second/10).String()
+	}
+	if it.Added > 0 || it.Removed > 0 {
+		line += fmt.Sprintf(" +%d −%d", it.Added, it.Removed)
+	}
+	return line
 }

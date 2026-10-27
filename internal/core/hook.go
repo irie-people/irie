@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -31,6 +32,11 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	if err != nil {
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
 	}
+	var call struct {
+		Tool  string          `json:"tool_name"`
+		Input json.RawMessage `json:"tool_input"`
+	}
+	json.Unmarshal(a.Payload, &call)
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
@@ -40,10 +46,15 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	var reply ipc.HookResult
 	failover := false
 	for _, e := range evs {
+		input := call.Input
 		if c.cfg.Journal.ToolInput == "none" {
 			for _, k := range toolInputKeys {
 				delete(e.Data, k)
 			}
+			input = nil
+		}
+		if p := eventPhrase(e, call.Tool, input); p != "" {
+			e.Data["phrase"] = p
 		}
 		// The journal cuts strings, so the whole message is kept first.
 		if msg := e.Str("message"); e.Kind == event.TurnEnded && e.Agent == event.Main && msg != "" {
@@ -57,6 +68,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			failover = true
 		}
 	}
+	c.followConversation(x)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -64,6 +76,27 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		go c.failover(a.Session)
 	}
 	return reply, nil
+}
+
+// eventPhrase is what an event of a tool call says in plain words (Phrase):
+// what a tool.started does, or what an input.needed of a permission prompt,
+// a question or a plan asks. Other events say nothing more.
+func eventPhrase(e event.Event, tool string, input json.RawMessage) string {
+	switch {
+	case tool == "":
+		return ""
+	case e.Kind == event.ToolStarted:
+		return Phrase(tool, input)
+	case e.Kind != event.InputNeeded:
+		return ""
+	}
+	switch e.Str("reason") {
+	case event.ReasonPermission:
+		return PhraseAsk(tool, input)
+	case event.ReasonQuestion, event.ReasonPlan:
+		return Phrase(tool, input)
+	}
+	return ""
 }
 
 // failedReason is spawn.failed's reason when the pane dies first.

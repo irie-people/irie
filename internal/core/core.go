@@ -109,6 +109,8 @@ type session struct {
 	usage    statusline.Usage // its last status line update
 	memory   int64            // what its processes take, last measured
 	out      *outcome         // its route and how it went, shared with Core.outcomes
+	conv     *conversation    // its conversation, read while clients follow it (conversation.go)
+	convSubs int              // the subscriptions that follow its conversation
 }
 
 func (x *session) wire() ipc.Session {
@@ -226,6 +228,7 @@ func (c *Core) tick() {
 	}
 	c.observe(time.Now())
 	c.countTokens()
+	c.followConversations()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -408,7 +411,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 		}}, nil
 	case ipc.OpList:
@@ -457,6 +460,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		items, notes := c.complete(a.Text)
 		return ipc.CompleteResult{Items: items, Notes: notes}, nil
+	case ipc.OpConversation:
+		var a ipc.ConversationArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.conversation(a)
 	case ipc.OpAttachInfo:
 		return c.attachInfo()
 	case ipc.OpPreflight:
