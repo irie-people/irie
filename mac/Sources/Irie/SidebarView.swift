@@ -404,9 +404,15 @@ private struct DetailsPanel: View {
                     .font(Theme.font(12.5, .bold))
                     .foregroundStyle(look.loud ? Theme.needs : Theme.ink)
                 Spacer(minLength: 4)
-                Button("Type to it") { store.show(s.id, focus: true) }
+                // Icons, so a narrow sidebar never cuts their words short; the
+                // words are on hover and for VoiceOver.
+                Button { store.show(s.id, focus: true) } label: { Image(systemName: "keyboard") }
+                    .help("Type to it")
+                    .accessibilityLabel("Type to it")
                 if let cwd = s.cwd {
-                    Button("Show folder") { store.reveal(cwd) }
+                    Button { store.reveal(cwd) } label: { Image(systemName: "folder") }
+                        .help("Show the folder in Finder")
+                        .accessibilityLabel("Show the folder in Finder")
                 }
             }
             .controlSize(.small)
