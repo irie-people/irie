@@ -20,6 +20,18 @@ final class Store: ObservableObject {
     @Published var spawning = false
     /// Bumped when the terminal should take keyboard focus.
     @Published var focusTerminal = 0
+    /// Bumped to move the keyboard to the session list or the find field.
+    @Published var focusSidebar = 0
+    @Published var focusFind = 0
+    /// The sidebar's collapsed groups and filter, which the keys that walk
+    /// the sidebar follow.
+    @Published var collapsed: Set<Look.Group> = []
+    @Published var filter = ""
+    @Published private(set) var fontSize: CGFloat = Store.savedFontSize()
+    /// The terminal view, to tell whether it has the keyboard.
+    weak var terminalView: NSView?
+
+    static let defaultFontSize: CGFloat = 13
 
     struct Notice: Equatable, Identifiable {
         let id = UUID()
@@ -103,6 +115,54 @@ final class Store: ObservableObject {
 
     private static func before(_ a: Session, _ b: Session) -> Bool {
         a.created != b.created ? a.created < b.created : a.id < b.id
+    }
+
+    // MARK: Keyboard
+
+    /// The rows in the order the sidebar draws them: grouped, without
+    /// collapsed groups or rows the filter hides.
+    var drawnOrder: [Session] {
+        let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
+        let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
+        return Look.Group.allCases.filter { !collapsed.contains($0) }.flatMap { g in rows.filter { Look($0).group == g } }
+    }
+
+    /// Shows the next (+1) or previous (-1) row of the drawn order, wrapping
+    /// at the ends. The keyboard stays where it is.
+    func step(_ delta: Int) {
+        let order = drawnOrder
+        guard !order.isEmpty else { return }
+        var next = delta > 0 ? 0 : order.count - 1
+        if let i = order.firstIndex(where: { $0.id == selection }) {
+            next = ((i + delta) % order.count + order.count) % order.count
+        }
+        show(order[next].id)
+    }
+
+    /// Shows the nth row (from 1) of the drawn order.
+    func showRow(_ n: Int) {
+        let order = drawnOrder
+        guard n >= 1, n <= order.count else { return }
+        show(order[n - 1].id)
+    }
+
+    /// Moves the keyboard between the session list and the terminal.
+    func toggleFocus() {
+        if let t = terminalView, t.window?.firstResponder === t {
+            focusSidebar += 1
+        } else {
+            focusTerminal += 1
+        }
+    }
+
+    func setFontSize(_ size: CGFloat) {
+        fontSize = min(max(size, 9), 28)
+        UserDefaults.standard.set(Double(fontSize), forKey: "terminalFontSize")
+    }
+
+    private static func savedFontSize() -> CGFloat {
+        let v = UserDefaults.standard.double(forKey: "terminalFontSize")
+        return v >= 9 && v <= 28 ? CGFloat(v) : defaultFontSize
     }
 
     // MARK: Requests

@@ -5,17 +5,17 @@ import SwiftUI
 /// opens up to show its details.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
-    let filter: String
-    @State private var collapsed: Set<Look.Group> = []
+    @FocusState private var listFocused: Bool
 
     private var visible: [Session] {
-        let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
+        let f = store.filter.trimmingCharacters(in: .whitespaces).lowercased()
         return f.isEmpty ? store.sessions : store.sessions.filter { $0.name.lowercased().contains(f) }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Header()
+            FindField()
             content
             Divider()
             TaskBar()
@@ -28,7 +28,7 @@ struct SidebarView: View {
         } else if store.sessions.isEmpty {
             Hint(text: store.link == .connecting ? "Connecting to Irie…" : "No sessions yet. Type a task below to start one.")
         } else if visible.isEmpty {
-            Hint(text: "No sessions match “\(filter)”.")
+            Hint(text: "No sessions match “\(store.filter)”.")
         } else {
             List(selection: Binding(get: { store.selection }, set: { if let id = $0 { store.show(id) } })) {
                 ForEach(Look.Group.allCases, id: \.self) { group in
@@ -50,6 +50,8 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            .focused($listFocused)
+            .onChange(of: store.focusSidebar) { listFocused = true }
             .onKeyPress(.return) {
                 guard let id = store.selection else { return .ignored }
                 store.show(id, focus: true)
@@ -59,9 +61,41 @@ struct SidebarView: View {
     }
 
     private func expansion(_ g: Look.Group) -> Binding<Bool> {
-        Binding(get: { !collapsed.contains(g) }, set: { open in
-            if open { collapsed.remove(g) } else { collapsed.insert(g) }
+        Binding(get: { !store.collapsed.contains(g) }, set: { open in
+            if open { store.collapsed.remove(g) } else { store.collapsed.insert(g) }
         })
+    }
+}
+
+/// "Find a session". ⌘F comes here; Esc clears it and goes back to the list.
+private struct FindField: View {
+    @EnvironmentObject private var store: Store
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(.secondary)
+            TextField("Find a session", text: $store.filter)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .focused($focused)
+                .onExitCommand {
+                    store.filter = ""
+                    store.focusSidebar += 1
+                }
+            if !store.filter.isEmpty {
+                Button { store.filter = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Clear")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 7).fill(.quaternary.opacity(0.6)))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
+        .onChange(of: store.focusFind) { focused = true }
     }
 }
 

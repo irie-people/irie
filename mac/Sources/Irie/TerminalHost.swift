@@ -10,15 +10,18 @@ import SwiftUI
 struct TerminalHost: NSViewRepresentable {
     let info: AttachInfo
     let focusToken: Int
+    let fontSize: CGFloat
+    let store: Store
 
     func makeCoordinator() -> Coordinator { Coordinator(info: info) }
 
     func makeNSView(context: Context) -> IrieTerminalView {
         let view = IrieTerminalView(frame: .zero)
         view.processDelegate = context.coordinator
-        view.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.nativeBackgroundColor = Theme.terminalBackground
         view.nativeForegroundColor = Theme.terminalForeground
+        store.terminalView = view
         context.coordinator.view = view
         context.coordinator.focusToken = focusToken
         context.coordinator.attach()
@@ -27,6 +30,9 @@ struct TerminalHost: NSViewRepresentable {
 
     func updateNSView(_ view: IrieTerminalView, context: Context) {
         context.coordinator.info = info // used by the next attach
+        if view.font.pointSize != fontSize {
+            view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
         if context.coordinator.focusToken != focusToken {
             context.coordinator.focusToken = focusToken
             view.window?.makeFirstResponder(view)
@@ -84,6 +90,14 @@ final class IrieTerminalView: LocalProcessTerminalView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         super.mouseDown(with: event)
+    }
+
+    /// A mouse selection is tmux's, and tmux already put it on the pasteboard
+    /// (OSC 52). Copying SwiftTerm's empty selection would wipe that, so ⌘C
+    /// copies only a selection SwiftTerm made itself (Shift-drag).
+    override func copy(_ sender: Any) {
+        guard selection.active else { return }
+        super.copy(sender)
     }
 }
 #endif

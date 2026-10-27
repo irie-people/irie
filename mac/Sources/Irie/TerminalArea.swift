@@ -40,7 +40,7 @@ struct TerminalArea: View {
 
     @ViewBuilder private func terminal(_ a: AttachInfo) -> some View {
         #if canImport(SwiftTerm)
-        TerminalHost(info: a, focusToken: store.focusTerminal)
+        TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store)
             .background(Color(nsColor: Theme.terminalBackground))
         #else
         Placeholder(

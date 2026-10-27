@@ -20,7 +20,7 @@ The app adds no state of its own to the core. It uses two additions to the socke
 
 The app runs `tmux -S <socket> attach-session -t irie` inside its terminal view. Because the slot is zoomed, that client shows only the shown agent, and `show` swaps agents in place.
 
-Two details of the generated tmux.conf follow from this. The `window-resized` hook leaves a zoomed window alone, because resizing the sidebar would end the zoom. The focus key goes to the agent while the slot is zoomed, because the app has no sidebar pane to move to. While the app is open, a terminal attached with `irie attach` also sees only the slot.
+Two details of the generated tmux.conf follow from this. The `window-resized` hook leaves a zoomed window alone, because resizing the sidebar would end the zoom. In a terminal attached to the zoomed slot, the focus key goes to the agent, because there is no sidebar pane to move to. The app catches Ctrl+] itself (§4), so from the app it never reaches tmux. While the app is open, a terminal attached with `irie attach` also sees only the slot.
 
 ## 3. Build and run
 
@@ -32,7 +32,22 @@ The terminal view is [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) v1.
 
 The app finds the core the way `irie` does (`internal/paths`). `--socket PATH`, or `IRIE_CORE_SOCKET`, points it at another Irie. It needs a core with `attach-info`; an older one gets a message to run the new build's `irie up`.
 
-## 4. Not yet
+## 4. Keys
+
+The **Go**, **View** and **Edit** menus list them all.
+
+| Keys | What they do |
+|---|---|
+| Ctrl+Tab, Ctrl+Shift+Tab | Show the next or the previous session in the sidebar's order: by group, without collapsed groups or rows the filter hides, wrapping at the ends. The keyboard stays where it was. The app catches these keys before the terminal or AppKit's key-view loop sees them |
+| Ctrl+] | Move the keyboard between the session list and the terminal |
+| ⌘1 to ⌘9 | Show the first to ninth session in the sidebar's order |
+| ⌘F | Find a session. Esc clears the search and goes back to the list |
+| ⌘N | New task |
+| ↑ and ↓, then Return | Pick a session in the list, then type to it |
+| ⌘C, ⌘V, ⌘A | Copy, paste and select all in the terminal. A mouse drag selects in tmux, which puts the text on the pasteboard when you let go (tmux's `set-clipboard external` and OSC 52, which SwiftTerm writes to the pasteboard). ⌘C copies a selection made with Shift-drag, which bypasses tmux |
+| ⌘=, ⌘-, ⌘0 | Make the terminal's text bigger, smaller or the default size |
+
+## 5. Not yet
 
 These come with the core features they need, or after:
 
