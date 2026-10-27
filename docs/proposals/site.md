@@ -15,8 +15,8 @@ Every page opens with its title and then its picture, before any text.
 | Home | `index.html` | The Irie window: the sidebar beside the slot | The tagline, "Be the change you want to see in the world.", unattributed. What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
 | How it works | `how-it-works.html` | You, Irie, tmux, agents and worktrees | You type a task; Irie starts an agent in tmux; Enter shows it live; hooks tell Irie how it is doing; what the colours mean; worktrees and profiles; what stays on your computer |
 | Get started | `get-started.html` | How a spawn line reads | There is nothing to install yet. What you will need, and four steps of what using Irie will look like |
-| Roadmap | `roadmap.html` | The eleven milestones | The milestones of DESIGN §8, marked done only once merged on main, then what comes after v1 (DESIGN §1.3) |
-| FAQ | `faq.html` | Close the window and the agents keep going | Short answers to a newcomer's questions: what an agent is, which agents, local models, cost, the name |
+| Roadmap | `roadmap.html` | The eleven milestones | The milestones of DESIGN §8 as done, in progress or planned; what was built beside them (Irie for Mac, the conversation view, sessions outside Irie); then what comes after v1 (DESIGN §1.3) |
+| FAQ | `faq.html` | Close the window and the agents keep going | Short answers to a newcomer's questions: what an agent is, the Mac app, which agents, local models, how a model is picked, cost, the name |
 | Contribute | `contribute.html` | From an issue to Steak | The four steps of CONTRIBUTING, "Free, and paid back" and the Steak links from the README, and the house rules from AGENTS.md |
 
 ### Docs
@@ -99,6 +99,7 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 
 - **When a milestone merges.** The same pull request updates `site/roadmap.html` and the milestones picture, and removes that milestone's "Planned" marks. Each mark carries `data-m="<N>"`, so `grep -rn 'data-m="3"' site/` finds them, and `grep -rn milestone site/` finds the sentences that name one.
 - **Milestone 3.** This branch was made on top of the M3 commit, which was not on main yet. The docs change that builds on it carries the M3 commit too, and marks M3 done, so M3 reaches main first or with it (open decision 4).
+- **Milestones 6 and 10, and the rest of live.** On 2026-10-27 the site was merged with live, so it carries the code it describes: M6 and M10 are built there and marked done, M4 and M7 are in progress (rename, close and reopen, reorder and promote are built; park, jump, undo and notes are not), and M5, M8, M9 and M11 are planned, each checked against live's code. The site reaches main with that code, so "done means added to main" holds wherever the site is published. The themes stay Planned, as agreed with the session that asked for them.
 - **When behaviour changes.** The same pull request updates the docs: keys are in `keys.html`, settings in `profiles.html`, and messages in `troubleshooting.html`.
 - **When the themes are built.** The marks with `data-m="themes"` go, Themes' stone on the docs page fills, and the other pictures move to the default theme, Rosewater.
 - **When the first release ships.** Install gains the download, and the "no download yet" lines on Home, Get started, the FAQ and the README go.

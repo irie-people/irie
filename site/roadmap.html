@@ -32,13 +32,14 @@
 <main id="main">
   <h1>Roadmap</h1>
 
-  <!-- When a milestone merges on main: fill its stone, move the sun to the
-       next one, update the count, the title and desc, and its row below. -->
+  <!-- When a milestone is done: fill its stone, update the count, the
+       title and desc, and its row below. A sun marks a milestone in
+       progress. -->
   <figure class="picture narrow">
     <svg viewBox="0 0 440 176" role="img" aria-labelledby="road-title" aria-describedby="road-desc">
-      <title id="road-title">Irie’s eleven milestones as stones over two waves: 3 of 11 are done.</title>
-      <desc id="road-desc">Stones 1 to 3 are filled with a tick: done. Stone 4 is a sun: next. Stones 5 to 11 are empty: planned. A flag marked v1 stands after stone 11.</desc>
-      <text x="20" y="32" font-size="20" font-weight="700" class="s-ink">3 of 11 milestones done</text>
+      <title id="road-title">Irie’s eleven milestones as stones over two waves: 5 of 11 are done, and 2 are in progress.</title>
+      <desc id="road-desc">Stones 1, 2, 3, 6 and 10 are filled with a tick: done. Stones 4 and 7 are suns: in progress. Stones 5, 8, 9 and 11 are empty: planned. A flag marked v1 stands after stone 11.</desc>
+      <text x="20" y="32" font-size="20" font-weight="700" class="s-ink">5 of 11 milestones done</text>
 
       <path d="M24 88H384" class="s-line" stroke-width="2"/>
       <!-- Done -->
@@ -48,20 +49,20 @@
       <path d="M54.5 88.5l3.6 3.8l7.2-8.4" fill="none" class="s-stroke-done-ink" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="96" cy="88" r="13" class="s-done"/>
       <path d="M90.5 88.5l3.6 3.8l7.2-8.4" fill="none" class="s-stroke-done-ink" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-      <!-- Next -->
+      <circle cx="204" cy="88" r="13" class="s-done"/>
+      <path d="M198.5 88.5l3.6 3.8l7.2-8.4" fill="none" class="s-stroke-done-ink" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="348" cy="88" r="13" class="s-done"/>
+      <path d="M342.5 88.5l3.6 3.8l7.2-8.4" fill="none" class="s-stroke-done-ink" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- In progress -->
       <circle cx="132" cy="88" r="13" class="s-sun" stroke="#14261D" stroke-width="2"/>
+      <circle cx="240" cy="88" r="13" class="s-sun" stroke="#14261D" stroke-width="2"/>
       <!-- Planned -->
       <g class="s-bg s-stroke-soft" stroke-width="2">
-        <circle cx="168" cy="88" r="12"/><circle cx="204" cy="88" r="12"/>
-        <circle cx="240" cy="88" r="12"/><circle cx="276" cy="88" r="12"/><circle cx="312" cy="88" r="12"/>
-        <circle cx="348" cy="88" r="12"/><circle cx="384" cy="88" r="12"/>
+        <circle cx="168" cy="88" r="12"/><circle cx="276" cy="88" r="12"/><circle cx="312" cy="88" r="12"/><circle cx="384" cy="88" r="12"/>
       </g>
       <g font-size="16" font-weight="700" text-anchor="middle">
-        <text x="24" y="124" class="s-ink">1</text><text x="60" y="124" class="s-ink">2</text><text x="96" y="124" class="s-ink">3</text><text x="132" y="124" class="s-ink">4</text>
-        <g class="s-soft">
-          <text x="168" y="124">5</text><text x="204" y="124">6</text><text x="240" y="124">7</text>
-          <text x="276" y="124">8</text><text x="312" y="124">9</text><text x="348" y="124">10</text><text x="384" y="124">11</text>
-        </g>
+        <text x="24" y="124" class="s-ink">1</text><text x="60" y="124" class="s-ink">2</text><text x="96" y="124" class="s-ink">3</text><text x="132" y="124" class="s-ink">4</text><text x="204" y="124" class="s-ink">6</text><text x="240" y="124" class="s-ink">7</text><text x="348" y="124" class="s-ink">10</text>
+        <g class="s-soft"><text x="168" y="124">5</text><text x="276" y="124">8</text><text x="312" y="124">9</text><text x="384" y="124">11</text></g>
       </g>
       <!-- Version 1 -->
       <path d="M418 70V106" class="s-stroke-ink" stroke-width="2"/>
@@ -72,7 +73,7 @@
       <path d="M0 148q18-8 36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0" fill="none" class="s-stroke-sea" stroke-width="3" stroke-linecap="round"/>
       <path d="M-18 162q18-8 36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0t36 0" fill="none" class="s-stroke-deep-sea" stroke-width="3" stroke-linecap="round"/>
     </svg>
-    <figcaption>A tick is done, the sun is next, and an empty stone is planned. Done means added to main, the project’s main line of code.</figcaption>
+    <figcaption>A tick is done, a sun is in progress, and an empty stone is planned. Done means added to main, the project’s main line of code.</figcaption>
   </figure>
 
   <p>Irie is built one milestone at a time, and version 1 is all eleven. The full plan is in the <a href="https://github.com/irie-hq/irie/blob/main/docs/DESIGN.md#8-milestones">design document</a>.</p>
@@ -98,23 +99,25 @@
     </li>
     <li class="now" id="m4" data-m="4">
       <span class="num" aria-hidden="true">4</span>
-      <h3>Manage the list <span class="tag next">Next</span></h3>
-      <p>Park rows out of the way, rename them, jump to one by typing, and close and reopen them. Undo and redo any of it.</p>
+      <h3>Manage the list <span class="tag next">In progress</span></h3>
+      <p>Rename a session, close it and reopen it later, and drag the rows into the order you want.</p>
+      <p>Parking rows out of the way, jumping to one by typing, and undo and redo are still to come.</p>
     </li>
     <li id="m5">
       <span class="num" aria-hidden="true">5</span>
       <h3>Pause at the next tool call <span class="tag">Planned</span></h3>
       <p>Pause an agent at its next <dfn>tool call</dfn>, a step such as running a command or editing a file. Let it go when you’re ready, and it’s told how long it waited.</p>
     </li>
-    <li id="m6">
+    <li class="done" id="m6">
       <span class="num" aria-hidden="true">6</span>
-      <h3>Freeze <span class="tag">Planned</span></h3>
-      <p>Stop an agent and everything it started, at once. Thaw it and it carries on; if it was busy, it’s told it was frozen.</p>
+      <h3>Freeze <span class="tag built">Done</span></h3>
+      <p>Stop an agent and everything it started at once, or every agent. Thaw it and it carries on; if it was busy, it’s told it was frozen.</p>
     </li>
-    <li id="m7">
+    <li class="now" id="m7" data-m="7">
       <span class="num" aria-hidden="true">7</span>
-      <h3>Priority and notes <span class="tag">Planned</span></h3>
-      <p>Mark a task as urgent: it moves to the top, and its agent is told to focus. Send any agent a note, which it reads at its next step.</p>
+      <h3>Priority and notes <span class="tag next">In progress</span></h3>
+      <p>Promote a task: it moves to the top, and its agent gets the computer first.</p>
+      <p>Notes to an agent, which it reads at its next step, are still to come.</p>
     </li>
     <li id="m8">
       <span class="num" aria-hidden="true">8</span>
@@ -126,10 +129,11 @@
       <h3>The Irie window in Ghostty, and Irie.app <span class="tag">Planned</span></h3>
       <p>On a Mac, find Irie in <dfn>Spotlight</dfn>, the Mac’s search, and open it like any app. It opens in a window of <dfn>Ghostty</dfn>, a free terminal app, and opening it again brings that window forward.</p>
     </li>
-    <li id="m10">
+    <li class="done" id="m10">
       <span class="num" aria-hidden="true">10</span>
-      <h3>Local models: context preflight <span class="tag">Planned</span></h3>
-      <p>Before an agent starts on a model on your own computer, Irie checks that the model can hold enough text for an agent’s work. If it can’t, Irie says how to fix it.</p>
+      <h3>Local models, cost and routing <span class="tag built">Done</span></h3>
+      <p>Run an agent on a model on your own computer, through a model server Irie runs for you. Irie won’t start an agent on a model without room for its work, and says how to fix it.</p>
+      <p>Every session shows what it costs. A task with no profile goes to the cheapest one that does such tasks well, and hard work stays on the strongest model.</p>
     </li>
     <li id="m11">
       <span class="num" aria-hidden="true">11</span>
@@ -138,13 +142,21 @@
     </li>
   </ol>
 
+  <h2 id="beside">Built beside the milestones</h2>
+  <ul class="after">
+    <li>Irie for Mac: an app for people who never open a terminal, with a card for each agent.</li>
+    <li>The conversation view: an agent’s work as a conversation, with your messages, its replies and one plain line for each step.</li>
+    <li>Sessions outside Irie: Claude Code sessions running elsewhere on your computer show up in the list, and an idle one can move in and carry on.</li>
+  </ul>
+  <p>Four colour themes are on their way too: see <a href="themes.html">Themes</a>.</p>
+
   <h2 id="after">After version 1</h2>
   <ol class="after">
     <li>Fuller support for more agents: Codex CLI first, then opencode, Gemini CLI and pi, then goose, hermes-agent, Amp and crush.</li>
-    <li>Choosing a model for each task by cost and limits, and agents working together, such as a review by another company’s model.</li>
+    <li>Agents working together more, such as a second opinion from another company’s model before anything reaches you.</li>
     <li>Popping an agent out into its own Ghostty tab.</li>
     <li>Seeing which agents work on the same project and how near each is to the most its model can hold in mind, and a focus mode that pauses the rest.</li>
-    <li>Cost tracking, clearing out old worktrees, and a desktop alert when an agent needs you.</li>
+    <li>Costs for agents other than Claude Code, clearing out old worktrees, and a desktop alert when an agent needs you.</li>
   </ol>
 </main>
 
