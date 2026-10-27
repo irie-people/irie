@@ -102,9 +102,13 @@ struct Frame: Decodable {
 struct Header: Decodable {
     /// ui.red_on_done: a done session is drawn red, not green.
     var redOnDone: Bool?
+    /// spawn.close_when_done: finished sessions close themselves, so there
+    /// is no Done group or count.
+    var closeWhenDone: Bool?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
+        case closeWhenDone = "close_when_done"
     }
 }
 

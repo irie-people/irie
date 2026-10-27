@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/testutil"
 )
@@ -45,5 +46,16 @@ func TestASessionStaysOpenByDefault(t *testing.T) {
 	time.Sleep(time.Second)
 	if _, ok := c.row(a.ID); !ok {
 		t.Fatal("the session closed with close_when_done off")
+	}
+}
+
+func TestTheHeaderCarriesCloseWhenDone(t *testing.T) {
+	c := &Core{cfg: config.Default(), version: "test"}
+	if c.headerNow().CloseWhenDone {
+		t.Error("close_when_done is on by default")
+	}
+	c.cfg.Spawn.CloseWhenDone = true
+	if !c.headerNow().CloseWhenDone {
+		t.Error("the header does not carry close_when_done")
 	}
 }
