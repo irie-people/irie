@@ -10,9 +10,10 @@
 # Agents keep running, and each agent's host keeps the build it started with.
 # If `irie up` fails, the previous build goes back.
 #
-# On macOS, when Irie.app is installed or running and mac/ changed since the
-# installed app was built, it builds the app, installs it in ~/Applications
-# and relaunches it if it was running. It never starts Irie or the app.
+# On macOS, when Irie.app is installed or running and mac/ or its icon
+# (tools/mkicon) changed since the installed app was built, it builds the
+# app, installs it in ~/Applications and relaunches it if it was running. It
+# never starts Irie or the app.
 #
 #   tools/live.sh             install this checkout
 #   tools/live.sh --rollback  swap the previous irie back in
@@ -134,7 +135,7 @@ if [ -n "$gonew" ]; then go build -o "$bin.new" ./cmd/irie; fi
 newapp=
 if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/dev/null; }; then
 	built=$(cat "$appstamp" 2>/dev/null || true)
-	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac 2>/dev/null; then
+	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac tools/mkicon 2>/dev/null; then
 		mac/build.sh
 		newapp=mac/build/Irie.app
 	fi
@@ -178,6 +179,9 @@ if [ -n "$newapp" ]; then
 	mkdir -p "$(dirname "$app")"
 	rm -rf "$app"
 	ditto "$newapp" "$app"
+	# Launch Services keeps the icon it last read; registering the app again
+	# makes Finder and the Dock show a new one.
+	/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app" 2>/dev/null || true
 	echo "$head" >"$appstamp"
 	if [ -n "$pids" ]; then
 		if [ -n "$front" ]; then open "$app"; else open -g "$app" --args --background; fi
