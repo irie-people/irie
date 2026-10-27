@@ -9,6 +9,10 @@ import SwiftUI
 enum Snapshot {
     static func run(into dir: String) -> Never {
         NSApplication.shared.setActivationPolicy(.accessory)
+        // The terminal view, with the frame and the line from the selected
+        // card, whichever view the app has saved, which a volatile domain
+        // leaves untouched.
+        UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)
         let store = Store(socketPath: "/nonexistent/irie-snapshot.sock")
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
@@ -29,7 +33,7 @@ enum Snapshot {
                 // Set directly, so the app's saved view and folds are untouched.
                 store.mode = mode
                 store.folded = []
-                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette], forName: UserDefaults.argumentDomain)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette, "showTerminal": true], forName: UserDefaults.argumentDomain)
                 Theme.use(palette)
                 let (rep, titlebar) = window(ContentView().environmentObject(store), dark: dark, width: width, height: 720)
                 let name = base + ".png"

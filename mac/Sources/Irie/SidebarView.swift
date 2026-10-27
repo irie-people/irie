@@ -84,6 +84,9 @@ struct SidebarView: View {
                         .padding(.bottom, 8)
                     }
                 }
+                // The line from the selected card shows while the card's
+                // middle is in sight here (TabLink.swift).
+                .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { $0.list = $1 }
                 .onChange(of: store.selection) {
                     if let id = store.selection { proxy.scrollTo(id) }
                 }
@@ -127,7 +130,8 @@ struct SidebarView: View {
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
 /// the pointer brings up the actions. The card is soft and rounded, on a
 /// gentle shadow: washed in its agent's colour while it works, tinted red
-/// while it needs you, edged in the accent while selected.
+/// while it needs you. The selected card is edged in its session's colour,
+/// which a line carries on to the terminal's frame (TabLink.swift).
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -181,7 +185,13 @@ private struct SessionCard: View {
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
         .background(shape.fill(fill).overlay { if let wash { shape.fill(wash) } }.shadow(color: Theme.shadow, radius: 3, y: 1.5))
-        .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
+        .overlay(shape.strokeBorder(edge, lineWidth: selected ? TabLink.width : 1))
+        .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
+            if selected {
+                ends.card = bounds
+                ends.color = edge
+            }
+        }
         .contentShape(shape)
         .onHover { hovering = $0 }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
@@ -237,16 +247,17 @@ private struct SessionCard: View {
 
     /// Its own colour across the card while it works, fullest by the mark and
     /// fading into the fill toward the trailing slot. A selected card keeps
-    /// it, over the selection's fill and edged in the accent.
+    /// it, over the selection's fill.
     private var wash: LinearGradient? {
         guard let c = Look.agentWash(session) else { return nil }
         return LinearGradient(colors: [c, c.opacity(0.5)], startPoint: .leading, endPoint: .trailing)
     }
 
-    /// The accent round the selected card, faint while the list lacks the
-    /// keyboard; red round one that needs you; a hairline round the rest.
+    /// Round the selected card, the colour of the terminal's frame and the
+    /// line between them; red round one that needs you; a hairline round the
+    /// rest.
     private var edge: Color {
-        if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
+        if selected { return Look.edge(session) }
         if hovering { return Theme.accent.opacity(0.45) }
         if let tint { return tint.opacity(0.55) }
         return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
