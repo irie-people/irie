@@ -111,7 +111,7 @@ final class Store: ObservableObject {
                 let hello = try await client.call("hello", HelloArgs(), timeout: 2, as: HelloResult.self)
                 guard hello.features.contains("attach-info") else {
                     link = .offline("This Irie is too old for the app. Run the new build's `irie up` to update it.")
-                    try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                    try await Task.sleep(nanoseconds: 3_000_000_000)
                     continue
                 }
                 attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
@@ -453,7 +453,7 @@ final class Store: ObservableObject {
         guard !error else { return }
         let id = notice?.id
         Task {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if notice?.id == id { notice = nil }
         }
     }
