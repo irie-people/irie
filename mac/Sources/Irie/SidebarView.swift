@@ -575,6 +575,8 @@ private struct TitleName: View {
         // The title bar sizes the item to its content; a point either side
         // keeps the capsules' edges whole.
         .padding(.horizontal, 1)
+        // The gap to the count badges, which sit in their own toolbar item.
+        .padding(.trailing, 6)
         .fixedSize()
     }
 }
