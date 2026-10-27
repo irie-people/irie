@@ -47,6 +47,7 @@ type Core struct {
 	log     *slog.Logger
 
 	spawnMu sync.Mutex // one spawn at a time, taken before mu
+	sendMu  sync.Mutex // one message typed to an agent at a time, taken before mu
 
 	mu        sync.Mutex // guards everything below, and serialises tmux calls
 	sessions  map[string]*session
@@ -363,7 +364,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
 		// refreshed when they are old; a problem is in the result.
@@ -409,6 +410,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return ipc.CompleteResult{Items: c.complete(a.Text)}, nil
+	case ipc.OpSend:
+		var a ipc.SendArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.send(a)
 	case ipc.OpConversation:
 		var a ipc.ConversationArgs
 		if err := decode(raw, &a); err != nil {
