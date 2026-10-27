@@ -46,7 +46,9 @@ rev() { go version -m "$1" 2>/dev/null | sed -n 's/^[[:space:]]*build[[:space:]]
 running() { "$1" ctl list >/dev/null 2>&1; }
 
 # agents lists every agent pane with its process, so that an install can
-# show it disturbed none (DESIGN §2.1, principle 6).
+# show it disturbed none (DESIGN §2.1, principle 6). The name comes last and
+# only names the agent in a report: a row's name may change meanwhile, as
+# when Claude Code titles a new session (DESIGN §4.2).
 agents() {
 	tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},agent}' \
 		-F '#{pane_id} #{pane_pid} #{pane_dead} #{@irie_name}' 2>/dev/null | sort || true
@@ -190,10 +192,11 @@ fi
 
 git update-ref refs/heads/live "$head"
 
-# Every agent must still run the process it ran before the install.
+# Every agent must still run the process it ran before the install: the
+# same pane, pid and dead flag, whatever its name is now.
 after=$(agents)
-changed=$(printf '%s\n' "$before" | while read -r line; do
-	if [ -n "$line" ] && ! printf '%s\n' "$after" | grep -qxF "$line"; then echo "$line"; fi
+changed=$(printf '%s\n' "$before" | while read -r pane pid dead name; do
+	if [ -n "$pane" ] && ! printf '%s\n' "$after" | grep -qE "^$pane $pid $dead( |\$)"; then echo "$pane $pid $dead $name"; fi
 done)
 if [ -n "$changed" ]; then
 	say "an agent's process changed during the install, which must never happen (DESIGN §2.1, principle 6):"
