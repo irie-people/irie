@@ -20,16 +20,35 @@ import (
 const ctlUsage = `usage: irie ctl <command>
 
   irie ctl list [--json]                 the sessions and their states
-  irie ctl spawn [--wait] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
+  irie ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
                                          starting Irie if needed. @REPO runs it in
                                          a new worktree of that repo, @REPO! in the
                                          repo's own checkout; +PROFILE picks the
-                                         agent. TASK - reads the task from stdin.
-                                         --wait waits until the agent is ready,
-                                         and fails if it is not
+                                         agent, +ollama:MODEL a local model. TASK -
+                                         reads the task from stdin. --wait waits
+                                         until the agent is ready, and fails if it
+                                         is not; --force spawns a local profile even
+                                         when its context or memory falls short
   irie ctl show [--focus] SESSION        show a session in the slot
   irie ctl watch [--session SESSION]     print events as NDJSON until interrupted
+  irie ctl local [--json]                the local Ollama server, the machine's
+                                         memory, and each model weighed against it
+  irie ctl preflight [--model MODEL] [--force] [PROFILE]
+                                         check a local profile's model (default
+                                         +local) as a spawn would, loading it
+  irie ctl route [--json] TASK...        where +auto would run a task, and why:
+                                         each profile's accuracy for the task's
+                                         class, its cost and its cost per success
+  irie ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...
+                                         from an agent: run a subtask in this
+                                         directory on the cheapest profile accurate
+                                         enough for it, wait, and print its result.
+                                         Exits 3 when it needs a stronger model
+                                         than the caller's cheaper ones, 4 when it
+                                         is still running at the timeout
+  irie ctl rate SESSION good|bad         rate a session's work; the router learns
+                                         each profile's accuracy from it
 `
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
@@ -46,6 +65,16 @@ func ctl(args []string) error {
 		return ctlShow(args[1:])
 	case "watch":
 		return ctlWatch(args[1:])
+	case "local":
+		return ctlLocal(args[1:])
+	case "preflight":
+		return ctlPreflight(args[1:])
+	case "route":
+		return ctlRoute(args[1:])
+	case "delegate":
+		return ctlDelegate(args[1:])
+	case "rate":
+		return ctlRate(args[1:])
 	}
 	return fmt.Errorf("unknown ctl command %q\n\n%s", args[0], ctlUsage)
 }
@@ -97,6 +126,7 @@ func ctlSpawn(args []string) error {
 	cwd := fs.String("cwd", "", "run the task in this directory")
 	name := fs.String("name", "", "name the session")
 	wait := fs.Bool("wait", false, "wait until the agent is ready, and fail if it is not")
+	force := fs.Bool("force", false, "spawn a local profile even when its context or memory falls short")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -116,7 +146,7 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl spawn [--wait] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
+		return errors.New("usage: irie ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
 	}
 	if *cwd != "" && a.Repo != "" {
 		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
@@ -137,7 +167,7 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.Task, a.Cwd, a.Name = task, dir, *name
+	a.Task, a.Cwd, a.Name, a.Force = task, dir, *name, *force
 	var r ipc.SpawnResult
 	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		return err

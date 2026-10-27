@@ -1,6 +1,7 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
-// the ui, spawn, profiles, repos, worktree, tmux, journal and hold sections.
+// the ui, spawn, profiles, local, route, repos, worktree, tmux, journal,
+// hold and usage sections.
 package config
 
 import (
@@ -9,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,18 +19,68 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/irie-hq/irie/internal/route"
 )
 
 type Config struct {
 	UI       UI                 `toml:"ui"`
 	Spawn    Spawn              `toml:"spawn"`
 	Profiles map[string]Profile `toml:"profiles"`
+	Local    Local              `toml:"local"`
+	Route    Route              `toml:"route"`
 	Repos    Repos              `toml:"repos"`
 	Worktree Worktree           `toml:"worktree"`
 	Tmux     Tmux               `toml:"tmux"`
 	Journal  Journal            `toml:"journal"`
 	Hold     Hold               `toml:"hold"`
+	Usage    Usage              `toml:"usage"`
 }
+
+// Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
+// on it runs on the profile with the lowest cost per success.
+const Auto = "auto"
+
+// Route is how auto picks a profile, and what goes with it (DESIGN §6.4).
+type Route struct {
+	Profiles     []string                      `toml:"profiles"`      // what auto chooses between
+	MinAccuracy  float64                       `toml:"min_accuracy"`  // a profile below this for a task's class is never chosen
+	PriorWeight  int                           `toml:"prior_weight"`  // how many outcomes the starting accuracies count as
+	Pressure     float64                       `toml:"pressure"`      // from this much of the plan's five hours used, in percent, cloud tokens cost more
+	Failover     bool                          `toml:"failover"`      // carry on a task on a cheaper profile when its session hits a usage limit
+	Delegate     bool                          `toml:"delegate"`      // tell Claude Code sessions they can hand subtasks to cheaper profiles
+	DelegateMode string                        `toml:"delegate_mode"` // the permission mode of a delegated session
+	Accuracy     map[string]map[string]float64 `toml:"accuracy"`      // starting guesses: first-time success, by profile and class
+	Cost         map[string]float64            `toml:"cost"`          // starting guesses: a task's cost relative to one on +claude
+	Words        route.Words                   `toml:"words"`         // what makes a task small, medium or hard
+}
+
+// Prior returns where a profile starts, for the router.
+func (r Route) Prior(profile string) (route.Prior, bool) {
+	acc, ok := r.Accuracy[profile]
+	if !ok {
+		return route.Prior{}, false
+	}
+	cost, ok := r.Cost[profile]
+	if !ok {
+		return route.Prior{}, false
+	}
+	return route.Prior{Accuracy: maps.Clone(acc), Cost: cost}, true
+}
+
+// Priors returns the priors of the route's profiles.
+func (r Route) Priors() map[string]route.Prior {
+	out := map[string]route.Prior{}
+	for _, p := range r.Profiles {
+		if pr, ok := r.Prior(p); ok {
+			out[p] = pr
+		}
+	}
+	return out
+}
+
+// Permission modes Claude Code takes (--permission-mode).
+var PermissionModes = []string{"acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"}
 
 type UI struct {
 	SidebarWidth int    `toml:"sidebar_width"` // columns
@@ -54,7 +106,44 @@ type Profile struct {
 	PermissionMode string            `toml:"permission_mode"`
 	Args           []string          `toml:"args"`
 	Env            map[string]string `toml:"env"`
-	Task           string            `toml:"task"` // how a generic agent gets its task: arg | paste; "" = arg
+	Task           string            `toml:"task"`  // how a generic agent gets its task: arg | paste; "" = arg
+	Local          *LocalModel       `toml:"local"` // the agent runs on a model of a local runtime
+	Cost           string            `toml:"cost"`  // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
+}
+
+// LocalModel is how a profile runs on a local model (DESIGN §6.1). With no
+// model of its own, the profile runs the one `irie setup local` chose.
+type LocalModel struct {
+	Runtime    string `toml:"runtime"`     // ollama
+	MinContext int    `toml:"min_context"` // a spawn is refused below this context, in tokens
+	Enforce    bool   `toml:"enforce"`     // false: spawn anyway, with a warning, when the context or memory is short
+}
+
+// DefaultMinContext is Ollama's guidance for coding agents: 64k tokens.
+const DefaultMinContext = 65536
+
+// Local is the Ollama server local profiles run on (DESIGN §6.3): Irie's
+// own, which it runs in its tmux server with the settings below, or one the
+// user runs at url.
+type Local struct {
+	Ollama    string            `toml:"ollama"`     // the ollama binary; "" = PATH, then the usual install places
+	URL       string            `toml:"url"`        // a server you run instead, such as "http://127.0.0.1:11434"; "" = Irie runs its own
+	Port      int               `toml:"port"`       // Irie's own server listens on 127.0.0.1 at this port
+	Context   int               `toml:"context"`    // its context length in tokens (OLLAMA_CONTEXT_LENGTH)
+	KVCache   string            `toml:"kv_cache"`   // its context cache type (OLLAMA_KV_CACHE_TYPE): f16, q8_0 or q4_0
+	MemoryGiB int               `toml:"memory_gib"` // the most memory local models may take; 0 = two thirds of the machine's
+	Env       map[string]string `toml:"env"`        // more settings for its server, such as OLLAMA_MODELS
+}
+
+// KV cache types Ollama offers (DESIGN §6.3).
+var KVCaches = []string{"f16", "q8_0", "q4_0"}
+
+// Usage is how Irie learns what a session costs (DESIGN §6.3).
+type Usage struct {
+	// StatusLine makes Irie the status line of Claude Code sessions, to read
+	// their cost, context and plan use. Irie runs the user's own status
+	// line and shows what it prints.
+	StatusLine bool `toml:"status_line"`
 }
 
 // Repos is where an @name finds its repo: aliases first, then the git repos
@@ -98,13 +187,17 @@ const (
 	TaskPaste = "paste" // pasted into its terminal once it runs, then Enter
 )
 
-// Default returns the built-in config. The default agent is Opus 5.5 on max
-// effort in auto mode.
+// Default returns the built-in config. A task with no profile goes to auto,
+// which runs it on the profile with the lowest cost per success: hard work
+// on claude, Opus 5.5 on max effort in auto mode; ordinary work on sonnet,
+// Sonnet 5.5 on medium effort; small work on haiku, Haiku 5.5, or on local,
+// Claude Code on a model of Irie's own Ollama server, which costs no tokens
+// but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
 		UI: UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"},
 		Spawn: Spawn{
-			DefaultProfile: "claude",
+			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
 			HideTmux:       true,
 		},
@@ -118,7 +211,33 @@ func Default() Config {
 				Args:           []string{},
 				Env:            map[string]string{},
 			},
+			"sonnet": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-sonnet-5-5",
+				Effort:         "medium",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+			},
+			"haiku": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-haiku-5-5",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+			},
+			"local": {
+				Harness: "claude-code",
+				Command: "claude",
+				Args:    []string{},
+				Env:     map[string]string{},
+				Local:   &LocalModel{Runtime: "ollama", MinContext: DefaultMinContext, Enforce: true},
+			},
 		},
+		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}},
+		Route: DefaultRoute(),
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
 			Base:         "HEAD",
@@ -129,6 +248,68 @@ func Default() Config {
 		Tmux:    Tmux{Socket: "irie"},
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
 		Hold:    Hold{Max: 24 * time.Hour},
+		Usage:   Usage{StatusLine: true},
+	}
+}
+
+// DefaultRoute is where routing starts (DESIGN §6.4). The accuracies are
+// guesses, which the user's own outcomes replace; with the floor at 85%
+// they keep hard work on claude. The costs follow Anthropic's list prices:
+// Sonnet 5.5 costs half as much as Opus 5.5 per token and spends fewer
+// thinking tokens at medium effort than at max, and Haiku 5.5 costs a
+// fortieth. A local model costs no tokens.
+func DefaultRoute() Route {
+	return Route{
+		Profiles:     []string{"local", "haiku", "sonnet", "claude"},
+		MinAccuracy:  0.85,
+		PriorWeight:  10,
+		Pressure:     80,
+		Failover:     true,
+		Delegate:     true,
+		DelegateMode: "acceptEdits",
+		Accuracy: map[string]map[string]float64{
+			"local":  {route.Small: 0.85, route.Medium: 0.40, route.Hard: 0.05},
+			"haiku":  {route.Small: 0.92, route.Medium: 0.70, route.Hard: 0.30},
+			"sonnet": {route.Small: 0.96, route.Medium: 0.88, route.Hard: 0.65},
+			"claude": {route.Small: 0.98, route.Medium: 0.94, route.Hard: 0.90},
+		},
+		Cost: map[string]float64{"local": 0, "haiku": 0.02, "sonnet": 0.25, "claude": 1},
+		Words: route.Words{
+			Small:  slices.Clone(route.DefaultWords.Small),
+			Medium: slices.Clone(route.DefaultWords.Medium),
+			Hard:   slices.Clone(route.DefaultWords.Hard),
+		},
+	}
+}
+
+// fillRoute puts back the default priors a file leaves out: a table that
+// names one profile, or one class, keeps the others.
+func fillRoute(r *Route) {
+	d := DefaultRoute()
+	if r.Accuracy == nil {
+		r.Accuracy = map[string]map[string]float64{}
+	}
+	for p, classes := range d.Accuracy {
+		if r.Accuracy[p] == nil {
+			r.Accuracy[p] = classes
+			continue
+		}
+		for class, v := range classes {
+			if _, ok := r.Accuracy[p][class]; !ok {
+				r.Accuracy[p][class] = v
+			}
+		}
+	}
+	if r.Cost == nil {
+		r.Cost = map[string]float64{}
+	}
+	for p, v := range d.Cost {
+		if _, ok := r.Cost[p]; !ok {
+			r.Cost[p] = v
+		}
+	}
+	if r.Profiles == nil {
+		r.Profiles = []string{}
 	}
 }
 
@@ -150,12 +331,15 @@ func Load(path string) (Config, error) {
 		UI       *UI                       `toml:"ui"`
 		Spawn    *Spawn                    `toml:"spawn"`
 		Profiles map[string]toml.Primitive `toml:"profiles"`
+		Local    *Local                    `toml:"local"`
+		Route    *Route                    `toml:"route"`
 		Repos    *Repos                    `toml:"repos"`
 		Worktree *Worktree                 `toml:"worktree"`
 		Tmux     *Tmux                     `toml:"tmux"`
 		Journal  *Journal                  `toml:"journal"`
 		Hold     *Hold                     `toml:"hold"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold}
+		Usage    *Usage                    `toml:"usage"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -167,6 +351,15 @@ func Load(path string) (Config, error) {
 		}
 		p.Args = slices.Clone(p.Args)
 		p.Env = maps.Clone(p.Env)
+		// A local table decodes over its defaults, so it may name only its
+		// runtime.
+		switch {
+		case p.Local != nil:
+			l := *p.Local
+			p.Local = &l
+		case md.IsDefined("profiles", name, "local"):
+			p.Local = &LocalModel{MinContext: DefaultMinContext, Enforce: true}
+		}
 		if err := md.PrimitiveDecode(file.Profiles[name], &p); err != nil {
 			return c, fmt.Errorf("config %s: profiles.%s: %w", path, name, err)
 		}
@@ -187,6 +380,10 @@ func Load(path string) (Config, error) {
 	if c.Worktree.Copy == nil {
 		c.Worktree.Copy = []string{}
 	}
+	if c.Local.Env == nil {
+		c.Local.Env = map[string]string{}
+	}
+	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
 		names := make([]string, len(keys))
 		for i, k := range keys {
@@ -206,6 +403,20 @@ var (
 	repoName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	branchChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 )
+
+// hasPrior reports whether a route profile has an accuracy for every class
+// and a cost.
+func hasPrior(r Route, p string) bool {
+	if _, ok := r.Cost[p]; !ok {
+		return false
+	}
+	for _, class := range route.Classes {
+		if _, ok := r.Accuracy[p][class]; !ok {
+			return false
+		}
+	}
+	return true
+}
 
 // pathLike reports whether p is an absolute path or a ~ path.
 func pathLike(p string) bool { return filepath.IsAbs(p) || p == "~" || strings.HasPrefix(p, "~/") }
@@ -252,8 +463,46 @@ func (c Config) Validate() error {
 	if c.UI.Ghostty != "auto" && c.UI.Ghostty != "off" {
 		bad("ui.ghostty = %q: must be auto or off", c.UI.Ghostty)
 	}
-	if _, ok := c.Profiles[c.Spawn.DefaultProfile]; !ok {
-		bad("spawn.default_profile = %q: no such profile", c.Spawn.DefaultProfile)
+	if _, ok := c.Profiles[c.Spawn.DefaultProfile]; !ok && c.Spawn.DefaultProfile != Auto {
+		bad("spawn.default_profile = %q: no such profile, and not auto", c.Spawn.DefaultProfile)
+	}
+	if _, ok := c.Profiles[Auto]; ok {
+		bad("profiles.%s: auto is Irie's router; give the profile another name", Auto)
+	}
+	r := c.Route
+	for _, p := range r.Profiles {
+		switch _, isProfile := c.Profiles[p]; {
+		case !isProfile:
+			bad("route.profiles: %q is not a profile", p)
+		case !hasPrior(r, p):
+			bad("route.profiles: %q needs route.accuracy.%s and route.cost.%s", p, p, p)
+		}
+	}
+	if r.MinAccuracy <= 0 || r.MinAccuracy > 1 {
+		bad("route.min_accuracy = %v: must be above 0 and at most 1", r.MinAccuracy)
+	}
+	if r.PriorWeight < 0 {
+		bad("route.prior_weight = %d: must not be negative", r.PriorWeight)
+	}
+	if r.Pressure < 0 || r.Pressure > 100 {
+		bad("route.pressure = %v: must be a percentage", r.Pressure)
+	}
+	if !slices.Contains(PermissionModes, r.DelegateMode) {
+		bad("route.delegate_mode = %q: must be one of %s", r.DelegateMode, strings.Join(PermissionModes, ", "))
+	}
+	for _, p := range slices.Sorted(maps.Keys(r.Accuracy)) {
+		for _, class := range slices.Sorted(maps.Keys(r.Accuracy[p])) {
+			if !slices.Contains(route.Classes, class) {
+				bad("route.accuracy.%s.%s: the classes are %s", p, class, strings.Join(route.Classes, ", "))
+			} else if v := r.Accuracy[p][class]; v < 0 || v > 1 {
+				bad("route.accuracy.%s.%s = %v: must be from 0 to 1", p, class, v)
+			}
+		}
+	}
+	for _, p := range slices.Sorted(maps.Keys(r.Cost)) {
+		if r.Cost[p] < 0 {
+			bad("route.cost.%s = %v: must not be negative", p, r.Cost[p])
+		}
 	}
 	if c.Spawn.ReadyTimeout <= 0 {
 		bad("spawn.ready_timeout = %v: must be positive", c.Spawn.ReadyTimeout)
@@ -272,6 +521,21 @@ func (c Config) Validate() error {
 		default:
 			bad("profiles.%s.task = %q: must be arg or paste", name, p.Task)
 		}
+		if strings.ContainsAny(p.Cost, "\n\r") {
+			bad("profiles.%s.cost: must be one line", name)
+		}
+		if l := p.Local; l != nil {
+			switch {
+			case l.Runtime != "ollama":
+				bad("profiles.%s.local.runtime = %q: must be ollama", name, l.Runtime)
+			case p.Harness != "claude-code":
+				bad("profiles.%s.local: only the claude-code harness runs on a local model yet", name)
+			case l.MinContext < 1:
+				bad("profiles.%s.local.min_context = %d: must be positive", name, l.MinContext)
+			case c.Local.URL == "" && l.MinContext > c.Local.Context:
+				bad("profiles.%s.local.min_context = %d is above local.context = %d, so Irie's own server could never run it", name, l.MinContext, c.Local.Context)
+			}
+		}
 		if p.Harness != "generic" {
 			continue
 		}
@@ -283,6 +547,29 @@ func (c Config) Validate() error {
 				bad("profiles.%s.%s = %q: the generic harness has no such setting; put the CLI's own flags in args", name, f[0], f[1])
 			}
 		}
+	}
+	if c.Local.Ollama != "" && !filepath.IsAbs(c.Local.Ollama) {
+		bad("local.ollama = %q: must be an absolute path", c.Local.Ollama)
+	}
+	if c.Local.URL != "" {
+		if u, err := url.Parse(c.Local.URL); err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
+			bad("local.url = %q: must be an http:// or https:// URL, such as http://127.0.0.1:11434", c.Local.URL)
+		}
+	}
+	if c.Local.Port < 1 || c.Local.Port > 65535 {
+		bad("local.port = %d: must be a TCP port", c.Local.Port)
+	}
+	if c.Local.Context < 2048 {
+		bad("local.context = %d: must be at least 2048 tokens", c.Local.Context)
+	}
+	if !slices.Contains(KVCaches, c.Local.KVCache) {
+		bad("local.kv_cache = %q: must be one of %s", c.Local.KVCache, strings.Join(KVCaches, ", "))
+	}
+	if c.Local.MemoryGiB < 0 {
+		bad("local.memory_gib = %d: must not be negative", c.Local.MemoryGiB)
+	}
+	if _, ok := c.Local.Env["OLLAMA_HOST"]; ok {
+		bad("local.env: OLLAMA_HOST is Irie's to set; use local.port, or local.url for a server you run")
 	}
 	for _, r := range c.Repos.Roots {
 		if !pathLike(r) {

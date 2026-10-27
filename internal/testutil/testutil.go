@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,6 +90,24 @@ func BuildIrie(t testing.TB) string {
 func BuildFakeAgent(t testing.TB) string {
 	t.Helper()
 	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/fakeagent", "fakeagent")
+}
+
+// BuildFakeOllama builds the fake Ollama server, `ollama serve`'s stand-in,
+// once per test binary and returns its path.
+func BuildFakeOllama(t testing.TB) string {
+	t.Helper()
+	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/fakeollama", "fakeollama")
+}
+
+// FreePort returns a TCP port on 127.0.0.1 that nothing listens on now.
+func FreePort(t testing.TB) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
 }
 
 // ShortDir returns a new directory under /tmp. Its path stays short enough for

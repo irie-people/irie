@@ -67,11 +67,19 @@ type Spawn struct {
 	Name     string        // slug shown in the sidebar
 	Task     string        // the task, verbatim
 	Cwd      string        // working directory
+	Repo     string        // the main checkout of the task's repo, when it runs in one
 	Dir      string        // the session's state dir, sessions/<id>
 	VendorID string        // vendor session id, assigned before launch
 	Bin      string        // the irie binary, which hook commands run
 	HoldMax  time.Duration // hold.max; hook timeouts sit above it
 	Probe    Probe         // what probing the CLI found
+
+	// StatusLine makes Irie the session's status line, to learn its cost
+	// (usage.status_line). Home and Environ, the user's home and the
+	// environment the agent starts with, find the user's own.
+	StatusLine bool
+	Home       string
+	Environ    []string
 }
 
 // Probe is what a harness learned about its CLI before a launch.

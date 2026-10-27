@@ -30,10 +30,11 @@ type subscriber struct {
 	wake    chan struct{}
 	done    chan struct{}
 
-	mu    sync.Mutex
-	full  bool
-	dirty map[string]bool
-	queue []ipc.Frame // event frames not sent yet
+	mu     sync.Mutex
+	full   bool
+	dirty  map[string]bool
+	header bool        // the header changed
+	queue  []ipc.Frame // event frames not sent yet
 }
 
 // Subscribe starts a stream of frames for one client (ipc.Handler).
@@ -102,6 +103,17 @@ func (s *subscriber) note(frames []ipc.Frame) {
 	}
 }
 
+// noteHeader tells the subscriber that the header changed.
+func (s *subscriber) noteHeader() {
+	s.mu.Lock()
+	s.header = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // event queues an event frame for a client that wants it. The caller holds
 // s.c.mu.
 func (s *subscriber) event(e event.Event) {
@@ -128,12 +140,23 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, queue := s.full, s.dirty, s.queue
-		s.full, s.dirty, s.queue = false, map[string]bool{}, nil
+		full, dirty, header, queue := s.full, s.dirty, s.header, s.queue
+		s.full, s.dirty, s.header, s.queue = false, map[string]bool{}, false, nil
 		s.mu.Unlock()
 		for _, f := range queue {
 			select {
 			case s.out <- f:
+			case <-s.done:
+				return
+			}
+		}
+		// A snapshot carries the header; otherwise it has a frame of its own.
+		if header && !full && s.session == "" {
+			s.c.mu.Lock()
+			h := s.c.headerNow()
+			s.c.mu.Unlock()
+			select {
+			case s.out <- ipc.Frame{T: ipc.FrameHeader, Header: &h}:
 			case <-s.done:
 				return
 			}
@@ -172,5 +195,6 @@ func (s *subscriber) frame(full bool, dirty map[string]bool) ipc.Frame {
 			rows = append(rows, row)
 		}
 	}
-	return ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{Version: s.c.version}}
+	h := s.c.headerNow()
+	return ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &h}
 }

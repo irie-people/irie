@@ -31,6 +31,7 @@ const (
 	RolePlaceholder = "placeholder"
 	RoleAgent       = "agent"
 	RoleMirror      = "mirror"
+	RoleRuntime     = "runtime" // Irie's own Ollama server (DESIGN §6.3), in its own window of irie-agents
 )
 
 // Pane user options. They travel with a pane through swaps, so a restarted
