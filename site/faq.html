@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>FAQ · Irie</title>
+<meta name="description" content="Short answers about Irie: what it is, which agents it runs, what it costs and what is planned.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<!-- Marks used by the picture: the sidebar's glyphs, drawn as shapes so
+     they look the same in every font. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <circle id="g-dot" r="5.2"/>
+    <path id="g-check" d="M-4.8 0.2 L-1.6 3.6 L4.8 -4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html" aria-current="page">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="qa">
+  <h1>Questions</h1>
+
+  <figure class="picture small">
+    <svg viewBox="0 0 400 300" role="img" aria-labelledby="close-title" aria-describedby="close-desc">
+      <title id="close-title">Closing the window doesn’t stop your agents: they live in tmux and keep working.</title>
+      <desc id="close-desc">Two windows sit above a box labelled tmux. The left window is open and shows the list of agents. The right window is closed, drawn as a dashed outline. In the tmux box below, three agents carry on either way: one working, one that needs you, and one done.</desc>
+
+      <!-- Window open -->
+      <text x="100" y="20" text-anchor="middle" font-size="15" font-weight="700" class="s-ink">Window open</text>
+      <rect x="10.75" y="30.75" width="178.5" height="98.5" rx="9" class="t-bg t-frame" stroke-width="1.5"/>
+      <path d="M10.75 46V39.75a9 9 0 0 1 9-9h160.5a9 9 0 0 1 9 9V46z" class="t-bar"/>
+      <use href="#g-dot" x="26" y="64" class="t-ink"/>
+      <rect x="37" y="61" width="60" height="6" rx="3" class="t-faint"/>
+      <use href="#g-dot" x="26" y="86" class="t-red"/>
+      <rect x="37" y="83" width="52" height="6" rx="3" class="t-red"/>
+      <use href="#g-check" x="26" y="108" class="t-green"/>
+      <rect x="37" y="105" width="44" height="6" rx="3" class="t-faint"/>
+      <path d="M110.5 46V129" class="t-rule"/>
+      <rect x="121" y="60" width="56" height="5" rx="2.5" class="t-faint"/>
+      <rect x="121" y="74" width="42" height="5" rx="2.5" class="t-faint"/>
+      <rect x="121" y="88" width="52" height="5" rx="2.5" class="t-faint"/>
+      <rect x="121" y="102" width="32" height="5" rx="2.5" class="t-faint"/>
+
+      <!-- Window closed -->
+      <text x="300" y="20" text-anchor="middle" font-size="15" font-weight="700" class="s-ink">Window closed</text>
+      <rect x="210.75" y="30.75" width="178.5" height="98.5" rx="9" fill="none" class="s-line" stroke-width="1.5" stroke-dasharray="6 5"/>
+
+      <!-- The open window shows what tmux holds -->
+      <path d="M100 130V168" class="s-line" stroke-width="1.5"/>
+
+      <!-- tmux, with the agents still going -->
+      <rect x="10.75" y="168.75" width="378.5" height="120.5" rx="14" class="s-card s-line" stroke-width="1.5"/>
+      <text x="26" y="195" font-size="16" font-weight="700" class="s-ink">tmux</text>
+      <text x="72" y="195" font-size="15" class="s-soft">your agents keep working</text>
+      <g font-size="15">
+        <rect x="24" y="211" width="110" height="60" rx="9" class="t-bg"/>
+        <use href="#g-dot" x="40" y="241" class="t-ink"/>
+        <text x="52" y="246" class="t-ink">working</text>
+        <rect x="145" y="211" width="110" height="60" rx="9" class="t-bg"/>
+        <use href="#g-dot" x="161" y="241" class="t-red"/>
+        <text x="173" y="246" class="t-red">needs you</text>
+        <rect x="266" y="211" width="110" height="60" rx="9" class="t-bg"/>
+        <use href="#g-check" x="282" y="241" class="t-green"/>
+        <text x="294" y="246" class="t-green">done</text>
+      </g>
+    </svg>
+    <figcaption>The window only shows your agents. They run inside <dfn>tmux</dfn>, a free program that keeps them going, so closing the window doesn’t stop them.</figcaption>
+  </figure>
+
+  <h2>Can I use Irie yet?</h2>
+  <p>Yes, if you build it from its source code: see <a href="install.html">Install</a>. Irie is early and unreleased, so there’s no download yet.</p>
+  <p>The <a href="roadmap.html">roadmap</a> shows what is built so far.</p>
+
+  <h2>What’s a coding agent?</h2>
+  <p>A <dfn>coding agent</dfn> is an AI program that works on code for you: it reads files, makes changes and runs commands. Claude Code is one, and there are many more.</p>
+
+  <h2>Do I need to know the terminal?</h2>
+  <p>A <dfn>terminal</dfn> is a window where you type commands instead of clicking. Irie lives in one, but most of what you type there is plain sentences.</p>
+  <p>On a Mac, you’ll be able to open Irie like any app. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></p>
+
+  <h2>Which agents can Irie run?</h2>
+  <p>Claude Code, and Irie shows when it’s working, needs you or is done. Any other agent that runs in a terminal can be started too, and Irie shows whether it’s still running.</p>
+  <p>Fuller support for Codex CLI, opencode, Gemini CLI and others is planned after version 1.</p>
+
+  <h2>Can it use an AI model on my own computer?</h2>
+  <p>A <dfn>model</dfn> is the AI behind an agent, and some run on your own computer for free. A <dfn>profile</dfn> in Irie’s settings can point Claude Code at one, for the tasks you choose.</p>
+  <p>Anthropic doesn’t support Claude Code on other companies’ models, so how well it works is up to the model.</p>
+  <p>Milestone&nbsp;10 adds a check that the model can hold enough text for an agent’s work, since one with too little room can quietly lose its instructions. <a class="tag" href="roadmap.html#m10" data-m="10">Planned</a></p>
+
+  <h2>What happens if I close the window?</h2>
+  <p>Your agents keep working. Open Irie again and they’re all where you left them.</p>
+
+  <h2>Does Irie send my code anywhere?</h2>
+  <p>Irie runs on your computer and sends nothing over the internet of its own. Each agent talks to its own AI company, just as it would without Irie.</p>
+  <p>Irie keeps a log of what each agent did, such as the commands it ran, on your computer for 30 days.</p>
+
+  <h2>Does it change my agent’s settings?</h2>
+  <p>It never edits your settings files. Each time it starts an agent, it adds its <dfn>hooks</dfn>, small commands the agent runs to say what it’s doing.</p>
+  <p>It also picks the model, effort and permission mode for each launch: by default Opus 5.5 at max effort in auto mode. You can change these in Irie’s settings.</p>
+
+  <h2>Could it delete my work?</h2>
+  <p>Irie itself doesn’t delete your files, but the agents it starts change files where they work. Unless you name a project or a folder with <code>@</code>, each task gets a new, empty folder of its own.</p>
+  <p>Name a project with <code>@</code>, and its agent works in a <dfn>worktree</dfn>: a second working copy, which version 1 never deletes.</p>
+  <p>Add <code>!</code> after the name, or name a folder outside git, and the agent works on your own files there.</p>
+
+  <h2>What does it run on?</h2>
+  <p>Macs and Linux computers, with tmux. Windows isn’t planned for version 1.</p>
+
+  <h2>What does it cost?</h2>
+  <p>Irie is free, and anyone may read, change and share its code under the Apache 2.0 license. The agents it starts still run on your own AI account, and cost what they would without Irie.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+
+  <h2>What does “Irie” mean?</h2>
+  <blockquote class="definition">
+    <p><strong>i·rie</strong> /ˈaɪ.ri/ · <em>adjective, Jamaican Patois</em></p>
+    <p>Good, pleasing, at peace. Everything’s all right.</p>
+    <p><em>“Everything irie.”</em></p>
+  </blockquote>
+  <p>Say it EYE-ree.</p>
+
+  <h2>Who makes it?</h2>
+  <p>Anyone who contributes. Accepted changes are sized in <dfn>Steak</dfn>, Irie’s measure of who built what.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. Each person’s share follows their Steak.</p>
+  <p><a href="contribute.html">You can help</a>.</p>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

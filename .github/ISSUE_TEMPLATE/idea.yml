@@ -1,0 +1,56 @@
+name: Idea
+description: Suggest a change or a feature, and agree it before anyone builds it.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Check the [roadmap](https://irie-hq.github.io/irie/roadmap.html) first, since yours may already be planned.
+
+        For anything bigger than a small fix, agree the approach here before you build it, as [CONTRIBUTING.md](https://github.com/irie-hq/irie/blob/main/CONTRIBUTING.md) asks.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you want to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What Irie would do. Plain words are fine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other ways
+      description: What you do now instead, or other ways it could work.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - The list and its keys
+        - Tasks, repos and worktrees
+        - Profiles and models
+        - irie ctl and scripts
+        - Docs and the website
+        - Something else
+  - type: dropdown
+    id: build
+    attributes:
+      label: Would you build it?
+      description: If an agent would write part of it, say so in the pull request.
+      options:
+        - Yes, I'd like to build it
+        - Maybe, with some help
+        - No, it's an idea for someone else
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I checked the roadmap and the issues.
+          required: true
