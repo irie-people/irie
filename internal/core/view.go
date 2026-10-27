@@ -34,6 +34,12 @@ func (c *Core) loadView() {
 	selected, raw, _ := strings.Cut(strings.TrimSpace(out), " ")
 	if sessionID.MatchString(selected) {
 		c.selected = selected
+	} else if snap, err := c.tmux.Snapshot(); err == nil {
+		// No view kept yet: the session whose terminal the slot shows is
+		// the one picked.
+		if slot := snap.SlotPane(); slot != nil && slot.Role == tmux.RoleAgent && sessionID.MatchString(slot.IrieSession) {
+			c.selected = slot.IrieSession
+		}
 	}
 	switch raw {
 	case "1":

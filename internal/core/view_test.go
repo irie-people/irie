@@ -88,3 +88,22 @@ func TestTheSlotPaneDrawsTheShownConversation(t *testing.T) {
 		t.Errorf("no message box:\n%s", screen)
 	}
 }
+
+func TestAFirstCoreWithTheViewPicksTheSessionInTheSlot(t *testing.T) {
+	c := setupWith(t, agentConfig{terminal: true})
+	a := c.spawn("prompt")
+	c.waitState(a.ID, ipc.StateWorking)
+	c.show(a.ID, false)
+	// An older core kept no view: forget it, and start one that shows
+	// conversations.
+	c.Tmux(t, "set-option", "-gu", "@irie_selected")
+	c.Tmux(t, "set-option", "-gu", "@irie_raw")
+	c.WriteConfig(t, agentConfig{}.toml(c.fake))
+	c.restartCore()
+	testutil.Eventually(t, 5*time.Second, "the agent did not go home for its conversation", func() bool {
+		return c.slot()["@irie_role"] == "placeholder"
+	})
+	if r, _ := c.row(a.ID); !r.Shown {
+		t.Errorf("the session in the slot is not the one shown: %+v", r)
+	}
+}
