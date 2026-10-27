@@ -56,6 +56,7 @@ Recordings come later. Each one has an empty box now, sized 16:10, whose caption
 - One idea per paragraph, two sentences at most.
 - A word a newcomer would not know gets a one-line meaning where it first appears on each page, marked with `<dfn>`: terminal, coding agent, model, tmux, git, worktree, branch, hook, harness, profile, spawn line, tool call, subagent, Ghostty, Spotlight, issue, commit, pull request and Steak. Headings may leave the meaning to the paragraph under them.
 - Only what is true of main today. Everything else is marked planned.
+- Irie's fixed lines, such as the tagline, the Why lines and "Free, and paid back", come from [docs/PHRASES.md](../PHRASES.md) word for word.
 - Examples use `alice`, `/home/alice`, `example.com`, a `shop` repo and widely known model names. No personal data.
 
 ## Deploy

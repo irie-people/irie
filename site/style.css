@@ -468,6 +468,18 @@ h2 .tag, h3 .tag { font-size: 0.8rem; margin-left: 0.4rem; }
 
 /* FAQ and Contribute */
 
+/* The definition from the README, word for word (docs/PHRASES.md) */
+.definition {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1.1rem;
+  max-width: var(--measure);
+  border-left: 4px solid var(--sun);
+  background: var(--bg-soft);
+  border-radius: 0 10px 10px 0;
+}
+.definition p { margin: 0.15rem 0 0; }
+.definition p:first-child { margin-top: 0; }
+
 .qa h2 { font-size: 1.25rem; margin-top: 2.25rem; }
 .rules { padding-left: 1.25rem; }
 .rules li { margin-top: 0.6rem; }
