@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The sidebar: a compact row per session, grouped by what it needs from
-/// you. Selecting a row shows that agent in the terminal; the selected row
-/// opens up to show its details.
+/// The sidebar: a card per session, grouped by what it needs from you. A
+/// click shows that agent's terminal and gives it the keyboard; the arrow
+/// keys walk the cards and keep the keyboard here. The selected card opens
+/// up to show its details.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
@@ -17,9 +18,9 @@ struct SidebarView: View {
             Header()
             FindField()
             content
-            Divider()
             TaskBar()
         }
+        .background(Theme.sidebar.ignoresSafeArea())
     }
 
     @ViewBuilder private var content: some View {
@@ -30,28 +31,38 @@ struct SidebarView: View {
         } else if visible.isEmpty {
             Hint(text: "No sessions match “\(store.filter)”.")
         } else {
-            List(selection: Binding(get: { store.selection }, set: { if let id = $0 { store.show(id) } })) {
-                ForEach(Look.Group.allCases, id: \.self) { group in
-                    let rows = visible.filter { Look($0).group == group }
-                    if !rows.isEmpty {
-                        Section(isExpanded: expansion(group)) {
-                            ForEach(rows) { s in
-                                SessionRow(session: s, selected: s.id == store.selection).tag(s.id)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    // One clock for every card's age.
+                    TimelineView(.periodic(from: .now, by: 30)) { ctx in
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(Look.Group.allCases, id: \.self) { group in
+                                let rows = visible.filter { Look($0).group == group }
+                                if !rows.isEmpty {
+                                    GroupSection(group: group, rows: rows, now: ctx.date)
+                                }
                             }
-                        } header: {
-                            HStack {
-                                Text(group.title)
-                                Spacer()
-                                Text("\(rows.count)").monospacedDigit()
-                            }
-                            .foregroundStyle(group == .needs ? Theme.needs : .secondary)
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
                     }
                 }
+                .onChange(of: store.selection) {
+                    if let id = store.selection { proxy.scrollTo(id) }
+                }
             }
-            .listStyle(.sidebar)
+            .focusable()
+            .focusEffectDisabled()
             .focused($listFocused)
             .onChange(of: store.focusSidebar) { listFocused = true }
+            .onKeyPress(.upArrow) {
+                store.step(-1, wrap: false)
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                store.step(1, wrap: false)
+                return .handled
+            }
             .onKeyPress(.return) {
                 guard let id = store.selection else { return .ignored }
                 store.show(id, focus: true)
@@ -59,132 +70,152 @@ struct SidebarView: View {
             }
         }
     }
-
-    private func expansion(_ g: Look.Group) -> Binding<Bool> {
-        Binding(get: { !store.collapsed.contains(g) }, set: { open in
-            if open { store.collapsed.remove(g) } else { store.collapsed.insert(g) }
-        })
-    }
 }
 
-/// "Find a session". ⌘F comes here; Esc clears it and goes back to the list.
-private struct FindField: View {
+/// A group's header, which folds the group, and its cards.
+private struct GroupSection: View {
     @EnvironmentObject private var store: Store
-    @FocusState private var focused: Bool
+    let group: Look.Group
+    let rows: [Session]
+    let now: Date
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(.secondary)
-            TextField("Find a session", text: $store.filter)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
-                .focused($focused)
-                .onExitCommand {
-                    store.filter = ""
-                    store.focusSidebar += 1
+        let open = !store.collapsed.contains(group)
+        VStack(alignment: .leading, spacing: 2) {
+            Button {
+                if open { store.collapsed.insert(group) } else { store.collapsed.remove(group) }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                    Text(group.title.uppercased()).font(.system(size: 10.5, weight: .bold)).tracking(0.8)
+                    Text("\(rows.count)").font(.system(size: 10.5, weight: .semibold)).monospacedDigit().opacity(0.75)
+                    Spacer()
                 }
-            if !store.filter.isEmpty {
-                Button { store.filter = "" } label: { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("Clear")
+                .foregroundStyle(group == .needs ? Theme.needs : Color.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(group.title), \(rows.count)")
+            .accessibilityHint(open ? "Folds the group" : "Opens the group")
+            if open {
+                ForEach(rows) { s in
+                    SessionCard(session: s, selected: s.id == store.selection, now: now).id(s.id)
+                }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 7).fill(.quaternary.opacity(0.6)))
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
-        .onChange(of: store.focusFind) { focused = true }
     }
 }
 
-/// The mark, the name and the counts. A count jumps to that group's first
-/// session.
-private struct Header: View {
-    @EnvironmentObject private var store: Store
-
-    var body: some View {
-        HStack(spacing: 7) {
-            SunMark().frame(width: 22, height: 22)
-            Text("Irie").font(.system(size: 18, weight: .heavy, design: .rounded))
-            Spacer()
-            if case .online = store.link {
-                count(.needs, systemImage: "circle.fill", color: Theme.needs, label: "need you")
-                count(.working, systemImage: "circle.dotted", color: Theme.work, label: "working")
-                count(.done, systemImage: "checkmark", color: Theme.done, label: "done")
-            } else if case .offline = store.link {
-                Text("offline").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.needs)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-    }
-
-    private func count(_ g: Look.Group, systemImage: String, color: Color, label: String) -> some View {
-        let rows = store.sessions.filter { Look($0).group == g }
-        return Button {
-            if let first = rows.first { store.show(first.id) }
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: systemImage).font(.system(size: 8, weight: .bold))
-                Text("\(rows.count)").font(.system(size: 12, weight: .bold)).monospacedDigit()
-            }
-            .foregroundStyle(color)
-            .opacity(rows.isEmpty ? 0.4 : 1)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(rows.isEmpty)
-        .help("\(rows.count) \(label)")
-    }
-}
-
-/// One session: a single line, plus what it asks when it needs you, plus its
-/// details while selected.
-private struct SessionRow: View {
+/// One session. A single line; what it asks when it needs you, on a red
+/// tint; its details while selected.
+private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
     let selected: Bool
+    let now: Date
+    @State private var hovering = false
 
     private var look: Look { Look(session) }
+    private var quiet: Bool { look == .done || look == .idle || look == .ended }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
                 StateMark(look: look)
                 Text(session.name)
-                    .font(.system(size: 13, weight: look == .done || look == .idle || look == .ended ? .regular : .medium))
-                    .foregroundStyle(look == .ended || look == .idle ? .secondary : .primary)
+                    .font(.system(size: 13, weight: quiet ? .regular : .semibold))
+                    .foregroundStyle(look == .ended || look == .idle ? Color.secondary : Color.primary)
                     .lineLimit(2)
                 Spacer(minLength: 4)
-                TimelineView(.periodic(from: .now, by: 30)) { ctx in
-                    Text(Age.short(session.created, now: ctx.date))
+                if hovering {
+                    QuickActions(session: session)
+                } else {
+                    Text(Age.short(session.created, now: now))
                         .font(.system(size: 11)).monospacedDigit()
                         .foregroundStyle(.tertiary)
                 }
             }
+            .frame(minHeight: 20)
             if look == .needs, let d = session.detail, !d.isEmpty {
                 Text(d)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(Theme.needs)
                     .lineLimit(selected ? 4 : 2)
-                    .padding(.leading, 21)
+                    .padding(.leading, 22)
             }
             if selected {
-                Details(session: session).padding(.leading, 21)
+                Details(session: session).padding(.leading, 22).padding(.top, 2)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 7)
+        .padding(.leading, 10)
+        .padding(.trailing, 8)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(fill))
+        .overlay(alignment: .leading) {
+            if selected {
+                Capsule().fill(Theme.sun).frame(width: 3).padding(.vertical, 7)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .onHover { hovering = $0 }
+        .onTapGesture { store.show(session.id, focus: true) }
         .contextMenu { Actions(session: session) }
-        .help(session.detail ?? session.name)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { store.show(session.id, focus: true) }
+    }
+
+    private var fill: Color {
+        if selected { return Theme.selection }
+        if hovering { return Theme.hover }
+        return look == .needs ? Theme.needsTint : .clear
+    }
+
+    private var accessibilityText: String {
+        var parts = [session.name, StateMark.label(for: look)]
+        if let d = session.detail, !d.isEmpty { parts.append(d) }
+        return parts.joined(separator: ", ")
     }
 }
 
-/// What a selected row adds: the current step, where it runs, warnings, the
+/// What a hovered card offers without opening it.
+private struct QuickActions: View {
+    @EnvironmentObject private var store: Store
+    let session: Session
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Button { store.show(session.id, focus: true) } label: { Image(systemName: "keyboard") }
+                .help("Type to it")
+                .accessibilityLabel("Type to it")
+            if let cwd = session.cwd {
+                Button { store.reveal(cwd) } label: { Image(systemName: "folder") }
+                    .help("Show the folder in Finder")
+                    .accessibilityLabel("Show the folder in Finder")
+            }
+            Menu {
+                Actions(session: session)
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More")
+            .accessibilityLabel("More actions")
+        }
+        .buttonStyle(.borderless)
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(.secondary)
+    }
+}
+
+/// What a selected card adds: the current step, where it runs, warnings, the
 /// screen of a spawn that went wrong, and the buttons.
 private struct Details: View {
     @EnvironmentObject private var store: Store
@@ -218,16 +249,8 @@ private struct Details: View {
                     .foregroundStyle(.secondary)
                     .padding(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
             }
-            HStack(spacing: 6) {
-                Button("Type to it") { store.show(session.id, focus: true) }
-                if let cwd = session.cwd {
-                    Button("Show folder") { store.reveal(cwd) }
-                }
-            }
-            .controlSize(.small)
-            .padding(.top, 2)
         }
     }
 }
@@ -255,6 +278,87 @@ private struct Actions: View {
     }
 }
 
+/// The mark, the name and a count per group. A count shows that group's
+/// first session.
+private struct Header: View {
+    @EnvironmentObject private var store: Store
+
+    var body: some View {
+        HStack(spacing: 7) {
+            SunMark().frame(width: 22, height: 22)
+            Text("Irie").font(.system(size: 18, weight: .heavy, design: .rounded))
+            Spacer()
+            switch store.link {
+            case .online:
+                count(.needs, color: Theme.needs, label: "need you")
+                count(.working, color: Theme.work, label: "working")
+                count(.done, color: Theme.done, label: "done")
+            case .offline:
+                Text("offline").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.needs)
+            case .connecting:
+                EmptyView()
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+    }
+
+    private func count(_ g: Look.Group, color: Color, label: String) -> some View {
+        let rows = store.sessions.filter { Look($0).group == g }
+        return Button {
+            if let first = rows.first { store.show(first.id) }
+        } label: {
+            HStack(spacing: 4) {
+                Circle().fill(color).frame(width: 6, height: 6)
+                Text("\(rows.count)").font(.system(size: 11.5, weight: .bold)).monospacedDigit()
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
+            .opacity(rows.isEmpty ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(rows.isEmpty)
+        .help("\(rows.count) \(label)")
+        .accessibilityLabel("\(rows.count) \(label)")
+    }
+}
+
+/// "Find a session". ⌘F comes here; Esc clears it and goes back to the list.
+private struct FindField: View {
+    @EnvironmentObject private var store: Store
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(.secondary)
+            TextField("Find a session", text: $store.filter)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .focused($focused)
+                .onExitCommand {
+                    store.filter = ""
+                    store.focusSidebar += 1
+                }
+            if !store.filter.isEmpty {
+                Button { store.filter = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Clear")
+                    .accessibilityLabel("Clear the search")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.06)))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
+        .onChange(of: store.focusFind) { focused = true }
+    }
+}
+
 /// Red when it needs you, an open ring while it works, a check when done.
 /// The marks hold still: an endless animation in a list makes the whole
 /// window lay out again on every frame.
@@ -265,8 +369,8 @@ struct StateMark: View {
         ZStack {
             switch look {
             case .needs:
+                Circle().fill(Theme.needs.opacity(0.22)).frame(width: 14, height: 14)
                 Circle().fill(Theme.needs).frame(width: 8, height: 8)
-                    .background(Circle().fill(Theme.needs.opacity(0.22)).frame(width: 14, height: 14))
             case .working:
                 Circle().trim(from: 0, to: 0.72)
                     .stroke(Theme.work, style: StrokeStyle(lineWidth: 2, lineCap: .round))
@@ -278,16 +382,16 @@ struct StateMark: View {
             case .done:
                 Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Theme.done)
             case .idle:
-                Circle().stroke(.secondary, lineWidth: 1.5).frame(width: 8, height: 8)
+                Circle().stroke(Color.secondary, lineWidth: 1.5).frame(width: 8, height: 8)
             case .ended:
-                Circle().fill(.secondary).frame(width: 5, height: 5)
+                Circle().fill(Color.secondary).frame(width: 5, height: 5)
             }
         }
         .frame(width: 14, height: 14)
-        .accessibilityLabel(label)
+        .accessibilityLabel(Self.label(for: look))
     }
 
-    private var label: String {
+    static func label(for look: Look) -> String {
         switch look {
         case .needs: return "Needs you"
         case .working: return "Working"

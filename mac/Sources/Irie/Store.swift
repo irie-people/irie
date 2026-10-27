@@ -128,15 +128,15 @@ final class Store: ObservableObject {
     }
 
     /// Shows the next (+1) or previous (-1) row of the drawn order, wrapping
-    /// at the ends. The keyboard stays where it is.
-    func step(_ delta: Int) {
+    /// at the ends unless told not to. The keyboard stays where it is.
+    func step(_ delta: Int, wrap: Bool = true) {
         let order = drawnOrder
         guard !order.isEmpty else { return }
         var next = delta > 0 ? 0 : order.count - 1
         if let i = order.firstIndex(where: { $0.id == selection }) {
-            next = ((i + delta) % order.count + order.count) % order.count
+            next = wrap ? ((i + delta) % order.count + order.count) % order.count : min(max(i + delta, 0), order.count - 1)
         }
-        show(order[next].id)
+        if order[next].id != selection { show(order[next].id) }
     }
 
     /// Shows the nth row (from 1) of the drawn order.

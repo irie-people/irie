@@ -11,6 +11,13 @@ enum Theme {
     static let needs = adaptive(light: 0xCF3D2A, dark: 0xFF6F5B)
     static let work = adaptive(light: 0x2672B3, dark: 0x66B6F3)
     static let done = adaptive(light: 0x21845C, dark: 0x48C894)
+    // Solid surfaces: nothing behind the window shows through.
+    static let sidebar = adaptive(light: 0xF2F6F3, dark: 0x0E1D17)
+    static let field = adaptive(light: 0xFFFFFF, dark: 0x132820)
+    // Card fills: the selected card, a hovered one, and one that needs you.
+    static let selection = adaptive(light: 0xDDEBE3, dark: 0x173C2E)
+    static let hover = Color.primary.opacity(0.06)
+    static let needsTint = adaptive(light: 0xFBEAE7, dark: 0x2A1714)
     static let terminalBackground = NSColor(hex: 0x0A1813)
     static let terminalForeground = NSColor(hex: 0xD6E7DE)
 
