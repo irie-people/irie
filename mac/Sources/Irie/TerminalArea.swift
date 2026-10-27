@@ -70,7 +70,8 @@ struct TerminalArea: View {
         #if canImport(SwiftTerm)
         let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
         TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store)
-            .padding(10)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 18)
             .background {
                 // A click on the frame types to the terminal too.
                 frame.fill(Color(nsColor: Theme.terminalBackground))
@@ -79,7 +80,8 @@ struct TerminalArea: View {
                                                 lineWidth: 1))
                     .onTapGesture { store.focusTerminal += 1 }
             }
-            .padding(12)
+            .padding([.horizontal, .bottom], 12)
+            .padding(.top, 24)
         #else
         Placeholder(
             title: "The terminal opens in Ghostty for now",
