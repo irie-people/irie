@@ -2,7 +2,7 @@ package ui
 
 // Drawing the list and the boxes around it (DESIGN §4.1): rounded cards
 // with a column of padding, a header for each group, one-line rows, the
-// State │ Repo tabs, the details card and the command bar's box. A box sits
+// List │ Repo tabs, the details card and the command bar's box. A box sits
 // a column in from each side of the pane; its border's cells keep the
 // sidebar's ground, so the corners look round, and its inside takes the
 // fill. Every cell carries its background (theme.go).
@@ -246,7 +246,8 @@ func (m Model) row(marks []piece, nameFG color.Color, name, a string, selected, 
 }
 
 // groupRow draws a group's header: `▾ irie  4`, and folded `▸ irie  4 · 1
-// needs you`, its count of what needs you in red.
+// needs you`, its count of what needs you in red. Parked's title is red
+// while any parked session needs you, folded or not.
 func (m Model) groupRow(g *group, selected, hovered bool) string {
 	p := m.pal
 	fill := m.rowFill(selected, hovered)
@@ -254,7 +255,11 @@ func (m Model) groupRow(g *group, selected, hovered bool) string {
 	if g.folded {
 		arrow = "▸ "
 	}
-	ps := []piece{{arrow, p.muted, false}, {g.title, p.ink, true}, {fmt.Sprintf("  %d", g.count), p.muted, false}}
+	title := p.ink
+	if g.key == parkedKey && g.needs > 0 {
+		title = p.needs
+	}
+	ps := []piece{{arrow, p.muted, false}, {g.title, title, true}, {fmt.Sprintf("  %d", g.count), p.muted, false}}
 	if g.folded && g.needs > 0 {
 		ps = append(ps, piece{fmt.Sprintf(" · %d needs you", g.needs), p.needs, false})
 	}
@@ -287,11 +292,11 @@ func (m Model) entry(items []item, i int) []string {
 	return m.card(it, selected, hovered)
 }
 
-// tabs are the State │ Repo bar's tabs, by where they sit.
+// tabs are the List │ Repo bar's tabs, by where they sit.
 var tabs = []struct {
 	view     listView
 	from, to int // columns
-}{{byState, 1, 8}, {byRepo, 9, 15}}
+}{{byList, 1, 7}, {byRepo, 8, 14}}
 
 func tabKey(v listView) string { return "tab:" + v.String() }
 
@@ -305,7 +310,7 @@ func tabAt(x int) (listView, bool) {
 	return 0, false
 }
 
-// tabBar draws `State │ Repo`, the view in use on the selection fill.
+// tabBar draws `List │ Repo`, the view in use on the selection fill.
 func (m Model) tabBar() string {
 	p := m.pal
 	out := blank(p.sidebar, 1)
@@ -381,8 +386,11 @@ func (m Model) detailRows() (string, [][]piece) {
 			what = "Enter unfolds it"
 		}
 		rows := [][]piece{{{groupLabel(g), p.muted, false}}}
-		if g.outside {
+		switch {
+		case g.outside:
 			rows = append(rows, []piece{{"Claude Code sessions in other terminals", p.muted, false}}, []piece{{"m moves an idle one in", p.muted, false}})
+		case g.key == parkedKey:
+			rows = append(rows, []piece{{"out of the way; they keep running", p.muted, false}}, []piece{{"z unparks one, Z folds them", p.muted, false}})
 		}
 		return g.title, append(rows, []piece{{what, p.muted, false}})
 	case itemOutside:

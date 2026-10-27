@@ -33,6 +33,11 @@ func (b *ctlBackend) Reorder(id, before string) error {
 	return nil
 }
 
+func (b *ctlBackend) Park(id string, on bool) error {
+	b.calls = append(b.calls, fmt.Sprintf("park %s %v", id, on))
+	return nil
+}
+
 func ctlModel(t *testing.T, rows []ipc.Session) (Model, *ctlBackend) {
 	t.Helper()
 	return ctlAt(t, rows, 34, 24)
@@ -317,21 +322,77 @@ func TestDraggingPastATallerCardHoldsStill(t *testing.T) {
 	}
 }
 
-// In the State view a card moves within its state's group the same way.
-func TestDraggingInTheStateView(t *testing.T) {
-	rows := sessions(3)
-	rows[1].State = ipc.StateNeedsYou
-	m, b := ctlAt(t, rows, 34, 30)
+// In the List view a card moves among all the unparked ones.
+func TestDraggingInTheListView(t *testing.T) {
+	rows := repoSessions()
+	for i := range rows {
+		rows[i].Order = i
+	}
+	m, b := ctlAt(t, rows, 34, 80)
 	m = send(m, keyMsg("esc"))
 	m = send(m, keyMsg("v"))
 	y := func(name string) int { return lineOf(t, m, name) }
-	m = dragAlong(m, y("task-002"), y("task-000"))
-	if want := []string{`reorder s000000000002 before "s000000000000"`}; !slices.Equal(b.calls, want) {
+	m = dragAlong(m, y("irie-tests"), y("web-copy"), y("fork-docs"), y("irie-theme"), y("scratch-notes"), y("web-fix"))
+	if want := []string{`reorder s6 before "s1"`}; !slices.Equal(b.calls, want) {
 		t.Errorf("calls = %v, want %v", b.calls, want)
 	}
-	m = dragAlong(m, y("task-002"), y("task-001"))
-	if len(b.calls) != 1 {
-		t.Errorf("a drop on Needs you reordered: %v", b.calls)
+	if got := outline(m); got[0] != "irie-tests" {
+		t.Errorf("outline %q", got)
+	}
+}
+
+// A card dragged across Parked's edge is parked there, and a parked one
+// dragged back among its own group's cards is unparked; the core hears
+// both, and where it went. Into any other group it goes back, parked as it
+// was.
+func TestDraggingAcrossParkedsEdge(t *testing.T) {
+	rows := parkedSessions()
+	for i := range rows {
+		rows[i].Order = i
+	}
+	m, b := ctlAt(t, rows, 34, 80)
+	m = send(m, keyMsg("esc"))
+	y := func(name string) int { return lineOf(t, m, name) }
+	// fork-docs into Parked, between scratch-notes and web-copy.
+	m = dragAlong(m, y("fork-docs"), y("scratch-notes"))
+	want := []string{"park s4 true", `reorder s4 before "s3"`}
+	if !slices.Equal(b.calls, want) {
+		t.Errorf("calls = %v, want %v", b.calls, want)
+	}
+	if got := outline(m); !slices.Equal(got[len(got)-4:], []string{"▾ Parked", "scratch-notes", "fork-docs", "web-copy"}) {
+		t.Errorf("outline %q", got)
+	}
+	if !strings.Contains(m.status, "parked fork-docs") {
+		t.Errorf("status %q", m.status)
+	}
+	// web-copy back among website's cards, above web-fix.
+	b.calls = nil
+	m = dragAlong(m, y("web-copy"), y("web-fix"))
+	want = []string{"park s5 false", `reorder s5 before "s1"`}
+	if !slices.Equal(b.calls, want) {
+		t.Errorf("calls = %v, want %v", b.calls, want)
+	}
+	if got := outline(m); !slices.Equal(got[:3], []string{"▾ website", "web-copy", "web-fix"}) {
+		t.Errorf("outline %q", got)
+	}
+	// A parked card waits in Parked over another repo's cards, and goes
+	// back when dropped there.
+	b.calls = nil
+	before := outline(m)
+	m = send(m, tea.MouseClickMsg{X: 5, Y: y("fork-docs"), Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: y("irie-theme"), Button: tea.MouseLeft})
+	if got := outline(m); !slices.Equal(got, before) {
+		t.Errorf("over another repo the card moved: %q", got)
+	}
+	// Across into Parked's other card and back out to code/irie: neither
+	// is its group, so the drop puts it back.
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: y("scratch-notes"), Button: tea.MouseLeft})
+	m = send(m, tea.MouseReleaseMsg{X: 5, Y: y("irie-theme"), Button: tea.MouseLeft})
+	if got := outline(m); !slices.Equal(got, before) || len(b.calls) != 0 {
+		t.Errorf("a drop on another group: outline %q, calls %v", got, b.calls)
+	}
+	if s := m.sessions[m.index("s4")]; !s.Parked {
+		t.Error("the drop that went back unparked it")
 	}
 }
 
@@ -352,5 +413,84 @@ func TestAFrozenFlagSitsBesideTheGlyph(t *testing.T) {
 	m, _ := ctlAt(t, rows, 34, 24)
 	if row := screen(t, m)[lineOf(t, m, "task-000")]; !strings.Contains(row, "✕◆ task-000") {
 		t.Errorf("row %q", row)
+	}
+}
+
+// z parks the selected session at once and the selection goes with it; z
+// again unparks it, back to its place. Z folds Parked, taking a selection
+// inside it to its header. :park and :unpark do the same as z.
+func TestZParksAndUnparks(t *testing.T) {
+	m, b := ctlAt(t, sessions(4), 34, 60)
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("Z"))
+	if !strings.Contains(m.status, "nothing is parked") {
+		t.Errorf("Z with nothing parked: %q", m.status)
+	}
+	m = selectNamed(t, m, "task-001")
+	m = send(m, keyMsg("z"))
+	if want := []string{"park s000000000001 true"}; !slices.Equal(b.calls, want) {
+		t.Fatalf("calls = %v, want %v", b.calls, want)
+	}
+	want := []string{"▾ Not in a repo", "task-000", "task-002", "task-003", "▾ Parked", "task-001"}
+	if got := outline(m); !slices.Equal(got, want) {
+		t.Errorf("outline %q, want %q", got, want)
+	}
+	if selectedName(m) != "task-001" || !strings.Contains(m.status, "parked task-001") {
+		t.Errorf("selection %s, status %q", selectedName(m), m.status)
+	}
+	// Z folds Parked around the selection, and opens it again.
+	m = send(m, keyMsg("Z"))
+	if got := outline(m); got[len(got)-1] != "▸ Parked" || selectedName(m) != "Parked" {
+		t.Errorf("after Z: outline %q, selection %s", got, selectedName(m))
+	}
+	m = send(m, keyMsg("Z"))
+	m = selectNamed(t, m, "task-001")
+	m = send(m, keyMsg("z"))
+	if got := outline(m); !slices.Equal(got, []string{"▾ Not in a repo", "task-000", "task-001", "task-002", "task-003"}) {
+		t.Errorf("unparked, the outline is %q", got)
+	}
+	if last := b.calls[len(b.calls)-1]; last != "park s000000000001 false" || selectedName(m) != "task-001" {
+		t.Errorf("last call %q, selection %s", last, selectedName(m))
+	}
+	// Parking into a folded Parked takes the selection to its header.
+	m = selectNamed(t, m, "task-003")
+	m = send(m, keyMsg("z"))
+	m = send(m, keyMsg("Z"))
+	m = selectNamed(t, m, "task-000")
+	m = send(m, keyMsg("z"))
+	if selectedName(m) != "Parked" {
+		t.Errorf("parked into a folded Parked, the selection is on %s", selectedName(m))
+	}
+	// The commands.
+	m = send(m, keyMsg("Z"))
+	m = selectNamed(t, m, "task-002")
+	m = typeText(send(m, keyMsg("tab")), ":park")
+	m = send(m, keyMsg("enter"))
+	if last := b.calls[len(b.calls)-1]; last != "park s000000000002 true" {
+		t.Errorf(":park called %q", last)
+	}
+	m = typeText(send(m, keyMsg("tab")), ":park")
+	m = send(m, keyMsg("enter"))
+	if !m.statusErr || !strings.Contains(m.status, "must be not parked") {
+		t.Errorf(":park of a parked session: %q", m.status)
+	}
+	m = send(m, keyMsg("esc"))
+	m = typeText(send(m, keyMsg("tab")), ":unpark")
+	m = send(m, keyMsg("enter"))
+	if last := b.calls[len(b.calls)-1]; last != "park s000000000002 false" {
+		t.Errorf(":unpark called %q", last)
+	}
+}
+
+// Promoting a parked session unparks it, at once, as the core does.
+func TestPromotingAParkedSessionUnparksIt(t *testing.T) {
+	rows := sessions(3)
+	rows[2].Parked = true
+	m, _ := ctlAt(t, rows, 34, 60)
+	m = send(m, keyMsg("esc"))
+	m = selectNamed(t, m, "task-002")
+	m = send(m, keyMsg("!"))
+	if got := outline(m); !slices.Equal(got, []string{"▾ Not in a repo", "task-002", "task-000", "task-001"}) {
+		t.Errorf("outline %q", got)
 	}
 }

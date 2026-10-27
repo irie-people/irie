@@ -1,5 +1,5 @@
 // Package ui is the sidebar (DESIGN §4.1): a header pinned at the top, the
-// State │ Repo tabs, the session list in groups of cards, a status strip or
+// List │ Repo tabs, the session list in groups of cards, a status strip or
 // details card, and a command bar pinned at the bottom. It is a pure client
 // of the core's socket and never calls tmux.
 package ui
@@ -89,7 +89,7 @@ type (
 
 // commands are what the command bar takes after a colon (DESIGN §4.2,
 // §4.6, §6.4).
-const commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON]"
+const commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
 
 type focusArea int
 
@@ -518,6 +518,10 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.freezeKey(msg.String() == "F")
 	case "!":
 		return m.promoteKey("")
+	case "z":
+		return m.parkKey()
+	case "Z":
+		m.foldParked()
 	case "r":
 		// The name is edited in the command bar, with its keys and the
 		// terminal's own cursor; Enter renames, Esc keeps the name.

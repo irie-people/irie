@@ -103,40 +103,29 @@ func TestRepoNamesTellReposApart(t *testing.T) {
 	}
 }
 
-// The State view: what needs you, what is under way and what has stopped,
-// each in start order, with empty groups left out. v switches, and so does
-// a click on a tab.
-func TestTheStateViewGroupsByState(t *testing.T) {
+// The List view: one list in the core's order, with no header, so a state
+// change moves nothing. v switches, and so does a click on a tab.
+func TestTheListViewKeepsOneOrder(t *testing.T) {
 	m := repoModel(t, 34, 80)
 	m = send(m, keyMsg("v"))
-	if m.view != byState {
+	if m.view != byList {
 		t.Fatalf("v left the view at %v", m.view)
 	}
-	want := []string{
-		"▾ Needs you", "irie-theme", "web-copy",
-		"▾ Working", "web-fix", "irie-tests",
-		"▾ To verify", "scratch-notes", "fork-docs",
-	}
+	want := []string{"web-fix", "scratch-notes", "irie-theme", "fork-docs", "web-copy", "irie-tests"}
 	if got := outline(m); !reflect.DeepEqual(got, want) {
 		t.Errorf("outline %q, want %q", got, want)
 	}
-	// Every state lands in its group; unknown ones count as under way.
-	for state, group := range map[string]string{
-		ipc.StateFailed: "state:needs", ipc.StateNeedsYou: "state:needs", ipc.StateStalled: "state:needs",
-		ipc.StateWorking: "state:working", ipc.StateStarting: "state:working", ipc.StatePausing: "state:working",
-		ipc.StatePaused: "state:working", ipc.StateFrozen: "state:working", "new-state": "state:working",
-		ipc.StateDone: "state:done", ipc.StateIdle: "state:done", ipc.StateExited: "state:done",
-	} {
-		if got := stateGroup(ipc.Session{State: state}); got != group {
-			t.Errorf("%s is in %s, want %s", state, got, group)
-		}
-	}
-	// With nothing that needs you, that group goes.
+	before := listText(t, m)
 	rows := repoSessions()
-	rows[2].State, rows[4].State = ipc.StateWorking, ipc.StateExited
-	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
-	if got := outline(m); got[0] != "▾ Working" {
-		t.Errorf("outline %q starts with an empty group", got)
+	rows[0].State, rows[2].State, rows[3].State = ipc.StateDone, ipc.StateWorking, ipc.StateNeedsYou
+	for i := range rows[:4] {
+		m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[i]}})
+	}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("after state changes the outline is %q", got)
+	}
+	if after := listText(t, m); len(after) != len(before) {
+		t.Errorf("state changes moved lines: %d → %d", len(before), len(after))
 	}
 	// The selection stays on its session across views.
 	m = selectNamed(t, m, "fork-docs")
@@ -144,14 +133,19 @@ func TestTheStateViewGroupsByState(t *testing.T) {
 	if m.view != byRepo || selectedName(m) != "fork-docs" {
 		t.Errorf("view %v, selection %s", m.view, selectedName(m))
 	}
+	m = send(m, keyMsg("v"))
+	if m.view != byList || selectedName(m) != "fork-docs" {
+		t.Errorf("view %v, selection %s", m.view, selectedName(m))
+	}
+	m = send(m, keyMsg("v"))
 	// Clicks on the tabs, under the header's two lines.
 	lines, y := screen(t, m), m.tabsTop()
-	if y != 2 || lines[y] != "  State │ Repo                    " {
+	if y != 2 || lines[y] != "  List │ Repo                     " {
 		t.Fatalf("tab bar on line %d: %q", y, lines[y])
 	}
-	m = send(m, tea.MouseClickMsg{X: strings.Index(lines[y], "State"), Y: y, Button: tea.MouseLeft})
-	if m.view != byState {
-		t.Errorf("a click on State left the view at %v", m.view)
+	m = send(m, tea.MouseClickMsg{X: strings.Index(lines[y], "List"), Y: y, Button: tea.MouseLeft})
+	if m.view != byList {
+		t.Errorf("a click on List left the view at %v", m.view)
 	}
 	m = send(m, tea.MouseClickMsg{X: strings.Index(lines[y], "Repo") - 2, Y: y, Button: tea.MouseLeft})
 	if m.view != byRepo {
@@ -159,8 +153,87 @@ func TestTheStateViewGroupsByState(t *testing.T) {
 	}
 	// The tab in use is on the selection fill.
 	raw := strings.Split(m.View().Content, "\n")[y]
-	if c := cells(raw); c[strings.Index(lines[y], "State")].bg != rgb(m.pal.sidebar) || c[11].bg != rgb(m.pal.selection) {
-		t.Errorf("tabs: State on %s, Repo on %s", c[2].bg, c[11].bg)
+	if c := cells(raw); c[strings.Index(lines[y], "List")].bg != rgb(m.pal.sidebar) || c[11].bg != rgb(m.pal.selection) {
+		t.Errorf("tabs: List on %s, Repo on %s", c[2].bg, c[11].bg)
+	}
+}
+
+// parkedSessions are repoSessions with web-copy, which failed, and
+// scratch-notes parked.
+func parkedSessions() []ipc.Session {
+	rows := repoSessions()
+	rows[1].Parked, rows[4].Parked = true, true
+	return rows
+}
+
+// Parked comes after the view's groups, in either view, and before Outside
+// Irie; a parked session shows only there. Its title is red while one of
+// them needs you, and folded it says how many do.
+func TestParkedComesLast(t *testing.T) {
+	m := repoModel(t, 34, 80)
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: parkedSessions(), Header: &ipc.Header{}}})
+	m = send(m, outsideFrame(outsideSessions(1), ""))
+	want := []string{
+		"▾ website", "web-fix",
+		"▾ code/irie", "irie-theme", "irie-tests",
+		"▾ forks/irie", "fork-docs",
+		"▾ Parked", "scratch-notes", "web-copy",
+		"▾ Outside Irie", "outside-00",
+	}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("Repo view %q, want %q", got, want)
+	}
+	m = send(m, keyMsg("v"))
+	want = []string{
+		"web-fix", "irie-theme", "fork-docs", "irie-tests",
+		"▾ Parked", "scratch-notes", "web-copy",
+		"▾ Outside Irie", "outside-00",
+	}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("List view %q, want %q", got, want)
+	}
+	y := lineOf(t, m, "Parked")
+	if row := screen(t, m)[y]; !strings.Contains(row, "▾ Parked  2") {
+		t.Errorf("header %q", row)
+	}
+	// The colour of the P of Parked.
+	title := func() string {
+		y := lineOf(t, m, "Parked")
+		line := screen(t, m)[y]
+		x := len([]rune(line[:strings.Index(line, "Parked")]))
+		return cells(strings.Split(m.View().Content, "\n")[y])[x].fg
+	}
+	if title() != rgb(m.pal.needs) {
+		t.Errorf("Parked's title is %s with a failed session in it, want red", title())
+	}
+	m = selectNamed(t, m, "Parked")
+	m = send(m, keyMsg("enter"))
+	if row := screen(t, m)[lineOf(t, m, "Parked")]; !strings.Contains(row, "▸ Parked  2 · 1 needs you") {
+		t.Errorf("folded header %q", row)
+	}
+	if got := statusText(t, m); !strings.Contains(got, "z unparks one") {
+		t.Errorf("the details on Parked say %q", got)
+	}
+	// Both views have Parked, so its header stays selected across them.
+	m = send(m, keyMsg("v"))
+	if m.view != byRepo || selectedName(m) != "Parked" {
+		t.Errorf("view %v, selection %s", m.view, selectedName(m))
+	}
+	m = send(m, keyMsg("v"))
+	// With nothing in it that needs you, its title is ink.
+	rows := parkedSessions()
+	rows[4].State = ipc.StateExited
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[4]}})
+	if title() != rgb(m.pal.ink) {
+		t.Errorf("Parked's title is %s with nothing in it that needs you", title())
+	}
+	if row := screen(t, m)[lineOf(t, m, "Parked")]; strings.Contains(row, "needs you") {
+		t.Errorf("folded header %q", row)
+	}
+	// With nothing parked, there is no Parked.
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: repoSessions(), Header: &ipc.Header{}}})
+	if got := strings.Join(outline(m), " "); strings.Contains(got, "Parked") {
+		t.Errorf("outline %q", got)
 	}
 }
 
@@ -243,8 +316,8 @@ func TestHoverLightsWhatIsUnderThePointer(t *testing.T) {
 		t.Errorf("over a header: hover %q", m.hover)
 	}
 	m = send(m, tea.MouseMotionMsg{X: 3, Y: m.tabsTop()})
-	if raw := strings.Split(m.View().Content, "\n")[m.tabsTop()]; m.hover != tabKey(byState) || cells(raw)[3].bg != rgb(m.pal.hover) {
-		t.Errorf("over the State tab: hover %q", m.hover)
+	if raw := strings.Split(m.View().Content, "\n")[m.tabsTop()]; m.hover != tabKey(byList) || cells(raw)[3].bg != rgb(m.pal.hover) {
+		t.Errorf("over the List tab: hover %q", m.hover)
 	}
 	m = send(m, tea.MouseMotionMsg{X: 3, Y: 0})
 	if m.hover != "" {
@@ -335,25 +408,17 @@ func TestSmallPanesFallBackToRows(t *testing.T) {
 }
 
 // Under spawn.close_when_done a finished session closes itself: the header
-// has no To verify count, and the State view leaves out what is done and calls
-// the last group Idle. The Repo view shows every session.
-func TestCloseWhenDoneHidesDone(t *testing.T) {
+// has no To verify count. Both views show every session until it goes.
+func TestCloseWhenDoneDropsTheCount(t *testing.T) {
 	m := repoModel(t, 100, 80)
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &ipc.Header{CloseWhenDone: true}}})
 	if header := screen(t, m)[0]; strings.Contains(header, "to verify") || !strings.Contains(header, "working") {
 		t.Errorf("header %q", header)
 	}
-	m = send(m, keyMsg("v"))
-	want := []string{
-		"▾ Needs you", "irie-theme", "web-copy",
-		"▾ Working", "web-fix", "irie-tests",
-		"▾ Idle", "scratch-notes",
-	}
-	if got := outline(m); !reflect.DeepEqual(got, want) {
-		t.Errorf("State view %q, want %q", got, want)
-	}
-	m = send(m, keyMsg("v"))
-	if got := strings.Join(outline(m), " "); !strings.Contains(got, "fork-docs") {
-		t.Errorf("the Repo view lost the done session: %s", got)
+	for range 2 {
+		if got := strings.Join(outline(m), " "); !strings.Contains(got, "fork-docs") {
+			t.Errorf("the %v view lost the done session: %s", m.view, got)
+		}
+		m = send(m, keyMsg("v"))
 	}
 }

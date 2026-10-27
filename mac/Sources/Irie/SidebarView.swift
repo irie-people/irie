@@ -1,14 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// The sidebar: a card per session, in groups. The Repo view is a tree, a
-/// group per repo with its sessions in the order they started and each
-/// session's helpers under it, so a state change only changes a card's mark
-/// and colours, never the order (DESIGN §4.1). The State view groups the
-/// sessions by what they need. A click shows that agent's terminal and gives
-/// it the keyboard; the arrow keys walk the cards and keep the keyboard
-/// here. The switch between the views, and the selected session's details,
-/// sit above the task bar, on one panel with it.
+/// The sidebar: a card per session, each with its helpers under it. The List
+/// view is one list; the Repo view is a tree, a group per repo. Either way
+/// the cards keep the list's one order, which only the user changes, and the
+/// parked ones wait in the Parked group at the end, so a state change only
+/// changes a card's mark and colours, never where it is (DESIGN §4.1). A
+/// click shows that agent's terminal and gives it the keyboard; the arrow
+/// keys walk the cards and keep the keyboard here, and z parks or unparks
+/// the selected card. The switch between the views, and the selected
+/// session's details, sit above the task bar, on one panel with it.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
@@ -86,7 +87,8 @@ struct SidebarView: View {
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
                         LazyVStack(alignment: .leading, spacing: 6) {
                             ForEach(groups) { g in
-                                GroupHeader(group: g)
+                                // The List view's one list needs no header.
+                                if g.id != SessionGroup.list { GroupHeader(group: g) }
                                 if store.isOpen(g) {
                                     ForEach(g.sessions) { s in
                                         SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil, listFocused: listFocused, now: ctx.date)
@@ -102,8 +104,8 @@ struct SidebarView: View {
                         .padding(.bottom, 8)
                     }
                 }
-                // The line from the selected card shows while the card's
-                // middle is in sight here (TabLink.swift).
+                // The lines from the selected card show while the stretch
+                // of its edge they open is in sight here (TabLink.swift).
                 .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { $0.list = $1 }
                 .onChange(of: store.selection) {
                     if let id = store.selection { proxy.scrollTo(id) }
@@ -138,6 +140,18 @@ struct SidebarView: View {
                 store.show(id, focus: true)
                 return .handled
             }
+            // z parks or unparks the selected card, and Z folds Parked.
+            .onKeyPress(characters: CharacterSet(charactersIn: "zZ"), phases: .down) { press in
+                guard store.renaming == nil, store.canPark, press.modifiers.subtracting([.shift, .capsLock]).isEmpty else { return .ignored }
+                if press.modifiers.contains(.shift) {
+                    store.foldParked()
+                } else if store.closable != nil {
+                    store.toggleParked()
+                } else {
+                    return .ignored
+                }
+                return .handled
+            }
             .accessibilityLabel("Sessions")
         }
     }
@@ -151,7 +165,7 @@ struct SidebarView: View {
 /// washed in its agent's colour while it works, tinted and edged in red
 /// while it needs you. The selected card stands up from the others, on a
 /// gentle shadow, filled with the selection and edged in its session's
-/// colour, which a line carries on to the terminal's frame (TabLink.swift).
+/// colour, which two lines carry on to the terminal's frame (TabLink.swift).
 /// A selected working card is a gradient, from the selection by its mark to
 /// the colour round its terminal at the trailing end.
 private struct SessionCard: View {
@@ -214,8 +228,7 @@ private struct SessionCard: View {
         .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
         .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
             if selected {
-                ends.card = bounds
-                ends.color = edge
+                ends.card = .init(bounds: bounds, color: edge, width: edgeWidth, ground: trailingGround)
             }
         }
         .contentShape(shape)
@@ -234,6 +247,7 @@ private struct SessionCard: View {
         .accessibilityActions {
             Button(session.isFrozen ? "Resume" : "Pause") { store.setFrozen(session, !session.isFrozen) }
             Button(session.isPromoted ? "Stop promoting" : "Promote to the top") { store.setPromoted(session, !session.isPromoted) }
+            if store.canPark { Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) } }
             if store.canMove(session, by: -1) { Button("Move up") { store.move(session, by: -1) } }
             if store.canMove(session, by: 1) { Button("Move down") { store.move(session, by: 1) } }
             Button("Rename") { store.beginRename(session.id) }
@@ -302,8 +316,13 @@ private struct SessionCard: View {
 
     private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
+    /// A selected card's ground at its trailing edge, bottom first: the fill,
+    /// then the full ends of its wash and of its deep end. The lines from it
+    /// paint these over its edge where they open it (TabLink.swift).
+    private var trailingGround: [Color] { [fill] + [Look.agentWash(session), deep].compactMap { $0 } }
+
     /// Round the selected card, the colour of the terminal's frame and the
-    /// line between them; a faint accent round the one under the pointer;
+    /// lines between them; a faint accent round the one under the pointer;
     /// red round one that needs you. The rest have none: a working card's
     /// agent shows in its mark and its wash.
     private var edge: Color {
@@ -312,9 +331,10 @@ private struct SessionCard: View {
         return look.loud ? Theme.needs.opacity(0.5) : .clear
     }
 
-    /// The selected card's edge is as wide as the line from it, and bolder
+    /// The selected card's edge is as wide as the lines from it, and bolder
     /// while the list has the keyboard, so its colour always matches the
-    /// line's and the frame's while its width tells where the keyboard is.
+    /// lines' and the frame's while its width tells where the keyboard is.
+    /// The lines narrow from it as they curve away.
     private var edgeWidth: CGFloat { selected ? (listFocused ? 2.5 : TabLink.width) : 1 }
 
     private var spoken: String {
@@ -367,7 +387,8 @@ private struct RenameField: View {
 }
 
 /// A group's header: its name and count, and a chevron that folds it. A
-/// folded group says how many of its sessions need you, in red.
+/// folded group says how many of its sessions need you, in red, and the
+/// Parked header turns red while any parked session needs you.
 private struct GroupHeader: View {
     @EnvironmentObject private var store: Store
     let group: SessionGroup
@@ -375,7 +396,7 @@ private struct GroupHeader: View {
     var body: some View {
         let open = store.isOpen(group)
         let needs = group.sessions.filter { Look($0).loud }.count
-        let note = !open && needs > 0 && group.id != "state:needs" ? "\(needs) \(needs == 1 ? "needs" : "need") you" : nil
+        let note = !open && needs > 0 ? "\(needs) \(needs == 1 ? "needs" : "need") you" : nil
         Button { store.fold(group) } label: {
             HStack(spacing: 5) {
                 Image(systemName: "chevron.right")
@@ -385,7 +406,7 @@ private struct GroupHeader: View {
                     .frame(width: 10)
                 Text(group.title)
                     .font(Theme.font(12, .heavy))
-                    .foregroundStyle(group.id == "state:needs" ? Theme.needs : Theme.ink)
+                    .foregroundStyle(group.id == SessionGroup.parked && needs > 0 ? Theme.needs : Theme.ink)
                     .lineLimit(1)
                 if let note {
                     Text("· " + note).font(Theme.font(11.5, .bold)).foregroundStyle(Theme.needs).lineLimit(1)
@@ -444,7 +465,7 @@ private struct HelperRows: View {
     }
 }
 
-/// The switch between the Repo and State views, above the details.
+/// The switch between the List and Repo views, above the details.
 private struct ModeSwitch: View {
     @EnvironmentObject private var store: Store
 
@@ -463,7 +484,7 @@ private struct ModeSwitch: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(m == .state ? "Group the sessions by what they need" : "Group the sessions by repo, with their helpers")
+                .help(m == .list ? "One list, in your order: only you move a card" : "Group the sessions by repo, with their helpers")
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
@@ -697,6 +718,7 @@ struct DetailsPanel: View {
                         .help("Show the folder in Finder")
                         .accessibilityLabel("Show the folder in Finder")
                 }
+                if store.canPark { ParkButton(session: s) }
                 DetailsFold()
             }
             .controlSize(.small)

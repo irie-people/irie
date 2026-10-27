@@ -9,7 +9,7 @@ import (
 // controlOps are the ops of what the user does to a session as a whole and
 // to its place in the list (ipc/control.go): freeze.go, priority.go and
 // order.go.
-var controlOps = []string{ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder}
+var controlOps = []string{ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpPark, ipc.OpUnpark}
 
 // control serves the control ops; ok is false for any other op.
 func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err error) {
@@ -36,6 +36,12 @@ func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err
 			return nil, true, err
 		}
 		return nil, true, c.reorder(a)
+	case ipc.OpPark, ipc.OpUnpark:
+		var a ipc.ParkArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, true, err
+		}
+		return nil, true, c.park(a, op == ipc.OpPark)
 	}
 	return nil, false, nil
 }

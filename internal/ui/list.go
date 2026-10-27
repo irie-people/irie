@@ -1,10 +1,12 @@
 package ui
 
-// The list (DESIGN §4.1): Irie's sessions in groups, by repo or by state,
-// then the Outside Irie group. Each group has a header that folds it. The
-// arrow keys walk the visible headers and sessions, and the selection and
-// the scroll follow what they are on, not where it is, so what the core
-// sends never moves the list under you.
+// The list (DESIGN §4.1): Irie's sessions in one list or a group per repo,
+// then the Parked group and the Outside Irie group. Every group but the List
+// view's one list has a header that folds it. The sessions keep the core's
+// one order, which only the user changes, so a state change never moves
+// one. The arrow keys walk the visible headers and sessions, and the
+// selection and the scroll follow what they are on, not where it is, so what
+// the core sends never moves the list under you.
 
 import (
 	"fmt"
@@ -19,8 +21,8 @@ import (
 type listView int
 
 const (
-	byRepo  listView = iota // a group per repo, in the order they started
-	byState                 // needs you, working, done
+	byRepo listView = iota // a group per repo, in the order they started
+	byList                 // one list, in the core's order
 )
 
 type itemKind int
@@ -31,7 +33,8 @@ const (
 	itemOutside                 // a session outside Irie
 )
 
-// group is a heading of the list: a repo, a state, or Outside Irie.
+// group is a heading of the list: the List view's one list, a repo,
+// Parked, or Outside Irie.
 type group struct {
 	key     string
 	title   string
@@ -39,6 +42,7 @@ type group struct {
 	needs   int // how many of them need you
 	folded  bool
 	outside bool
+	bare    bool // drawn without a header: the List view's one list
 }
 
 // item is one entry of the list.
@@ -50,36 +54,41 @@ type item struct {
 	o     int    // an index into m.outside
 }
 
-// Keys. groupKey names the Outside Irie group.
-const groupKey = "\x00outside"
+// Keys. groupKey names the Outside Irie group, listKey the List view's one
+// list and parkedKey the Parked group.
+const (
+	groupKey  = "\x00outside"
+	listKey   = "\x00list"
+	parkedKey = "\x00parked"
+)
 
 func sessionKey(id string) string { return "session:" + id }
 
 func outsideItemKey(o ipc.OutsideSession) string { return "outside:" + o.Key() }
 
-// stateGroups are the State view's groups, in order (DESIGN §4.1).
-var stateGroups = []struct{ key, title string }{
-	{"state:needs", "Needs you"},
-	{"state:working", "Working"},
-	{"state:done", "To verify"},
-}
-
-// stateGroup is the State view's group of a session: what needs you
-// (failed, needs you, stalled), what is under way (working, starting,
-// pausing, paused, frozen) and what has stopped, which waits for you to
-// verify it (done, idle, exited).
-func stateGroup(s ipc.Session) string {
-	switch {
-	case needsYou(s):
-		return "state:needs"
-	case s.State == ipc.StateDone, s.State == ipc.StateIdle, s.State == ipc.StateExited:
-		return "state:done"
-	}
-	return "state:working"
-}
-
 // notInARepo is the Repo view's group of sessions that run outside any repo.
 const notInARepo = "repo:"
+
+// homeKey is the group a session is in while it is not parked: the List
+// view's one list, or in the Repo view its repo's group.
+func (m Model) homeKey(s ipc.Session) string {
+	switch {
+	case m.view == byList:
+		return listKey
+	case s.Repo != "":
+		return "repo:" + s.Repo
+	}
+	return notInARepo
+}
+
+// groupOf is the group a session is in: Parked while it is parked, else its
+// home.
+func (m Model) groupOf(s ipc.Session) string {
+	if s.Parked {
+		return parkedKey
+	}
+	return m.homeKey(s)
+}
 
 // repoNames names each repo by its folder, with as many parent folders as
 // it takes to tell apart repos of the same name.
@@ -118,45 +127,22 @@ func tail(p string, n int) string {
 }
 
 // groups returns the groups of Irie's sessions in the current view, in
-// order, with the indexes of their sessions in the core's order (control.go).
-// A state change never moves a session in the Repo view.
-//
-// Under spawn.close_when_done a finished session closes itself, so the
-// State view leaves out the done ones, which are about to go, and calls
-// what is left of that group Idle (DESIGN §4.5).
+// order, with the indexes of their sessions in the core's order (control.go):
+// the List view's one list or a group per repo, then Parked. Only the user
+// moves a session, by dragging, promoting or parking it, so a state change
+// never does.
 func (m Model) groups() ([]*group, [][]int) {
 	var keys []string
 	members := map[string][]int{}
-	closing := m.view == byState && m.head.CloseWhenDone
 	for i, s := range m.sessions {
-		if closing && s.State == ipc.StateDone {
-			continue
-		}
-		k := stateGroup(s)
-		if m.view == byRepo {
-			k = notInARepo
-			if s.Repo != "" {
-				k = "repo:" + s.Repo
-			}
-		}
-		if _, ok := members[k]; !ok {
+		k := m.groupOf(s)
+		if _, ok := members[k]; !ok && k != parkedKey {
 			keys = append(keys, k)
 		}
 		members[k] = append(members[k], i)
 	}
-	titles := map[string]string{notInARepo: "Not in a repo"}
-	if m.view == byState {
-		keys = keys[:0]
-		for _, g := range stateGroups {
-			if len(members[g.key]) > 0 {
-				keys = append(keys, g.key)
-			}
-			titles[g.key] = g.title
-		}
-		if closing {
-			titles["state:done"] = "Idle"
-		}
-	} else {
+	titles := map[string]string{notInARepo: "Not in a repo", listKey: "Sessions", parkedKey: "Parked"}
+	if m.view == byRepo {
 		var repos []string
 		for _, k := range keys {
 			if k != notInARepo {
@@ -188,10 +174,15 @@ func (m Model) groups() ([]*group, [][]int) {
 			return 0
 		})
 	}
+	if len(members[parkedKey]) > 0 {
+		keys = append(keys, parkedKey)
+	}
 	groups := make([]*group, len(keys))
 	order := make([][]int, len(keys))
 	for i, k := range keys {
-		g := &group{key: k, title: titles[k], count: len(members[k]), folded: m.folded[k]}
+		// The one list has no header, so it never folds.
+		bare := k == listKey
+		g := &group{key: k, title: titles[k], count: len(members[k]), folded: m.folded[k] && !bare, bare: bare}
 		for _, s := range members[k] {
 			if needsYou(m.sessions[s]) {
 				g.needs++
@@ -209,13 +200,15 @@ func b2i(b bool) int {
 	return 0
 }
 
-// items is the list as it stands: each group's header and, unless it is
-// folded, its sessions, then the Outside Irie group.
+// items is the list as it stands: each group's header, but the one list's,
+// and unless it is folded its sessions, then the Outside Irie group.
 func (m Model) items() []item {
 	var out []item
 	groups, order := m.groups()
 	for i, g := range groups {
-		out = append(out, item{kind: itemGroup, key: g.key, group: g})
+		if !g.bare {
+			out = append(out, item{kind: itemGroup, key: g.key, group: g})
+		}
 		if !g.folded {
 			for _, s := range order[i] {
 				out = append(out, item{kind: itemSession, key: sessionKey(m.sessions[s].ID), group: g, s: s})
@@ -319,14 +312,15 @@ func (m Model) allItems() []item {
 	return m.items()
 }
 
-// setView switches between the State and Repo views. The selected session
-// stays selected; a header's selection goes to the first session.
+// setView switches between the List and Repo views. The selected session
+// stays selected, and so do Parked's and Outside Irie's headers, which both
+// views have; another header's selection goes to the first session.
 func (m *Model) setView(v listView) {
 	if m.view == v {
 		return
 	}
 	sel := ""
-	if it, ok := m.selected(); ok && (it.kind != itemGroup || it.group.outside) {
+	if it, ok := m.selected(); ok && (it.kind != itemGroup || it.group.outside || it.key == parkedKey) {
 		sel = it.key
 	}
 	m.view, m.hover = v, ""
@@ -340,8 +334,8 @@ func (m *Model) setView(v listView) {
 }
 
 func (v listView) String() string {
-	if v == byState {
-		return "State"
+	if v == byList {
+		return "List"
 	}
 	return "Repo"
 }

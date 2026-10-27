@@ -6,6 +6,10 @@ package core
 // The order lives in a user option of the agents' tmux session, as the
 // registry lives in pane options, so a restarted core keeps it. A closed
 // session keeps its place for its reopen.
+//
+// Parking a session puts it in the Parked group at the end of the list and
+// leaves the order be, so unparking brings it back to its place. Park is
+// in the journal (ui.parked, ui.unparked), which a restarted core replays.
 
 import (
 	"cmp"
@@ -132,4 +136,32 @@ func (c *Core) putBefore(id, before string) error {
 func (c *Core) toTop(id string) {
 	ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
 	c.setOrder(slices.Insert(ids, 0, id))
+}
+
+// park parks a session (on) or unparks it. Parking one that is parked
+// already, or unparking one that is not, changes nothing.
+func (c *Core) park(a ipc.ParkArgs, on bool) error {
+	c.mu.Lock()
+	err := c.setParked(a.Session, on)
+	frames := c.changes()
+	c.mu.Unlock()
+	c.publish(frames)
+	return err
+}
+
+// setParked parks or unparks session id. The caller holds c.mu.
+func (c *Core) setParked(id string, on bool) error {
+	x := c.sessions[id]
+	if x == nil {
+		return ipc.Errorf(ipc.CodeNotFound, "no session %q", id)
+	}
+	if x.track.parked == on {
+		return nil
+	}
+	kind := event.UIParked
+	if !on {
+		kind = event.UIUnparked
+	}
+	c.record(x, event.Event{Source: event.SourceUser, Kind: kind})
+	return nil
 }

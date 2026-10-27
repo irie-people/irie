@@ -104,22 +104,23 @@ struct TerminalArea: View {
     }
 
     /// The terminal in its rounded frame, edged in the shown session's colour,
-    /// where the line from its card ends while it shows (TabLink.swift).
+    /// where the lines from its card end while it shows (TabLink.swift).
     private func framed(_ terminal: some View) -> some View {
         let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
+        let ground = Color(nsColor: Theme.terminalBackground)
         let shows = store.showTerminal
         return terminal
             .padding(.vertical, 10)
             .padding(.horizontal, 18)
             .background {
                 // A click on the frame types to the terminal too.
-                frame.fill(Color(nsColor: Theme.terminalBackground))
+                frame.fill(ground)
                     .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
                     .overlay(frame.strokeBorder(edge, lineWidth: TabLink.width))
                     .onTapGesture { store.focusTerminal += 1 }
             }
             .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
-                if shows { ends.frame = bounds }
+                if shows { ends.frame = .init(bounds: bounds, ground: ground) }
             }
             .padding([.horizontal, .bottom], 12)
             .padding(.top, 12)
