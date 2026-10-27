@@ -81,7 +81,7 @@ struct TerminalArea: View {
                     .onTapGesture { store.focusTerminal += 1 }
             }
             .padding([.horizontal, .bottom], 12)
-            .padding(.top, 24)
+            .padding(.top, 12)
         #else
         Placeholder(
             title: "The terminal opens in Ghostty for now",
