@@ -46,6 +46,16 @@ struct IrieApp: App {
                 Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                     .keyboardShortcut("n", modifiers: [.command, .option])
             }
+            // Sessions close like tabs (Closing.swift). KeyRouter catches ⌘W
+            // first; the window's own Close moves to ⇧⌘W.
+            CommandGroup(after: .newItem) {
+                Button("Close Session") { if let s = store.closable { store.close(s) } }
+                    .keyboardShortcut("w")
+                    .disabled(store.closable == nil)
+                Button("Reopen Closed Session") { store.reopenLast() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                    .disabled(store.closed.isEmpty)
+            }
             // KeyRouter catches Ctrl+Tab and Ctrl+] first; the menu shows them.
             CommandMenu("Go") {
                 Button("Next Session") { store.step(1) }
@@ -104,17 +114,36 @@ final class KeyRouter {
                 MainActor.assumeIsolated { store.toggleFocus() }
                 return nil
             }
+            // In Irie's window ⌘W closes the selected session and ⇧⌘W the
+            // window, even while the terminal has the keyboard. Other
+            // windows, such as About, keep ⌘W.
+            if event.charactersIgnoringModifiers?.lowercased() == "w", mods == .command || mods == [.command, .shift],
+               let window = event.window, window === NSApp.mainWindow {
+                MainActor.assumeIsolated {
+                    if mods.contains(.shift) {
+                        window.performClose(nil)
+                    } else if let s = store.closable {
+                        store.close(s)
+                    } else {
+                        NSSound.beep()
+                    }
+                }
+                return nil
+            }
             return event
         }
     }
 }
 
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
-/// it quits with its window.
+/// it quits with its window. `--background`, which `tools/live.sh` passes when
+/// it relaunches the app, leaves the focus where it is.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        if !CommandLine.arguments.contains("--background") {
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }
