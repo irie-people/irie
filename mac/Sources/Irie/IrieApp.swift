@@ -95,7 +95,8 @@ final class KeyRouter {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak store] event in
             guard let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            if event.keyCode == 48, mods == .control || mods == [.control, .shift] { // Tab
+            if event.keyCode == 48, mods == .control || mods == [.control, .shift], // Tab
+               event.window === NSApp.mainWindow {
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
             }

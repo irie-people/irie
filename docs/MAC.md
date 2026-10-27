@@ -59,7 +59,7 @@ The **File**, **Go**, **View** and **Edit** menus list them all.
 
 | Keys | What they do |
 |---|---|
-| Ctrl+Tab, Ctrl+Shift+Tab | Show the next or the previous session in the sidebar's order: group by group, without the cards in folded groups or those the filter hides, wrapping at the ends. The keyboard stays where it was. The app catches these keys before the terminal or AppKit's key-view loop sees them |
+| Ctrl+Tab, Ctrl+Shift+Tab | Show the next or the previous session in the sidebar's order: group by group, without the cards in folded groups or those the filter hides, wrapping at the ends. From a card in a folded group it goes on from that card's place. Presses faster than the core answers collapse into the last one, so the terminal always ends on the highlighted session. The keyboard stays where it was. The app catches these keys before the terminal or AppKit's key-view loop sees them |
 | Ctrl+] | Move the keyboard between the session list and the terminal |
 | ⌘1 to ⌘9 | Show the first to ninth session in the sidebar's order |
 | ⌘F | Find a session. Esc clears the search and goes back to the list |
