@@ -59,8 +59,8 @@ struct TerminalArea: View {
                 // A click on the frame types to the terminal too.
                 frame.fill(Color(nsColor: Theme.terminalBackground))
                     .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
-                    .overlay(frame.strokeBorder(edge.opacity(store.terminalHasKeys ? 1 : 0.45),
-                                                lineWidth: store.terminalHasKeys ? 2 : 1))
+                    .overlay(frame.strokeBorder(edge.opacity(store.terminalHasKeys ? 0.6 : 0.35),
+                                                lineWidth: 1))
                     .onTapGesture { store.focusTerminal += 1 }
             }
             .padding(12)
@@ -74,7 +74,7 @@ struct TerminalArea: View {
     }
 
     /// The frame's colour: the shown session's, or sun while it is quiet. It
-    /// brightens while the terminal has the keyboard.
+    /// deepens a little while the terminal has the keyboard.
     private var edge: Color { selected.flatMap { Look($0).color } ?? Theme.sunEdge }
 
     /// What the banner says while the core is away.
