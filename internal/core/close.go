@@ -200,17 +200,18 @@ func (c *Core) reopenable(x *session) closedRecord {
 // subagent running and no freeze. A session that gets one more prompt is
 // not done, one the user paused stays, and one whose answer is for you to
 // read, such as a status report or a question, is not closed at all
-// (awaitsLook). The close is the user's own, so it can be undone with
-// reopen. The caller holds c.mu.
+// (awaitsLook). Turning close_when_done off in the settings stops the
+// closes still waiting. The close is the user's own, so it can be undone
+// with reopen. The caller holds c.mu.
 func (c *Core) closeWhenDone(x *session) {
 	if c.awaitsLook(x) {
 		return
 	}
 	id, quiet := x.id, x.quiet
-	time.AfterFunc(c.cfg.Spawn.CloseDelay, func() {
+	time.AfterFunc(c.cfg().Spawn.CloseDelay, func() {
 		c.mu.Lock()
 		x := c.sessions[id]
-		if x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || len(x.track.subs) > 0 || x.track.frozen != nil {
+		if !c.cfg().Spawn.CloseWhenDone || x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || len(x.track.subs) > 0 || x.track.frozen != nil {
 			c.mu.Unlock()
 			return
 		}
@@ -446,7 +447,7 @@ func (c *Core) reopenJob(r closedRecord) (job, error) {
 	}
 	profile, ok := c.profile(spec.Profile)
 	if !ok {
-		return job{}, ipc.Errorf(ipc.CodeNotFound, "%s ran on +%s, which is no longer a profile; the profiles are %s", r.Name, spec.Profile, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "))
+		return job{}, ipc.Errorf(ipc.CodeNotFound, "%s ran on +%s, which is no longer a profile; the profiles are %s", r.Name, spec.Profile, strings.Join(slices.Sorted(maps.Keys(c.cfg().Profiles)), ", "))
 	}
 	// The mode the spawn chose, such as a delegated task's, stays.
 	if i := slices.Index(spec.Argv, "--permission-mode"); i >= 0 && i+1 < len(spec.Argv) {

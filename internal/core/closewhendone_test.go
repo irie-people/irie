@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -60,6 +61,20 @@ func TestASessionStaysOpenByDefault(t *testing.T) {
 	}
 }
 
+func TestTurningCloseWhenDoneOffStopsAWaitingClose(t *testing.T) {
+	c := setupWith(t, agentConfig{spawn: "close_when_done = true\nclose_delay = \"2s\"\n"})
+	a := c.spawn("prompt,stop")
+	c.waitState(a.ID, ipc.StateDone)
+	off := ipc.ConfigArgs{Set: []ipc.ConfigSet{{Key: "spawn.close_when_done", Value: json.RawMessage("false")}}}
+	if err := c.call(ipc.OpConfig, off, nil); err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	time.Sleep(3 * time.Second)
+	if _, ok := c.row(a.ID); !ok {
+		t.Fatal("the session closed after close_when_done was turned off")
+	}
+}
+
 func TestLookTaskKeepsAnswerSessionsOpen(t *testing.T) {
 	for task, want := range map[string]bool{
 		"status of the padding audit":     true,
@@ -77,11 +92,12 @@ func TestLookTaskKeepsAnswerSessionsOpen(t *testing.T) {
 }
 
 func TestTheHeaderCarriesCloseWhenDone(t *testing.T) {
-	c := &Core{cfg: config.Default(), version: "test"}
+	c := &Core{version: "test"}
+	c.useConfig(config.Default())
 	if c.headerNow().CloseWhenDone {
 		t.Error("close_when_done is on by default")
 	}
-	c.cfg.Spawn.CloseWhenDone = true
+	c.cfg().Spawn.CloseWhenDone = true
 	if !c.headerNow().CloseWhenDone {
 		t.Error("the header does not carry close_when_done")
 	}

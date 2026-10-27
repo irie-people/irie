@@ -87,7 +87,7 @@ type jotLook struct {
 // isJot reports whether the dog watches x: a task given to Irie, which no
 // other session delegated and no tool runs. The caller holds c.mu.
 func (c *Core) isJot(x *session) bool {
-	if !c.cfg.Dog.Watch || x.harness == "tool" || x.out != nil && x.out.parent != "" {
+	if !c.cfg().Dog.Watch || x.harness == "tool" || x.out != nil && x.out.parent != "" {
 		return false
 	}
 	_, err := os.Stat(c.paths.TaskFile(x.id))
@@ -117,8 +117,8 @@ func (c *Core) knownRepos() []string {
 			out = append(out, r)
 		}
 	}
-	for _, name := range slices.Sorted(maps.Keys(c.cfg.Repos.Aliases)) {
-		add(repo.Expand(c.cfg.Repos.Aliases[name], home))
+	for _, name := range slices.Sorted(maps.Keys(c.cfg().Repos.Aliases)) {
+		add(repo.Expand(c.cfg().Repos.Aliases[name], home))
 	}
 	for _, r := range c.recent {
 		add(r)
@@ -168,22 +168,22 @@ func (c *Core) placesOf(l jotLook, repos []string, timeout time.Duration) []jotT
 // landOf is the branch a repo's work must reach to be through (dog.land),
 // set by the repo's path, its alias or its folder's name; "" when none is.
 func (c *Core) landOf(r string) string {
-	if r == "" || len(c.cfg.Dog.Land) == 0 {
+	if r == "" || len(c.cfg().Dog.Land) == 0 {
 		return ""
 	}
 	home, _ := os.UserHomeDir()
-	keys := slices.Sorted(maps.Keys(c.cfg.Dog.Land))
+	keys := slices.Sorted(maps.Keys(c.cfg().Dog.Land))
 	for _, k := range keys {
 		if repo.IsPath(k) && samePath(repo.Expand(k, home), r) {
-			return c.cfg.Dog.Land[k]
+			return c.cfg().Dog.Land[k]
 		}
 	}
 	for _, k := range keys {
-		if a, ok := c.cfg.Repos.Aliases[k]; ok && samePath(repo.Expand(a, home), r) {
-			return c.cfg.Dog.Land[k]
+		if a, ok := c.cfg().Repos.Aliases[k]; ok && samePath(repo.Expand(a, home), r) {
+			return c.cfg().Dog.Land[k]
 		}
 	}
-	return c.cfg.Dog.Land[filepath.Base(r)]
+	return c.cfg().Dog.Land[filepath.Base(r)]
 }
 
 // readJot reads what a jot left that has not landed, in each of its own
@@ -250,7 +250,7 @@ func (c *Core) dogAtStop(id string, evs []event.Event) (string, []looseIn) {
 	e := evs[end]
 	waiting, _ := e.Int("waiting")
 	switch {
-	case len(loose) == 0, nudged >= c.cfg.Dog.Nudges, time.Since(start) > dogStopBudget:
+	case len(loose) == 0, nudged >= c.cfg().Dog.Nudges, time.Since(start) > dogStopBudget:
 		return "", nil
 	case e.Data["stop_hook_active"] == true, waiting > 0, asksUser(e.Str("message")):
 		// A stop hook sent it on already, so it has had its say; work of
@@ -340,7 +340,7 @@ func dogShows(state string) bool {
 // is left and clears once the work lands, however it lands. One sweep runs
 // at a time, and git runs without c.mu.
 func (c *Core) dogSweep() {
-	if !c.cfg.Dog.Watch || !c.sweeping.CompareAndSwap(false, true) {
+	if !c.cfg().Dog.Watch || !c.sweeping.CompareAndSwap(false, true) {
 		return
 	}
 	defer c.sweeping.Store(false)
@@ -381,7 +381,7 @@ func (c *Core) dogList() (ipc.DogResult, error) {
 	}
 	var closed []closedLook
 	for _, r := range c.closes.list {
-		if c.sessions[r.ID] == nil && time.Since(r.Closed) < dogClosedFor && c.cfg.Dog.Watch {
+		if c.sessions[r.ID] == nil && time.Since(r.Closed) < dogClosedFor && c.cfg().Dog.Watch {
 			if l, ok := c.closedJot(r); ok {
 				closed = append(closed, closedLook{l, r})
 			}

@@ -39,7 +39,7 @@ func (c *Core) sample() {
 		}
 	}
 	rt := c.runtimePane()
-	own := c.cfg.Local.URL == "" && rt != nil && !rt.Dead
+	own := c.cfg().Local.URL == "" && rt != nil && !rt.Dead
 	c.mu.Unlock()
 
 	mem := treeMemory(roots)
@@ -117,7 +117,7 @@ func (c *Core) memoryNow() ipc.Memory {
 	m := c.machine
 	out := ipc.Memory{
 		Total: m.Total, Available: m.Available / availableStep * availableStep,
-		Local: c.localMem, Budget: localmodel.Budget(c.cfg.Local.MemoryGiB, m),
+		Local: c.localMem, Budget: localmodel.Budget(c.cfg().Local.MemoryGiB, m),
 		Low: m.Total > 0 && m.Available < localmodel.Reserve(m),
 	}
 	for _, x := range c.sessions {
@@ -128,7 +128,7 @@ func (c *Core) memoryNow() ipc.Memory {
 
 // headerNow is the header subscribers see. The caller holds c.mu.
 func (c *Core) headerNow() ipc.Header {
-	h := ipc.Header{Version: c.version, RedOnDone: c.cfg.UI.RedOnDone, CloseWhenDone: c.cfg.Spawn.CloseWhenDone}
+	h := ipc.Header{Version: c.version, RedOnDone: c.cfg().UI.RedOnDone, CloseWhenDone: c.cfg().Spawn.CloseWhenDone}
 	if c.plan.FiveHour != nil || c.plan.SevenDay != nil {
 		p := c.plan
 		h.Plan = &p
