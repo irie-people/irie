@@ -243,6 +243,34 @@ func TestWheelMovesTheOffsetNotTheSelection(t *testing.T) {
 	}
 }
 
+// What the core sends never scrolls the list: you can read it while the
+// agents work.
+func TestFramesLeaveTheListWhereItIs(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 100)
+	for range 10 {
+		m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
+	}
+	first := func() string { return screen(t, m)[m.listTop()] }
+	if !strings.Contains(first(), "task-010") {
+		t.Fatalf("first row after scrolling = %q", first())
+	}
+	// A row changes state while the selection is off screen.
+	row := sessions(100)[50]
+	row.State = ipc.StateNeedsYou
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &row}})
+	if !strings.Contains(first(), "task-010") {
+		t.Errorf("an upsert scrolled the list: first row %q", first())
+	}
+	// A row above the screen goes away: the rows on screen stay put.
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameRemove, ID: "s000000000003"}})
+	if !strings.Contains(first(), "task-010") {
+		t.Errorf("a removal above the screen moved the rows: first row %q", first())
+	}
+	if m.sel != 0 {
+		t.Errorf("selection moved to %d", m.sel)
+	}
+}
+
 func TestTypingThreeLinesGrowsTheBarAndShrinksTheList(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 100)
 	m = send(m, keyMsg("tab"))
@@ -267,6 +295,78 @@ func TestTypingThreeLinesGrowsTheBarAndShrinksTheList(t *testing.T) {
 	}
 	if !strings.Contains(lines[21], "one") || !strings.Contains(lines[23], "three") {
 		t.Errorf("bar lines = %q", lines[21:])
+	}
+}
+
+// A growing command bar shows fewer rows but never scrolls them, even when
+// the selected row drops out of sight.
+func TestTypingLeavesTheListWhereItIs(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 100)
+	h := m.listHeight()
+	for range h - 1 {
+		m = send(m, keyMsg("down")) // the selection is on the last row on screen
+	}
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "one")
+	m = send(m, keyMsg("ctrl+j"))
+	m = typeText(m, "two")
+	m = send(m, keyMsg("ctrl+j"))
+	m = typeText(m, "three")
+	if first := screen(t, m)[m.listTop()]; m.offset != 0 || !strings.Contains(first, "task-000") {
+		t.Errorf("typing scrolled the list: offset %d, first row %q", m.offset, first)
+	}
+	// Back in the list, the selected row is on screen again.
+	m = send(m, keyMsg("esc"))
+	rows := strings.Join(screen(t, m)[m.listTop():m.listTop()+m.listHeight()], "\n")
+	if want := fmt.Sprintf("task-%03d", h-1); !strings.Contains(rows, want) {
+		t.Errorf("%s not on screen after Esc:\n%s", want, rows)
+	}
+}
+
+// The terminal's own cursor sits where you type, so a screen magnifier or
+// reader can follow it.
+func TestTheTerminalCursorIsInTheCommandBar(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 3)
+	if c := m.View().Cursor; c != nil {
+		t.Errorf("cursor at %+v while the list has the keyboard", c.Position)
+	}
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "abc")
+	c := m.View().Cursor
+	if c == nil {
+		t.Fatal("no cursor in the command bar")
+	}
+	if want := (tea.Position{X: lipgloss.Width(barPrompt) + 3, Y: 23}); c.Position != want {
+		t.Errorf("cursor at %+v, want %+v", c.Position, want)
+	}
+	if c.Color != nil {
+		t.Errorf("cursor colour %v; the terminal's own suits its theme", c.Color)
+	}
+	m = send(m, keyMsg("ctrl+j"))
+	m = typeText(m, "de")
+	if c := m.View().Cursor; c == nil || c.Position != (tea.Position{X: lipgloss.Width(barPrompt) + 2, Y: 23}) {
+		t.Errorf("second line: cursor %+v", c)
+	}
+	m = send(m, keyMsg("esc"))
+	if c := m.View().Cursor; c != nil {
+		t.Errorf("cursor at %+v after leaving the bar", c.Position)
+	}
+}
+
+// A task left in the bar while the list has the keyboard keeps the
+// terminal's own colour, which reads on a light theme too.
+func TestABlurredTaskKeepsTheTerminalsColour(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 3)
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "half a task")
+	m = send(m, tea.MouseClickMsg{X: 3, Y: m.listTop(), Button: tea.MouseLeft})
+	raw := strings.Split(m.View().Content, "\n")
+	bar := raw[len(raw)-1]
+	if !strings.Contains(ansiRE.ReplaceAllString(bar, ""), "half a task") {
+		t.Fatalf("bar = %q", bar)
+	}
+	if sgr(37).MatchString(bar) {
+		t.Errorf("blurred task drawn in light grey: %q", bar)
 	}
 }
 
@@ -400,11 +500,11 @@ func TestHeaderCounts(t *testing.T) {
 		{ID: "s2", Name: "b", State: ipc.StateWorking, Created: now},
 		{ID: "s3", Name: "c", State: ipc.StateExited, Created: now},
 	}}})
-	if got := screen(t, m)[0]; !strings.Contains(got, "●2 working") {
+	if got := screen(t, m)[0]; !strings.Contains(got, "◐2 working") {
 		t.Errorf("wide header = %q", got)
 	}
 	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 10})
-	if got := screen(t, m)[0]; !strings.Contains(got, "●2") || strings.Contains(got, "working") {
+	if got := screen(t, m)[0]; !strings.Contains(got, "◐2") || strings.Contains(got, "working") {
 		t.Errorf("narrow header = %q", got)
 	}
 }
@@ -437,10 +537,10 @@ func TestRulesNeedRoom(t *testing.T) {
 
 func TestSelectionHasAnEdge(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 3)
-	if row := screen(t, m)[m.listTop()]; !strings.HasPrefix(row, "▌● task-000") {
+	if row := screen(t, m)[m.listTop()]; !strings.HasPrefix(row, "▌◐ task-000") {
 		t.Errorf("selected row = %q", row)
 	}
-	if row := screen(t, m)[m.listTop()+1]; !strings.HasPrefix(row, " ● task-001") {
+	if row := screen(t, m)[m.listTop()+1]; !strings.HasPrefix(row, " ◐ task-001") {
 		t.Errorf("other row = %q", row)
 	}
 }
@@ -764,8 +864,8 @@ func TestEveryStateHasItsGlyph(t *testing.T) {
 	m := statesModel(t, Options{})
 	m = send(m, keyMsg("tab")) // the selection bar would hide nothing, but keep rows plain
 	for name, glyph := range map[string]string{
-		"failed-row": "✕", "exited-ok": "·", "exited-bad": "·", "needs-row": "●", "stalled-row": "!",
-		"working-row": "●", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
+		"failed-row": "✕", "exited-ok": "·", "exited-bad": "✕", "needs-row": "●", "stalled-row": "!",
+		"working-row": "◐", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
 	} {
 		plain := strings.TrimLeft(ansiRE.ReplaceAllString(rowLine(t, m, name), ""), " ▌")
 		if !strings.HasPrefix(plain, glyph+" "+name) {
@@ -804,11 +904,29 @@ func TestRedMarksOnlyTheRowsThatNeedYou(t *testing.T) {
 	}
 }
 
+// Without colour (NO_COLOR, a monochrome terminal, colour blindness) a red
+// row still looks different from every row that is not red.
+func TestRedIsNeverTheOnlyCue(t *testing.T) {
+	m := statesModel(t, Options{})
+	m = send(m, keyMsg("tab"))
+	rows := map[bool]map[string]string{true: {}, false: {}} // red → glyph → row
+	for _, s := range everyState() {
+		raw := rowLine(t, m, s.Name)
+		glyph := strings.Fields(strings.TrimLeft(ansiRE.ReplaceAllString(raw, ""), " ▌"))[0]
+		rows[red.MatchString(raw)][glyph] = s.Name
+	}
+	for glyph, name := range rows[true] {
+		if other, ok := rows[false][glyph]; ok {
+			t.Errorf("%s and %s are both %s: only red tells them apart", name, other, glyph)
+		}
+	}
+}
+
 func TestHeaderCountsWhatNeedsYou(t *testing.T) {
 	m := statesModel(t, Options{})
 	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	header := screen(t, m)[0]
-	for _, want := range []string{"●1 working", "●2 needs you", "✓1 done"} {
+	for _, want := range []string{"◐1 working", "●2 needs you", "✓1 done"} {
 		if !strings.Contains(header, want) {
 			t.Errorf("header %q lacks %q", header, want)
 		}
