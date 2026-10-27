@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Install · Irie</title>
+<meta name="description" content="Build Irie from its source code with Go, and what it does the first time it runs.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Install</h1>
+
+  <figure class="picture narrow">
+    <svg viewBox="0 0 520 216" role="img" aria-labelledby="build-title" aria-describedby="build-desc">
+      <title id="build-title">Building Irie in a terminal: get the code, install it with Go, check its version, then open it.</title>
+      <desc id="build-desc">A terminal window with five commands, each after a dollar sign: git clone https://github.com/irie-hq/irie.git; cd irie; go install ./cmd/irie; irie version, which answers irie 0.1.0-dev and a build number; and irie, which opens Irie.</desc>
+      <rect x="0.75" y="0.75" width="518.5" height="214.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+      <path d="M0.75 30V12.75a12 12 0 0 1 12-12h494.5a12 12 0 0 1 12 12V30z" class="t-bar"/>
+      <circle cx="20" cy="15.5" r="4.5" class="t-dot"/>
+      <circle cx="36" cy="15.5" r="4.5" class="t-dot"/>
+      <circle cx="52" cy="15.5" r="4.5" class="t-dot"/>
+      <text x="260" y="20" text-anchor="middle" font-size="13" class="t-title">~/code</text>
+      <g font-size="16" class="mono">
+        <g class="t-faint">
+          <text x="16" y="60">$</text><text x="16" y="86">$</text><text x="16" y="112">$</text>
+          <text x="16" y="138">$</text><text x="16" y="190">$</text>
+        </g>
+        <text x="36" y="60" class="t-ink">git clone https://github.com/irie-hq/irie.git</text>
+        <text x="36" y="86" class="t-ink">cd irie</text>
+        <text x="36" y="112" class="t-ink">go install ./cmd/irie</text>
+        <text x="36" y="138" class="t-ink">irie version</text>
+        <text x="16" y="164" class="t-faint">irie 0.1.0-dev+3f2a9c41d07e</text>
+        <text x="36" y="190" class="t-ink">irie</text>
+        <rect x="80" y="177" width="10" height="17" class="t-sun"/>
+      </g>
+    </svg>
+    <figcaption>Four commands build Irie and check it. The fifth opens it.</figcaption>
+  </figure>
+
+  <p class="note">There’s no release of Irie yet, so you build it from its <dfn>source code</dfn>, the files it’s written in. It takes a few commands in a <dfn>terminal</dfn>, the window where you type commands.</p>
+
+  <h2 id="need">What you need</h2>
+  <ul class="needs">
+    <li>A Mac or a Linux computer. Windows isn’t planned for version 1.</li>
+    <li><dfn>Go</dfn> 1.26 or later, the programming language Irie is written in: <a href="https://go.dev/doc/install">go.dev/doc/install</a>.</li>
+    <li><dfn>git</dfn>, which keeps the history of code: <a href="https://git-scm.com/install/">git-scm.com/install</a>.</li>
+    <li><dfn>tmux</dfn>, which keeps programs running in the background: <a href="https://github.com/tmux/tmux/wiki/Installing">tmux’s install page</a>. Irie is written against tmux 3.7b.</li>
+    <li><dfn>Claude Code</dfn>, the <dfn>coding agent</dfn> Irie starts by default, signed in to your own account: <a href="https://code.claude.com/docs/en/setup">its setup page</a>.</li>
+    <li>Any terminal, <a href="https://ghostty.org/download">Ghostty</a> included.</li>
+  </ul>
+  <p>By default Irie asks Claude Code for Opus 5.5 at max effort in auto mode, so your account must allow them. You can change each one in a <a href="profiles.html">profile</a>.</p>
+  <p>To check what you have, run these. Each should print a version.</p>
+<pre><code>go version
+git --version
+tmux -V
+claude --version</code></pre>
+
+  <h2 id="build">Build it</h2>
+  <p>Get the code, then build it. <code>go install</code> puts the <code>irie</code> program in Go’s folder for programs: <code>~/go/bin</code>, unless you changed it.</p>
+<pre><code>git clone https://github.com/irie-hq/irie.git
+cd irie
+go install ./cmd/irie
+irie version</code></pre>
+  <p>The last command prints a line such as <code>irie 0.1.0-dev+3f2a9c41d07e</code>. The part after the <code>+</code> is different for every build.</p>
+  <p>If the terminal says it can’t find <code>irie</code>, add Go’s folder to your <dfn>PATH</dfn>, the list of folders a terminal looks in for programs. Put this line in your shell’s startup file, such as <code>~/.zshrc</code> on a Mac or <code>~/.bashrc</code> on Linux, then open a new terminal:</p>
+<pre><code>export PATH="$PATH:$(go env GOPATH)/bin"</code></pre>
+
+  <h2 id="first-run">Open it</h2>
+<pre><code>irie</code></pre>
+  <p>The first time, Irie sets itself up and opens in the same terminal window:</p>
+  <ol class="rules">
+    <li>It makes its folders: <code>~/.local/state/irie</code> for its own records, and <code>~/.local/share/irie</code> for the folders agents work in. Only you can read them.</li>
+    <li>It writes a tmux settings file of its own. Your own tmux settings are never read or changed.</li>
+    <li>It starts a tmux of its own, named <code>irie</code>, apart from any tmux you already use. Inside it runs Irie’s core: the part that starts agents and keeps track of them.</li>
+    <li>The core draws the list on the left and the space for an agent on the right, and your terminal joins in.</li>
+  </ol>
+  <p>Irie doesn’t make a settings file. Until you write one, it uses its defaults, which <code>irie config print</code> shows and <a href="profiles.html#settings">Profiles and models</a> lists.</p>
+  <p>Next time, <code>irie</code> joins the Irie that’s already running, with every agent where you left it. If you set the <code>XDG_CONFIG_HOME</code>, <code>XDG_STATE_HOME</code> or <code>XDG_DATA_HOME</code> folders, Irie uses them instead, on a Mac too.</p>
+  <p><a href="first-session.html">Your first session</a> shows what you’ll see, and what to type.</p>
+
+  <h3 id="nested">Inside tmux already?</h3>
+  <p>Run inside another tmux, <code>irie</code> stops and says so. <code>irie attach --nested</code> opens it there anyway.</p>
+
+  <h3 id="headless">Without a window</h3>
+  <p><code>irie up</code> starts Irie in the background and comes straight back. <code>irie ctl spawn</code> does it for you, so a script can start agents with no window open: see <a href="keys.html#ctl">Keys and commands</a>.</p>
+
+  <h2 id="update">Update it</h2>
+<pre><code>cd irie
+git pull
+go install ./cmd/irie</code></pre>
+  <p>The next <code>irie</code> sees the new build and restarts Irie’s own parts with it. Your agents keep running.</p>
+
+  <h2 id="keep">Keep irie where it is</h2>
+  <p>Each running agent reports to Irie through <code>irie</code>, by the path it had when the agent started. Don’t move or delete it while agents run: their reports would fail, and Claude Code 2.1.295 and later then block their steps.</p>
+  <p>Building again in the same place, as above, is fine.</p>
+
+  <h2 id="remove">Remove it</h2>
+  <p>To stop Irie and every agent in it, all at once:</p>
+<pre><code>tmux -L irie kill-server</code></pre>
+  <p>Then delete the program and Irie’s folders:</p>
+<pre><code>rm "$(go env GOPATH)/bin/irie"
+rm -rf ~/.config/irie ~/.local/state/irie ~/.local/share/irie</code></pre>
+  <p>Look before you delete <code>~/.local/share/irie</code>: its <code>worktrees</code> folder holds your agents’ work. Each worktree is also listed in its project, so remove them with git first, as <a href="tasks.html#cleanup">Tasks, repos and worktrees</a> shows.</p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="first-session.html">Your first session</a></p>
+    <ol>
+      <li><a href="install.html" aria-current="page">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

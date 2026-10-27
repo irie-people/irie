@@ -25,7 +25,7 @@ const usage = `usage: irie [command]
   irie                    start Irie if needed and attach to it (same as attach)
   irie up                 start the server, core and sidebar if needed
   irie attach [--nested]  attach this terminal to Irie
-  irie ctl <command>      script Irie: list, spawn, show, watch (irie ctl for help)
+  irie ctl <command>      script Irie: list, spawn, show, watch, move (irie ctl for help)
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
 

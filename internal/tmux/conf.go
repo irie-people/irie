@@ -17,8 +17,9 @@ func Conf(o ConfOptions) string {
 set -g status off
 set -g prefix None
 
-# Toggle focus between the sidebar and the slot.
-bind -n '%[1]s' if -F '#{==:#{pane_index},0}' 'select-pane -t %[2]s' 'select-pane -t %[3]s'
+# Toggle focus between the sidebar and the slot. While the Mac app zooms the
+# slot it has no sidebar, so the key goes to the agent.
+bind -n '%[1]s' if -F '#{window_zoomed_flag}' 'send-keys %[1]s' "if -F '#{==:#{pane_index},0}' 'select-pane -t %[2]s' 'select-pane -t %[3]s'"
 
 # Click to focus, wheel to scroll.
 set -g mouse on
@@ -48,7 +49,8 @@ set -s escape-time 10
 # irie:0 follows the latest client. Agent windows are sized to the slot.
 set -gw window-size latest
 
-# Keep the sidebar's width when a client resizes the window.
-set-hook -g window-resized 'resize-pane -t %[3]s -x %[4]d'
+# Keep the sidebar's width when a client resizes the window. Resizing a pane
+# would end the Mac app's zoom, so a zoomed window is left alone.
+set-hook -g window-resized "if -F '#{!=:#{window_zoomed_flag},1}' 'resize-pane -t %[3]s -x %[4]d'"
 `, o.FocusKey, Slot, Sidebar, o.SidebarWidth)
 }

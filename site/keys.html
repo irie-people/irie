@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Keys and commands · Irie</title>
+<meta name="description" content="Every key in Irie, every command, and irie ctl for scripts: list, spawn, show and watch, with examples.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Keys and commands</h1>
+
+  <figure class="picture narrow">
+    <svg viewBox="0 0 444 240" role="img" aria-labelledby="keys-title" aria-describedby="keys-desc">
+      <title id="keys-title">The keys Irie lists on the right while no agent is shown.</title>
+      <desc id="keys-desc">A dark panel lists keys as keycaps, each with what it does. Ctrl+] moves between the sidebar and here. In the sidebar, Tab types a new task, the up and down arrows pick a session, Enter shows it here, and Space shows it while you stay in the sidebar.</desc>
+      <rect x="0.75" y="0.75" width="442.5" height="238.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+      <g class="t-bar t-frame" stroke-width="1.5">
+        <rect x="20" y="24" width="66" height="26" rx="6"/>
+        <rect x="20" y="96" width="46" height="26" rx="6"/>
+        <rect x="20" y="130" width="28" height="26" rx="6"/>
+        <rect x="54" y="130" width="28" height="26" rx="6"/>
+        <rect x="20" y="164" width="62" height="26" rx="6"/>
+        <rect x="20" y="198" width="62" height="26" rx="6"/>
+      </g>
+      <g font-size="14" font-weight="700" text-anchor="middle" class="mono t-ink">
+        <text x="53" y="42">Ctrl+]</text>
+        <text x="43" y="114">Tab</text>
+        <text x="34" y="148">↑</text>
+        <text x="68" y="148">↓</text>
+        <text x="51" y="182">Enter</text>
+        <text x="51" y="216">Space</text>
+      </g>
+      <g font-size="15" class="mono t-faint">
+        <text x="114" y="42">move between the sidebar and here</text>
+        <text x="20" y="82">In the sidebar:</text>
+        <text x="114" y="114">type a new task</text>
+        <text x="114" y="148">pick a session</text>
+        <text x="114" y="182">show it here</text>
+        <text x="114" y="216">show it, stay in the sidebar</text>
+      </g>
+    </svg>
+    <figcaption>Irie lists these keys on the right until you pick an agent.</figcaption>
+  </figure>
+
+  <p>Irie has two places to type: its list on the left, with the task box at the bottom, and the agent you show on the right. <kbd>Ctrl</kbd>+<kbd>]</kbd> moves between them.</p>
+
+  <h2 id="list">In the list</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Key</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>↑</kbd> <kbd>↓</kbd>, <kbd>k</kbd> <kbd>j</kbd></td><td>Pick the row above or below.</td></tr>
+        <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Move a screenful.</td></tr>
+        <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>Pick the first or the last row.</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Show the picked agent on the right, and move there.</td></tr>
+        <tr><td><kbd>Space</kbd></td><td>Show it, but stay in the list.</td></tr>
+        <tr><td><kbd>Tab</kbd></td><td>Go to the task box.</td></tr>
+        <tr><td><kbd>:</kbd></td><td>Go to the task box with a <code>:</code> typed, for a command. The commands themselves are planned. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td>Mouse wheel</td><td>Scroll the list without changing the pick.</td></tr>
+        <tr><td>Click a row</td><td>Show it and move there, like Enter.</td></tr>
+        <tr><td>Click the task box</td><td>Go to the task box.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="box">In the task box</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Key</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>Enter</kbd></td><td>Start the task.</td></tr>
+        <tr><td><kbd>Shift</kbd>+<kbd>Enter</kbd>, <kbd>Ctrl</kbd>+<kbd>J</kbd></td><td>A new line.</td></tr>
+        <tr><td><kbd>Tab</kbd></td><td>Complete the <code>@</code> or <code>+</code> word under the cursor: see <a href="tasks.html#tab">Tab completion</a>.</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Clear the box and go back to the list.</td></tr>
+        <tr><td>Paste</td><td>Over 8 KiB, a paste shows as a chip and goes to the agent whole: see <a href="tasks.html#pastes">Pastes</a>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="anywhere">Anywhere</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Key</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>]</kbd></td><td>Move between the list and the agent on the right. <code>ui.focus_key</code> changes it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>On the right, every key goes to the agent, since that’s the agent’s own screen. Click there to move in, and scroll with the wheel.</p>
+  <p>There’s no key to quit. Close the window and your agents keep running; tmux’s own keys are switched off inside Irie.</p>
+
+  <h2 id="planned">Keys to come</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Key</th><th scope="col">What it will do</th><th scope="col"></th></tr></thead>
+      <tbody>
+        <tr><td><kbd>/</kbd></td><td>Jump to a row by typing part of its name.</td><td><a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Jump to the first to ninth row.</td><td><a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td><kbd>r</kbd></td><td>Rename the row.</td><td><a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td><kbd>z</kbd>, <kbd>Z</kbd></td><td>Park the row out of the way; fold or open the parked rows.</td><td><a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td><kbd>x</kbd> <kbd>x</kbd></td><td>Close the session.</td><td><a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td><kbd>u</kbd>, <kbd>U</kbd></td><td>Undo, redo.</td><td><a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td><kbd>p</kbd>, <kbd>P</kbd></td><td>Pause the agent, or it and its helpers, at its next step.</td><td><a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></td></tr>
+        <tr><td><kbd>f</kbd>, <kbd>F</kbd></td><td>Freeze the session, or all of them, at once.</td><td><a class="tag" href="roadmap.html#m6" data-m="6">Planned</a></td></tr>
+        <tr><td><kbd>!</kbd>, <kbd>n</kbd></td><td>Mark the task as urgent; send its agent a note.</td><td><a class="tag" href="roadmap.html#m7" data-m="7">Planned</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Commands typed after <code>:</code>, such as <code>:rename</code>, <code>:pause</code> and <code>:note</code>, come with milestones 4 to 7. Until then the task box answers <code>unknown command</code>.</p>
+
+  <h2 id="commands">Commands</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>irie</code></td><td>Start Irie if needed, and open it in this terminal.</td></tr>
+        <tr><td><code>irie up</code></td><td>Start Irie if needed, in the background, without opening it.</td></tr>
+        <tr><td><code>irie attach [--nested]</code></td><td>Open Irie in this terminal. <code>--nested</code> opens it inside another tmux.</td></tr>
+        <tr><td><code>irie ctl &lt;command&gt;</code></td><td>Use Irie from scripts: <a href="#ctl">below</a>.</td></tr>
+        <tr><td><code>irie version</code></td><td>Print the version.</td></tr>
+        <tr><td><code>irie config path</code></td><td>Print where the settings file is.</td></tr>
+        <tr><td><code>irie config print</code></td><td>Print the settings in effect.</td></tr>
+        <tr><td><code>irie help</code></td><td>Print the list of commands.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Irie also runs <code>irie core</code>, <code>irie ui</code>, <code>irie host</code>, <code>irie hook</code> and <code>irie placeholder</code> for itself. You don’t need to.</p>
+
+  <h2 id="ctl">irie ctl</h2>
+  <p><code>irie ctl</code> lets <dfn>scripts</dfn>, files of commands run in a row, use Irie without a window. It talks to the Irie that’s running, and <code>spawn</code> starts one first if needed.</p>
+
+  <h3 id="ctl-list">irie ctl list [--json]</h3>
+  <p>Lists the sessions and their states.</p>
+<pre><code><span class="prompt">$ </span>irie ctl list
+SESSION        STATE      NAME                         DETAIL
+s38bvacmnq8rx  working    fix-the-flaky-checkout-test  Bash · go test ./checkout/...
+s38bvad9actcd  needs_you  write-the-release-notes      asks: Which version is this?
+s38bvad9qgve0  done       update-the-dependencies</code></pre>
+  <p>A state is one of <code>starting</code>, <code>working</code>, <code>needs_you</code>, <code>stalled</code>, <code>failed</code>, <code>exited</code>, <code>done</code> and <code>idle</code>.</p>
+  <p><code>--json</code> prints <code>{"sessions": […]}</code>, with an object for each row. It holds the row’s <code>id</code>, <code>name</code>, <code>state</code>, <code>detail</code>, <code>created</code> time and <code>cwd</code>, and where they apply the <code>repo</code>, <code>worktree</code>, <code>branch</code>, <code>copied</code> files, <code>profile</code>, <code>warnings</code>, <code>exit_code</code> and <code>tail</code>: the last lines of the screen of an agent that stalled or failed.</p>
+
+  <h3 id="ctl-spawn">irie ctl spawn</h3>
+<pre><code>irie ctl spawn [--wait] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...</code></pre>
+  <p>Starts a task and prints its session id, starting Irie first if it isn’t running.</p>
+  <ul class="rules">
+    <li><code>@REPO</code>, <code>@REPO!</code> and <code>+PROFILE</code> work as in the task box, but must come before the task.</li>
+    <li><code>-</code> as the task reads it from standard input, such as a file: <code>irie ctl spawn @shop - &lt; task.md</code>.</li>
+    <li><code>--cwd DIR</code> runs the task right there in a folder. It can’t go with <code>@REPO</code>.</li>
+    <li><code>--name NAME</code> names the row.</li>
+    <li><code>--wait</code> waits until the agent is up and working. If it fails, stalls or ends first, the command fails and says why, with the last lines of the agent’s screen.</li>
+  </ul>
+<pre><code><span class="prompt">$ </span>irie ctl spawn --wait @shop fix the cart total
+s38bvacmnq8rx
+<span class="prompt">$ </span>irie ctl spawn --wait +aider tidy the README
+s38bvaapndcgp
+irie: tidy-the-readme failed: failed: exit 127 · irie: aider: command not found
+  irie: aider: command not found</code></pre>
+  <p>The command ends with 0 when the task started and 1 when it didn’t, so a script can test it. Without <code>--wait</code>, it returns as soon as the task is handed over.</p>
+
+  <h3 id="ctl-show">irie ctl show [--focus] SESSION</h3>
+  <p>Shows a session on the right, as Enter does in the list. <code>--focus</code> also moves your typing there. Showing a done session marks it seen, so it turns idle.</p>
+<pre><code>irie ctl show s38bvacmnq8rx</code></pre>
+
+  <h3 id="ctl-watch">irie ctl watch [--session SESSION]</h3>
+  <p>Prints Irie’s events as they happen, one <dfn>JSON</dfn> object per line, until you stop it with Ctrl+C. <code>--session</code> keeps one session’s events.</p>
+<pre><code><span class="prompt">$ </span>irie ctl watch --session s38bvacmnq8rx
+{"v":1,"seq":42,"ts":"2026-10-26T14:02:11.408Z","session":"s38bvacmnq8rx","agent":"main","source":"hook","harness":"claude-code","kind":"tool.started","vendor":{"session_id":"6f1c…","tool_use_id":"toolu_01…","hook_event":"PreToolUse"},"data":{"tool":"Bash","summary":"go test ./checkout/..."}}</code></pre>
+  <p>Each event has a <code>kind</code> and its <code>data</code>. The kinds today are <code>spawn.requested</code>, <code>spawn.failed</code>, <code>session.started</code>, <code>prompt.submitted</code>, <code>tool.started</code>, <code>tool.finished</code>, <code>tool.failed</code>, <code>input.needed</code>, <code>turn.ended</code>, <code>turn.failed</code>, <code>subagent.started</code>, <code>subagent.finished</code>, <code>session.ended</code>, <code>pane.exited</code> and <code>ui.shown</code>.</p>
+  <p>Irie keeps the same events in <code>~/.local/state/irie/journal/</code>, one file per day, for 30 days.</p>
+  <p>More <code>irie ctl</code> commands arrive with the actions they control, such as pausing. Milestone 10 adds <code>irie ctl preflight</code> and <code>spawn --force</code> for local models. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="recipes.html">Recipes</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="keys.html" aria-current="page">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

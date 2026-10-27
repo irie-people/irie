@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Your first session · Irie</title>
+<meta name="description" content="Open Irie, type a task, read its row, look in on the agent, and answer it when it needs you.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<!-- Marks used by the pictures: the sidebar's glyphs, drawn as shapes so
+     they look the same in every font. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <circle id="g-dot" r="5.2"/>
+    <path id="g-check" d="M-4.8 0.2 L-1.6 3.6 L4.8 -4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="g-bars" d="M-3.4 -5.6h2.2v11.2h-2.2z M1.2 -5.6h2.2v11.2h-2.2z"/>
+    <path id="g-diamond" d="M0 -5.8 L5.8 0 L0 5.8 L-5.8 0z"/>
+    <g id="g-sun"><circle r="3.2"/><path d="M0-6.4v1.7M0 4.7v1.7M-6.4 0h1.7M4.7 0h1.7M-4.5-4.5l1.2 1.2M3.3 3.3l1.2 1.2M-4.5 4.5l1.2-1.2M3.3-3.3l1.2-1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Your first session</h1>
+
+  <figure class="picture">
+    <div class="window">
+      <svg viewBox="0 0 940 356" preserveAspectRatio="xMinYMin slice" role="img" aria-labelledby="first-title" aria-describedby="first-desc">
+        <title id="first-title">The Irie window the first time you open it: an empty list on the left with the task box ready, and the keys on the right.</title>
+        <desc id="first-desc">On the left is Irie’s sidebar. Its header reads Irie, and every count is 0. The list is empty. The line under it reads Enter: start, Ctrl+J: new line, and the task box at the bottom shows its hint, new task (Enter starts it), with the cursor in it. On the right, the slot shows Irie’s mark, a sun over two waves, then the name Irie and the keys: Ctrl+] moves between the sidebar and here. In the sidebar, Tab types a new task, the up and down arrows pick a session, Enter shows it here, and Space shows it while you stay in the sidebar.</desc>
+
+        <!-- Window frame and title bar. tmux titles the window "Irie". -->
+        <rect x="10.75" y="10.75" width="918.5" height="334.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+        <path d="M10.75 40V22.75a12 12 0 0 1 12-12h894.5a12 12 0 0 1 12 12V40z" class="t-bar"/>
+        <circle cx="30" cy="25.5" r="4.5" class="t-dot"/>
+        <circle cx="46" cy="25.5" r="4.5" class="t-dot"/>
+        <circle cx="62" cy="25.5" r="4.5" class="t-dot"/>
+        <text x="470" y="30" text-anchor="middle" font-size="13" class="t-title">Irie</text>
+
+        <!-- The sidebar on a first run: no sessions, every count 0 and
+             faint, and the command bar focused. -->
+        <g font-size="16" class="mono">
+          <use href="#g-sun" x="35" y="61" class="t-sun"/>
+          <text x="50" y="66" font-weight="700" class="t-sun">Irie</text>
+          <g class="t-faint">
+            <use href="#g-dot" x="215" y="61"/><text x="220" y="66">0</text>
+            <use href="#g-dot" x="245" y="61"/><text x="250" y="66">0</text>
+            <use href="#g-check" x="275" y="61"/><text x="280" y="66">0</text>
+            <use href="#g-bars" x="305" y="61"/><text x="310" y="66">0</text>
+            <use href="#g-diamond" x="335" y="61"/><text x="340" y="66">0</text>
+          </g>
+          <path d="M30 83.5H350" class="t-rule"/>
+          <path d="M30 281.5H350" class="t-rule"/>
+          <text x="30" y="308" class="t-faint">Enter: start&#160; Ctrl+J: new line</text>
+          <text x="30" y="330" class="t-sun">›</text>
+          <rect x="50" y="317" width="10" height="17" class="t-sun"/>
+          <text x="62" y="330" class="t-faint">new task (Enter starts it)</text>
+        </g>
+
+        <!-- tmux's border between the sidebar and the slot -->
+        <path d="M365.5 40V345" class="t-rule"/>
+
+        <!-- The slot's placeholder: the mark, the name and the keys -->
+        <g class="t-sun" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <path d="M648 70v7M630 76l5 5M666 76l-5 5M620 92h8M668 92h8"/>
+        </g>
+        <circle cx="648" cy="92" r="7.5" class="t-sun"/>
+        <path d="M603 114q5-4 10 0t10 0t10 0t10 0t10 0t10 0t10 0t10 0t10 0" fill="none" class="s-stroke-sea" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M613 126q5-4 10 0t10 0t10 0t10 0t10 0t10 0t10 0" fill="none" class="s-stroke-deep-sea" stroke-width="2.6" stroke-linecap="round"/>
+        <text x="648" y="160" text-anchor="middle" font-size="16" font-weight="700" class="mono t-sun">Irie</text>
+        <g font-size="16" class="mono">
+          <text x="433" y="198"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Ctrl+]</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="533" y="198" class="t-faint">move between the sidebar and here</text>
+          <text x="433" y="230" class="t-faint">In the sidebar:</text>
+          <text x="433" y="254"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Tab</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="533" y="254" class="t-faint">type a new task</text>
+          <text x="433" y="276"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">↑</tspan><tspan class="t-faint">][</tspan><tspan class="t-ink" font-weight="700">↓</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="533" y="276" class="t-faint">pick a session</text>
+          <text x="433" y="298"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Enter</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="533" y="298" class="t-faint">show it here</text>
+          <text x="433" y="320"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Space</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="533" y="320" class="t-faint">show it, stay in the sidebar</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>The first time you open Irie: an empty list, and the task box ready for your first task. Until you pick an agent, the right shows the keys.</figcaption>
+  </figure>
+
+  <p>This page takes one task from start to finish. You type it, read its row, look in on the agent, answer the question it asks, and see it finish.</p>
+  <p>You need Irie <a href="install.html">installed</a>, and Claude Code signed in.</p>
+
+  <h2 id="open">Open Irie</h2>
+  <p>In a <dfn>terminal</dfn>, the window where you type commands, run <code>irie</code>.</p>
+  <p>On the left is Irie’s list, 34 columns wide. On the right is the space where an agent’s screen appears; until you pick one, it shows the keys.</p>
+  <p>The task box at the bottom of the list is ready for typing. Its hint reads <code>new task (Enter starts it)</code>.</p>
+
+  <h2 id="type">Type a task</h2>
+  <p>Type what you want done, in plain words, and press Enter. This task makes the agent ask you something first, so you’ll see a row turn red:</p>
+<pre><code>Write haiku about my city. Ask me which city first.</code></pre>
+  <p>Irie starts a <dfn>coding agent</dfn> on the task, Claude Code unless you’ve changed it, and a row appears. The row is named after the task’s first five words: <code>write-haiku-about-my-city</code>.</p>
+  <p>The agent gets the task word for word. It works in a new, empty folder of its own, since the task names no project; <a href="tasks.html">Tasks, repos and worktrees</a> shows how to work on yours.</p>
+  <p>For a new line inside a task, press Shift+Enter or Ctrl+J.</p>
+
+  <h2 id="row">Read the row</h2>
+  <p>Each row has a mark, a name and an age: how long ago its task started, such as <code>now</code>, <code>42s</code>, <code>3m</code>, <code>2h</code> or <code>5d</code>.</p>
+  <p>The mark says how the agent is doing. A new row shows <code>◌</code> while the agent starts, then <code>●</code> while it works.</p>
+  <div class="table-wrap">
+    <table>
+      <caption>What each mark means</caption>
+      <thead><tr><th scope="col">Mark</th><th scope="col">State</th><th scope="col">What it means</th></tr></thead>
+      <tbody>
+        <tr><td><span class="glyph faint">◌</span></td><td>Starting</td><td>Just launched.</td></tr>
+        <tr><td><span class="glyph ink">●</span></td><td>Working</td><td>Busy, so leave it be.</td></tr>
+        <tr><td><span class="glyph red">●</span></td><td>Needs you</td><td>It asked a question, wants your go-ahead, or hit a problem such as a usage limit.</td></tr>
+        <tr><td><span class="glyph red">!</span></td><td>Stalled</td><td>It didn’t get going within 30 seconds, usually because it’s waiting for you.</td></tr>
+        <tr><td><span class="glyph red">✕</span></td><td>Failed</td><td>It couldn’t start.</td></tr>
+        <tr><td><span class="glyph green">✓</span></td><td>Done</td><td>It finished, and you haven’t looked yet.</td></tr>
+        <tr><td><span class="glyph faint">○</span></td><td>Idle</td><td>It finished, and you’ve looked.</td></tr>
+        <tr><td><span class="glyph faint">·</span></td><td>Exited</td><td>Its program ended. The mark is red if it ended with an error.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The line under the list tells you more about the row you’ve picked: the step its agent is on, such as <code>Bash · go test ./...</code>, or what it needs from you. Then come its full name and folder.</p>
+  <p>The counts at the top add up the rows: working, needing you, done, paused and frozen. Paused and frozen stay at 0 until Irie can pause and freeze agents. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></p>
+
+  <h2 id="look">Look in</h2>
+  <p>Pick the row with <kbd>↑</kbd> and <kbd>↓</kbd>, then press <kbd>Enter</kbd>. The agent’s own screen moves into the space on the right, live, and what you type goes to the agent.</p>
+  <p>Press <kbd>Ctrl</kbd>+<kbd>]</kbd> to go back to the list. <kbd>Space</kbd> shows a row but keeps you in the list, and clicking a row does what Enter does.</p>
+  <p>One agent shows at a time. The others keep working out of sight.</p>
+
+  <h2 id="answer">Answer an agent that needs you</h2>
+  <p>When the agent asks which city, its row turns red, and the line under the list reads something like <code>asks: Which city do you live in?</code> The agent picks its own words.</p>
+  <p>Pick the row, press Enter, and answer on the agent’s screen as you would without Irie. When the agent carries on, its row goes back to working.</p>
+  <p>If the agent asks in plain words and stops instead, its row shows done. Look in and answer it the same way.</p>
+  <p>Rows also turn red when an agent wants your go-ahead for a step, such as <code>needs permission: Bash · rm -rf build</code>, wants a plan approved, or hits a problem such as a usage limit. <a href="troubleshooting.html#needs-you">Each one, and what to do</a>.</p>
+
+  <h2 id="finish">See it finish</h2>
+  <p>When the agent finishes, its row shows a green <code>✓</code>: done, and you haven’t looked yet. Once you show it, the mark turns to <code>○</code>, idle.</p>
+  <p>The agent is still there, waiting. To give it more to do, show it and type.</p>
+  <p>To see done rows in red too, like rows that need you, set <a href="profiles.html#ui"><code>ui.red_on_done</code></a>.</p>
+
+  <h2 id="close">Close the window</h2>
+  <p>Close the terminal window whenever you like: your agents keep working inside tmux. Run <code>irie</code> again, and they’re all where you left them.</p>
+  <p>There’s no key to quit Irie, and tmux’s own keys are switched off inside it. To stop every agent at once, see <a href="install.html#remove">Remove it</a>.</p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="tasks.html">Tasks, repos and worktrees</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html" aria-current="page">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

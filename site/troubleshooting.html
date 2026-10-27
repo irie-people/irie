@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Troubleshooting · Irie</title>
+<meta name="description" content="Each stall, failure, message and warning Irie shows, and what to do about it.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<!-- Marks used by the pictures: the sidebar's glyphs, drawn as shapes so
+     they look the same in every font. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <circle id="g-dot" r="5.2"/>
+    <path id="g-check" d="M-4.8 0.2 L-1.6 3.6 L4.8 -4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="g-cross" d="M-4.2 -4.2 L4.2 4.2 M4.2 -4.2 L-4.2 4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+    <path id="g-bars" d="M-3.4 -5.6h2.2v11.2h-2.2z M1.2 -5.6h2.2v11.2h-2.2z"/>
+    <path id="g-diamond" d="M0 -5.8 L5.8 0 L0 5.8 L-5.8 0z"/>
+    <circle id="g-point" r="2"/>
+    <g id="g-bang"><rect x="-1.25" y="-6.2" width="2.5" height="7.6" rx="0.8"/><circle cy="4.6" r="1.5"/></g>
+    <g id="g-sun"><circle r="3.2"/><path d="M0-6.4v1.7M0 4.7v1.7M-6.4 0h1.7M4.7 0h1.7M-4.5-4.5l1.2 1.2M3.3 3.3l1.2 1.2M-4.5 4.5l1.2-1.2M3.3-3.3l1.2-1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Troubleshooting</h1>
+
+  <figure class="picture narrow">
+    <svg viewBox="0 0 440 280" role="img" aria-labelledby="trouble-title" aria-describedby="trouble-desc">
+      <title id="trouble-title">Rows that need a look: one stalled, one that failed, one that needs you and one whose program ended, each with the line Irie shows for it.</title>
+      <desc id="trouble-desc">A dark sidebar whose header counts 2 rows that need you. The first row, fix-cart-total, is red with an exclamation mark: stalled: no hooks within 30s. The second, add-dark-mode, is red with a cross: failed: exit 127 · irie: claude: command not found. The third, write-release-notes, is red with a dot: asks: Which version is this? The fourth, update-dependencies, is dim with a small red dot: exited 1.</desc>
+      <rect x="0.75" y="0.75" width="438.5" height="278.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+      <g font-size="15" class="mono">
+        <use href="#g-sun" x="22" y="27" class="t-sun"/>
+        <text x="36" y="32" font-weight="700" class="t-sun">Irie</text>
+        <use href="#g-dot" x="280" y="27" class="t-faint"/><text x="286" y="32" class="t-faint">0</text>
+        <use href="#g-dot" x="310" y="27" class="t-red"/><text x="316" y="32" class="t-red">2</text>
+        <use href="#g-check" x="340" y="27" class="t-faint"/><text x="346" y="32" class="t-faint">0</text>
+        <use href="#g-bars" x="370" y="27" class="t-faint"/><text x="376" y="32" class="t-faint">0</text>
+        <use href="#g-diamond" x="400" y="27" class="t-faint"/><text x="406" y="32" class="t-faint">0</text>
+        <path d="M16 46.5H424" class="t-rule"/>
+
+        <use href="#g-bang" x="24" y="69" class="t-red"/>
+        <text x="40" y="74" class="t-red">fix-cart-total</text>
+        <use href="#g-cross" x="24" y="123" class="t-red"/>
+        <text x="40" y="128" class="t-red">add-dark-mode</text>
+        <use href="#g-dot" x="24" y="177" class="t-red"/>
+        <text x="40" y="182" class="t-red">write-release-notes</text>
+        <use href="#g-point" x="24" y="231" class="t-red"/>
+        <text x="40" y="236" class="t-faint">update-dependencies</text>
+        <g text-anchor="end" class="t-faint">
+          <text x="424" y="74">1m</text><text x="424" y="128">1m</text><text x="424" y="182">4m</text><text x="424" y="236">9m</text>
+        </g>
+      </g>
+      <g font-size="12" class="mono">
+        <text x="40" y="95" class="t-red">stalled: no hooks within 30s</text>
+        <text x="40" y="149" class="t-red">failed: exit 127 · irie: claude: command not found</text>
+        <text x="40" y="203" class="t-red">asks: Which version is this?</text>
+        <text x="40" y="257" class="t-faint">exited 1</text>
+      </g>
+    </svg>
+    <figcaption>Rows that need a look. Here each row’s line sits under it; Irie shows the picked row’s line under the list.</figcaption>
+  </figure>
+
+  <p>When something goes wrong, Irie shows it in the row’s mark, and says why in the line under the list. <code>irie ctl list</code> shows the same line under DETAIL, and <code>irie ctl list --json</code> adds the last lines of the agent’s screen.</p>
+
+  <h2 id="stalled">Stalled <span class="glyph red" aria-hidden="true">!</span></h2>
+<pre><code>stalled: no hooks within 30s · &lt;the last line on the agent’s screen&gt;</code></pre>
+  <p>The agent didn’t report in within <code>spawn.ready_timeout</code>, 30 seconds unless you changed it. Usually it’s waiting for you at the start: to trust the folder, to sign in, or to accept something on its first run.</p>
+  <ul class="rules">
+    <li>Show the row and answer the agent on its screen. The row turns to working once the agent starts.</li>
+    <li>Trusting a repo once covers all its worktrees.</li>
+    <li>If your agent is only slow to start, raise <code>spawn.ready_timeout</code>, such as to <code>"60s"</code>.</li>
+  </ul>
+
+  <h2 id="failed">Failed <span class="glyph red" aria-hidden="true">✕</span></h2>
+<pre><code>failed: exit 127 · irie: claude: command not found</code></pre>
+  <p>The agent’s program ended before it got going. Its exit code and its last screen line say why.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">The line ends with</th><th scope="col">What to do</th></tr></thead>
+      <tbody>
+        <tr><td><code>exit 127 · irie: claude: command not found</code></td><td>Irie couldn’t find the program. Install it, or put its full path in the profile’s <code>command</code>. Irie’s tmux keeps the PATH it started with, so a folder you added since isn’t searched.</td></tr>
+        <tr><td>Claude Code’s own message about a model, effort or permission mode</td><td>Claude Code turned down a value in the profile, such as a model your account can’t use. Change the profile, then <a href="profiles.html#apply">restart the core</a>.</td></tr>
+        <tr><td><code>exit 126 · irie host: …</code></td><td>Irie couldn’t read the session’s launch file. Start the task again, and report a bug if it happens again.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The agent’s last screen stays: show the row to read all of it.</p>
+
+  <h2 id="needs-you">Needs you <span class="glyph red" aria-hidden="true">●</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">The line says</th><th scope="col">What happened</th><th scope="col">What to do</th></tr></thead>
+      <tbody>
+        <tr><td><code>asks: …</code></td><td>The agent asked you a question.</td><td>Show it and answer.</td></tr>
+        <tr><td><code>needs permission: …</code></td><td>It wants your go-ahead for a step, such as a command.</td><td>Show it, then allow or refuse.</td></tr>
+        <tr><td><code>wants the plan approved</code></td><td>It made a plan, and waits for you.</td><td>Show it and decide.</td></tr>
+        <tr><td><code>… asks: …</code></td><td>A tool server the agent uses wants your input.</td><td>Show it and answer.</td></tr>
+        <tr><td><code>turn failed: rate_limit</code></td><td>Claude Code hit a usage limit.</td><td>Wait until the limit resets, or start the task again on another profile.</td></tr>
+        <tr><td><code>turn failed: authentication_failed</code></td><td>Claude Code’s sign-in failed.</td><td>Sign in to Claude Code again, then show the row and carry on.</td></tr>
+        <tr><td><code>turn failed: billing_error</code></td><td>A problem with your account’s billing.</td><td>Check your account.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The row goes back to working at the agent’s next step. Moving a task to another profile when it hits a usage limit is planned. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></p>
+
+  <h2 id="exited">Exited <span class="glyph faint" aria-hidden="true">·</span></h2>
+<pre><code>exited 1</code></pre>
+  <p>The agent’s program ended after it got going, for example because you quit it. The mark is red if it ended with an error, and Claude Code’s reason, when it gives one, follows the code.</p>
+  <p>The last screen stays: show the row to read it. An ended row stays in the list, since closing rows, and reopening one with its conversation, are planned. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></p>
+
+  <h2 id="always-working">A row that always says working</h2>
+  <p>Agents from a <a href="profiles.html#generic">generic profile</a> don’t report in, so Irie knows only whether their program is still running. Their rows show working until the program ends, then exited.</p>
+
+  <h2 id="core-offline">core offline</h2>
+  <p>The list can’t reach Irie’s core. Irie restarts the core on its own, waiting a little longer each time, up to 30 seconds, and the list tries again every second.</p>
+  <p>If it stays offline, run <code>irie up</code> in another terminal, and read the end of <code>~/.local/state/irie/core.log</code>.</p>
+
+  <h2 id="messages">Messages from irie</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Message</th><th scope="col">What to do</th></tr></thead>
+      <tbody>
+        <tr><td><code>Irie is not running; `irie up` starts it</code></td><td><code>irie ctl list</code>, <code>show</code> and <code>watch</code> need a running Irie. Run <code>irie up</code>.</td></tr>
+        <tr><td><code>already inside tmux; run `irie attach --nested` to open Irie inside it</code></td><td>Run <code>irie</code> outside tmux, or add <code>--nested</code>.</td></tr>
+        <tr><td><code>tmux not found: install it or set tmux.path</code></td><td>Install tmux, or set <code>tmux.path</code> to its full path.</td></tr>
+        <tr><td><code>the core did not answer within 5s (…); see …/core.log</code></td><td>The core didn’t start. The log says why.</td></tr>
+        <tr><td><code>config …: unknown key "…"</code></td><td>A setting Irie doesn’t know: a typo, or one from a later milestone. Fix or remove it.</td></tr>
+        <tr><td><code>config …: spawn.default_profile = "fast": no such profile</code></td><td>A value that makes no sense. The message names the setting and what it must be.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="wont-start">When a task won’t start</h2>
+  <p>Nothing starts, and the line under the list turns red. From <code>irie ctl spawn</code>, the same message ends the command.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Message</th><th scope="col">What to do</th></tr></thead>
+      <tbody>
+        <tr><td><code>no repo named @shp; closest: @shop</code></td><td>Use one of the names it suggests, or give the folder.</td></tr>
+        <tr><td><code>no repo named @shop, and no repos are known: …</code></td><td>Tell Irie where your projects live, with <a href="tasks.html#repo-names"><code>repos.roots</code></a>, or give the folder.</td></tr>
+        <tr><td><code>@shop fits 2 repos: …; give the path of the one you mean</code></td><td>Give the folder of the one you mean.</td></tr>
+        <tr><td><code>… has no commits yet: commit once, or add ! to run in the checkout itself</code></td><td>A worktree needs a commit to start from.</td></tr>
+        <tr><td><code>worktree.base "…" is not a commit in …</code></td><td>Point <code>worktree.base</code> at a commit that repo has.</td></tr>
+        <tr><td><code>@…: no such directory: …</code></td><td>The folder doesn’t exist.</td></tr>
+        <tr><td><code>@./shop: give an absolute path, a ~/ path or a repo name</code></td><td>Write the folder from <code>~/</code> or <code>/</code>.</td></tr>
+        <tr><td><code>no profile +fast; the profiles are claude, local</code></td><td>Use one of those, or add the profile and restart the core.</td></tr>
+        <tr><td><code>only one +profile per task</code>, <code>only one @ target per task</code></td><td>Keep one of each.</td></tr>
+        <tr><td><code>empty task</code></td><td>Write a task after the <code>@</code> and <code>+</code> words.</td></tr>
+        <tr><td><code>unknown command :pause</code></td><td>Commands that start with <code>:</code> are planned. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></td></tr>
+        <tr><td><code>paste too long for the command bar (… lines); …</code></td><td>The box holds 10,000 lines at most. Save the text to a file and name the file in the task.</td></tr>
+        <tr><td><code>git worktree add …: …</code></td><td>git couldn’t make the worktree; the rest is git’s own message.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="warnings">Warnings after a start</h2>
+  <p>These show in the line under the list once a task starts, and <code>irie ctl list --json</code> lists them under <code>warnings</code>. The agent runs anyway.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Warning</th><th scope="col">What it means</th></tr></thead>
+      <tbody>
+        <tr><td><code>1 uncommitted change in the main checkout was not carried over</code></td><td>Changes you hadn’t committed stayed in your checkout. Commit them, and start again if the agent needs them.</td></tr>
+        <tr><td><code>.env not copied: …</code>, <code>no local files copied: …</code></td><td>A local file couldn’t be copied into the worktree.</td></tr>
+        <tr><td><code>submodules not checked out: …</code></td><td>git couldn’t check out the repo’s submodules in the worktree.</td></tr>
+        <tr><td><code>pause off: Claude Code … is older than 2.1.295</code></td><td>Pausing agents will need Claude Code 2.1.295 or later; nothing else changes today. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></td></tr>
+        <tr><td><code>--name left out: `claude --help` does not list it</code></td><td>Your Claude Code doesn’t take <code>--name</code>, so its own session isn’t named after the row.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="moved">Every step blocked after moving irie</h2>
+  <p>Agents report to Irie through <code>irie</code>, by the path it had when they started. If you moved or deleted it, Claude Code 2.1.295 and later block their steps: put <code>irie</code> back, or build it again in the same place with <code>go install</code>.</p>
+
+  <h2 id="files">Where Irie keeps things</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Path</th><th scope="col">What’s there</th></tr></thead>
+      <tbody>
+        <tr><td><code>~/.config/irie/config.toml</code></td><td>Your settings, if you made the file.</td></tr>
+        <tr><td><code>~/.local/state/irie/core.log</code>, <code>ui.log</code></td><td>What the core and the list did, with their errors.</td></tr>
+        <tr><td><code>~/.local/state/irie/journal/</code></td><td>Every event, one file per day, kept for 30 days.</td></tr>
+        <tr><td><code>~/.local/state/irie/sessions/&lt;id&gt;/</code></td><td>Each session’s task, <code>task.md</code>; how it was started, <code>spec.json</code>; Irie’s hooks for it, <code>claude-settings.json</code>; and how it ended, <code>exit.json</code>.</td></tr>
+        <tr><td><code>~/.local/state/irie/tmux.conf</code></td><td>Irie’s own tmux settings, written for you.</td></tr>
+        <tr><td><code>~/.local/share/irie/scratch/</code></td><td>The folders of tasks that named no project.</td></tr>
+        <tr><td><code>~/.local/share/irie/worktrees/</code></td><td>Worktrees, a folder per repo.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>With <code>XDG_CONFIG_HOME</code>, <code>XDG_STATE_HOME</code> or <code>XDG_DATA_HOME</code> set, these live in those folders instead. Scratch folders and worktrees stay until you remove them.</p>
+
+  <h2 id="report">Still stuck?</h2>
+  <p>Search the <a href="https://github.com/irie-hq/irie/issues">issues</a>, then <a href="https://github.com/irie-hq/irie/issues/new/choose">report a bug</a>. Give <code>irie version</code>, your system, <code>tmux -V</code> and <code>claude --version</code>, and the lines of <code>core.log</code> from around the time, with anything private taken out.</p>
+  <p>For a security problem, don’t open an issue: see <a href="https://github.com/irie-hq/irie/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Back to: <a href="docs.html">Docs</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="troubleshooting.html" aria-current="page">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>
