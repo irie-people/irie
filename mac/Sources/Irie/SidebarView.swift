@@ -26,7 +26,11 @@ struct SidebarView: View {
             if !store.sessions.isEmpty {
                 ModeSwitch()
             }
-            DetailsPanel()
+            // The details share the cards' room evenly, once there is a
+            // session to pick.
+            if !store.sessions.isEmpty || !store.outside.isEmpty {
+                DetailsPanel()
+            }
             // The footer sits lighter than the list, with rounded top corners.
             TaskBar()
                 .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
@@ -423,12 +427,12 @@ private struct QuickActions: View {
     }
 }
 
-/// The selected session's details, on a card of fixed height above the task
-/// bar, edged in its state's colour: long text is cut off, and the full text
-/// is on hover.
+/// The selected session's details, on a card above the task bar that shares
+/// the sidebar's height evenly with the cards, edged in its state's colour:
+/// long text is cut off, and the full text is on hover. The card keeps its
+/// half however many lines it has; what doesn't fit is cut off at the bottom.
 private struct DetailsPanel: View {
     @EnvironmentObject private var store: Store
-    static let height: CGFloat = 150
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
@@ -450,14 +454,13 @@ private struct DetailsPanel: View {
         }
         .padding(.horizontal, Theme.inset)
         .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
         .background(shape.fill(Theme.panel))
         .overlay(shape.strokeBorder(stateColor?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
         .clipShape(shape)
         .background(shape.fill(Theme.panel).shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .padding(.horizontal, 10)
         .padding(.top, 6)
-        .frame(height: Self.height)
     }
 
     private func details(_ s: Session) -> some View {
