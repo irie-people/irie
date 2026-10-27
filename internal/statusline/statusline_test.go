@@ -119,6 +119,35 @@ func TestLineColours(t *testing.T) {
 	}
 }
 
+// TestLineTakesTheSessionsColourWhileItWorks: while the session works, its
+// state and the faint parts are in its own colour, and a share that runs
+// high keeps its warning.
+func TestLineTakesTheSessionsColourWhileItWorks(t *testing.T) {
+	u, _ := Parse([]byte(sample))
+	own := "\x1b[38;2;194;149;74m"
+	working := &ipc.StatusReply{State: ipc.StateWorking, Color: "#c2954a"}
+	got := Line(u, working, 0)
+	if !strings.HasPrefix(got, own+"◐ working\x1b[0m"+own+" · \x1b[0m"+own+"$1.23\x1b[0m") {
+		t.Errorf("working line = %q", got)
+	}
+	if strings.Contains(got, "\x1b[2m") {
+		t.Errorf("working line %q is still faint in places", got)
+	}
+	if plain(got) != "◐ working · "+meters {
+		t.Errorf("working line reads %q", plain(got))
+	}
+	hot := 72.0
+	if got := Line(Usage{FiveHour: &Window{Used: hot}}, working, 0); !strings.Contains(got, own+"5h \x1b[0m\x1b[33m72%\x1b[0m") {
+		t.Errorf("hot line = %q", got)
+	}
+	// Without a colour it can read, the line is as before.
+	for _, c := range []string{"", "c2954a", "#c2954", "#c2954g"} {
+		if got := Line(u, &ipc.StatusReply{State: ipc.StateWorking, Color: c}, 0); !strings.HasPrefix(got, "◐ working\x1b[2m · \x1b[0m\x1b[2m$1.23") {
+			t.Errorf("colour %q: line = %q", c, got)
+		}
+	}
+}
+
 func TestLineFitsTheWidth(t *testing.T) {
 	u, _ := Parse([]byte(sample))
 	done := &ipc.StatusReply{State: ipc.StateDone}
