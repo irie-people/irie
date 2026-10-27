@@ -76,14 +76,14 @@ func (m Model) home2tilde(p string) string {
 // state returns a row's glyph and colour (DESIGN §5.3). A nil colour is the
 // terminal's own; a dim row is drawn faint. A loud row, one that needs you,
 // takes the colour for its name too. Each state has its own glyph, so colour
-// is never the only cue.
+// is never the only cue; an exit with an error code shares failed's ✕.
 func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool) {
 	switch s.State {
 	case ipc.StateFailed:
 		return "✕", lipgloss.Red, false, true
 	case ipc.StateExited:
 		if s.ExitCode != nil && *s.ExitCode != 0 {
-			return "·", lipgloss.Red, true, false
+			return "✕", lipgloss.Red, true, false
 		}
 		return "·", nil, true, false
 	case ipc.StateNeedsYou:
@@ -100,7 +100,7 @@ func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool
 	case ipc.StateIdle:
 		return "○", nil, true, false
 	}
-	return "●", nil, false, false
+	return "◐", nil, false, false
 }
 
 func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
@@ -140,7 +140,7 @@ func (m Model) counts(w int) string {
 		n            int
 		c            color.Color
 	}{
-		{"●", "working", working, nil},
+		{"◐", "working", working, nil},
 		{"●", "needs you", needs, lipgloss.Red},
 		{"✓", "done", done, lipgloss.Green},
 		{"‖", "paused", paused, lipgloss.Yellow},
@@ -272,11 +272,19 @@ func (m Model) View() tea.View {
 	if h := m.barHeight(); len(bar) > h {
 		bar = bar[:h]
 	}
+	barTop := len(lines)
 	lines = append(lines, bar...)
 	if len(lines) > m.height {
 		// Too short for everything: keep the header and the command bar.
-		lines = append(lines[:max(1, m.height-len(bar))], bar...)[:m.height]
+		barTop = max(1, m.height-len(bar))
+		lines = append(lines[:barTop], bar...)[:m.height]
 	}
 	v.SetContent(strings.Join(lines, "\n"))
+	// The terminal's cursor marks the place in the command bar while it has
+	// the keyboard.
+	if c := m.bar.Cursor(); c != nil && c.Y < len(bar) && barTop+c.Y < m.height {
+		c.Y += barTop
+		v.Cursor = c
+	}
 	return v
 }

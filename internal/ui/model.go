@@ -123,13 +123,21 @@ func New(b Backend, o Options) Model {
 		return strings.Repeat(" ", lipgloss.Width(barPrompt))
 	})
 	bar.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "ctrl+j"))
+	// The terminal's own cursor, not a drawn one, so a screen magnifier or
+	// reader can follow the typing (View places it).
+	bar.SetVirtualCursor(false)
 	styles := textarea.DefaultStyles(true)
 	styles.Focused.CursorLine = lipgloss.NewStyle()
 	styles.Focused.Prompt = lipgloss.NewStyle().Foreground(sun)
 	styles.Blurred.Prompt = styleDim
 	styles.Focused.Placeholder = styleDim
 	styles.Blurred.Placeholder = styleDim
-	styles.Cursor.Color = sun
+	// The dark defaults draw blurred text and the cursor in light grey,
+	// which all but vanishes on a light theme; the terminal's own colours
+	// suit any theme.
+	styles.Blurred.Text = lipgloss.NewStyle()
+	styles.Blurred.CursorLine = lipgloss.NewStyle()
+	styles.Cursor.Color = nil
 	styles.Cursor.Blink = false
 	bar.SetStyles(styles)
 
@@ -250,6 +258,12 @@ func (m *Model) apply(f ipc.Frame) {
 	if m.sel >= 0 && m.sel < len(m.sessions) {
 		selected = m.sessions[m.sel].ID
 	}
+	// Rows that come and go above the screen leave it as it is: the first
+	// visible row stays first.
+	top := ""
+	if m.offset < len(m.sessions) {
+		top = m.sessions[m.offset].ID
+	}
 	switch f.T {
 	case ipc.FrameSnapshot:
 		m.sessions = slices.Clone(f.Sessions)
@@ -285,15 +299,25 @@ func (m *Model) apply(f ipc.Frame) {
 	if selected != "" {
 		m.sel = m.index(selected)
 	}
+	// Only the row of a task started here scrolls into view. Nothing else
+	// the core sends moves the list, so it holds still while you read it.
+	reveal := false
 	if m.pending != "" {
 		if i := m.index(m.pending); i >= 0 {
-			m.sel, m.pending = i, ""
+			m.sel, m.pending, reveal = i, "", true
 		}
 	}
 	if m.sel < 0 && len(m.sessions) > 0 {
 		m.sel = 0
 	}
-	m.reveal()
+	if i := m.index(top); i >= 0 {
+		m.offset = i
+	}
+	if reveal {
+		m.reveal()
+	} else {
+		m.clamp()
+	}
 }
 
 func (m Model) showCmd(focus bool) tea.Cmd {
@@ -347,7 +371,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			c := newChip(msg.Content)
 			m.chips = append(m.chips, c)
 			m.bar.InsertString(c.label)
-			m.reveal()
+			m.clamp()
 			return m, nil
 		}
 		if n := strings.Count(m.bar.Value(), "\n") + strings.Count(msg.Content, "\n") + 1; n > maxBarContent {
@@ -356,7 +380,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.bar, cmd = m.bar.Update(msg)
-		m.reveal()
+		m.clamp()
 		return m, cmd
 	case tea.MouseWheelMsg:
 		switch msg.Button {
@@ -452,9 +476,11 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return completedMsg{token: word, items: items, err: err}
 		}
 	}
+	// As the bar grows the list shows fewer rows, but the rows it shows stay
+	// where they are, even when the selected one drops out of sight.
 	var cmd tea.Cmd
 	m.bar, cmd = m.bar.Update(msg)
-	m.reveal()
+	m.clamp()
 	return m, cmd
 }
 
@@ -514,7 +540,7 @@ func (m *Model) replaceWord(start int, word, repl string, space bool) {
 	m.bar.SetValue(strings.Join(lines, "\n"))
 	m.bar.MoveToBegin()
 	m.bar.SetCursorColumn(start + len([]rune(repl)))
-	m.reveal()
+	m.clamp()
 }
 
 func commonPrefix(items []string) string {

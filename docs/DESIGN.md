@@ -340,12 +340,12 @@ type Harness interface {
 ### 4.1 Session list
 
 **Layout, from top to bottom:**
-- **Header** (pinned, 1–2 lines): `Irie`, then counts (`●3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
+- **Header** (pinned, 1–2 lines): `Irie`, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
 - **List:** scrolls.
 - **Status strip** (1 line): the selected row's detail (current tool, why it needs you, copied files) or the last error.
-- **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself.
+- **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
 
-**Rows.** Each row reads `[!][glyph] name … age`, with subagents indented under their parent (M8). Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder the list. The Parked group comes last. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
+**Rows.** Each row reads `[!][glyph] name … age`, with subagents indented under their parent (M8). Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder the list, and only you scroll it: frames from the core and a growing command bar leave the rows on screen where they are, and only a task you just started scrolls into view. The Parked group comes last. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
 
 | Key (list focus) | Action |
 |---|---|
@@ -583,13 +583,13 @@ Each row shows the first state in this table that applies; the table is in prece
 | State | Glyph | Colour | From |
 |---|---|---|---|
 | failed | `✕` | red | `spawn.failed` |
-| exited | `·` | dim (red if the code is not 0) | `pane.exited`, `session.ended` |
+| exited | `·`, or `✕` if the code is not 0 | dim (red if the code is not 0) | `pane.exited`, `session.ended` |
 | frozen | `◆` | cyan | `freeze.on` without a later `freeze.off` |
 | paused | `‖` | yellow | `gate.held` |
 | needs you | `●` | **red** | `input.needed`, `turn.failed`. Cleared by the next prompt or tool event |
 | stalled | `!` | **red** | Readiness timer |
 | pausing | `‖` | dim yellow | `gate.set` with no hold yet |
-| working | `●` | default | `prompt.submitted`, `tool.*` |
+| working | `◐` | default | `prompt.submitted`, `tool.*` |
 | starting | `◌` | dim | `spawn.requested` |
 | done | `✓` | green | `turn.ended`, not yet viewed. Turns into idle when you show the session. `ui.red_on_done = true` shows it red instead |
 | idle | `○` | dim | done and viewed |
