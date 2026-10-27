@@ -103,7 +103,7 @@ go test ./...
 gonew=1
 installed=$(rev "$bin")
 if [ -n "$installed" ] && { [ -z "$corebin" ] || [ "$corebin" = "$bin" ]; } &&
-	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal 2>/dev/null; then
+	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal ':(exclude)*_test.go' 2>/dev/null; then
 	gonew=
 fi
 if [ -n "$gonew" ]; then go build -o "$bin.new" ./cmd/irie; fi
