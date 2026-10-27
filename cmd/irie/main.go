@@ -15,7 +15,9 @@ import (
 	"github.com/irie-hq/irie/internal/core"
 	"github.com/irie-hq/irie/internal/hook"
 	"github.com/irie-hq/irie/internal/host"
+	"github.com/irie-hq/irie/internal/localmodel"
 	"github.com/irie-hq/irie/internal/paths"
+	"github.com/irie-hq/irie/internal/statusline"
 	"github.com/irie-hq/irie/internal/ui"
 	"github.com/irie-hq/irie/internal/version"
 )
@@ -25,7 +27,11 @@ const usage = `usage: irie [command]
   irie                    start Irie if needed and attach to it (same as attach)
   irie up                 start the server, core and sidebar if needed
   irie attach [--nested]  attach this terminal to Irie
-  irie ctl <command>      script Irie: list, spawn, show, watch, move (irie ctl for help)
+  irie ctl <command>      script Irie: list, spawn, show, watch, move, local,
+                          preflight (irie ctl for help)
+  irie setup local [--model MODEL] [--yes]
+                          get +local ready: install Ollama if needed, pick a
+                          model that fits this machine's memory, pull and check it
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
 
@@ -34,6 +40,11 @@ Used by Irie itself:
   irie ui [--supervise]     the sidebar
   irie host --spec <file>   the first process of an agent pane
   irie hook                 the shim an agent runs for each hook event
+  irie statusline [--then COMMAND]
+                            the status line of Claude Code sessions, which runs
+                            the user's own
+  irie runtime -- COMMAND   Irie's own Ollama server, whose model runners stop
+                            with it
   irie placeholder          what the slot shows when no session is shown
 `
 
@@ -69,8 +80,17 @@ func run(args []string) int {
 		err = ui.Placeholder(cfg.UI.FocusKey)
 	case "hook":
 		return hook.Run(os.Stdin, os.Stdout, os.Getenv)
+	case "statusline":
+		return statusline.Run(args, os.Stdin, os.Stdout, os.Stderr, os.Getenv)
+	case "runtime":
+		if len(args) > 0 && args[0] == "--" {
+			args = args[1:]
+		}
+		return localmodel.Serve(args)
 	case "ctl":
 		err = ctl(args)
+	case "setup":
+		err = setup(args)
 	case "version":
 		fmt.Println("irie", version.String())
 	case "config":
@@ -83,10 +103,24 @@ func run(args []string) int {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "irie:", err)
+		var ec exitCode
+		if errors.As(err, &ec) {
+			return ec.code
+		}
 		return 1
 	}
 	return 0
 }
+
+// exitCode is an error with an exit code of its own, for scripts and agents
+// that act on it.
+type exitCode struct {
+	code int
+	err  error
+}
+
+func (e exitCode) Error() string { return e.err.Error() }
+func (e exitCode) Unwrap() error { return e.err }
 
 // load reads the config and paths. On a config error it still returns the
 // defaults, for commands that can run without the file.

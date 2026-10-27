@@ -53,11 +53,16 @@ type outside struct {
 }
 
 // claudeProfile is the profile whose command lists the sessions:
-// spawn.default_profile when it is a Claude Code profile, else the first
-// Claude Code profile by name.
+// spawn.default_profile when it is a Claude Code profile, and for auto the
+// strongest profile it routes to (DESIGN §6.4); else the first Claude Code
+// profile by name.
 func (c *Core) claudeProfile() (string, config.Profile, bool) {
-	if p, ok := c.cfg.Profiles[c.cfg.Spawn.DefaultProfile]; ok && p.Harness == "claude-code" {
-		return c.cfg.Spawn.DefaultProfile, p, true
+	name := c.cfg.Spawn.DefaultProfile
+	if name == config.Auto {
+		name = strongest(c.cfg.Route)
+	}
+	if p, ok := c.cfg.Profiles[name]; ok && p.Harness == "claude-code" {
+		return name, p, true
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.cfg.Profiles)) {
 		if c.cfg.Profiles[name].Harness == "claude-code" {
