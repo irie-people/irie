@@ -190,5 +190,6 @@ struct ContentView: View {
             keys.install(store)
             WindowCloseItem.install()
         }
+        .onChange(of: theme) { store.sendTheme(theme) }
     }
 }

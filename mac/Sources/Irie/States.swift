@@ -125,6 +125,12 @@ extension Look {
     static func agentDeep(_ s: Session) -> Color? {
         Look(s) == .working ? Theme.agentDeep(slot: Theme.agentSlot(s.id)) : nil
     }
+
+    /// The agent's colour as text, for its state, its details and its
+    /// helpers away from its card, while it is working; none otherwise.
+    static func agentInk(_ s: Session) -> Color? {
+        Look(s) == .working ? Theme.agentInk(slot: Theme.agentSlot(s.id)) : nil
+    }
 }
 
 /// A state's glyph from DESIGN §5.3, drawn: ✕ failed, · exited (✕ with an
