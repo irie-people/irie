@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 /// The app's state: the core's rows, kept live by one subscription, and the
 /// requests the window makes.
@@ -23,9 +24,7 @@ final class Store: ObservableObject {
     /// Bumped to move the keyboard to the session list or the find field.
     @Published var focusSidebar = 0
     @Published var focusFind = 0
-    /// The sidebar's collapsed groups and filter, which the keys that walk
-    /// the sidebar follow.
-    @Published var collapsed: Set<Look.Group> = []
+    /// The sidebar's filter, which the keys that walk the sidebar follow.
     @Published var filter = ""
     @Published private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
@@ -119,12 +118,12 @@ final class Store: ObservableObject {
 
     // MARK: Keyboard
 
-    /// The rows in the order the sidebar draws them: grouped, without
-    /// collapsed groups or rows the filter hides.
+    /// The rows in the order the sidebar draws them: the order they started,
+    /// which a state change never alters (DESIGN §4.1), without the rows the
+    /// filter hides.
     var drawnOrder: [Session] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
-        return Look.Group.allCases.filter { !collapsed.contains($0) }.flatMap { g in rows.filter { Look($0).group == g } }
+        return f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
     }
 
     /// Shows the next (+1) or previous (-1) row of the drawn order, wrapping
@@ -203,14 +202,21 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Shows a notice above the task bar and has VoiceOver read it. A
+    /// confirmation goes after 3 s; an error stays until the next notice, or
+    /// until the user edits or submits (WCAG 2.2.1).
     func say(_ text: String, error: Bool) {
         notice = Notice(text: text, isError: error)
+        AccessibilityNotification.Announcement(text).post()
+        guard !error else { return }
         let id = notice?.id
         Task {
-            try? await Task.sleep(nanoseconds: error ? 6_000_000_000 : 3_000_000_000)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
             if notice?.id == id { notice = nil }
         }
     }
+
+    func dismissNotice() { notice = nil }
 
     // MARK: Desktop actions
 

@@ -1,26 +1,32 @@
 import SwiftUI
 
-/// The task bar at the foot of the sidebar. Nothing appears or vanishes
-/// around it, so the list above never shifts: the hint is the placeholder,
-/// and notices float above the bar.
+/// The task bar at the foot of the sidebar. It is always three lines tall,
+/// and longer text scrolls inside it. Nothing appears or vanishes around it,
+/// so the list above never shifts: the hint is the placeholder, and notices
+/// float above the bar.
 struct TaskBar: View {
     @EnvironmentObject private var store: Store
     @State private var text = ""
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: "plus")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.muted)
+                .padding(.top, 2)
                 .accessibilityHidden(true)
+            // It keeps the keyboard while a task starts; submit() refuses a
+            // second start until the first is done.
             TextField(focused ? "@repo +profile, then the task" : "New task…", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
-                .lineLimit(1...6)
+                .lineLimit(3, reservesSpace: true)
                 .focused($focused)
                 .onSubmit(submit)
-                .disabled(store.spawning)
+                .onChange(of: text) {
+                    if store.notice?.isError == true { store.dismissNotice() }
+                }
                 .accessibilityLabel("New task")
                 .accessibilityHint("Start with @repo or +profile to pick where and who. Return starts it.")
             Button(action: submit) {
@@ -74,6 +80,7 @@ struct TaskBar: View {
     private func submit() {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty, !store.spawning else { return }
+        store.dismissNotice()
         Task {
             if await store.spawn(input) { text = "" }
         }

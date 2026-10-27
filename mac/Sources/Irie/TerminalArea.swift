@@ -9,18 +9,24 @@ struct TerminalArea: View {
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
     var body: some View {
-        Group {
-            switch store.link {
-            case .connecting:
-                ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .offline(why):
+        ZStack(alignment: .top) {
+            // Once attached, the terminal stays: tmux outlives a core
+            // restart, so a flap gets a banner, not a reattach.
+            if let a = store.attach {
+                terminal(a)
+            } else if case let .offline(why) = store.link {
                 Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
-            case .online:
-                if let a = store.attach {
-                    terminal(a)
-                } else {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+            } else {
+                ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            if store.attach != nil, let note = linkNote {
+                Text(note)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Theme.field).shadow(radius: 3, y: 1))
+                    .padding(.top, 8)
+                    .accessibilityAddTraits(.isStaticText)
             }
         }
         .navigationTitle(selected?.name ?? "Irie")
@@ -49,6 +55,15 @@ struct TerminalArea: View {
             action: ("Open the terminal", store.openInGhostty)
         )
         #endif
+    }
+
+    /// What the banner says while the core is away.
+    private var linkNote: String? {
+        switch store.link {
+        case .online: return nil
+        case .connecting: return "Connecting to Irie…"
+        case let .offline(why): return "\(why) Reconnecting…"
+        }
     }
 
     private func subtitle(_ s: Session) -> String {

@@ -1,46 +1,43 @@
 import SwiftUI
 
-/// The sidebar: a card per session, grouped by what it needs from you. A
-/// click shows that agent's terminal and gives it the keyboard; the arrow
-/// keys walk the cards and keep the keyboard here. The selected card opens
-/// up to show its details.
+/// The sidebar: a card per session, in the order they started. A state
+/// change only changes a card's mark and colours, never the order or a
+/// card's height (DESIGN §4.1), so nothing moves under the pointer. A click
+/// shows that agent's terminal and gives it the keyboard; the arrow keys
+/// walk the cards and keep the keyboard here. The selected session's
+/// details sit in a fixed panel above the task bar.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
-
-    private var visible: [Session] {
-        let f = store.filter.trimmingCharacters(in: .whitespaces).lowercased()
-        return f.isEmpty ? store.sessions : store.sessions.filter { $0.name.lowercased().contains(f) }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
             Header()
             FindField()
             content
+            DetailsPanel()
             TaskBar()
         }
         .background(Theme.sidebar.ignoresSafeArea())
     }
 
     @ViewBuilder private var content: some View {
+        let rows = store.drawnOrder
         if case let .offline(why) = store.link, store.sessions.isEmpty {
             Offline(why: why, socket: store.socketPath)
         } else if store.sessions.isEmpty {
             Hint(text: store.link == .connecting ? "Connecting to Irie…" : "No sessions yet. Type a task below to start one.")
-        } else if visible.isEmpty {
+        } else if rows.isEmpty {
             Hint(text: "No sessions match “\(store.filter)”.")
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
                     // One clock for every card's age.
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
-                        LazyVStack(alignment: .leading, spacing: 10) {
-                            ForEach(Look.Group.allCases, id: \.self) { group in
-                                let rows = visible.filter { Look($0).group == group }
-                                if !rows.isEmpty {
-                                    GroupSection(group: group, rows: rows, now: ctx.date)
-                                }
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(rows) { s in
+                                SessionCard(session: s, selected: s.id == store.selection, listFocused: listFocused, now: ctx.date)
+                                    .id(s.id)
                             }
                         }
                         .padding(.horizontal, 8)
@@ -68,54 +65,20 @@ struct SidebarView: View {
                 store.show(id, focus: true)
                 return .handled
             }
+            .accessibilityLabel("Sessions")
         }
     }
 }
 
-/// A group's header, which folds the group, and its cards.
-private struct GroupSection: View {
-    @EnvironmentObject private var store: Store
-    let group: Look.Group
-    let rows: [Session]
-    let now: Date
-
-    var body: some View {
-        let open = !store.collapsed.contains(group)
-        VStack(alignment: .leading, spacing: 2) {
-            Button {
-                if open { store.collapsed.insert(group) } else { store.collapsed.remove(group) }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
-                        .rotationEffect(.degrees(open ? 90 : 0))
-                    Text(group.title.uppercased()).font(.system(size: 10.5, weight: .bold)).tracking(0.8)
-                    Text("\(rows.count)").font(.system(size: 10.5, weight: .semibold)).monospacedDigit().opacity(0.75)
-                    Spacer()
-                }
-                .foregroundStyle(group == .needs ? Theme.needs : Color.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(group.title), \(rows.count)")
-            .accessibilityHint(open ? "Folds the group" : "Opens the group")
-            if open {
-                ForEach(rows) { s in
-                    SessionCard(session: s, selected: s.id == store.selection, now: now).id(s.id)
-                }
-            }
-        }
-    }
-}
-
-/// One session. A single line; what it asks when it needs you, on a red
-/// tint; its details while selected.
+/// One session, always two lines: its name, then what it needs from you (in
+/// red), what it is doing, or how it ended. The trailing slot has a fixed
+/// width, so the name never re-wraps when the age ticks or the pointer
+/// brings up the actions.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
     let selected: Bool
+    let listFocused: Bool
     let now: Date
     @State private var hovering = false
 
@@ -123,116 +86,112 @@ private struct SessionCard: View {
     private var quiet: Bool { look == .done || look == .idle || look == .ended }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                StateMark(look: look)
+        HStack(alignment: .top, spacing: 8) {
+            StateMark(look: look).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(session.name)
                     .font(.system(size: 13, weight: quiet ? .regular : .semibold))
-                    .foregroundStyle(look == .ended || look == .idle ? Color.secondary : Color.primary)
-                    .lineLimit(2)
-                Spacer(minLength: 4)
-                if hovering {
-                    QuickActions(session: session)
-                } else {
-                    Text([session.tokens.map { Tokens.short($0.total) }, Age.short(session.created, now: now)]
-                        .compactMap { $0 }.joined(separator: " · "))
-                        .font(.system(size: 11)).monospacedDigit()
-                        .foregroundStyle(.tertiary)
-                        .help(session.tokens?.breakdown ?? "")
+                    .foregroundStyle(look == .ended || look == .idle ? Theme.muted : Color.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(status)
+                    .font(.system(size: 11.5, weight: look == .needs ? .medium : .regular))
+                    .foregroundStyle(look == .needs ? Theme.needs : Theme.muted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(Age.short(session.created, now: now))
+                    Text(session.tokens.map { Tokens.short($0.total) } ?? " ")
                 }
+                .font(.system(size: 11)).monospacedDigit()
+                .foregroundStyle(Theme.muted)
+                .opacity(hovering ? 0 : 1)
+                QuickActions(session: session)
+                    .opacity(hovering ? 1 : 0)
+                    .allowsHitTesting(hovering)
             }
-            .frame(minHeight: 20)
-            if look == .needs, let d = session.detail, !d.isEmpty {
-                Text(d)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Theme.needs)
-                    .lineLimit(selected ? 4 : 2)
-                    .padding(.leading, 22)
-            }
-            if let helpers = session.subagents, !helpers.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(helpers) { HelperLine(helper: $0) }
-                }
-                .padding(.leading, 22)
-            }
-            if selected {
-                Details(session: session).padding(.leading, 22).padding(.top, 2)
-            }
+            .frame(width: 66, alignment: .trailing)
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 6)
         .padding(.leading, 10)
-        .padding(.trailing, 8)
+        .padding(.trailing, 6)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(fill))
         .overlay(alignment: .leading) {
             if selected {
-                Capsule().fill(Theme.sun).frame(width: 3).padding(.vertical, 7)
+                Capsule().fill(Theme.sun).frame(width: 3).padding(.vertical, 7).opacity(listFocused ? 1 : 0.45)
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .onHover { hovering = $0 }
         .onTapGesture { store.show(session.id, focus: true) }
         .contextMenu { Actions(session: session) }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityText)
+        .help([session.name, session.detail].compactMap { $0 }.joined(separator: "\n"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { store.show(session.id, focus: true) }
+        .accessibilityActions {
+            if let cwd = session.cwd {
+                Button("Show the folder in Finder") { store.reveal(cwd) }
+                Button("Copy the folder path") { store.copy(cwd, what: "folder path") }
+            }
+            Button("Open in Ghostty") {
+                store.show(session.id)
+                store.openInGhostty()
+            }
+            if let branch = session.branch, !branch.isEmpty {
+                Button("Copy the branch name") { store.copy(branch, what: "branch name") }
+            }
+            Button("Copy the session ID") { store.copy(session.id, what: "session ID") }
+        }
+    }
+
+    /// The second line.
+    private var status: String {
+        let helpers = session.subagents.map { $0.count == 1 ? "1 helper" : "\($0.count) helpers" }
+        let what: String
+        switch look {
+        case .needs: what = session.detail ?? "Needs you"
+        case .working: what = session.detail ?? "Working"
+        case .starting: what = "Starting…"
+        case .done: what = "Done"
+        case .idle: what = "Idle"
+        case .ended: what = session.detail ?? "Ended"
+        }
+        return [helpers, what].compactMap { $0 }.joined(separator: " · ")
     }
 
     private var fill: Color {
-        if selected { return Theme.selection }
+        if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.45) }
         if hovering { return Theme.hover }
         return look == .needs ? Theme.needsTint : .clear
     }
 
-    private var accessibilityText: String {
+    private var spoken: String {
         var parts = [session.name, StateMark.label(for: look)]
         if let d = session.detail, !d.isEmpty { parts.append(d) }
+        parts.append("started " + Age.spoken(session.created, now: now))
+        if let t = session.tokens { parts.append("\(t.total) tokens") }
         return parts.joined(separator: ", ")
     }
 }
 
-/// A helper (subagent) under the card of the session that started it: red
-/// when it needs you, blue while it works, with its current tool.
-private struct HelperLine: View {
-    let helper: Subagent
-
-    private var needs: Bool { helper.needsYou == true }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.turn.down.right")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.tertiary)
-            Circle().fill(needs ? Theme.needs : Theme.work).frame(width: 6, height: 6)
-            Text(helper.type ?? "Helper").font(.system(size: 11.5, weight: .medium))
-            if let d = helper.detail, !d.isEmpty {
-                Text(d)
-                    .font(.system(size: 11))
-                    .foregroundStyle(needs ? Theme.needs : Color.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Helper \(helper.type ?? ""), \(needs ? "needs you" : "working")\(helper.detail.map { ", " + $0 } ?? "")")
-    }
-}
-
-/// What a hovered card offers without opening it.
+/// What a hovered card offers. They sit in the card's fixed trailing slot;
+/// VoiceOver gets them, and more, as the card's actions.
 private struct QuickActions: View {
     @EnvironmentObject private var store: Store
     let session: Session
 
     var body: some View {
-        HStack(spacing: 2) {
-            Button { store.show(session.id, focus: true) } label: { Image(systemName: "keyboard") }
+        HStack(spacing: 0) {
+            Button { store.show(session.id, focus: true) } label: { Image(systemName: "keyboard").frame(width: 20, height: 18) }
                 .help("Type to it")
-                .accessibilityLabel("Type to it")
-            if let cwd = session.cwd {
-                Button { store.reveal(cwd) } label: { Image(systemName: "folder") }
-                    .help("Show the folder in Finder")
-                    .accessibilityLabel("Show the folder in Finder")
-            }
+            Button { if let cwd = session.cwd { store.reveal(cwd) } } label: { Image(systemName: "folder").frame(width: 20, height: 18) }
+                .help("Show the folder in Finder")
+                .disabled(session.cwd == nil)
             Menu {
                 Actions(session: session)
             } label: {
@@ -240,55 +199,87 @@ private struct QuickActions: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .fixedSize()
+            .frame(width: 22)
             .help("More")
-            .accessibilityLabel("More actions")
         }
         .buttonStyle(.borderless)
         .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Theme.muted)
+        .accessibilityHidden(true)
     }
 }
 
-/// What a selected card adds: the current step, where it runs, warnings, the
-/// screen of a spawn that went wrong, and the buttons.
-private struct Details: View {
+/// The selected session's details, in a panel of fixed height above the
+/// task bar: long text is cut off, and the full text is on hover.
+private struct DetailsPanel: View {
     @EnvironmentObject private var store: Store
-    let session: Session
+    static let height: CGFloat = 150
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            if Look(session) != .needs, let d = session.detail, !d.isEmpty {
-                Text(d).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(3)
+        Group {
+            if let s = store.sessions.first(where: { $0.id == store.selection }) {
+                details(s)
+            } else {
+                Text("Pick a session to see its details.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            let facts = [session.profile, session.branch].compactMap { $0 }.filter { !$0.isEmpty }
-            if !facts.isEmpty {
-                Text(facts.joined(separator: " · "))
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(height: Self.height)
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .background(Theme.panel)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private func details(_ s: Session) -> some View {
+        let look = Look(s)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                StateMark(look: look)
+                Text(StateMark.label(for: look))
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(look == .needs ? Theme.needs : Color.primary)
+                Spacer(minLength: 4)
+                Button("Type to it") { store.show(s.id, focus: true) }
+                if let cwd = s.cwd {
+                    Button("Show folder") { store.reveal(cwd) }
+                }
             }
-            if let cwd = session.cwd {
-                Text(Age.tilde(cwd))
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1).truncationMode(.middle)
+            .controlSize(.small)
+            line(s.detail, color: look == .needs ? Theme.needs : Color.primary)
+            line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
+            line(s.cwd.map(Age.tilde), mono: true)
+            line(s.tokens?.breakdown)
+            ForEach((s.subagents ?? []).prefix(3)) { h in
+                line("↳ " + [h.type ?? "Helper", h.detail].compactMap { $0 }.joined(separator: " · "),
+                     color: h.needsYou == true ? Theme.needs : Theme.muted)
             }
-            if let t = session.tokens {
-                Text(t.breakdown).font(.system(size: 10.5)).monospacedDigit().foregroundStyle(.secondary)
+            if let extra = s.subagents.map({ $0.count - 3 }), extra > 0 {
+                line("and \(extra) more helpers")
             }
-            ForEach(session.warnings ?? [], id: \.self) { w in
-                Label(w, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11)).foregroundStyle(.orange)
+            ForEach((s.warnings ?? []).prefix(2), id: \.self) { w in
+                line("⚠︎ " + w, color: Theme.sunInk)
             }
-            if let tail = session.tail, !tail.isEmpty {
-                Text(tail.suffix(6).joined(separator: "\n"))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .padding(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+            ForEach((s.tail ?? []).suffix(2), id: \.self) { t in
+                line(t, mono: true)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// One line of the panel, cut off with its full text on hover.
+    @ViewBuilder private func line(_ text: String?, mono: Bool = false, color: Color = Theme.muted) -> some View {
+        if let text, !text.isEmpty {
+            Text(text)
+                .font(.system(size: mono ? 10.5 : 11.5, design: mono ? .monospaced : .default))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(text)
         }
     }
 }
@@ -316,8 +307,8 @@ private struct Actions: View {
     }
 }
 
-/// The mark, the name and a count per group. A count shows that group's
-/// first session.
+/// The mark, the name and a count per state. A count shows the first
+/// session, in list order, in that state.
 private struct Header: View {
     @EnvironmentObject private var store: Store
 
@@ -371,7 +362,10 @@ private struct FindField: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(.secondary)
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted)
+                .accessibilityHidden(true)
             TextField("Find a session", text: $store.filter)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
@@ -380,13 +374,13 @@ private struct FindField: View {
                     store.filter = ""
                     store.focusSidebar += 1
                 }
-            if !store.filter.isEmpty {
-                Button { store.filter = "" } label: { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("Clear")
-                    .accessibilityLabel("Clear the search")
-            }
+            Button { store.filter = "" } label: { Image(systemName: "xmark.circle.fill") }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.muted)
+                .opacity(store.filter.isEmpty ? 0 : 1)
+                .disabled(store.filter.isEmpty)
+                .help("Clear")
+                .accessibilityLabel("Clear the search")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
@@ -420,9 +414,9 @@ struct StateMark: View {
             case .done:
                 Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Theme.done)
             case .idle:
-                Circle().stroke(Color.secondary, lineWidth: 1.5).frame(width: 8, height: 8)
+                Circle().stroke(Theme.muted, lineWidth: 1.5).frame(width: 8, height: 8)
             case .ended:
-                Circle().fill(Color.secondary).frame(width: 5, height: 5)
+                Circle().fill(Theme.muted).frame(width: 5, height: 5)
             }
         }
         .frame(width: 14, height: 14)
@@ -449,8 +443,8 @@ private struct Offline: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(why).font(.system(size: 13, weight: .semibold))
             Text("Start it in a terminal with `irie up`. The app connects by itself once it’s running.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-            Text(Age.tilde(socket)).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(.tertiary)
+                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+            Text(Age.tilde(socket)).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.muted)
                 .lineLimit(1).truncationMode(.middle)
         }
         .padding(14)
@@ -463,7 +457,7 @@ private struct Hint: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 12.5)).foregroundStyle(.secondary)
+            .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
             .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -478,6 +472,13 @@ enum Age {
         case ..<86400: return "\(s / 3600)h"
         default: return "\(s / 86400)d"
         }
+    }
+
+    /// "3 minutes ago", for VoiceOver: "3m" would be read as metres.
+    static func spoken(_ d: Date, now: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f.localizedString(for: d, relativeTo: now)
     }
 
     static func tilde(_ path: String) -> String {

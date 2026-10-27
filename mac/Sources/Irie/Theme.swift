@@ -2,17 +2,21 @@ import AppKit
 import SwiftUI
 
 /// Irie's colours (the sidebar's palette in internal/ui/view.go), each with a
-/// light and a dark value.
+/// light and a dark value, and stronger ones for Increase Contrast. Text
+/// colours keep 4.5:1 on the surfaces they sit on.
 enum Theme {
     static let sun = Color(hex: 0xF2B544)
-    static let sunInk = adaptive(light: 0x8A5A00, dark: 0xF4C35F)
+    static let sunInk = adaptive(light: 0x8A5A00, dark: 0xF4C35F, contrastLight: 0x6B4500, contrastDark: 0xFFD27A)
     static let deepGreen = Color(hex: 0x1E5A42)
     static let sea = adaptive(light: 0x1E8F68, dark: 0x48C894)
-    static let needs = adaptive(light: 0xCF3D2A, dark: 0xFF6F5B)
-    static let work = adaptive(light: 0x2672B3, dark: 0x66B6F3)
-    static let done = adaptive(light: 0x21845C, dark: 0x48C894)
+    static let needs = adaptive(light: 0xB42318, dark: 0xFF6F5B, contrastLight: 0x8E1A10, contrastDark: 0xFF8A7A)
+    static let work = adaptive(light: 0x1F64A3, dark: 0x66B6F3, contrastLight: 0x164B7A, contrastDark: 0x8CCBFF)
+    static let done = adaptive(light: 0x1A6E4C, dark: 0x48C894, contrastLight: 0x12543A, contrastDark: 0x6EE0B0)
+    /// Ages, paths and other quiet text: readable, unlike `.tertiary`.
+    static let muted = adaptive(light: 0x5B6A62, dark: 0x9FB3A8, contrastLight: 0x3E4A44, contrastDark: 0xC3D3CA)
     // Solid surfaces: nothing behind the window shows through.
     static let sidebar = adaptive(light: 0xF2F6F3, dark: 0x0E1D17)
+    static let panel = adaptive(light: 0xE8EFEB, dark: 0x0B1813)
     static let field = adaptive(light: 0xFFFFFF, dark: 0x132820)
     // Card fills: the selected card, a hovered one, and one that needs you.
     static let selection = adaptive(light: 0xDDEBE3, dark: 0x173C2E)
@@ -21,9 +25,12 @@ enum Theme {
     static let terminalBackground = NSColor(hex: 0x0A1813)
     static let terminalForeground = NSColor(hex: 0xD6E7DE)
 
-    static func adaptive(light: UInt32, dark: UInt32) -> Color {
+    static func adaptive(light: UInt32, dark: UInt32, contrastLight: UInt32? = nil, contrastDark: UInt32? = nil) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(hex: dark) : NSColor(hex: light)
+            let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
+            if match == .accessibilityHighContrastDarkAqua { return NSColor(hex: contrastDark ?? dark) }
+            if match == .accessibilityHighContrastAqua { return NSColor(hex: contrastLight ?? light) }
+            return NSColor(hex: match == .darkAqua ? dark : light)
         })
     }
 }
