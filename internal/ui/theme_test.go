@@ -276,9 +276,9 @@ func TestLightOrDarkFollowsTheTerminal(t *testing.T) {
 		t.Error("a tick asks again after an answer")
 	}
 	// The command bar follows too.
-	bar := strings.Split(m.View().Content, "\n")
-	if c := cells(bar[len(bar)-1]); c[0].bg != rgb(th.light.field) {
-		t.Errorf("bar on %s, want the light field %s", c[0].bg, rgb(th.light.field))
+	bar := strings.Split(m.View().Content, "\n")[m.barTop()]
+	if c := cells(bar); c[2].bg != rgb(th.light.field) {
+		t.Errorf("bar on %s, want the light field %s", c[2].bg, rgb(th.light.field))
 	}
 	m = send(m, tea.BackgroundColorMsg{Color: lipgloss.Color("#1E1E2E")})
 	if !m.dark || groundOf(m) != rgb(th.dark.sidebar) {
@@ -323,7 +323,20 @@ func TestEveryCellIsOnThePalette(t *testing.T) {
 			m = send(m, tea.WindowSizeMsg{Width: 34, Height: h})
 			m = send(m, outsideFrame(outsideSessions(3), ""))
 			m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &plan}})
+			helped := everyState()[5]
+			helped.Subagents = []ipc.Subagent{{Type: "Explore", Detail: "Reading DESIGN.md"}, {NeedsYou: true, Detail: "Asks: may it edit go.mod?"}, {}, {}}
+			m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &helped}})
 			painted(t, name+", list", m)
+			for y := range h {
+				m = send(m, tea.MouseMotionMsg{X: 4, Y: y})
+				painted(t, fmt.Sprintf("%s, hovering row %d", name, y), m)
+			}
+			m = send(m, keyMsg("v"))
+			painted(t, name+", by state", m)
+			m = send(m, keyMsg("home"))
+			m = send(m, keyMsg("enter"))
+			painted(t, name+", folded", m)
+			m = send(m, keyMsg("v"))
 			for range 4 {
 				m = send(m, keyMsg("down"))
 			}

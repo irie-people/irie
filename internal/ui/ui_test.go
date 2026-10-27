@@ -167,6 +167,97 @@ func screen(t *testing.T, m Model) []string {
 	return strings.Split(ansiRE.ReplaceAllString(m.View().Content, ""), "\n")
 }
 
+// selectNamed selects the session, the session outside Irie or the group
+// header named name, as the arrow keys would.
+func selectNamed(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	for i, it := range m.items() {
+		if entryName(m, it) == name {
+			m.sel = i
+			m.reveal()
+			return m
+		}
+	}
+	t.Fatalf("no entry %s", name)
+	return m
+}
+
+func entryName(m Model, it item) string {
+	switch it.kind {
+	case itemSession:
+		return m.sessions[it.s].Name
+	case itemOutside:
+		return outsideLabel(m.outside[it.o])
+	}
+	return it.group.title
+}
+
+// selectedName is the name of the selected entry.
+func selectedName(m Model) string {
+	if it, ok := m.selected(); ok {
+		return entryName(m, it)
+	}
+	return ""
+}
+
+// boxRunes are the runes of borders and edges, which tests read past.
+const boxRunes = "│╭╮╰╯─▌"
+
+// plain is a line's text without its borders and edges, with each run of
+// spaces made one.
+func plain(l string) string {
+	return strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+		if strings.ContainsRune(boxRunes, r) {
+			return ' '
+		}
+		return r
+	}, l)), " ")
+}
+
+// statusText is what the status strip, or the details card with its title,
+// says, as one line of text.
+func statusText(t *testing.T, m Model) string {
+	t.Helper()
+	top := m.listTop() + m.listHeight()
+	var parts []string
+	for _, l := range screen(t, m)[top : top+m.statusHeight()] {
+		if p := plain(l); p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// barText is the command bar's lines of text.
+func barText(t *testing.T, m Model) []string {
+	t.Helper()
+	return screen(t, m)[m.barTop() : m.barTop()+m.barHeight()]
+}
+
+// lineOf is the screen row of the first line that holds s.
+func lineOf(t *testing.T, m Model, s string) int {
+	t.Helper()
+	for i, l := range screen(t, m) {
+		if strings.Contains(l, s) {
+			return i
+		}
+	}
+	t.Fatalf("%q is not on screen:\n%s", s, strings.Join(screen(t, m), "\n"))
+	return -1
+}
+
+// listText is the list's lines, read past borders and edges.
+func listText(t *testing.T, m Model) []string {
+	t.Helper()
+	var out []string
+	for _, l := range screen(t, m)[m.listTop() : m.listTop()+m.listHeight()] {
+		if p := plain(l); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func TestHeaderAndCommandBarArePinned(t *testing.T) {
 	for _, h := range []int{6, 24, 80} {
 		for _, n := range []int{0, 3, 100} {
@@ -179,16 +270,21 @@ func TestHeaderAndCommandBarArePinned(t *testing.T) {
 			if !strings.Contains(lines[0], "☀ Irie") {
 				t.Errorf("34×%d, %d rows: first line %q is not the header", h, n, lines[0])
 			}
-			if !strings.HasPrefix(lines[h-1], barPrompt) {
-				t.Errorf("34×%d, %d rows: last line %q is not the command bar", h, n, lines[h-1])
+			// The command bar's text, in its box when it has one, ends the pane.
+			bottom := m.barTop() + m.barHeight() + b2i(m.tabbed())
+			if bar := barText(t, m); bottom != h || !strings.Contains(bar[0], barPrompt) {
+				t.Errorf("34×%d, %d rows: bar %q ends on row %d", h, n, bar, bottom)
+			}
+			if m.tabbed() && !strings.HasPrefix(lines[h-1], " ╰") {
+				t.Errorf("34×%d: last line %q is not the bar's box", h, lines[h-1])
 			}
 			for i, l := range lines {
 				if w := lipgloss.Width(l); w > 34 {
 					t.Errorf("34×%d: line %d is %d columns: %q", h, i, w, l)
 				}
 			}
-			if top := m.listTop(); n > 0 && !strings.Contains(lines[top], "task-000") {
-				t.Errorf("34×%d: line %d = %q, want the first row", h, top, lines[top])
+			if list := listText(t, m); n > 0 && !strings.Contains(strings.Join(list, "\n"), "task-000") {
+				t.Errorf("34×%d: list %q lacks the first row", h, list)
 			}
 		}
 	}
@@ -223,10 +319,10 @@ func TestShortPaneHidesTheStatusStrip(t *testing.T) {
 func TestSelectedLastRowIsVisible(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 100)
 	m = send(m, keyMsg("end"))
-	if m.sel != 99 {
-		t.Fatalf("selection = %d, want 99", m.sel)
+	if got := selectedName(m); got != "task-099" {
+		t.Fatalf("selection = %s, want task-099", got)
 	}
-	if !strings.Contains(strings.Join(screen(t, m), "\n"), "task-099") {
+	if !strings.Contains(strings.Join(listText(t, m), "\n"), "task-099") {
 		t.Error("the selected last row is not on screen")
 	}
 
@@ -235,34 +331,40 @@ func TestSelectedLastRowIsVisible(t *testing.T) {
 	for range 99 {
 		m = send(m, keyMsg("down"))
 	}
-	if m.sel != 99 || !strings.Contains(strings.Join(screen(t, m), "\n"), "task-099") {
-		t.Errorf("selection %d, offset %d: last row hidden", m.sel, m.offset)
+	if selectedName(m) != "task-099" || !strings.Contains(strings.Join(listText(t, m), "\n"), "task-099") {
+		t.Errorf("selection %s, offset %d: last row hidden", selectedName(m), m.offset)
 	}
 }
 
 func TestWheelMovesTheOffsetNotTheSelection(t *testing.T) {
-	m, _ := newModel(t, 34, 24, 100)
-	sel, off := m.sel, m.offset
-	m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
-	if m.offset <= off {
-		t.Errorf("offset %d → %d after wheel down", off, m.offset)
-	}
-	if m.sel != sel {
-		t.Errorf("selection moved %d → %d", sel, m.sel)
-	}
-	if strings.Contains(screen(t, m)[m.listTop()], "task-000") {
-		t.Error("first row still on top after scrolling")
-	}
-	m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelUp})
-	if m.offset != off || m.sel != sel {
-		t.Errorf("after wheel up: offset %d selection %d", m.offset, m.sel)
-	}
-	// The wheel stops at the ends.
-	for range 200 {
+	for _, h := range []int{12, 24} { // one-line rows, then cards
+		m, _ := newModel(t, 34, h, 100)
+		sel, off := m.sel, m.offset
 		m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
-	}
-	if max := 100 - m.listHeight(); m.offset != max {
-		t.Errorf("offset %d after scrolling past the end, want %d", m.offset, max)
+		if m.offset <= off {
+			t.Errorf("34×%d: offset %d → %d after wheel down", h, off, m.offset)
+		}
+		if m.sel != sel {
+			t.Errorf("34×%d: selection moved %d → %d", h, sel, m.sel)
+		}
+		if strings.Contains(listText(t, m)[0], "Not in a repo") {
+			t.Errorf("34×%d: the group's header still on top after scrolling", h)
+		}
+		m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelUp})
+		if m.offset != off || m.sel != sel {
+			t.Errorf("34×%d: after wheel up: offset %d selection %d", h, m.offset, m.sel)
+		}
+		// The wheel stops at the end, with the last row whole on screen.
+		for range 200 {
+			m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
+		}
+		items := m.items()
+		if want := m.maxOffset(items); m.offset != want || m.span(items, m.offset, len(items)) > m.listHeight() {
+			t.Errorf("34×%d: offset %d after scrolling past the end, want %d", h, m.offset, want)
+		}
+		if list := listText(t, m); !strings.Contains(list[len(list)-1], "task-099") && !strings.Contains(strings.Join(list[max(0, len(list)-2):], " "), "task-099") {
+			t.Errorf("34×%d: the last row is not at the bottom: %q", h, list)
+		}
 	}
 }
 
@@ -273,24 +375,40 @@ func TestFramesLeaveTheListWhereItIs(t *testing.T) {
 	for range 10 {
 		m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
 	}
-	first := func() string { return screen(t, m)[m.listTop()] }
-	if !strings.Contains(first(), "task-010") {
-		t.Fatalf("first row after scrolling = %q", first())
+	first := func() string { return listText(t, m)[0] }
+	if !strings.Contains(first(), "task-009") {
+		t.Fatalf("first card after scrolling = %q", first())
 	}
 	// A row changes state while the selection is off screen.
 	row := sessions(100)[50]
 	row.State = ipc.StateNeedsYou
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &row}})
-	if !strings.Contains(first(), "task-010") {
-		t.Errorf("an upsert scrolled the list: first row %q", first())
+	if !strings.Contains(first(), "task-009") {
+		t.Errorf("an upsert scrolled the list: first card %q", first())
 	}
 	// A row above the screen goes away: the rows on screen stay put.
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameRemove, ID: "s000000000003"}})
-	if !strings.Contains(first(), "task-010") {
-		t.Errorf("a removal above the screen moved the rows: first row %q", first())
+	if !strings.Contains(first(), "task-009") {
+		t.Errorf("a removal above the screen moved the rows: first card %q", first())
 	}
-	if m.sel != 0 {
-		t.Errorf("selection moved to %d", m.sel)
+	if selectedName(m) != "task-000" {
+		t.Errorf("selection moved to %s", selectedName(m))
+	}
+	// In the State view a card that changes state moves group; the one on
+	// top leaving does not scroll the list to where it went.
+	m, _ = newModel(t, 34, 24, 100)
+	m = send(m, keyMsg("v"))
+	for range 5 {
+		m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
+	}
+	if !strings.Contains(first(), "task-004") {
+		t.Fatalf("first card after scrolling = %q", first())
+	}
+	row = sessions(100)[4]
+	row.State = ipc.StateDone
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &row}})
+	if !strings.Contains(first(), "task-005") {
+		t.Errorf("the top card went to Done and the list followed it: first card %q", first())
 	}
 }
 
@@ -312,12 +430,14 @@ func TestTypingThreeLinesGrowsTheBarAndShrinksTheList(t *testing.T) {
 	if got := m.listHeight(); got != list-2 {
 		t.Errorf("list is %d rows, want %d", got, list-2)
 	}
-	lines := screen(t, m)
-	if len(lines) != 24 {
-		t.Fatalf("%d lines", len(lines))
+	if len(screen(t, m)) != 24 {
+		t.Fatalf("%d lines", len(screen(t, m)))
 	}
-	if !strings.Contains(lines[21], "one") || !strings.Contains(lines[23], "three") {
-		t.Errorf("bar lines = %q", lines[21:])
+	if bar := barText(t, m); !strings.Contains(bar[0], "one") || !strings.Contains(bar[2], "three") {
+		t.Errorf("bar lines = %q", bar)
+	}
+	if m.compact() {
+		t.Error("cards turned into rows while typing")
 	}
 }
 
@@ -325,23 +445,22 @@ func TestTypingThreeLinesGrowsTheBarAndShrinksTheList(t *testing.T) {
 // the selected row drops out of sight.
 func TestTypingLeavesTheListWhereItIs(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 100)
-	h := m.listHeight()
-	for range h - 1 {
-		m = send(m, keyMsg("down")) // the selection is on the last row on screen
+	for m.sel < m.offset+m.visible(m.items())-1 {
+		m = send(m, keyMsg("down")) // the selection is on the last card on screen
 	}
+	want := selectedName(m)
 	m = send(m, keyMsg("tab"))
 	m = typeText(m, "one")
 	m = send(m, keyMsg("ctrl+j"))
 	m = typeText(m, "two")
 	m = send(m, keyMsg("ctrl+j"))
 	m = typeText(m, "three")
-	if first := screen(t, m)[m.listTop()]; m.offset != 0 || !strings.Contains(first, "task-000") {
-		t.Errorf("typing scrolled the list: offset %d, first row %q", m.offset, first)
+	if first := listText(t, m)[0]; m.offset != 0 || !strings.Contains(first, "Not in a repo") {
+		t.Errorf("typing scrolled the list: offset %d, first line %q", m.offset, first)
 	}
-	// Back in the list, the selected row is on screen again.
+	// Back in the list, the selected card is on screen again.
 	m = send(m, keyMsg("esc"))
-	rows := strings.Join(screen(t, m)[m.listTop():m.listTop()+m.listHeight()], "\n")
-	if want := fmt.Sprintf("task-%03d", h-1); !strings.Contains(rows, want) {
+	if rows := strings.Join(listText(t, m), "\n"); !strings.Contains(rows, want) {
 		t.Errorf("%s not on screen after Esc:\n%s", want, rows)
 	}
 }
@@ -359,20 +478,32 @@ func TestTheTerminalCursorIsInTheCommandBar(t *testing.T) {
 	if c == nil {
 		t.Fatal("no cursor in the command bar")
 	}
-	if want := (tea.Position{X: lipgloss.Width(barPrompt) + 3, Y: 23}); c.Position != want {
+	// Inside the box: a column of margin and one of border, and the line
+	// above the box's bottom border.
+	if want := (tea.Position{X: 2 + lipgloss.Width(barPrompt) + 3, Y: 22}); c.Position != want {
 		t.Errorf("cursor at %+v, want %+v", c.Position, want)
+	}
+	if got := []rune(screen(t, m)[22])[c.Position.X-1]; got != 'c' {
+		t.Errorf("the cursor follows %q, want the c typed last", got)
 	}
 	if c.Color != nil {
 		t.Errorf("cursor colour %v; the terminal's own suits its theme", c.Color)
 	}
 	m = send(m, keyMsg("ctrl+j"))
 	m = typeText(m, "de")
-	if c := m.View().Cursor; c == nil || c.Position != (tea.Position{X: lipgloss.Width(barPrompt) + 2, Y: 23}) {
+	if c := m.View().Cursor; c == nil || c.Position != (tea.Position{X: 2 + lipgloss.Width(barPrompt) + 2, Y: 22}) {
 		t.Errorf("second line: cursor %+v", c)
 	}
 	m = send(m, keyMsg("esc"))
 	if c := m.View().Cursor; c != nil {
 		t.Errorf("cursor at %+v after leaving the bar", c.Position)
+	}
+	// Without the box, below 10 rows, it sits on the last line.
+	m, _ = newModel(t, 34, 8, 3)
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "abc")
+	if c := m.View().Cursor; c == nil || c.Position != (tea.Position{X: lipgloss.Width(barPrompt) + 3, Y: 7}) {
+		t.Errorf("34×8: cursor %+v", c)
 	}
 }
 
@@ -382,14 +513,16 @@ func TestABlurredTaskKeepsTheInk(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 3)
 	m = send(m, keyMsg("tab"))
 	m = typeText(m, "half a task")
-	m = send(m, tea.MouseClickMsg{X: 3, Y: m.listTop(), Button: tea.MouseLeft})
-	raw := strings.Split(m.View().Content, "\n")
-	bar := raw[len(raw)-1]
+	m = send(m, tea.MouseClickMsg{X: 3, Y: lineOf(t, m, "task-001"), Button: tea.MouseLeft})
+	if m.focus != focusList {
+		t.Fatal("a click on a card left the keyboard in the bar")
+	}
+	bar := strings.Split(m.View().Content, "\n")[m.barTop()]
 	if !strings.Contains(ansiRE.ReplaceAllString(bar, ""), "half a task") {
 		t.Fatalf("bar = %q", bar)
 	}
 	for _, c := range cells(bar) {
-		if strings.TrimSpace(c.r) != "" && c.r != "›" && c.fg != rgb(m.pal.ink) {
+		if strings.TrimSpace(c.r) != "" && !strings.Contains("›"+boxRunes, c.r) && c.fg != rgb(m.pal.ink) {
 			t.Errorf("blurred task: %q in %s, want ink %s", c.r, c.fg, rgb(m.pal.ink))
 			break
 		}
@@ -428,13 +561,19 @@ func TestEnterShowsWithFocusAndSpaceWithout(t *testing.T) {
 }
 
 func TestClickShowsTheRow(t *testing.T) {
-	m, b := newModel(t, 34, 24, 3)
-	m = send(m, tea.MouseClickMsg{X: 3, Y: m.listTop() + 2, Button: tea.MouseLeft})
-	if want := []showCall{{"s000000000002", true}}; !reflect.DeepEqual(b.shows, want) {
-		t.Errorf("shows = %+v, want %+v", b.shows, want)
-	}
-	if m.sel != 2 {
-		t.Errorf("selection = %d", m.sel)
+	for _, h := range []int{12, 24} { // a row, then any line of a card
+		m, b := newModel(t, 34, h, 3)
+		y := lineOf(t, m, "task-002")
+		if !m.compact() {
+			y-- // the card's top border
+		}
+		m = send(m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft})
+		if want := []showCall{{"s000000000002", true}}; !reflect.DeepEqual(b.shows, want) {
+			t.Errorf("34×%d: shows = %+v, want %+v", h, b.shows, want)
+		}
+		if selectedName(m) != "task-002" {
+			t.Errorf("34×%d: selection = %s", h, selectedName(m))
+		}
 	}
 }
 
@@ -457,8 +596,27 @@ func TestSubmitSpawnsAndSelectsTheNewRow(t *testing.T) {
 	}
 	created := ipc.Session{ID: "snew00000001", Name: "describe-this-repo", State: ipc.StateWorking, Created: now}
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &created}})
-	if m.sel != 0 || m.sessions[0].ID != created.ID {
+	if s, ok := m.selSession(); !ok || s.ID != created.ID {
 		t.Errorf("new row not selected: sel %d sessions %+v", m.sel, m.sessions)
+	}
+}
+
+// A task started in a folded group unfolds it, so its card shows.
+func TestANewTaskUnfoldsItsGroup(t *testing.T) {
+	m, b := newModel(t, 34, 24, 3)
+	m = selectNamed(t, m, "Not in a repo")
+	m = send(m, keyMsg("enter"))
+	if !m.folded[notInARepo] {
+		t.Fatal("Enter on the header did not fold it")
+	}
+	b.spawned = &ipc.Session{ID: "snew00000001", Name: "fresh"}
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "fresh")
+	m = send(m, keyMsg("enter"))
+	fresh := ipc.Session{ID: "snew00000001", Name: "fresh", State: ipc.StateStarting, Created: now}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &fresh}})
+	if m.folded[notInARepo] || selectedName(m) != "fresh" || !strings.Contains(strings.Join(listText(t, m), "\n"), "fresh") {
+		t.Errorf("folded %v, selection %s, list %q", m.folded, selectedName(m), listText(t, m))
 	}
 }
 
@@ -501,21 +659,27 @@ func TestSelectionFollowsARemovedRow(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 3)
 	m = send(m, keyMsg("down"))
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameRemove, ID: "s000000000001"}})
-	if m.sel != 1 || m.sessions[m.sel].ID != "s000000000002" {
+	if s, ok := m.selSession(); !ok || s.ID != "s000000000002" {
 		t.Errorf("selection = %d (%v)", m.sel, m.sessions)
 	}
 }
 
+// A name too long for its card or row is cut with an ellipsis; the status
+// strip, or the details card's title, shows more of it.
 func TestLongNamesAreCut(t *testing.T) {
-	m, _ := newModel(t, 34, 24, 0)
-	long := ipc.Session{ID: "s1", Name: "a-very-long-session-name-that-will-not-fit", State: ipc.StateWorking, Created: now}
-	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &long}})
-	lines := screen(t, m)
-	if row := lines[m.listTop()]; !strings.Contains(row, "…") {
-		t.Errorf("row = %q, want an ellipsis", row)
-	}
-	if !strings.Contains(strings.Join(lines, "\n"), "a-very-long-session-name-that") {
-		t.Errorf("full name not in the status strip:\n%s", strings.Join(lines, "\n"))
+	for _, c := range []struct {
+		h    int
+		more string
+	}{{20, "a-very-long-session-name-that"}, {24, "a-very-long-session-name-"}} {
+		m, _ := newModel(t, 34, c.h, 0)
+		long := ipc.Session{ID: "s1", Name: "a-very-long-session-name-that-will-not-fit", State: ipc.StateWorking, Created: now}
+		m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &long}})
+		if row := screen(t, m)[lineOf(t, m, "a-very-long")]; !strings.Contains(row, "…") {
+			t.Errorf("34×%d: row = %q, want an ellipsis", c.h, row)
+		}
+		if got := statusText(t, m); !strings.Contains(got, c.more) {
+			t.Errorf("34×%d: the name is not in the status: %q", c.h, got)
+		}
 	}
 }
 
@@ -543,31 +707,67 @@ func TestZeroCountsAreNotRed(t *testing.T) {
 	}
 }
 
-func TestRulesNeedRoom(t *testing.T) {
-	isRule := func(l string) bool { return strings.Contains(l, "────") }
+// The tab bar and the command bar's box take three rows, so they wait for a
+// pane of 10.
+func TestTabsAndTheBoxNeedRoom(t *testing.T) {
 	m, _ := newModel(t, 34, 9, 3)
 	for i, l := range screen(t, m) {
-		if isRule(l) {
-			t.Errorf("height 9: line %d is a rule", i)
+		if strings.Contains(l, "State │ Repo") || strings.ContainsAny(l, "╭╰") {
+			t.Errorf("height 9: line %d = %q", i, l)
 		}
 	}
 	m, _ = newModel(t, 34, 10, 3)
 	lines := screen(t, m)
-	if !isRule(lines[1]) || !isRule(lines[len(lines)-3]) {
-		t.Errorf("height 10: no rules under the header and above the status strip:\n%s", strings.Join(lines, "\n"))
+	if lines[1] != "  State │ Repo                    " || !strings.HasPrefix(lines[9], " ╰") || !strings.HasPrefix(lines[7], " ╭") {
+		t.Errorf("height 10: no tabs under the header or no box around the bar:\n%s", strings.Join(lines, "\n"))
 	}
-	if !strings.Contains(lines[2], "task-000") {
-		t.Errorf("height 10: line 2 = %q, want the first row", lines[2])
+	if !strings.Contains(lines[2], "Not in a repo") || !strings.Contains(lines[3], "task-000") {
+		t.Errorf("height 10: lines 2 and 3 = %q, %q, want the group and its first row", lines[2], lines[3])
 	}
 }
 
-func TestSelectionHasAnEdge(t *testing.T) {
-	m, _ := newModel(t, 34, 24, 3)
-	if row := screen(t, m)[m.listTop()]; !strings.HasPrefix(row, "▌◐ task-000") {
+// The selected row has the accent edge on the selection fill; the selected
+// card the selection fill inside an accent border. With the keyboard in the
+// command bar, the accent goes there.
+func TestTheSelectionStandsOut(t *testing.T) {
+	m, _ := newModel(t, 34, 12, 3)
+	if row := screen(t, m)[lineOf(t, m, "task-000")]; !strings.HasPrefix(row, "▌◐ task-000") {
 		t.Errorf("selected row = %q", row)
 	}
-	if row := screen(t, m)[m.listTop()+1]; !strings.HasPrefix(row, " ◐ task-001") {
+	if row := screen(t, m)[lineOf(t, m, "task-001")]; !strings.HasPrefix(row, " ◐ task-001") {
 		t.Errorf("other row = %q", row)
+	}
+	if c := cells(strings.Split(m.View().Content, "\n")[lineOf(t, m, "task-000")]); c[0].fg != rgb(m.pal.accent) || c[3].bg != rgb(m.pal.selection) {
+		t.Errorf("selected row: edge %s on %s", c[0].fg, c[3].bg)
+	}
+
+	m, _ = newModel(t, 34, 24, 3)
+	raw := strings.Split(m.View().Content, "\n")
+	card := func(name string) (edge, fill string) {
+		y := lineOf(t, m, name)
+		c := cells(raw[y])
+		return c[1].fg, c[4].bg
+	}
+	if e, f := card("task-000"); e != rgb(m.pal.accent) || f != rgb(m.pal.selection) {
+		t.Errorf("selected card: border %s, fill %s", e, f)
+	}
+	if e, f := card("task-001"); e != rgb(m.pal.edge) || f != rgb(m.pal.card) {
+		t.Errorf("other card: border %s, fill %s", e, f)
+	}
+	box := func() string { return cells(strings.Split(m.View().Content, "\n")[m.barTop()])[1].fg }
+	if box() != rgb(m.pal.edge) {
+		t.Errorf("the bar's box is %s while the list has the keyboard", box())
+	}
+	m = send(m, keyMsg("tab"))
+	raw = strings.Split(m.View().Content, "\n")
+	if e, f := card("task-000"); e != rgb(m.pal.edge) || f != rgb(m.pal.selection) {
+		t.Errorf("selected card, keyboard in the bar: border %s, fill %s", e, f)
+	}
+	if box() != rgb(m.pal.accent) {
+		t.Errorf("the bar's box is %s while it has the keyboard", box())
+	}
+	if !strings.Contains(barText(t, m)[0], "What should we work on?") {
+		t.Errorf("placeholder %q", barText(t, m)[0])
 	}
 }
 
@@ -806,10 +1006,13 @@ func TestTheStatusStripSaysWhereATaskWent(t *testing.T) {
 	}
 	m = typeText(m, "@website fix it")
 	m = send(m, keyMsg("enter"))
-	status := screen(t, m)[len(screen(t, m))-2]
-	for _, want := range []string{"irie/fix-it", "copied .env, CLAUDE.local.md", "2 uncommitted changes"} {
-		if !strings.Contains(status, want) {
-			t.Errorf("status strip %q lacks %q", status, want)
+	for _, h := range []int{24, 20} { // the details card, then the strip
+		m = send(m, tea.WindowSizeMsg{Width: 80, Height: h})
+		status := statusText(t, m)
+		for _, want := range []string{"irie/fix-it", "copied .env, CLAUDE.local.md", "2 uncommitted changes"} {
+			if !strings.Contains(status, want) {
+				t.Errorf("80×%d: status %q lacks %q", h, status, want)
+			}
 		}
 	}
 }
@@ -871,13 +1074,24 @@ func everyState() []ipc.Session {
 
 func statesModel(t *testing.T, o Options) Model {
 	t.Helper()
+	return statesAt(t, o, 34, 24)
+}
+
+// statesAt is every state in a pane of w×h.
+func statesAt(t *testing.T, o Options, w, h int) Model {
+	t.Helper()
 	o.Now = func() time.Time { return now }
 	m := New(&fakeBackend{}, o)
-	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 24})
+	m = send(m, tea.WindowSizeMsg{Width: w, Height: h})
 	return send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: everyState(), Header: &ipc.Header{}}})
 }
 
-// rowLine returns the raw (styled) screen line of the row named name.
+// layouts are panes that show every state at once: one-line rows in a
+// narrow pane, and cards in a tall one.
+var layouts = [][2]int{{22, 40}, {34, 80}}
+
+// rowLine returns the raw (styled) screen line of the row named name, or
+// of the line of its card that has its name.
 func rowLine(t *testing.T, m Model, name string) string {
 	t.Helper()
 	for _, l := range strings.Split(m.View().Content, "\n") {
@@ -890,16 +1104,21 @@ func rowLine(t *testing.T, m Model, name string) string {
 }
 
 func TestEveryStateHasItsGlyph(t *testing.T) {
-	m := statesModel(t, Options{})
-	m = send(m, keyMsg("tab")) // the selection bar would hide nothing, but keep rows plain
-	for name, glyph := range map[string]string{
-		"failed-row": "✕", "exited-ok": "·", "exited-bad": "✕", "needs-row": "●", "stalled-row": "!",
-		"working-row": "◐", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
-		"frozen-row": "◆", "paused-row": "‖", "pausing-row": "‖",
-	} {
-		plain := strings.TrimLeft(ansiRE.ReplaceAllString(rowLine(t, m, name), ""), " ▌")
-		if !strings.HasPrefix(plain, glyph+" "+name) {
-			t.Errorf("row %q, want glyph %s", plain, glyph)
+	for _, size := range layouts {
+		m := statesAt(t, Options{}, size[0], size[1])
+		if m.compact() != (size[0] < cardMinWidth) {
+			t.Fatalf("%d×%d: compact %v", size[0], size[1], m.compact())
+		}
+		m = send(m, keyMsg("tab")) // the selection bar would hide nothing, but keep rows plain
+		for name, glyph := range map[string]string{
+			"failed-row": "✕", "exited-ok": "·", "exited-bad": "✕", "needs-row": "●", "stalled-row": "!",
+			"working-row": "◐", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
+			"frozen-row": "◆", "paused-row": "‖", "pausing-row": "‖",
+		} {
+			plain := strings.TrimLeft(ansiRE.ReplaceAllString(rowLine(t, m, name), ""), " ▌│")
+			if !strings.HasPrefix(plain, glyph+" "+name) {
+				t.Errorf("%d×%d: row %q, want glyph %s", size[0], size[1], plain, glyph)
+			}
 		}
 	}
 }
@@ -1004,7 +1223,7 @@ func glyphAndName(t *testing.T, m Model, name string) (glyph, nameFG string) {
 	t.Helper()
 	cs := cells(rowLine(t, m, name))
 	for i, c := range cs {
-		if strings.TrimSpace(c.r) == "" || c.r == "▌" {
+		if strings.TrimSpace(c.r) == "" || strings.Contains(boxRunes, c.r) {
 			continue
 		}
 		for j := i + 1; j < len(cs); j++ {
@@ -1022,72 +1241,103 @@ func glyphAndName(t *testing.T, m Model, name string) (glyph, nameFG string) {
 // muted. A dim red or dim yellow row has the colour in its glyph and a muted
 // name.
 func TestEveryStateHasItsColours(t *testing.T) {
-	m := statesModel(t, Options{})
-	m = send(m, keyMsg("tab"))
-	p := m.pal
-	for name, want := range map[string][2]color.Color{
-		"failed-row":   {p.needs, p.needs},
-		"exited-ok":    {p.muted, p.muted},
-		"exited-bad":   {p.needs, p.muted},
-		"frozen-row":   {p.frozen, p.ink},
-		"paused-row":   {p.paused, p.ink},
-		"needs-row":    {p.needs, p.needs},
-		"stalled-row":  {p.needs, p.needs},
-		"pausing-row":  {p.paused, p.muted},
-		"working-row":  {p.ink, p.ink},
-		"starting-row": {p.muted, p.muted},
-		"done-row":     {p.done, p.ink},
-		"idle-row":     {p.muted, p.muted},
-	} {
-		if g, n := glyphAndName(t, m, name); g != rgb(want[0]) || n != rgb(want[1]) {
-			t.Errorf("%s: glyph %s and name %s, want %s and %s", name, g, n, rgb(want[0]), rgb(want[1]))
+	for _, size := range layouts {
+		m := statesAt(t, Options{}, size[0], size[1])
+		m = send(m, keyMsg("tab"))
+		p := m.pal
+		for name, want := range map[string][2]color.Color{
+			"failed-row":   {p.needs, p.needs},
+			"exited-ok":    {p.muted, p.muted},
+			"exited-bad":   {p.needs, p.muted},
+			"frozen-row":   {p.frozen, p.ink},
+			"paused-row":   {p.paused, p.ink},
+			"needs-row":    {p.needs, p.needs},
+			"stalled-row":  {p.needs, p.needs},
+			"pausing-row":  {p.paused, p.muted},
+			"working-row":  {p.ink, p.ink},
+			"starting-row": {p.muted, p.muted},
+			"done-row":     {p.done, p.ink},
+			"idle-row":     {p.muted, p.muted},
+		} {
+			if g, n := glyphAndName(t, m, name); g != rgb(want[0]) || n != rgb(want[1]) {
+				t.Errorf("%d×%d %s: glyph %s and name %s, want %s and %s", size[0], size[1], name, g, n, rgb(want[0]), rgb(want[1]))
+			}
 		}
-	}
-	m = statesModel(t, Options{RedOnDone: true})
-	m = send(m, keyMsg("tab"))
-	if g, n := glyphAndName(t, m, "done-row"); g != rgb(m.pal.needs) || n != rgb(m.pal.needs) {
-		t.Errorf("red_on_done: done row's glyph %s and name %s, want the needs colour", g, n)
+		m = statesAt(t, Options{RedOnDone: true}, size[0], size[1])
+		m = send(m, keyMsg("tab"))
+		if g, n := glyphAndName(t, m, "done-row"); g != rgb(m.pal.needs) || n != rgb(m.pal.needs) {
+			t.Errorf("%d×%d red_on_done: done row's glyph %s and name %s, want the needs colour", size[0], size[1], g, n)
+		}
 	}
 }
 
 func TestRedMarksOnlyTheRowsThatNeedYou(t *testing.T) {
-	m := statesModel(t, Options{})
-	m = send(m, keyMsg("tab"))
-	for name, wantRed := range map[string]bool{
-		"failed-row": true, "exited-bad": true, "needs-row": true, "stalled-row": true,
-		"exited-ok": false, "working-row": false, "starting-row": false, "done-row": false, "idle-row": false,
-		"frozen-row": false, "paused-row": false, "pausing-row": false,
-	} {
-		if got := hasFG(rowLine(t, m, name), m.pal.needs); got != wantRed {
-			t.Errorf("%s: red %v, want %v: %q", name, got, wantRed, rowLine(t, m, name))
+	for _, size := range layouts {
+		m := statesAt(t, Options{}, size[0], size[1])
+		m = send(m, keyMsg("tab"))
+		for name, wantRed := range map[string]bool{
+			"failed-row": true, "exited-bad": true, "needs-row": true, "stalled-row": true,
+			"exited-ok": false, "working-row": false, "starting-row": false, "done-row": false, "idle-row": false,
+			"frozen-row": false, "paused-row": false, "pausing-row": false,
+		} {
+			if got := hasFG(rowLine(t, m, name), m.pal.needs); got != wantRed {
+				t.Errorf("%d×%d %s: red %v, want %v: %q", size[0], size[1], name, got, wantRed, rowLine(t, m, name))
+			}
 		}
-	}
-	if !hasFG(rowLine(t, m, "done-row"), m.pal.done) {
-		t.Errorf("done row is not green: %q", rowLine(t, m, "done-row"))
-	}
-	// ui.red_on_done shows done in red instead.
-	m = statesModel(t, Options{RedOnDone: true})
-	m = send(m, keyMsg("tab"))
-	if !hasFG(rowLine(t, m, "done-row"), m.pal.needs) {
-		t.Errorf("red_on_done: done row %q", rowLine(t, m, "done-row"))
+		if !hasFG(rowLine(t, m, "done-row"), m.pal.done) {
+			t.Errorf("done row is not green: %q", rowLine(t, m, "done-row"))
+		}
+		// ui.red_on_done shows done in red instead.
+		m = statesAt(t, Options{RedOnDone: true}, size[0], size[1])
+		m = send(m, keyMsg("tab"))
+		if !hasFG(rowLine(t, m, "done-row"), m.pal.needs) {
+			t.Errorf("red_on_done: done row %q", rowLine(t, m, "done-row"))
+		}
 	}
 }
 
 // Without colour (NO_COLOR, a monochrome terminal, colour blindness) a red
 // row still looks different from every row that is not red.
 func TestRedIsNeverTheOnlyCue(t *testing.T) {
-	m := statesModel(t, Options{})
-	m = send(m, keyMsg("tab"))
-	rows := map[bool]map[string]string{true: {}, false: {}} // red → glyph → row
-	for _, s := range everyState() {
-		raw := rowLine(t, m, s.Name)
-		glyph := strings.Fields(strings.TrimLeft(ansiRE.ReplaceAllString(raw, ""), " ▌"))[0]
-		rows[hasFG(raw, m.pal.needs)][glyph] = s.Name
-	}
-	for glyph, name := range rows[true] {
-		if other, ok := rows[false][glyph]; ok {
-			t.Errorf("%s and %s are both %s: only red tells them apart", name, other, glyph)
+	for _, size := range layouts {
+		m := statesAt(t, Options{}, size[0], size[1])
+		m = send(m, keyMsg("tab"))
+		rows := map[bool]map[string]string{true: {}, false: {}} // red → glyph → row
+		for _, s := range everyState() {
+			raw := rowLine(t, m, s.Name)
+			glyph := strings.Fields(strings.TrimLeft(ansiRE.ReplaceAllString(raw, ""), " ▌│"))[0]
+			rows[hasFG(raw, m.pal.needs)][glyph] = s.Name
 		}
+		for glyph, name := range rows[true] {
+			if other, ok := rows[false][glyph]; ok {
+				t.Errorf("%d×%d: %s and %s are both %s: only red tells them apart", size[0], size[1], name, other, glyph)
+			}
+		}
+	}
+}
+
+// A card that needs you is tinted and edged in red, and says what it needs
+// in red; any other card says what it does in muted.
+func TestACardThatNeedsYouIsTinted(t *testing.T) {
+	m := statesAt(t, Options{}, 34, 80)
+	m = send(m, keyMsg("tab"))
+	p := m.pal
+	for name, want := range map[string][3]color.Color{
+		"needs-row":   {p.needs, p.needsTint, p.needs},
+		"stalled-row": {p.needs, p.needsTint, p.needs},
+		"working-row": {p.edge, p.card, p.muted},
+		"exited-bad":  {p.edge, p.card, p.muted},
+	} {
+		raw := strings.Split(m.View().Content, "\n")
+		y := lineOf(t, m, name)
+		line1, line2 := cells(raw[y]), cells(raw[y+1])
+		if line1[1].fg != rgb(want[0]) || line1[4].bg != rgb(want[1]) || line2[3].fg != rgb(want[2]) {
+			t.Errorf("%s: border %s, fill %s, detail %s", name, line1[1].fg, line1[4].bg, line2[3].fg)
+		}
+	}
+	// The second line falls back to the state in words.
+	if row := screen(t, m)[lineOf(t, m, "starting-row")+1]; !strings.Contains(row, "Starting") {
+		t.Errorf("starting-row's second line = %q", row)
 	}
 }
 
@@ -1124,23 +1374,65 @@ func TestZeroCountsAreFaint(t *testing.T) {
 }
 
 func TestStatusStripShowsWhyAndWhat(t *testing.T) {
-	m := statesModel(t, Options{})
-	status := func() string { return screen(t, m)[len(screen(t, m))-2] }
-	for i, want := range []string{
-		"failed: exit 1", "exited 0", "exited 2", "asks: Which colour", "stalled: no hooks", "Bash · go test", "starting-row", "done-row", "idle-row",
-	} {
-		m.sel = i
-		if !strings.Contains(status(), want) {
-			t.Errorf("row %d: status strip %q, want %q", i, status(), want)
+	for _, h := range []int{20, 24} { // the strip, then the details card
+		m := statesAt(t, Options{}, 80, h)
+		for name, want := range map[string]string{
+			"failed-row": "failed: exit 1", "exited-ok": "exited 0", "exited-bad": "exited 2", "needs-row": "asks: Which colour",
+			"stalled-row": "stalled: no hooks", "working-row": "Bash · go test", "starting-row": "starting-row", "done-row": "done-row", "idle-row": "idle-row",
+		} {
+			m = selectNamed(t, m, name)
+			if got := statusText(t, m); !strings.Contains(got, want) {
+				t.Errorf("80×%d %s: status %q, want %q", h, name, got, want)
+			}
+		}
+		// A warning shows when there is nothing more pressing to say.
+		rows := everyState()
+		rows[6].Warnings = []string{"pause off: Claude Code 2.1.200 is older than 2.1.295"}
+		m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[6]}})
+		m = selectNamed(t, m, "starting-row")
+		if got := statusText(t, m); !strings.Contains(got, "pause off: Claude Code 2.1.200") {
+			t.Errorf("80×%d: status %q, want the warning", h, got)
 		}
 	}
-	// A warning shows when there is nothing more pressing to say.
-	rows := everyState()
-	rows[6].Warnings = []string{"pause off: Claude Code 2.1.200 is older than 2.1.295"}
-	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[6]}})
-	m.sel = 6
-	if !strings.Contains(status(), "pause off: Claude Code 2.1.200") {
-		t.Errorf("status strip %q, want the warning", status())
+}
+
+// From 24 rows the status strip is a details card: the selected session's
+// name in its border, then its state with what it costs, what it is doing,
+// the exact call, and its branch and folder.
+func TestTheDetailsCard(t *testing.T) {
+	m, _ := newModel(t, 60, 24, 0)
+	cost := 0.5
+	s := ipc.Session{
+		ID: "s1", Name: "fix-flaky-test", State: ipc.StateWorking, Created: now, CostUSD: &cost,
+		Detail: "Running the tests", Command: "Bash · go test ./...",
+		Branch: "irie/fix-flaky-test", Cwd: "/home/alice/code/irie",
+	}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: []ipc.Session{s}, Header: &ipc.Header{}}})
+	lines := screen(t, m)
+	top := m.listTop() + m.listHeight()
+	want := []string{
+		" ╭─ fix-flaky-test ─",
+		" │ ◐ Working · $0.50",
+		" │ Running the tests",
+		" │ Bash · go test ./...",
+		" │ irie/fix-flaky-test · ~/code/irie",
+		" ╰─",
+	}
+	if m.statusHeight() != len(want) {
+		t.Fatalf("details card of %d lines", m.statusHeight())
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(lines[top+i], w) {
+			t.Errorf("details line %d = %q, want it to start %q", i, lines[top+i], w)
+		}
+	}
+	if c := cells(strings.Split(m.View().Content, "\n")[top+1]); c[3].bg != rgb(m.pal.panel) {
+		t.Errorf("details card on %s, want the panel", c[3].bg)
+	}
+	// Below 24 rows it is one line again.
+	m = send(m, tea.WindowSizeMsg{Width: 60, Height: 23})
+	if m.statusHeight() != 1 || !strings.Contains(statusText(t, m), "Running the tests (Bash · go test ./...)") {
+		t.Errorf("60×23: status %q", statusText(t, m))
 	}
 }
 
@@ -1176,14 +1468,17 @@ func TestStatusStripSaysWhatASessionCosts(t *testing.T) {
 	rows[1].Local, rows[1].Model, rows[1].Memory = true, "qwen3.5:9b", 512_000_000
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
 	m = send(m, keyMsg("esc"))
-	status := func() string { s := screen(t, m); return s[len(s)-2] }
-	m.sel = 0
-	if !strings.Contains(status(), "$1.23 ctx 41% 640 MB · task-000") {
-		t.Errorf("status strip %q", status())
+	m = selectNamed(t, m, "task-000")
+	if got := statusText(t, m); !strings.Contains(got, "Working · $1.23 ctx 41% 640 MB") {
+		t.Errorf("details card %q", got)
 	}
-	m.sel = 1
-	if !strings.Contains(status(), "local 512 MB · task-001") {
-		t.Errorf("status strip %q", status())
+	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 20})
+	if got := statusText(t, m); !strings.Contains(got, "$1.23 ctx 41% 640 MB · task-000") {
+		t.Errorf("status strip %q", got)
+	}
+	m = selectNamed(t, m, "task-001")
+	if got := statusText(t, m); !strings.Contains(got, "local 512 MB · task-001") {
+		t.Errorf("status strip %q", got)
 	}
 }
 
@@ -1209,7 +1504,7 @@ func TestColonCommands(t *testing.T) {
 		t.Errorf("tools %v", b.tools)
 	}
 	// A rating goes to the selected session.
-	m.sel = 1
+	m = selectNamed(t, m, "task-001")
 	enter(":rate bad")
 	if !reflect.DeepEqual(b.rates, []string{m.sessions[1].ID + " bad"}) || !strings.Contains(m.status, "rated task-001 bad") {
 		t.Errorf("rates %v, status %q", b.rates, m.status)
@@ -1229,7 +1524,7 @@ func TestColonCommands(t *testing.T) {
 func TestPlusAndMinusRateTheSelectedRow(t *testing.T) {
 	m, b := newModel(t, 60, 24, 3)
 	m = send(m, keyMsg("esc"))
-	m.sel = 2
+	m = selectNamed(t, m, "task-002")
 	m = send(m, keyMsg("+"))
 	m = send(m, keyMsg("-"))
 	if want := []string{m.sessions[2].ID + " good", m.sessions[2].ID + " bad"}; !reflect.DeepEqual(b.rates, want) {
@@ -1247,14 +1542,17 @@ func TestStatusStripSaysHowASessionWasRouted(t *testing.T) {
 	rows[1].Parent = rows[0].ID
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
 	m = send(m, keyMsg("esc"))
-	status := func() string { s := screen(t, m); return s[len(s)-2] }
-	m.sel = 0
-	if !strings.Contains(status(), "small→local rated good · task-000") {
-		t.Errorf("status strip %q", status())
+	m = selectNamed(t, m, "task-000")
+	if got := statusText(t, m); !strings.Contains(got, "Working · small→local rated good") {
+		t.Errorf("details card %q", got)
 	}
-	m.sel = 1
-	if !strings.Contains(status(), "↳ delegated · task-001") {
-		t.Errorf("status strip %q", status())
+	m = send(m, tea.WindowSizeMsg{Width: 90, Height: 20})
+	if got := statusText(t, m); !strings.Contains(got, "small→local rated good · task-000") {
+		t.Errorf("status strip %q", got)
+	}
+	m = selectNamed(t, m, "task-001")
+	if got := statusText(t, m); !strings.Contains(got, "↳ delegated · task-001") {
+		t.Errorf("status strip %q", got)
 	}
 }
 

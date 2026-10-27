@@ -1,6 +1,7 @@
 // Package ui is the sidebar (DESIGN §4.1): a header pinned at the top, the
-// session list, a status strip and a command bar pinned at the bottom. It is
-// a pure client of the core's socket and never calls tmux.
+// State │ Repo tabs, the session list in groups of cards, a status strip or
+// details card, and a command bar pinned at the bottom. It is a pure client
+// of the core's socket and never calls tmux.
 package ui
 
 import (
@@ -124,8 +125,11 @@ type Model struct {
 	head          ipc.Header // the plan's use and the machine's memory
 
 	sessions []ipc.Session
-	sel      int // selected row, -1 when the list is empty
-	offset   int // first visible row
+	view     listView        // how the list groups them (list.go)
+	folded   map[string]bool // folded groups, by key; never changed in place
+	sel      int             // the selected entry of items(), -1 when the list is empty
+	offset   int             // the first entry on screen
+	hover    string          // the key of the entry or tab under the pointer
 	pending  string
 
 	outside        []ipc.OutsideSession // the Outside Irie group, after the sessions (outside.go)
@@ -156,7 +160,7 @@ func New(b Backend, o Options) Model {
 	bar.MaxContentHeight = math.MaxInt32
 	bar.DynamicHeight = true
 	bar.MinHeight = 1
-	bar.Placeholder = "new task (Enter starts it)"
+	bar.Placeholder = "What should we work on?"
 	bar.SetPromptFunc(lipgloss.Width(barPrompt), func(info textarea.PromptInfo) string {
 		if info.LineNumber == 0 {
 			return barPrompt
@@ -184,45 +188,6 @@ func tick() tea.Cmd {
 
 func (m Model) Init() tea.Cmd { return tea.Batch(tick(), tea.RequestBackgroundColor) }
 
-// Heights. The header and the command bar are pinned; the list takes the
-// rest. Thin rules frame the list once the pane has room for them. Below 6
-// rows the status strip is hidden and the bar is one line.
-
-func (m Model) statusVisible() bool { return m.height >= 6 }
-
-func (m Model) ruled() bool { return m.height >= 10 }
-
-// chrome is the number of rows that are neither the list nor the bar.
-func (m Model) chrome() int {
-	n := 1
-	if m.statusVisible() {
-		n++
-	}
-	if m.ruled() {
-		n += 2
-	}
-	return n
-}
-
-// listTop is the screen row of the first list row.
-func (m Model) listTop() int {
-	if m.ruled() {
-		return 2
-	}
-	return 1
-}
-
-func (m Model) maxBar() int {
-	if !m.statusVisible() {
-		return 1
-	}
-	return max(1, min(maxBarLines, m.height-m.chrome()-1))
-}
-
-func (m Model) barHeight() int { return min(max(m.bar.Height(), 1), m.maxBar()) }
-
-func (m Model) listHeight() int { return max(m.height-m.chrome()-m.barHeight(), 0) }
-
 func (m *Model) setFocus(f focusArea) {
 	m.focus = f
 	if f == focusBar {
@@ -233,47 +198,6 @@ func (m *Model) setFocus(f focusArea) {
 }
 
 func (m *Model) setStatus(s string, isErr bool) { m.status, m.statusErr = s, isErr }
-
-func (m *Model) clamp() {
-	n := m.rowCount()
-	if n == 0 {
-		m.sel, m.offset = -1, 0
-		return
-	}
-	m.sel = min(max(m.sel, 0), n-1)
-	m.offset = min(max(m.offset, 0), max(0, n-m.listHeight()))
-}
-
-// reveal scrolls so the selected row is visible.
-func (m *Model) reveal() {
-	m.clamp()
-	if m.sel < 0 {
-		return
-	}
-	if h := m.listHeight(); h > 0 {
-		if m.sel < m.offset {
-			m.offset = m.sel
-		}
-		if m.sel >= m.offset+h {
-			m.offset = m.sel - h + 1
-		}
-	}
-	m.clamp()
-}
-
-func (m *Model) moveTo(i int) {
-	m.sel = i
-	m.reveal()
-}
-
-func (m *Model) scroll(n int) {
-	m.offset += n
-	if rows := m.rowCount(); rows > 0 {
-		m.offset = min(max(m.offset, 0), max(0, rows-m.listHeight()))
-	} else {
-		m.offset = 0
-	}
-}
 
 func (m Model) index(id string) int {
 	return slices.IndexFunc(m.sessions, func(s ipc.Session) bool { return s.ID == id })
@@ -287,15 +211,17 @@ func before(a, b ipc.Session) bool {
 }
 
 func (m *Model) apply(f ipc.Frame) {
-	selected, outsideSel := "", m.outsideKey(m.sel)
-	if m.sel >= 0 && m.sel < len(m.sessions) {
-		selected = m.sessions[m.sel].ID
-	}
-	// Rows that come and go above the screen leave it as it is: the first
-	// visible row stays first.
-	top := ""
-	if m.offset < len(m.sessions) {
-		top = m.sessions[m.offset].ID
+	// The selection stays on what it is on. Entries that come and go above
+	// the screen leave it as it is: the first entry on screen stays first,
+	// unless it moved to another group.
+	selected, top, topGroup := "", "", ""
+	if items := m.items(); len(items) > 0 {
+		if m.sel >= 0 && m.sel < len(items) {
+			selected = items[m.sel].key
+		}
+		if m.offset < len(items) {
+			top, topGroup = items[m.offset].key, items[m.offset].group.key
+		}
 	}
 	switch f.T {
 	case ipc.FrameOutside:
@@ -333,30 +259,24 @@ func (m *Model) apply(f ipc.Frame) {
 			return
 		}
 		m.sessions = slices.Delete(m.sessions, i, i+1)
-		if f.ID == selected {
-			// The selection moves to the next row.
-			m.sel = i
-			selected = ""
-		}
 	}
-	if selected != "" {
-		m.sel = m.index(selected)
-	}
-	if i := m.outsideIndex(outsideSel); i >= 0 {
+	items := m.items()
+	// The selection follows its entry; when that went, it moves to the next.
+	if i := keyIndex(items, selected); i >= 0 {
 		m.sel = i
 	}
 	// Only the row of a task started here scrolls into view. Nothing else
 	// the core sends moves the list, so it holds still while you read it.
 	reveal := false
-	if m.pending != "" {
-		if i := m.index(m.pending); i >= 0 {
-			m.sel, m.pending, reveal = i, "", true
-		}
+	if m.pending != "" && m.index(m.pending) >= 0 {
+		m.unfoldFor(m.pending)
+		items = m.items()
+		m.sel, m.pending, reveal = m.sessionIndex(m.pending), "", true
 	}
-	if m.sel < 0 && m.rowCount() > 0 {
-		m.sel = 0
+	if m.sel < 0 && len(items) > 0 {
+		m.sel = firstSession(items)
 	}
-	if i := m.index(top); i >= 0 {
+	if i := keyIndex(items, top); i >= 0 && items[i].group.key == topGroup {
 		m.offset = i
 	}
 	if reveal {
@@ -367,11 +287,23 @@ func (m *Model) apply(f ipc.Frame) {
 }
 
 func (m Model) showCmd(focus bool) tea.Cmd {
-	if m.sel < 0 || m.sel >= len(m.sessions) {
+	s, ok := m.selSession()
+	if !ok {
 		return nil
 	}
-	id, b := m.sessions[m.sel].ID, m.backend
+	id, b := s.ID, m.backend
 	return func() tea.Msg { return shownMsg{err: b.Show(id, focus)} }
+}
+
+// pick selects the session with id, once its row is in, unfolding its
+// group, and scrolls it into view; else it waits for it.
+func (m *Model) pick(id string) {
+	m.pending = id
+	if m.index(id) >= 0 {
+		m.unfoldFor(id)
+		m.moveTo(m.sessionIndex(id))
+		m.pending = ""
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -379,7 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.bar.MaxHeight = m.maxBar()
-		m.bar.SetWidth(m.width)
+		m.bar.SetWidth(m.barWidth())
 		m.reveal()
 		// A new size may be a client of another terminal attaching.
 		m.asked = 0
@@ -408,11 +340,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chips = nil
 		m.setFocus(focusList)
 		m.setStatus(spawnSummary(msg.session), false)
-		m.pending = msg.session.ID
-		if i := m.index(msg.session.ID); i >= 0 {
-			m.moveTo(i)
-			m.pending = ""
-		}
+		m.pick(msg.session.ID)
 	case shownMsg:
 		if msg.err != nil {
 			m.setStatus(msg.err.Error(), true)
@@ -436,11 +364,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bar.Reset()
 		m.chips = nil
 		m.setFocus(focusList)
-		m.pending = msg.session.ID
-		if i := m.index(msg.session.ID); i >= 0 {
-			m.moveTo(i)
-			m.pending = ""
-		}
+		m.pick(msg.session.ID)
 		id, b := msg.session.ID, m.backend
 		return m, func() tea.Msg { return shownMsg{err: b.Show(id, true)} }
 	case routedMsg:
@@ -475,20 +399,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.MouseWheelDown:
 			m.scroll(1)
 		}
+		m.hover = m.hoverAt(msg.X, msg.Y)
+	case tea.MouseMotionMsg:
+		m.hover = m.hoverAt(msg.X, msg.Y)
+	case tea.BlurMsg:
+		m.hover = ""
 	case tea.MouseClickMsg:
 		if msg.Button != tea.MouseLeft {
 			break
 		}
 		m.confirming = ""
-		if row := msg.Y - m.listTop(); row >= 0 && row < m.listHeight() {
-			if i := m.offset + row; i < m.rowCount() {
-				m.sel = i
-				m.setFocus(focusList)
-				cmd := m.open(true)
-				return m, cmd
-			}
+		if v, ok := tabAt(msg.X); ok && m.tabbed() && msg.Y == 1 {
+			m.setView(v)
+			break
 		}
-		if msg.Y >= m.height-m.barHeight() {
+		if i, _, ok := m.at(msg.Y); ok {
+			// A click selects what it is on: a card or row shows its
+			// session, a header folds its group.
+			m.sel = i
+			m.setFocus(focusList)
+			cmd := m.open(true)
+			m.reveal()
+			return m, cmd
+		}
+		if msg.Y >= m.barTop()-b2i(m.tabbed()) {
 			m.setFocus(focusBar)
 		}
 	case tea.KeyPressMsg:
@@ -511,9 +445,9 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.moveTo(m.sel + 1)
 	case "pgup":
-		m.moveTo(m.sel - max(1, m.listHeight()))
+		m.moveTo(m.sel - max(1, m.visible(m.items())))
 	case "pgdown":
-		m.moveTo(m.sel + max(1, m.listHeight()))
+		m.moveTo(m.sel + max(1, m.visible(m.items())))
 	case "home":
 		m.moveTo(0)
 	case "end":
@@ -521,6 +455,8 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter", "space":
 		cmd := m.open(msg.String() == "enter")
 		return m, cmd
+	case "v":
+		m.setView(1 - m.view)
 	case "m":
 		cmd := m.moveSelected()
 		return m, cmd
@@ -587,10 +523,11 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // rateCmd rates the selected session. A row outside Irie has nothing to
 // rate.
 func (m Model) rateCmd(verdict string) tea.Cmd {
-	if m.sel < 0 || m.sel >= len(m.sessions) {
+	s, ok := m.selSession()
+	if !ok {
 		return nil
 	}
-	s, b := m.sessions[m.sel], m.backend
+	b := m.backend
 	return func() tea.Msg { return ratedMsg{name: s.Name, verdict: verdict, err: b.Rate(s.ID, verdict)} }
 }
 
@@ -619,7 +556,7 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 	case name == "models" && arg == "":
 		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolModels); return toolMsg{session: s, err: err} }
 	case name == "rate" && (arg == ipc.Good || arg == ipc.Bad):
-		if m.sel < 0 || m.sel >= len(m.sessions) {
+		if _, ok := m.selSession(); !ok {
 			m.setStatus("no session to rate; select one of Irie's", true)
 			return m, nil
 		}

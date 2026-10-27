@@ -216,36 +216,7 @@ func (m Model) counts(w int) string {
 	return ""
 }
 
-func (m Model) rule() string {
-	return m.text(m.pal.edge).Render(" " + strings.Repeat("─", max(0, m.width-2)) + " ")
-}
-
-func (m Model) row(i int) string {
-	s := m.sessions[i]
-	return m.paint(i, m.look(s), s.Name, age(m.now().Sub(s.Created)))
-}
-
-// paint draws list row i, `[edge][glyph] name … age`, with the glyph's
-// colour and the name's.
-func (m Model) paint(i int, l look, name, a string) string {
-	p := m.pal
-	nameW := m.width - 5 - lipgloss.Width(a)
-	name = cut(name, nameW)
-	gap := spaces(nameW - lipgloss.Width(name))
-	if i == m.sel && m.focus == focusList {
-		// The selection is the selection fill with an accent edge.
-		bg := p.selection
-		return on(bg, p.accent).Render("▌") + on(bg, l.mark).Render(l.glyph) +
-			on(bg, l.name).Render(" "+name+gap+" ") + on(bg, p.muted).Render(a) + blank(bg, 1)
-	}
-	edge, ns := blank(p.sidebar, 1), m.text(l.name)
-	if i == m.sel {
-		// Quieter while the command bar has focus.
-		edge, ns = m.text(p.muted).Render("▌"), ns.Bold(true)
-	}
-	return edge + m.text(l.mark).Render(l.glyph) + ns.Render(" "+name+gap+" ") + m.text(p.muted).Render(a) + blank(p.sidebar, 1)
-}
-
+// statusLine is the one-line status strip, for panes under 24 rows.
 func (m Model) statusLine() string {
 	p := m.pal
 	if m.status != "" {
@@ -255,20 +226,25 @@ func (m Model) statusLine() string {
 		}
 		return blank(p.sidebar, 1) + m.text(c).Render(cut(m.status, m.width-2))
 	}
-	if m.sel < 0 {
-		hint := "Tab: type a task"
-		if m.focus == focusBar {
-			hint = "Enter: start  Ctrl+J: new line"
-		}
-		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut(hint, m.width-2))
+	it, ok := m.selected()
+	if !ok {
+		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut(m.hint(), m.width-2))
 	}
-	if m.sel >= len(m.sessions) {
-		return m.outsideStatus()
+	switch it.kind {
+	case itemOutside:
+		return m.outsideStatus(m.outside[it.o])
+	case itemGroup:
+		g := it.group
+		text := g.title + " · " + groupLabel(g)
+		if g.outside {
+			text = "Claude Code sessions in other terminals · m moves an idle one in"
+		}
+		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut(text, m.width-2))
 	}
 	// What the selected row is doing or needs, in plain words, with the call
 	// it is about; else what Irie cannot do for it; then what it costs; then
 	// its full name and directory.
-	s := m.sessions[m.sel]
+	s := m.sessions[it.s]
 	var parts []string
 	switch {
 	case s.Detail != "" && s.Command != "":
@@ -334,47 +310,61 @@ func routed(s ipc.Session) string {
 func (m Model) View() tea.View {
 	var v tea.View
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	// Every motion, so the card under the pointer lights up; focus, so the
+	// light goes out when the pane loses it.
+	v.MouseMode = tea.MouseModeAllMotion
+	v.ReportFocus = true
 	if m.width <= 0 || m.height <= 0 {
 		return v
 	}
 	// Every line is painted on the sidebar's own ground, padded to the
 	// pane's width, so the palette's contrast holds on any terminal theme.
 	lines := []string{m.ground(m.header())}
-	if m.ruled() {
-		lines = append(lines, m.ground(m.rule()))
+	if m.tabbed() {
+		lines = append(lines, m.ground(m.tabBar()))
 	}
-	for i := range m.listHeight() {
-		if r := m.offset + i; r < m.rowCount() {
-			lines = append(lines, m.ground(m.line(r)))
-		} else {
-			lines = append(lines, m.ground(""))
+	// The list: whole entries from the offset; the last may be cut short.
+	items, list := m.items(), make([]string, 0, m.listHeight())
+	for i := m.offset; i < len(items) && len(list) < m.listHeight(); i++ {
+		list = append(list, m.entry(items, i)...)
+	}
+	for len(list) < m.listHeight() {
+		list = append(list, "")
+	}
+	for _, l := range list[:m.listHeight()] {
+		lines = append(lines, m.ground(l))
+	}
+	switch {
+	case m.details():
+		for _, l := range m.detailsCard() {
+			lines = append(lines, m.ground(l))
 		}
-	}
-	if m.ruled() {
-		lines = append(lines, m.ground(m.rule()))
-	}
-	if m.statusVisible() {
+	case m.statusVisible():
 		lines = append(lines, m.ground(m.statusLine()))
 	}
 	bar := strings.Split(m.bar.View(), "\n")
 	if h := m.barHeight(); len(bar) > h {
 		bar = bar[:h]
 	}
+	barTop, barLeft := len(lines), 0
+	if m.tabbed() {
+		bar, barTop, barLeft = m.barBox(bar), barTop+1, 2
+	}
 	for i := range bar {
 		bar[i] = m.ground(bar[i])
 	}
-	barTop := len(lines)
 	lines = append(lines, bar...)
 	if len(lines) > m.height {
 		// Too short for everything: keep the header and the command bar.
-		barTop = max(1, m.height-len(bar))
-		lines = append(lines[:barTop], bar...)[:m.height]
+		top := max(1, m.height-len(bar))
+		barTop += top - (len(lines) - len(bar))
+		lines = append(lines[:top], bar...)[:m.height]
 	}
 	v.SetContent(strings.Join(lines, "\n"))
 	// The terminal's cursor marks the place in the command bar while it has
 	// the keyboard.
-	if c := m.bar.Cursor(); c != nil && c.Y < len(bar) && barTop+c.Y < m.height {
+	if c := m.bar.Cursor(); c != nil && c.Y < m.barHeight() && barTop+c.Y < m.height {
+		c.X += barLeft
 		c.Y += barTop
 		v.Cursor = c
 	}

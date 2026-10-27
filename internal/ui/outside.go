@@ -1,7 +1,7 @@
 package ui
 
 // The Outside Irie group (DESIGN §4.6): Claude Code sessions that run in
-// other terminals, listed after Irie's own rows under a header with their
+// other terminals, listed after Irie's own groups under a header with their
 // count. Each is one line, busy or idle by its glyph alone, in the order
 // they started, so a change of state never moves one. The selected one's
 // details go in the status strip. m m, or :move, moves an idle one in.
@@ -16,7 +16,6 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/irie-hq/irie/internal/ipc"
 )
@@ -25,52 +24,6 @@ type movedMsg struct {
 	name    string
 	session ipc.Session
 	err     error
-}
-
-// groupKey names the Outside Irie header when the selection is on it.
-const groupKey = "\x00outside"
-
-// rowCount is how many list rows there are: Irie's sessions, then the
-// Outside Irie header and its rows when there are any.
-func (m Model) rowCount() int {
-	if len(m.outside) == 0 {
-		return len(m.sessions)
-	}
-	return len(m.sessions) + 1 + len(m.outside)
-}
-
-func (m Model) isGroupHeader(i int) bool { return len(m.outside) > 0 && i == len(m.sessions) }
-
-// outsideAt returns the outside session on list row i.
-func (m Model) outsideAt(i int) (ipc.OutsideSession, bool) {
-	if j := i - len(m.sessions) - 1; len(m.outside) > 0 && j >= 0 && j < len(m.outside) {
-		return m.outside[j], true
-	}
-	return ipc.OutsideSession{}, false
-}
-
-// outsideKey names list row i when it belongs to the group, else "".
-func (m Model) outsideKey(i int) string {
-	if m.isGroupHeader(i) {
-		return groupKey
-	}
-	if o, ok := m.outsideAt(i); ok {
-		return o.Key()
-	}
-	return ""
-}
-
-// outsideIndex is the list row that key names, or -1.
-func (m Model) outsideIndex(key string) int {
-	if key == groupKey && len(m.outside) > 0 {
-		return len(m.sessions)
-	}
-	for j, o := range m.outside {
-		if key != "" && o.Key() == key {
-			return len(m.sessions) + 1 + j
-		}
-	}
-	return -1
 }
 
 // setOutside takes an outside frame. A problem shows in the status strip
@@ -83,40 +36,6 @@ func (m *Model) setOutside(f ipc.Frame) {
 			m.setStatus(f.Problem, true)
 		}
 	}
-}
-
-// line draws list row i, whichever kind it is.
-func (m Model) line(i int) string {
-	switch {
-	case i < len(m.sessions):
-		return m.row(i)
-	case m.isGroupHeader(i):
-		return m.groupHeader(i)
-	}
-	o, _ := m.outsideAt(i)
-	a := ""
-	if !o.Started.IsZero() {
-		a = age(m.now().Sub(o.Started))
-	}
-	return m.paint(i, m.outsideLook(o), outsideLabel(o), a)
-}
-
-// groupHeader draws the group's title and count, then a rule.
-func (m Model) groupHeader(i int) string {
-	p := m.pal
-	edge, st := blank(p.sidebar, 1), m.text(p.muted)
-	if i == m.sel {
-		edge, st = m.text(p.accent).Render("▌"), m.text(p.ink).Bold(true)
-		if m.focus != focusList {
-			edge = m.text(p.muted).Render("▌")
-		}
-	}
-	title := cut(fmt.Sprintf("Outside Irie %d", len(m.outside)), m.width-2)
-	out := edge + st.Render(title)
-	if rule := m.width - lipgloss.Width(title) - 3; rule > 0 {
-		out += m.text(p.edge).Render(" " + strings.Repeat("─", rule) + " ")
-	}
-	return out
 }
 
 // outsideLook draws an outside row as the Irie state it matches: busy as
@@ -158,26 +77,24 @@ func where(o ipc.OutsideSession) string {
 	return "in a terminal"
 }
 
-// outsideStatus is the status strip for the group's header or one of its
-// rows: what it does, its name, where it runs, and whether m moves it.
-func (m Model) outsideStatus() string {
-	p := m.pal
-	if m.isGroupHeader(m.sel) {
-		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut("Claude Code sessions in other terminals · m moves an idle one in", m.width-2))
-	}
-	o, _ := m.outsideAt(m.sel)
-	var doing string
+// outsideDoing says what an outside session does, and whether m moves it.
+func outsideDoing(o ipc.OutsideSession) string {
 	switch {
 	case o.Movable:
-		doing = "idle · m moves it in"
+		return "idle · m moves it in"
 	case o.Status == ipc.StatusWaiting && o.WaitingFor != "":
-		doing = "waiting for " + o.WaitingFor
+		return "waiting for " + printable(o.WaitingFor)
 	case o.Status == "":
-		doing = "not running"
-	default:
-		doing = o.Status
+		return "not running"
 	}
-	parts := []string{doing, outsideLabel(o)}
+	return printable(o.Status)
+}
+
+// outsideStatus is the status strip for one of the group's rows: what it
+// does, its name, where it runs, and whether m moves it.
+func (m Model) outsideStatus(o ipc.OutsideSession) string {
+	p := m.pal
+	parts := []string{outsideDoing(o), outsideLabel(o)}
 	if o.Cwd != "" {
 		parts = append(parts, printable(m.home2tilde(o.Cwd)))
 	}
@@ -189,26 +106,29 @@ func (m Model) outsideStatus() string {
 	return blank(p.sidebar, 1) + m.text(c).Render(cut(strings.Join(parts, " · "), m.width-2))
 }
 
-// open shows the selected session; for the group, which Irie cannot show,
-// it says why and what m does instead.
+// open acts on the selected entry: it shows a session, folds or unfolds a
+// group, and for a session outside Irie, which Irie cannot show, says why
+// and what m does instead.
 func (m *Model) open(focus bool) tea.Cmd {
-	if m.sel >= 0 && m.sel < len(m.sessions) {
+	it, ok := m.selected()
+	switch {
+	case !ok:
+		return nil
+	case it.kind == itemSession:
 		return m.showCmd(focus)
-	}
-	if m.isGroupHeader(m.sel) {
-		m.setStatus("These Claude Code sessions run outside Irie; m moves an idle one in", false)
+	case it.kind == itemGroup:
+		m.fold(it.key)
 		return nil
 	}
-	if o, ok := m.outsideAt(m.sel); ok {
-		msg := outsideLabel(o) + " runs outside Irie, " + where(o)
-		switch {
-		case o.Movable:
-			msg += "; m moves it in here"
-		case o.Why != "":
-			msg += "; " + o.Why
-		}
-		m.setStatus(msg, false)
+	o := m.outside[it.o]
+	msg := outsideLabel(o) + " runs outside Irie, " + where(o)
+	switch {
+	case o.Movable:
+		msg += "; m moves it in here"
+	case o.Why != "":
+		msg += "; " + o.Why
 	}
+	m.setStatus(msg, false)
 	return nil
 }
 
@@ -219,7 +139,7 @@ const moveConfirm = 5 * time.Second
 // runs in the background, so it takes a second m, as closing takes x x
 // (DESIGN §4.1); any other key in between cancels it.
 func (m *Model) moveSelected() tea.Cmd {
-	o, ok := m.outsideAt(m.sel)
+	o, ok := m.selOutside()
 	if !ok {
 		m.setStatus("m moves a session from Outside Irie into Irie", false)
 		return nil
@@ -267,18 +187,14 @@ func (m *Model) moved(msg movedMsg) {
 		return
 	}
 	m.setStatus("moved "+msg.name+" into Irie", false)
-	m.pending = msg.session.ID
-	if i := m.index(msg.session.ID); i >= 0 {
-		m.moveTo(i)
-		m.pending = ""
-	}
+	m.pick(msg.session.ID)
 }
 
 // pickOutside finds the outside session that :move names: by its id, short
 // id or name, or the selected one when it names none.
 func (m Model) pickOutside(what string) (ipc.OutsideSession, error) {
 	if what == "" {
-		if o, ok := m.outsideAt(m.sel); ok {
+		if o, ok := m.selOutside(); ok {
 			return o, nil
 		}
 		return ipc.OutsideSession{}, errors.New(":move takes the selected session under Outside Irie, or one you name")
