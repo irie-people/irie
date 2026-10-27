@@ -162,7 +162,7 @@ func (cv *conversation) all(limit int) ipc.Conversation {
 	if limit > 0 && len(out.Items) > limit {
 		out.Items, out.More = out.Items[len(out.Items)-limit:], true
 	}
-	out.Items = slices.Clone(out.Items)
+	out.Items = append([]ipc.Item{}, out.Items...)
 	return out
 }
 
@@ -654,15 +654,15 @@ func (c *Core) followConversation(x *session) {
 	}
 }
 
-// transcriptsOf are session x's own transcripts, oldest first: those its
-// SessionStart hooks named, or, when none did, the transcript Claude Code
-// keeps for its session id, as for a session started before Irie followed
-// hooks. The caller holds c.mu.
+// transcriptsOf are session x's own transcripts that exist, oldest first:
+// those its SessionStart hooks named, or, when there are none, the
+// transcript Claude Code keeps for its session id, as for a session started
+// before Irie followed hooks. The caller holds c.mu.
 func (c *Core) transcriptsOf(x *session) []string {
 	var out []string
 	sub := string(filepath.Separator) + "subagents" + string(filepath.Separator)
 	for _, p := range x.track.transcripts {
-		if !strings.Contains(p, sub) {
+		if _, err := os.Stat(p); err == nil && !strings.Contains(p, sub) {
 			out = append(out, p)
 		}
 	}
