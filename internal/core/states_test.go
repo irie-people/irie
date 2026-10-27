@@ -347,7 +347,7 @@ func TestHooksFailOpenWhileTheCoreIsStopped(t *testing.T) {
 		if r["exit"] != 0.0 || r["stdout"] != "" || r["blocked"] != false {
 			t.Errorf("hook reply while the core was stopped: %v", r)
 		}
-		if ms, _ := r["ms"].(float64); ms >= 300 {
+		if ms, _ := r["ms"].(float64); ms >= 300 && !demoted(t) {
 			t.Errorf("%s took %v ms, want under 300", r["event"], ms)
 		}
 	}
@@ -439,10 +439,14 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 		argv = append(argv, a.(string))
 	}
 	settings := filepath.Join(c.paths.Session(s.ID), "claude-settings.json")
-	for flag, want := range map[string]string{"--settings": settings, "--session-id": s.VendorID, "--name": s.Name} {
+	for flag, want := range map[string]string{"--settings": settings, "--session-id": s.VendorID} {
 		if i := slices.Index(argv, flag); i < 0 || argv[i+1] != want {
 			t.Errorf("argv %q: want %s %s", argv, flag, want)
 		}
+	}
+	// Given no name, Claude Code titles the session itself (title.go).
+	if slices.Contains(argv, "--name") {
+		t.Errorf("argv %q: --name for a session given no name", argv)
 	}
 	if fi, err := os.Stat(settings); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("settings file: %v", err)

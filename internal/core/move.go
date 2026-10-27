@@ -84,12 +84,14 @@ func (c *Core) move(a ipc.MoveArgs) (ipc.Session, error) {
 	}
 
 	c.mu.Lock()
+	// The name Claude Code lists it under, which its titles may change
+	// (title.go).
 	name := cleanText(o.Name, 200)
 	if name == "" {
 		name = slug(filepath.Base(o.Cwd))
 	}
 	x, err := c.launch(job{
-		place: place{name: unique(name, c.names()), cwd: o.Cwd}, profile: profileName, run: profile, h: h, probe: probe,
+		place: place{name: unique(name, c.names(nil)), cwd: o.Cwd}, profile: profileName, run: profile, h: h, probe: probe,
 		resume: o.VendorID, data: map[string]any{"resume": o.VendorID, "kind": o.Kind},
 	})
 	if err == nil {

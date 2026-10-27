@@ -115,12 +115,12 @@ func TestUndoAndRedoOfAStartRoundTrip(t *testing.T) {
 	a, b := c.spawn("prompt,stop"), c.spawn("prompt,stop")
 	c.waitState(a.ID, ipc.StateDone)
 	c.waitState(b.ID, ipc.StateDone)
-	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "prompt-stop"`, `start "prompt-stop-2"`}) || len(h.Redo) != 0 {
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "Prompt,stop"`, `start "Prompt,stop-2"`}) || len(h.Redo) != 0 {
 		t.Fatalf("history %+v", h)
 	}
 
 	// Undo closes the newest first, by id.
-	if r := c.step(dirUndo); r.Label != `start "prompt-stop-2"` {
+	if r := c.step(dirUndo); r.Label != `start "Prompt,stop-2"` {
 		t.Errorf("undo %+v", r)
 	}
 	c.step(dirUndo)
@@ -131,7 +131,7 @@ func TestUndoAndRedoOfAStartRoundTrip(t *testing.T) {
 		t.Errorf("closed %+v", r.Closed)
 	}
 	// Undo and redo record nothing new and clear nothing.
-	if h := c.history(); len(h.Undo) != 0 || !slices.Equal(labels(h.Redo), []string{`start "prompt-stop-2"`, `start "prompt-stop"`}) {
+	if h := c.history(); len(h.Undo) != 0 || !slices.Equal(labels(h.Redo), []string{`start "Prompt,stop-2"`, `start "Prompt,stop"`}) {
 		t.Errorf("history after two undos %+v", h)
 	}
 	if _, err := c.undoOp(dirUndo, ipc.UndoArgs{}); code(err) != ipc.CodeNotFound {
@@ -160,7 +160,7 @@ func TestUndoAndRedoOfAStartRoundTrip(t *testing.T) {
 			t.Errorf("%s's agent ran %v: two must never share a conversation", s.Name, kinds)
 		}
 	}
-	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "prompt-stop"`, `start "prompt-stop-2"`}) || len(h.Redo) != 0 {
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "Prompt,stop"`, `start "Prompt,stop-2"`}) || len(h.Redo) != 0 {
 		t.Errorf("history after two redos %+v", h)
 	}
 	if got, want := c.uiSteps(a.ID), []string{"ui.undo spawn open>closed", "ui.redo spawn closed>open"}; !slices.Equal(got, want) {
@@ -182,12 +182,12 @@ func TestUndoAndRedoOfACloseRoundTripAcrossARestart(t *testing.T) {
 	a := c.spawn("prompt,stop")
 	c.waitState(a.ID, ipc.StateDone)
 	c.closeSession(a.ID)
-	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "prompt-stop"`, `close "prompt-stop"`}) {
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "Prompt,stop"`, `close "Prompt,stop"`}) {
 		t.Fatalf("history %+v", h)
 	}
 	c.restartCore()
 
-	if r := c.step(dirUndo); r.Label != `close "prompt-stop"` {
+	if r := c.step(dirUndo); r.Label != `close "Prompt,stop"` {
 		t.Errorf("undo %+v", r)
 	}
 	s, ok := c.row(a.ID)
@@ -202,7 +202,7 @@ func TestUndoAndRedoOfACloseRoundTripAcrossARestart(t *testing.T) {
 	if r := c.listAll(); len(r.Closed) != 1 || r.Closed[0].ID != a.ID || r.Closed[0].Name != a.Name {
 		t.Errorf("closed %+v", r.Closed)
 	}
-	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "prompt-stop"`, `close "prompt-stop"`}) || len(h.Redo) != 0 {
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "Prompt,stop"`, `close "Prompt,stop"`}) || len(h.Redo) != 0 {
 		t.Errorf("history %+v", h)
 	}
 	if got, want := c.uiSteps(a.ID), []string{"ui.undo close closed>open", "ui.redo close open>closed"}; !slices.Equal(got, want) {
@@ -213,13 +213,13 @@ func TestUndoAndRedoOfACloseRoundTripAcrossARestart(t *testing.T) {
 	// what could be redone, and undo closes the session again.
 	c.step(dirUndo)
 	c.closeSession(a.ID)
-	if h := c.history(); len(h.Redo) != 0 || h.Undo[len(h.Undo)-1].Label != `close "prompt-stop"` {
+	if h := c.history(); len(h.Redo) != 0 || h.Undo[len(h.Undo)-1].Label != `close "Prompt,stop"` {
 		t.Errorf("after a close by hand %+v", h)
 	}
 	if _, err := c.reopen(""); err != nil {
 		t.Fatal(err)
 	}
-	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "prompt-stop"`, `close "prompt-stop"`, `reopen "prompt-stop"`}) || len(h.Redo) != 0 {
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "Prompt,stop"`, `close "Prompt,stop"`, `reopen "Prompt,stop"`}) || len(h.Redo) != 0 {
 		t.Errorf("after a reopen by hand %v / %v", labels(h.Undo), labels(h.Redo))
 	}
 	c.waitState(a.ID, ipc.StateIdle)
@@ -234,7 +234,7 @@ func TestUndoAsksBeforeStoppingAnAgentAtWork(t *testing.T) {
 	a := c.spawn("prompt")
 	c.waitState(a.ID, ipc.StateWorking)
 	ch := c.ask(dirUndo)
-	if ch.Question != `"prompt" is still at work.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceCancel, ipc.ChoiceApply, ipc.ChoiceSkip}) {
+	if ch.Question != `"Prompt" is still at work.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceCancel, ipc.ChoiceApply, ipc.ChoiceSkip}) {
 		t.Errorf("question %+v", ch)
 	}
 	if _, ok := c.row(a.ID); !ok {
@@ -264,7 +264,7 @@ func TestUndoAsksBeforeStoppingAFrozenAgent(t *testing.T) {
 	c.freeze(a.ID, true)
 	c.waitState(a.ID, ipc.StateFrozen)
 	ch := c.ask(dirUndo)
-	if ch.Question != `"prompt" is frozen in the middle of its work.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceCancel, ipc.ChoiceApply, ipc.ChoiceSkip}) {
+	if ch.Question != `"Prompt" is frozen in the middle of its work.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceCancel, ipc.ChoiceApply, ipc.ChoiceSkip}) {
 		t.Errorf("question %+v", ch)
 	}
 	if r := c.answer(dirUndo, ch, ipc.ChoiceApply); r.Did != ipc.DidUndo {
@@ -336,18 +336,18 @@ func TestUndoOfWhatIsAlreadySoSettlesOrSkips(t *testing.T) {
 	if r := c.answer(dirUndo, ch, ipc.ChoiceSkip); r.Did != ipc.DidSkip {
 		t.Errorf("skip %+v", r)
 	}
-	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "prompt-stop"`}) || len(h.Redo) != 0 {
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "Prompt,stop"`}) || len(h.Redo) != 0 {
 		t.Errorf("history after skip %+v", h)
 	}
 
 	ch = c.ask(dirUndo)
-	if ch.Question != `"prompt-stop" is closed already.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceSettle, ipc.ChoiceSkip, ipc.ChoiceCancel}) {
+	if ch.Question != `"Prompt,stop" is closed already.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceSettle, ipc.ChoiceSkip, ipc.ChoiceCancel}) {
 		t.Errorf("question %+v", ch)
 	}
 	if r := c.answer(dirUndo, ch, ipc.ChoiceSettle); r.Did != ipc.DidSettle {
 		t.Errorf("settle %+v", r)
 	}
-	if h := c.history(); len(h.Undo) != 0 || !slices.Equal(labels(h.Redo), []string{`start "prompt-stop"`}) {
+	if h := c.history(); len(h.Undo) != 0 || !slices.Equal(labels(h.Redo), []string{`start "Prompt,stop"`}) {
 		t.Errorf("history after settle %+v", h)
 	}
 	// Redo carries it on again.
@@ -382,7 +382,7 @@ exec %[1]q "$@"
 	// Starting, it has nothing to lose: undo closes it at once.
 	c.step(dirUndo)
 	ch := c.ask(dirRedo)
-	if ch.Question != `"prompt" never got going, so there is no conversation to carry on.` || ch.Options[0].Key != ipc.ChoiceApply || ch.Options[0].Label != "Start its task again" {
+	if ch.Question != `"Prompt" never got going, so there is no conversation to carry on.` || ch.Options[0].Key != ipc.ChoiceApply || ch.Options[0].Label != "Start its task again" {
 		t.Errorf("question %+v", ch)
 	}
 	if r := c.answer(dirRedo, ch, ipc.ChoiceApply); r.Did != ipc.DidRedo {

@@ -5,7 +5,7 @@
 # installed, SwiftPM 5.9 stops at "unable to lookup item 'PlatformPath'". The
 # terminal view is SwiftTerm (MIT), fetched at the pinned release and checked
 # against its SHA-256, then compiled once into a static library in the user's
-# cache, which every checkout and worktree shares.
+# cache, which every checkout and worktree shares. The icon is drawn in Go.
 # IRIE_MAC_NO_SWIFTTERM=1 builds with Apple's frameworks only; the terminal
 # then opens in Ghostty.
 set -eu
@@ -63,5 +63,10 @@ else
 		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
 fi
 cp Info.plist "$app/Contents/Info.plist"
+# Irie's icon (DESIGN §7.2): tools/mkicon draws the iconset, iconutil packs it.
+rm -rf build/Irie.iconset
+go run ../tools/mkicon build/Irie.iconset
+iconutil -c icns -o "$app/Contents/Resources/Irie.icns" build/Irie.iconset
+rm -rf build/Irie.iconset
 codesign --force --sign - "$app" 2>/dev/null
 echo "built $(pwd)/$app"

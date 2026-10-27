@@ -56,7 +56,8 @@ func newID(t time.Time) string {
 
 const maxSlug = 32
 
-// slug names a session after the first words of its task's first line.
+// slug names a session's folder and branch after the first words of its
+// task's first line.
 func slug(task string) string {
 	first, _, _ := strings.Cut(strings.TrimSpace(task), "\n")
 	words := strings.FieldsFunc(strings.ToLower(first), func(r rune) bool {
@@ -92,11 +93,13 @@ func numbered(name string, n int) string {
 	return name + "-" + strconv.Itoa(n)
 }
 
-// names returns the names the sessions have. The caller holds c.mu.
-func (c *Core) names() map[string]bool {
+// names returns the names the sessions but one have. The caller holds c.mu.
+func (c *Core) names(but *session) map[string]bool {
 	taken := map[string]bool{}
 	for _, x := range c.sessions {
-		taken[x.name] = true
+		if x != but {
+			taken[x.name] = true
+		}
 	}
 	return taken
 }
@@ -111,9 +114,9 @@ func unique(name string, taken map[string]bool) string {
 }
 
 // workdir resolves where a task runs: the requested directory in place,
-// else spawn.default_cwd, else a new scratch dir, so an untargeted task
-// never runs in $HOME.
-func (c *Core) workdir(requested, name string) (string, error) {
+// else spawn.default_cwd, else a new scratch dir named after base, so an
+// untargeted task never runs in $HOME.
+func (c *Core) workdir(requested, base string) (string, error) {
 	dir := requested
 	if dir == "" {
 		dir = c.cfg.Spawn.DefaultCwd
@@ -123,7 +126,7 @@ func (c *Core) workdir(requested, name string) (string, error) {
 			return "", err
 		}
 		for n := 1; ; n++ {
-			d := c.paths.ScratchDir(numbered(name, n))
+			d := c.paths.ScratchDir(numbered(base, n))
 			err := os.Mkdir(d, 0o700)
 			if err == nil {
 				return d, nil
@@ -153,8 +156,9 @@ func (c *Core) workdir(requested, name string) (string, error) {
 // through tmux and is never typed into a TUI, unless a generic profile asks
 // for it to be pasted. It goes to the agent as an argument, or as a file
 // when it is large. Whether the agent then comes up, fails or stalls,
-// observe and the hooks tell.
-func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
+// observe and the hooks tell. named says whether a.Name, when there is one,
+// is the user's (title.go), as a name a client sends is.
+func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	if strings.TrimSpace(a.Task) == "" {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "empty task")
 	}
@@ -215,12 +219,12 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 			return ipc.Session{}, err
 		}
 	}
-	return c.spawnProfile(a, profileName, profile, warnings, extra)
+	return c.spawnProfile(a, named, profileName, profile, warnings, extra)
 }
 
 // spawnProfile spawns a on profile, which is ready to run: routed, its
 // local model checked. extra goes into spawn.requested.
-func (c *Core) spawnProfile(a ipc.SpawnArgs, profileName string, profile config.Profile, warnings []string, extra map[string]any) (ipc.Session, error) {
+func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, profile config.Profile, warnings []string, extra map[string]any) (ipc.Session, error) {
 	h, err := harnessFor(profile.Harness)
 	if err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", profileName, err)
@@ -241,9 +245,11 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, profileName string, profile config.
 	// meanwhile for hooks and the sidebar.
 	c.spawnMu.LockAt(c.levelOf(a.Parent, a.Continues))
 	defer c.spawnMu.Unlock()
-	base := slug(a.Task)
-	if a.Name != "" {
-		base = slug(a.Name)
+	// A name given is shown as given; else the task's title names the
+	// session until Claude Code titles it. The slug names its folder.
+	name, base := cleanText(a.Name, maxName), slug(a.Name)
+	if name == "" {
+		name, named, base = title(a.Task), false, slug(a.Task)
 	}
 	pl, err := c.place(a, base)
 	if err != nil {
@@ -251,6 +257,7 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, profileName string, profile config.
 		return ipc.Session{}, err
 	}
 	c.mu.Lock()
+	pl.name, pl.named = unique(name, c.names(nil)), named
 	if hash, _ := extra["task_hash"].(string); hash != "" {
 		class, _ := extra["class"].(string)
 		c.escalate(hash, class, profileName, time.Now())
@@ -315,7 +322,7 @@ func (c *Core) launch(j job) (*session, error) {
 	}
 	pl, h, profile := j.place, j.h, j.run
 	x := &session{
-		id: id, name: pl.name, agent: "main", created: created,
+		id: id, name: pl.name, named: pl.named, agent: "main", created: created,
 		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
 		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
 		vendorID: vendorID, warnings: append(slices.Clone(pl.warnings), j.probe.Warnings...),
@@ -329,9 +336,14 @@ func (c *Core) launch(j job) (*session, error) {
 	// A reopened session starts unfrozen (freeze.go).
 	os.Remove(c.paths.FreezeFile(id))
 	s := harness.Spawn{
-		Session: id, Name: x.name, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
+		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: j.probe,
 		StatusLine: c.cfg.Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
+	}
+	// Only the user's name goes to the agent: Claude Code titles a session
+	// it gets no name for, and the row follows the title (title.go).
+	if x.named {
+		s.Name = x.name
 	}
 	launch := h.Launch
 	if j.resume != "" {
@@ -386,11 +398,12 @@ func (c *Core) launch(j job) (*session, error) {
 		opt(tmux.OptAgent, x.agent),
 		opt(tmux.OptRole, tmux.RoleAgent),
 		opt(tmux.OptName, x.name),
+		opt(tmux.OptNamed, flag(x.named)),
 		opt(tmux.OptCreated, x.created.Format(time.RFC3339Nano)),
 		opt(tmux.OptVendorID, x.vendorID),
 		append([]string{"resize-window", "-t", target}, size...),
-		// A name given by rename or carried in by move is any text, which
-		// tmux would expand as a format.
+		// A name is any text, such as a title, which tmux would expand as
+		// a format.
 		{"rename-window", "-t", target, "--", tmux.Literal(x.name)},
 	})
 	if err != nil {

@@ -158,7 +158,7 @@ func (c *coreEnv) list() []ipc.Session {
 // panes lists every pane of the private server as maps of format fields.
 func (c *coreEnv) panes() []map[string]string {
 	c.t.Helper()
-	keys := []string{"session_name", "window_index", "window_panes", "pane_index", "pane_id", "pane_width", "pane_height", "pane_current_command", "@irie_role", "@irie_session", "@irie_agent", "@irie_name", "@irie_created", "@irie_vendor_id"}
+	keys := []string{"session_name", "window_index", "window_panes", "pane_index", "pane_id", "pane_width", "pane_height", "pane_current_command", "@irie_role", "@irie_session", "@irie_agent", "@irie_name", "@irie_named", "@irie_created", "@irie_vendor_id"}
 	var f []string
 	for _, k := range keys {
 		f = append(f, "#{"+k+"}")
@@ -304,8 +304,9 @@ func TestSpawnCreatesAnAgentWindow(t *testing.T) {
 	if !regexp.MustCompile(`^s[0-9a-hjkmnp-tv-z]{12}$`).MatchString(s.ID) {
 		t.Errorf("session id %q", s.ID)
 	}
-	if s.Name != "say-hello" {
-		t.Errorf("name = %q, want say-hello", s.Name)
+	// The task's title names it; its slug names its folder.
+	if s.Name != "Say Hello" {
+		t.Errorf("name = %q, want Say Hello", s.Name)
 	}
 
 	var p map[string]string
@@ -317,7 +318,7 @@ func TestSpawnCreatesAnAgentWindow(t *testing.T) {
 	if p == nil {
 		t.Fatal("no pane carries @irie_session")
 	}
-	if p["session_name"] != tmux.AgentsSession || p["window_panes"] != "1" || p["@irie_role"] != tmux.RoleAgent || p["@irie_agent"] != "main" || p["@irie_name"] != "say-hello" {
+	if p["session_name"] != tmux.AgentsSession || p["window_panes"] != "1" || p["@irie_role"] != tmux.RoleAgent || p["@irie_agent"] != "main" || p["@irie_name"] != "Say Hello" || p["@irie_named"] != "0" {
 		t.Errorf("agent pane = %v", p)
 	}
 	if !uuidV4.MatchString(p["@irie_vendor_id"]) {
@@ -356,9 +357,9 @@ func TestSpawnCreatesAnAgentWindow(t *testing.T) {
 		t.Errorf("list = %+v", ls)
 	}
 
-	// Same first words again: a numbered slug.
-	if again := c.spawn("say hello"); again.Name != "say-hello-2" {
-		t.Errorf("second name = %q, want say-hello-2", again.Name)
+	// Same first words again: a numbered title.
+	if again := c.spawn("say hello"); again.Name != "Say Hello-2" {
+		t.Errorf("second name = %q, want Say Hello-2", again.Name)
 	}
 }
 
@@ -566,11 +567,11 @@ func TestTheSidebarSpawnsAndShows(t *testing.T) {
 		}
 		return s.ID != ""
 	})
-	if s.Cwd != dir || s.Name != "say-hello" {
-		t.Errorf("spawned %+v, want say-hello in %s", s, dir)
+	if s.Cwd != dir || s.Name != "Say Hello" {
+		t.Errorf("spawned %+v, want Say Hello in %s", s, dir)
 	}
 	testutil.Eventually(t, 5*time.Second, "the row did not appear", func() bool {
-		return strings.Contains(screen(), "say-hello")
+		return strings.Contains(screen(), "Say Hello")
 	})
 
 	// Enter on the new row shows it and focuses it.
