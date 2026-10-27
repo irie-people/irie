@@ -249,6 +249,14 @@ enum Theme {
         return computed(alpha: { $0 ? 0 : 1 }) { agentDeepHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
+    /// An agent's own colour as text, for the lines about it away from its
+    /// card: its mark's hue, as deep or as bright as keeps 4.5:1 on every
+    /// ground such a line sits on, and 7:1 under Increase Contrast.
+    static func agentInk(slot: Int) -> Color {
+        let p = palette
+        return computed { agentInkHex(slot: slot, palette: p, dark: $0, high: $1) }
+    }
+
     /// The slot for a session: the same one every time, from its id.
     static func agentSlot(_ id: String) -> Int {
         var h: UInt32 = 2166136261
@@ -337,6 +345,29 @@ enum Theme {
             }
         }
         return mark(dark ? hi : lo)
+    }
+
+    static func agentInkHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
+        let s = dark ? p.dark : p.light
+        let hue = agentHue(slot: slot, s)
+        // The sidebar under a card's helpers, the title bar's ground, cards
+        // and the details panel; a little over 4.5:1 leaves room for
+        // rounding.
+        let want = high ? 7 : 4.6
+        let grounds = [s.sidebar, s.ground, s.card, s.panel].map(luminance)
+        // Past full brightness it pales toward white, as the mark does.
+        func ink(_ x: Double) -> UInt32 { x <= 1 ? rgb(hue, 0.62, x) : rgb(hue, 0.62 * (2 - x), 1) }
+        var lo = 0.0, hi = dark ? 2.0 : 1.0
+        for _ in 0..<14 {
+            let mid = (lo + hi) / 2
+            let l = luminance(ink(mid))
+            if grounds.allSatisfy({ ratio(l, $0) >= want }) {
+                if dark { hi = mid } else { lo = mid }
+            } else {
+                if dark { lo = mid } else { hi = mid }
+            }
+        }
+        return ink(dark ? hi : lo)
     }
 
     private static func hsb(_ hex: UInt32) -> (Double, Double, Double) {

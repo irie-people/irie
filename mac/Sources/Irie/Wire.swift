@@ -147,6 +147,12 @@ struct SubscribeArgs: Encodable {
     var view = "app"
 }
 
+/// The palette in use, which the agents' colours on Irie's status line
+/// follow, so they match the cards.
+struct ThemeArgs: Encodable {
+    var theme: String
+}
+
 struct AttachInfo: Decodable, Equatable {
     var tmux: String
     var socket: String

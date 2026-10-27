@@ -100,28 +100,34 @@ func (w *window) get() *Window {
 // context is and how much of the plan is used, such as
 // "✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41% · 5h 62% · 7d 18%". The state has the
 // sidebar's marks and colours (DESIGN §5.3); the rest is faint until a
-// share runs high. Parts drop from the end to fit in width columns; 0 is
-// no limit.
+// share runs high. While the session works, the state and the faint parts
+// take its own colour instead, the one its card has in the Mac app. Parts
+// drop from the end to fit in width columns; 0 is no limit.
 func Line(u Usage, st *ipc.StatusReply, width int) string {
 	var parts []seg
+	quiet := faint
 	if st != nil {
-		if s := state(*st); s.width > 0 {
+		own := rgb(st.Color)
+		if own != "" {
+			quiet = own
+		}
+		if s := state(*st, own); s.width > 0 {
 			parts = append(parts, s)
 		}
 	}
 	if u.CostUSD != nil && *u.CostUSD >= 0.005 {
 		var s seg
-		s.add(faint, fmt.Sprintf("$%.2f", *u.CostUSD))
+		s.add(quiet, fmt.Sprintf("$%.2f", *u.CostUSD))
 		parts = append(parts, s)
 	}
 	if u.Context != nil {
-		parts = append(parts, share("ctx", *u.Context, true))
+		parts = append(parts, share("ctx", *u.Context, true, quiet))
 	}
 	if u.FiveHour != nil {
-		parts = append(parts, share("5h", u.FiveHour.Used, false))
+		parts = append(parts, share("5h", u.FiveHour.Used, false, quiet))
 	}
 	if u.SevenDay != nil {
-		parts = append(parts, share("7d", u.SevenDay.Used, false))
+		parts = append(parts, share("7d", u.SevenDay.Used, false, quiet))
 	}
 	for width > 0 && len(parts) > 1 && lineWidth(parts) > width {
 		parts = parts[:len(parts)-1]
@@ -129,16 +135,17 @@ func Line(u Usage, st *ipc.StatusReply, width int) string {
 	var b strings.Builder
 	for i, p := range parts {
 		if i > 0 {
-			b.WriteString(paint(faint, sep))
+			b.WriteString(paint(quiet, sep))
 		}
 		b.WriteString(p.text)
 	}
 	return b.String()
 }
 
-// state leads the line with the session's state. A turn that ended while
-// its helpers still run is not done: the line says what it waits on.
-func state(r ipc.StatusReply) seg {
+// state leads the line with the session's state, working in own, the
+// session's colour, when it has one. A turn that ended while its helpers
+// still run is not done: the line says what it waits on.
+func state(r ipc.StatusReply, own string) seg {
 	var s seg
 	n := len(r.Subagents)
 	switch r.State {
@@ -157,9 +164,9 @@ func state(r ipc.StatusReply) seg {
 		s.add("", "◌ starting")
 	case ipc.StateWorking:
 		if n == 0 {
-			s.add("", "◐ working")
+			s.add(own, "◐ working")
 		} else {
-			s.add("", "◐ working + "+helpers(n))
+			s.add(own, "◐ working + "+helpers(n))
 		}
 	case ipc.StateDone, ipc.StateIdle:
 		if n == 0 {
@@ -210,10 +217,10 @@ func kinds(subs []ipc.Subagent) string {
 const maxKinds = 3
 
 // share is a percentage with its label, such as "5h 62%"; the context's
-// has a bar of eight cells as well. It turns yellow from 70% and red from
-// 90%.
-func share(label string, pct float64, bar bool) seg {
-	style := faint
+// has a bar of eight cells as well. It is drawn in quiet, and turns yellow
+// from 70% and red from 90%.
+func share(label string, pct float64, bar bool, quiet string) seg {
+	style := quiet
 	switch {
 	case pct >= 90:
 		style = red
@@ -221,11 +228,11 @@ func share(label string, pct float64, bar bool) seg {
 		style = yellow
 	}
 	var s seg
-	s.add(faint, label+" ")
+	s.add(quiet, label+" ")
 	if bar {
 		full := int(math.Round(min(max(pct, 0), 100) / 100 * cells))
 		s.add(style, strings.Repeat("▰", full))
-		s.add(faint, strings.Repeat("▱", cells-full)+" ")
+		s.add(quiet, strings.Repeat("▱", cells-full)+" ")
 	}
 	s.add(style, fmt.Sprintf("%.0f%%", pct))
 	return s
@@ -233,7 +240,8 @@ func share(label string, pct float64, bar bool) seg {
 
 const cells = 8
 
-// SGR styles. The colours are the terminal's own, as the sidebar's are.
+// SGR styles. The colours are the terminal's own, as the sidebar's are;
+// only a working session's own colour is not (rgb).
 const (
 	faint  = "2"
 	red    = "31"
@@ -242,6 +250,19 @@ const (
 )
 
 const sep = " · "
+
+// rgb is the SGR style of a colour given as "#rrggbb", and "" for anything
+// else.
+func rgb(hex string) string {
+	if len(hex) != 7 || hex[0] != '#' {
+		return ""
+	}
+	v, err := strconv.ParseUint(hex[1:], 16, 32)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("38;2;%d;%d;%d", v>>16, v>>8&0xFF, v&0xFF)
+}
 
 // seg is one part of the line: its text with its styles, and the columns
 // it takes.

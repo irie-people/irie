@@ -55,6 +55,9 @@ const (
 	// the user did (DESIGN §2.4, §4.5).
 	OpUndo = "undo"
 	OpRedo = "redo"
+	// OpTheme gives the core the Mac app's palette, which the agents'
+	// colours on Irie's status line follow (DESIGN §6.3).
+	OpTheme = "theme"
 	// OpDog lists the jots that are not through: what each left that has
 	// not landed, by the jot dog's last look (DESIGN §4.8).
 	OpDog = "dog"
@@ -525,6 +528,14 @@ type StatusArgs struct {
 type StatusReply struct {
 	State     string     `json:"state"`
 	Subagents []Subagent `json:"subagents,omitempty"`
+	// Color is the session's own colour while it works, as "#rrggbb": its
+	// card's mark in the Mac app's dark mode, which reads on its terminal.
+	Color string `json:"color,omitempty"`
+}
+
+// ThemeArgs name the Mac app's palette, one of config.Themes.
+type ThemeArgs struct {
+	Theme string `json:"theme"`
 }
 
 type ShowArgs struct {
