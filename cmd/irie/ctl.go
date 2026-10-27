@@ -35,6 +35,10 @@ const ctlUsage = `usage: irie ctl <command>
                                          spawn.close_when_done a finished session
                                          closes itself, so the sidebar has no
                                          To verify group: look here instead
+  irie ctl dog [--json]                  the jots that are not through: those whose
+                                         turn is over but whose work is not committed,
+                                         or not yet in their repo's land branch
+                                         (dog.land), with those closed in the last day
   irie ctl close [SESSION]               close a session, by id or name, or with
                                          none the one this runs in: an agent
                                          closes its own once you approve its
@@ -96,6 +100,8 @@ func ctl(args []string) error {
 		return ctlClose(args[1:])
 	case "reopen":
 		return ctlReopen(args[1:])
+	case "dog":
+		return ctlDog(args[1:])
 	case "show":
 		return ctlShow(args[1:])
 	case "rename":

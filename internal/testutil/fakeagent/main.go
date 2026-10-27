@@ -12,7 +12,13 @@
 //	ask               tool:AskUserQuestion
 //	permission        PreToolUse, PermissionRequest and a permission_prompt
 //	                  Notification for Bash, a line of input, then PostToolUse
-//	stop              Stop
+//	stop              Stop; when a Stop hook answers with additionalContext
+//	                  or a block, the turn goes on, as in Claude Code, and
+//	                  stops again with stop_hook_active, up to 8 times
+//	stop:bg           Stop with a shell task running in the background
+//	stop:ask          Stop whose last message asks the user a question
+//	write:<file>      write a file in the agent's folder, as an edit does
+//	commit            git add -A and git commit in the agent's folder
 //	stopfail:<error>  StopFailure
 //	sub:<id>:<steps>  SubagentStart, the steps (joined by +) inside the
 //	                  subagent, then SubagentStop
@@ -333,8 +339,9 @@ type agent struct {
 	in         *bufio.Reader
 	pace       time.Duration
 
-	mu    sync.Mutex // one hook at a time
-	tools int
+	mu     sync.Mutex // one hook at a time
+	tools  int
+	writes int
 }
 
 func newAgent(o options, version string) (*agent, error) {
@@ -457,7 +464,7 @@ func (a *agent) run() int {
 		}
 		fmt.Println("› " + line)
 		a.fire("UserPromptSubmit", "", map[string]any{"prompt": line})
-		a.stop()
+		a.stop("")
 	}
 }
 
@@ -487,7 +494,15 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 	case "permission":
 		a.permission(sub)
 	case "stop":
-		a.stop()
+		a.stop(s.arg)
+	case "write":
+		n := a.writes + 1
+		a.writes = n
+		err := os.WriteFile(filepath.Join(a.cwd, s.arg), []byte(fmt.Sprintf("edit %d\n", n)), 0o600)
+		a.record(map[string]any{"t": "write", "file": s.arg, "err": errText(err)})
+	case "commit":
+		out, err := exec.Command("/bin/sh", "-c", `git add -A && git commit -q -m "Fake work"`).CombinedOutput()
+		a.record(map[string]any{"t": "commit", "out": string(out), "err": errText(err)})
 	case "stopfail":
 		fmt.Println("✕ API Error: " + s.arg)
 		a.fire("StopFailure", s.arg, map[string]any{"error": s.arg, "error_details": "fake " + s.arg, "last_assistant_message": "API Error: " + s.arg})
@@ -587,10 +602,63 @@ func loadStatusLine(value string) string {
 	return s.StatusLine.Command
 }
 
-func (a *agent) stop() {
+// stop ends the turn. A Stop hook that answers with additionalContext, or
+// with a block and its reason, sends the turn on, as Claude Code's hooks
+// reference describes: the agent goes on, then stops again with
+// stop_hook_active set, at most 8 times in a row. how is "bg" for a turn
+// that leaves a shell task running in the background, and "ask" for one
+// whose last message asks the user something.
+func (a *agent) stop(how string) {
 	fmt.Println("✓ done")
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
-	a.fire("Stop", "", map[string]any{"stop_hook_active": false, "last_assistant_message": "Done: " + first, "background_tasks": []any{}, "session_crons": []any{}})
+	msg, tasks := "Done: "+first, []any{}
+	switch how {
+	case "bg":
+		msg = "The install runs in the background; I'll report when it lands."
+		tasks = []any{map[string]any{"id": "task-001", "type": "shell", "status": "running", "description": "Install the build", "command": "tools/live.sh"}}
+	case "ask":
+		msg = "It works. Shall I land it?"
+	}
+	for i := range 8 {
+		out := a.fire("Stop", "", map[string]any{"stop_hook_active": i > 0, "last_assistant_message": msg, "background_tasks": tasks, "session_crons": []any{}})
+		more := goesOn(out)
+		if more == "" {
+			return
+		}
+		a.record(map[string]any{"t": "continued", "context": more})
+		fmt.Println("↻ " + strings.SplitN(more, "\n", 2)[0])
+		msg = "I stopped on purpose."
+	}
+}
+
+// goesOn is why the hooks' answer to a Stop sends the turn on, or "".
+func goesOn(outputs []string) string {
+	for _, o := range outputs {
+		var r struct {
+			Decision string `json:"decision"`
+			Reason   string `json:"reason"`
+			Specific struct {
+				AdditionalContext string `json:"additionalContext"`
+			} `json:"hookSpecificOutput"`
+		}
+		if json.Unmarshal([]byte(o), &r) != nil {
+			continue
+		}
+		if r.Specific.AdditionalContext != "" {
+			return r.Specific.AdditionalContext
+		}
+		if r.Decision == "block" {
+			return r.Reason
+		}
+	}
+	return ""
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func (a *agent) toolID() string {
@@ -664,9 +732,9 @@ func (a *agent) permission(sub *subagent) {
 	}))
 }
 
-// fire runs the hooks configured for an event, one after another, and logs
-// each reply.
-func (a *agent) fire(event, value string, fields map[string]any) {
+// fire runs the hooks configured for an event, one after another, logs
+// each reply and returns what each printed.
+func (a *agent) fire(event, value string, fields map[string]any) []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	payload := map[string]any{
@@ -680,19 +748,21 @@ func (a *agent) fire(event, value string, fields map[string]any) {
 		payload[k] = v
 	}
 	body, _ := json.Marshal(payload)
+	var outputs []string
 	for _, g := range a.hooks[event] {
 		if matcherSupport[event] && !matches(g.Matcher, value) {
 			continue
 		}
 		for _, h := range g.Hooks {
 			if h.Type == "command" {
-				a.runHook(event, value, h, body)
+				outputs = append(outputs, a.runHook(event, value, h, body))
 			}
 		}
 	}
+	return outputs
 }
 
-func (a *agent) runHook(event, value string, h handler, body []byte) {
+func (a *agent) runHook(event, value string, h handler, body []byte) string {
 	timeout := time.Duration(h.Timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 600 * time.Second
@@ -728,4 +798,5 @@ func (a *agent) runHook(event, value string, h handler, body []byte) {
 		"stderr": stderr.String(), "ms": time.Since(start).Milliseconds(), "timed_out": timedOut,
 		"blocked": code == 2 || failed && h.OnFailure == "block",
 	})
+	return stdout.String()
 }

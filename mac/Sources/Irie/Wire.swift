@@ -35,13 +35,25 @@ struct Session: Codable, Identifiable, Equatable {
     var frozen: Date?
     var freezing: Bool?
     var priority: Int?
+    /// What its jot left that has not landed, by the jot dog's last look,
+    /// while its turn is over (DESIGN §4.8); nil when it is through.
+    var loose: Loose?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, tokens
-        case order, frozen, freezing, priority
+        case order, frozen, freezing, priority, loose
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
+}
+
+/// What a jot left that has not landed: files not committed, and its own
+/// commits not yet in its repo's land branch (DESIGN §4.8). The core says
+/// it in words in the session's detail too.
+struct Loose: Codable, Equatable {
+    var dirty: Int?
+    var ahead: Int?
+    var land: String?
 }
 
 /// What a session's model calls have used, each reply counted once.

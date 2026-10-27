@@ -37,6 +37,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | See every Claude Code session on the machine, and bring one in | An "Outside Irie" group with live busy and idle; "Move into Irie" carries an idle session on in an Irie pane, on request only | §4.6 |
 | Fewer tokens through local and free models that Irie sets up, in the spawn list with their cost, weighing the machine's memory | Built-in `+sonnet` and `+local`; Irie's own Ollama server; `irie setup local`; what each profile costs in the `+` list; sessions' cost and memory in the sidebar; a memory check before a model loads | §6.1, §6.3, M10 |
 | Route each task by cost, normalised by accuracy; keep orchestration on Opus; delegate to local; fail over at usage limits; set up local models from the sidebar | `+auto`, the default: the lowest cost per success among profiles accurate enough for the task's class, learning from ratings and re-runs; `irie ctl delegate`; failover; `:setup`, `:models`, `:rate`, `:route` | §6.4, M10 |
+| A jot dog that watches the jots and sees each through | When a jot's turn ends with work not committed, or not yet in its repo's land branch (such as `live`), the dog sends its agent back to finish once, then its row says what is left until the work lands; `irie ctl dog` lists every jot that is not through | §4.8 |
 
 ### 1.2 Not in v1
 
@@ -216,6 +217,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `preflight` | `profile`, `model?`, `remember?`, `force?` | `ok`, `problems[]`, `warnings[]`, the context and memory the model got | M10 |
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
 | `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle. A local profile is checked as for a spawn (§6.1) before the outside copy ends | Sessions outside Irie (§4.6) |
+| `dog` | none | `jots[]`: the jots that are not through, each with its `loose` (below), looked at afresh: the open ones in the list's order, then those closed in the last day as `closed` | The jot dog (§4.8) |
 | `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
 | `conversation` | `session`, `limit?` | `session`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
@@ -322,7 +324,7 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | PermissionRequest | `*` | 10 s | none | Needs you (permission). Never answered |
 | Notification | none | 10 s | none | `permission_prompt` and `agent_needs_input` mean "needs you" |
 | Elicitation | none | 10 s | none | Needs you |
-| Stop | none | 10 s | none | Turn ended |
+| Stop | none | 10 s | none | Turn ended; the jot dog may send it on (§4.8) |
 | StopFailure | none | 10 s | none | Turn failed: `rate_limit`, `authentication_failed`, `billing_error`, … |
 | SubagentStart, SubagentStop | none | 10 s | none | Child rows and mirror paths |
 | SessionEnd | none | 1 s | none | Session ended (Claude Code allows 1.5 s by default) |
@@ -336,12 +338,14 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | `tool_name`, `tool_input`, `tool_use_id` | PreToolUse, PostToolUse | Detail line; question detection |
 | `notification_type`, `message` | Notification | Reasons for "needs you" |
 | `error` | StopFailure | Error reason |
+| `last_assistant_message`, `stop_hook_active`, `background_tasks`, `session_crons` | Stop | The turn's result (§6.4); whether the jot dog may send it on (§4.8) |
 | `agent_transcript_path` | SubagentStop | Confirms the mirror's path |
 | `reason` | SessionEnd | Why the session ended |
 
 **Replies.** The shim always exits 0.
 - **PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, SessionStart:** print `{"hookSpecificOutput":{"hookEventName":"<event>","additionalContext":"<notes>"}}` only when there is something to say; otherwise print nothing.
 - **PreToolUse after `hold.max`:** print `permissionDecision: "deny"` with a `permissionDecisionReason`.
+- **Stop:** when the jot dog sends the turn on (§4.8), print `{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"<what is left>"}}`: feedback that goes on with the turn, under Claude Code's own loop guards. Otherwise print nothing.
 - **Never `"allow"`:** that would bypass the user's permission rules.
 - **All other events:** print nothing.
 
@@ -676,6 +680,36 @@ Left out: the model's thinking, expanded skills and other meta lines, Claude Cod
 
 **Tests:** each kind of transcript line, read in halves, across `/clear` and replacement; stopped calls; finding the transcript Claude Code keeps; the op, the frames and `needs` with the fake agent; a sent message reaching the fake agent and leaving `pending` once the transcript has it; refusals while it asks a question and for several lines without bracketed paste; the slot showing a conversation, flipping to the raw terminal and back, a restarted core keeping the view, the flip key's binding, and the slot pane drawing a shown conversation in tmux; the slot program's cards, sending, banner, keys and scrolling.
 
+
+### 4.8 The jot dog
+
+People jot tasks down in the command bar and the Mac app's task bar, and move on. A jot is not through when its agent's turn ends: the work has to be committed and, in a repo that installs from a branch, reach that branch. Turns end short of that in a few repeating ways: the agent waits on an install it started in the background, an install lock or another session holds it up, it asks "say so and I'll ship it", or it simply forgets. The row then says done. The jot dog watches every jot and sees it through, or makes plain what is left. It costs no tokens: it reads git, and speaks to an agent only when work is left.
+
+**What it watches.** A jot is a session with a task that no other session delegated (`irie ctl delegate`'s subtasks are their caller's to finish) and that no tool runs. Its own work is in:
+- the worktree Irie made for it (`@repo`);
+- for a jot that runs in a scratch folder of its own: a worktree of a repo Irie knows (its aliases, the repos used lately, those of open sessions) that lies in that folder, or under a folder named for the jot's conversation id. Claude Code's scratchpad is such a folder, so an agent that makes its own worktree there is followed;
+- nothing for a jot that runs in a repo's main checkout (`@repo!`), which is shared: what is in it may be anyone's.
+
+**What is left.** In each of those worktrees, by `git status` and `git log`, read with no optional locks:
+- files not committed, untracked ones included, but not the local files Irie copied in (§4.2);
+- when its repo has a land branch (`dog.land`, by the repo's alias, folder name or path), the jot's own commits that branch lacks: those of `HEAD` not in the branch, committed since the jot started, so what its branch started from does not count. In Irie's own repo the land branch is `live`, which `tools/live.sh` moves when it installs (AGENTS.md). A land branch the repo lacks is ignored.
+
+The dog only reads. It never commits, merges, pushes or removes anything.
+
+**At the door.** Claude Code runs the Stop hook when a turn ends. Its input says whether a stop hook already sent this turn on (`stop_hook_active`), and which background tasks and session wakeups are in flight (`background_tasks`, `session_crons`), which tell "done" from "paused until its background work wakes it". The core reads the jot before it records the stop, within 2 s a git command; the shim waits up to 8 s for a Stop, under the hook's 10 s, and a look that took over 5 s lets the turn end, so a nudge the agent never hears never stands in for its end. When work is left, the core answers with `additionalContext`, which goes on with the turn as hook feedback rather than a hook error: the agent is told what is left, where, and to finish it the way the repo's AGENTS.md or CLAUDE.md says, to wait and retry when an install or another session holds it up, or to say in one line why it stopped on purpose. The journal records `dog.nudged` in place of that stop's `turn.ended`, so the row stays working and nothing that waits for a turn's end, such as close-when-done or delegation, sees one. The dog lets a turn end:
+- when nothing is left;
+- when a stop hook already sent it on: the agent has had its say. With Claude Code's own cap of 8 continuations in a row, a turn can never loop;
+- while background work or a wakeup of its own will wake it;
+- when its last message asks the user something, ending in a question mark;
+- once it has sent the jot back `dog.nudges` times since the user's last prompt (2; 0 only watches).
+
+**On the row.** Once a jot's turn is over (done, idle or exited), its row carries `loose`: `dirty`, `ahead`, `land`, `where[]` (each worktree's `path`, `branch`, `dirty` and `ahead`) and `nudged`. Its detail says it in words, "Not through: 3 files not committed · 2 commits not in live", which both sidebars show on the card in place of "To verify". A finished turn that waits on its own background work says "Waiting on its work in the background", with the first task's description. The dog looks again every 30 s at the finished jots it found work left in, and once at every finished jot after the core starts, so the row clears when the work lands, by whatever route: an install, a merge by another session, or the user's own hand. It keeps nothing on disk; git is the record.
+
+**The report.** `irie ctl dog [--json]` (op `dog`) looks at every finished jot afresh and lists those that are not through, with what is left and where, then the jots closed in the last day that are not through, which `irie ctl reopen` brings back to finish.
+
+**Not yet.** A jot stopped by a usage limit could be told to go on when the limit resets; and a closed jot could be reopened to finish without being asked.
+
+**Tests:** git reads against real worktrees (uncommitted, untracked, renamed, copied files left out, commits before the jot's start, a land branch missing, landing by moving the branch); with the fake agent, which goes on after a Stop hook as Claude Code does: a nudge and then the stop it lets through, the row's words, a commit that lands, background work and a question left alone, `nudges = 0`, a delegated task, and a scratch jot's own worktree found by its conversation id but not another's, open and closed.
 ---
 
 ## 5. Data and config
@@ -712,7 +746,7 @@ One JSON object per journal line and per `event` frame:
 | `tool.started` | `tool`, `summary`, `phrase` (the call in plain words: "Running the tests") | PreToolUse | `tool_call` pending / working |
 | `tool.finished`, `tool.failed` | `tool`, `ms` | PostToolUse, PostToolUseFailure | `tool_call_update` completed / failed |
 | `input.needed` | `reason`: `permission`, `question`, `plan`, `elicitation`, `stalled`; `phrase` for a permission, a question or a plan ("Asks: may it run rm -rf build?") | PermissionRequest, Notification, PreToolUse(AskUserQuestion, ExitPlanMode), Elicitation, readiness timer | `request_permission` / blocked |
-| `turn.ended` | `message`: the turn's last message, cut; whole in `result.md` (M10) | Stop | stop reason `end_turn` / done |
+| `turn.ended` | `message`: the turn's last message, cut; whole in `result.md` (M10). `stop_hook_active` when a stop hook sent the turn on before; `waiting`, how many background tasks and wakeups of its own will wake it, and `waiting_on`, the first task's description (§4.8) | Stop | stop reason `end_turn` / done |
 | `turn.failed` | `error` | StopFailure | error |
 | `subagent.started`, `subagent.finished` | `agent_type`, `transcript` | SubagentStart, SubagentStop | none (an ACP RFD covers subagents) |
 | `session.ended` | `reason` | SessionEnd | `session/close` |
@@ -727,6 +761,7 @@ One JSON object per journal line and per `event` frame:
 | `outcome.rated` | `verdict`: `good` or `bad` | user (M10, §6.4) | none |
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
 | `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |
+| `dog.nudged` | `dirty`, `ahead`, `land`, `message`: what the jot left, and what its agent had said. It stands in for that stop's `turn.ended`, since the turn goes on | irie (§4.8) | none |
 
 ### 5.3 Derived state
 
@@ -907,6 +942,11 @@ tool_input = "summary"        # summary | none
 
 [usage]
 status_line = true            # be Claude Code's status line, to read cost and plan use; yours still runs (§6.3)
+
+[dog]                         # the jot dog: sees each jot through until its work lands (§4.8)
+watch = true                  # read a jot's own worktree when its turn ends, and say on its row what is left
+nudges = 2                    # how often it sends one jot back to finish between two of your prompts; 0 = only watch
+land = {}                     # by repo (alias, folder name or path), the branch its work must reach, e.g. { irie = "live" }
 
 [env]
 capture = "login-shell"       # login-shell | none  (used when started from Irie.app)

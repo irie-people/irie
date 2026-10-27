@@ -22,7 +22,9 @@ var toolInputKeys = []string{"summary", "question"}
 // hook takes one hook event from the shim (DESIGN §3.3) and records it.
 // Nothing holds a call yet. A session that starts may be told it can
 // delegate (DESIGN §6.4); a turn's last message is kept whole for
-// delegation; a turn stopped at a usage limit may fail over.
+// delegation; a turn stopped at a usage limit may fail over; a jot whose
+// turn ends before its work has landed may be sent back to finish it
+// (DESIGN §4.8).
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	h, err := harnessFor(a.Harness)
 	if err != nil {
@@ -37,6 +39,9 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		Input json.RawMessage `json:"tool_input"`
 	}
 	json.Unmarshal(a.Payload, &call)
+	// The jot dog reads what a finished turn left before the turn is
+	// recorded, outside c.mu (dog.go).
+	unfinished, loose := c.dogAtStop(a.Session, evs)
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
@@ -47,6 +52,12 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	failover, turnEnded := false, false
 	x.quiet++
 	for _, e := range evs {
+		if unfinished != "" && e.Kind == event.TurnEnded && e.Agent == event.Main {
+			// The turn goes on, so it has not ended: the dog sent the
+			// agent back to finish what it left.
+			e = nudgeEvent(e, loose)
+			reply.Unfinished = unfinished
+		}
 		input := call.Input
 		if c.cfg.Journal.ToolInput == "none" {
 			for _, k := range toolInputKeys {
