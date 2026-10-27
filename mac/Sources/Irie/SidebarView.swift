@@ -413,22 +413,24 @@ private struct HelperRows: View {
 
     var body: some View {
         let helpers = session.subagents ?? []
+        // In their orchestrator's colour while it works, so they read as its.
+        let own = Look.agentInk(session)
         if !helpers.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(helpers.prefix(3)) { h in
                     let loud = h.needsYou == true
                     HStack(spacing: 5) {
-                        Text("↳").font(Theme.font(12)).foregroundStyle(Theme.muted)
-                        Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : Theme.ink)
+                        Text("↳").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                        Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : own ?? Theme.ink)
                         if let d = h.detail, !d.isEmpty {
-                            Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : Theme.muted)
+                            Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : own ?? Theme.muted)
                         }
                     }
                     .lineLimit(1)
                     .help([h.type, h.detail, h.command].compactMap { $0 }.joined(separator: "\n"))
                 }
                 if helpers.count > 3 {
-                    Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(Theme.muted)
+                    Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
                 }
             }
             // Under the card's name: its inset, its mark and the gap.
@@ -505,7 +507,8 @@ private struct QuickActions: View {
 }
 
 /// The selected session's details, on a card above the task bar, edged in
-/// its state's colour: long text is cut off, and the full text is on hover.
+/// its state's colour, or its agent's while it works: long text is cut off,
+/// and the full text is on hover.
 /// It opens small, the state and one line, and shows as many whole lines as
 /// fit. Its top edge drags it taller, as far as leaves the
 /// cards their room, or shorter. The chevron, a double click on the edge or
@@ -538,7 +541,9 @@ struct DetailsPanel: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
         let outside = store.selectedOutside
-        let stateColor = outside == nil ? selected.flatMap { Look($0).color } : nil
+        // Its state's colour, or its agent's while it works, as the
+        // terminal's frame.
+        let stateColor = outside == nil ? selected.flatMap { Look($0).color ?? Look.agentTint($0) } : nil
         Group {
             if minimized {
                 summary(outside)
@@ -649,13 +654,14 @@ struct DetailsPanel: View {
                 line(o.doing, color: Theme.ink)
             } else if let s = selected {
                 let look = Look(s)
-                StateMark(look: look)
+                let own = Look.agentInk(s)
+                StateMark(look: look, tint: Look.agentTint(s))
                 if look.loud {
                     line(s.detail ?? look.label, color: Theme.needs)
                 } else if let c = s.command, !c.isEmpty {
-                    line(c, mono: true, color: Theme.ink)
+                    line(c, mono: true, color: own ?? Theme.ink)
                 } else {
-                    line(s.detail ?? look.label, color: Theme.ink)
+                    line(s.detail ?? look.label, color: own ?? Theme.ink)
                 }
             } else {
                 line("No session picked")
@@ -666,14 +672,18 @@ struct DetailsPanel: View {
         .controlSize(.small)
     }
 
+    /// While the session works, its state and every line about it but a
+    /// warning take its agent's colour, as its card does.
     private func details(_ s: Session) -> some View {
         let look = Look(s)
+        let own = Look.agentInk(s)
+        let meta = own ?? Theme.muted
         return WholeLines(spacing: 4) {
             HStack(spacing: 6) {
-                StateMark(look: look)
+                StateMark(look: look, tint: Look.agentTint(s))
                 Text(look.label)
                     .font(Theme.font(12.5, .bold))
-                    .foregroundStyle(look.loud ? Theme.needs : Theme.ink)
+                    .foregroundStyle(look.loud ? Theme.needs : own ?? Theme.ink)
                 Spacer(minLength: 4)
                 // Icons, so a narrow sidebar never cuts their words short; the
                 // words are on hover and for VoiceOver.
@@ -688,18 +698,18 @@ struct DetailsPanel: View {
                 DetailsFold()
             }
             .controlSize(.small)
-            line(s.detail, color: look.loud ? Theme.needs : Theme.ink)
+            line(s.detail, color: look.loud ? Theme.needs : own ?? Theme.ink)
             ControlLines(session: s)
-            line(s.command, mono: true)
-            line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
-            line(s.cwd.map(Age.tilde), mono: true)
-            line(s.tokens?.breakdown)
+            line(s.command, mono: true, color: meta)
+            line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true, color: meta)
+            line(s.cwd.map(Age.tilde), mono: true, color: meta)
+            line(s.tokens?.breakdown, color: meta)
             ForEach((s.subagents ?? []).prefix(3)) { h in
                 line("↳ " + [h.type ?? "Helper", h.detail].compactMap { $0 }.joined(separator: " · "),
-                     color: h.needsYou == true ? Theme.needs : Theme.muted)
+                     color: h.needsYou == true ? Theme.needs : meta)
             }
             if let extra = s.subagents.map({ $0.count - 3 }), extra > 0 {
-                line("and \(extra) more helpers")
+                line("and \(extra) more helpers", color: meta)
             }
             ForEach((s.warnings ?? []).prefix(2), id: \.self) { w in
                 line("⚠︎ " + w, color: Theme.sunInk)

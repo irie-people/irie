@@ -32,9 +32,11 @@ struct TerminalArea: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(selected?.name ?? "Irie")
                         .font(.system(size: 13, weight: .semibold))
+                    // Its state and the rest, in its agent's colour while it
+                    // works, as its card and the terminal's frame.
                     Text(selected.map(subtitle) ?? "No session")
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                 }
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
