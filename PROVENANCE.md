@@ -78,6 +78,9 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-27 | `go help version` and `go help build` (Go 1.27) | `go version -m` prints the `vcs.revision` that `-buildvcs` stamps into a build: how `tools/live.sh` tells which commit is installed |
 | 2026-10-27 | `git merge-base -h` and `git update-ref -h` | `--is-ancestor` refuses an install that would drop the live build, and `update-ref` moves the `live` branch: `tools/live.sh` |
 | 2026-10-27 | macOS manual pages `lsappinfo(1)`, `open(1)`, `pgrep(1)`, `ditto(1)` | Whether Irie.app is in front, relaunching it in front or behind (`open -g`), finding it by process name (`pgrep -x`) and copying the bundle: `tools/live.sh` |
+| 2026-10-27 | https://code.claude.com/docs/en/tools-reference.md | Claude Code's tool names, and that on macOS and Linux Glob and Grep are left out so Claude searches with `find` and `grep` through Bash: the vocabulary of `core.Phrase`, which says a tool call in plain words ("Running the tests", "Editing main.rs") |
+| 2026-10-27 | https://code.claude.com/docs/en/agent-sdk/typescript.md (Tool Input Types) | The inputs `core.Phrase` reads: `BashInput.command` and `description`, `FileReadInput`/`FileEditInput`/`FileWriteInput.file_path`, `GrepInput`/`GlobInput.pattern`, `WebFetchInput.url`, `WebSearchInput.query`, `AgentInput.description`, `AskUserQuestionInput.questions[].question` |
+| 2026-10-27 | https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html (§2.2 Quoting, §2.3 Token Recognition, §2.7 Redirection, §2.7.4 Here-Document, §2.9 Shell Commands) | Reading a Bash command for its words: quotes, backslashes, command substitution, comments, operators that split simple commands, redirections and here-document bodies, which `core.Phrase` skips |
 
 ## Third-party code
 
