@@ -97,16 +97,16 @@
 
   <h2>Do I need to know the terminal?</h2>
   <p>A <dfn>terminal</dfn> is a window where you type commands instead of clicking. Irie lives in one, but most of what you type there is plain sentences.</p>
-  <p>On a Mac, you’ll be able to open Irie like any app. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></p>
+  <p>On a Mac, Irie for Mac is made for people who never open a terminal: it shows each agent as a card, and its work as a conversation.</p>
 
   <h2>Which agents can Irie run?</h2>
   <p>Claude Code, and Irie shows when it’s working, needs you or is done. Any other agent that runs in a terminal can be started too, and Irie shows whether it’s still running.</p>
   <p>Fuller support for Codex CLI, opencode, Gemini CLI and others is planned after version 1.</p>
 
   <h2>Can it use an AI model on my own computer?</h2>
-  <p>A <dfn>model</dfn> is the AI behind an agent, and some run on your own computer for free. A <dfn>profile</dfn> in Irie’s settings can point Claude Code at one, for the tasks you choose.</p>
+  <p>A <dfn>model</dfn> is the AI behind an agent, and some run on your own computer for free. Irie can run a model server for you, Ollama, and start Claude Code on a model there with <code>+local</code>.</p>
   <p>Anthropic doesn’t support Claude Code on other companies’ models, so how well it works is up to the model.</p>
-  <p>Milestone&nbsp;10 adds a check that the model can hold enough text for an agent’s work, since one with too little room can quietly lose its instructions. <a class="tag" href="roadmap.html#m10" data-m="10">Planned</a></p>
+  <p>Before it starts one, Irie checks that the model can hold enough text for an agent’s work and that your computer can hold the model. If not, it says how to fix it, since a model with too little room can quietly lose its instructions.</p>
 
   <h2>What happens if I close the window?</h2>
   <p>Your agents keep working. Open Irie again and they’re all where you left them.</p>
@@ -117,18 +117,20 @@
 
   <h2>Does it change my agent’s settings?</h2>
   <p>It never edits your settings files. Each time it starts an agent, it adds its <dfn>hooks</dfn>, small commands the agent runs to say what it’s doing.</p>
-  <p>It also picks the model, effort and permission mode for each launch: by default Opus 5.5 at max effort in auto mode. You can change these in Irie’s settings.</p>
+  <p>It also picks the model for each task. By default a task goes to the cheapest <dfn>profile</dfn>, a recipe of agent and model, that does such tasks well, from Haiku for small jobs to Opus 5.5 for hard ones.</p>
+  <p>You can change this in Irie’s settings, or name a profile for a task with <code>+</code>.</p>
 
   <h2>Could it delete my work?</h2>
   <p>Irie itself doesn’t delete your files, but the agents it starts change files where they work. Unless you name a project or a folder with <code>@</code>, each task gets a new, empty folder of its own.</p>
   <p>Name a project with <code>@</code>, and its agent works in a <dfn>worktree</dfn>: a second working copy, which version 1 never deletes.</p>
-  <p>Add <code>!</code> after the name, or name a folder outside git, and the agent works on your own files there.</p>
+  <p>Add <code>!</code> after the name, or name a folder outside <dfn>git</dfn>, the tool that keeps a project’s history, and the agent works on your own files there.</p>
 
   <h2>What does it run on?</h2>
-  <p>Macs and Linux computers, with tmux. Windows isn’t planned for version 1.</p>
+  <p>Macs and Linux computers, with tmux, and on a Mac there’s also Irie for Mac, an app of its own. Windows isn’t planned for version 1.</p>
 
   <h2>What does it cost?</h2>
   <p>Irie is free, and anyone may read, change and share its code under the Apache 2.0 license. The agents it starts still run on your own AI account, and cost what they would without Irie.</p>
+  <p>Irie shows what each session costs, and sends small jobs to cheaper models that do them well.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
 
   <h2>What does “Irie” mean?</h2>

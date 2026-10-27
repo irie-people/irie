@@ -15,8 +15,8 @@ Every page opens with its title and then its picture, before any text. Home puts
 | Home | `index.html` | The Irie window: the sidebar beside the slot | The definition of "irie". The tagline, "If you could do anything, what would you do first?". What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
 | How it works | `how-it-works.html` | You, Irie, tmux, agents and worktrees | You type a task; Irie starts an agent in tmux; Enter shows it live; hooks tell Irie how it is doing; what the colours mean; worktrees and profiles; what stays on your computer |
 | Get started | `get-started.html` | How a spawn line reads | There is nothing to install yet. What you will need, and four steps of what using Irie will look like |
-| Roadmap | `roadmap.html` | The eleven milestones | The milestones of DESIGN §8, marked done only once merged on main, then what comes after v1 (DESIGN §1.3) |
-| FAQ | `faq.html` | Close the window and the agents keep going | Short answers to a newcomer's questions: what an agent is, which agents, local models, cost, the name |
+| Roadmap | `roadmap.html` | The eleven milestones | The milestones of DESIGN §8 as done, in progress or planned; what was built beside them (Irie for Mac, the conversation view, sessions outside Irie); then what comes after v1 (DESIGN §1.3) |
+| FAQ | `faq.html` | Close the window and the agents keep going | Short answers to a newcomer's questions: what an agent is, the Mac app, which agents, local models, how a model is picked, cost, the name |
 | Contribute | `contribute.html` | From an issue to Steak | The four steps of CONTRIBUTING, "Free, and paid back" and the Steak links from the README, and the house rules from AGENTS.md |
 
 ### Docs
@@ -25,11 +25,12 @@ Added on 2026-10-26, for using Irie rather than learning about it. A "Docs" item
 
 | Page | File | Picture | What it covers |
 |---|---|---|---|
-| Docs | `docs.html` | Seven stones on a path | The pages in order, and what the marks mean |
+| Docs | `docs.html` | Eight stones on a path, Themes' stone empty because it is planned | The pages in order, and what the marks mean |
 | Install | `install.html` | A terminal building Irie | Building from source with Go; what `irie` does on its first run; updating, keeping and removing it |
 | Your first session | `first-session.html` | The window on a first run | Typing a task, reading the row, looking in, answering an agent, a finished task |
 | Tasks, repos and worktrees | `tasks.html` | Two `@shop` tasks in worktrees | The task box, `@`, `@!` and `+`, how `@` finds a repo, worktrees, Tab completion, pastes, names |
 | Profiles and models | `profiles.html` | `+local` picking a profile | The settings file and when a change takes effect, profiles, local models, generic agents, every setting |
+| Themes | `themes.html` | Four themes as tiles, light beside dark | Planned. Rosewater (the default), Terracotta and Lilac in the colours the owner approved from warm-look's palettes, and Evergreen from `mac/Sources/Irie/Theme.swift`, all copied exactly: for each, a light and a dark sidebar, every state in order, and each colour's lowest contrast |
 | Keys and commands | `keys.html` | Irie's key guide as keycaps | Every key, the keys to come, every command, `irie ctl` |
 | Recipes | `recipes.html` | Three branches merged into main | Seven recipes, each with what works today and what is planned |
 | Troubleshooting | `troubleshooting.html` | Rows in trouble | Each state, message and warning, what to do, and where Irie keeps things |
@@ -49,6 +50,8 @@ All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<titl
 | Milestones | Roadmap | Eleven stones over two waves: done, in progress, planned |
 | The window closes | FAQ | The window is only a view; the agents live in tmux and keep going |
 | From an issue to Steak | Contribute | Issue, signed-off pull request, merge, a `steak:N` size, the public record |
+| Four themes | Themes | Rosewater, Terracotta, Lilac and Evergreen as tiles, light on the left and dark on the right |
+| A theme's sidebar | Themes | For each theme, in light and dark: the Mac app's sidebar as planned, with cards in every kind of state, then every state's mark in order. Each picture keeps its own colours in both of the site's themes |
 
 Recordings come later. Each one has an empty box now, sized 16:10, whose caption doubles as its alt text and names the recording to come.
 
@@ -96,7 +99,9 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 
 - **When a milestone merges.** The same pull request updates `site/roadmap.html` and the milestones picture, and removes that milestone's "Planned" marks. Each mark carries `data-m="<N>"`, so `grep -rn 'data-m="3"' site/` finds them, and `grep -rn milestone site/` finds the sentences that name one.
 - **Milestone 3.** This branch was made on top of the M3 commit, which was not on main yet. The docs change that builds on it carries the M3 commit too, and marks M3 done, so M3 reaches main first or with it (open decision 4).
+- **Milestones 6 and 10, and the rest of live.** On 2026-10-27 the site was merged with live, so it carries the code it describes: M6 and M10 are built there and marked done, M4 and M7 are in progress (rename, close and reopen, reorder and promote are built; park, jump, undo and notes are not), and M5, M8, M9 and M11 are planned, each checked against live's code. The site reaches main with that code, so "done means added to main" holds wherever the site is published. The themes stay Planned, as agreed with the session that asked for them.
 - **When behaviour changes.** The same pull request updates the docs: keys are in `keys.html`, settings in `profiles.html`, and messages in `troubleshooting.html`.
+- **When the themes are built.** The marks with `data-m="themes"` go, Themes' stone on the docs page fills, and the other pictures move to the default theme, Rosewater.
 - **When the first release ships.** Install gains the download, and the "no download yet" lines on Home, Get started, the FAQ and the README go.
 - **Links out.** The site links to `github.com/irie-hq/irie`, `irie-hq/stake` and `steak-hq/steak`. None of them was public on 2026-10-26, so those links fail until they are.
 

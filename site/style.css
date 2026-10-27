@@ -542,6 +542,7 @@ td .tag { margin-top: 0.2rem; }
   line-height: 2.3rem;
   text-align: center;
 }
+.doc-list > li.planned::before { border: 2px solid var(--ink-soft); background: transparent; color: var(--ink-soft); line-height: calc(2.3rem - 4px); }
 .doc-list h2 { margin: 0.2rem 0 0; font-size: 1.15rem; }
 .doc-list p { margin-top: 0.3rem; }
 
@@ -567,6 +568,22 @@ td .tag { margin-top: 0.2rem; }
 }
 .docs-nav li { max-width: none; }
 .docs-nav a[aria-current="page"] { color: var(--ink); font-weight: 650; text-decoration: none; }
+
+/* Themes. Each picture carries its theme's own colours, so it looks the
+   same in the site's light and dark. */
+svg .rounded { font-family: ui-rounded, "SF Pro Rounded", var(--sans); }
+.pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 0 1.5rem;
+  max-width: 44rem;
+}
+.pair .picture svg { max-width: 21rem; margin: 0 auto; }
+.colours { margin-top: 1.25rem; max-width: 44rem; }
+.colours summary { cursor: pointer; color: var(--link); font-weight: 650; }
+.colours .role { display: block; color: var(--ink-soft); font-size: 0.85rem; font-weight: 400; }
+.colours td { white-space: nowrap; }
+.sw { width: 0.9rem; height: 0.9rem; margin-right: 0.4rem; vertical-align: -0.1rem; }
 
 @media (max-width: 32.5rem) {
   :root { --gutter: 1rem; }
