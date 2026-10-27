@@ -172,6 +172,8 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-27 | https://docs.claude.com/en/api/messages (content blocks) | Message content as a string or blocks: `text`, `thinking`, `tool_use` with `id`, `name` and `input`, and `tool_result` with `tool_use_id`, `content` and `is_error`: reading a transcript's messages (DESIGN §4.7) |
 | 2026-10-27 | https://www.adityabawankule.io/blog/claude-code-session-jsonl-format (2026; no licence stated, so facts only) | A transcript line's `type` (`user`, `assistant`, `system` and metadata types), `uuid`, `parentUuid`, `timestamp` and `isSidechain`; one assistant line per content block; tool results as `user` lines with a top-level `toolUseResult`; subagents in `subagents/agent-<id>.jsonl`: the shape the conversation reader expects (DESIGN §4.7) |
 | 2026-10-27 | https://github.com/daaain/claude-code-log (MIT; at main: `claude_code_log/models.py`, `factories/user_factory.py`, `factories/attachment_factory.py`, `factories/system_factory.py`, `utils.py`) | Facts only, no code copied: `isMeta` lines (expanded skills and commands), `isCompactSummary`, `system` lines with subtype `compact_boundary`, `attachment` lines of type `queued_command` (a message typed while the agent works, `prompt` a string or blocks, `origin.kind` `peer` for another agent's), and the tags Claude Code wraps around slash commands (`command-name`, `command-args`), local command output, shell commands (`bash-input`, `bash-stdout`), memory notes, task notifications and reminders, with its `[Request interrupted by user` and `Caveat:` texts: what the conversation shows and leaves out (DESIGN §4.7) |
+| 2026-10-27 | https://www.conventionalcommits.org/en/v1.0.0/ (CC BY 3.0) | The commit subject rule in AGENTS.md, which `.github/conventional-commit.sh` checks |
+| 2026-10-27 | https://github.com/googleapis/release-please (docs/manifest-releaser.md, docs/customizing.md, schemas/config.json) ; https://github.com/googleapis/release-please-action (README) | `release-please-config.json` (the `go` release type, `initial-version`, tags without a component) and the `x-release-please-version` annotation release-please needs before it can update `Base`; the manifest at 0.0.0, so the first release is 0.1.0 |
 
 ## Third-party code
 
@@ -215,6 +217,13 @@ The website in `site/` has no third-party code: no scripts, fonts or stylesheets
 | actions/configure-pages | v6 | MIT | Pages workflow: read the Pages settings |
 | actions/upload-pages-artifact | v5 | MIT | Pages workflow: package `site/` |
 | actions/deploy-pages | v5 | MIT | Pages workflow: publish it |
+
+`.github/conventional-commit.sh`, `.github/workflows/commits.yml` and `.github/workflows/release-please.yml` are copied from the templates of the [Steak framework](https://github.com/steak-hq/steak) (`templates/project`, MIT). The two workflows run these actions on GitHub's runners; nothing from them is copied into the repository.
+
+| Action | Version | License | Why |
+|---|---|---|---|
+| actions/checkout | v4 | MIT | commits workflow: fetch the pull request's history |
+| googleapis/release-please-action | v4 | Apache-2.0 | release-please workflow: the release pull request, the tag and the GitHub release |
 
 ## Third-party text
 
