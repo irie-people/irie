@@ -32,6 +32,10 @@ final class Store: ObservableObject {
     /// ui.red_on_done, from the core: done sessions are drawn red. Look keeps
     /// it for the marks; this draws the views again when it changes.
     @Published private(set) var redOnDone = false
+    /// spawn.close_when_done, from the core: a finished session closes
+    /// itself, so the sidebar keeps no Done group and the title bar no Done
+    /// count. What closed is in history (`irie ctl history`, ⇧⌘T).
+    @Published private(set) var closeWhenDone = false
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
@@ -142,6 +146,9 @@ final class Store: ObservableObject {
             Look.redOnDone = h.redOnDone ?? false
             redOnDone = Look.redOnDone
         }
+        if let h = f.header, (h.closeWhenDone ?? false) != closeWhenDone {
+            closeWhenDone = h.closeWhenDone ?? false
+        }
         switch f.t {
         case "snapshot":
             sessions = (f.sessions ?? []).sorted(by: Self.before)
@@ -237,8 +244,11 @@ final class Store: ObservableObject {
         switch mode {
         case .state:
             return Look.Group.allCases.compactMap { g in
-                let in_ = rows.filter { Look($0).group == g }
-                return in_.isEmpty ? nil : SessionGroup(id: "state:\(g)", title: g.title, path: nil, sessions: in_)
+                // A finished session is about to close itself; what is left
+                // in the last group is idle or ended, so it is named so.
+                let in_ = rows.filter { Look($0).group == g && !(closeWhenDone && Look($0) == .done) }
+                let title = closeWhenDone && g == .done ? "Idle" : g.title
+                return in_.isEmpty ? nil : SessionGroup(id: "state:\(g)", title: title, path: nil, sessions: in_)
             }
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
