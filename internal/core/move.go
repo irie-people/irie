@@ -122,7 +122,7 @@ func (c *Core) resumeProfile(name string) (string, config.Profile, error) {
 	}
 	p, ok := c.profile(name)
 	if !ok {
-		return "", config.Profile{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, and +%s<model> for a local model", name, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "), localPrefix)
+		return "", config.Profile{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, and +%s<model> for a local model", name, strings.Join(slices.Sorted(maps.Keys(c.cfg().Profiles)), ", "), localPrefix)
 	}
 	if p.Harness != "claude-code" {
 		return "", config.Profile{}, ipc.Errorf(ipc.CodeBadArgs, "profile +%s runs %s, which cannot carry a Claude Code conversation on", name, p.Harness)

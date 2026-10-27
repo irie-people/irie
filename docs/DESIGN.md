@@ -218,6 +218,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
 | `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle. A local profile is checked as for a spawn (§6.1) before the outside copy ends | Sessions outside Irie (§4.6) |
 | `dog` | none | `jots[]`: the jots that are not through, each with its `loose` (below), looked at afresh: the open ones in the list's order, then those closed in the last day as `closed` | The jot dog (§4.8) |
+| `config` | `set[]?`, each a `key`, dotted as in the file (`spawn.default_profile`), and a `value` of the type the key takes: a duration as a string such as `"30s"`, and null to take the key out, so its default applies | `path`, `config`: every key in effect, defaults too, by the file's names, and `problem?`: why the file would not load as it stands. With `set` it first edits the file in place and runs on the result (§5.5); what would not load is refused with `bad_args` and changes nothing | The Mac app's Settings window ([MAC.md](MAC.md)) |
 | `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
 | `conversation` | `session`, `limit?` | `session`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
@@ -814,6 +815,8 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 ### 5.5 Config and defaults
 
 `$XDG_CONFIG_HOME/irie/config.toml`. Every key is optional, and an unknown key is an error that names it. The values shown are the defaults.
+
+The Mac app's Settings window changes the file through the `config` op (§2.4), which edits it in place: a key the file sets keeps its line, its comment and its place, a new key goes after the last key of its table, and a new table goes at the end. The edit is refused unless the file then decodes to its old values with exactly the change made, and loads. A file linked from elsewhere is written where it lives, and the file keeps its mode. The core runs on the result at once, with any hand edit made since it started: the next task, the agents' menus and the sidebars' header (`red_on_done`, `close_when_done`) follow, and turning `close_when_done` off stops the closes still waiting. What is read only as Irie starts waits for its next start: `tmux.*`, `journal.keep_days`, the tmux keys, and the terminal sidebar's `ui.theme` and `ui.red_on_done`. Irie's own Ollama server keeps its settings until it starts again.
 
 ```toml
 [ui]

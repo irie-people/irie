@@ -26,7 +26,7 @@ func (c *Core) rawView() bool { return c.raw || c.appViews > 0 }
 // loadView takes up the view a previous core kept, or else starts with the
 // configured one. The caller holds c.mu.
 func (c *Core) loadView() {
-	c.raw = c.cfg.UI.View == "terminal"
+	c.raw = c.cfg().UI.View == "terminal"
 	out, err := c.tmux.Run("display-message", "-p", "#{"+optSelected+"} #{"+optRaw+"}")
 	if err != nil {
 		return

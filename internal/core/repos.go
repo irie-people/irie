@@ -40,17 +40,17 @@ func (c *Core) repoOptions() repo.Options {
 	c.mu.Lock()
 	recent := slices.Clone(c.recent)
 	c.mu.Unlock()
-	return repo.Options{Aliases: c.cfg.Repos.Aliases, Roots: c.cfg.Repos.Roots, Recent: recent, Home: home()}
+	return repo.Options{Aliases: c.cfg().Repos.Aliases, Roots: c.cfg().Repos.Roots, Recent: recent, Home: home()}
 }
 
 func (c *Core) worktreeOptions() worktree.Options {
 	root := c.paths.Worktrees()
-	if c.cfg.Worktree.Root != "" {
-		root = repo.Expand(c.cfg.Worktree.Root, home())
+	if c.cfg().Worktree.Root != "" {
+		root = repo.Expand(c.cfg().Worktree.Root, home())
 	}
 	return worktree.Options{
-		Root: root, Base: c.cfg.Worktree.Base, BranchPrefix: c.cfg.Worktree.BranchPrefix,
-		Copy: c.cfg.Worktree.Copy, Submodules: c.cfg.Worktree.Submodules,
+		Root: root, Base: c.cfg().Worktree.Base, BranchPrefix: c.cfg().Worktree.BranchPrefix,
+		Copy: c.cfg().Worktree.Copy, Submodules: c.cfg().Worktree.Submodules,
 	}
 }
 

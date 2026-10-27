@@ -433,17 +433,17 @@ func TestAResumedSessionIsReadyAndIdle(t *testing.T) {
 // and moved in, with the profile it keeps hard work on.
 func TestAutoListsWithTheStrongestProfile(t *testing.T) {
 	c := testCore(t)
-	if c.cfg.Spawn.DefaultProfile != config.Auto {
-		t.Fatalf("default profile %q", c.cfg.Spawn.DefaultProfile)
+	if c.cfg().Spawn.DefaultProfile != config.Auto {
+		t.Fatalf("default profile %q", c.cfg().Spawn.DefaultProfile)
 	}
 	if name, p, ok := c.claudeProfile(); !ok || name != "claude" || p.Model != "claude-opus-5-5" {
 		t.Errorf("claudeProfile = %q, %+v, %v; want claude", name, p, ok)
 	}
-	c.cfg.Route.Profiles = []string{"local", "haiku", "sonnet"}
+	c.cfg().Route.Profiles = []string{"local", "haiku", "sonnet"}
 	if name, _, _ := c.claudeProfile(); name != "sonnet" {
 		t.Errorf("with sonnet the strongest: claudeProfile = %q", name)
 	}
-	c.cfg.Spawn.DefaultProfile = "haiku"
+	c.cfg().Spawn.DefaultProfile = "haiku"
 	if name, _, _ := c.claudeProfile(); name != "haiku" {
 		t.Errorf("with haiku the default: claudeProfile = %q", name)
 	}
