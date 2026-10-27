@@ -8,11 +8,11 @@ A small website, served by GitHub Pages from `site/`, that explains Irie so plai
 
 ## Pages
 
-Every page opens with its title and then its picture, before any text.
+Every page opens with its title and then its picture, before any text. Home puts the definition of the word above its title, as the README does.
 
 | Page | File | Picture | What it says |
 |---|---|---|---|
-| Home | `index.html` | The Irie window: the sidebar beside the slot | The tagline, "Be the change you want to see in the world.", unattributed. What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
+| Home | `index.html` | The Irie window: the sidebar beside the slot | The definition of "irie". The tagline, "If you could do anything, what would you do first?". What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
 | What Irie is | `what-irie-is.html` | Your computer holding all of Irie, with one arrow out: from the agents to their AI companies | Added on 2026-10-27, first in the navigation so it is one click from every page. Everything, in full: what Irie does and never does, its parts, the programs it runs, every file it keeps and for how long, what it sends and where, what it does to agents and the three `[Irie]` notes word for word, what isn't built yet, who makes it, and commands to check each claim |
 | How it works | `how-it-works.html` | You, Irie, tmux, agents and worktrees | You type a task; Irie starts an agent in tmux; Enter shows it live; hooks tell Irie how it is doing; what the colours mean; worktrees and profiles; what stays on your computer |
 | Get started | `get-started.html` | How a spawn line reads | There is nothing to install yet. What you will need, and four steps of what using Irie will look like |
