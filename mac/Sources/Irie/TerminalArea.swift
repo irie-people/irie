@@ -30,7 +30,8 @@ struct TerminalArea: View {
             }
         }
         .navigationTitle(selected?.name ?? "Irie")
-        .navigationSubtitle(selected.map(subtitle) ?? "")
+        // Never empty: the title moves when a subtitle appears or goes.
+        .navigationSubtitle(selected.map(subtitle) ?? "No session")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {

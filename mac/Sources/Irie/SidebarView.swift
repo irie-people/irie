@@ -340,7 +340,9 @@ private struct Header: View {
         } label: {
             HStack(spacing: 4) {
                 Circle().fill(color).frame(width: 6, height: 6)
+                // Two digits' width, so a tenth session doesn't push the others.
                 Text("\(rows.count)").font(.system(size: 11.5, weight: .bold)).monospacedDigit()
+                    .frame(minWidth: 15)
             }
             .foregroundStyle(color)
             .padding(.horizontal, 7)
