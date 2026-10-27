@@ -1,0 +1,26 @@
+[
+  {
+    "reviewer": "opus",
+    "profile": "review-opus",
+    "model": "claude-opus-5-5",
+    "supplier": "anthropic",
+    "cli": "claude",
+    "environment": "irie-review-anthropic"
+  },
+  {
+    "reviewer": "sonnet",
+    "profile": "review-sonnet",
+    "model": "claude-sonnet-5-5",
+    "supplier": "anthropic",
+    "cli": "claude",
+    "environment": "irie-review-anthropic"
+  },
+  {
+    "reviewer": "codex",
+    "profile": "review-codex",
+    "model": "gpt-6.1-sol",
+    "supplier": "openai",
+    "cli": "codex",
+    "environment": "irie-review-openai"
+  }
+]
