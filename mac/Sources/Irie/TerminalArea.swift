@@ -17,7 +17,7 @@ struct TerminalArea: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            main
+            main.modifier(FileDrop(session: selected))
             PhraseBar()
         }
         .background(Theme.ground.ignoresSafeArea())
