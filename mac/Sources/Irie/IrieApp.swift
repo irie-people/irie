@@ -64,6 +64,15 @@ struct IrieApp: App {
                 Button(store.closable?.isParked == true ? "Unpark Session" : "Park Session") { store.toggleParked() }
                     .disabled(store.closable == nil || !store.canPark)
             }
+            // Undo and Redo step through the core's history, a park or a
+            // close, and name the step; a text field with typing to take
+            // back keeps ⌘Z for that (Undo.swift).
+            CommandGroup(replacing: .undoRedo) {
+                Button(store.undoLabel.map { "Undo " + UndoText.title($0) } ?? "Undo") { store.undoKey() }
+                    .keyboardShortcut("z")
+                Button(store.redoLabel.map { "Redo " + UndoText.title($0) } ?? "Redo") { store.undoKey(redo: true) }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
             // KeyRouter catches Ctrl+Tab and Ctrl+] first; the menu shows them.
             CommandMenu("Go") {
                 Button("Next Session") { store.step(1) }

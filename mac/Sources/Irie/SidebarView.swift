@@ -51,6 +51,9 @@ struct SidebarView: View {
             .layoutPriority(1)
         }
         .background(Theme.sidebar.ignoresSafeArea())
+        // A card parked from under the pointer takes its place once the
+        // pointer leaves it, or the app the front (Controls.swift).
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in store.settle() }
         .toolbar {
             // Both over the sidebar, beside the traffic lights and above the
             // find field: macOS sets automatic items in their own column's
@@ -235,7 +238,10 @@ private struct SessionCard: View {
             }
         }
         .contentShape(shape)
-        .onHover { hovering = $0 }
+        .onHover {
+            hovering = $0
+            store.hover(session.id, $0)
+        }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
         // A double click opens the name to edit; its first click showed it.
         .simultaneousGesture(TapGesture(count: 2).onEnded { store.beginRename(session.id) })
@@ -422,7 +428,9 @@ private struct GroupHeader: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(group.path.map(Age.tilde) ?? group.title)
+        .help(group.id == SessionGroup.parked
+              ? "Out of the way, and still running. Unpark one with its P button, z, or a drag out of Parked; ⌘Z takes back the last park."
+              : group.path.map(Age.tilde) ?? group.title)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([group.title, "\(group.sessions.count) sessions", note].compactMap { $0 }.joined(separator: ", "))
         .accessibilityHint(open ? "Folds the group" : "Opens the group")
