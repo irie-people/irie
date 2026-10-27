@@ -10,16 +10,32 @@ struct TerminalArea: View {
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
+    private var online: Bool {
+        if case .online = store.link { return true }
+        return false
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
             // restart, so a flap gets a banner, not a reattach.
             if let a = store.attach {
+                // The terminal stays attached under the conversation, so
+                // ⌥⌘T flips between them at once.
                 terminal(a)
-            } else if case let .offline(why) = store.link {
-                Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
-            } else {
-                ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(store.showTerminal ? 1 : 0)
+                    .allowsHitTesting(store.showTerminal)
+                    .accessibilityHidden(!store.showTerminal)
+            }
+            // The conversation needs only the core, not the terminal.
+            if !store.showTerminal && (store.attach != nil || online) {
+                ConversationView()
+            } else if store.attach == nil {
+                if case let .offline(why) = store.link {
+                    Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
+                } else {
+                    ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             if store.attach != nil, let note = linkNote {
                 Text(note)

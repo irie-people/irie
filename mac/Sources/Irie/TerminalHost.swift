@@ -25,6 +25,7 @@ struct TerminalHost: NSViewRepresentable {
             if let store, store.terminalHasKeys != has { store.terminalHasKeys = has }
         }
         store.terminalView = view
+        view.takesKeysOnStart = store.showTerminal
         context.coordinator.view = view
         context.coordinator.focusToken = focusToken
         context.coordinator.attach()
@@ -75,6 +76,9 @@ final class IrieTerminalView: LocalProcessTerminalView {
     private var responder: NSKeyValueObservation?
     /// Told whether the terminal has the keyboard.
     var onKeyboard: ((Bool) -> Void)?
+    /// Whether it takes the keyboard once it is in a window; not while the
+    /// conversation shows over it.
+    var takesKeysOnStart = true
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -89,7 +93,9 @@ final class IrieTerminalView: LocalProcessTerminalView {
         guard let window, !triedMetal else { return }
         triedMetal = true
         try? setUseMetal(true)
-        window.makeFirstResponder(self) // type to the agent straight away
+        if takesKeysOnStart {
+            window.makeFirstResponder(self) // type to the agent straight away
+        }
     }
 
     /// SwiftTerm's Metal view covers the terminal and takes no keyboard
