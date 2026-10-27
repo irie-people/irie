@@ -260,11 +260,14 @@ func (m Model) statusLine() string {
 	if m.sel >= len(m.sessions) {
 		return m.outsideStatus()
 	}
-	// What the selected row is doing or needs, else what Irie cannot do for
-	// it, then what it costs, then its full name and directory.
+	// What the selected row is doing or needs, in plain words, with the call
+	// it is about; else what Irie cannot do for it; then what it costs; then
+	// its full name and directory.
 	s := m.sessions[m.sel]
 	var parts []string
 	switch {
+	case s.Detail != "" && s.Command != "":
+		parts = append(parts, s.Detail+" ("+s.Command+")")
 	case s.Detail != "":
 		parts = append(parts, s.Detail)
 	case len(s.Warnings) > 0:

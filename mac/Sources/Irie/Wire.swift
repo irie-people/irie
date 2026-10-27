@@ -11,6 +11,8 @@ struct Session: Codable, Identifiable, Equatable {
     var state: String
     var reason: String?
     var detail: String?
+    /// The tool call the detail is about, as "Bash · go test ./...".
+    var command: String?
     var tail: [String]?
     var warnings: [String]?
     var exitCode: Int?
@@ -28,7 +30,7 @@ struct Session: Codable, Identifiable, Equatable {
     var tokens: Tokens?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, agent, state, reason, detail, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, tokens
+        case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, tokens
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -70,12 +72,13 @@ struct Subagent: Codable, Equatable, Identifiable {
     var type: String?
     var started: Date
     var detail: String?
+    var command: String?
     var needsYou: Bool?
 
     var id: String { agent }
 
     enum CodingKeys: String, CodingKey {
-        case agent, type, started, detail
+        case agent, type, started, detail, command
         case needsYou = "needs_you"
     }
 }
