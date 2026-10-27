@@ -725,7 +725,7 @@ default_profile = "auto"      # auto = the lowest cost per success among profile
 default_cwd = ""              # "" = new scratch dir per task
 ready_timeout = "30s"
 hide_tmux = true              # remove TMUX/TMUX_PANE from agent env
-close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it)
+close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it; status, report and question sessions are left open)
 close_delay = "30s"           # how long a finished session waits; a new prompt, or anything it needs from you, cancels the close
 
 [profiles.claude]             # the strongest: hard work and orchestration

@@ -47,3 +47,19 @@ func TestASessionStaysOpenByDefault(t *testing.T) {
 		t.Fatal("the session closed with close_when_done off")
 	}
 }
+
+func TestLookTaskKeepsAnswerSessionsOpen(t *testing.T) {
+	for task, want := range map[string]bool{
+		"status of the padding audit":     true,
+		"What changed in the last commit": true,
+		"summarize the open PRs":          true,
+		"review this diff":                true,
+		"rename Foo to Bar in core":       false,
+		"add a test for close":            false,
+		"prompt,stop":                     false,
+	} {
+		if got := lookTask.MatchString(task); got != want {
+			t.Errorf("lookTask(%q) = %v, want %v", task, got, want)
+		}
+	}
+}

@@ -15,6 +15,8 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -189,10 +191,14 @@ func (c *Core) reopenable(x *session) closedRecord {
 
 // closeWhenDone closes x once close_delay passes with nothing more from it:
 // no event, no message typed to it, nothing it needs from you and no
-// subagent running. A session that gets one more prompt is not done. The
-// close is the user's own, so it can be undone with reopen. The caller holds
-// c.mu.
+// subagent running. A session that gets one more prompt is not done. A
+// session whose answer is for you to read, such as a status report or a
+// question, is not closed at all (awaitsLook). The close is the user's own,
+// so it can be undone with reopen. The caller holds c.mu.
 func (c *Core) closeWhenDone(x *session) {
+	if c.awaitsLook(x) {
+		return
+	}
 	id, quiet := x.id, x.quiet
 	time.AfterFunc(c.cfg.Spawn.CloseDelay, func() {
 		c.mu.Lock()
@@ -211,6 +217,28 @@ func (c *Core) closeWhenDone(x *session) {
 		}
 		c.publishClosed()
 	})
+}
+
+// lookTask matches a task that asks for something to read: a status, a
+// report, a summary, a review, an explanation, a lookup or a question. The
+// session's answer is the point, so it waits for the user.
+var lookTask = regexp.MustCompile(`(?i)\b(status|report|summar(y|ize|ise)|recap|review|explain|investigate|audit|compare|research|what|where|which|why|how|who|when|list|show|tell|check|find|look (at|into)|walk me through)\b`)
+
+// awaitsLook reports whether x is waiting for the user to read its answer,
+// so it must not close by itself: its task asks for a status, report or
+// other answer (lookTask), or its last message asks the user something.
+// The caller holds c.mu.
+func (c *Core) awaitsLook(x *session) bool {
+	if msg, err := os.ReadFile(filepath.Join(c.paths.Session(x.id), resultFile)); err == nil &&
+		strings.HasSuffix(strings.TrimSpace(string(msg)), "?") {
+		return true
+	}
+	task, err := os.ReadFile(c.paths.TaskFile(x.id))
+	if err != nil {
+		return false
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(task)), "\n")
+	return lookTask.MatchString(first)
 }
 
 // reap gives every closing pane an ending, such as those a restarted core
