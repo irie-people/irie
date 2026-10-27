@@ -94,6 +94,18 @@ struct Frame: Decodable {
     var problem: String?
     /// A closed frame: the sessions reopen can bring back, the last closed first.
     var closed: [ClosedSession]?
+    /// A snapshot's or a header frame's header.
+    var header: Header?
+}
+
+/// What a snapshot says besides its rows.
+struct Header: Decodable {
+    /// ui.red_on_done: a done session is drawn red, not green.
+    var redOnDone: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case redOnDone = "red_on_done"
+    }
 }
 
 struct HelloArgs: Encodable {
@@ -150,6 +162,17 @@ struct SpawnResult: Decodable {
 struct ShowArgs: Encodable {
     var session: String
     var focus: Bool
+}
+
+struct RenameArgs: Encodable {
+    var session: String
+    var name: String
+}
+
+/// The session with the name the core gave it, numbered when another
+/// session has it.
+struct RenameResult: Decodable {
+    var session: Session
 }
 
 struct Empty: Codable {}
