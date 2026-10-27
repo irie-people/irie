@@ -69,7 +69,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | tmux 3.7b manual page (local `man tmux`), checked on a private test server | `resize-pane -Z` (toggles the zoom), `swap-pane -Z` and `select-pane -Z` (keep it), the `window_zoomed_flag` and `pane_active` formats, and `if-shell -F` in a hook and a key binding: the zoomed slot of the Mac app ([docs/MAC.md](docs/MAC.md)) |
 | 2026-10-26 | https://developer.apple.com/documentation/swiftui ; https://developer.apple.com/documentation/appkit | `Window`, `NavigationSplitView`, `searchable(placement: .sidebar)`, collapsible `Section(isExpanded:)`, `onKeyPress`, `NSViewRepresentable`, `NSWorkspace`, `NSPasteboard` and the activation policy: the Mac app's window ([docs/MAC.md](docs/MAC.md)) |
 | 2026-10-26 | macOS manual pages `socket(2)`, `connect(2)`, `unix(4)`, `setsockopt(2)` | A Unix-domain stream client with `SO_NOSIGPIPE` and `SO_RCVTIMEO`: the Mac app's connection to the core |
-| 2026-10-26 | https://github.com/migueldeicaza/SwiftTerm (MIT): `Package.swift` of releases 1.2.5 to 1.99.0, read for their swift-tools-version, and the package's public API | `LocalProcessTerminalView`, its delegate and `Terminal.getEnvironmentVariables`: the Mac app's terminal view, not yet compiled here. v1.18.0 is the newest release whose manifest declares swift-tools-version 5.9 |
+| 2026-10-26 | https://github.com/migueldeicaza/SwiftTerm (MIT): `Package.swift` of releases 1.2.5 to 1.99.0, read for their swift-tools-version; in v1.18.0, `Mac/MacLocalTerminalView.swift`, `Mac/MacTerminalView.swift`, `Apple/Metal/MetalTerminalRenderer.swift` and `Documentation.docc/GPURendering.md`, read for the API | `LocalProcessTerminalView` and its delegate, `Terminal.getEnvironmentVariables`, `setUseMetal` after the view joins a window, and the renderer compiling `Shaders.metal` from the main bundle at run time: the Mac app's terminal view, and why the app ships that file. v1.18.0 is the newest release whose manifest declares swift-tools-version 5.9 |
 | 2026-10-26 | `swift build` with the Swift 5.9.0 Command Line Tools on macOS 14.1 | SwiftPM stops at `xcrun --show-sdk-platform-path`: why `mac/build.sh` calls `swiftc` |
 
 ## Third-party code
@@ -83,7 +83,7 @@ No third-party code is copied into the repository. These Go modules are compiled
 | charm.land/lipgloss/v2 (github.com/charmbracelet/lipgloss) | v2.0.6 | MIT | Direct: styles and layout |
 | github.com/BurntSushi/toml | v1.6.0 | MIT | Direct: config.toml |
 | github.com/atotto/clipboard | v0.1.4 | BSD-3-Clause | Indirect, via the Bubbles textarea |
-| github.com/migueldeicaza/SwiftTerm (Swift package, not a Go module) | v1.18.0 | MIT | Declared in `mac/Package.swift` for the Mac app's terminal view. Not fetched or compiled into the Apple-frameworks build that `mac/build.sh` makes |
+| github.com/migueldeicaza/SwiftTerm (Swift package, not a Go module) | v1.18.0 | MIT | The Mac app's terminal view. `mac/build.sh` fetches the release tarball, checks its SHA-256 (`57fb6256…700d48`), compiles it into a static library under `mac/.build` (not in the repository) and links it into Irie.app; its `Shaders.metal` is copied into the app's resources. Also declared in `mac/Package.swift`. Not part of `IRIE_MAC_NO_SWIFTTERM=1` builds |
 | github.com/charmbracelet/colorprofile | v0.4.3 | MIT | Indirect |
 | github.com/charmbracelet/ultraviolet | v0.0.0-20261008173134-6b8d4baf91b4 | MIT | Indirect |
 | github.com/charmbracelet/x/ansi | v0.11.9 | MIT | Indirect |

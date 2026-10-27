@@ -12,8 +12,8 @@ struct TerminalHost: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(info: info) }
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
-        let view = LocalProcessTerminalView(frame: .zero)
+    func makeNSView(context: Context) -> IrieTerminalView {
+        let view = IrieTerminalView(frame: .zero)
         view.processDelegate = context.coordinator
         view.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         view.nativeBackgroundColor = Theme.terminalBackground
@@ -24,7 +24,7 @@ struct TerminalHost: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: LocalProcessTerminalView, context: Context) {
+    func updateNSView(_ view: IrieTerminalView, context: Context) {
         context.coordinator.info = info // used by the next attach
         if context.coordinator.focusToken != focusToken {
             context.coordinator.focusToken = focusToken
@@ -35,7 +35,7 @@ struct TerminalHost: NSViewRepresentable {
     final class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
         var info: AttachInfo
         var focusToken = 0
-        weak var view: LocalProcessTerminalView?
+        weak var view: IrieTerminalView?
 
         init(info: AttachInfo) { self.info = info }
 
@@ -54,6 +54,20 @@ struct TerminalHost: NSViewRepresentable {
         func processTerminated(source: TerminalView, exitCode: Int32?) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.attach() }
         }
+    }
+}
+
+/// Draws with Metal once it is in a window. SwiftTerm compiles its shaders
+/// from Shaders.metal in the app's resources at run time, so no Xcode is
+/// needed; without Metal it keeps drawing with Core Graphics.
+final class IrieTerminalView: LocalProcessTerminalView {
+    private var triedMetal = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, !triedMetal else { return }
+        triedMetal = true
+        try? setUseMetal(true)
     }
 }
 #endif
