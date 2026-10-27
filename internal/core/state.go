@@ -194,9 +194,10 @@ func (t *track) subagents() []ipc.Subagent {
 	for agent, e := range t.subs {
 		sa := ipc.Subagent{Agent: agent, Type: e.Str("agent_type"), Started: e.Time()}
 		if n, ok := t.needs[agent]; ok {
-			sa.NeedsYou, sa.Detail = true, needDetail(n)
+			sa.NeedsYou = true
+			sa.Detail, sa.Command = needLine(n)
 		} else if tool, ok := t.latestToolOf(agent); ok {
-			sa.Detail = joinDetail(tool.Str("tool"), tool.Str("summary"))
+			sa.Detail, sa.Command = callLine(tool)
 		}
 		out = append(out, sa)
 	}
@@ -277,18 +278,44 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 			break
 		}
 		s.Reason = n.Str("reason")
-		s.Detail = needDetail(n)
+		s.Detail, s.Command = needLine(n)
 	case ipc.StateStalled:
 		s.Reason, s.Tail = event.ReasonStalled, lines(t.stalled.Str("tail"))
 		s.Detail = "stalled: no hooks within " + t.stalled.Str("wait") + lastLine(s.Tail)
 	case ipc.StateWorking:
 		if tool, ok := t.latestTool(); ok {
-			s.Detail = joinDetail(tool.Str("tool"), tool.Str("summary"))
+			s.Detail, s.Command = callLine(tool)
 		}
 	}
 	if s.State != ipc.StateExited && s.State != ipc.StateFailed {
 		s.Subagents = t.subagents()
 	}
+}
+
+// callLine is what a running tool call shows: its plain words for the row,
+// such as "Running the tests", and the call itself for the details, such as
+// "Bash · go test ./...". The core records the words on the event (Phrase);
+// an event from before it did has only the call, which is then the row's.
+func callLine(e event.Event) (detail, command string) {
+	call := joinDetail(e.Str("tool"), e.Str("summary"))
+	if p := e.Str("phrase"); p != "" {
+		return p, call
+	}
+	return call, ""
+}
+
+// needLine is what a need shows: its plain words, such as "Asks: may it run
+// rm -rf build?", and for a permission the call it asks about. An event from
+// before the core recorded words says it the older way.
+func needLine(n event.Event) (detail, command string) {
+	p := n.Str("phrase")
+	if p == "" {
+		return needDetail(n), ""
+	}
+	if n.Str("reason") == event.ReasonPermission && n.Str("tool") != "" {
+		command = joinDetail(n.Str("tool"), n.Str("summary"))
+	}
+	return p, command
 }
 
 func needDetail(n event.Event) string {

@@ -85,7 +85,8 @@ type Session struct {
 	Agent    string    `json:"agent,omitempty"` // "main"
 	State    string    `json:"state"`
 	Reason   string    `json:"reason,omitempty"`   // why it needs you, stalled or failed
-	Detail   string    `json:"detail,omitempty"`   // one line for the status strip
+	Detail   string    `json:"detail,omitempty"`   // what it is doing or needs, in plain words, for its row
+	Command  string    `json:"command,omitempty"`  // the tool call the detail is about, as "Bash · go test ./...", for its details
 	Tail     []string  `json:"tail,omitempty"`     // the last screen lines of a stalled or failed spawn
 	Warnings []string  `json:"warnings,omitempty"` // what Irie cannot do for this session
 	ExitCode *int      `json:"exit_code,omitempty"`
@@ -135,7 +136,8 @@ type Subagent struct {
 	Agent    string    `json:"agent"`          // sub:<vendor agent id>
 	Type     string    `json:"type,omitempty"` // its kind, such as Explore
 	Started  time.Time `json:"started"`
-	Detail   string    `json:"detail,omitempty"` // what it needs, or else its newest running tool
+	Detail   string    `json:"detail,omitempty"`  // what it needs, or else what its newest running tool does, in plain words
+	Command  string    `json:"command,omitempty"` // the tool call the detail is about
 	NeedsYou bool      `json:"needs_you,omitempty"`
 }
 

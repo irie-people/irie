@@ -290,6 +290,7 @@ private struct DetailsPanel: View {
             }
             .controlSize(.small)
             line(s.detail, color: look == .needs ? Theme.needs : Color.primary)
+            line(s.command, mono: true)
             line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
             line(s.cwd.map(Age.tilde), mono: true)
             line(s.tokens?.breakdown)
