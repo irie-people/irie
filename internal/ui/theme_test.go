@@ -337,11 +337,14 @@ func TestEveryCellIsOnThePalette(t *testing.T) {
 			}
 			m = send(m, keyMsg("v"))
 			painted(t, name+", as one list", m)
-			// Parked, with a red row in it, open and folded.
+			// Parked, with a red row in it, folded as it starts, then open,
+			// then folded again.
 			parked := everyState()[3]
 			parked.Parked = true
 			m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &parked}})
 			painted(t, name+", parked", m)
+			m = send(m, keyMsg("Z"))
+			painted(t, name+", parked and open", m)
 			m = send(m, keyMsg("Z"))
 			painted(t, name+", folded", m)
 			m = send(m, keyMsg("v"))

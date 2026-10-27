@@ -20,6 +20,9 @@ final class Store: ObservableObject {
     /// are kept when the user changes them (choose(_:), fold(_:)).
     @Published var mode: SidebarMode = SidebarMode(saved: UserDefaults.standard.string(forKey: "sidebarMode"))
     @Published var folded: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "foldedGroups") ?? [])
+    /// Parked is folded until it is opened, so a parked card goes out of
+    /// sight at once; the app keeps it open once opened (fold(_:)).
+    @Published var parkedOpen = UserDefaults.standard.bool(forKey: "parkedOpen")
     /// The repos the @ words know and the agents the + words name, with what
     /// each runs: what the task bar's menu and the new-task sheet offer.
     @Published private(set) var repoNames: [String] = []
@@ -325,13 +328,19 @@ final class Store: ObservableObject {
     /// it.
     var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap(\.sessions) }
 
-    /// A group is open unless folded, and every group is open while the
-    /// filter has text, so what it finds shows.
+    /// A group is open unless folded, and Parked only once opened. Every
+    /// group is open while the filter has text, so what it finds shows.
     func isOpen(_ g: SessionGroup) -> Bool {
-        !filter.trimmingCharacters(in: .whitespaces).isEmpty || !folded.contains(g.id)
+        if !filter.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        return g.id == SessionGroup.parked ? parkedOpen : !folded.contains(g.id)
     }
 
     func fold(_ g: SessionGroup) {
+        if g.id == SessionGroup.parked {
+            parkedOpen.toggle()
+            UserDefaults.standard.set(parkedOpen, forKey: "parkedOpen")
+            return
+        }
         if folded.contains(g.id) { folded.remove(g.id) } else { folded.insert(g.id) }
         UserDefaults.standard.set(Array(folded).sorted(), forKey: "foldedGroups")
     }
@@ -555,7 +564,8 @@ final class Store: ObservableObject {
 }
 
 /// How the sidebar groups the sessions: one list, or a group per repo.
-/// Either way the parked ones come last, in the Parked group.
+/// Either way the parked ones come last, in the Parked group, folded until
+/// it is opened.
 enum SidebarMode: String, CaseIterable {
     case list, repo
 

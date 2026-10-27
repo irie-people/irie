@@ -141,7 +141,7 @@ struct TerminalArea: View {
 
     private func subtitle(_ s: Session) -> String {
         let look = Look(s)
-        var parts = [look.loud ? s.detail ?? look.label : look.label]
+        var parts = [look.loud ? s.detail ?? look.label : Look.label(s)]
         if let p = s.profile, !p.isEmpty { parts.append(p) }
         if let b = s.branch, !b.isEmpty { parts.append(b) }
         if let t = s.tokens { parts.append("\(Tokens.short(t.total)) tokens") }

@@ -199,7 +199,9 @@ func New(b Backend, o Options) Model {
 	if !ok {
 		th = themes[defaultTheme]
 	}
-	m := Model{backend: b, now: o.Now, home: o.Home, redOnDone: o.RedOnDone, theme: th, sel: -1, focus: focusBar, bar: bar}
+	// Parked starts folded, so a session parked goes out of sight.
+	folded := map[string]bool{parkedKey: true}
+	m := Model{backend: b, now: o.Now, home: o.Home, redOnDone: o.RedOnDone, theme: th, folded: folded, sel: -1, focus: focusBar, bar: bar}
 	m.setDark(true)
 	m.bar.Focus()
 	return m

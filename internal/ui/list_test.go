@@ -167,8 +167,9 @@ func parkedSessions() []ipc.Session {
 }
 
 // Parked comes after the view's groups, in either view, and before Outside
-// Irie; a parked session shows only there. Its title is red while one of
-// them needs you, and folded it says how many do.
+// Irie; a parked session shows only there. It starts folded, so what is
+// parked is out of sight. Its title is red while one of them needs you, and
+// folded it says how many do.
 func TestParkedComesLast(t *testing.T) {
 	m := repoModel(t, 34, 80)
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: parkedSessions(), Header: &ipc.Header{}}})
@@ -177,11 +178,26 @@ func TestParkedComesLast(t *testing.T) {
 		"▾ website", "web-fix",
 		"▾ code/irie", "irie-theme", "irie-tests",
 		"▾ forks/irie", "fork-docs",
-		"▾ Parked", "scratch-notes", "web-copy",
+		"▸ Parked",
 		"▾ Outside Irie", "outside-00",
 	}
 	if got := outline(m); !reflect.DeepEqual(got, want) {
 		t.Errorf("Repo view %q, want %q", got, want)
+	}
+	if row := screen(t, m)[lineOf(t, m, "Parked")]; !strings.Contains(row, "▸ Parked  2 · 1 needs you") {
+		t.Errorf("folded header %q", row)
+	}
+	m = selectNamed(t, m, "Parked")
+	m = send(m, keyMsg("enter"))
+	want = []string{
+		"▾ website", "web-fix",
+		"▾ code/irie", "irie-theme", "irie-tests",
+		"▾ forks/irie", "fork-docs",
+		"▾ Parked", "scratch-notes", "web-copy",
+		"▾ Outside Irie", "outside-00",
+	}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("Repo view, Parked open: %q, want %q", got, want)
 	}
 	m = send(m, keyMsg("v"))
 	want = []string{
