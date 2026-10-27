@@ -264,6 +264,7 @@ svg .mono { font-family: var(--mono); }
 /* Home */
 
 .lead { font-size: 1.2rem; color: var(--ink-soft); }
+.hero .definition { margin: 0 0 1.75rem; }
 .hero hgroup { margin: 0; }
 .tagline { margin: 0 0 0.6rem; color: var(--mark); font-size: 1.15rem; font-weight: 700; text-wrap: balance; }
 .hero h1 { max-width: 22ch; }

@@ -15,19 +15,19 @@ These are Irie's fixed lines. Pages and docs use them word for word: the same wo
 > Good, pleasing, at peace. Everything's all right.
 > *"Everything irie."*
 
-Used in: `README.md`, at the top. `site/faq.html`, as the answer to "What does “Irie” mean?".
+Used in: `README.md`, at the top. `site/index.html`, at the top of the hero, above the tagline. `site/faq.html`, as the answer to "What does “Irie” mean?".
 
 ## The motto
 
 > Everything irie.
 
-The last line of the definition, in quotes there. Used in: `README.md` and `site/faq.html`, inside the definition.
+The last line of the definition, in quotes there. Used in: `README.md`, `site/index.html` and `site/faq.html`, inside the definition.
 
 ## The tagline
 
-> Be the change you want to see in the world.
+> If you could do anything, what would you do first?
 
-Unattributed: never add a name or a source to it. Used in: `README.md`, in bold under the definition. `site/index.html`, above the headline.
+Used in: `README.md`, in bold under the definition. `site/index.html`, under the definition and above the headline.
 
 ## The one-line summaries
 
