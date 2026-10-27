@@ -54,6 +54,7 @@ type Core struct {
 	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
 	http     *http.Client // for local servers
 	sampling atomic.Bool  // a memory sample is running
+	sweeping atomic.Bool  // the jot dog looks at the finished jots (dog.go)
 
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
@@ -119,6 +120,7 @@ type session struct {
 	note     string           // what its agent is told at its next tool call, once (freeze.go)
 	demoted  bool             // its process tree runs in the background, for a promoted session (priority.go)
 	convSubs int              // the subscriptions that follow its conversation
+	dog      dogState         // what the jot dog found its jot left (dog.go)
 }
 
 func (x *session) wire() ipc.Session {
@@ -140,6 +142,16 @@ func (x *session) wire() ipc.Session {
 		s.Class, s.Routed, s.Parent, s.Rated = o.class, o.routed, o.parent, o.rated
 	}
 	x.track.describe(&s, x.dead, x.exitCode)
+	// Once its turn is over, a jot's row says what it left that has not
+	// landed (DESIGN §4.8).
+	if l := wireLoose(x.dog.loose, x.track.nudged); l != nil && dogShows(s.State) {
+		s.Loose = l
+		if s.State == ipc.StateExited {
+			s.Detail += " · not through: " + l.Words()
+		} else {
+			s.Detail = joinDetail("Not through: "+l.Words(), s.Detail)
+		}
+	}
 	return s
 }
 
@@ -199,6 +211,7 @@ func Run(o Options) error {
 	c.mu.Unlock()
 	c.tick()
 	go c.sample()
+	go c.dogSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -219,6 +232,9 @@ func Run(o Options) error {
 			c.tick()
 			if n%sampleEvery == 0 {
 				go c.sample()
+			}
+			if n%dogEvery == 0 {
+				go c.dogSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
@@ -429,7 +445,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.FeatureSpawnModel,
-			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder,
+			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -444,6 +460,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return nil, c.close(a)
+	case ipc.OpDog:
+		return c.dogList()
 	case ipc.OpReopen:
 		var a ipc.ReopenArgs
 		if err := decode(raw, &a); err != nil {

@@ -95,6 +95,9 @@ type Probe struct {
 type HookReply struct {
 	Context string
 	Deny    string
+	// Unfinished is what is left of the task when its turn ends: the
+	// agent goes on to finish it, as the jot dog asks (DESIGN §4.8).
+	Unfinished string
 }
 
 // Harness is one agent CLI.

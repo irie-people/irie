@@ -1,7 +1,7 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
 // the ui, spawn, profiles, local, route, repos, worktree, tmux, journal,
-// hold and usage sections.
+// hold, usage and dog sections.
 package config
 
 import (
@@ -35,6 +35,7 @@ type Config struct {
 	Journal  Journal            `toml:"journal"`
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
+	Dog      Dog                `toml:"dog"`
 }
 
 // Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
@@ -155,6 +156,17 @@ type Usage struct {
 	StatusLine bool `toml:"status_line"`
 }
 
+// Dog is the jot dog (DESIGN §4.8): it sees each task you jot down through
+// until its work has landed. When a jot's turn ends with work left in its
+// own worktree, uncommitted or not yet in its repo's land branch, it sends
+// the agent back to finish, a few times at most between two of your
+// prompts, and the jot's row says what is left.
+type Dog struct {
+	Watch  bool              `toml:"watch"`  // check a jot's own worktree when its turn ends, and show what is left
+	Nudges int               `toml:"nudges"` // how often it sends one jot back to finish between two of your prompts; 0 = never
+	Land   map[string]string `toml:"land"`   // by repo (alias, folder name or path), the branch its work must reach, such as live
+}
+
 // Repos is where an @name finds its repo: aliases first, then the git repos
 // two levels under the roots.
 type Repos struct {
@@ -259,6 +271,7 @@ func Default() Config {
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
+		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
 	}
 }
 
@@ -349,7 +362,8 @@ func Load(path string) (Config, error) {
 		Journal  *Journal                  `toml:"journal"`
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage}
+		Dog      *Dog                      `toml:"dog"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -392,6 +406,9 @@ func Load(path string) (Config, error) {
 	}
 	if c.Local.Env == nil {
 		c.Local.Env = map[string]string{}
+	}
+	if c.Dog.Land == nil {
+		c.Dog.Land = map[string]string{}
 	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
@@ -634,6 +651,18 @@ func (c Config) Validate() error {
 	}
 	if c.Hold.Max <= 0 {
 		bad("hold.max = %v: must be positive", c.Hold.Max)
+	}
+	if c.Dog.Nudges < 0 {
+		bad("dog.nudges = %d: must not be negative", c.Dog.Nudges)
+	}
+	for _, repo := range slices.Sorted(maps.Keys(c.Dog.Land)) {
+		branch := c.Dog.Land[repo]
+		switch {
+		case strings.TrimSpace(repo) == "":
+			bad("dog.land: a repo needs a name, such as irie")
+		case !branchChars.MatchString(branch) || strings.HasPrefix(branch, "-") || strings.Contains(branch, ".."):
+			bad("dog.land.%s = %q: must name a branch, such as live", repo, branch)
+		}
 	}
 	return errors.Join(errs...)
 }

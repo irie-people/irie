@@ -27,6 +27,13 @@ type track struct {
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
 	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
 
+	// How its last turn ended, for the jot dog (dog.go): how often the dog
+	// sent it back since the user's last prompt, and the work of its own
+	// in the background, or wakeups, that will wake it again.
+	nudged    int
+	waiting   int
+	waitingOn string
+
 	// What the user did to the session as a whole (freeze.go, priority.go).
 	frozen   *event.Event // freeze.on, until freeze.off
 	held     bool         // a frozen session's running agent came to a tool call, where the shim holds it
@@ -68,6 +75,7 @@ func (t *track) apply(e event.Event) {
 		}
 	case event.PromptSubmitted:
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
+		t.nudged, t.waiting, t.waitingOn = 0, 0, ""
 	case event.ToolStarted:
 		t.busy(e)
 		t.held = t.held || t.frozen != nil
@@ -94,6 +102,14 @@ func (t *track) apply(e event.Event) {
 		t.activity, t.viewed = done, false
 		delete(t.needs, event.Main)
 		t.stopTools(event.Main)
+		if e.Agent == event.Main {
+			t.waiting, _ = e.Int("waiting")
+			t.waitingOn = e.Str("waiting_on")
+		}
+	case event.DogNudged:
+		// The turn goes on: the dog sent the agent back to finish.
+		t.nudged++
+		t.busy(e)
 	case event.TurnFailed:
 		t.activity, t.viewed = done, false
 		t.stopTools(event.Main)
@@ -318,6 +334,11 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	case ipc.StateWorking:
 		if tool, ok := t.latestTool(); ok {
 			s.Detail, s.Command = callLine(tool)
+		}
+	case ipc.StateDone, ipc.StateIdle:
+		// Work of its own in the background, or a wakeup, will wake it.
+		if t.waiting > 0 {
+			s.Detail = joinDetail("Waiting on its work in the background", t.waitingOn)
 		}
 	}
 	if s.State != ipc.StateExited && s.State != ipc.StateFailed {

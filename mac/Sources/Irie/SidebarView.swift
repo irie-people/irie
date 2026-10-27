@@ -170,7 +170,7 @@ private struct SessionCard: View {
                 }
                 Text(status)
                     .font(Theme.font(12, look.loud ? .semibold : .regular))
-                    .foregroundStyle(look.loud ? Theme.needs : Theme.muted)
+                    .foregroundStyle(look.loud ? Theme.needs : session.loose != nil ? Theme.accentInk : Theme.muted)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -229,12 +229,14 @@ private struct SessionCard: View {
         }
     }
 
-    /// The second line.
+    /// The second line. A finished jot whose work has not landed, or that
+    /// waits on work of its own in the background, says so (DESIGN §4.8).
     private var status: String {
         switch look {
         case .starting: return "Starting…"
         case .frozen where session.freezing == true: return "Freezing…"
-        case .done, .idle, .frozen, .paused, .pausing: return look.label
+        case .done, .idle: return session.detail.flatMap { $0.isEmpty ? nil : $0 } ?? look.label
+        case .frozen, .paused, .pausing: return look.label
         default: return session.detail ?? look.label
         }
     }
