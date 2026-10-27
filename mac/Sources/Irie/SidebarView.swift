@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The sidebar: a card per session, in groups. The Repo view is a tree, a
@@ -12,6 +13,10 @@ struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
 
+    /// The least room the cards keep, however tall the details are dragged:
+    /// a group's header and two cards.
+    static let cardsLeast: CGFloat = 132
+
     var body: some View {
         // One row of its own above the cards: Irie's mark, its name and the
         // counts sit in the title bar, beside the traffic lights.
@@ -23,10 +28,16 @@ struct SidebarView: View {
                     .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
                 .zIndex(1)
             content
+                .frame(minHeight: Self.cardsLeast)
+            ReviewDock()
             if !store.sessions.isEmpty {
                 ModeSwitch()
             }
-            DetailsPanel()
+            // The details, once there is a session to pick: small until
+            // their edge is dragged, and the cards have the rest.
+            if !store.sessions.isEmpty || !store.outside.isEmpty {
+                DetailsPanel()
+            }
             // The footer sits lighter than the list, with rounded top corners.
             TaskBar()
                 .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
@@ -34,7 +45,9 @@ struct SidebarView: View {
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
-            ToolbarItem(placement: .automatic) { TitleBar() }
+            ToolbarItem(placement: .navigation) { TitleName() }
+            // The primary action slot sits at the trailing edge of the title bar.
+            ToolbarItem(placement: .primaryAction) { Counts() }
         }
         // The toggle would crowd them out of the title bar; View >
         // Hide Sidebar (SidebarCommands) still hides it.
@@ -119,8 +132,10 @@ struct SidebarView: View {
 /// red), what it is doing, or how it ended, in plain words. The trailing
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
 /// the pointer brings up the actions. The card is soft and rounded, on a
-/// gentle shadow: tinted red while it needs you, edged in the accent while
-/// selected.
+/// gentle shadow: washed in its agent's colour while it works, tinted red
+/// while it needs you, filled with the selection and edged in the accent
+/// while selected. A selected working card is a gradient, from the selection
+/// by its mark to the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -129,23 +144,29 @@ private struct SessionCard: View {
     let now: Date
     @State private var hovering = false
 
+    /// The trailing slot's width: the age and tokens, or the actions.
+    private static let slot: CGFloat = 66
+
     private var look: Look { Look(session) }
     private var renaming: Bool { store.renaming == session.id }
     /// Its own colour while it works, so a glance tells the agents apart.
     private var tint: Color? { Look.agentTint(session) }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
+        HStack(alignment: .top, spacing: 8) {
             StateMark(look: look, tint: tint).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 if renaming {
                     RenameField(session: session)
                 } else {
-                    Text(session.name)
-                        .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
-                        .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 4) {
+                        Text(session.name)
+                            .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
+                            .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if session.isPromoted { PromotedBadge() }
+                    }
                 }
                 Text(status)
                     .font(Theme.font(12, look.loud ? .semibold : .regular))
@@ -160,24 +181,25 @@ private struct SessionCard: View {
                     Text(session.tokens.map { Tokens.short($0.total) } ?? " ")
                 }
                 .font(Theme.font(11)).monospacedDigit()
-                .foregroundStyle(Theme.muted)
+                // In ink over a selected working card's deep end.
+                .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
                 .opacity(hovering ? 0 : 1)
-                QuickActions(session: session)
+                QuickActions(session: session, ink: deep != nil)
                     .opacity(hovering ? 1 : 0)
                     .allowsHitTesting(hovering)
             }
-            .frame(width: 66, alignment: .trailing)
+            .frame(width: Self.slot, alignment: .trailing)
         }
         .padding(.vertical, 8)
-        .padding(.leading, 11)
-        .padding(.trailing, 7)
-        .background(shape.fill(fill).shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .padding(.horizontal, Theme.inset)
+        .background(ground.shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
         .onHover { hovering = $0 }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
         // A double click opens the name to edit; its first click showed it.
         .simultaneousGesture(TapGesture(count: 2).onEnded { store.beginRename(session.id) })
+        .modifier(Reorderable(session: session))
         .contextMenu { Actions(session: session) }
         .help([session.name, session.detail, session.command].compactMap { $0 }.joined(separator: "\n"))
         // While the name is open to edit, VoiceOver reaches the field.
@@ -186,6 +208,10 @@ private struct SessionCard: View {
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { store.show(session.id, focus: true) }
         .accessibilityActions {
+            Button(session.isFrozen ? "Resume" : "Pause") { store.setFrozen(session, !session.isFrozen) }
+            Button(session.isPromoted ? "Stop promoting" : "Promote to the top") { store.setPromoted(session, !session.isPromoted) }
+            if store.canMove(session, by: -1) { Button("Move up") { store.move(session, by: -1) } }
+            if store.canMove(session, by: 1) { Button("Move down") { store.move(session, by: 1) } }
             Button("Rename") { store.beginRename(session.id) }
             if let cwd = session.cwd {
                 Button("Show the folder in Finder") { store.reveal(cwd) }
@@ -207,6 +233,7 @@ private struct SessionCard: View {
     private var status: String {
         switch look {
         case .starting: return "Starting…"
+        case .frozen where session.freezing == true: return "Freezing…"
         case .done, .idle, .frozen, .paused, .pausing: return look.label
         default: return session.detail ?? look.label
         }
@@ -214,11 +241,40 @@ private struct SessionCard: View {
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }
 
+    /// The fill, its wash, and a selected working card's deep end across the
+    /// trailing slot.
+    private var ground: some View {
+        shape.fill(fill)
+            .overlay { if let wash { shape.fill(wash) } }
+            .overlay(alignment: .trailing) {
+                if let deep {
+                    LinearGradient(colors: [deep.opacity(0), deep], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: Self.slot + Theme.inset)
+                }
+            }
+            .clipShape(shape)
+    }
+
+    /// The selection's fill is full even while the terminal has the keyboard,
+    /// so the shown session is plain to see; the edge tells where the
+    /// keyboard is.
     private var fill: Color {
-        if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.55) }
+        if selected { return Theme.selection }
         if look.loud { return Theme.needsTint }
         return hovering ? Theme.hover : Theme.card
     }
+
+    /// Its own colour across the card while it works, fullest by the mark and
+    /// fading into the fill toward the trailing slot. A selected card turns
+    /// it round: the selection by the mark, turning to its own colour, which
+    /// deepens across the trailing slot into the colour round its terminal.
+    private var wash: LinearGradient? {
+        guard let c = Look.agentWash(session) else { return nil }
+        let colors = selected ? [c.opacity(0), c] : [c, c.opacity(0.5)]
+        return LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
+    }
+
+    private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
     /// The accent round the selected card, faint while the list lacks the
     /// keyboard; red round one that needs you; a hairline round the rest.
@@ -345,8 +401,9 @@ private struct HelperRows: View {
                     Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(Theme.muted)
                 }
             }
+            // Under the card's name: its inset, its mark and the gap.
             .padding(.leading, 34)
-            .padding(.trailing, 8)
+            .padding(.trailing, Theme.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
         }
@@ -391,14 +448,14 @@ private struct ModeSwitch: View {
 private struct QuickActions: View {
     @EnvironmentObject private var store: Store
     let session: Session
+    /// All in ink, over a selected working card's deep end.
+    let ink: Bool
 
     var body: some View {
         HStack(spacing: 0) {
-            Button { store.show(session.id, focus: true) } label: { Image(systemName: "keyboard").frame(width: 20, height: 18) }
-                .help("Type to it")
-            Button { if let cwd = session.cwd { store.reveal(cwd) } } label: { Image(systemName: "folder").frame(width: 20, height: 18) }
-                .help("Show the folder in Finder")
-                .disabled(session.cwd == nil)
+            // A click on the card types to it; the folder is in the menu.
+            PauseButton(session: session)
+            PromoteButton(session: session, ink: ink)
             Menu {
                 Actions(session: session)
             } label: {
@@ -411,17 +468,39 @@ private struct QuickActions: View {
         }
         .buttonStyle(.borderless)
         .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(Theme.muted)
+        .foregroundStyle(ink ? Theme.ink : Theme.muted)
         .accessibilityHidden(true)
     }
 }
 
-/// The selected session's details, on a card of fixed height above the task
-/// bar, edged in its state's colour: long text is cut off, and the full text
-/// is on hover.
-private struct DetailsPanel: View {
+/// The selected session's details, on a card above the task bar, edged in
+/// its state's colour: long text is cut off, and the full text is on hover.
+/// It opens small, the state and one line, and shows as many whole lines as
+/// fit. Its top edge drags it taller, as far as leaves the
+/// cards their room, or shorter. The chevron, a double click on the edge or
+/// a drag to the bottom minimizes it to one line of what the agent is
+/// doing. The app keeps its height and whether it is minimized.
+struct DetailsPanel: View {
     @EnvironmentObject private var store: Store
-    static let height: CGFloat = 150
+    /// Its height while open, in points.
+    @AppStorage(DetailsPanel.heightKey) private var height = DetailsPanel.compact
+    @AppStorage(DetailsPanel.minimizedKey) private var minimized = false
+    /// Its height as drawn: less than `height` while the cards need the room.
+    @State private var drawn: CGFloat = 0
+    /// While the edge is dragged: the height drawn, and the height kept, as
+    /// the drag began.
+    @State private var dragFrom: (drawn: CGFloat, kept: Double)?
+    @State private var overEdge = false
+
+    static let heightKey = "detailsHeight"
+    static let minimizedKey = "detailsMinimized"
+    /// Its height until the edge is dragged: the state and one line, about a
+    /// sixth of the half of the sidebar it took before it could be dragged.
+    static let compact: Double = 60
+    /// The least it opens to, the state and one line. A drag below `fold`
+    /// minimizes it.
+    private static let least: CGFloat = 58
+    private static let fold: CGFloat = 44
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
@@ -430,32 +509,137 @@ private struct DetailsPanel: View {
         let outside = store.selectedOutside
         let stateColor = outside == nil ? selected.flatMap { Look($0).color } : nil
         Group {
-            if let o = outside {
+            if minimized {
+                summary(outside)
+            } else if let o = outside {
                 OutsideDetails(outside: o)
             } else if let s = selected {
                 details(s)
             } else {
-                Text("Pick a session to see its details.")
-                    .font(Theme.font(12))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                HStack(alignment: .top, spacing: 6) {
+                    Text("Pick a session to see its details.")
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.muted)
+                    Spacer(minLength: 4)
+                    DetailsFold()
+                }
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, Theme.inset)
+        .padding(.vertical, minimized ? 6 : 9)
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: minimized ? nil : CGFloat(height), alignment: .top)
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { drawn = g.size.height }
+                .onChange(of: g.size.height) { drawn = g.size.height }
+        })
         .background(shape.fill(Theme.panel))
         .overlay(shape.strokeBorder(stateColor?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
         .clipShape(shape)
         .background(shape.fill(Theme.panel).shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .overlay(alignment: .top) { edge }
         .padding(.horizontal, 10)
         .padding(.top, 6)
-        .frame(height: Self.height)
+        // It takes its height before the cards, which keep their least.
+        .layoutPriority(1)
+    }
+
+    /// The top edge, a strip across the border: a drag makes the panel
+    /// taller or shorter, and a double click minimizes it or brings it
+    /// back. Its grip shows under the pointer.
+    private var edge: some View {
+        Capsule()
+            .fill(Theme.muted.opacity(overEdge || dragFrom != nil ? 0.55 : 0))
+            .frame(width: 32, height: 3)
+            .padding(.bottom, 1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .contentShape(Rectangle())
+            .frame(height: 10)
+            .offset(y: -4)
+            .onHover { inside in
+                overEdge = inside
+                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            }
+            .onDisappear { if overEdge { NSCursor.pop() } }
+            .onTapGesture(count: 2) { withAnimation(.easeOut(duration: 0.15)) { minimized.toggle() } }
+            // In the window's space, since the edge moves with the drag.
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag(by: $0.translation.height) }
+                .onEnded { _ in endDrag() })
+            .accessibilityElement()
+            .accessibilityLabel("Details height")
+            .accessibilityValue(minimized ? "Minimized" : "\(Int(drawn)) points")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: step(40)
+                case .decrement: step(-40)
+                @unknown default: break
+                }
+            }
+    }
+
+    private func drag(by dy: CGFloat) {
+        let from = dragFrom ?? (drawn: drawn, kept: height)
+        dragFrom = from
+        let want = from.drawn - dy
+        if want < Self.fold {
+            minimized = true
+        } else {
+            minimized = false
+            height = Double(max(want, Self.least))
+        }
+    }
+
+    /// Keeps no more than the height drawn, which the cards' room may have
+    /// cut short, or the one it had when a drag minimized it.
+    private func endDrag() {
+        guard let from = dragFrom else { return }
+        height = minimized ? from.kept : min(height, Double(drawn))
+        dragFrom = nil
+    }
+
+    /// VoiceOver's steps: taller or shorter, minimized below the least.
+    private func step(_ by: CGFloat) {
+        if minimized {
+            if by > 0 { minimized = false }
+        } else if drawn + by < Self.least {
+            minimized = true
+        } else {
+            height = Double(drawn + by)
+        }
+    }
+
+    /// The minimized panel's line: what the session needs from you, or the
+    /// call its agent is making, or what it is doing.
+    private func summary(_ outside: OutsideSession?) -> some View {
+        HStack(spacing: 6) {
+            if let o = outside {
+                StateMark(look: Look(outside: o))
+                line(o.doing, color: Theme.ink)
+            } else if let s = selected {
+                let look = Look(s)
+                StateMark(look: look)
+                if look.loud {
+                    line(s.detail ?? look.label, color: Theme.needs)
+                } else if let c = s.command, !c.isEmpty {
+                    line(c, mono: true, color: Theme.ink)
+                } else {
+                    line(s.detail ?? look.label, color: Theme.ink)
+                }
+            } else {
+                line("No session picked")
+            }
+            Spacer(minLength: 4)
+            DetailsFold()
+        }
+        .controlSize(.small)
     }
 
     private func details(_ s: Session) -> some View {
         let look = Look(s)
-        return VStack(alignment: .leading, spacing: 4) {
+        return WholeLines(spacing: 4) {
             HStack(spacing: 6) {
                 StateMark(look: look)
                 Text(look.label)
@@ -472,9 +656,11 @@ private struct DetailsPanel: View {
                         .help("Show the folder in Finder")
                         .accessibilityLabel("Show the folder in Finder")
                 }
+                DetailsFold()
             }
             .controlSize(.small)
             line(s.detail, color: look.loud ? Theme.needs : Theme.ink)
+            ControlLines(session: s)
             line(s.command, mono: true)
             line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
             line(s.cwd.map(Age.tilde), mono: true)
@@ -509,6 +695,49 @@ private struct DetailsPanel: View {
     }
 }
 
+/// The details panel's lines, down from the top, as many as fit whole: the
+/// first that would be cut off, and every line after it, is left out, so
+/// the panel never shows half a line, however tall it is.
+struct WholeLines: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let natural = heights(subviews, width).reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0))
+        return CGSize(width: width, height: min(natural, proposal.height ?? natural))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        var fits = true
+        for (view, height) in zip(subviews, heights(subviews, bounds.width)) {
+            fits = fits && y + height <= bounds.maxY + 0.5
+            // A line left out goes far below, where the panel's clip hides it.
+            view.place(at: CGPoint(x: bounds.minX, y: fits ? y : bounds.maxY + 1000),
+                       proposal: ProposedViewSize(width: bounds.width, height: height))
+            y += height + spacing
+        }
+    }
+
+    private func heights(_ subviews: Subviews, _ width: CGFloat) -> [CGFloat] {
+        subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+    }
+}
+
+/// The details panel's chevron, at the end of its first line: it minimizes
+/// the panel to one line, or brings it back.
+struct DetailsFold: View {
+    @AppStorage(DetailsPanel.minimizedKey) private var minimized = false
+
+    var body: some View {
+        Button { withAnimation(.easeOut(duration: 0.15)) { minimized.toggle() } } label: {
+            Image(systemName: minimized ? "chevron.up" : "chevron.down")
+        }
+        .help(minimized ? "Show the details" : "Minimize the details")
+        .accessibilityLabel(minimized ? "Show the details" : "Minimize the details")
+    }
+}
+
 /// The right-click menu.
 private struct Actions: View {
     @EnvironmentObject private var store: Store
@@ -521,6 +750,8 @@ private struct Actions: View {
             store.openInGhostty()
         }
         Button("Rename…") { store.beginRename(session.id) }
+        Divider()
+        ControlItems(session: session)
         Divider()
         if let cwd = session.cwd {
             Button("Show Folder in Finder") { store.reveal(cwd) }
@@ -537,20 +768,17 @@ private struct Actions: View {
 
 /// A count per state, in the title bar above the sidebar. A count shows the
 /// first session, in list order, in that state.
-/// What the sidebar puts in the title bar: the sun over the waves, the name
-/// Irie and the counts, in one compact row beside the traffic lights.
-private struct TitleBar: View {
+/// What the sidebar puts in the title bar: the sun over the waves and the name
+/// Irie, beside the traffic lights. The counts sit at the trailing edge.
+private struct TitleName: View {
     var body: some View {
-        HStack(spacing: 6) {
-            HStack(spacing: 3) {
-                SunMark().frame(width: 14, height: 14)
-                Text("Irie").font(.system(size: 13, weight: .heavy, design: .rounded))
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Irie")
-            .accessibilityAddTraits(.isHeader)
-            Counts()
+        HStack(spacing: 3) {
+            SunMark().frame(width: 14, height: 14)
+            Text("Irie").font(.system(size: 13, weight: .heavy, design: .rounded))
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Irie")
+        .accessibilityAddTraits(.isHeader)
         // The title bar sizes the item to its content; a point either side
         // keeps the capsules' edges whole.
         .padding(.horizontal, 1)
@@ -562,12 +790,14 @@ private struct Counts: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 6) {
             switch store.link {
             case .online:
                 count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
                 count([.working], mark: .working, color: Theme.ink, label: "working")
-                count([.done], mark: .done, color: Look.doneColor, label: "done, not yet seen")
+                if !store.closeWhenDone {
+                    count([.done], mark: .done, color: Look.doneColor, label: "done, not yet seen")
+                }
                 if store.sessions.contains(where: { [.paused, .pausing].contains(Look($0)) }) {
                     count([.paused, .pausing], mark: .paused, color: Theme.paused, label: "paused")
                 }
@@ -638,7 +868,7 @@ private struct FindField: View {
                 .help("Clear")
                 .accessibilityLabel("Clear the search")
         }
-        .padding(.horizontal, 9)
+        .padding(.horizontal, Theme.inset)
         .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field)
             .shadow(color: Theme.shadow, radius: 2, y: 1))

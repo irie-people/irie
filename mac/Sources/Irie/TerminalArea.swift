@@ -22,10 +22,23 @@ struct TerminalArea: View {
         }
         .background(Theme.ground.ignoresSafeArea())
         .toolbarBackground(Theme.ground, for: .windowToolbar)
+        // The window's own title. The bar hides it (IrieApp.showsTitle),
+        // or the name would show twice.
         .navigationTitle(selected?.name ?? "Irie")
-        // Never empty: the title moves when a subtitle appears or goes.
-        .navigationSubtitle(selected.map(subtitle) ?? "No session")
         .toolbar {
+            // The bar's only title: the name and subtitle centre on its
+            // midline beside the button.
+            ToolbarItem(placement: .principal) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(selected?.name ?? "Irie")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(selected.map(subtitle) ?? "No session")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     store.openInGhostty()
@@ -121,16 +134,18 @@ struct TerminalArea: View {
     }
 }
 
+/// A quiet page, laid out as ConversationNote is: the two take turns in the
+/// same place.
 private struct Placeholder: View {
     let title: String
     let text: String
     var action: (String, () -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 14) {
-            SunMark().frame(width: 64, height: 64)
+        VStack(spacing: 12) {
+            SunMark().frame(width: 48, height: 48)
             Text(title).font(.system(size: 17, weight: .semibold, design: .rounded)).multilineTextAlignment(.center)
-            Text(text).font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
+            Text(text).font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
             if let action {
                 Button(action.0, action: action.1)
                     .buttonStyle(.borderedProminent)

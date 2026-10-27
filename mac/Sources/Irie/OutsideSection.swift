@@ -254,8 +254,7 @@ private struct OutsideRow: View {
             .frame(width: 44, alignment: .trailing)
         }
         .padding(.vertical, 5)
-        .padding(.leading, 10)
-        .padding(.trailing, 6)
+        .padding(.horizontal, Theme.inset)
         .background(shape.fill(fill))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
@@ -326,7 +325,7 @@ struct OutsideDetails: View {
 
     var body: some View {
         let look = Look(outside: outside)
-        VStack(alignment: .leading, spacing: 4) {
+        WholeLines(spacing: 4) {
             HStack(spacing: 6) {
                 StateMark(look: look)
                 Text(outside.doing)
@@ -339,6 +338,7 @@ struct OutsideDetails: View {
                 if let v = outside.vendorId {
                     Button("Copy Session ID") { store.copy(v, what: "session ID") }
                 }
+                DetailsFold()
             }
             .controlSize(.small)
             line(outside.label, color: Theme.ink)

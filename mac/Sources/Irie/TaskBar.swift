@@ -8,7 +8,9 @@ import SwiftUI
 /// agent. ⌘N opens the full new-task sheet.
 struct TaskBar: View {
     @EnvironmentObject private var store: Store
-    @State private var text = ""
+    /// Kept in the defaults as it is typed, so an unsent task survives the
+    /// app being stopped and relaunched, as every install does.
+    @AppStorage("taskDraft") private var text = ""
     @FocusState private var focused: Bool
     /// Tasks started from the bar, newest last, kept across launches. ↑ walks
     /// back through them and ↓ forward again, ending on what was being typed.
@@ -18,9 +20,9 @@ struct TaskBar: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
-            // It keeps the keyboard while a task starts, then hands it to the
-            // new agent's terminal; submit() refuses a second start until the
-            // first is done.
+            // It keeps the keyboard while a task starts and after, since the
+            // task starts behind the session on show; submit() refuses a
+            // second start until the first is done.
             TextField(focused ? "@repo +profile, then the task" : "What should we work on?", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(Theme.font(13.5))
@@ -41,10 +43,11 @@ struct TaskBar: View {
                 startButton
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 5)
-        .padding(.top, 10)
-        .padding(.bottom, 5)
+        .padding(.leading, Theme.inset)
+        // The menu and the start button sit in the corner, as the message
+        // box's send button does.
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
         .fixedSize(horizontal: false, vertical: true)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field)
             .shadow(color: Theme.shadow, radius: 3, y: 1.5))
@@ -84,7 +87,7 @@ struct TaskBar: View {
                     .foregroundStyle(n.isError ? Theme.needs : Theme.ink)
                     .lineLimit(4)
                     .textSelection(.enabled)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, Theme.inset)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
@@ -141,10 +144,14 @@ struct TaskBar: View {
             return
         }
         Task {
+            let shown = store.selection
             if await store.spawn(input) {
                 remember(input)
                 text = ""
-                focused = false // the store gives the new agent's terminal the keyboard
+                // A task starts behind the session on show and the bar keeps
+                // the keyboard for the next one; when nothing was on show, the
+                // store gives the new agent's terminal the keyboard.
+                if store.selection != shown { focused = false }
             }
         }
     }

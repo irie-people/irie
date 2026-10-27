@@ -12,17 +12,18 @@ import (
 // status takes one status line update of a Claude Code session (DESIGN
 // §6.3): what the session has cost, how full its context is, and the
 // plan's use, which is the account's and so the newest update's. The
-// session's last update is kept in status.json, for a restarted core.
-func (c *Core) status(a ipc.StatusArgs) error {
+// session's last update is kept in status.json, for a restarted core. It
+// answers with the session's state and running subagents.
+func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	u, err := statusline.Parse(a.Payload)
 	if err != nil {
-		return ipc.Errorf(ipc.CodeBadArgs, "%v", err)
+		return nil, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
 	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
 		c.mu.Unlock()
-		return ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		return nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
 	if !reflect.DeepEqual(x.usage, u) {
 		x.usage = u
@@ -33,11 +34,12 @@ func (c *Core) status(a ipc.StatusArgs) error {
 	if u.FiveHour != nil || u.SevenDay != nil {
 		c.plan = ipc.Plan{FiveHour: u.FiveHour, SevenDay: u.SevenDay}
 	}
+	row := x.wire()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
 	c.publishHeader()
-	return nil
+	return &ipc.StatusReply{State: row.State, Subagents: row.Subagents}, nil
 }
 
 // loadStatus reads a session's last status update, and takes its plan use

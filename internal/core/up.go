@@ -52,7 +52,7 @@ func Up(cfg config.Config, p paths.Paths, bin, version string) error {
 		return err
 	}
 
-	conf := []byte(tmux.Conf(tmux.ConfOptions{FocusKey: cfg.UI.FocusKey, SidebarWidth: cfg.UI.SidebarWidth}))
+	conf := []byte(tmux.Conf(tmux.ConfOptions{FocusKey: cfg.UI.FocusKey, SidebarWidth: cfg.UI.SidebarWidth, FlipKey: cfg.UI.FlipKey, Bin: bin}))
 	old, _ := os.ReadFile(p.TmuxConf())
 	changed := !bytes.Equal(old, conf)
 	if changed {
