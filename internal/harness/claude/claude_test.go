@@ -221,6 +221,13 @@ func TestNameNeedsTheFlag(t *testing.T) {
 	if slices.Contains(argv, "--name") {
 		t.Errorf("argv = %q: --name without the flag in --help", argv)
 	}
+	// No name the user chose: Claude Code titles the session itself.
+	s = spawnOf("x")
+	s.Name = ""
+	argv, _, _ = launchSpawn(t, defaultProfile(), s)
+	if slices.Contains(argv, "--name") {
+		t.Errorf("argv = %q: --name with no name", argv)
+	}
 }
 
 func TestSettingsArePassedWithTheSessionsFile(t *testing.T) {

@@ -36,11 +36,12 @@ func (Harness) Levels() harness.Levels {
 // Launch builds:
 //
 //	<command> <args...> --model M --effort E --permission-mode P \
-//	    --settings <dir>/claude-settings.json --session-id <uuid> [--name <slug>] <task>
+//	    --settings <dir>/claude-settings.json --session-id <uuid> [--name <name>] <task>
 //
 // The profile's own args come right after the command. A flag whose value is
-// empty in the profile is left out, and --name only goes to a CLI whose
-// --help lists it.
+// empty in the profile is left out. --name goes only with a name the user
+// chose, and only to a CLI whose --help lists it: without it, Claude Code
+// titles the session itself.
 func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[string][]byte, error) {
 	argv, env, settings, err := base(p, s)
 	if err != nil {

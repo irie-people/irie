@@ -61,8 +61,8 @@ func TestRenameSurvivesACoreRestart(t *testing.T) {
 	if w := c.Tmux(t, "display-message", "-p", "-t", tmux.MainSession+":0", "#{window_name}"); strings.Contains(w, "Fix") {
 		t.Errorf("irie:0 is named %q", w)
 	}
-	if evs := c.renames(a.ID); len(evs) != 1 || evs[0].Source != event.SourceUser || evs[0].Str("before") != "task-a" || evs[0].Str("after") != name {
-		t.Errorf("ui.renamed = %+v, want one from task-a to %q", evs, name)
+	if evs := c.renames(a.ID); len(evs) != 1 || evs[0].Source != event.SourceUser || evs[0].Str("before") != "Task A" || evs[0].Str("after") != name || evs[0].Data["before_named"] != false {
+		t.Errorf("ui.renamed = %+v, want one from Task A, not pinned, to %q", evs, name)
 	}
 
 	// A new core reads the name back from the pane.
@@ -113,12 +113,13 @@ func TestRenameNumbersATakenNameAndRefusesNone(t *testing.T) {
 	c.waitState(b.ID, ipc.StateWorking)
 
 	// Another row's name is numbered, as a spawn's is.
-	if s, err := c.rename(b.ID, "task-a"); err != nil || s.Name != "task-a-2" {
-		t.Errorf("rename to a taken name = %q, %v; want task-a-2", s.Name, err)
+	if s, err := c.rename(b.ID, "Task A"); err != nil || s.Name != "Task A-2" {
+		t.Errorf("rename to a taken name = %q, %v; want Task A-2", s.Name, err)
 	}
-	// Its own name changes nothing and is not journaled.
-	if s, err := c.rename(a.ID, " task-a "); err != nil || s.Name != "task-a" {
-		t.Errorf("rename to its own name = %q, %v", s.Name, err)
+	// Its own name changes nothing and is not journaled, but the name is
+	// the user's now.
+	if s, err := c.rename(a.ID, " Task A "); err != nil || s.Name != "Task A" || c.pane(s.Pane)["@irie_named"] != "1" {
+		t.Errorf("rename to its own name = %q, %v; pane %v", s.Name, err, c.pane(s.Pane))
 	}
 	if evs := c.renames(a.ID); len(evs) != 0 {
 		t.Errorf("a rename that changed nothing was journaled: %+v", evs)

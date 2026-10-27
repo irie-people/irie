@@ -86,7 +86,7 @@ func TestAnAtRepoTaskRunsInANewWorktree(t *testing.T) {
 	c := setup(t)
 	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: repo})
 	wt := filepath.Join(c.paths.Worktrees(), "website", "prompt")
-	if s.Worktree != wt || s.Cwd != wt || s.Branch != "irie/prompt" || s.Name != "prompt" || !sameDir(s.Repo, repo) {
+	if s.Worktree != wt || s.Cwd != wt || s.Branch != "irie/prompt" || s.Name != "Prompt" || !sameDir(s.Repo, repo) {
 		t.Errorf("session = %+v, want the worktree %s on irie/prompt", s, wt)
 	}
 	if want := []string{".claude/settings.local.json", ".env", "CLAUDE.local.md"}; !slices.Equal(s.Copied, want) {
@@ -126,7 +126,7 @@ func TestAnAtRepoTaskRunsInANewWorktree(t *testing.T) {
 
 	// The same task in the same repo gets the next slug.
 	again := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: repo})
-	if again.Name != "prompt-2" || again.Branch != "irie/prompt-2" || again.Worktree != wt+"-2" {
+	if again.Name != "Prompt-2" || again.Branch != "irie/prompt-2" || again.Worktree != wt+"-2" {
 		t.Errorf("second session = %+v", again)
 	}
 
@@ -182,10 +182,10 @@ func TestNamesAndTargets(t *testing.T) {
 	}
 	// A repo found under repos.roots gets a worktree; its path under the
 	// root picks one of two repos of the same name.
-	if s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: "website"}); s.Worktree != filepath.Join(c.paths.Worktrees(), "website", s.Name) {
+	if s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: "website"}); filepath.Dir(s.Worktree) != filepath.Join(c.paths.Worktrees(), "website") {
 		t.Errorf("@website = %+v", s)
 	}
-	if s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: "b/api"}); !sameDir(s.Repo, apiB) || s.Worktree != filepath.Join(c.paths.Worktrees(), "api", s.Name) {
+	if s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Repo: "b/api"}); !sameDir(s.Repo, apiB) || filepath.Dir(s.Worktree) != filepath.Join(c.paths.Worktrees(), "api") {
 		t.Errorf("@b/api = %+v", s)
 	}
 

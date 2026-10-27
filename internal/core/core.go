@@ -90,6 +90,7 @@ type Core struct {
 type session struct {
 	id       string
 	name     string
+	named    bool // the user chose the name, by rename or at spawn: Claude Code's titles leave it be (title.go)
 	agent    string
 	created  time.Time
 	cwd      string
@@ -249,6 +250,7 @@ func (c *Core) tick() {
 	c.keepFrozen()
 	c.background()
 	c.countTokens()
+	c.followTitles()
 	c.followConversations()
 	frames := c.changes()
 	c.mu.Unlock()
@@ -287,6 +289,7 @@ var sessionID = regexp.MustCompile(`^s[0-9a-z]{12}$`)
 func (c *Core) sync(s tmux.Snapshot) {
 	slot := s.SlotPane()
 	seen := map[string]bool{}
+	var old []*session
 	for _, p := range s.ByRole(tmux.RoleAgent) {
 		if !sessionID.MatchString(p.IrieSession) || seen[p.IrieSession] {
 			continue
@@ -296,6 +299,9 @@ func (c *Core) sync(s tmux.Snapshot) {
 		if x == nil {
 			x = c.adopt(p)
 			c.sessions[x.id] = x
+			if p.Named == "" {
+				old = append(old, x)
+			}
 		}
 		x.pane, x.dead, x.exitCode, x.command, x.bracket = p.ID, p.Dead, p.DeadStatus, p.Command, p.BracketPaste
 		// Shown: its pane is in the slot, or its conversation is, which
@@ -307,13 +313,18 @@ func (c *Core) sync(s tmux.Snapshot) {
 			delete(c.sessions, id)
 		}
 	}
+	// A pane from before @irie_named has its name settled once every row
+	// is in, so a new title is numbered against them all.
+	for _, x := range old {
+		c.settle(x)
+	}
 }
 
 // adopt rebuilds a registry entry from an agent pane, as a restarted core
 // does for every session, and replays the session's journal into its state.
 func (c *Core) adopt(p tmux.Pane) *session {
 	created, _ := time.Parse(time.RFC3339Nano, p.Created)
-	x := &session{id: p.IrieSession, name: p.Name, agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession)}
+	x := &session{id: p.IrieSession, name: p.Name, named: p.Named == "1", agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession)}
 	if x.name == "" {
 		x.name = x.id
 	}
@@ -490,7 +501,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		s, err := c.spawn(a)
+		s, err := c.spawn(a, true)
 		if err != nil {
 			return nil, err
 		}

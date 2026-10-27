@@ -674,8 +674,8 @@ func checkReopen(c *Core, a action) []problem {
 			options:   []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: "Reopen it anyway", Detail: "Brings back the session as it was closed last."}},
 			recommend: ipc.ChoiceApply})
 	}
-	if c.names()[r.Name] {
-		n := unique(r.Name, c.names())
+	if c.names(nil)[r.Name] {
+		n := unique(r.Name, c.names(nil))
 		ps = append(ps, problem{code: "name-taken", question: fmt.Sprintf("Another session is called %q now.", r.Name),
 			options:   []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: fmt.Sprintf("Reopen it as %q", n), Detail: fmt.Sprintf("Brings it back in its own row under the name %q.", n)}},
 			recommend: ipc.ChoiceApply})
