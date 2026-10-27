@@ -147,6 +147,12 @@ private struct SessionCard: View {
                     .lineLimit(selected ? 4 : 2)
                     .padding(.leading, 22)
             }
+            if let helpers = session.subagents, !helpers.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(helpers) { HelperLine(helper: $0) }
+                }
+                .padding(.leading, 22)
+            }
             if selected {
                 Details(session: session).padding(.leading, 22).padding(.top, 2)
             }
@@ -180,6 +186,33 @@ private struct SessionCard: View {
         var parts = [session.name, StateMark.label(for: look)]
         if let d = session.detail, !d.isEmpty { parts.append(d) }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// A helper (subagent) under the card of the session that started it: red
+/// when it needs you, blue while it works, with its current tool.
+private struct HelperLine: View {
+    let helper: Subagent
+
+    private var needs: Bool { helper.needsYou == true }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+            Circle().fill(needs ? Theme.needs : Theme.work).frame(width: 6, height: 6)
+            Text(helper.type ?? "Helper").font(.system(size: 11.5, weight: .medium))
+            if let d = helper.detail, !d.isEmpty {
+                Text(d)
+                    .font(.system(size: 11))
+                    .foregroundStyle(needs ? Theme.needs : Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Helper \(helper.type ?? ""), \(needs ? "needs you" : "working")\(helper.detail.map { ", " + $0 } ?? "")")
     }
 }
 

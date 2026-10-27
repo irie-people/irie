@@ -24,11 +24,28 @@ struct Session: Codable, Identifiable, Equatable {
     var vendorId: String?
     var pane: String?
     var shown: Bool?
+    var subagents: [Subagent]?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, agent, state, reason, detail, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown
+        case id, name, agent, state, reason, detail, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
+    }
+}
+
+/// A running subagent of a session: a helper.
+struct Subagent: Codable, Equatable, Identifiable {
+    var agent: String
+    var type: String?
+    var started: Date
+    var detail: String?
+    var needsYou: Bool?
+
+    var id: String { agent }
+
+    enum CodingKeys: String, CodingKey {
+        case agent, type, started, detail
+        case needsYou = "needs_you"
     }
 }
 

@@ -74,6 +74,18 @@ type Session struct {
 	VendorID string    `json:"vendor_id,omitempty"`
 	Pane     string    `json:"pane,omitempty"`
 	Shown    bool      `json:"shown,omitempty"`
+	// Subagents are the session's running subagents, oldest first.
+	Subagents []Subagent `json:"subagents,omitempty"`
+}
+
+// Subagent is a subagent at work in a session (DESIGN §4.4): its hooks
+// reported it started and not yet that it stopped.
+type Subagent struct {
+	Agent    string    `json:"agent"`          // sub:<vendor agent id>
+	Type     string    `json:"type,omitempty"` // its kind, such as Explore
+	Started  time.Time `json:"started"`
+	Detail   string    `json:"detail,omitempty"` // what it needs, or else its newest running tool
+	NeedsYou bool      `json:"needs_you,omitempty"`
 }
 
 // Header is the part of a snapshot that is not a row.

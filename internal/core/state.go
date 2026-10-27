@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type track struct {
 	activity  string                 // "", working or done
 	viewed    bool                   // shown since the turn ended
 	tools     map[string]event.Event // running tools' tool.started, by tool_use_id
+	subs      map[string]event.Event // running subagents' subagent.started, by agent
 }
 
 const (
@@ -76,11 +78,17 @@ func (t *track) apply(e event.Event) {
 		t.need(e)
 	case event.SubagentStarted:
 		t.activity = working
+		if t.subs == nil {
+			t.subs = map[string]event.Event{}
+		}
+		t.subs[e.Agent] = e
 	case event.SubagentFinished:
 		delete(t.needs, e.Agent)
 		t.stopTools(e.Agent)
+		delete(t.subs, e.Agent)
 	case event.SessionEnded:
 		t.ended = &e
+		t.subs = nil
 	case event.UIShown:
 		t.viewed = true
 	}
@@ -136,14 +144,43 @@ func (t *track) latestNeed() event.Event {
 }
 
 // latestTool is the newest running tool call.
-func (t *track) latestTool() (event.Event, bool) {
+func (t *track) latestTool() (event.Event, bool) { return t.latestToolOf("") }
+
+// latestToolOf is an agent's newest running tool call; any agent's when
+// agent is empty.
+func (t *track) latestToolOf(agent string) (event.Event, bool) {
 	var n event.Event
 	for _, e := range t.tools {
-		if e.Seq >= n.Seq {
+		if (agent == "" || e.Agent == agent) && e.Seq >= n.Seq {
 			n = e
 		}
 	}
 	return n, n.Kind != ""
+}
+
+// subagents lists the running subagents, oldest first, each with what it
+// needs from the user or else its newest running tool.
+func (t *track) subagents() []ipc.Subagent {
+	if len(t.subs) == 0 {
+		return nil
+	}
+	out := make([]ipc.Subagent, 0, len(t.subs))
+	for agent, e := range t.subs {
+		sa := ipc.Subagent{Agent: agent, Type: e.Str("agent_type"), Started: e.Time()}
+		if n, ok := t.needs[agent]; ok {
+			sa.NeedsYou, sa.Detail = true, needDetail(n)
+		} else if tool, ok := t.latestToolOf(agent); ok {
+			sa.Detail = joinDetail(tool.Str("tool"), tool.Str("summary"))
+		}
+		out = append(out, sa)
+	}
+	slices.SortFunc(out, func(a, b ipc.Subagent) int {
+		if c := a.Started.Compare(b.Started); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Agent, b.Agent)
+	})
+	return out
 }
 
 // state is the first state of DESIGN §5.3 that applies. dead is tmux's word
@@ -222,6 +259,9 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 		if tool, ok := t.latestTool(); ok {
 			s.Detail = joinDetail(tool.Str("tool"), tool.Str("summary"))
 		}
+	}
+	if s.State != ipc.StateExited && s.State != ipc.StateFailed {
+		s.Subagents = t.subagents()
 	}
 }
 

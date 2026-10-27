@@ -74,6 +74,48 @@ func TestTheStatesOfATurn(t *testing.T) {
 	}
 }
 
+func TestRunningSubagentsAreListedUntilTheyStop(t *testing.T) {
+	s := newScript()
+	var tr track
+	describe := func() ipc.Session {
+		var row ipc.Session
+		tr.describe(&row, false, 0)
+		return row
+	}
+	for _, e := range []event.Event{
+		s.hook(event.SessionStarted),
+		s.hook(event.PromptSubmitted),
+		s.sub(event.SubagentStarted, "agent_type", "Explore"),
+		s.sub(event.ToolStarted, "tool", "Grep", "summary", "TODO", "tool_use_id", "t1"),
+	} {
+		tr.apply(e)
+	}
+	if got := describe().Subagents; len(got) != 1 || got[0].Agent != "sub:a1b2c3" || got[0].Type != "Explore" ||
+		got[0].Detail != "Grep · TODO" || got[0].NeedsYou || got[0].Started.IsZero() {
+		t.Fatalf("subagents = %+v", got)
+	}
+
+	// What a subagent needs shows on the subagent as well as on the row.
+	tr.apply(s.sub(event.InputNeeded, "reason", event.ReasonPermission, "tool", "Bash", "summary", "rm -rf build"))
+	row := describe()
+	if row.State != ipc.StateNeedsYou || len(row.Subagents) != 1 || !row.Subagents[0].NeedsYou ||
+		row.Subagents[0].Detail != "needs permission: Bash · rm -rf build" {
+		t.Fatalf("after a need: state %s, subagents %+v", row.State, row.Subagents)
+	}
+
+	tr.apply(s.sub(event.SubagentFinished))
+	if got := describe().Subagents; len(got) != 0 {
+		t.Errorf("after the stop: subagents = %+v", got)
+	}
+
+	// A session that ends lists none.
+	tr.apply(s.sub(event.SubagentStarted, "agent_type", "Plan"))
+	tr.apply(s.hook(event.SessionEnded, "reason", "other"))
+	if got := describe().Subagents; len(got) != 0 {
+		t.Errorf("after the session ended: subagents = %+v", got)
+	}
+}
+
 func TestNeedsYouIsClearedByTheNextPromptOrToolEvent(t *testing.T) {
 	s := newScript()
 	var tr track
