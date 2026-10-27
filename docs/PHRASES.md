@@ -75,6 +75,6 @@ The promise, short. Used in: the footer of every page in `site/`. `site/faq.html
 
 Used in: `README.md` and `site/contribute.html`.
 
-> The record is public: irie-hq/stake. It runs on Steak v0.1.0.
+> The record is public: irie-hq/stake. It runs on Steak v0.2.0.
 
 Used in: `README.md` and `site/contribute.html`, with "irie-hq/stake" linked to <https://github.com/irie-hq/stake> and "Steak" to <https://github.com/steak-hq/steak>.
