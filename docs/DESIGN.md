@@ -382,7 +382,7 @@ type Harness interface {
 | `1`–`9` | Jump to the nth visible row (M4) |
 | `r` | Rename inline (M4) |
 | `z` | Park or unpark; `Z` collapses or expands Parked (M4) |
-| `x` `x` | Close the session (M4) |
+| `x` `x` | Close the session (M4, §4.5). The first press says what it closes; any other key cancels. `:close` closes it at once, and `:reopen` brings back the session closed last |
 | `u`, `U` | Undo, redo (M4) |
 | `p`, `P` | Pause or resume this agent, or the whole tree (M5) |
 | `f`, `F` | Freeze or thaw this session, or all (M6) |

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// One of Irie's palettes: a light and a dark set of swatches. Rosewater is
-/// the default; View > Theme picks Terracotta or Lilac, and the app keeps
+/// the default; View > Theme picks Terracotta, Lilac or Evergreen, and the app keeps
 /// the choice. In every palette and mode, each text colour keeps 4.5:1 and
 /// each mark 3:1 on every surface it sits on (WCAG 2.2), and Increase
 /// Contrast strengthens them further. The terminal sidebar has the same
@@ -14,7 +14,7 @@ struct Palette: Identifiable, Equatable {
     let light: Swatches
     let dark: Swatches
 
-    static let all: [Palette] = [.rosewater, .terracotta, .lilac]
+    static let all: [Palette] = [.rosewater, .terracotta, .lilac, .evergreen]
     static let standard = Palette.rosewater
     /// Where the app keeps the choice.
     static let defaultsKey = "theme"
@@ -91,6 +91,23 @@ extension Palette {
             accent: 0xC79BE0, accentInk: 0xD2AEE8, accentFill: 0xC79BE0, onAccent: 0x241731,
             needs: 0xFF836F, done: 0x9CC9A6, paused: 0xEFC468, frozen: 0x80C3D0,
             sun: 0xF2B544, waves: 0xC79BE0))
+
+    static let evergreen = Palette(
+        id: "evergreen", name: "Evergreen",
+        light: Swatches(
+            sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, field: 0xFDFDF9,
+            edge: 0xD8DCC9, hover: 0xF6F7EF, selection: 0xDDE5D3, needsTint: 0xFBE5DC,
+            ink: 0x1E2B22, muted: 0x56635A,
+            accent: 0x2F5D46, accentInk: 0x264D3A, accentFill: 0x9DB8A3, onAccent: 0x1E2B22,
+            needs: 0xB42A1E, done: 0x3F6A5F, paused: 0x855700, frozen: 0x286873,
+            sun: 0xD9A93F, waves: 0x5E8A6E),
+        dark: Swatches(
+            sidebar: 0x141C17, ground: 0x0E1410, card: 0x1C2620, panel: 0x18221C, field: 0x202B24,
+            edge: 0x34443A, hover: 0x25322A, selection: 0x2A3D31, needsTint: 0x4A251C,
+            ink: 0xECF0E6, muted: 0xB3BFB5,
+            accent: 0x9CC5A1, accentInk: 0xB3D6B8, accentFill: 0x9CC5A1, onAccent: 0x12201A,
+            needs: 0xFF9585, done: 0x8FC3B2, paused: 0xEFC468, frozen: 0x7DC4CE,
+            sun: 0xD9A93F, waves: 0x9CC5A1))
 }
 
 /// Irie's colours, from the palette in use. Each follows the window's

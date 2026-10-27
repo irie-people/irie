@@ -45,6 +45,18 @@ final class Store: ObservableObject {
     weak var terminalView: NSView?
     /// Whether the terminal has the keyboard, which brightens its frame.
     @Published var terminalHasKeys = false
+    /// The right side shows the live terminal instead of the conversation
+    /// (View > Terminal, ⌥⌘T); remembered across launches.
+    @Published var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
+        didSet {
+            UserDefaults.standard.set(showTerminal, forKey: "showTerminal")
+            if showTerminal { focusTerminal += 1 } else { focusMessage += 1 }
+        }
+    }
+    /// Bumped when the conversation's message box should take the keyboard.
+    @Published var focusMessage = 0
+    /// Whether the message box has the keyboard.
+    var messageHasKeys = false
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     @Published var outside: [OutsideSession] = []
@@ -55,6 +67,9 @@ final class Store: ObservableObject {
     /// (Closing.swift).
     @Published var closed: [ClosedSession] = []
     var outsideProblem = ""
+    /// The session the core is to show next, and whether a request is out.
+    private var wanted: (id: String, focus: Bool)?
+    private var showing = false
 
     static let defaultFontSize: CGFloat = 13
 
@@ -255,15 +270,27 @@ final class Store: ObservableObject {
     }
 
     /// Shows the next (+1) or previous (-1) row of the drawn order, wrapping
-    /// at the ends unless told not to. The keyboard stays where it is.
+    /// at the ends unless told not to. The keyboard stays where it is. From a
+    /// card the sidebar doesn't draw, such as the shown one in a folded group
+    /// or one the filter hides, it goes on from that card's place in the list.
     func step(_ delta: Int, wrap: Bool = true) {
-        let order = drawnOrder
-        guard !order.isEmpty else { return }
-        var next = delta > 0 ? 0 : order.count - 1
-        if let i = order.firstIndex(where: { $0.id == selection }) {
-            next = wrap ? ((i + delta) % order.count + order.count) % order.count : min(max(i + delta, 0), order.count - 1)
+        let all = drawnGroups.flatMap(\.sessions)
+        let drawn = Set(drawnOrder.map(\.id))
+        guard !drawn.isEmpty else { return }
+        var i = all.firstIndex { $0.id == selection } ?? (delta > 0 ? -1 : all.count)
+        for _ in 0..<all.count {
+            i += delta
+            if wrap {
+                i = (i + all.count) % all.count
+            } else if !all.indices.contains(i) {
+                return
+            }
+            let s = all[i]
+            if drawn.contains(s.id) {
+                if outsideSelection != nil || s.id != selection { show(s.id) }
+                return
+            }
         }
-        if order[next].id != selection { show(order[next].id) }
     }
 
     /// Shows the nth row (from 1) of the drawn order.
@@ -275,7 +302,9 @@ final class Store: ObservableObject {
 
     /// Moves the keyboard between the session list and the terminal.
     func toggleFocus() {
-        if let t = terminalView, t.window?.firstResponder === t {
+        if !showTerminal {
+            if messageHasKeys { focusSidebar += 1 } else { focusMessage += 1 }
+        } else if let t = terminalView, t.window?.firstResponder === t {
             focusSidebar += 1
         } else {
             focusTerminal += 1
@@ -294,17 +323,29 @@ final class Store: ObservableObject {
 
     // MARK: Requests
 
-    /// Swaps the session into the slot, which the terminal shows.
+    /// Swaps the session into the slot, which the terminal shows. Requests
+    /// that come faster than the core answers, such as a key held down or
+    /// pressed twice, collapse into the last one: the core would take them
+    /// in no set order and leave the terminal on a session the list doesn't
+    /// highlight.
     func show(_ id: String, focus: Bool = false) {
         selection = id
         outsideSelection = nil
+        wanted = (id, focus)
+        guard !showing else { return }
+        showing = true
         Task {
-            do {
-                _ = try await client.call("show", ShowArgs(session: id, focus: focus), as: Empty.self)
-                if focus { focusTerminal += 1 }
-            } catch {
-                say("Couldn’t show it: \(error.localizedDescription)", error: true)
+            while let next = wanted {
+                wanted = nil
+                do {
+                    _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus), as: Empty.self)
+                    // The conversation's message box, or the terminal when it shows.
+                    if next.focus, wanted == nil { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
+                } catch where wanted == nil {
+                    say("Couldn’t show it: \(error.localizedDescription)", error: true)
+                } catch {}
             }
+            showing = false
         }
     }
 
