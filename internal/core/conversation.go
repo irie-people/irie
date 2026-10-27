@@ -358,7 +358,7 @@ func (cv *conversation) toolUse(id, name string, input json.RawMessage, at time.
 	c := &call{done: w.done(), failed: w.failed()}
 	switch name {
 	case "Agent", "Task":
-		it.Kind, it.AgentType = ipc.ItemAgent, or(in.str("subagent_type"), "general-purpose")
+		it.Kind, it.AgentType, it.Text = ipc.ItemAgent, or(in.str("subagent_type"), "general-purpose"), in.str("description")
 	case "Edit", "MultiEdit", "Write", "NotebookEdit":
 		c.added, c.removed = editLines(name, in)
 	case "AskUserQuestion":
