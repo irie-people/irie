@@ -29,7 +29,7 @@ Two details of the generated tmux.conf follow from this. The `window-resized` ho
 
 ## 3. Build and run
 
-`mac/build.sh` builds `mac/build/Irie.app`. It calls `swiftc` directly because SwiftPM 5.9, the version in the Command Line Tools for macOS 14.1, stops at `unable to lookup item 'PlatformPath'`.
+`mac/build.sh` builds `mac/build/Irie.app`. It calls `swiftc` directly because SwiftPM 5.9, the version in the Command Line Tools for macOS 14.1, stops at `unable to lookup item 'PlatformPath'`. `tools/live.sh` (AGENTS.md) runs it when `mac/` changed, installs the app in `~/Applications` and relaunches it if it was running.
 
 The terminal view is [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) v1.18.0 (MIT), the newest release whose manifest builds with Swift 5.9. The script fetches it, refuses the download unless its SHA-256 matches, and compiles it once into a static library under `mac/.build`. SwiftTerm draws with Metal: its renderer compiles `Shaders.metal`, which the script copies into the app, when the app runs, so no Xcode is needed. Where Metal is missing it draws with Core Graphics.
 

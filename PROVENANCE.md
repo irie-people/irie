@@ -74,6 +74,9 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | https://code.claude.com/docs/en/hooks.md (read again) | `transcript_path` on every hook and `agent_transcript_path` on SubagentStop: which transcripts a session's tally reads. SubagentStart and SubagentStop with `agent_id` and `agent_type`: the running subagents on each row |
 | 2026-10-27 | https://www.w3.org/TR/WCAG22/ (1.4.3 Contrast (Minimum), 1.4.11 Non-text Contrast, 2.2.1 Timing Adjustable, 2.4.7 Focus Visible) | The Mac app: text colours at 4.5:1 on its solid surfaces and state marks at 3:1, with stronger colours under Increase Contrast; error notices that stay until the user acts; a selected card that shows whether the list has the keyboard |
 | 2026-10-26 | `swift build` with the Swift 5.9.0 Command Line Tools on macOS 14.1 | SwiftPM stops at `xcrun --show-sdk-platform-path`: why `mac/build.sh` calls `swiftc` |
+| 2026-10-27 | `go help version` and `go help build` (Go 1.27) | `go version -m` prints the `vcs.revision` that `-buildvcs` stamps into a build: how `tools/live.sh` tells which commit is installed |
+| 2026-10-27 | `git merge-base -h` and `git update-ref -h` | `--is-ancestor` refuses an install that would drop the live build, and `update-ref` moves the `live` branch: `tools/live.sh` |
+| 2026-10-27 | macOS manual pages `lsappinfo(1)`, `open(1)`, `pgrep(1)`, `ditto(1)` | Whether Irie.app is in front, relaunching it in front or behind (`open -g`), finding it by process name (`pgrep -x`) and copying the bundle: `tools/live.sh` |
 
 ## Third-party code
 
