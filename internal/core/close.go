@@ -220,7 +220,7 @@ func (c *Core) end(p tmux.Pane) {
 			for deadline := time.Now().Add(closeWait); alive(p.PID) && time.Now().Before(deadline); {
 				time.Sleep(50 * time.Millisecond)
 			}
-			if alive(p.PID) {
+			if alive(p.PID) && c.hosts(p) {
 				c.log.Warn("close: the agent did not exit after SIGTERM, so it is killed", "session", p.IrieSession, "pid", p.PID, "wait", closeWait)
 				signalAll(p.PID, syscall.SIGKILL)
 				for i := 0; i < 40 && alive(p.PID); i++ {
@@ -235,6 +235,15 @@ func (c *Core) end(p tmux.Pane) {
 		}
 		delete(c.closes.ending, p.ID)
 	}()
+}
+
+// hosts reports whether p's process still runs in p, by tmux's word, so a
+// SIGKILL never reaches a process that took the pid of a host that exited.
+func (c *Core) hosts(p tmux.Pane) bool {
+	c.mu.Lock()
+	out, err := c.tmux.Run("display-message", "-p", "-t", p.ID, "#{pane_pid} #{pane_dead}")
+	c.mu.Unlock()
+	return err == nil && strings.TrimSpace(out) == strconv.Itoa(p.PID)+" 0"
 }
 
 // signalAll sends sig to what a host runs, the host last: the agent's
