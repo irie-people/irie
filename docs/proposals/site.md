@@ -30,7 +30,7 @@ Added on 2026-10-26, for using Irie rather than learning about it. A "Docs" item
 | Your first session | `first-session.html` | The window on a first run | Typing a task, reading the row, looking in, answering an agent, a finished task |
 | Tasks, repos and worktrees | `tasks.html` | Two `@shop` tasks in worktrees | The task box, `@`, `@!` and `+`, how `@` finds a repo, worktrees, Tab completion, pastes, names |
 | Profiles and models | `profiles.html` | `+local` picking a profile | The settings file and when a change takes effect, profiles, local models, generic agents, every setting |
-| Themes | `themes.html` | Three themes as tiles, light beside dark | Planned. Rosewater (the default), Terracotta and Lilac, in the colours the owner approved from warm-look's palettes, copied exactly: for each, a light and a dark sidebar, every state in order, and each colour's lowest contrast |
+| Themes | `themes.html` | Four themes as tiles, light beside dark | Planned. Rosewater (the default), Terracotta and Lilac in the colours the owner approved from warm-look's palettes, and Evergreen from `mac/Sources/Irie/Theme.swift`, all copied exactly: for each, a light and a dark sidebar, every state in order, and each colour's lowest contrast |
 | Keys and commands | `keys.html` | Irie's key guide as keycaps | Every key, the keys to come, every command, `irie ctl` |
 | Recipes | `recipes.html` | Three branches merged into main | Seven recipes, each with what works today and what is planned |
 | Troubleshooting | `troubleshooting.html` | Rows in trouble | Each state, message and warning, what to do, and where Irie keeps things |
@@ -50,7 +50,7 @@ All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<titl
 | Milestones | Roadmap | Eleven stones over two waves: done, in progress, planned |
 | The window closes | FAQ | The window is only a view; the agents live in tmux and keep going |
 | From an issue to Steak | Contribute | Issue, signed-off pull request, merge, a `steak:N` size, the public record |
-| Three themes | Themes | Rosewater, Terracotta and Lilac as tiles, light on the left and dark on the right |
+| Four themes | Themes | Rosewater, Terracotta, Lilac and Evergreen as tiles, light on the left and dark on the right |
 | A theme's sidebar | Themes | For each theme, in light and dark: the Mac app's sidebar as planned, with cards in every kind of state, then every state's mark in order. Each picture keeps its own colours in both of the site's themes |
 
 Recordings come later. Each one has an empty box now, sized 16:10, whose caption doubles as its alt text and names the recording to come.
