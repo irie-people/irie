@@ -1,19 +1,25 @@
 package core
 
 import (
+	"cmp"
 	"encoding/json"
 	"os"
 	"reflect"
+	"slices"
+	"strings"
 
+	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/statusline"
+	"github.com/irie-hq/irie/internal/ui"
 )
 
 // status takes one status line update of a Claude Code session (DESIGN
 // §6.3): what the session has cost, how full its context is, and the
 // plan's use, which is the account's and so the newest update's. The
 // session's last update is kept in status.json, for a restarted core. It
-// answers with the session's state and running subagents.
+// answers with the session's state and running subagents, and while it
+// works its own colour.
 func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	u, err := statusline.Parse(a.Payload)
 	if err != nil {
@@ -35,11 +41,27 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 		c.plan = ipc.Plan{FiveHour: u.FiveHour, SevenDay: u.SevenDay}
 	}
 	row := x.wire()
+	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents}
+	if row.State == ipc.StateWorking {
+		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg.UI.Theme), x.id)
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
 	c.publishHeader()
-	return &ipc.StatusReply{State: row.State, Subagents: row.Subagents}, nil
+	return reply, nil
+}
+
+// theme takes the Mac app's palette, so the agents' colours on the status
+// line match their cards; until the app says, they follow ui.theme.
+func (c *Core) theme(a ipc.ThemeArgs) error {
+	if !slices.Contains(config.Themes, a.Theme) {
+		return ipc.Errorf(ipc.CodeBadArgs, "theme %q: must be one of %s", a.Theme, strings.Join(config.Themes, ", "))
+	}
+	c.mu.Lock()
+	c.appTheme = a.Theme
+	c.mu.Unlock()
+	return nil
 }
 
 // loadStatus reads a session's last status update, and takes its plan use

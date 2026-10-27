@@ -8,7 +8,7 @@ import SwiftUI
 /// sessions by what they need. A click shows that agent's terminal and gives
 /// it the keyboard; the arrow keys walk the cards and keep the keyboard
 /// here. The switch between the views, and the selected session's details,
-/// sit above the task bar.
+/// sit above the task bar, on one panel with it.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
@@ -30,24 +30,36 @@ struct SidebarView: View {
             content
                 .frame(minHeight: Self.cardsLeast)
             ReviewDock()
-            if !store.sessions.isEmpty {
-                ModeSwitch()
+            // The footer sits lighter than the list, with rounded top
+            // corners: the switch between the views, the details and the
+            // task bar, on one panel.
+            VStack(spacing: 0) {
+                if !store.sessions.isEmpty {
+                    ModeSwitch()
+                }
+                // The details, once there is a session to pick: small until
+                // their edge is dragged, and the cards have the rest.
+                if !store.sessions.isEmpty || !store.outside.isEmpty {
+                    DetailsPanel()
+                }
+                TaskBar()
             }
-            // The details, once there is a session to pick: small until
-            // their edge is dragged, and the cards have the rest.
-            if !store.sessions.isEmpty || !store.outside.isEmpty {
-                DetailsPanel()
-            }
-            // The footer sits lighter than the list, with rounded top corners.
-            TaskBar()
-                .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
-                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
+                .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            // It takes its height before the cards, which keep their least.
+            .layoutPriority(1)
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
-            ToolbarItem(placement: .navigation) { TitleName() }
-            // The primary action slot sits at the trailing edge of the title bar.
-            ToolbarItem(placement: .primaryAction) { Counts() }
+            // Both over the sidebar, beside the traffic lights and above the
+            // find field: macOS sets automatic items in their own column's
+            // part of the bar, leading to trailing. A .navigation item goes
+            // to the detail column's bar, ahead of its title, and a
+            // .primaryAction one to the bar's leading edge. Short of room,
+            // the bar moves its trailing item into the overflow menu first,
+            // so the counts go before the name does.
+            ToolbarItem(placement: .automatic) { TitleName() }
+            ToolbarItem(placement: .automatic) { Counts() }
         }
         // The toggle would crowd them out of the title bar; View >
         // Hide Sidebar (SidebarCommands) still hides it.
@@ -90,6 +102,9 @@ struct SidebarView: View {
                         .padding(.bottom, 8)
                     }
                 }
+                // The line from the selected card shows while the card's
+                // middle is in sight here (TabLink.swift).
+                .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { $0.list = $1 }
                 .onChange(of: store.selection) {
                     if let id = store.selection { proxy.scrollTo(id) }
                 }
@@ -133,9 +148,10 @@ struct SidebarView: View {
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
 /// the pointer brings up the actions. The card is soft and rounded, on a
 /// gentle shadow: washed in its agent's colour while it works, tinted red
-/// while it needs you, filled with the selection and edged in the accent
-/// while selected. A selected working card is a gradient, from the selection
-/// by its mark to the colour round its terminal at the trailing end.
+/// while it needs you. The selected card is filled with the selection and
+/// edged in its session's colour, which a line carries on to the terminal's
+/// frame (TabLink.swift). A selected working card is a gradient, from the
+/// selection by its mark to the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -193,7 +209,13 @@ private struct SessionCard: View {
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
         .background(ground.shadow(color: Theme.shadow, radius: 3, y: 1.5))
-        .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
+        .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
+        .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
+            if selected {
+                ends.card = bounds
+                ends.color = edge
+            }
+        }
         .contentShape(shape)
         .onHover { hovering = $0 }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
@@ -276,14 +298,20 @@ private struct SessionCard: View {
 
     private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
-    /// The accent round the selected card, faint while the list lacks the
-    /// keyboard; red round one that needs you; a hairline round the rest.
+    /// Round the selected card, the colour of the terminal's frame and the
+    /// line between them; red round one that needs you; a hairline round the
+    /// rest.
     private var edge: Color {
-        if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
+        if selected { return Look.edge(session) }
         if hovering { return Theme.accent.opacity(0.45) }
         if let tint { return tint.opacity(0.55) }
         return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
     }
+
+    /// The selected card's edge is as wide as the line from it, and bolder
+    /// while the list has the keyboard, so its colour always matches the
+    /// line's and the frame's while its width tells where the keyboard is.
+    private var edgeWidth: CGFloat { selected ? (listFocused ? 2.5 : TabLink.width) : 1 }
 
     private var spoken: String {
         var parts = [session.name, look.label]
@@ -383,22 +411,24 @@ private struct HelperRows: View {
 
     var body: some View {
         let helpers = session.subagents ?? []
+        // In their orchestrator's colour while it works, so they read as its.
+        let own = Look.agentInk(session)
         if !helpers.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(helpers.prefix(3)) { h in
                     let loud = h.needsYou == true
                     HStack(spacing: 5) {
-                        Text("↳").font(Theme.font(12)).foregroundStyle(Theme.muted)
-                        Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : Theme.ink)
+                        Text("↳").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                        Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : own ?? Theme.ink)
                         if let d = h.detail, !d.isEmpty {
-                            Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : Theme.muted)
+                            Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : own ?? Theme.muted)
                         }
                     }
                     .lineLimit(1)
                     .help([h.type, h.detail, h.command].compactMap { $0 }.joined(separator: "\n"))
                 }
                 if helpers.count > 3 {
-                    Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(Theme.muted)
+                    Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
                 }
             }
             // Under the card's name: its inset, its mark and the gap.
@@ -437,7 +467,8 @@ private struct ModeSwitch: View {
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
         .frame(maxWidth: 190)
-        .padding(.top, 5)
+        // As far from the footer's top as the task bar is from its foot.
+        .padding(.top, 10)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Group the sessions")
     }
@@ -474,7 +505,8 @@ private struct QuickActions: View {
 }
 
 /// The selected session's details, on a card above the task bar, edged in
-/// its state's colour: long text is cut off, and the full text is on hover.
+/// its state's colour, or its agent's while it works: long text is cut off,
+/// and the full text is on hover.
 /// It opens small, the state and one line, and shows as many whole lines as
 /// fit. Its top edge drags it taller, as far as leaves the
 /// cards their room, or shorter. The chevron, a double click on the edge or
@@ -507,7 +539,9 @@ struct DetailsPanel: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
         let outside = store.selectedOutside
-        let stateColor = outside == nil ? selected.flatMap { Look($0).color } : nil
+        // Its state's colour, or its agent's while it works, as the
+        // terminal's frame.
+        let stateColor = outside == nil ? selected.flatMap { Look($0).color ?? Look.agentTint($0) } : nil
         Group {
             if minimized {
                 summary(outside)
@@ -542,8 +576,6 @@ struct DetailsPanel: View {
         .overlay(alignment: .top) { edge }
         .padding(.horizontal, 10)
         .padding(.top, 6)
-        // It takes its height before the cards, which keep their least.
-        .layoutPriority(1)
     }
 
     /// The top edge, a strip across the border: a drag makes the panel
@@ -620,13 +652,14 @@ struct DetailsPanel: View {
                 line(o.doing, color: Theme.ink)
             } else if let s = selected {
                 let look = Look(s)
-                StateMark(look: look)
+                let own = Look.agentInk(s)
+                StateMark(look: look, tint: Look.agentTint(s))
                 if look.loud {
                     line(s.detail ?? look.label, color: Theme.needs)
                 } else if let c = s.command, !c.isEmpty {
-                    line(c, mono: true, color: Theme.ink)
+                    line(c, mono: true, color: own ?? Theme.ink)
                 } else {
-                    line(s.detail ?? look.label, color: Theme.ink)
+                    line(s.detail ?? look.label, color: own ?? Theme.ink)
                 }
             } else {
                 line("No session picked")
@@ -637,14 +670,18 @@ struct DetailsPanel: View {
         .controlSize(.small)
     }
 
+    /// While the session works, its state and every line about it but a
+    /// warning take its agent's colour, as its card does.
     private func details(_ s: Session) -> some View {
         let look = Look(s)
+        let own = Look.agentInk(s)
+        let meta = own ?? Theme.muted
         return WholeLines(spacing: 4) {
             HStack(spacing: 6) {
-                StateMark(look: look)
+                StateMark(look: look, tint: Look.agentTint(s))
                 Text(look.label)
                     .font(Theme.font(12.5, .bold))
-                    .foregroundStyle(look.loud ? Theme.needs : Theme.ink)
+                    .foregroundStyle(look.loud ? Theme.needs : own ?? Theme.ink)
                 Spacer(minLength: 4)
                 // Icons, so a narrow sidebar never cuts their words short; the
                 // words are on hover and for VoiceOver.
@@ -659,18 +696,18 @@ struct DetailsPanel: View {
                 DetailsFold()
             }
             .controlSize(.small)
-            line(s.detail, color: look.loud ? Theme.needs : Theme.ink)
+            line(s.detail, color: look.loud ? Theme.needs : own ?? Theme.ink)
             ControlLines(session: s)
-            line(s.command, mono: true)
-            line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
-            line(s.cwd.map(Age.tilde), mono: true)
-            line(s.tokens?.breakdown)
+            line(s.command, mono: true, color: meta)
+            line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true, color: meta)
+            line(s.cwd.map(Age.tilde), mono: true, color: meta)
+            line(s.tokens?.breakdown, color: meta)
             ForEach((s.subagents ?? []).prefix(3)) { h in
                 line("↳ " + [h.type ?? "Helper", h.detail].compactMap { $0 }.joined(separator: " · "),
-                     color: h.needsYou == true ? Theme.needs : Theme.muted)
+                     color: h.needsYou == true ? Theme.needs : meta)
             }
             if let extra = s.subagents.map({ $0.count - 3 }), extra > 0 {
-                line("and \(extra) more helpers")
+                line("and \(extra) more helpers", color: meta)
             }
             ForEach((s.warnings ?? []).prefix(2), id: \.self) { w in
                 line("⚠︎ " + w, color: Theme.sunInk)
@@ -766,10 +803,8 @@ private struct Actions: View {
     }
 }
 
-/// A count per state, in the title bar above the sidebar. A count shows the
-/// first session, in list order, in that state.
-/// What the sidebar puts in the title bar: the sun over the waves and the name
-/// Irie, beside the traffic lights. The counts sit at the trailing edge.
+/// What the sidebar puts first in the title bar, beside the traffic lights
+/// and above the find field: the sun over the waves and the name Irie.
 private struct TitleName: View {
     var body: some View {
         HStack(spacing: 3) {
@@ -779,13 +814,14 @@ private struct TitleName: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Irie")
         .accessibilityAddTraits(.isHeader)
-        // The title bar sizes the item to its content; a point either side
-        // keeps the capsules' edges whole.
-        .padding(.horizontal, 1)
+        // The gap to the counts, which are an item of their own.
+        .padding(.trailing, 6)
         .fixedSize()
     }
 }
 
+/// A count per state, in the title bar after Irie's name. A count shows the
+/// first session, in list order, in that state.
 private struct Counts: View {
     @EnvironmentObject private var store: Store
 
@@ -810,6 +846,10 @@ private struct Counts: View {
                 EmptyView()
             }
         }
+        // The title bar sizes the item to its content; a point either side
+        // keeps the capsules' edges whole.
+        .padding(.horizontal, 1)
+        .fixedSize()
     }
 
     /// A count of the sessions in these states, with the first state's mark,

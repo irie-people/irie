@@ -125,6 +125,19 @@ extension Look {
     static func agentDeep(_ s: Session) -> Color? {
         Look(s) == .working ? Theme.agentDeep(slot: Theme.agentSlot(s.id)) : nil
     }
+
+    /// The colour that edges the selected card and the terminal's frame, and
+    /// draws the line between them: red while it needs you, green once it is
+    /// done, the agent's own colour while it works, and sun otherwise.
+    static func edge(_ s: Session) -> Color {
+        Look(s).color ?? agentTint(s) ?? Theme.sunEdge
+    }
+
+    /// The agent's colour as text, for its state, its details and its
+    /// helpers away from its card, while it is working; none otherwise.
+    static func agentInk(_ s: Session) -> Color? {
+        Look(s) == .working ? Theme.agentInk(slot: Theme.agentSlot(s.id)) : nil
+    }
 }
 
 /// A state's glyph from DESIGN §5.3, drawn: ✕ failed, · exited (✕ with an

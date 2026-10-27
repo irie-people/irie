@@ -108,7 +108,9 @@ func TestBangPromotesToTheTopAtOnce(t *testing.T) {
 	if selectedName(m) != "task-002" || m.sessions[0].Priority != 1 {
 		t.Errorf("selection %s, priority %d", selectedName(m), m.sessions[0].Priority)
 	}
-	if got := listText(t, m); got[1] != "◐↑task-002 1m" {
+	// The first card, whether or not the group's header scrolled away.
+	got := listText(t, m)
+	if i := slices.IndexFunc(got, func(l string) bool { return strings.Contains(l, "task-") }); i < 0 || got[i] != "◐↑task-002 1m" {
 		t.Errorf("no badge on the first card: %q", got)
 	}
 	raw := strings.Split(m.View().Content, "\n")[lineOf(t, m, "↑task-002")]

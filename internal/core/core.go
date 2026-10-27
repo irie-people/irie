@@ -52,6 +52,7 @@ type Core struct {
 	spawnMu  turns        // one spawn at a time, a promoted session's first; taken before mu
 	sendMu   turns        // one message typed to an agent at a time, likewise
 	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
+	undoMu   sync.Mutex   // one undo or redo at a time, taken before spawnMu and mu
 	http     *http.Client // for local servers
 	sampling atomic.Bool  // a memory sample is running
 
@@ -68,6 +69,7 @@ type Core struct {
 	history    map[string][]event.Event // journal events of sessions not adopted yet
 	recent     []string                 // repos used recently, newest first
 	appViews   int                      // open subscriptions of the Mac app; while any, the slot is zoomed
+	appTheme   string                   // the Mac app's palette, which the status line's agent colours follow; ui.theme until it says
 	outside    outside                  // the Claude Code sessions outside Irie (outside.go)
 	local      localState               // local.json
 	machine    localmodel.Machine       // the machine's memory, last read
@@ -78,6 +80,7 @@ type Core struct {
 	order      []string            // the list's order from the top, which the user sets (order.go)
 	bg         map[int]bgProc      // the processes Irie put in the background, by pid (priority.go)
 	closes     closes              // closed sessions, and agents still ending (close.go)
+	steps      stateFile           // state.json: the undo and redo stacks (undo.go)
 	selected   string              // the session you picked, whose conversation or terminal the slot shows (view.go)
 	raw        bool                // the slot shows the picked session's raw terminal, not its conversation
 }
@@ -191,6 +194,7 @@ func Run(o Options) error {
 	c.loadOutcomes()
 	c.loadOrder()
 	c.loadClosed()
+	c.loadState()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
@@ -428,7 +432,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
-			ipc.OpClose, ipc.OpReopen, ipc.FeatureSpawnModel,
+			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder,
 		}}, nil
 	case ipc.OpList:
@@ -438,12 +442,22 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem, Closed: c.closedList()}, nil
+	case ipc.OpTheme:
+		var a ipc.ThemeArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.theme(a)
 	case ipc.OpClose:
 		var a ipc.CloseArgs
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return nil, c.close(a)
+		if err := c.close(a); err != nil {
+			return nil, err
+		}
+		c.recordAction(actClose, a.Session, nil)
+		return nil, nil
 	case ipc.OpReopen:
 		var a ipc.ReopenArgs
 		if err := decode(raw, &a); err != nil {
@@ -453,7 +467,14 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.recordAction(actReopen, s.ID, nil)
 		return ipc.ReopenResult{Session: s}, nil
+	case ipc.OpUndo, ipc.OpRedo:
+		var a ipc.UndoArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.undo(op, a)
 	case ipc.OpMove:
 		var a ipc.MoveArgs
 		if err := decode(raw, &a); err != nil {
@@ -472,6 +493,10 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		s, err := c.spawn(a)
 		if err != nil {
 			return nil, err
+		}
+		// A subtask an agent delegates is the agent's doing, not the user's.
+		if !a.Delegate {
+			c.recordAction(actSpawn, s.ID, nil)
 		}
 		return ipc.SpawnResult{Session: s}, nil
 	case ipc.OpShow:
