@@ -37,6 +37,9 @@ final class Store: ObservableObject {
     @Published var outsideSelection: String?
     @Published var confirmingMove: OutsideSession?
     @Published var moving: String?
+    /// The closed sessions reopen can bring back, the last closed first
+    /// (Closing.swift).
+    @Published var closed: [ClosedSession] = []
     var outsideProblem = ""
 
     static let defaultFontSize: CGFloat = 13
@@ -112,6 +115,9 @@ final class Store: ObservableObject {
             sessions.removeAll { $0.id == f.id }
         case "outside":
             applyOutside(f)
+            return
+        case "closed":
+            closed = f.closed ?? []
             return
         default:
             return
