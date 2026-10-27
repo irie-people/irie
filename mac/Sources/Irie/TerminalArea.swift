@@ -22,12 +22,12 @@ struct TerminalArea: View {
         }
         .background(Theme.ground.ignoresSafeArea())
         .toolbarBackground(Theme.ground, for: .windowToolbar)
+        // The window's own title. The bar hides it (IrieApp.showsTitle),
+        // or the name would show twice.
         .navigationTitle(selected?.name ?? "Irie")
-        // Never empty: the title moves when a subtitle appears or goes.
-        .navigationSubtitle(selected.map(subtitle) ?? "No session")
         .toolbar {
-            // The principal slot replaces the system title, so the name and
-            // subtitle centre on the bar's midline beside the button.
+            // The bar's only title: the name and subtitle centre on its
+            // midline beside the button.
             ToolbarItem(placement: .principal) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(selected?.name ?? "Irie")
