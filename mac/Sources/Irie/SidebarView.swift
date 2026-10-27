@@ -8,7 +8,7 @@ import SwiftUI
 /// sessions by what they need. A click shows that agent's terminal and gives
 /// it the keyboard; the arrow keys walk the cards and keep the keyboard
 /// here. The switch between the views, and the selected session's details,
-/// sit above the task bar.
+/// sit above the task bar, on one panel with it.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
@@ -30,18 +30,24 @@ struct SidebarView: View {
             content
                 .frame(minHeight: Self.cardsLeast)
             ReviewDock()
-            if !store.sessions.isEmpty {
-                ModeSwitch()
+            // The footer sits lighter than the list, with rounded top
+            // corners: the switch between the views, the details and the
+            // task bar, on one panel.
+            VStack(spacing: 0) {
+                if !store.sessions.isEmpty {
+                    ModeSwitch()
+                }
+                // The details, once there is a session to pick: small until
+                // their edge is dragged, and the cards have the rest.
+                if !store.sessions.isEmpty || !store.outside.isEmpty {
+                    DetailsPanel()
+                }
+                TaskBar()
             }
-            // The details, once there is a session to pick: small until
-            // their edge is dragged, and the cards have the rest.
-            if !store.sessions.isEmpty || !store.outside.isEmpty {
-                DetailsPanel()
-            }
-            // The footer sits lighter than the list, with rounded top corners.
-            TaskBar()
-                .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
-                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
+                .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            // It takes its height before the cards, which keep their least.
+            .layoutPriority(1)
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
@@ -410,7 +416,8 @@ private struct ModeSwitch: View {
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
         .frame(maxWidth: 190)
-        .padding(.top, 5)
+        // As far from the footer's top as the task bar is from its foot.
+        .padding(.top, 10)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Group the sessions")
     }
@@ -513,8 +520,6 @@ struct DetailsPanel: View {
         .overlay(alignment: .top) { edge }
         .padding(.horizontal, 10)
         .padding(.top, 6)
-        // It takes its height before the cards, which keep their least.
-        .layoutPriority(1)
     }
 
     /// The top edge, a strip across the border: a drag makes the panel
