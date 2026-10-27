@@ -47,7 +47,8 @@ struct SidebarView: View {
                             OutsideSection(now: ctx.date, listFocused: listFocused)
                         }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
                     }
                 }
                 .onChange(of: store.selection) {
@@ -344,9 +345,9 @@ private struct Header: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        HStack(spacing: 7) {
-            SunMark().frame(width: 22, height: 22)
-            Text("Irie").font(.system(size: 18, weight: .heavy, design: .rounded))
+        HStack(spacing: 6) {
+            SunMark().frame(width: 18, height: 18)
+            Text("Irie").font(.system(size: 15, weight: .heavy, design: .rounded))
             Spacer()
             switch store.link {
             case .online:
@@ -360,8 +361,8 @@ private struct Header: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.top, 3)
+        .padding(.bottom, 5)
     }
 
     private func count(_ g: Look.Group, color: Color, label: String) -> some View {
@@ -377,7 +378,7 @@ private struct Header: View {
             }
             .foregroundStyle(color)
             .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+            .padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
             .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
             .opacity(rows.isEmpty ? 0.5 : 1)
@@ -417,14 +418,14 @@ private struct FindField: View {
                 .accessibilityLabel("Clear the search")
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                 .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
         .padding(.horizontal, 10)
-        .padding(.bottom, 6)
+        .padding(.bottom, 2)
         .onChange(of: store.focusFind) { focused = true }
     }
 }
