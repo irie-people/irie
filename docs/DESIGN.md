@@ -158,7 +158,8 @@ On every tick the core checks these invariants and repairs any it finds broken:
 - `irie:0` has exactly two panes, and pane 0 is the sidebar.
 - The slot holds P or exactly one agent or mirror pane.
 - Every agent pane is either in the slot or in its own window.
-- The sidebar is `ui.sidebar_width` wide.
+- The slot is zoomed exactly while the Mac app is open ([MAC.md](MAC.md)), and swaps keep the zoom.
+- The sidebar is `ui.sidebar_width` wide, except while the slot is zoomed.
 - Every agent window has the slot's size, so a swap never resizes an agent: no SIGWINCH and no redraw jump.
 
 The core never kills a pane while it is in the slot; it swaps the pane home first.
@@ -180,7 +181,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 |---|---|---|---|
 | `hello` | `client`, `api` | `version`, `api`, `features[]` | M1 |
 | `list` | none | `sessions[]` | M1 |
-| `subscribe` | `events?`, `session?`, `agent?` | frames (above) | M1 |
+| `subscribe` | `events?`, `session?`, `agent?`, `view?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed | M1 (`view`: Mac app) |
 | `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?`, `name?`, `force?` | `session` | M1 (`repo`, `profile` M3; `force` M10) |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
@@ -191,7 +192,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `priority` | `session`, `level` (0 or 1), `reason?` | none | M7 |
 | `note` | `session`, `agent?`, `text` | `note` | M7 |
 | `preflight` | `profile` | `ok`, `problems[]` | M10 |
-| `attach-info` | `session` | tmux socket and target, for an external terminal | after v1 |
+| `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
 
 ### 2.5 Observation
 
@@ -727,6 +728,8 @@ Claude Code reaches a local model through any server that speaks the Anthropic M
 ---
 
 ## 7. Ghostty and Irie.app
+
+A native Mac app now comes first on macOS: [MAC.md](MAC.md). This section is the plan from before it.
 
 ### 7.1 The Irie window
 

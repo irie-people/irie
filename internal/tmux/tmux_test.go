@@ -161,6 +161,52 @@ func TestSwapInCommands(t *testing.T) {
 	}
 }
 
+// zoomedApp is sound() as the Mac app keeps it: the slot zoomed to the whole
+// window, and the agent window sized like it.
+func zoomedApp() Snapshot {
+	s := edit(sound(), "%1", func(p *Pane) { p.Zoomed = true })
+	s = edit(s, "%2", func(p *Pane) { p.Zoomed, p.Active, p.Width = true, true, 80 })
+	return edit(s, "%3", func(p *Pane) { p.Width, p.WindowWidth = 80, 80 })
+}
+
+func TestPlanZoomsTheSlotForTheApp(t *testing.T) {
+	app := want
+	app.Zoom = true
+	toggle := "resize-pane -Z -t " + Slot
+	if got := first(Plan(sound(), app)); got != toggle {
+		t.Errorf("zoom = %q, want %q", got, toggle)
+	}
+	if cmds := Plan(zoomedApp(), app); cmds != nil {
+		t.Errorf("zoomed layout needs %q", cmds)
+	}
+	// The sidebar's width waits until the zoom ends.
+	if cmds := Plan(edit(zoomedApp(), "%1", func(p *Pane) { p.Width = 44 }), app); cmds != nil {
+		t.Errorf("zoomed layout with a wide sidebar needs %q", cmds)
+	}
+	// Another pane is zoomed: unzoom first.
+	other := edit(edit(zoomedApp(), "%2", func(p *Pane) { p.Active = false }), "%1", func(p *Pane) { p.Active = true })
+	if got := first(Plan(other, app)); got != toggle {
+		t.Errorf("sidebar zoomed = %q, want %q", got, toggle)
+	}
+	// The app closed: unzoom.
+	if got := first(Plan(zoomedApp(), want)); got != toggle {
+		t.Errorf("unzoom = %q, want %q", got, toggle)
+	}
+}
+
+func TestSwapInKeepsTheZoom(t *testing.T) {
+	cmds, err := SwapIn(zoomedApp(), "%3", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := [][]string{
+		{"swap-pane", "-Z", "-d", "-s", "%3", "-t", Slot},
+		{"select-pane", "-Z", "-t", Slot},
+	}; !slices.EqualFunc(cmds, want, slices.Equal) {
+		t.Errorf("show while zoomed = %q", cmds)
+	}
+}
+
 func TestQuoteArgEndingInSemicolon(t *testing.T) {
 	got := listArgs([][]string{{"display-message", "a;"}, {"set-option", "x", "y"}})
 	want := []string{"display-message", `a\;`, ";", "set-option", "x", "y"}
@@ -255,10 +301,11 @@ func TestConfLoadsIntoTmux(t *testing.T) {
 			binding = line
 		}
 	}
-	if !strings.Contains(binding, "select-pane -t irie:0.1") || !strings.Contains(binding, "select-pane -t irie:0.0") {
+	if !strings.Contains(binding, "select-pane -t irie:0.1") || !strings.Contains(binding, "select-pane -t irie:0.0") ||
+		!strings.Contains(binding, "window_zoomed_flag") || !strings.Contains(binding, "send-keys C-]") {
 		t.Errorf("focus key binding = %q", binding)
 	}
-	if got := run(t, r, "show-hooks", "-g", "window-resized"); !strings.Contains(got, "resize-pane -t irie:0.0 -x 34") {
+	if got := run(t, r, "show-hooks", "-g", "window-resized"); !strings.Contains(got, "resize-pane -t irie:0.0 -x 34") || !strings.Contains(got, "window_zoomed_flag") {
 		t.Errorf("window-resized hook = %q", got)
 	}
 }
@@ -366,6 +413,46 @@ func TestLayoutAndSwapInKeepSizes(t *testing.T) {
 	}
 	if cmds := Plan(s, w); cmds != nil {
 		t.Errorf("layout after swaps needs %q", cmds)
+	}
+}
+
+func TestZoomedSlotFillsTheWindowThroughSwaps(t *testing.T) {
+	r, w := startServer(t)
+	w.Zoom = true
+	s := settle(t, r, w)
+	slot := s.SlotPane()
+	if slot == nil || !slot.Zoomed || !slot.Active || slot.Width != slot.WindowWidth {
+		t.Fatalf("slot = %+v", slot)
+	}
+	a := agentWindow(t, r, w, "sa")
+	b := agentWindow(t, r, w, "sb")
+	s = settle(t, r, w)
+	if pa := paneByID(s, a); pa.Width != slot.Width || pa.Height != slot.Height {
+		t.Fatalf("agent %+v is not the zoomed slot's size %dx%d", pa, slot.Width, slot.Height)
+	}
+	for _, id := range []string{a, b, a} {
+		cmds, err := SwapIn(s, id, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.RunList(cmds); err != nil {
+			t.Fatal(err)
+		}
+		if s, err = r.Snapshot(); err != nil {
+			t.Fatal(err)
+		}
+		if got := s.SlotPane(); got == nil || got.ID != id || !got.Zoomed || got.Width != slot.Width {
+			t.Fatalf("after showing %s the slot is %+v", id, got)
+		}
+	}
+	if cmds := Plan(s, w); cmds != nil {
+		t.Errorf("zoomed layout after swaps needs %q", cmds)
+	}
+
+	w.Zoom = false
+	s = settle(t, r, w)
+	if ui := s.Sidebar(); ui == nil || ui.Zoomed || ui.Width != 34 {
+		t.Errorf("after the zoom the sidebar is %+v", ui)
 	}
 }
 

@@ -1,0 +1,184 @@
+import AppKit
+import Foundation
+
+/// The app's state: the core's rows, kept live by one subscription, and the
+/// requests the window makes.
+@MainActor
+final class Store: ObservableObject {
+    enum Link: Equatable {
+        case connecting
+        case online(version: String)
+        case offline(String)
+    }
+
+    @Published private(set) var link: Link = .connecting
+    @Published private(set) var sessions: [Session] = []
+    @Published private(set) var attach: AttachInfo?
+    @Published var selection: String?
+    @Published var expanded: Set<String> = []
+    @Published var notice: Notice?
+    @Published var spawning = false
+    /// Bumped when the terminal should take keyboard focus.
+    @Published var focusTerminal = 0
+
+    struct Notice: Equatable, Identifiable {
+        let id = UUID()
+        var text: String
+        var isError: Bool
+    }
+
+    let client: CoreClient
+    private var started = false
+
+    init(socketPath: String = CorePaths.socket()) {
+        client = CoreClient(socketPath: socketPath)
+    }
+
+    var socketPath: String { client.socketPath }
+
+    // MARK: Connection
+
+    func start() {
+        guard !started else { return }
+        started = true
+        Task { await run() }
+    }
+
+    /// Connects, subscribes and stays subscribed; on any failure it waits and
+    /// tries again, so starting Irie later just works.
+    private func run() async {
+        while true {
+            do {
+                let hello = try await client.call("hello", HelloArgs(), timeout: 2, as: HelloResult.self)
+                guard hello.features.contains("attach-info") else {
+                    link = .offline("This Irie is too old for the app. Run the new build's `irie up` to update it.")
+                    try await Task.sleep(nanoseconds: 3_000_000_000)
+                    continue
+                }
+                attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
+                link = .online(version: hello.version)
+                // The store lives as long as the app.
+                try await client.subscribe { frame in
+                    Task { @MainActor in self.apply(frame) }
+                }
+                link = .offline("The core went away.")
+            } catch {
+                link = .offline(Self.describe(error))
+            }
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+        }
+    }
+
+    private static func describe(_ error: Error) -> String {
+        if case let CoreError.system(call, code) = error, call == "connect", code == ENOENT || code == ECONNREFUSED {
+            return "Irie isn’t running."
+        }
+        return error.localizedDescription
+    }
+
+    private func apply(_ f: Frame) {
+        switch f.t {
+        case "snapshot":
+            sessions = (f.sessions ?? []).sorted(by: Self.before)
+        case "upsert":
+            guard let s = f.session else { return }
+            if let i = sessions.firstIndex(where: { $0.id == s.id }) {
+                sessions[i] = s
+            } else {
+                sessions.append(s)
+                sessions.sort(by: Self.before)
+            }
+        case "remove":
+            sessions.removeAll { $0.id == f.id }
+        default:
+            return
+        }
+        if selection == nil, let shown = sessions.first(where: { $0.shown == true }) {
+            selection = shown.id
+        }
+        if let sel = selection, !sessions.contains(where: { $0.id == sel }) {
+            selection = nil
+        }
+    }
+
+    private static func before(_ a: Session, _ b: Session) -> Bool {
+        a.created != b.created ? a.created < b.created : a.id < b.id
+    }
+
+    // MARK: Requests
+
+    /// Swaps the session into the slot, which the terminal shows.
+    func show(_ id: String, focus: Bool = false) {
+        selection = id
+        Task {
+            do {
+                _ = try await client.call("show", ShowArgs(session: id, focus: focus), as: Empty.self)
+                if focus { focusTerminal += 1 }
+            } catch {
+                say("Couldn’t show it: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
+    /// Starts a task typed in the task bar. Returns whether it started.
+    func spawn(_ input: String) async -> Bool {
+        let args: SpawnArgs
+        do {
+            args = try TaskParser.parse(input, home: NSHomeDirectory())
+        } catch {
+            say(error.localizedDescription, error: true)
+            return false
+        }
+        spawning = true
+        defer { spawning = false }
+        do {
+            // A task in a repo may make a worktree and check out submodules first.
+            let r = try await client.call("spawn", args, timeout: 600, as: SpawnResult.self)
+            say("Started \(r.session.name).", error: false)
+            show(r.session.id)
+            return true
+        } catch {
+            say(error.localizedDescription, error: true)
+            return false
+        }
+    }
+
+    func say(_ text: String, error: Bool) {
+        notice = Notice(text: text, isError: error)
+        let id = notice?.id
+        Task {
+            try? await Task.sleep(nanoseconds: error ? 6_000_000_000 : 3_000_000_000)
+            if notice?.id == id { notice = nil }
+        }
+    }
+
+    // MARK: Desktop actions
+
+    func copy(_ text: String, what: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        say("Copied the \(what).", error: false)
+    }
+
+    func reveal(_ path: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    /// Opens the slot in a Ghostty window: the terminal for builds without
+    /// SwiftTerm, and a second view for builds with it.
+    func openInGhostty() {
+        guard let a = attach else { return }
+        guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.mitchellh.ghostty") != nil else {
+            say("Ghostty isn’t installed. In any terminal, run: \(a.tmux) -S \(a.socket) attach-session -t \(a.target)", error: true)
+            return
+        }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        p.arguments = ["-na", "Ghostty", "--args", "--title=Irie", "-e", a.tmux, "-S", a.socket, "attach-session", "-t", a.target]
+        do {
+            try p.run()
+        } catch {
+            say("Couldn’t open Ghostty: \(error.localizedDescription)", error: true)
+        }
+    }
+}

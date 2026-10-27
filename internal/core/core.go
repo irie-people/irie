@@ -56,6 +56,7 @@ type Core struct {
 	journal   *journal.Journal
 	history   map[string][]event.Event // journal events of sessions not adopted yet
 	recent    []string                 // repos used recently, newest first
+	appViews  int                      // open subscriptions of the Mac app; while any, the slot is zoomed
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -157,8 +158,9 @@ func Run(o Options) error {
 	}
 }
 
+// want is the layout to keep. The caller holds c.mu.
 func (c *Core) want() tmux.Want {
-	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg.UI.SidebarWidth, Version: c.version}
+	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg.UI.SidebarWidth, Version: c.version, Zoom: c.appViews > 0}
 }
 
 // tick polls tmux, repairs the layout, records what tmux and the clock say
@@ -343,7 +345,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo}}, nil
 	case ipc.OpList:
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -376,8 +378,22 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return ipc.CompleteResult{Items: c.complete(a.Text)}, nil
+	case ipc.OpAttachInfo:
+		return c.attachInfo()
 	}
 	return nil, ipc.Errorf(ipc.CodeUnknownOp, "unknown op %q", op)
+}
+
+// attachInfo tells a terminal outside Irie, such as the Mac app's, how to
+// attach to the session that holds the slot.
+func (c *Core) attachInfo() (ipc.AttachInfoResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	sock, err := c.tmux.SocketPath()
+	if err != nil {
+		return ipc.AttachInfoResult{}, err
+	}
+	return ipc.AttachInfoResult{Tmux: c.tmux.Bin, Socket: sock, Target: tmux.MainSession}, nil
 }
 
 func decode(raw json.RawMessage, v any) error {

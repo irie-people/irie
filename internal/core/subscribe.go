@@ -42,6 +42,10 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	if err := decode(raw, &a); err != nil {
 		return nil, nil, err
 	}
+	if a.View != "" && a.View != ipc.ViewApp {
+		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "unknown view %q", a.View)
+	}
+	app := a.View == ipc.ViewApp
 	sub := &subscriber{
 		c: c, session: a.Session, agent: a.Agent, events: a.Events,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
@@ -49,7 +53,13 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	}
 	c.mu.Lock()
 	c.subs[sub] = true
+	if app {
+		c.appViews++
+	}
 	c.mu.Unlock()
+	if app {
+		go c.tick() // zoom the slot now, not at the next tick
+	}
 	sub.wake <- struct{}{}
 	go sub.loop()
 	var once sync.Once
@@ -57,8 +67,14 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 		once.Do(func() {
 			c.mu.Lock()
 			delete(c.subs, sub)
+			if app {
+				c.appViews--
+			}
 			c.mu.Unlock()
 			close(sub.done)
+			if app {
+				go c.tick()
+			}
 		})
 	}
 	return sub.out, cancel, nil

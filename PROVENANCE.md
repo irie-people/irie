@@ -66,6 +66,11 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | tmux 3.7b manual page (local `man tmux`), checked on a private test server | `load-buffer`, `paste-buffer -p -d` (bracketed only when the program asked for it, LF sent as CR, control characters other than tabs shown as `^X` unless `-S`), `send-keys Enter`, and the `pane_current_command` and `bracket_paste_flag` formats: pasting a generic agent's task once it runs (M3) |
 | 2026-10-26 | Source of Bubbles v2.2.1 (textarea, internal/runeutil), Bubble Tea v2.1.0 and ultraviolet (Go module cache; MIT) | API only, no code copied: the textarea's `InsertString`, `Line`, `Column`, `MoveToBegin` and `SetCursorColumn` for Tab completion; its sanitizer, which turns tabs into spaces and CR into newlines, and `PasteMsg`, which carries a paste as sent: why a paste over 8 KiB becomes a chip outside the textarea (M3) |
 | 2026-10-26 | https://en.wikipedia.org/wiki/Levenshtein_distance | Edit distance for the closest repo names when an @name fits none (M3) |
+| 2026-10-26 | tmux 3.7b manual page (local `man tmux`), checked on a private test server | `resize-pane -Z` (toggles the zoom), `swap-pane -Z` and `select-pane -Z` (keep it), the `window_zoomed_flag` and `pane_active` formats, and `if-shell -F` in a hook and a key binding: the zoomed slot of the Mac app ([docs/MAC.md](docs/MAC.md)) |
+| 2026-10-26 | https://developer.apple.com/documentation/swiftui ; https://developer.apple.com/documentation/appkit | `Window`, `NavigationSplitView`, `searchable(placement: .sidebar)`, collapsible `Section(isExpanded:)`, `onKeyPress`, `NSViewRepresentable`, `NSWorkspace`, `NSPasteboard` and the activation policy: the Mac app's window ([docs/MAC.md](docs/MAC.md)) |
+| 2026-10-26 | macOS manual pages `socket(2)`, `connect(2)`, `unix(4)`, `setsockopt(2)` | A Unix-domain stream client with `SO_NOSIGPIPE` and `SO_RCVTIMEO`: the Mac app's connection to the core |
+| 2026-10-26 | https://github.com/migueldeicaza/SwiftTerm (MIT): `Package.swift` of releases 1.2.5 to 1.99.0, read for their swift-tools-version, and the package's public API | `LocalProcessTerminalView`, its delegate and `Terminal.getEnvironmentVariables`: the Mac app's terminal view, not yet compiled here. v1.18.0 is the newest release whose manifest declares swift-tools-version 5.9 |
+| 2026-10-26 | `swift build` with the Swift 5.9.0 Command Line Tools on macOS 14.1 | SwiftPM stops at `xcrun --show-sdk-platform-path`: why `mac/build.sh` calls `swiftc` |
 
 ## Third-party code
 
@@ -78,6 +83,7 @@ No third-party code is copied into the repository. These Go modules are compiled
 | charm.land/lipgloss/v2 (github.com/charmbracelet/lipgloss) | v2.0.6 | MIT | Direct: styles and layout |
 | github.com/BurntSushi/toml | v1.6.0 | MIT | Direct: config.toml |
 | github.com/atotto/clipboard | v0.1.4 | BSD-3-Clause | Indirect, via the Bubbles textarea |
+| github.com/migueldeicaza/SwiftTerm (Swift package, not a Go module) | v1.18.0 | MIT | Declared in `mac/Package.swift` for the Mac app's terminal view. Not fetched or compiled into the Apple-frameworks build that `mac/build.sh` makes |
 | github.com/charmbracelet/colorprofile | v0.4.3 | MIT | Indirect |
 | github.com/charmbracelet/ultraviolet | v0.0.0-20261008173134-6b8d4baf91b4 | MIT | Indirect |
 | github.com/charmbracelet/x/ansi | v0.11.9 | MIT | Indirect |

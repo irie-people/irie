@@ -22,7 +22,14 @@ const (
 	// OpComplete is an addition to the ops of DESIGN §2.4: the candidates
 	// Tab offers for an @ or + token of the command bar (M3).
 	OpComplete = "complete"
+	// OpAttachInfo is the planned op of DESIGN §2.4, here for the Mac app:
+	// how a terminal outside Irie attaches to the slot (docs/MAC.md).
+	OpAttachInfo = "attach-info"
 )
+
+// ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
+// with it, the slot fills irie:0 (docs/MAC.md).
+const ViewApp = "app"
 
 // Error codes.
 const (
@@ -94,6 +101,15 @@ type SubscribeArgs struct {
 	Events  bool   `json:"events,omitempty"`
 	Session string `json:"session,omitempty"`
 	Agent   string `json:"agent,omitempty"`
+	View    string `json:"view,omitempty"` // "" or ViewApp
+}
+
+// AttachInfoResult is how to attach a tmux client to the session that holds
+// the slot: tmux -S Socket attach-session -t Target.
+type AttachInfoResult struct {
+	Tmux   string `json:"tmux"`   // the tmux binary Irie runs
+	Socket string `json:"socket"` // the server's socket path
+	Target string `json:"target"` // the session to attach to
 }
 
 // SpawnArgs start a task. Cwd runs it in place in a directory. Repo is the
