@@ -28,6 +28,9 @@ const (
 	// OpMove is an addition to the ops of DESIGN §2.4: it carries an idle
 	// Claude Code session that runs outside Irie on in an Irie pane (§4.6).
 	OpMove = "move"
+	// OpRename gives a session a new name, which a restarted core keeps
+	// (DESIGN §2.4, M4).
+	OpRename = "rename"
 	// OpPreflight checks a local profile's model before a spawn (M10).
 	OpPreflight = "preflight"
 	// OpLocal and OpStatus are additions for local models and cost
@@ -42,7 +45,14 @@ const (
 	OpRoute  = "route"
 	OpResult = "result"
 	OpTool   = "tool"
+	// OpClose ends a session's agent and removes its row; OpReopen, its
+	// undo, carries the session on again (DESIGN §2.4, §4.5).
+	OpClose  = "close"
+	OpReopen = "reopen"
 )
+
+// FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
+const FeatureSpawnModel = "spawn-model"
 
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
@@ -62,7 +72,9 @@ const (
 	CodeNeedsStronger = "needs_stronger"
 )
 
-// Session states (DESIGN §5.3), derived from the session's events.
+// Session states (DESIGN §5.3), derived from the session's events. Frozen is
+// in control.go. The core derives paused and pausing once it can pause (M5);
+// the sidebar already draws them.
 const (
 	StateFailed   = "failed"
 	StateExited   = "exited"
@@ -72,6 +84,8 @@ const (
 	StateStarting = "starting"
 	StateDone     = "done"
 	StateIdle     = "idle"
+	StatePaused   = "paused"
+	StatePausing  = "pausing"
 )
 
 // Session is one row of the session list.
@@ -114,6 +128,12 @@ type Session struct {
 	Routed bool   `json:"routed,omitempty"` // auto chose its profile
 	Parent string `json:"parent,omitempty"` // the session that delegated it
 	Rated  string `json:"rated,omitempty"`  // good or bad, as the user said
+
+	// Where the user put it and what they did to it (control.go).
+	Order    int        `json:"order"`              // its place in the list, from 0 at the top
+	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
+	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
+	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
 }
 
 // Tokens counts a session's model usage: each reply once, from the usage
@@ -139,9 +159,15 @@ type Subagent struct {
 
 // Header is what the sidebar shows that is not a row.
 type Header struct {
-	Version string  `json:"version,omitempty"`
-	Plan    *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
-	Memory  *Memory `json:"memory,omitempty"` // the machine's memory
+	Version string `json:"version,omitempty"`
+	// RedOnDone is ui.red_on_done: a done session is drawn red, not green
+	// (DESIGN §5.3), in every sidebar.
+	RedOnDone bool `json:"red_on_done,omitempty"`
+	// CloseWhenDone is spawn.close_when_done: a finished session closes
+	// itself, so no sidebar keeps a Done group; closed ones are in history.
+	CloseWhenDone bool    `json:"close_when_done,omitempty"`
+	Plan          *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
+	Memory        *Memory `json:"memory,omitempty"` // the machine's memory
 }
 
 // Window is one window of a plan's use, such as the five hours.
@@ -184,6 +210,30 @@ type ListResult struct {
 	// first (DESIGN §4.6). OutsideProblem says why that list may be old.
 	Outside        []OutsideSession `json:"outside"`
 	OutsideProblem string           `json:"outside_problem,omitempty"`
+	// Closed lists the sessions reopen can carry on, the last closed first.
+	Closed []ClosedSession `json:"closed"`
+}
+
+// ClosedSession is a closed session that reopen can carry on.
+type ClosedSession struct {
+	ID     string    `json:"id"`
+	Name   string    `json:"name"`
+	Closed time.Time `json:"closed"`
+}
+
+// CloseArgs name the session to close.
+type CloseArgs struct {
+	Session string `json:"session"`
+}
+
+// ReopenArgs name the closed session to reopen: the one closed last when
+// Session is empty.
+type ReopenArgs struct {
+	Session string `json:"session,omitempty"`
+}
+
+type ReopenResult struct {
+	Session Session `json:"session"`
 }
 
 type SubscribeArgs struct {
@@ -224,6 +274,11 @@ type SpawnArgs struct {
 	Delegate       bool   `json:"delegate,omitempty"`
 	Parent         string `json:"parent,omitempty"`
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// Model runs this task on a model other than its profile's: an alias
+	// such as opus or sonnet, or a model's full name. Only a Claude Code
+	// profile takes it; a local model has its own +ollama: profile. The
+	// Mac app's new-task sheet sends it (docs/MAC.md).
+	Model string `json:"model,omitempty"`
 	// Continues is the session a failover carries the task on from.
 	Continues string `json:"continues,omitempty"`
 }
@@ -346,10 +401,29 @@ type StatusArgs struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+// StatusReply is the session's state and running subagents, which Irie's
+// own status line shows.
+type StatusReply struct {
+	State     string     `json:"state"`
+	Subagents []Subagent `json:"subagents,omitempty"`
+}
+
 type ShowArgs struct {
 	Session string `json:"session"`
 	Agent   string `json:"agent,omitempty"`
 	Focus   bool   `json:"focus"`
+}
+
+// RenameArgs give a session a new name. The core makes its whitespace and
+// control characters single spaces, and numbers a name another row has.
+type RenameArgs struct {
+	Session string `json:"session"`
+	Name    string `json:"name"`
+}
+
+// RenameResult is the session with the name it got.
+type RenameResult struct {
+	Session Session `json:"session"`
 }
 
 // HookArgs carry one hook event from the shim: the harness's own payload,
@@ -378,6 +452,10 @@ const (
 	// after the first snapshot, then whenever the list or its problem
 	// changes. A subscription to one session gets none.
 	FrameOutside = "outside"
+	// FrameClosed lists the closed sessions reopen can carry on, the last
+	// closed first: once after the first snapshot, then whenever they
+	// change. A subscription to one session gets none.
+	FrameClosed = "closed"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
@@ -390,13 +468,14 @@ type Frame struct {
 	Event    *event.Event     `json:"event,omitempty"`    // event
 	Outside  []OutsideSession `json:"outside,omitempty"`  // outside
 	Problem  string           `json:"problem,omitempty"`  // outside: why the list may be old
+	Closed   []ClosedSession  `json:"closed,omitempty"`   // closed
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
-// the sessions of a snapshot and of an outside frame, even when there are
-// none.
+// the sessions of a snapshot, an outside frame and a closed frame, even when
+// there are none.
 func (f Frame) MarshalJSON() ([]byte, error) {
 	switch f.T {
 	case FrameSnapshot:
@@ -438,6 +517,15 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			Outside []OutsideSession `json:"outside"`
 			Problem string           `json:"problem,omitempty"`
 		}{f.T, o, f.Problem})
+	case FrameClosed:
+		c := f.Closed
+		if c == nil {
+			c = []ClosedSession{}
+		}
+		return json.Marshal(struct {
+			T      string          `json:"t"`
+			Closed []ClosedSession `json:"closed"`
+		}{f.T, c})
 	case FrameHeader:
 		h := f.Header
 		if h == nil {

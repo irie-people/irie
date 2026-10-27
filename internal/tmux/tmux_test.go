@@ -354,6 +354,33 @@ func TestSnapshotReadsPaneOptions(t *testing.T) {
 	}
 }
 
+// A name is text: tmux would replace #{…} in a window's name and run the
+// command in #(…).
+func TestLiteralKeepsAWindowsNameAsTyped(t *testing.T) {
+	r, _ := startServer(t)
+	name := "-v2 #{session_name} #(echo hi) ## #"
+	run(t, r, "rename-window", "-t", AgentsSession+":0", "--", Literal(name))
+	if got := run(t, r, "display-message", "-p", "-t", AgentsSession+":0", "#{window_name}"); got != name {
+		t.Errorf("window name = %q, want %q", got, name)
+	}
+}
+
+func TestSnapshotReadsNamesWithoutAUTF8Locale(t *testing.T) {
+	r, _ := startServer(t)
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_CTYPE", "")
+	t.Setenv("LANG", "C")
+	name := "Café ☀ 日本"
+	run(t, r, "set-option", "-p", "-t", AgentsSession+":0", "@irie_name", name)
+	s, err := r.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Panes) != 1 || s.Panes[0].Name != name {
+		t.Errorf("panes = %+v, want the name %q", s.Panes, name)
+	}
+}
+
 func agentWindow(t *testing.T, r *Runner, w Want, id string) string {
 	t.Helper()
 	out, err := r.RunList([][]string{

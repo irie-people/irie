@@ -61,7 +61,8 @@ type Item struct {
 	ID   string    `json:"id"`
 	Kind string    `json:"kind"`
 	Time time.Time `json:"time"`
-	// Text is a message, the agent's Markdown, a note, or what a need asks.
+	// Text is a message, the agent's Markdown, a note, what a need asks, or
+	// a subagent's task in a few words.
 	Text string `json:"text,omitempty"`
 	// Phrase is a tool call or a subagent in plain words: "Running the
 	// tests" while it runs, "Ran the tests" once it has.
@@ -97,4 +98,14 @@ const OpSend = "send"
 type SendArgs struct {
 	Session string `json:"session"`
 	Text    string `json:"text"`
+}
+
+// OpFlip is an addition to the ops of DESIGN §2.4: it turns the slot's view
+// of the session you picked between its conversation and its raw terminal
+// (DESIGN §4.7), and gives the slot the keyboard.
+const OpFlip = "flip"
+
+// FlipResult says what the slot shows now.
+type FlipResult struct {
+	Terminal bool `json:"terminal"` // the raw terminal; else the conversation
 }

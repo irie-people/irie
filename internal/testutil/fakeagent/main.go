@@ -22,6 +22,10 @@
 //	                  Claude-shaped JSON, as the status line docs describe:
 //	                  that cost in dollars, 12% of the context, and 33% of
 //	                  the plan's five hours
+//	kids              start two children that run for an hour: one in the
+//	                  agent's process group, and a shell in a group of its
+//	                  own with a child of its own, as a tool's background
+//	                  job may be; the log records their pids
 //
 // Any other task runs the script "prompt". After the script the agent idles:
 // each line typed is a prompt and a turn, and EOF or a hangup ends the
@@ -30,16 +34,19 @@
 //
 // `fakeagent agents --json` lists no sessions, as `claude agents --json`
 // does on a machine with none outside Irie. The log's first line records
-// the agent's argv, pid and the names, not the values, of its environment.
+// the agent's argv, pid and the names, not the values, of its environment;
+// each SIGHUP, SIGTERM or SIGINT it gets is logged too.
 //
 // Environment:
 //
-//	IRIE_FAKE_VERSION  what --version reports (default 2.1.300); a version
-//	                   before 2.1.295 refuses settings that use onFailure
-//	IRIE_FAKE_NO_NAME  when set, --help lists no --name and --name is refused
-//	IRIE_FAKE_PACE     a pause before each step, such as 300ms
-//	IRIE_FAKE_LOG      the log file; by default fakeagent.ndjson next to the
-//	                   --settings file
+//	IRIE_FAKE_VERSION      what --version reports (default 2.1.300); a version
+//	                       before 2.1.295 refuses settings that use onFailure
+//	IRIE_FAKE_NO_NAME      when set, --help lists no --name and --name is refused
+//	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
+//	                       agent that hangs
+//	IRIE_FAKE_PACE         a pause before each step, such as 300ms
+//	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
+//	                       the --settings file
 package main
 
 import (
@@ -407,9 +414,14 @@ func (a *agent) run() int {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		<-sigs
-		a.end("other")
-		os.Exit(0)
+		for s := range sigs {
+			a.record(map[string]any{"t": "signal", "signal": s.String()})
+			if s == syscall.SIGTERM && os.Getenv("IRIE_FAKE_IGNORE_TERM") != "" {
+				continue
+			}
+			a.end("other")
+			os.Exit(0)
+		}
 	}()
 
 	source := "startup"
@@ -501,8 +513,27 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		return s.n, true
 	case "status":
 		a.status(s.arg)
+	case "kids":
+		a.kids()
 	}
 	return 0, false
+}
+
+// kids starts the children of the kids step.
+func (a *agent) kids() {
+	same := exec.Command("sleep", "3600")
+	own := exec.Command("/bin/sh", "-c", "sleep 3601 & wait")
+	own.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var pids []int
+	for _, c := range []*exec.Cmd{same, own} {
+		if err := c.Start(); err != nil {
+			a.record(map[string]any{"t": "kids", "err": err.Error()})
+			return
+		}
+		pids = append(pids, c.Process.Pid)
+		go c.Wait()
+	}
+	a.record(map[string]any{"t": "kids", "pids": pids})
 }
 
 // status runs the settings' status line command once, as Claude Code does

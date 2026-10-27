@@ -99,6 +99,13 @@ func BuildFakeOllama(t testing.TB) string {
 	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/fakeollama", "fakeollama")
 }
 
+// BuildOldHost builds the stand-in for `irie host` as it was before freeze
+// once per test binary and returns its path.
+func BuildOldHost(t testing.TB) string {
+	t.Helper()
+	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/oldhost", "oldhost")
+}
+
 // FreePort returns a TCP port on 127.0.0.1 that nothing listens on now.
 func FreePort(t testing.TB) int {
 	t.Helper()
@@ -214,8 +221,10 @@ func (e *Env) WriteConfig(t testing.TB, extra string) {
 	}
 }
 
+// tmuxCmd runs tmux on the private server. -u, as the core's own runner has
+// it: a name is UTF-8 whatever the test's locale.
 func (e *Env) tmuxCmd(args ...string) *exec.Cmd {
-	cmd := exec.Command("tmux", append([]string{"-L", e.Socket}, args...)...)
+	cmd := exec.Command("tmux", append([]string{"-u", "-L", e.Socket}, args...)...)
 	cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+e.TmuxTmpDir)
 	return cmd
 }

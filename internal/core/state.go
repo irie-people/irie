@@ -25,6 +25,12 @@ type track struct {
 	viewed    bool                   // shown since the turn ended
 	tools     map[string]event.Event // running tools' tool.started, by tool_use_id
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
+	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
+
+	// What the user did to the session as a whole (freeze.go, priority.go).
+	frozen   *event.Event // freeze.on, until freeze.off
+	held     bool         // a frozen session's running agent came to a tool call, where the shim holds it
+	priority int          // the level of the last priority.set
 
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads.
@@ -43,7 +49,8 @@ func (t *track) apply(e event.Event) {
 	}
 	switch e.Kind {
 	case event.SpawnRequested:
-		t.requested = e.Time()
+		// A reopened session starts over, but its tokens still count.
+		*t = track{requested: e.Time(), transcripts: t.transcripts}
 	case event.SpawnFailed:
 		t.failed = &e
 	case event.PaneExited:
@@ -51,6 +58,9 @@ func (t *track) apply(e event.Event) {
 	case event.SessionStarted:
 		t.started = true
 		t.addTranscript(e.Str("transcript"))
+		if e.Vendor != nil && e.Vendor.SessionID != "" {
+			t.vendorID = e.Vendor.SessionID
+		}
 		if e.Str("source") == "resume" && t.activity == "" {
 			// A resumed conversation, such as one moved into Irie, waits at
 			// its prompt: it is ready without one, and idle.
@@ -60,12 +70,14 @@ func (t *track) apply(e event.Event) {
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
 	case event.ToolStarted:
 		t.busy(e)
+		t.held = t.held || t.frozen != nil
 		if t.tools == nil {
 			t.tools = map[string]event.Event{}
 		}
 		t.tools[toolUseID(e)] = e
 	case event.ToolFinished, event.ToolFailed:
 		t.busy(e)
+		t.held = t.held || t.frozen != nil
 		delete(t.tools, toolUseID(e))
 	case event.InputNeeded:
 		if e.Str("reason") == event.ReasonStalled {
@@ -102,6 +114,12 @@ func (t *track) apply(e event.Event) {
 		t.subs = nil
 	case event.UIShown:
 		t.viewed = true
+	case event.FreezeOn:
+		t.frozen, t.held = &e, false
+	case event.FreezeOff:
+		t.frozen, t.held = nil, false
+	case event.PrioritySet:
+		t.priority, _ = e.Int("level")
 	}
 }
 
@@ -142,6 +160,10 @@ func toolUseID(e event.Event) string {
 // ready reports whether the spawn became a live agent: SessionStart and
 // UserPromptSubmit arrived, or the agent is plainly at work.
 func (t *track) ready() bool { return t.started && t.prompted || t.activity != "" }
+
+// conversed reports whether the agent got as far as a conversation that can
+// be carried on: its prompt went in, or it showed life, as a resumed one does.
+func (t *track) conversed() bool { return t.prompted || t.activity != "" }
 
 // awaiting reports whether Irie saw this session spawned and still waits for
 // it to become ready.
@@ -209,6 +231,16 @@ func (t *track) state(dead bool) string {
 		return ipc.StateFailed
 	case t.exited != nil || dead || t.ended != nil:
 		return ipc.StateExited
+	case t.frozen != nil:
+		return ipc.StateFrozen
+	}
+	return t.live()
+}
+
+// live is the state of a session that has not ended, as if it were not
+// frozen: what a frozen row still says it was doing.
+func (t *track) live() string {
+	switch {
 	case len(t.needs) > 0:
 		return ipc.StateNeedsYou
 	case t.stalled != nil:
@@ -227,16 +259,26 @@ func (t *track) state(dead bool) string {
 	return ipc.StateWorking
 }
 
-// describe fills a row's state, reason, detail, tail and exit code.
+// describe fills a row's state, reason, detail, tail and exit code, and
+// what the user did to it. A frozen row keeps the reason and detail of what
+// it was doing.
 func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	s.State = t.state(dead)
+	s.Priority = t.priority
 	code := func(e *event.Event, key string) *int {
 		if n, ok := e.Int(key); ok {
 			return &n
 		}
 		return nil
 	}
-	switch s.State {
+	shown := s.State
+	if s.State == ipc.StateFrozen {
+		shown = t.live()
+		at := t.frozen.Time()
+		whole, _ := t.frozen.Data["whole"].(bool)
+		s.Frozen, s.Freezing = &at, !whole && !t.held && t.activity == working
+	}
+	switch shown {
 	case ipc.StateFailed:
 		s.Reason, s.ExitCode, s.Tail = t.failed.Str("reason"), code(t.failed, "exit"), lines(t.failed.Str("tail"))
 		s.Detail = "failed"

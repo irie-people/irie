@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -200,6 +201,57 @@ func TestStopsTheHostDidNotCauseAreContinued(t *testing.T) {
 	})
 }
 
+func TestTheHostSaysWhoItIsInHostJSON(t *testing.T) {
+	h := startHost(t, "sleep", "600")
+	host, c := h.child("sleep 600")
+	var info Info
+	testutil.Eventually(t, 5*time.Second, "no host.json", func() bool {
+		var err error
+		info, err = ReadInfo(filepath.Join(h.dir, InfoFile))
+		return err == nil
+	})
+	if info != (Info{PID: host, Agent: c.pid, Freeze: 1}) {
+		t.Errorf("host.json = %+v, want pid %d, agent %d, freeze 1", info, host, c.pid)
+	}
+}
+
+func TestAFrozenAgentStaysStopped(t *testing.T) {
+	// The core stops a frozen session's agent itself; the host must not
+	// continue it, as it continues stops it did not cause.
+	h := startHost(t, "sleep", "600")
+	_, c := h.child("sleep 600")
+	freeze := filepath.Join(h.dir, FreezeFile)
+	if err := os.WriteFile(freeze, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !Frozen(h.dir) {
+		t.Fatal("Frozen does not see freeze.json")
+	}
+	if err := syscall.Kill(-c.pid, syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	for _, p := range processes(t) {
+		if p.pid == c.pid && !strings.HasPrefix(p.stat, "T") {
+			t.Fatalf("the frozen agent runs again: %s", p.stat)
+		}
+	}
+	// Thawed, the agent runs, and a later stop is someone else's again.
+	syscall.Kill(-c.pid, syscall.SIGCONT)
+	os.Remove(freeze)
+	if err := syscall.Kill(c.pid, syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, 2*time.Second, "a stop after the thaw was not continued", func() bool {
+		for _, p := range processes(t) {
+			if p.pid == c.pid {
+				return !strings.HasPrefix(p.stat, "T")
+			}
+		}
+		return false
+	})
+}
+
 func TestUnsetVariablesNeverReachTheAgent(t *testing.T) {
 	script := `printf '%s|%s|%s\n' "${TMUX-unset}" "${TMUX_PANE-unset}" "$IRIE_TEST_MARK"; sleep 600`
 	h := startHostSpec(t, Spec{Argv: []string{"/bin/sh", "-c", script}, Unset: []string{"TMUX", "TMUX_PANE"}})
@@ -211,5 +263,47 @@ func TestUnsetVariablesNeverReachTheAgent(t *testing.T) {
 	testutil.Eventually(t, 5*time.Second, "the agent did not print its env", func() bool {
 		screen := h.Tmux(t, "capture-pane", "-p", "-t", "h:0.0")
 		return strings.Contains(screen, "|1") && !strings.Contains(screen, "unset")
+	})
+}
+
+func TestSIGTERMEndsAStoppedAgent(t *testing.T) {
+	// The agent's own child catches SIGTERM, as Claude Code does, and is
+	// stopped, as in a frozen session, where the host's wait does not see it.
+	// A caught signal waits until the process runs again, so the host
+	// continues the group after passing SIGTERM on.
+	inner := filepath.Join(t.TempDir(), "inner.sh")
+	if err := os.WriteFile(inner, []byte("trap 'exit 0' TERM\nwhile :; do sleep 1; done\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := startHost(t, "/bin/sh", "-c", `/bin/sh "$0" & trap "" TERM; read line`, inner)
+	host, sh := h.child(`/bin/sh -c /bin/sh "$0" & trap "" TERM; read line ` + inner)
+	var child proc
+	testutil.Eventually(t, 5*time.Second, "the agent's child did not start", func() bool {
+		for _, p := range processes(t) {
+			if p.ppid == sh.pid && p.command == "/bin/sh "+inner {
+				child = p
+				return true
+			}
+		}
+		return false
+	})
+	state := func() string {
+		for _, p := range processes(t) {
+			if p.pid == child.pid {
+				return p.stat
+			}
+		}
+		return "gone"
+	}
+	if out, err := exec.Command("kill", "-STOP", strconv.Itoa(child.pid)).CombinedOutput(); err != nil {
+		t.Fatalf("kill -STOP %d: %v: %s", child.pid, err, out)
+	}
+	testutil.Eventually(t, time.Second, "the child did not stop", func() bool { return strings.HasPrefix(state(), "T") })
+	if out, err := exec.Command("kill", "-TERM", strconv.Itoa(host)).CombinedOutput(); err != nil {
+		t.Fatalf("kill -TERM %d: %v: %s", host, err, out)
+	}
+	testutil.Eventually(t, 5*time.Second, "the stopped child never ran its SIGTERM trap", func() bool {
+		s := state()
+		return s == "gone" || strings.HasPrefix(s, "Z")
 	})
 }

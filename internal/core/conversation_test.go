@@ -107,7 +107,7 @@ func TestAConversationReadsAsItems(t *testing.T) {
 		{"a:a1:0", ipc.ItemText, "I'll add it.", "", ""},
 		{"t:toolu_1", ipc.ItemTool, "", "Ran the tests", ipc.ItemOK},
 		{"t:toolu_2", ipc.ItemTool, "", "Edited phrasebook.md", ipc.ItemOK},
-		{"t:toolu_3", ipc.ItemAgent, "", "Asked a helper to find the config loader", ipc.ItemOK},
+		{"t:toolu_3", ipc.ItemAgent, "Find the config loader", "Asked a helper to find the config loader", ipc.ItemOK},
 		{"u:q1", ipc.ItemUser, "also link it from the home page", "", ""},
 		{"n:i1", ipc.ItemNote, "Interrupted", "", ""},
 		{"u:c1", ipc.ItemUser, "/model opus", "", ""},

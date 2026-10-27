@@ -13,18 +13,37 @@ enum Snapshot {
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-            // The default size in both modes, then the narrowest window and a
-            // wide one.
-            let shots: [(String, CGFloat, Bool)] = [
-                ("window-light", 1100, false), ("window-dark", 1100, true),
-                ("window-narrow", 820, false), ("window-wide", 1500, false),
-            ]
-            for (base, width, dark) in shots {
-                let (rep, titlebar) = window(store, dark: dark, width: width)
+            // Each palette in both modes at the default size, then the default
+            // palette in the narrowest window and a wide one. The palette is
+            // set in a volatile domain, so the app's saved choice is untouched.
+            var shots: [(String, String, CGFloat, Bool, SidebarMode)] = []
+            for p in Palette.all {
+                shots.append(("\(p.id)-light", p.id, 1100, false, .repo))
+                shots.append(("\(p.id)-dark", p.id, 1100, true, .repo))
+            }
+            shots.append(("state-light", Palette.standard.id, 1100, false, .state))
+            shots.append(("state-dark", Palette.standard.id, 1100, true, .state))
+            shots.append(("window-narrow", Palette.standard.id, 820, false, .repo))
+            shots.append(("window-wide", Palette.standard.id, 1500, false, .repo))
+            for (base, palette, width, dark, mode) in shots {
+                // Set directly, so the app's saved view and folds are untouched.
+                store.mode = mode
+                store.folded = []
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette], forName: UserDefaults.argumentDomain)
+                Theme.use(palette)
+                let (rep, titlebar) = window(ContentView().environmentObject(store), dark: dark, width: width, height: 720)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 let top = firstCardTop(rep, below: titlebar)
                 print("\(name): title bar \(fmt(titlebar)) pt, first card at \(top.map(fmt) ?? "?") pt")
+            }
+            // The new-task sheet, in the default palette.
+            Theme.use(Palette.standard.id)
+            for dark in [false, true] {
+                let (rep, _) = window(NewTaskSheet().environmentObject(store), dark: dark, width: 560, height: 470)
+                let name = "sheet-\(dark ? "dark" : "light").png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
             }
         } catch {
             FileHandle.standardError.write(Data("snapshot: \(error.localizedDescription)\n".utf8))
@@ -35,13 +54,13 @@ enum Snapshot {
 
     /// The window as the app draws it, at 2x, and its title bar's height in
     /// points. It is ordered in far off any screen, so it never shows.
-    private static func window(_ store: Store, dark: Bool, width: CGFloat) -> (NSBitmapImageRep, CGFloat) {
-        let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: 720),
+    private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat) -> (NSBitmapImageRep, CGFloat) {
+        let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: height),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         w.toolbarStyle = IrieApp.toolbarStyle
-        let host = NSHostingView(rootView: ContentView().environmentObject(store))
+        let host = NSHostingView(rootView: root)
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
         w.orderFrontRegardless()

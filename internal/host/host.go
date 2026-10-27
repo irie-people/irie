@@ -1,7 +1,8 @@
 // Package host is `irie host`, the first process of every agent pane
 // (DESIGN §2.2, §4.2). It starts the agent in its own process group, makes
-// that group the terminal's foreground, continues stops it did not cause,
-// and records the exit status in exit.json.
+// that group the terminal's foreground, says who it is in host.json,
+// continues stops it did not cause unless the session is frozen, and
+// records the exit status in exit.json.
 package host
 
 import (
@@ -47,6 +48,44 @@ type Exit struct {
 
 // ExitFile is the name of the exit status file next to spec.json.
 const ExitFile = "exit.json"
+
+// InfoFile, host.json next to spec.json, says which host runs the agent and
+// what it can do. A host from before freeze writes none.
+const InfoFile = "host.json"
+
+// FreezeFile, freeze.json next to spec.json, exists while the user has the
+// session frozen (DESIGN §4.3). The core writes it before it stops the
+// agent and removes it after it continues it. Meanwhile the host leaves its
+// agent's stops alone, and the hook shim holds the agent's tool calls.
+const FreezeFile = "freeze.json"
+
+// Info is host.json.
+type Info struct {
+	PID   int `json:"pid"`   // the host's own
+	Agent int `json:"agent"` // the agent's, the leader of its process group
+	// Freeze is 1 for a host that leaves its agent stopped while
+	// freeze.json exists, so the core can stop the agent itself.
+	Freeze int `json:"freeze,omitempty"`
+}
+
+// ReadInfo reads a host.json.
+func ReadInfo(path string) (Info, error) {
+	var i Info
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return i, err
+	}
+	if err := json.Unmarshal(b, &i); err != nil {
+		return i, fmt.Errorf("%s: %w", path, err)
+	}
+	return i, nil
+}
+
+// Frozen reports whether the session whose files are in dir is frozen.
+func Frozen(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, FreezeFile))
+	return err == nil
+}
 
 // WriteSpec writes s to path with mode 0600.
 func WriteSpec(path string, s Spec) error { return writeJSON(path, s) }
@@ -95,7 +134,8 @@ func writeJSON(path string, v any) error {
 // Run runs the agent described by the spec at specPath and returns the
 // host's own exit code, which is the agent's.
 func Run(specPath string) int {
-	exitPath := filepath.Join(filepath.Dir(specPath), ExitFile)
+	dir := filepath.Dir(specPath)
+	exitPath := filepath.Join(dir, ExitFile)
 	spec, err := ReadSpec(specPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "irie host: %v\n", err)
@@ -146,10 +186,18 @@ func Run(specPath string) int {
 	go func() {
 		for s := range sigs {
 			syscall.Kill(-pid, s.(syscall.Signal))
+			// A stopped agent that catches the signal, as Claude Code does,
+			// keeps it pending until it runs again, so the group is continued:
+			// a frozen session closes too (DESIGN §4.3).
+			syscall.Kill(-pid, syscall.SIGCONT)
 		}
 	}()
 
-	ws, err := wait(pid)
+	if err := writeJSON(filepath.Join(dir, InfoFile), Info{PID: os.Getpid(), Agent: pid, Freeze: 1}); err != nil {
+		fmt.Fprintf(os.Stderr, "irie host: %v\n", err)
+	}
+
+	ws, err := wait(pid, dir)
 	if foreground {
 		setForeground(0, syscall.Getpgrp())
 	}
@@ -163,10 +211,11 @@ func Run(specPath string) int {
 	return finish(Exit{Code: ws.ExitStatus()})
 }
 
-// wait waits for the agent to exit. The host never stops the agent itself,
-// so any stop is someone else's, such as the agent's own Ctrl+Z handling;
-// the agent's group is continued at once so it never wedges.
-func wait(pid int) (syscall.WaitStatus, error) {
+// wait waits for the agent to exit. The host never stops the agent itself.
+// While the session in dir is frozen, the core stopped it, and the stop
+// stays. Any other stop is someone else's, such as the agent's own Ctrl+Z
+// handling, and the agent's group is continued at once so it never wedges.
+func wait(pid int, dir string) (syscall.WaitStatus, error) {
 	for {
 		var ws syscall.WaitStatus
 		_, err := syscall.Wait4(pid, &ws, syscall.WUNTRACED, nil)
@@ -177,7 +226,9 @@ func wait(pid int) (syscall.WaitStatus, error) {
 			return ws, err
 		}
 		if stopped(ws) {
-			syscall.Kill(-pid, syscall.SIGCONT)
+			if !Frozen(dir) {
+				syscall.Kill(-pid, syscall.SIGCONT)
+			}
 			continue
 		}
 		if ws.Exited() || ws.Signaled() {

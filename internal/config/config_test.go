@@ -21,10 +21,10 @@ func writeFile(t *testing.T, body string) string {
 
 func TestDefaultsMatchDesign(t *testing.T) {
 	c := Default()
-	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"}); c.UI != want {
+	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", Theme: "rosewater"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -127,14 +127,19 @@ func TestFileOverridesEachKey(t *testing.T) {
 [ui]
 sidebar_width = 40
 focus_key = "C-o"
+flip_key = "M-t"
+view = "terminal"
 max_sub_rows = 3
 red_on_done = true
 ghostty = "off"
+theme = "lilac"
 
 [spawn]
 default_profile = "fast"
 default_cwd = "/home/alice/scratch"
 ready_timeout = "45s"
+close_when_done = true
+close_delay = "5s"
 hide_tmux = false
 
 [profiles.claude]
@@ -196,10 +201,10 @@ status_line = false
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", MaxSubRows: 3, RedOnDone: true, Ghostty: "off"}); c.UI != want {
+	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", Theme: "lilac"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	wantClaude := Profile{
@@ -385,10 +390,12 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 	for _, c := range []struct{ body, mention string }{
 		{"[spawn]\ndefault_profile = \"nope\"\n", "nope"},
 		{"[ui]\nghostty = \"sometimes\"\n", "ghostty"},
+		{"[ui]\ntheme = \"\"\n", "ui.theme"},
 		{"[ui]\nsidebar_width = 2\n", "sidebar_width"},
 		{"[ui]\nfocus_key = \"C-] x\"\n", "focus_key"},
 		{"[ui]\nmax_sub_rows = -1\n", "max_sub_rows"},
 		{"[spawn]\nready_timeout = \"-1s\"\n", "ready_timeout"},
+		{"[spawn]\nclose_delay = \"-1s\"\n", "close_delay"},
 		{"[profiles.claude]\nharness = \"bogus\"\n", "harness"},
 		{"[tmux]\nsocket = \"a/b\"\n", "socket"},
 		{"[tmux]\npath = \"tmux\"\n", "path"},
@@ -449,12 +456,27 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 	}
 }
 
+// TestThemesAreNamed: a theme the sidebar does not have is refused with the
+// names of those it has, and each of those loads.
+func TestThemesAreNamed(t *testing.T) {
+	_, err := Load(writeFile(t, "[ui]\ntheme = \"solarized\"\n"))
+	if err == nil || !strings.Contains(err.Error(), `ui.theme = "solarized": must be one of rosewater, terracotta, lilac, evergreen`) {
+		t.Errorf("error = %v", err)
+	}
+	for _, name := range Themes {
+		c, err := Load(writeFile(t, "[ui]\ntheme = \""+name+"\"\n"))
+		if err != nil || c.UI.Theme != name {
+			t.Errorf("theme %s: %v, got %q", name, err, c.UI.Theme)
+		}
+	}
+}
+
 func TestPrintRoundTrips(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Default().Write(&buf); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`, `branch_prefix = "irie/"`, `submodules = true`, `runtime = "ollama"`, `kv_cache = "q8_0"`, `status_line = true`} {
+	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`, `branch_prefix = "irie/"`, `submodules = true`, `runtime = "ollama"`, `kv_cache = "q8_0"`, `status_line = true`, `theme = "rosewater"`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("printed config lacks %s:\n%s", want, buf.String())
 		}
