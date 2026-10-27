@@ -20,6 +20,7 @@ import (
 type SlotOptions struct {
 	FocusKey string // ui.focus_key, as tmux names it
 	FlipKey  string // ui.flip_key, as tmux names it; "" when there is none
+	Theme    string // ui.theme: the sidebar's palette, which the slot shares; "" is rosewater
 }
 
 // Slot is `irie placeholder`: what the slot shows besides an agent's raw
@@ -154,6 +155,8 @@ type slotModel struct {
 	follow  chan<- string
 	help    placeholder
 	flipKey string
+	theme   theme   // ui.theme's light and dark sets
+	pal     palette // the one in use
 
 	w, h    int
 	rows    []ipc.Session
@@ -179,24 +182,50 @@ func newSlot(b slotBackend, o SlotOptions) *slotModel {
 	in.Prompt = ""
 	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "ctrl+j", "alt+enter"))
 	in.SetVirtualCursor(false)
-	styles := textarea.DefaultStyles(true)
-	styles.Focused.CursorLine = lipgloss.NewStyle()
-	styles.Focused.Placeholder = styleDim
-	styles.Blurred.Placeholder = styleDim
-	styles.Blurred.Text = lipgloss.NewStyle()
-	styles.Blurred.CursorLine = lipgloss.NewStyle()
-	styles.Cursor.Color = nil
-	styles.Cursor.Blink = false
-	in.SetStyles(styles)
 	in.Focus()
 	flip := ""
 	if o.FlipKey != "" {
 		flip = keyLabel(o.FlipKey)
 	}
-	return &slotModel{backend: b, help: placeholder{focusKey: keyLabel(o.FocusKey), flipKey: flip}, flipKey: flip, input: in}
+	th, ok := themes[o.Theme]
+	if !ok {
+		th = themes[defaultTheme]
+	}
+	m := &slotModel{backend: b, help: placeholder{focusKey: keyLabel(o.FocusKey), flipKey: flip}, flipKey: flip, input: in, theme: th}
+	m.setDark(true)
+	return m
 }
 
-func (m *slotModel) Init() tea.Cmd { return nil }
+// setDark draws the slot in its theme's dark or light set, as the sidebar
+// does: dark until the terminal tells its background.
+func (m *slotModel) setDark(dark bool) {
+	m.pal = m.theme.light
+	if dark {
+		m.pal = m.theme.dark
+	}
+	slotColours(m.pal)
+	styles := textarea.DefaultStyles(true)
+	ink := lipgloss.NewStyle().Foreground(m.pal.ink)
+	for _, st := range []*textarea.StyleState{&styles.Focused, &styles.Blurred} {
+		st.Base, st.Text, st.CursorLine = lipgloss.NewStyle(), ink, ink
+		st.Placeholder, st.EndOfBuffer = styleDim, styleDim
+	}
+	styles.Cursor.Color = nil
+	styles.Cursor.Blink = false
+	m.input.SetStyles(styles)
+}
+
+// paint puts a drawn screen on the palette's ground: every line, padded to
+// the pane's width.
+func (m *slotModel) paint(content string) string {
+	lines := strings.Split(content, "\n")
+	for i, l := range lines {
+		lines[i] = grounded(l, m.pal.ground, m.pal.ink, m.w)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *slotModel) Init() tea.Cmd { return tea.RequestBackgroundColor }
 
 // session is the row of the shown session.
 func (m *slotModel) session() (ipc.Session, bool) {
@@ -214,6 +243,10 @@ func (m *slotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 		m.help.w, m.help.h = msg.Width, msg.Height
 		m.input.SetWidth(max(10, m.column()-4))
+		// A new size may be a client of another terminal attaching.
+		return m, tea.RequestBackgroundColor
+	case tea.BackgroundColorMsg:
+		m.setDark(msg.IsDark())
 	case FrameMsg:
 		m.offline = false
 		m.applyFrame(msg.Frame)
@@ -389,11 +422,8 @@ func (m *slotModel) flipHint(what string) string {
 // header is the session's name and state, over a rule.
 func (m *slotModel) header(s ipc.Session) []string {
 	col := m.column()
-	g, st, _, _ := Model{}.state(s)
-	glyph := lipgloss.NewStyle()
-	if st != nil {
-		glyph = glyph.Foreground(st)
-	}
+	l := Model{pal: m.pal}.look(s)
+	g, glyph := l.glyph, lipgloss.NewStyle().Foreground(l.mark)
 	what := s.Detail
 	if what == "" {
 		what = strings.ReplaceAll(s.State, "_", " ")
@@ -413,7 +443,11 @@ func (m *slotModel) feedHeight() int {
 func (m *slotModel) View() tea.View {
 	s, ok := m.session()
 	if !ok || m.offline || m.w <= 0 || m.h <= 0 {
-		return m.help.View()
+		v := m.help.View()
+		if m.w > 0 && m.h > 0 {
+			v.SetContent(m.paint(v.Content))
+		}
+		return v
 	}
 	var v tea.View
 	v.AltScreen = true
@@ -437,7 +471,7 @@ func (m *slotModel) View() tea.View {
 	for i := range lines {
 		lines[i] = pad + lines[i]
 	}
-	v.SetContent(strings.Join(lines, "\n"))
+	v.SetContent(m.paint(strings.Join(lines, "\n")))
 	if c := m.input.Cursor(); c != nil && !waitsOnYou(s) && !ended(s) && s.State != ipc.StateStarting {
 		// The box's border and padding come before the text.
 		c.X += len(pad) + 2
@@ -446,13 +480,6 @@ func (m *slotModel) View() tea.View {
 	}
 	return v
 }
-
-// Colours of the conversation's cards, on the sidebar's palette.
-var (
-	needsRed  color.Color = lipgloss.Red
-	quietEdge             = ruleGreen
-	youEdge               = lipgloss.Color("#B9A27A")
-)
 
 // cardStyle is a rounded card of the given width, its border included.
 func cardStyle(border color.Color, width int) lipgloss.Style {
@@ -700,7 +727,6 @@ var (
 	emphasis   = regexp.MustCompile(`(^|[^*\w])\*([^*\s][^*]*)\*`)
 	link       = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
 	listItem   = regexp.MustCompile(`^(\s*)([-*+]|\d+[.)])\s+(.*)$`)
-	codeStyle  = lipgloss.NewStyle().Foreground(sun)
 )
 
 func inline(s string) string {

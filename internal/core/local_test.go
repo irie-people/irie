@@ -282,6 +282,31 @@ func TestTheStatusLineGivesCostAndPlanUse(t *testing.T) {
 	}
 }
 
+func TestTheStatusLineHearsTheStateAndTheHelpers(t *testing.T) {
+	c := setup(t)
+	s := c.spawn("prompt,sub:helper1:sleep:2s,stop")
+	cl, err := ipc.Dial(c.paths.Socket(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	status := func() ipc.StatusReply {
+		var r ipc.StatusReply
+		if err := cl.Call(ipc.OpStatus, ipc.StatusArgs{Session: s.ID, Payload: json.RawMessage(`{"cost": {"total_cost_usd": 0.1}}`)}, &r); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	testutil.Eventually(t, 5*time.Second, "the answer has no helper", func() bool {
+		r := status()
+		return r.State == ipc.StateWorking && len(r.Subagents) == 1 && r.Subagents[0].Type == "Explore"
+	})
+	c.waitState(s.ID, ipc.StateDone)
+	if r := status(); r.State != ipc.StateDone || len(r.Subagents) != 0 {
+		t.Errorf("after the stop: %+v", r)
+	}
+}
+
 func TestMemoryIsMeasured(t *testing.T) {
 	c := setup(t)
 	s := c.spawn("prompt")

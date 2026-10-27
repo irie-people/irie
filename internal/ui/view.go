@@ -13,24 +13,6 @@ import (
 	"github.com/irie-hq/irie/internal/localmodel"
 )
 
-// Irie's colours are the deep green and warm sun of its icon (DESIGN §7.2).
-// State colours (DESIGN §5.3) come from the terminal's own palette, so they
-// follow its theme.
-var (
-	sun       = lipgloss.Color("#F2B544")
-	deepGreen = lipgloss.Color("#1E5A42")
-	onGreen   = lipgloss.Color("#EAF6EF")
-	ruleGreen = lipgloss.Color("#3D5247")
-	sea       = lipgloss.Color("#2E9E77")
-	deepSea   = lipgloss.Color("#1D7357")
-
-	styleTitle = lipgloss.NewStyle().Foreground(sun).Bold(true)
-	styleBold  = lipgloss.NewStyle().Bold(true)
-	styleDim   = lipgloss.NewStyle().Faint(true)
-	styleRule  = lipgloss.NewStyle().Foreground(ruleGreen)
-	styleRed   = lipgloss.NewStyle().Foreground(lipgloss.Red)
-)
-
 // cut shortens s to w columns, ending in an ellipsis when it had to cut.
 func cut(s string, w int) string {
 	if w <= 0 {
@@ -74,36 +56,60 @@ func (m Model) home2tilde(p string) string {
 	return p
 }
 
-// state returns a row's glyph and colour (DESIGN §5.3). A nil colour is the
-// terminal's own; a dim row is drawn faint. A loud row, one that needs you,
-// takes the colour for its name too. Each state has its own glyph, so colour
-// is never the only cue; an exit with an error code shares failed's ✕.
-func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool) {
+// look is how a state is drawn (DESIGN §5.3): its glyph, the glyph's colour
+// and the name's. Red is the palette's needs colour, green done, yellow
+// paused and cyan frozen; default is ink and dim is muted, so a dim red or
+// dim yellow row has a red or yellow glyph and a muted name. A loud row, one
+// that needs you, takes the red for its name too. Each state has its own
+// glyph, so colour is never the only cue: an exit with an error code shares
+// failed's ✕, and pausing paused's ‖.
+type look struct {
+	glyph      string
+	mark, name color.Color
+	loud       bool
+}
+
+func (m Model) look(s ipc.Session) look {
+	p := m.pal
 	switch s.State {
 	case ipc.StateFailed:
-		return "✕", lipgloss.Red, false, true
+		return look{"✕", p.needs, p.needs, true}
 	case ipc.StateExited:
 		if s.ExitCode != nil && *s.ExitCode != 0 {
-			return "✕", lipgloss.Red, true, false
+			return look{"✕", p.needs, p.muted, false}
 		}
-		return "·", nil, true, false
+		return look{"·", p.muted, p.muted, false}
 	case ipc.StateFrozen:
-		return "◆", lipgloss.Cyan, false, false
+		return look{"◆", p.frozen, p.ink, false}
+	case ipc.StatePaused:
+		return look{"‖", p.paused, p.ink, false}
 	case ipc.StateNeedsYou:
-		return "●", lipgloss.Red, false, true
+		return look{"●", p.needs, p.needs, true}
 	case ipc.StateStalled:
-		return "!", lipgloss.Red, false, true
+		return look{"!", p.needs, p.needs, true}
+	case ipc.StatePausing:
+		return look{"‖", p.paused, p.muted, false}
 	case ipc.StateStarting:
-		return "◌", nil, true, false
+		return look{"◌", p.muted, p.muted, false}
 	case ipc.StateDone:
 		if m.redOnDone {
-			return "✓", lipgloss.Red, false, true
+			return look{"✓", p.needs, p.needs, true}
 		}
-		return "✓", lipgloss.Green, false, false
+		return look{"✓", p.done, p.ink, false}
 	case ipc.StateIdle:
-		return "○", nil, true, false
+		return look{"○", p.muted, p.muted, false}
 	}
-	return "◐", nil, false, false
+	return look{"◐", p.ink, p.ink, false}
+}
+
+// needsYou reports whether a session waits on you: it needs you, stalled or
+// failed. These are red, and counted as needing you.
+func needsYou(s ipc.Session) bool {
+	switch s.State {
+	case ipc.StateNeedsYou, ipc.StateStalled, ipc.StateFailed:
+		return true
+	}
+	return false
 }
 
 func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
@@ -111,41 +117,47 @@ func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
 // tagline is the catch phrase in the title bar.
 const tagline = "you've got this 🌴"
 
-// header is the title bar: a deep-green band with the name, the tagline when
-// it fits, and the state counts on the right.
+// header is the title bar: a band of the palette's ground, a shade deeper
+// than the sidebar's, with the name, the tagline when it fits, and the
+// state counts on the right.
 func (m Model) header() string {
-	bar := lipgloss.NewStyle().Background(deepGreen)
-	title := bar.Foreground(sun).Bold(true).Render(" ☀ Irie")
+	p := m.pal
+	band := func(fg color.Color) lipgloss.Style { return on(p.ground, fg) }
+	title := blank(p.ground, 1) + band(p.sun).Render("☀") + band(p.accentInk).Bold(true).Render(" Irie")
 	right := ""
 	switch m.conn {
 	case offline:
-		right = bar.Foreground(lipgloss.Red).Render("core offline")
+		right = band(p.needs).Render("core offline")
 	case online:
 		// Low memory comes first, then the plan's use, then the counts,
 		// each kept only while it fits.
 		w := m.width - lipgloss.Width(title) - 2
 		var extra []string
 		if mem := m.head.Memory; mem != nil && mem.Low {
-			extra = append(extra, styleRed.Render("mem low"))
+			extra = append(extra, band(p.needs).Render("mem low"))
 		}
-		if p := m.head.Plan; p != nil && p.FiveHour != nil {
-			st := styleDim
+		if pl := m.head.Plan; pl != nil && pl.FiveHour != nil {
+			c := p.muted
 			switch {
-			case p.FiveHour.Used >= 90:
-				st = styleRed
-			case p.FiveHour.Used >= 70:
-				st = lipgloss.NewStyle().Foreground(lipgloss.Yellow)
+			case pl.FiveHour.Used >= 90:
+				c = p.needs
+			case pl.FiveHour.Used >= 70:
+				c = p.paused
 			}
-			extra = append(extra, st.Render(fmt.Sprintf("5h%.0f%%", p.FiveHour.Used)))
+			extra = append(extra, band(c).Render(fmt.Sprintf("5h%.0f%%", pl.FiveHour.Used)))
 		}
-		for len(extra) >= 0 {
-			lead := strings.Join(extra, " ")
+		for {
+			lead := strings.Join(extra, blank(p.ground, 1))
 			room := w - lipgloss.Width(lead)
 			if lead != "" {
 				room--
 			}
 			if counts := m.counts(room); counts != "" || len(extra) == 0 {
-				right = strings.TrimSpace(lead + " " + counts)
+				right = lead
+				if lead != "" && counts != "" {
+					right += blank(p.ground, 1)
+				}
+				right += counts
 				break
 			}
 			extra = extra[:len(extra)-1]
@@ -153,41 +165,43 @@ func (m Model) header() string {
 	}
 	left := title
 	if phrase := "   " + tagline; lipgloss.Width(title)+lipgloss.Width(phrase)+lipgloss.Width(right)+2 <= m.width {
-		left += bar.Foreground(onGreen).Faint(true).Render(phrase)
+		left += band(p.muted).Render(phrase)
 	}
-	gap := bar.Render(spaces(m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1))
-	return left + gap + right + bar.Render(" ")
+	return left + blank(p.ground, m.width-lipgloss.Width(left)-lipgloss.Width(right)-1) + right + blank(p.ground, 1)
 }
 
-// counts renders the state counts in at most w columns: with labels when
-// they fit, else glyphs and numbers. A zero count is faint, so colour only
-// ever means that something is there.
+// counts renders the state counts in at most w columns, in DESIGN §4.1's
+// order: with labels when they fit, else glyphs and numbers. Needs you
+// counts every red row: needs you, stalled and failed; paused counts pausing
+// too. A zero count is faint, so colour only ever means that something is
+// there, and each count keeps its glyph.
 func (m Model) counts(w int) string {
-	working, needs, done, frozen := 0, 0, 0, 0
+	working, needs, done, paused, frozen := 0, 0, 0, 0, 0
 	for _, s := range m.sessions {
-		switch s.State {
-		case ipc.StateWorking:
-			working++
-		case ipc.StateNeedsYou, ipc.StateStalled:
+		switch {
+		case needsYou(s):
 			needs++
-		case ipc.StateDone:
+		case s.State == ipc.StateWorking:
+			working++
+		case s.State == ipc.StateDone:
 			done++
-		case ipc.StateFrozen:
+		case s.State == ipc.StatePaused, s.State == ipc.StatePausing:
+			paused++
+		case s.State == ipc.StateFrozen:
 			frozen++
 		}
 	}
-	// Paused comes from gates, which this version does not have yet.
-	paused := 0
+	p := m.pal
 	all := []struct {
 		glyph, label string
 		n            int
 		c            color.Color
 	}{
-		{"◐", "working", working, nil},
-		{"●", "needs you", needs, lipgloss.Red},
-		{"✓", "done", done, lipgloss.Green},
-		{"‖", "paused", paused, lipgloss.Yellow},
-		{"◆", "frozen", frozen, lipgloss.Cyan},
+		{"◐", "working", working, p.ink},
+		{"●", "needs you", needs, p.needs},
+		{"✓", "done", done, m.look(ipc.Session{State: ipc.StateDone}).mark},
+		{"‖", "paused", paused, p.paused},
+		{"◆", "frozen", frozen, p.frozen},
 	}
 	for _, long := range []bool{true, false} {
 		var parts []string
@@ -201,17 +215,16 @@ func (m Model) counts(w int) string {
 			if long {
 				text += " " + x.label
 			}
-			st := lipgloss.NewStyle().Foreground(x.c).Background(deepGreen)
+			c := x.c
 			if x.n == 0 {
-				st = styleDim.Background(deepGreen)
+				c = p.muted
 			}
-			parts = append(parts, st.Render(text))
+			parts = append(parts, on(p.ground, c).Render(text))
 		}
-		sep := " "
+		sep := blank(p.ground, 1)
 		if long {
-			sep = "  "
+			sep = blank(p.ground, 2)
 		}
-		sep = lipgloss.NewStyle().Background(deepGreen).Render(sep)
 		if line := strings.Join(parts, sep); lipgloss.Width(line) <= w {
 			return line
 		}
@@ -219,81 +232,35 @@ func (m Model) counts(w int) string {
 	return ""
 }
 
-func (m Model) rule() string {
-	return " " + styleRule.Render(strings.Repeat("─", max(0, m.width-2))) + " "
-}
-
-func (m Model) row(i int) string {
-	s := m.sessions[i]
-	g, c, dim, loud := m.state(s)
-	return m.paintBadged(i, g, c, dim, loud, s.Priority > 0, s.Name, age(m.now().Sub(s.Created)))
-}
-
-// paint draws list row i, `[edge][glyph] name … age`, with the glyph's
-// colour and, for a row that is dim or loud, its name's.
-func (m Model) paint(i int, g string, c color.Color, dim, loud bool, name, a string) string {
-	return m.paintBadged(i, g, c, dim, loud, false, name, a)
-}
-
-// paintBadged is paint with, for a promoted session, a sun-coloured ↑
-// between the glyph and the name.
-func (m Model) paintBadged(i int, g string, c color.Color, dim, loud, promoted bool, name, a string) string {
-	sep, badge := " ", lipgloss.NewStyle()
-	if promoted {
-		sep, badge = "↑", styleBadge
-	}
-	nameW := m.width - 5 - lipgloss.Width(a)
-	name = cut(name, nameW)
-	gap := spaces(nameW - lipgloss.Width(name))
-	if i == m.sel && m.focus == focusList {
-		// The selection is a deep-green bar with a sun-coloured edge.
-		bar := lipgloss.NewStyle().Background(deepGreen)
-		text := bar.Foreground(onGreen)
-		gc := c
-		if gc == nil {
-			gc = onGreen
-		}
-		return bar.Foreground(sun).Render("▌") + bar.Foreground(gc).Render(g) + bar.Inherit(badge).Render(sep) +
-			text.Render(name+gap+" ") + text.Faint(true).Render(a) + text.Render(" ")
-	}
-	gs, ns := lipgloss.NewStyle().Foreground(c), lipgloss.NewStyle()
-	if loud {
-		ns = ns.Foreground(c)
-	}
-	if dim {
-		gs, ns = gs.Faint(true), ns.Faint(true)
-	}
-	edge := " "
-	if i == m.sel {
-		// Quieter while the command bar has focus.
-		edge = styleTitle.Faint(true).Render("▌")
-		ns = ns.Bold(true)
-	}
-	return edge + gs.Render(g) + badge.Render(sep) + ns.Render(name) + gap + " " + styleDim.Render(a) + " "
-}
-
+// statusLine is the one-line status strip, for panes under 24 rows.
 func (m Model) statusLine() string {
+	p := m.pal
 	if m.status != "" {
-		st := styleDim
+		c := p.muted
 		if m.statusErr {
-			st = styleRed
+			c = p.needs
 		}
-		return " " + st.Render(cut(m.status, m.width-2))
+		return blank(p.sidebar, 1) + m.text(c).Render(cut(m.status, m.width-2))
 	}
-	if m.sel < 0 {
-		hint := "Tab: type a task"
-		if m.focus == focusBar {
-			hint = "Enter: start  Ctrl+J: new line"
+	it, ok := m.selected()
+	if !ok {
+		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut(m.hint(), m.width-2))
+	}
+	switch it.kind {
+	case itemOutside:
+		return m.outsideStatus(m.outside[it.o])
+	case itemGroup:
+		g := it.group
+		text := g.title + " · " + groupLabel(g)
+		if g.outside {
+			text = "Claude Code sessions in other terminals · m moves an idle one in"
 		}
-		return " " + styleDim.Render(cut(hint, m.width-2))
-	}
-	if m.sel >= len(m.sessions) {
-		return m.outsideStatus()
+		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut(text, m.width-2))
 	}
 	// What the selected row is doing or needs, in plain words, with the call
 	// it is about; else what Irie cannot do for it; then what it costs; then
 	// its full name on the left and its directory right-aligned.
-	s := m.sessions[m.sel]
+	s := m.sessions[it.s]
 	var parts []string
 	if l := frozenLine(s); l != "" {
 		parts = append(parts, l)
@@ -313,9 +280,9 @@ func (m Model) statusLine() string {
 		parts = append(parts, r)
 	}
 	parts = append(parts, s.Name)
-	st := styleDim
-	if _, c, _, loud := m.state(s); loud {
-		st = lipgloss.NewStyle().Foreground(c)
+	c := p.muted
+	if l := m.look(s); l.loud {
+		c = l.name
 	}
 	w := m.width - 2
 	left := strings.Join(parts, " · ")
@@ -326,11 +293,10 @@ func (m Model) statusLine() string {
 	// The directory is dropped when it would leave the left column under a
 	// third of the line.
 	if dir == "" || w-lipgloss.Width(dir)-2 < w/3 {
-		return " " + st.Render(cut(left, w))
+		return blank(p.sidebar, 1) + m.text(c).Render(cut(left, w))
 	}
 	left = cut(left, w-lipgloss.Width(dir)-2)
-	gap := spaces(w - lipgloss.Width(left) - lipgloss.Width(dir))
-	return " " + st.Render(left) + gap + styleDim.Render(dir)
+	return blank(p.sidebar, 1) + m.text(c).Render(left) + blank(p.sidebar, w-lipgloss.Width(left)-lipgloss.Width(dir)) + m.text(p.muted).Render(dir)
 }
 
 // cost is what a session costs: dollars at list price for a cloud model,
@@ -372,42 +338,61 @@ func routed(s ipc.Session) string {
 func (m Model) View() tea.View {
 	var v tea.View
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	// Every motion, so the card under the pointer lights up; focus, so the
+	// light goes out when the pane loses it.
+	v.MouseMode = tea.MouseModeAllMotion
+	v.ReportFocus = true
 	if m.width <= 0 || m.height <= 0 {
 		return v
 	}
-	lines := []string{m.header()}
-	if m.ruled() {
-		lines = append(lines, m.rule())
+	// Every line is painted on the sidebar's own ground, padded to the
+	// pane's width, so the palette's contrast holds on any terminal theme.
+	lines := []string{m.ground(m.header())}
+	if m.tabbed() {
+		lines = append(lines, m.ground(m.tabBar()))
 	}
-	for i := range m.listHeight() {
-		if r := m.offset + i; r < m.rowCount() {
-			lines = append(lines, m.line(r))
-		} else {
-			lines = append(lines, "")
+	// The list: whole entries from the offset; the last may be cut short.
+	items, list := m.items(), make([]string, 0, m.listHeight())
+	for i := m.offset; i < len(items) && len(list) < m.listHeight(); i++ {
+		list = append(list, m.entry(items, i)...)
+	}
+	for len(list) < m.listHeight() {
+		list = append(list, "")
+	}
+	for _, l := range list[:m.listHeight()] {
+		lines = append(lines, m.ground(l))
+	}
+	switch {
+	case m.details():
+		for _, l := range m.detailsCard() {
+			lines = append(lines, m.ground(l))
 		}
-	}
-	if m.ruled() {
-		lines = append(lines, m.rule())
-	}
-	if m.statusVisible() {
-		lines = append(lines, m.statusLine())
+	case m.statusVisible():
+		lines = append(lines, m.ground(m.statusLine()))
 	}
 	bar := strings.Split(m.bar.View(), "\n")
 	if h := m.barHeight(); len(bar) > h {
 		bar = bar[:h]
 	}
-	barTop := len(lines)
+	barTop, barLeft := len(lines), 0
+	if m.tabbed() {
+		bar, barTop, barLeft = m.barBox(bar), barTop+1, 2
+	}
+	for i := range bar {
+		bar[i] = m.ground(bar[i])
+	}
 	lines = append(lines, bar...)
 	if len(lines) > m.height {
 		// Too short for everything: keep the header and the command bar.
-		barTop = max(1, m.height-len(bar))
-		lines = append(lines[:barTop], bar...)[:m.height]
+		top := max(1, m.height-len(bar))
+		barTop += top - (len(lines) - len(bar))
+		lines = append(lines[:top], bar...)[:m.height]
 	}
 	v.SetContent(strings.Join(lines, "\n"))
 	// The terminal's cursor marks the place in the command bar while it has
 	// the keyboard.
-	if c := m.bar.Cursor(); c != nil && c.Y < len(bar) && barTop+c.Y < m.height {
+	if c := m.bar.Cursor(); c != nil && c.Y < m.barHeight() && barTop+c.Y < m.height {
+		c.X += barLeft
 		c.Y += barTop
 		v.Cursor = c
 	}

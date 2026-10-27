@@ -72,7 +72,9 @@ const (
 	CodeNeedsStronger = "needs_stronger"
 )
 
-// Session states (DESIGN §5.3), derived from the session's events.
+// Session states (DESIGN §5.3), derived from the session's events. Frozen is
+// in control.go. The core derives paused and pausing once it can pause (M5);
+// the sidebar already draws them.
 const (
 	StateFailed   = "failed"
 	StateExited   = "exited"
@@ -82,6 +84,8 @@ const (
 	StateStarting = "starting"
 	StateDone     = "done"
 	StateIdle     = "idle"
+	StatePaused   = "paused"
+	StatePausing  = "pausing"
 )
 
 // Session is one row of the session list.
@@ -395,6 +399,13 @@ const (
 type StatusArgs struct {
 	Session string          `json:"session"`
 	Payload json.RawMessage `json:"payload"`
+}
+
+// StatusReply is the session's state and running subagents, which Irie's
+// own status line shows.
+type StatusReply struct {
+	State     string     `json:"state"`
+	Subagents []Subagent `json:"subagents,omitempty"`
 }
 
 type ShowArgs struct {

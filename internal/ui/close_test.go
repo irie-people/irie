@@ -39,7 +39,7 @@ func TestXXClosesTheSelectedSession(t *testing.T) {
 	}
 	// The row goes when the core says so, and the selection moves on.
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameRemove, ID: "s000000000001"}})
-	if len(m.sessions) != 2 || m.sessions[m.sel].ID != "s000000000002" {
+	if s, ok := m.selSession(); len(m.sessions) != 2 || !ok || s.ID != "s000000000002" {
 		t.Errorf("after the remove: sel %d of %+v", m.sel, m.sessions)
 	}
 }
@@ -77,7 +77,7 @@ func TestCloseAndReopenCommands(t *testing.T) {
 	if !slices.Equal(b.reopens, []string{""}) || !strings.Contains(m.status, "reopened task-001") {
 		t.Fatalf(":reopen asked for %q, status %q", b.reopens, m.status)
 	}
-	if m.sessions[m.sel].ID != "s000000000001" {
+	if s, ok := m.selSession(); !ok || s.ID != "s000000000001" {
 		t.Errorf("the reopened row is not selected: %d", m.sel)
 	}
 

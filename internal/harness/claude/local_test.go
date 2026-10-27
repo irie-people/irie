@@ -101,7 +101,9 @@ func TestSettingsMakeIrieTheStatusLine(t *testing.T) {
 	if err := json.Unmarshal(files[SettingsFile], &got); err != nil {
 		t.Fatal(err)
 	}
-	if want := (StatusLine{Type: "command", Command: "'" + irieBin + "' statusline"}); got.StatusLine != want {
+	// Irie's own line re-runs on a timer, to follow the session while it
+	// is idle.
+	if want := (StatusLine{Type: "command", Command: "'" + irieBin + "' statusline", RefreshInterval: 2}); got.StatusLine != want {
 		t.Errorf("statusLine = %+v, want %+v", got.StatusLine, want)
 	}
 

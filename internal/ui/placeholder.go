@@ -1,11 +1,60 @@
 package ui
 
 import (
+	"fmt"
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
+
+// The slot's colours. The slot's pane draws the keys and the shown
+// session's conversation (slot.go) in the sidebar's palette, on its ground
+// (slotColours, slotModel.paint). They start as rosewater's dark set, the
+// one used before the terminal tells its background.
+var (
+	sun        color.Color // the accent: the message box while it has the keyboard, a call that runs
+	sea        color.Color // what went well: a call's ✓, lines an edit added
+	artSun     color.Color // the mark's sun
+	artWaves   color.Color // the mark's waves
+	slotGround color.Color // the pane's own background
+	needsRed   color.Color // what needs you, and its card's border
+	quietEdge  color.Color // a quiet card's border, a rule
+	youEdge    color.Color // the border of your messages
+
+	styleTitle, styleBold, styleDim, styleRule, styleRed, codeStyle lipgloss.Style
+)
+
+func init() { slotColours(themes[defaultTheme].dark) }
+
+// slotColours sets the slot's colours from p: names in the accent's ink,
+// text in ink, quiet words muted, rules and quiet borders in the edge
+// colour, what needs you or failed in red, what went well in green.
+func slotColours(p palette) {
+	sun, sea, artSun, artWaves, slotGround = p.accent, p.done, p.sun, p.waves, p.ground
+	needsRed, quietEdge, youEdge = p.needs, p.edge, p.accent
+	styleTitle = lipgloss.NewStyle().Foreground(p.accentInk).Bold(true)
+	styleBold = lipgloss.NewStyle().Foreground(p.ink).Bold(true)
+	styleDim = lipgloss.NewStyle().Foreground(p.muted)
+	styleRule = lipgloss.NewStyle().Foreground(p.edge)
+	styleRed = lipgloss.NewStyle().Foreground(p.needs)
+	codeStyle = lipgloss.NewStyle().Foreground(p.accentInk)
+}
+
+// grounded paints a drawn line on bg, padded to w columns: after each reset
+// an inner style ends with, bg comes back, so no cell shows the terminal's
+// own background. Text with no colour of its own is drawn in ink.
+func grounded(line string, bg, ink color.Color, w int) string {
+	r, g, b, _ := bg.RGBA()
+	ir, ig, ib, _ := ink.RGBA()
+	on := fmt.Sprintf("\x1b[48;2;%d;%d;%dm\x1b[38;2;%d;%d;%dm", r>>8, g>>8, b>>8, ir>>8, ig>>8, ib>>8)
+	line = on + strings.NewReplacer("\x1b[m", "\x1b[m"+on, "\x1b[0m", "\x1b[0m"+on).Replace(line)
+	if pad := w - lipgloss.Width(line); pad > 0 {
+		line += strings.Repeat(" ", pad)
+	}
+	return line + "\x1b[m"
+}
 
 // keyLabel turns a tmux key name such as C-] into Ctrl+].
 func keyLabel(k string) string {
@@ -34,12 +83,12 @@ func (p placeholder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // mark is the icon's picture in text: a sun rising over two waves.
 func mark() string {
-	sunStyle := lipgloss.NewStyle().Foreground(sun)
+	sunStyle, waves := lipgloss.NewStyle().Foreground(artSun), lipgloss.NewStyle().Foreground(artWaves)
 	return lipgloss.JoinVertical(lipgloss.Center,
 		sunStyle.Render(`\ | /`),
 		sunStyle.Render(`— ( ☀ ) —`),
-		lipgloss.NewStyle().Foreground(sea).Render(strings.Repeat("～", 9)),
-		lipgloss.NewStyle().Foreground(deepSea).Render(strings.Repeat("～", 7)),
+		waves.Render(strings.Repeat("～", 9)),
+		waves.Render(strings.Repeat("～", 7)),
 	)
 }
 

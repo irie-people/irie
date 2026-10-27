@@ -197,7 +197,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
-| `status` | `session`, `payload`: Claude Code's status line JSON | none | M10 (§6.3) |
+| `status` | `session`, `payload`: Claude Code's status line JSON | `state`, `subagents[]`: the session's, for Irie's own status line | M10 (§6.3) |
 | `local` | `start?` | the local server, the machine's memory, and each model weighed against it | M10 (§6.3) |
 | `route` | `task`, `parent?` | where `+auto` would run it: class, choice, reason, every profile weighed | M10 (§6.4) |
 | `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |
@@ -367,19 +367,28 @@ type Harness interface {
 
 ### 4.1 Session list
 
-**Layout, from top to bottom:**
-- **Header** (pinned, 1–2 lines): `Irie`, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
-- **List:** scrolls.
-- **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail.
-- **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
+The sidebar is a terminal program that reads like a web page, and like the Mac app: rounded cards with padding, a tree of repos, plain words, and a mouse that lights up what it points at. It paints every cell in the palette of `ui.theme` (§5.3, §5.5).
 
-**Rows.** Each row reads `[glyph][↑] name … age`, the `↑` in sun for a promoted session, with subagents indented under their parent (M8). The core keeps one order, which both sidebars draw and each row carries as `order`: a new session goes last, promoting one puts it first, and dragging one with the mouse puts it where it is dropped (`reorder`). The order lives in the `@irie_order` option of the `irie-agents` session, so a restarted core keeps it, and a closed session keeps its place for its reopen. State changes never reorder the list, and only you scroll it: frames from the core and a growing command bar leave the rows on screen where they are, and only a task you just started scrolls into view. The Parked group comes after them. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
+**Layout, from top to bottom:**
+- **Header** (pinned, 1–2 lines): a title bar on the palette's ground, a shade deeper than the sidebar: `Irie` and its tagline while there is room, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). Needs you counts every red row (needs you, stalled and failed), paused counts pausing too, and a zero count is faint. When the core is unreachable the header says `core offline` and the UI retries every second.
+- **Tabs** (1 line, from 10 rows): `State │ Repo`, the view in use on the selection fill. A click on a tab, or `v`, switches. The sidebar opens in Repo.
+- **List:** scrolls. Groups of sessions, each under a header that folds it.
+- **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), what it costs and its name, and its folder on the right while that leaves the rest a third of the line; or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail. From 24 rows it is a **details card**: a rounded card with the selected session's name in its border, then its state with what it costs and how it was routed, its detail, its exact call, and its branch and folder. An error or a message takes the card's four lines.
+- **Command bar** (pinned): from 10 rows a rounded box, edged in the accent while it has the keyboard, with the placeholder "What should we work on?". It grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
+
+**Groups.** The Repo view has a group per repo (a session's `repo`, its main checkout), named by the repo's folder, with parent folders added when two repos share a name (`code/irie`, `forks/irie`), in the order their first session started, then "Not in a repo". The State view has "Needs you" (failed, needs you, stalled), "Working" (working, starting, pausing, paused, frozen) and "Done" (done, idle, exited), each only while it has a session. Under `spawn.close_when_done` the State view leaves out what is done, which is about to close itself, and calls the last group "Idle" (§4.5). A header reads `▾ irie  4`; Enter, Space or a click folds it to `▸ irie  4 · 1 needs you`, which counts in red what inside needs you. Within a group sessions follow the core's one order (below), so in the Repo view a state change never moves a card.
+
+**Cards.** Each session is a rounded card a column in from each side of the pane, with a column of padding: the state's glyph, any flag beside it (§5.3: `◆` for a frozen session under a state that comes first), an `↑` in the accent for a promoted session, the name and the age on its first line, its detail in plain words on the second (red when it needs you, and the state in words when it has none), then up to three of its running helpers, `↳ Explore  Reading DESIGN.md`, and `and N more`. A card that needs you is tinted and edged in red. The selected card takes the selection fill, edged in the accent while the list has the keyboard; the card under the pointer takes the hover fill. Where the list has fewer than 8 rows, or the pane fewer than 24 columns, each session is a one-line row instead, `[glyph][↑] name … age`, in the same palette, the selected one with an accent edge. Sessions outside Irie are always one-line rows. Subagent rows (M8) sit in their parent's card, as its helpers.
+
+**Order.** The core keeps one order, which both sidebars draw and each row carries as `order`: a new session goes last, promoting one puts it first, and dragging one with the mouse puts it where it is dropped (`reorder`). The order lives in the `@irie_order` option of the `irie-agents` session, so a restarted core keeps it, and a closed session keeps its place for its reopen. Each group draws its sessions in that order, so a promoted session heads its group, and the groups keep their own order. A card or row dragged with the mouse moves among the others of its group as the pointer crosses them, in either view, and only once the pointer is where it would land, so cards of different heights never trade places back and forth; dropped, it stays, and dropped on another group it goes back. State changes never reorder a group, and only you scroll the list: frames from the core and a growing command bar leave what is on screen where it is, and only a task you just started scrolls into view, its group unfolding. The Parked group comes after the groups. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last, and folds like the others. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
 
 | Key (list focus) | Action |
 |---|---|
-| `↑` `↓`, `j` `k`, wheel, PgUp/PgDn, Home/End | Move the selection or scroll. The wheel scrolls the view without moving the selection |
-| Enter, click | Show the session in the slot and focus it |
-| Space | Show it, keep focus in the sidebar |
+| `↑` `↓`, `j` `k`, wheel, PgUp/PgDn, Home/End | Move the selection over the cards and headers that show, or scroll. The wheel scrolls the view without moving the selection |
+| Enter, click | Show the session in the slot and focus it; on a header, fold or unfold its group |
+| Space | Show it, keep focus in the sidebar; on a header, fold or unfold its group |
+| `v`, a click on a tab | Switch between the State and Repo views; the selected session stays selected |
+| The pointer | Lights the card, header or tab under it; the light goes out at the margins and when the pane loses focus |
 | `Ctrl+]` (tmux binding) | Toggle focus between sidebar and slot |
 | `Ctrl+\` (tmux binding, `ui.flip_key`) | Flip the slot between the shown session's conversation and its raw terminal (§4.7) |
 | Tab, `:` | Focus the command bar (`:` pre-fills a colon) |
@@ -392,15 +401,18 @@ type Harness interface {
 | `p`, `P` | Pause or resume this agent, or the whole tree (M5) |
 | `f`, `F` | Freeze or thaw this session, or all (M6) |
 | `!`, `n` | Toggle priority; write a note (M7) |
-| Drag a row (mouse) | Put the session where it is dropped. A click opens a row when the button comes up on it |
+| Drag a card or row (mouse) | Put the session where it is dropped, among the others of its group; dropped on another group, it goes back. A click opens a card, row or header when the button comes up on it |
 | `m` `m` | Move the selected session under Outside Irie into Irie (§4.6). The first press says what the move ends; any other key cancels |
 | `+`, `-` | Rate the session's work good or bad, which teaches the router (M10, §6.4) |
 
 | Edge case | Behaviour |
 |---|---|
 | Pane shorter than 6 rows | Header 1 line, command bar 1 line, at least 1 list row; the status strip is hidden |
+| Pane shorter than 10 rows | No tabs, and the command bar has no box |
+| A list shorter than 8 rows, or a pane narrower than 24 columns | One-line rows instead of cards. Typing never turns cards into rows: the rule counts a one-line command bar |
 | 200 or more sessions | Only visible rows are rendered |
-| Name wider than the sidebar | Cut with an ellipsis; the full name is in the status strip |
+| Name wider than the sidebar | Cut with an ellipsis; the status strip, or the details card's border, shows as much of it as fits |
+| Folding a group while one of its sessions is selected | The selection moves to the group's header |
 | Two clients of different sizes | `window-size latest`; the slot follows, and agent windows are resized to match |
 | The shown session exits | Its pane stays in the slot with its exit status; the row shows exited |
 | The selected session disappears | The selection moves to the next row |
@@ -412,7 +424,7 @@ type Harness interface {
 | Core crashes | Header says `core offline` | The supervisor restarts the core, which rebuilds from tmux options, `state.json` and gate files |
 | Slot pane killed by hand | Layout invariant broken | The core recreates the placeholder within a tick |
 
-**Tests:** model tests in M1 and M4 (pinned header and command bar at three heights, scrolling, park counts, jump ranking), plus tmux integration tests for the swap-in.
+**Tests:** model tests in M1 and M4 (pinned header and command bar at three heights, scrolling, park counts, jump ranking), the grouping in both views, folding, hover, clicks on tabs, headers and cards, the fallback to rows, and every cell on the palette, plus tmux integration tests for the swap-in.
 
 ### 4.2 Command bar and spawning
 
@@ -599,7 +611,7 @@ If the outside copy stopped but Irie could not start the session, the error says
 
 **Clients.**
 - **`irie ctl`.** `list` shows the sessions under `OUTSIDE IRIE`, and `move [--wait] [+PROFILE] <session-id|name>` moves one in.
-- **The sidebar.** The group comes last, after Parked, under a header with its count. Each row is one line, with the glyph and colour of the Irie state it matches (§5.3): busy as working, idle as idle, waiting for the user as needs you, and a dim `·` for anything else. Selecting a row puts what it is doing, its folder and how it runs in the status strip. `m` `m` moves it in, as `x` `x` closes: the first press says that its copy outside Irie ends, with anything it runs in the background, and any other key cancels. `:move [name]` moves it at once. Enter or Space says that it runs outside Irie instead of failing.
+- **The sidebar.** The group comes last, after Parked, under a header with its count that folds it like any group's (§4.1). Each row is one line, even among cards, with the glyph and colour of the Irie state it matches (§5.3): busy as working, idle as idle, waiting for the user as needs you, and a dim `·` for anything else. Selecting a row puts what it is doing, its folder and how it runs in the status strip. `m` `m` moves it in, as `x` `x` closes: the first press says that its copy outside Irie ends, with anything it runs in the background, and any other key cancels. `:move [name]` moves it at once. Enter or Space says that it runs outside Irie instead of failing.
 - **The Mac app.** An "Outside Irie" section after the cards, with the same one-line rows. The details panel has Move into Irie, off with the reason while the session can't move, and Copy Session ID, and a move asks first ([MAC.md](MAC.md)).
 
 **Agents keep their own identity.** An agent inherits the tmux server's environment, which came from whatever first ran `irie up`. When that was a Claude Code session in a terminal pane, every agent would carry that session's markers. These are the variables Claude Code's environment reference documents: `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID`, `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_REMOTE_SESSION_ID`, and `CLAUDE_EFFORT`, the other session's effort. Agents would also carry the terminal pane's ids and its control capability: names ending in `_PANEL_ID`, `_SURFACE_ID` or `_SOCKET_CAPABILITY`, that terminal's other `*_ID` and `*_SOCKET*` variables, and `WINDOWID`. Claude Code would take each agent for a nested session, leave it out of `claude agents` and `--resume`, and hand it the other session's inbox. It ignores the inherited marker when it sees tmux, but Irie hides `TMUX`. So the pane host drops these variables before it starts an agent, unless the profile sets them, and the core drops them from its own runs of the CLI. A core restarted on a running server therefore fixes every agent it spawns from then on. Starting the server from a clean login environment was the other option. It would reach a running server only when the server restarts, it needs the login-shell capture of §7.2, and `env -i` also drops variables that launchd rather than a shell profile sets, such as `SSH_AUTH_SOCK` on macOS.
@@ -627,7 +639,7 @@ Left out: the model's thinking, expanded skills and other meta lines, Claude Cod
 
 **Sending** (`send`). A message reaches the agent the way a person typing would, through the core, the only writer to tmux: the text goes into a tmux buffer from a file, `paste-buffer -p` pastes it into the agent's pane (bracketed when the agent asked for bracketed paste, with control characters other than tabs and newlines shown as `^X`), and Enter follows 150 ms later. Claude Code queues a message that arrives while it works for its next tool boundary. While the agent waits on you in its terminal (a permission, a question, a plan), Enter would answer that prompt, so `send` refuses with `busy` and a view offers the terminal instead. It also refuses before the agent is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste, where each newline would be Enter. One message is typed at a time. A sent message shows in `pending` until the transcript has a message from you as new as it, and for 15 minutes at most.
 
-**In the terminal.** The slot's placeholder pane (`irie placeholder`) draws the shown session's conversation, the way the Mac app does, in Bubble Tea and Lip Gloss: a header with the name and what it is doing, your messages in rounded cards, Claude's replies in Markdown, one line per call with a ✓, ✕ or ring, how long it took and the lines an edit changed, runs of reads, edits or searches as one line, subagents as `↳ Explore` lines, notes as ruled lines, what it waits on you for in a red card, and a message box that sends with Enter (Shift+Enter or Ctrl+J for a new line); PgUp, PgDn and the wheel scroll. While the agent waits on you, a banner takes the box's place. With no session picked, it lists the keys.
+**In the terminal.** The slot's placeholder pane (`irie placeholder`) draws the shown session's conversation, the way the Mac app does, in Bubble Tea and Lip Gloss: a header with the name and what it is doing, your messages in rounded cards, Claude's replies in Markdown, one line per call with a ✓, ✕ or ring, how long it took and the lines an edit changed, runs of reads, edits or searches as one line, subagents as `↳ Explore` lines, notes as ruled lines, what it waits on you for in a red card, and a message box that sends with Enter (Shift+Enter or Ctrl+J for a new line); PgUp, PgDn and the wheel scroll. While the agent waits on you, a banner takes the box's place. With no session picked, it lists the keys. It draws in the sidebar's palette (`ui.theme`, light or dark as the terminal is), on the palette's ground.
 - **The view.** `show` picks a session. In the conversation view, the default (`ui.view`), its own pane stays home and P stays in the slot; the picked session's row is `shown`, and P follows the row the core marks shown. In the terminal view the session's pane is swapped in, as before. `flip` (`irie ctl flip`, bound to `ui.flip_key`, Ctrl+\ by default, which Claude Code's documented shortcuts do not use) turns the view and focuses the slot. The core keeps the picked session and the view in the server options `@irie_selected` and `@irie_raw`, so a restarted core keeps them.
 - **The Mac app.** While the app is open the slot shows the picked session's raw terminal whatever the view, since the app draws its own conversation; the flip key goes to the agent then, as the focus key does. When the app closes, the view comes back.
 
@@ -704,6 +716,16 @@ Each row shows the first state in this table that applies; the table is in prece
 | done | `✓` | green | `turn.ended`, not yet viewed. Turns into idle when you show the session. `ui.red_on_done = true` shows it red instead |
 | idle | `○` | dim | done and viewed |
 
+The sidebar draws these colours from its palette (§5.5, `ui.theme`): red is the palette's needs colour, green its done, yellow its paused and cyan its frozen; default is ink and dim is muted, so a dim red or dim yellow row has a red or yellow glyph and a muted name. In every palette, light and dark, each text colour reads at 4.5:1 and the accent at 3:1 on every surface (WCAG 2.2, 1.4.3 and 1.4.11). The sidebar paints every cell's background itself, so this holds whatever the terminal's theme is. It asks the terminal for its background (OSC 11, which tmux answers with the attached client's) and draws the dark set until an answer comes. Each state has its own glyph, so colour is never the only cue (1.4.1): only failed and an exit with an error code share `✕`, and only paused and pausing share `‖`. The core derives frozen (M6), and will derive paused and pausing (M5); the sidebar already draws them. The Mac app draws the same glyphs in the same roles ([MAC.md](MAC.md) §5).
+
+Before the palettes, neither sidebar followed this table exactly. The terminal sidebar:
+- drew its title and the command bar's prompt in Irie's sun yellow, which reads at 1.8:1 on a light terminal;
+- took its state colours from the terminal's own theme, so their contrast was whatever that theme gave;
+- left failed rows out of the needs-you count, though they are red;
+- had no look for frozen, paused or pausing.
+
+Two older faults were fixed just before: working shared needs you's `●`, and an exit with an error code shared a clean exit's `·`. The Mac app's faults are listed in [MAC.md](MAC.md) §5.
+
 ### 5.4 Files
 
 Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.local/share`, `~/.cache`), so paths match Linux. Directories are 0700 and files 0600.
@@ -737,13 +759,14 @@ view = "conversation"         # what the slot shows first: conversation | termin
 max_sub_rows = 6
 red_on_done = false
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
+theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
 
 [spawn]
 default_profile = "auto"      # auto = the lowest cost per success among profiles accurate enough (§6.4)
 default_cwd = ""              # "" = new scratch dir per task
 ready_timeout = "30s"
 hide_tmux = true              # remove TMUX/TMUX_PANE from agent env
-close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it)
+close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it; status, report and question sessions are left open)
 close_delay = "30s"           # how long a finished session waits; a new prompt, or anything it needs from you, cancels the close
 
 [profiles.claude]             # the strongest: hard work and orchestration
@@ -909,9 +932,9 @@ Every session costs something, and the spawn list says what before a task starts
 | Memory | What the session's processes take, measured | The same, plus what its model takes: weights, the context cache at the server's context, and working room |
 
 **Status line.** With `usage.status_line` (on by default), Irie's settings file makes `irie statusline` the session's status line.
-- **Forwarding.** It forwards each update to the core (op `status`). The call takes at most 300 ms and never fails.
+- **Forwarding.** It forwards each update to the core (op `status`), which answers with the session's state and running subagents. The call takes at most 300 ms and never fails.
 - **The user's own.** It then `exec`s the user's own status line on the same input. It finds it where Claude Code would: the project's local settings at the repo's main checkout, the shared project settings in the cwd, then the user's in `CLAUDE_CONFIG_DIR` or `~/.claude`. Their `padding`, `refreshInterval` and `hideVimModeIndicator` are kept.
-- **No status line of their own.** It prints a short line instead (`$1.23 · ctx 41% · 5h 62%`), because any status line hides Claude Code's footer hints.
+- **No status line of their own.** It prints a short line instead, because any status line hides Claude Code's footer hints: the session's state in the marks and colours of §5.3, then the cost, the context with a bar, and the plan's use (`✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41% · 5h 62%`). A turn that ended while subagents still run is not done: the line says `◐ waiting on 2 helpers: Explore, dev`, and while the turn runs `◐ working + 2 helpers`. Shares turn yellow from 70% and red from 90%; the rest is faint. Parts drop from the end to fit `COLUMNS`. It re-runs every 2 s (`refreshInterval`), since Claude Code's updates stop while the session is idle, as when it waits on background subagents.
 - **Restarts.** The last update is kept in the session's `status.json`, so a restarted core still knows it.
 
 **Memory.**
