@@ -77,6 +77,20 @@ func (b socketBackend) Reopen(id string) (ipc.Session, error) {
 	return r.Session, err
 }
 
+// Undo and Redo wait as long as a spawn: redo may reopen a session, which
+// waits for its old agent to end.
+func (b socketBackend) Undo(a ipc.UndoArgs) (ipc.UndoResult, error) {
+	var r ipc.UndoResult
+	err := ipc.Call(b.socket, spawnTimeout, ipc.OpUndo, a, &r)
+	return r, err
+}
+
+func (b socketBackend) Redo(a ipc.UndoArgs) (ipc.UndoResult, error) {
+	var r ipc.UndoResult
+	err := ipc.Call(b.socket, spawnTimeout, ipc.OpRedo, a, &r)
+	return r, err
+}
+
 // Run is `irie ui`: the sidebar, fed by the core at socket.
 func Run(socket string, o Options) error {
 	if o.Home == "" {
