@@ -285,10 +285,11 @@ private struct OutsideRow: View {
         return hovering ? Theme.hover : Theme.card
     }
 
+    /// As a card's: none at rest, so the rows lie flat in the list.
     private var edge: Color {
         if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
         if hovering { return Theme.accent.opacity(0.45) }
-        return look == .needs ? Theme.needs.opacity(0.6) : Theme.edge
+        return look == .needs ? Theme.needs.opacity(0.6) : .clear
     }
 
     private var spoken: String {

@@ -146,12 +146,14 @@ struct SidebarView: View {
 /// One session, always two lines: its name, then what it needs from you (in
 /// red), what it is doing, or how it ended, in plain words. The trailing
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
-/// the pointer brings up the actions. The card is soft and rounded, on a
-/// gentle shadow: washed in its agent's colour while it works, tinted red
-/// while it needs you. The selected card is filled with the selection and
-/// edged in its session's colour, which a line carries on to the terminal's
-/// frame (TabLink.swift). A selected working card is a gradient, from the
-/// selection by its mark to the colour round its terminal at the trailing end.
+/// the pointer brings up the actions. The card is soft and rounded, and lies
+/// flat in the list, with no edge or shadow, like a window's other tabs:
+/// washed in its agent's colour while it works, tinted and edged in red
+/// while it needs you. The selected card stands up from the others, on a
+/// gentle shadow, filled with the selection and edged in its session's
+/// colour, which a line carries on to the terminal's frame (TabLink.swift).
+/// A selected working card is a gradient, from the selection by its mark to
+/// the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -177,7 +179,7 @@ private struct SessionCard: View {
                 } else {
                     HStack(spacing: 4) {
                         Text(session.name)
-                            .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
+                            .font(Theme.font(13.5, look.quiet ? .medium : .semibold))
                             .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -208,7 +210,7 @@ private struct SessionCard: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
-        .background(ground.shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .background(ground.shadow(color: selected ? Theme.shadow : .clear, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
         .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
             if selected {
@@ -299,13 +301,13 @@ private struct SessionCard: View {
     private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
     /// Round the selected card, the colour of the terminal's frame and the
-    /// line between them; red round one that needs you; a hairline round the
-    /// rest.
+    /// line between them; a faint accent round the one under the pointer;
+    /// red round one that needs you. The rest have none: a working card's
+    /// agent shows in its mark and its wash.
     private var edge: Color {
         if selected { return Look.edge(session) }
         if hovering { return Theme.accent.opacity(0.45) }
-        if let tint { return tint.opacity(0.55) }
-        return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
+        return look.loud ? Theme.needs.opacity(0.5) : .clear
     }
 
     /// The selected card's edge is as wide as the line from it, and bolder
@@ -337,7 +339,7 @@ private struct RenameField: View {
         // stays where it was drawn.
         TextField("Name", text: $store.renameText)
             .textFieldStyle(.plain)
-            .font(Theme.font(13.5, .bold))
+            .font(Theme.font(13.5, .semibold))
             .foregroundStyle(Theme.ink)
             .focused($focused)
             .frame(maxWidth: .infinity, alignment: .leading)
