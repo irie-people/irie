@@ -200,6 +200,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-27 | https://code.claude.com/docs/en/interactive-mode.md (read again) ; tmux 3.7b manual page (local `man tmux`: `load-buffer`, `paste-buffer -p -d`, `send-keys`, `bracket_paste_flag`) | A message typed while Claude Code works is queued for its next tool boundary; a bracketed paste then Enter types a message as a person would, and a pane that did not ask for bracketed paste would take each newline as Enter: `send` (DESIGN §4.7) |
 | 2026-10-27 | https://www.conventionalcommits.org/en/v1.0.0/ (CC BY 3.0) | The commit subject rule in AGENTS.md, which `.github/conventional-commit.sh` checks |
 | 2026-10-27 | https://github.com/googleapis/release-please (docs/manifest-releaser.md, docs/customizing.md, schemas/config.json) ; https://github.com/googleapis/release-please-action (README) | `release-please-config.json` (the `go` release type, `initial-version`, tags without a component) and the `x-release-please-version` annotation release-please needs before it can update `Base`; the manifest at 0.0.0, so the first release is 0.1.0 |
+| 2026-10-27 | https://developer.mozilla.org/en-US/docs/Web/CSS/font-family | `ui-rounded`, the system's rounded interface font, is a generic family: unquoted, and followed by fallbacks: the rounded type of the planned themes in `site/themes.html`'s pictures (site) |
 
 ## Third-party code
 
