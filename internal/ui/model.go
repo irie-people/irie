@@ -555,6 +555,16 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if first, _, _ := strings.Cut(strings.TrimSpace(m.bar.Value()), "\n"); strings.HasPrefix(first, ":") {
 			return m.command(first)
 		}
+		if q, ok := ParseHows(m.bar.Value()); ok {
+			if s := FindSession(m.sessions, q); s != nil {
+				m.setStatus(Hows(*s), false)
+			} else {
+				m.setStatus("no agent matches “"+q+"”", true)
+			}
+			m.bar.Reset()
+			m.chips = nil
+			return m, nil
+		}
 		args, err := ParseTask(m.bar.Value(), m.home)
 		if err != nil {
 			m.setStatus(err.Error(), true)
