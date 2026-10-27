@@ -96,6 +96,9 @@ struct SidebarView: View {
                         .padding(.bottom, 8)
                     }
                 }
+                // The line from the selected card shows while the card's
+                // middle is in sight here (TabLink.swift).
+                .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { $0.list = $1 }
                 .onChange(of: store.selection) {
                     if let id = store.selection { proxy.scrollTo(id) }
                 }
@@ -141,8 +144,9 @@ struct SidebarView: View {
 /// flat in the list, with no edge or shadow, like a window's other tabs:
 /// washed in its agent's colour while it works, tinted and edged in red
 /// while it needs you. The selected card stands up from the others, on a
-/// gentle shadow, filled with the selection and edged in the accent. A
-/// selected working card is a gradient, from the selection by its mark to
+/// gentle shadow, filled with the selection and edged in its session's
+/// colour, which a line carries on to the terminal's frame (TabLink.swift).
+/// A selected working card is a gradient, from the selection by its mark to
 /// the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
@@ -201,7 +205,13 @@ private struct SessionCard: View {
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
         .background(ground.shadow(color: selected ? Theme.shadow : .clear, radius: 3, y: 1.5))
-        .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
+        .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
+        .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
+            if selected {
+                ends.card = bounds
+                ends.color = edge
+            }
+        }
         .contentShape(shape)
         .onHover { hovering = $0 }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
@@ -284,15 +294,20 @@ private struct SessionCard: View {
 
     private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
-    /// The accent round the selected card, faint while the list lacks the
-    /// keyboard, and round the one under the pointer, fainter; red round one
-    /// that needs you. The rest have none: a working card's agent shows in
-    /// its mark and its wash.
+    /// Round the selected card, the colour of the terminal's frame and the
+    /// line between them; a faint accent round the one under the pointer;
+    /// red round one that needs you. The rest have none: a working card's
+    /// agent shows in its mark and its wash.
     private var edge: Color {
-        if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
+        if selected { return Look.edge(session) }
         if hovering { return Theme.accent.opacity(0.45) }
         return look.loud ? Theme.needs.opacity(0.5) : .clear
     }
+
+    /// The selected card's edge is as wide as the line from it, and bolder
+    /// while the list has the keyboard, so its colour always matches the
+    /// line's and the frame's while its width tells where the keyboard is.
+    private var edgeWidth: CGFloat { selected ? (listFocused ? 2.5 : TabLink.width) : 1 }
 
     private var spoken: String {
         var parts = [session.name, look.label]
