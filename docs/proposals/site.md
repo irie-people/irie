@@ -12,7 +12,7 @@ Every page opens with its title and then its picture, before any text.
 
 | Page | File | Picture | What it says |
 |---|---|---|---|
-| Home | `index.html` | The Irie window: the sidebar beside the slot | What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
+| Home | `index.html` | The Irie window: the sidebar beside the slot | The tagline, "Be the change you want to see in the world.", unattributed. What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
 | How it works | `how-it-works.html` | You, Irie, tmux, agents and worktrees | You type a task; Irie starts an agent in tmux; Enter shows it live; hooks tell Irie how it is doing; what the colours mean; worktrees and profiles; what stays on your computer |
 | Get started | `get-started.html` | How a spawn line reads | There is nothing to install yet. What you will need, and four steps of what using Irie will look like |
 | Roadmap | `roadmap.html` | The eleven milestones | The milestones of DESIGN §8, marked done only once merged on main, then what comes after v1 (DESIGN §1.3) |

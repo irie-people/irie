@@ -4,6 +4,8 @@
 > Good, pleasing, at peace. Everything's all right.
 > *"Everything irie."*
 
+**Be the change you want to see in the world.**
+
 Run every coding agent you have, from any supplier, on any model, cloud or local. Run them side by side and keep track of all of them in one calm view.
 
 ## Why
