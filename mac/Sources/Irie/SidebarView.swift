@@ -119,8 +119,8 @@ struct SidebarView: View {
 /// red), what it is doing, or how it ended, in plain words. The trailing
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
 /// the pointer brings up the actions. The card is soft and rounded, on a
-/// gentle shadow: tinted red while it needs you, edged in the accent while
-/// selected.
+/// gentle shadow: washed in its agent's colour while it works, tinted red
+/// while it needs you, edged in the accent while selected.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -173,7 +173,7 @@ private struct SessionCard: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
-        .background(shape.fill(fill).shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .background(shape.fill(fill).overlay { if let wash { shape.fill(wash) } }.shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
         .onHover { hovering = $0 }
@@ -226,6 +226,13 @@ private struct SessionCard: View {
         if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.55) }
         if look.loud { return Theme.needsTint }
         return hovering ? Theme.hover : Theme.card
+    }
+
+    /// Its own colour across the card while it works, fullest by the mark and
+    /// fading toward the trailing slot. The selection's fill replaces it.
+    private var wash: LinearGradient? {
+        guard !selected, let c = Look.agentWash(session) else { return nil }
+        return LinearGradient(colors: [c, c.opacity(0.5)], startPoint: .leading, endPoint: .trailing)
     }
 
     /// The accent round the selected card, faint while the list lacks the
