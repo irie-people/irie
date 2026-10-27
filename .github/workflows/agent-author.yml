@@ -1,0 +1,285 @@
+# Irie maintains itself, part 1: the author agent (docs/proposals/self-maintaining.md).
+# A maintainer's agent:accepted label on an issue starts it; agent-review starts it
+# again to answer a review. Nothing runs unless the repository variable IRIE_AGENTS
+# is "on". Only the agent's job holds a model key, and no job that holds a GitHub
+# write token or the App's key runs an agent or code from a pull request.
+#   variables IRIE_AGENTS (the switch), IRIE_BOT_LOGIN and IRIE_BOT_ID (the App's bot account)
+#   environment irie-author: secret MODEL_KEY, an Anthropic key from a workspace with a spend limit
+#   environment irie-bot: variable APP_CLIENT_ID, secret APP_PRIVATE_KEY (the GitHub App)
+name: agent-author
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: The accepted issue
+        required: true
+        type: number
+      pr:
+        description: The agent's pull request, to answer its last review; empty to start the issue
+        required: false
+        type: string
+      round:
+        description: The review round to answer
+        required: false
+        type: number
+        default: 0
+permissions: {}
+concurrency:
+  # One run at a time per issue. Labels other than agent:accepted get a group of their
+  # own, so that they never replace an acceptance waiting its turn.
+  group: >-
+    ${{ github.event_name == 'workflow_dispatch' && format('agent-issue-{0}', inputs.issue)
+    || github.event.label.name == 'agent:accepted' && format('agent-issue-{0}', github.event.issue.number)
+    || format('agent-other-{0}', github.run_id) }}
+defaults:
+  run:
+    shell: bash
+env:
+  REPO: ${{ github.repository }}
+  BOT: ${{ vars.IRIE_BOT_LOGIN }}
+  MAX_ROUNDS: "3"
+  AUTHOR_MODEL: claude-opus-5-5 # as in .github/irie/config.toml, for the pull request's body
+  CLAUDE_CODE_VERSION: "2.1.310"
+  IRIE_CI: /tmp/irie-ci
+jobs:
+  gate:
+    # Every label added to an issue starts this workflow; only agent:accepted goes on.
+    if: >-
+      vars.IRIE_AGENTS == 'on' &&
+      (github.event_name == 'workflow_dispatch' || github.event.label.name == 'agent:accepted')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      issue: ${{ steps.gate.outputs.issue }}
+      mode: ${{ steps.gate.outputs.mode }}
+      pr: ${{ steps.gate.outputs.pr }}
+      round: ${{ steps.gate.outputs.round }}
+      head: ${{ steps.gate.outputs.head }}
+      title: ${{ steps.gate.outputs.title }}
+      pin: ${{ steps.gate.outputs.pin }}
+      acceptor: ${{ steps.gate.outputs.acceptor }}
+      acceptor_id: ${{ steps.gate.outputs.acceptor_id }}
+      handover: ${{ steps.gate.outputs.handover }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check who accepted the issue, that its text is the one accepted, and what is due
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          ACTOR: ${{ github.triggering_actor }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
+          PR: ${{ inputs.pr }}
+          ROUND: ${{ inputs.round }}
+          EVENT_TITLE: ${{ github.event.issue.title }}
+          EVENT_BODY: ${{ github.event.issue.body }}
+          MAIN_SHA: ${{ github.sha }}
+        run: python3 -I .github/irie/swarm.py gate-author --reviewers .github/irie/reviewers.json --context context
+      - uses: actions/upload-artifact@v4
+        with:
+          name: context
+          path: context/
+          retention-days: 3
+
+  write:
+    needs: gate
+    if: vars.IRIE_AGENTS == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    environment: irie-author
+    permissions:
+      contents: read
+    steps:
+      - name: Check out main, for the prompts, the config and Irie
+        uses: actions/checkout@v4
+        with:
+          path: trusted
+          persist-credentials: false
+      - name: Check out the code the agent works on
+        uses: actions/checkout@v4
+        with:
+          path: work
+          ref: ${{ needs.gate.outputs.head }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: context
+          path: ${{ env.IRIE_CI }}/context
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: trusted/go.mod
+          cache: false
+      - name: Install tmux and Claude Code, and build Irie
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq tmux
+          npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          bash trusted/.github/irie/setup-irie.sh trusted
+      - name: Run the author agent through Irie
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.MODEL_KEY }}
+          GIT_AUTHOR_NAME: ${{ vars.IRIE_BOT_LOGIN }}
+          GIT_AUTHOR_EMAIL: ${{ vars.IRIE_BOT_ID }}+${{ vars.IRIE_BOT_LOGIN }}@users.noreply.github.com
+          GIT_COMMITTER_NAME: ${{ needs.gate.outputs.acceptor }}
+          GIT_COMMITTER_EMAIL: ${{ needs.gate.outputs.acceptor_id }}+${{ needs.gate.outputs.acceptor }}@users.noreply.github.com
+          TZ: UTC
+          MODE: ${{ needs.gate.outputs.mode }}
+          ISSUE: ${{ needs.gate.outputs.issue }}
+        run: |
+          prompt=author.md
+          if [ "$MODE" = answer ]; then prompt=answer.md; fi
+          cat "trusted/.github/irie/$prompt" trusted/AGENTS.md >"$IRIE_CI/task.md"
+          bash trusted/.github/irie/run-agent.sh author "$PWD/work" "issue-$ISSUE" "$IRIE_CI/task.md" 55
+      - name: Bundle the agent's commits
+        env:
+          BASE: ${{ needs.gate.outputs.head }}
+        run: |
+          if [ "$(git -C work rev-parse HEAD)" != "$BASE" ]; then
+            git -C work bundle create "$IRIE_CI/out/agent.bundle" "$BASE..HEAD"
+          fi
+          ls -l "$IRIE_CI/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-out
+          path: ${{ env.IRIE_CI }}/out/
+          retention-days: 3
+          if-no-files-found: error
+
+  publish:
+    # Runs no agent and no code from a pull request: it checks the agent's work with
+    # code from main, then pushes it with the App's token.
+    needs: [gate, write]
+    if: vars.IRIE_AGENTS == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: irie-bot
+    permissions:
+      contents: read
+      actions: write # starts agent-review
+      issues: write # labels
+      pull-requests: write # labels
+    env:
+      MODE: ${{ needs.gate.outputs.mode }}
+      ISSUE: ${{ needs.gate.outputs.issue }}
+      BASE: ${{ needs.gate.outputs.head }}
+    steps:
+      - name: Check out main, with its history
+        uses: actions/checkout@v4
+        with:
+          path: trusted
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-out
+          path: ${{ runner.temp }}/out
+      - name: Check the agent's report and commits
+        id: check
+        env:
+          BOT_NAME: ${{ vars.IRIE_BOT_LOGIN }}
+          BOT_EMAIL: ${{ vars.IRIE_BOT_ID }}+${{ vars.IRIE_BOT_LOGIN }}@users.noreply.github.com
+          COMMITTER_NAME: ${{ needs.gate.outputs.acceptor }}
+          COMMITTER_EMAIL: ${{ needs.gate.outputs.acceptor_id }}+${{ needs.gate.outputs.acceptor }}@users.noreply.github.com
+          ACCEPTOR: ${{ needs.gate.outputs.acceptor }}
+          PIN: ${{ needs.gate.outputs.pin }}
+          ROUND: ${{ needs.gate.outputs.round }}
+          MODEL: ${{ env.AUTHOR_MODEL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OUT: ${{ runner.temp }}/out
+        run: |
+          swarm=$PWD/trusted/.github/irie/swarm.py
+          head=$BASE
+          if [ -f "$OUT/agent.bundle" ]; then
+            git -C trusted bundle verify -q "$OUT/agent.bundle"
+            git -C trusted fetch -q "$OUT/agent.bundle" HEAD:refs/agent/head
+            head=$(git -C trusted rev-parse refs/agent/head)
+            (cd trusted && bash .github/irie/check-commits.sh "$BASE" "$head")
+          elif [ "$MODE" = write ]; then
+            echo "refused: the agent made no commits" >&2
+            exit 1
+          fi
+          if [ "$MODE" = write ]; then
+            python3 -I "$swarm" pr-body --result "$OUT/result.json" --out "$RUNNER_TEMP/body.md"
+          else
+            HEAD=$head python3 -I "$swarm" answers --file "$OUT/answers.json" --out "$RUNNER_TEMP/answers.json"
+          fi
+          echo "head=$head" >>"$GITHUB_OUTPUT"
+      - name: Get a token for the bot
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Push the agent's branch
+        if: steps.check.outputs.head != needs.gate.outputs.head
+        env:
+          TOKEN: ${{ steps.app.outputs.token }}
+          HEAD: ${{ steps.check.outputs.head }}
+        run: |
+          # One refspec, to the issue's own branch. An empty lease means the branch
+          # must not exist yet; in an answer round it must still be where the
+          # reviewers left it, so a person's push is never overwritten.
+          branch=agent/issue-$ISSUE
+          lease=refs/heads/$branch:
+          if [ "$MODE" = answer ]; then lease=refs/heads/$branch:$BASE; fi
+          auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -C trusted -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push --force-with-lease="$lease" "https://github.com/$REPO.git" "$HEAD:refs/heads/$branch"
+      - name: Open the draft pull request, or post the answers
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TITLE: ${{ needs.gate.outputs.title }}
+          PR: ${{ needs.gate.outputs.pr }}
+        run: |
+          if [ "$MODE" = write ]; then
+            url=$(gh pr create --repo "$REPO" --draft --base main --head "agent/issue-$ISSUE" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md")
+            PR=${url##*/}
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" --input "$RUNNER_TEMP/answers.json" >/dev/null
+          fi
+          echo "pr=$PR" >>"$GITHUB_OUTPUT"
+      - name: Start the review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.pr }}
+          HEAD: ${{ steps.check.outputs.head }}
+          ROUND: ${{ needs.gate.outputs.round }}
+        run: |
+          gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=agent:review" >/dev/null
+          gh workflow run agent-review.yml --repo "$REPO" --ref main -f pr="$PR" -f sha="$HEAD" -f round="$((ROUND + 1))"
+
+  report:
+    # The run stopped, at the gate or later, before a pull request was opened or
+    # updated: hand the issue or pull request to people. A gate that refused a
+    # duplicate or stray run says so, and then nothing is labelled.
+    needs: [gate, write, publish]
+    if: >-
+      ${{ !cancelled() && vars.IRIE_AGENTS == 'on' && needs.gate.result != 'skipped'
+      && needs.publish.result != 'success' && needs.gate.outputs.handover != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Label it agent:needs-human
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ needs.gate.outputs.pr || needs.gate.outputs.issue || inputs.pr || github.event.issue.number || inputs.issue }}
+          GATE: ${{ needs.gate.result }}
+          WRITE: ${{ needs.write.result }}
+          PUBLISH: ${{ needs.publish.result }}
+        run: |
+          gh api -X POST "repos/$REPO/issues/$NUMBER/labels" -f "labels[]=agent:needs-human" >/dev/null
+          gh api -X DELETE "repos/$REPO/issues/$NUMBER/labels/agent:review" >/dev/null 2>&1 || true
+          echo "The agents' run stopped (gate: $GATE, write: $WRITE, publish: $PUBLISH), so #$NUMBER is labelled agent:needs-human. The failed job's log says why." >>"$GITHUB_STEP_SUMMARY"
