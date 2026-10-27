@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>Irie</string>
+	<key>CFBundleIconFile</key>
+	<string>Irie</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.irie-hq.irie</string>
 	<key>CFBundleName</key>

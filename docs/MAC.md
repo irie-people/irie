@@ -50,7 +50,9 @@ Two details of the generated tmux.conf follow from this. The `window-resized` ho
 
 ## 3. Build and run
 
-`mac/build.sh` builds `mac/build/Irie.app`. It calls `swiftc` directly because SwiftPM 5.9, the version in the Command Line Tools for macOS 14.1, stops at `unable to lookup item 'PlatformPath'`. `tools/live.sh` (AGENTS.md) runs it when `mac/` changed, installs the app in `~/Applications` and relaunches it if it was running.
+`mac/build.sh` builds `mac/build/Irie.app`. It calls `swiftc` directly because SwiftPM 5.9, the version in the Command Line Tools for macOS 14.1, stops at `unable to lookup item 'PlatformPath'`. `tools/live.sh` (AGENTS.md) runs it when `mac/` or `tools/mkicon` changed, installs the app in `~/Applications`, registers it again so Finder and the Dock show its current icon, and relaunches it if it was running.
+
+The icon is Irie's mark, a warm sun rising over two calm waves on a deep-green rounded square (DESIGN §7.2). `go run ./tools/mkicon` draws it with Go's standard library and writes the ten PNGs of an iconset, and the script packs them into `Irie.icns` with `iconutil`, so the build needs Go as well. macOS draws an icns as it is, so the icon carries its own shape: an 824-pixel square with continuous corners in the middle of the 1024-pixel canvas, on a soft shadow. Below 64 pixels the rays would blur into the sun, so the small sizes draw a larger sun over two level lines, with their edges on whole pixels. The output is the same on every run, which its tests check.
 
 The terminal view is [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) v1.18.0 (MIT), the newest release whose manifest builds with Swift 5.9. The script fetches it, refuses the download unless its SHA-256 matches, and compiles it once into a static library in `~/Library/Caches/irie` (or `$XDG_CACHE_HOME/irie`), named for the release, the target and the compiler. Every checkout and worktree shares it, so a fresh worktree's build compiles only Irie's own files. SwiftTerm draws with Metal: its renderer compiles `Shaders.metal`, which the script copies into the app, when the app runs, so no Xcode is needed. Where Metal is missing it draws with Core Graphics.
 
@@ -109,4 +111,4 @@ These come with the core features they need, or after:
 - park controls, notes to an agent, and undo beyond reopening a closed session (M4 to M7);
 - buttons that answer a question or approve a command;
 - choosing a local model for small jobs;
-- an icon, and a signed, notarized app.
+- a signed, notarized app.
