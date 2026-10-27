@@ -1,5 +1,6 @@
 #if canImport(SwiftTerm)
 import AppKit
+import MetalKit
 import SwiftTerm
 import SwiftUI
 
@@ -65,9 +66,24 @@ final class IrieTerminalView: LocalProcessTerminalView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil, !triedMetal else { return }
+        guard let window, !triedMetal else { return }
         triedMetal = true
         try? setUseMetal(true)
+        window.makeFirstResponder(self) // type to the agent straight away
+    }
+
+    /// SwiftTerm's Metal view covers the terminal and takes no keyboard
+    /// focus, so clicks on it count as clicks on the terminal.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit is MTKView ? self : hit
+    }
+
+    /// With tmux's mouse mode on, SwiftTerm hands the click to tmux and never
+    /// takes the keyboard, so a click claims it here.
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
     }
 }
 #endif

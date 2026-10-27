@@ -221,28 +221,23 @@ private struct Actions: View {
     }
 }
 
-/// Red when it needs you, a turning ring while it works, a check when done.
+/// Red when it needs you, an open ring while it works, a check when done.
+/// The marks hold still: an endless animation in a list makes the whole
+/// window lay out again on every frame.
 struct StateMark: View {
     let look: Look
-    @Environment(\.accessibilityReduceMotion) private var still
-    @State private var moving = false
 
     var body: some View {
         ZStack {
             switch look {
             case .needs:
                 Circle().fill(Theme.needs).frame(width: 8, height: 8)
-                    .background(
-                        Circle().stroke(Theme.needs.opacity(0.45), lineWidth: 3)
-                            .scaleEffect(moving ? 2.1 : 1).opacity(moving ? 0 : 1)
-                    )
-                    .onAppear { animate(.easeOut(duration: 1.8)) }
+                    .background(Circle().fill(Theme.needs.opacity(0.22)).frame(width: 14, height: 14))
             case .working:
                 Circle().trim(from: 0, to: 0.72)
                     .stroke(Theme.work, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .frame(width: 11, height: 11)
-                    .rotationEffect(.degrees(moving ? 360 : 0))
-                    .onAppear { animate(.linear(duration: 0.9)) }
+                    .rotationEffect(.degrees(-90))
             case .starting:
                 Circle().stroke(Theme.work, style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
                     .frame(width: 11, height: 11)
@@ -267,11 +262,6 @@ struct StateMark: View {
         case .idle: return "Idle"
         case .ended: return "Ended"
         }
-    }
-
-    private func animate(_ a: Animation) {
-        guard !still else { return }
-        withAnimation(a.repeatForever(autoreverses: false)) { moving = true }
     }
 }
 
