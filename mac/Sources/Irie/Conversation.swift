@@ -27,10 +27,15 @@ struct ConversationItem: Codable, Identifiable, Equatable {
     var reason: String?
     var queued: Bool?
     var pending: Bool?
+    /// The helper a subagent item started, as sub:<id>, once the core knows it.
+    var agent: String?
+    /// "parent" on a helper's first message: its task from its session.
+    var from: String?
 
     enum CodingKeys: String, CodingKey {
         case id, kind, time, text, phrase, detail, tool, state, ms, added, removed, group, output, tools, options, reason, queued, pending
         case agentType = "agent_type"
+        case agent, from
     }
 
     /// The time, unless the core had none (Go's zero time).
@@ -40,6 +45,8 @@ struct ConversationItem: Codable, Identifiable, Equatable {
 /// A conversation, or what changed in it.
 struct ConversationUpdate: Codable {
     var session: String
+    /// The helper whose conversation this is, as sub:<id>; nil for the session's own.
+    var agent: String?
     var transcript: String?
     var reset: Bool?
     var more: Bool?
@@ -55,6 +62,7 @@ private struct ConversationFrame: Decodable {
 
 private struct FollowArgs: Encodable {
     var session: String
+    var agent: String?
     var conversation = true
 }
 
@@ -64,15 +72,16 @@ struct SendMessageArgs: Encodable {
 }
 
 extension CoreClient {
-    /// Streams one session's conversation until the task is cancelled or the
-    /// connection ends. The read times out every second, so a cancelled
-    /// follow stops within a second.
-    func followConversation(_ session: String, onUpdate: @escaping @Sendable (ConversationUpdate) -> Void) async throws {
+    /// Streams one session's conversation, or one of its helpers' (agent
+    /// sub:<id>), until the task is cancelled or the connection ends. The
+    /// read times out every second, so a cancelled follow stops within a
+    /// second.
+    func followConversation(_ session: String, agent: String? = nil, onUpdate: @escaping @Sendable (ConversationUpdate) -> Void) async throws {
         let path = socketPath
         let reader = Task.detached(priority: .userInitiated) {
             let c = try CoreConnection(path: path, timeout: 1)
             defer { c.close() }
-            try c.send(op: "subscribe", args: FollowArgs(session: session))
+            try c.send(op: "subscribe", args: FollowArgs(session: session, agent: agent))
             var first = true
             while !Task.isCancelled {
                 let line: Data
@@ -102,10 +111,11 @@ extension CoreClient {
 }
 
 /// The shown session's conversation, kept live by one subscription that
-/// follows the selection.
+/// follows the selection; or, with an agent, one of its helpers'.
 @MainActor
 final class ConversationModel: ObservableObject {
     @Published private(set) var session: String?
+    @Published private(set) var agent: String?
     @Published private(set) var items: [ConversationItem] = []
     @Published private(set) var needs: ConversationItem?
     @Published private(set) var pending: [ConversationItem] = []
@@ -121,13 +131,15 @@ final class ConversationModel: ObservableObject {
     private var follow: Task<Void, Never>?
     private var client: CoreClient?
 
-    /// Follows a session's conversation, and stops following the last one.
-    func follow(_ id: String?, client: CoreClient) {
+    /// Follows a session's conversation, or with an agent one of its
+    /// helpers', and stops following the last one.
+    func follow(_ id: String?, agent: String? = nil, client: CoreClient) {
         self.client = client
-        guard id != session || follow == nil && id != nil else { return }
+        guard id != session || agent != self.agent || follow == nil && id != nil else { return }
         follow?.cancel()
         follow = nil
         session = id
+        self.agent = agent
         items = []
         index = [:]
         needs = nil
@@ -137,15 +149,15 @@ final class ConversationModel: ObservableObject {
         loaded = false
         problem = nil
         guard let id else { return }
-        if let fixture = ConversationFixture.update(for: id) {
-            apply(fixture, for: id)
+        if let fixture = ConversationFixture.update(for: id, agent: agent) {
+            apply(fixture, for: id, agent: agent)
             return
         }
         follow = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await client.followConversation(id) { update in
-                        Task { @MainActor in self?.apply(update, for: id) }
+                    try await client.followConversation(id, agent: agent) { update in
+                        Task { @MainActor in self?.apply(update, for: id, agent: agent) }
                     }
                 } catch is CancellationError {
                     return
@@ -158,8 +170,8 @@ final class ConversationModel: ObservableObject {
         }
     }
 
-    func apply(_ u: ConversationUpdate, for id: String) {
-        guard id == session else { return }
+    func apply(_ u: ConversationUpdate, for id: String, agent: String? = nil) {
+        guard id == session, agent == self.agent else { return }
         let new = u.items ?? []
         if u.reset == true {
             items = new

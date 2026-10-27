@@ -21,7 +21,7 @@ func writeFile(t *testing.T, body string) string {
 
 func TestDefaultsMatchDesign(t *testing.T) {
 	c := Default()
-	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", Theme: "rosewater"}); c.UI != want {
+	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second}); c.Spawn != want {
@@ -135,6 +135,7 @@ view = "terminal"
 max_sub_rows = 3
 red_on_done = true
 ghostty = "off"
+helper_style = "terminal"
 theme = "lilac"
 
 [spawn]
@@ -209,7 +210,7 @@ land = { web = "live", "~/code/api" = "main" }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", Theme: "lilac"}); c.UI != want {
+	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second}); c.Spawn != want {
@@ -401,6 +402,7 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 	for _, c := range []struct{ body, mention string }{
 		{"[spawn]\ndefault_profile = \"nope\"\n", "nope"},
 		{"[ui]\nghostty = \"sometimes\"\n", "ghostty"},
+		{"[ui]\nhelper_style = \"tabs\"\n", "ui.helper_style"},
 		{"[ui]\ntheme = \"\"\n", "ui.theme"},
 		{"[ui]\nsidebar_width = 2\n", "sidebar_width"},
 		{"[ui]\nfocus_key = \"C-] x\"\n", "focus_key"},

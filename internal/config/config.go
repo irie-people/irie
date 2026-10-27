@@ -92,7 +92,13 @@ type UI struct {
 	RedOnDone    bool   `toml:"red_on_done"`
 	Ghostty      string `toml:"ghostty"` // auto | off
 	Theme        string `toml:"theme"`   // the palette of the sidebar and the slot, one of Themes
+	// HelperStyle is how a view draws a helper beside its session: as
+	// cards and plain words (browser) or as a terminal (terminal).
+	HelperStyle string `toml:"helper_style"`
 }
+
+// HelperStyles are the ways ui.helper_style draws a helper.
+var HelperStyles = []string{"browser", "terminal"}
 
 // Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's. Each has a
 // light and a dark set; the terminal's background picks one.
@@ -216,7 +222,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", Theme: "rosewater"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -501,6 +507,9 @@ func (c Config) Validate() error {
 	}
 	if c.UI.Ghostty != "auto" && c.UI.Ghostty != "off" {
 		bad("ui.ghostty = %q: must be auto or off", c.UI.Ghostty)
+	}
+	if !slices.Contains(HelperStyles, c.UI.HelperStyle) {
+		bad("ui.helper_style = %q: must be browser or terminal", c.UI.HelperStyle)
 	}
 	if !slices.Contains(Themes, c.UI.Theme) {
 		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))

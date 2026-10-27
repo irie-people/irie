@@ -193,7 +193,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 |---|---|---|---|
 | `hello` | `client`, `api` | `version`, `api`, `features[]`, which name the ops served, `move` among them | M1 |
 | `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
-| `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session` | M1 (`view`: Mac app; `conversation`: §4.7) |
+| `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session`; with `agent: "sub:<id>"` it follows that helper's own conversation (§4.4) | M1 (`view`: Mac app; `conversation`: §4.7) |
 | `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?` (`auto` routes it), `name?` (the user's, §4.2), `force?`, `delegate?`, `parent?`, `permission_mode?`, `continues?` | `session` | M1 (`repo`, `profile` M3; `force`, `delegate`, `parent`, `permission_mode`, `continues` M10) |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
@@ -220,7 +220,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `dog` | none | `jots[]`: the jots that are not through, each with its `loose` (below), looked at afresh: the open ones in the list's order, then those closed in the last day as `closed` | The jot dog (§4.8) |
 | `config` | `set[]?`, each a `key`, dotted as in the file (`spawn.default_profile`), and a `value` of the type the key takes: a duration as a string such as `"30s"`, and null to take the key out, so its default applies | `path`, `config`: every key in effect, defaults too, by the file's names, and `problem?`: why the file would not load as it stands. With `set` it first edits the file in place and runs on the result (§5.5); what would not load is refused with `bad_args` and changes nothing | The Mac app's Settings window ([MAC.md](MAC.md)) |
 | `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
-| `conversation` | `session`, `limit?` | `session`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7) | Conversation view (§4.7) |
+| `conversation` | `session`, `agent?`, `limit?` | `session`, `agent?`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7), or with `agent: "sub:<id>"` that helper's, read from its own (§4.4) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
 
 ### 2.5 Observation
@@ -570,7 +570,9 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | The tailer fails | The mirror shows the error and keeps showing hook events |
 | The parent session is closed | Its mirrors close |
 
-**Tests:** M8.
+**Helpers beside their session.** Built ahead of the rest of M8, after docs/proposals/split-pane.md, which replaces the mirror windows above with views Irie draws. A helper has no terminal of its own, so a view shows one from its own transcript, `agent-<id>.jsonl` in the `subagents` folder beside its session's. `conversation` and `subscribe` with `agent: "sub:<id>"` read it with the reader of §4.7, which keeps its sidechain lines and marks its first message `from: "parent"`, the task its session gave it. An agent id is checked before it names a file: letters, digits, `-` and `_` only. An `agent` item names its helper as `agent` once the call's result gives the id, which a subagent in the background returns at once. A subagent still running in the foreground gets the running helper of its kind that no other item names, the oldest first. `ui.helper_style` picks the look, `browser` (cards and plain words) or `terminal`, and the header carries it to every view. The Mac app shows a helper beside the conversation, never beside the raw terminal ([MAC.md](MAC.md)). Nothing in tmux changes, so no agent is resized.
+
+**Tests:** M8; for the helpers beside their session, `internal/core/helpers_test.go`.
 
 ### 4.5 Undo and redo
 
@@ -827,6 +829,7 @@ flip_key = "C-\\"            # tmux key that flips the slot: conversation <-> ra
 view = "conversation"         # what the slot shows first: conversation | terminal (§4.7)
 max_sub_rows = 6
 red_on_done = false
+helper_style = "browser"      # browser | terminal: how a view draws a helper beside its session (§4.4)
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
 theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
 

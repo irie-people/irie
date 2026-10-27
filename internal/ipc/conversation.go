@@ -13,15 +13,18 @@ const OpConversation = "conversation"
 const FrameConversation = "conversation"
 
 // ConversationArgs ask for a session's conversation, or only its newest
-// Limit items.
+// Limit items. With Agent "sub:<id>" they ask for the conversation of that
+// helper, one of the session's subagents, read from its own transcript.
 type ConversationArgs struct {
 	Session string `json:"session"`
+	Agent   string `json:"agent,omitempty"`
 	Limit   int    `json:"limit,omitempty"`
 }
 
 // Conversation is a session's conversation, or what changed in it.
 type Conversation struct {
 	Session string `json:"session"`
+	Agent   string `json:"agent,omitempty"` // the helper's, as sub:<id>; "" for the session's own
 	// Transcript is the transcript it is read from; "" while there is none,
 	// as for a session started before Irie followed transcripts.
 	Transcript string `json:"transcript,omitempty"`
@@ -78,14 +81,18 @@ type Item struct {
 	Removed int `json:"removed,omitempty"`
 	// Group is read, edit or search for calls a view may gather into one
 	// line ("Edited 3 files").
-	Group     string   `json:"group,omitempty"`
-	Output    string   `json:"output,omitempty"`     // the start of a failed call's output
-	AgentType string   `json:"agent_type,omitempty"` // a subagent's kind, such as Explore
-	Tools     int      `json:"tools,omitempty"`      // the tool calls a subagent made
-	Options   []string `json:"options,omitempty"`    // a question's choices
-	Reason    string   `json:"reason,omitempty"`     // a need's reason, as a row's
-	Queued    bool     `json:"queued,omitempty"`     // a message typed while the agent worked
-	Pending   bool     `json:"pending,omitempty"`    // a message sent that the agent has not taken yet
+	Group     string `json:"group,omitempty"`
+	Output    string `json:"output,omitempty"`     // the start of a failed call's output
+	AgentType string `json:"agent_type,omitempty"` // a subagent's kind, such as Explore
+	Agent     string `json:"agent,omitempty"`      // the helper a subagent item started, as sub:<id>, once known
+	Tools     int    `json:"tools,omitempty"`      // the tool calls a subagent made
+	// From is "parent" on a helper's first message: its task, from the
+	// session that started it, not a message from you.
+	From    string   `json:"from,omitempty"`
+	Options []string `json:"options,omitempty"` // a question's choices
+	Reason  string   `json:"reason,omitempty"`  // a need's reason, as a row's
+	Queued  bool     `json:"queued,omitempty"`  // a message typed while the agent worked
+	Pending bool     `json:"pending,omitempty"` // a message sent that the agent has not taken yet
 }
 
 // OpSend is an addition to the ops of DESIGN §2.4: it types a message to a

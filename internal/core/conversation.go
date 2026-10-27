@@ -40,6 +40,10 @@ type conversation struct {
 	// pending are messages sent to the agent that the transcript does not
 	// have yet (send.go).
 	pending []ipc.Item
+	// sidechain marks a helper's conversation, read from the helper's own
+	// transcript, where every line is a sidechain line (helpers.go).
+	sidechain bool
+	tasked    bool // its first message, the helper's task, is in
 }
 
 type transcriptFeed struct {
@@ -65,6 +69,13 @@ const resetLimit = 1000
 
 func newConversation() *conversation {
 	return &conversation{index: map[string]int{}, calls: map[string]*call{}}
+}
+
+// newHelperConversation is a helper's conversation (helpers.go).
+func newHelperConversation() *conversation {
+	cv := newConversation()
+	cv.sidechain = true
+	return cv
 }
 
 // update reads what the transcripts at paths, oldest first, gained.
@@ -120,6 +131,7 @@ func (cv *conversation) update(paths []string, active bool) bool {
 func (cv *conversation) clear() {
 	cv.files, cv.items, cv.vers = nil, nil, nil
 	cv.index, cv.calls = map[string]int{}, map[string]*call{}
+	cv.tasked = false
 	cv.ver++
 	cv.reset = cv.ver
 }
@@ -218,7 +230,7 @@ func (cv *conversation) line(b []byte) {
 			} `json:"origin"`
 		} `json:"attachment"`
 	}
-	if json.Unmarshal(b, &rec) != nil || rec.IsSidechain {
+	if json.Unmarshal(b, &rec) != nil || rec.IsSidechain && !cv.sidechain {
 		return
 	}
 	at, _ := time.Parse(time.RFC3339Nano, rec.Timestamp)
@@ -324,7 +336,12 @@ func (cv *conversation) said(id string, at time.Time, text string, queued bool) 
 		return
 	}
 	if text != "" {
-		cv.add(ipc.Item{ID: "u:" + id, Kind: ipc.ItemUser, Time: at, Text: capText(text, maxItemText), Queued: queued})
+		it := ipc.Item{ID: "u:" + id, Kind: ipc.ItemUser, Time: at, Text: capText(text, maxItemText), Queued: queued}
+		if cv.sidechain && !cv.tasked {
+			// A helper's first message is the task its session gave it.
+			it.From, cv.tasked = "parent", true
+		}
+		cv.add(it)
 		cv.taken(at)
 	}
 }
@@ -398,6 +415,7 @@ func (cv *conversation) result(id string, at time.Time, failed bool, content, st
 		TotalDurationMs   int64  `json:"totalDurationMs"`
 		TotalToolUseCount int    `json:"totalToolUseCount"`
 		Status            string `json:"status"`
+		AgentID           string `json:"agentId"`
 	}
 	if json.Unmarshal(structured, &out) == nil {
 		if len(out.StructuredPatch) > 0 {
@@ -419,6 +437,11 @@ func (cv *conversation) result(id string, at time.Time, failed bool, content, st
 		it.Tools = out.TotalToolUseCount
 		if out.Status == "async_launched" {
 			it.Phrase += " (in the background)"
+		}
+		// A subagent's result names its helper, at once for one that runs
+		// in the background.
+		if it.Kind == ipc.ItemAgent && out.AgentID != "" && helperAgent.MatchString("sub:"+out.AgentID) {
+			it.Agent = "sub:" + out.AgentID
 		}
 	}
 	cv.set(i, it)
@@ -628,6 +651,9 @@ func (c *Core) conversationOf(x *session) (*conversation, bool) {
 	row := x.wire()
 	active := row.State == ipc.StateWorking || row.State == ipc.StateNeedsYou || row.State == ipc.StateStalled || row.State == ipc.StateStarting
 	changed := x.conv.update(c.transcriptsOf(x), active)
+	if x.conv.linkAgents(x.track.subagents()) {
+		changed = true
+	}
 	if x.conv.setNeeds(c.needsOf(x, row)) {
 		changed = true
 	}
@@ -638,7 +664,7 @@ func (c *Core) conversationOf(x *session) (*conversation, bool) {
 // and tells those clients. The caller holds c.mu.
 func (c *Core) followConversations() {
 	for _, x := range c.sessions {
-		if x.conv != nil && x.convSubs > 0 {
+		if x.conv != nil && x.convSubs > 0 || len(x.helpers) > 0 {
 			c.followConversation(x)
 		}
 	}
@@ -647,12 +673,12 @@ func (c *Core) followConversations() {
 // followConversation catches up one session's conversation for the clients
 // that follow it. The caller holds c.mu.
 func (c *Core) followConversation(x *session) {
-	if x.convSubs == 0 {
-		return
+	if x.convSubs > 0 {
+		if _, changed := c.conversationOf(x); changed {
+			c.tellConversation(x)
+		}
 	}
-	if _, changed := c.conversationOf(x); changed {
-		c.tellConversation(x)
-	}
+	c.followHelpers(x)
 }
 
 // transcriptsOf are session x's own transcripts that exist, oldest first:
@@ -743,6 +769,12 @@ func (c *Core) conversation(a ipc.ConversationArgs) (ipc.Conversation, error) {
 	x := c.sessions[a.Session]
 	if x == nil {
 		return ipc.Conversation{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+	}
+	if isHelper(a.Agent) {
+		if !helperAgent.MatchString(a.Agent) {
+			return ipc.Conversation{}, ipc.Errorf(ipc.CodeBadArgs, "no helper %q", a.Agent)
+		}
+		return c.helperConversation(x, a.Agent, a.Limit), nil
 	}
 	cv, _ := c.conversationOf(x)
 	out := cv.all(a.Limit)

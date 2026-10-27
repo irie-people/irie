@@ -1,6 +1,6 @@
 # Proposal: helpers beside their session (the split pane)
 
-Date: 2026-10-27. Status: research and proposal, for the owner to decide. It answers two open questions: [DESIGN](../DESIGN.md) §10 decision 4, which left "selecting an orchestrator splits the slot" for after v1, and where a subagent shows at all, which M8 never settled once the conversation view and the Mac app arrived. An agent (Claude Code) wrote it, from `live` at `cb29dff`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-10-27. Status: option C is being built (see "Built so far" below); decisions 2 to 4 are still the owner's. It answers two open questions: [DESIGN](../DESIGN.md) §10 decision 4, which left "selecting an orchestrator splits the slot" for after v1, and where a subagent shows at all, which M8 never settled once the conversation view and the Mac app arrived. An agent (Claude Code) wrote it, from `live` at `cb29dff`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 **In short.** A Claude Code subagent is headless: it has no terminal of its own. It runs inside its session's `claude` process, and all there is to see of it is its transcript, its hook events and its row in Claude Code's subagent status line. So a split pane that puts a helper beside its session is a view Irie draws, not a tmux pane: Irie draws the helper from its transcript, the way it already draws the session's conversation. In the Mac app, opening a helper splits the conversation view: the session's conversation stays where it is, and the helper's own conversation sits beside it under a strip of its siblings. The terminal sidebar's slot does the same inside its one pane. Nothing is added to tmux, so no agent is resized or signalled, and the mirror windows M8 planned are not needed. The raw terminal does not split, because a narrower terminal resizes every agent window, 59 of them on the day this was written.
 
@@ -11,6 +11,13 @@ Date: 2026-10-27. Status: research and proposal, for the owner to decide. It ans
 | A helper that finished | Gone from the card at once | Stays, marked done, until you drop it or the session's next prompt plus 10 minutes |
 | A delegated session | Its own card; only the terminal sidebar marks it `↳ delegated` | Under its parent's card, and opens in the same split |
 | tmux | One pane in the slot | Unchanged |
+
+**Built so far** (2026-10-27, at the owner's request, with a style setting):
+- the core: a helper's conversation through `conversation` and `subscribe` with `agent: "sub:<id>"`, chips that name their helper, and `ui.helper_style` in the header (DESIGN §4.4);
+- the Mac app: the helper pane beside the conversation, or in its place in a narrow window, with the strip, the clickable lines under a card, View > Show Helpers (⇧⌘H) and Go > Next and Previous Helper (⌘] and ⌘[) ([MAC.md](../MAC.md));
+- two looks, which Settings > Appearance > Helpers picks: `browser`, cards and plain words as in §6.2, and `terminal`, a terminal's lines on its dark ground, still drawn by the app, so no agent is resized.
+
+Not built yet: the subagent status line feed (§6.1), finished helpers kept on the card itself, delegated sessions under their parent (§6.4), the terminal sidebar's split (§6.3), `teammateMode` (§6.5), and pause and notes per helper (§6.6).
 
 ---
 

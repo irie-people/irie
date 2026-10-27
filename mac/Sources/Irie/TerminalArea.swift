@@ -42,6 +42,16 @@ struct TerminalArea: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             ToolbarItem(placement: .primaryAction) {
+                // A helper beside the conversation (HelperPane.swift).
+                Button {
+                    store.toggleHelpers()
+                } label: {
+                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: "rectangle.split.2x1")
+                }
+                .help(store.helperShown ? "Put the conversation back on its own (⇧⌘H)" : "Show the session’s helpers beside its conversation (⇧⌘H)")
+                .disabled(selected == nil)
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     store.openInGhostty()
                 } label: {

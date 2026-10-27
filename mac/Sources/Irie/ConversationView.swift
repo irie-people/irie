@@ -13,14 +13,17 @@ struct ConversationView: View {
     @StateObject private var model = ConversationModel()
     /// The palette: a switch draws the view again in its colours.
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
+    /// How wide the helper pane is beside the conversation (HelperPane.swift).
+    @AppStorage("helperPaneWidth") private var paneWidth: Double = 380
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
     var body: some View {
         VStack(spacing: 0) {
             if let s = selected {
-                ConversationFeed(model: model, session: s)
-                Composer(model: model, session: s)
+                GeometryReader { geo in
+                    split(s, width: geo.size.width)
+                }
             } else {
                 ConversationNote(title: "Pick a session", text: "Its conversation shows here.")
             }
@@ -29,6 +32,42 @@ struct ConversationView: View {
         .background(Theme.ground)
         .onAppear { model.follow(store.selection, client: store.client) }
         .onChange(of: store.selection) { model.follow(store.selection, client: store.client) }
+        .onChange(of: newestHelper) { if let s = selected, let a = newestHelper { store.noteHelper(a, in: s.id) } }
+    }
+
+    /// The newest helper the shown session's conversation names, which
+    /// View > Show Helpers opens when none runs.
+    private var newestHelper: String? {
+        guard let s = selected else { return nil }
+        return HelperRef.list(model.items, s).last?.agent
+    }
+
+    /// The conversation, with its open helper beside it when there is room
+    /// for both, or in its place when there is not. The conversation stays
+    /// in place either way, so it keeps its scroll and its draft.
+    @ViewBuilder private func split(_ s: Session, width: CGFloat) -> some View {
+        let agent = store.openHelpers[s.id]
+        let wide = width >= HelperPane.sideBySide
+        let alone = agent != nil && !wide
+        ZStack {
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    ConversationFeed(model: model, session: s)
+                    Composer(model: model, session: s)
+                }
+                .opacity(alone ? 0 : 1)
+                .allowsHitTesting(!alone)
+                .accessibilityHidden(alone)
+                if let agent, wide {
+                    PaneDivider(width: $paneWidth, total: width)
+                    HelperPane(session: s, agent: agent, parent: model, style: store.helperStyle)
+                        .frame(width: HelperPane.width(paneWidth, in: width))
+                }
+            }
+            if let agent, alone {
+                HelperPane(session: s, agent: agent, parent: model, narrow: true, style: store.helperStyle)
+            }
+        }
     }
 }
 
@@ -94,6 +133,9 @@ struct FeedContent: View {
     let session: Session
     var more = false
     @Binding var expanded: Set<String>
+    /// A helper's conversation: its replies under its kind, and its first
+    /// message as the task from its session (HelperPane.swift).
+    var helper: HelperVoice? = nil
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 18) {
@@ -105,9 +147,9 @@ struct FeedContent: View {
             ForEach(Turn.make(items, pending: pending)) { turn in
                 switch turn.kind {
                 case .you(let it):
-                    YouTurn(item: it)
+                    YouTurn(item: it, from: helper.map { it.from == "parent" ? "From \($0.parent)" : "Message" })
                 case .claude(let parts):
-                    ClaudeTurn(parts: parts, session: session, expanded: $expanded)
+                    ClaudeTurn(parts: parts, session: session, expanded: $expanded, name: helper?.kind ?? "Claude")
                 case .note(let it):
                     NoteLine(text: it.text ?? "")
                 }
@@ -243,6 +285,8 @@ private struct Speaker: View {
 /// after a dozen lines.
 private struct YouTurn: View {
     let item: ConversationItem
+    /// Who it is from, in a helper's conversation; you otherwise.
+    var from: String? = nil
     @State private var whole = false
 
     private var text: String { item.text ?? "" }
@@ -250,7 +294,8 @@ private struct YouTurn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Speaker(name: "You", symbol: "person.crop.circle.fill", tint: Theme.muted, time: item.when, note: note)
+            Speaker(name: from ?? "You", symbol: from == nil ? "person.crop.circle.fill" : "arrow.turn.down.right",
+                    tint: Theme.muted, time: item.when, note: note)
             VStack(alignment: .leading, spacing: 6) {
                 Text(text)
                     .font(.body)
@@ -284,9 +329,12 @@ private struct YouTurn: View {
 
 /// Claude's replies and calls between two of your messages.
 private struct ClaudeTurn: View {
+    @EnvironmentObject private var store: Store
     let parts: [Turn.Part]
     let session: Session
     @Binding var expanded: Set<String>
+    /// Who speaks: Claude, or a helper by its kind.
+    var name = "Claude"
 
     private var time: Date? {
         for p in parts {
@@ -302,7 +350,7 @@ private struct ClaudeTurn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Speaker(name: "Claude", symbol: "sparkle", tint: Theme.sunInk, time: time)
+            Speaker(name: name, symbol: "sparkle", tint: Theme.sunInk, time: time)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(parts) { part in
                     switch part {
@@ -314,19 +362,28 @@ private struct ClaudeTurn: View {
                     case let .group(kind, items):
                         GroupRow(kind: kind, items: items, expanded: $expanded)
                     case let .agent(it):
-                        HelperChip(item: it, live: live(for: it), expanded: $expanded)
+                        HelperChip(item: it, live: live(for: it), running: running(it), expanded: $expanded,
+                                   isOpen: it.agent != nil && store.openHelpers[session.id] == it.agent,
+                                   open: it.agent.map { a in { store.openHelper(a, in: session.id) } })
                     }
                 }
             }
         }
     }
 
-    /// What a running subagent does now, from the session's row, when only
-    /// one subagent of its kind runs.
+    /// What a running subagent does now, from the session's row: its own
+    /// helper's, or else the one of its kind when only one runs.
     private func live(for it: ConversationItem) -> String? {
+        if let a = it.agent, let h = session.subagents?.first(where: { $0.agent == a }) { return h.detail }
         guard it.state == "running", let type = it.agentType else { return nil }
         let same = (session.subagents ?? []).filter { $0.type == type }
         return same.count == 1 ? same[0].detail : nil
+    }
+
+    /// Whether its helper still runs: one started in the background has its
+    /// call's result at once, while the session's row lists it running.
+    private func running(_ it: ConversationItem) -> Bool {
+        it.state == "running" || it.agent.map { a in session.subagents?.contains { $0.agent == a } == true } == true
     }
 }
 
@@ -528,16 +585,26 @@ private struct GroupRow: View {
 }
 
 /// A subagent Claude started: its kind and task, how it went, and what it
-/// does now while it runs.
+/// does now while it runs. One whose helper Irie knows opens that helper
+/// beside the conversation (HelperPane.swift); any other unfolds in place.
 private struct HelperChip: View {
     let item: ConversationItem
     let live: String?
+    /// Its helper still runs, though its call may have its result already.
+    var running = false
     @Binding var expanded: Set<String>
+    /// Its helper shows beside the conversation.
+    var isOpen = false
+    /// Shows its helper beside the conversation; nil while Irie doesn't know
+    /// which helper it is.
+    var open: (() -> Void)? = nil
 
     var body: some View {
-        let open = expanded.contains(item.id)
+        let unfolded = open == nil && expanded.contains(item.id)
         VStack(alignment: .leading, spacing: 6) {
-            Button { expanded.formSymmetricDifference([item.id]) } label: {
+            Button {
+                if let open { open() } else { expanded.formSymmetricDifference([item.id]) }
+            } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "arrow.turn.down.right")
                         .font(.caption.weight(.semibold))
@@ -550,23 +617,31 @@ private struct HelperChip: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 6)
-                    CallMark(state: item.state)
-                    if let ms = item.ms, ms > 0 {
+                    CallMark(state: running ? "running" : item.state)
+                    if let ms = item.ms, ms > 0, !running {
                         Text(Took.short(ms)).font(.callout.monospacedDigit()).foregroundStyle(Theme.muted)
+                    }
+                    if open != nil {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.muted)
+                            .accessibilityHidden(true)
                     }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Helper \(item.agentType ?? ""): \(item.phrase ?? ""), \(CallMark.label(item.state))")
-            if let live, item.state == "running" {
+            .help(open != nil ? "Show this helper beside the conversation" : "")
+            .accessibilityLabel("Helper \(item.agentType ?? ""): \(item.phrase ?? ""), \(CallMark.label(running ? "running" : item.state))")
+            .accessibilityHint(open != nil ? "Shows it beside the conversation" : "")
+            if let live, running {
                 Text(live)
                     .font(.caption)
                     .foregroundStyle(Theme.muted)
                     .lineLimit(1)
                     .padding(.leading, 22)
             }
-            if open {
+            if unfolded {
                 if let tools = item.tools, tools > 0 {
                     Text(tools == 1 ? "1 tool call" : "\(tools) tool calls")
                         .font(.caption).foregroundStyle(Theme.muted)
@@ -579,7 +654,8 @@ private struct HelperChip: View {
         .padding(.horizontal, Theme.inset)
         .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
+            .strokeBorder(isOpen ? Theme.accent : Theme.edge, lineWidth: isOpen ? 1.5 : 1))
     }
 }
 

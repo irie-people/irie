@@ -116,16 +116,17 @@ type session struct {
 	quiet    int        // counts the session's events and messages; a close-when-done timer fires only if it has not moved
 	tally    tokenTally // read from the transcripts track names
 	tokens   *ipc.Tokens
-	model    string           // the model the agent runs, as its profile said
-	local    bool             // a model of a local runtime
-	usage    statusline.Usage // its last status line update
-	memory   int64            // what its processes take, last measured
-	out      *outcome         // its route and how it went, shared with Core.outcomes
-	conv     *conversation    // its conversation, read while clients follow it (conversation.go)
-	note     string           // what its agent is told at its next tool call, once (freeze.go)
-	demoted  bool             // its process tree runs in the background, for a promoted session (priority.go)
-	convSubs int              // the subscriptions that follow its conversation
-	dog      dogState         // what the jot dog found its jot left (dog.go)
+	model    string                 // the model the agent runs, as its profile said
+	local    bool                   // a model of a local runtime
+	usage    statusline.Usage       // its last status line update
+	memory   int64                  // what its processes take, last measured
+	out      *outcome               // its route and how it went, shared with Core.outcomes
+	conv     *conversation          // its conversation, read while clients follow it (conversation.go)
+	note     string                 // what its agent is told at its next tool call, once (freeze.go)
+	demoted  bool                   // its process tree runs in the background, for a promoted session (priority.go)
+	convSubs int                    // the subscriptions that follow its conversation
+	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
+	dog      dogState               // what the jot dog found its jot left (dog.go)
 }
 
 func (x *session) wire() ipc.Session {

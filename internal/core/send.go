@@ -134,7 +134,7 @@ func (cv *conversation) expire(now time.Time) {
 // The caller holds c.mu.
 func (c *Core) tellConversation(x *session) {
 	for s := range c.subs {
-		if s.conversation && s.session == x.id {
+		if s.conversation && s.session == x.id && !isHelper(s.agent) {
 			s.noteConversation()
 		}
 	}

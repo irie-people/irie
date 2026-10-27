@@ -240,9 +240,12 @@ type Header struct {
 	RedOnDone bool `json:"red_on_done,omitempty"`
 	// CloseWhenDone is spawn.close_when_done: a finished session closes
 	// itself, so no sidebar keeps a Done group; closed ones are in history.
-	CloseWhenDone bool    `json:"close_when_done,omitempty"`
-	Plan          *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
-	Memory        *Memory `json:"memory,omitempty"` // the machine's memory
+	CloseWhenDone bool `json:"close_when_done,omitempty"`
+	// HelperStyle is ui.helper_style: how a view draws a helper beside its
+	// session, as cards ("browser") or as a terminal ("terminal").
+	HelperStyle string  `json:"helper_style,omitempty"`
+	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
+	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
 }
 
 // Window is one window of a plan's use, such as the five hours.
@@ -366,8 +369,11 @@ type ChoiceOption struct {
 type SubscribeArgs struct {
 	Events  bool   `json:"events,omitempty"`
 	Session string `json:"session,omitempty"`
-	Agent   string `json:"agent,omitempty"`
-	View    string `json:"view,omitempty"` // "" or ViewApp
+	// Agent keeps event frames to one agent of the session, main or
+	// sub:<id>. With Conversation, sub:<id> follows that helper's own
+	// conversation instead of the session's.
+	Agent string `json:"agent,omitempty"`
+	View  string `json:"view,omitempty"` // "" or ViewApp
 	// Conversation adds the session's conversation frames; it needs Session.
 	Conversation bool `json:"conversation,omitempty"`
 }

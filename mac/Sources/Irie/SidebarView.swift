@@ -435,6 +435,7 @@ private struct GroupHeader: View {
 /// kind and what it is doing, in red when it needs you. Three at most, then
 /// how many more.
 private struct HelperRows: View {
+    @EnvironmentObject private var store: Store
     let session: Session
 
     var body: some View {
@@ -445,25 +446,37 @@ private struct HelperRows: View {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(helpers.prefix(3)) { h in
                     let loud = h.needsYou == true
-                    HStack(spacing: 5) {
-                        Text("↳").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
-                        Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : own ?? Theme.ink)
-                        if let d = h.detail, !d.isEmpty {
-                            Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : own ?? Theme.muted)
+                    let shown = store.helperShown && store.selection == session.id && store.openHelpers[session.id] == h.agent
+                    // A click shows the helper beside its session's conversation.
+                    Button { store.openHelper(h.agent, in: session.id) } label: {
+                        HStack(spacing: 5) {
+                            Text("↳").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                            Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : own ?? Theme.ink)
+                            if let d = h.detail, !d.isEmpty {
+                                Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : own ?? Theme.muted)
+                            }
                         }
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(shown ? Theme.selection : .clear))
+                        .contentShape(Rectangle())
                     }
-                    .lineLimit(1)
+                    .buttonStyle(.plain)
                     .help([h.type, h.detail, h.command].compactMap { $0 }.joined(separator: "\n"))
+                    .accessibilityHint("Shows the helper beside the conversation")
                 }
                 if helpers.count > 3 {
                     Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
                 }
             }
-            // Under the card's name: its inset, its mark and the gap.
-            .padding(.leading, 34)
+            // Under the card's name: its inset, its mark and the gap, less
+            // each line's own inset.
+            .padding(.leading, 28)
             .padding(.trailing, Theme.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
         }
     }
 }

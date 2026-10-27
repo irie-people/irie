@@ -80,6 +80,14 @@ struct IrieApp: App {
                 Divider()
                 Button("Find a Session") { store.focusFind += 1 }
                     .keyboardShortcut("f")
+                Divider()
+                // Step through the strip of the helper pane (HelperPane.swift).
+                Button("Next Helper") { NotificationCenter.default.post(name: .irieHelperStep, object: 1) }
+                    .keyboardShortcut("]", modifiers: .command)
+                    .disabled(!store.helperShown)
+                Button("Previous Helper") { NotificationCenter.default.post(name: .irieHelperStep, object: -1) }
+                    .keyboardShortcut("[", modifiers: .command)
+                    .disabled(!store.helperShown)
             }
             CommandGroup(after: .toolbar) {
                 Picker("Theme", selection: $theme) {
@@ -96,6 +104,10 @@ struct IrieApp: App {
                 // The conversation, or the live terminal on the right.
                 Toggle("Terminal", isOn: $store.showTerminal)
                     .keyboardShortcut("t", modifiers: [.command, .option])
+                // A helper beside the conversation (HelperPane.swift).
+                Button(store.helperShown ? "Hide Helpers" : "Show Helpers") { store.toggleHelpers() }
+                    .keyboardShortcut("h", modifiers: [.command, .shift])
+                    .disabled(store.selection == nil || store.outsideSelection != nil)
             }
         }
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).

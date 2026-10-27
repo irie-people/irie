@@ -61,6 +61,9 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	if a.Conversation && a.Session == "" {
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "a conversation needs a session")
 	}
+	if isHelper(a.Agent) && !helperAgent.MatchString(a.Agent) {
+		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "no helper %q", a.Agent)
+	}
 	app := a.View == ipc.ViewApp
 	sub := &subscriber{
 		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation,
@@ -74,8 +77,12 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 			c.mu.Unlock()
 			return nil, nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 		}
-		x.convSubs++
-		c.conversationOf(x)
+		if isHelper(a.Agent) {
+			c.followHelper(x, a.Agent)
+		} else {
+			x.convSubs++
+			c.conversationOf(x)
+		}
 	}
 	c.subs[sub] = true
 	if app {
@@ -97,7 +104,11 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 				c.appViews--
 			}
 			if x := c.sessions[sub.session]; x != nil && sub.conversation {
-				x.convSubs--
+				if isHelper(sub.agent) {
+					c.unfollowHelper(x, sub.agent)
+				} else {
+					x.convSubs--
+				}
 			}
 			c.mu.Unlock()
 			close(sub.done)
@@ -339,17 +350,30 @@ func (s *subscriber) conversationFrame() (ipc.Frame, bool) {
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
 	x := s.c.sessions[s.session]
-	if x == nil || x.conv == nil {
+	if x == nil {
+		return ipc.Frame{}, false
+	}
+	conv := x.conv
+	if isHelper(s.agent) {
+		conv = nil
+		if h := x.helpers[s.agent]; h != nil {
+			conv = h.conv
+		}
+	}
+	if conv == nil {
 		return ipc.Frame{}, false
 	}
 	var cv ipc.Conversation
 	ok := true
 	if !s.talkSent {
-		cv, s.talkSent = x.conv.all(resetLimit), true
+		cv, s.talkSent = conv.all(resetLimit), true
 	} else {
-		cv, ok = x.conv.since(s.talkSeen)
+		cv, ok = conv.since(s.talkSeen)
 	}
-	s.talkSeen = x.conv.ver
+	s.talkSeen = conv.ver
 	cv.Session = x.id
+	if isHelper(s.agent) {
+		cv.Agent = s.agent
+	}
 	return ipc.Frame{T: ipc.FrameConversation, Conversation: &cv}, ok
 }

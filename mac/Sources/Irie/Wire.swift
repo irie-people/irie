@@ -126,10 +126,14 @@ struct Header: Decodable {
     /// spawn.close_when_done: finished sessions close themselves, so there
     /// is no To verify count.
     var closeWhenDone: Bool?
+    /// ui.helper_style: a helper beside its session is drawn as cards
+    /// ("browser") or as a terminal ("terminal").
+    var helperStyle: String?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
+        case helperStyle = "helper_style"
     }
 }
 

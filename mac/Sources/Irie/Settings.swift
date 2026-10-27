@@ -72,7 +72,16 @@ struct CoreConfig: Decodable, Equatable {
 
     struct UI: Decodable, Equatable {
         var redOnDone: Bool
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done" }
+        /// How a helper beside its session is drawn: browser or terminal.
+        var helperStyle: String
+        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style" }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            redOnDone = try c.decode(Bool.self, forKey: .redOnDone)
+            // A core from before helper styles has none: the cards.
+            helperStyle = try c.decodeIfPresent(String.self, forKey: .helperStyle) ?? "browser"
+        }
     }
 
     struct Spawn: Decodable, Equatable {
@@ -562,6 +571,27 @@ private struct AppearanceSettings: View {
                 Text("Window")
             } footer: {
                 footnote("View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
+            }
+            Section {
+                switch (store.link, model.config) {
+                case let (.online, c?):
+                    Picker("Helpers look like", selection: model.bind(c, \.ui.helperStyle, "ui.helper_style")) {
+                        Text("Browser").tag("browser")
+                        Text("Terminal").tag("terminal")
+                    }
+                    .pickerStyle(.segmented)
+                default:
+                    Picker("Helpers look like", selection: .constant(store.helperStyle)) {
+                        Text("Browser").tag("browser")
+                        Text("Terminal").tag("terminal")
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(true)
+                }
+            } header: {
+                Text("Helpers")
+            } footer: {
+                footnote("A helper is a subagent its session started. Click one, or press ⇧⌘H, to see its work beside the conversation: as cards and plain words, or as a terminal. ⌘[ and ⌘] step through them.")
             }
             Section {
                 switch (store.link, model.config) {

@@ -39,6 +39,12 @@ final class Store: ObservableObject {
     /// ui.red_on_done, from the core: done sessions are drawn red. Look keeps
     /// it for the marks; this draws the views again when it changes.
     @Published private(set) var redOnDone = false
+    /// ui.helper_style, from the core: a helper beside its session is drawn
+    /// as cards ("browser") or as a terminal ("terminal").
+    @Published private(set) var helperStyle = "browser"
+    /// The helper shown beside each session's conversation, as sub:<id>, by
+    /// session (ConversationView, HelperPane.swift).
+    @Published private(set) var openHelpers: [String: String] = [:]
     /// spawn.close_when_done, from the core: a finished session closes
     /// itself, so the title bar keeps no To verify count, and the review dock
     /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
@@ -172,6 +178,9 @@ final class Store: ObservableObject {
         }
         if let h = f.header, (h.closeWhenDone ?? false) != closeWhenDone {
             closeWhenDone = h.closeWhenDone ?? false
+        }
+        if let s = f.header?.helperStyle, s != helperStyle {
+            helperStyle = s
         }
         switch f.t {
         case "snapshot":
@@ -403,6 +412,53 @@ final class Store: ObservableObject {
     }
 
     // MARK: Requests
+
+    /// Shows a helper beside its session's conversation. The terminal never
+    /// splits, so a click on a helper while it shows brings the
+    /// conversation back.
+    func openHelper(_ agent: String, in session: String) {
+        if selection != session || outsideSelection != nil { show(session) }
+        openHelpers[session] = agent
+        if showTerminal { showTerminal = false }
+    }
+
+    /// Puts a session's conversation back on its own.
+    func closeHelper(in session: String) {
+        if let a = openHelpers[session] { lastHelpers[session] = a }
+        openHelpers[session] = nil
+    }
+
+    /// The helper each session showed last, and the newest its conversation
+    /// names, which View > Show Helpers opens when none runs.
+    private var lastHelpers: [String: String] = [:]
+    private var newestHelpers: [String: String] = [:]
+
+    /// Notes the newest helper a session's conversation names.
+    func noteHelper(_ agent: String, in session: String) {
+        newestHelpers[session] = agent
+    }
+
+    /// Whether the selected session shows a helper beside its conversation.
+    var helperShown: Bool {
+        guard let id = selection, outsideSelection == nil, !showTerminal else { return false }
+        return openHelpers[id] != nil
+    }
+
+    /// View > Show Helpers: opens the selected session's helper beside its
+    /// conversation (the one shown last, else the newest running, else the
+    /// newest), or puts the conversation back on its own.
+    func toggleHelpers() {
+        guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else { return }
+        if helperShown {
+            closeHelper(in: id)
+            return
+        }
+        if let a = openHelpers[id] ?? lastHelpers[id] ?? s.subagents?.last?.agent ?? newestHelpers[id] {
+            openHelper(a, in: id)
+        } else {
+            say("\(s.name) has no helpers yet. They show here once it starts one.", error: false)
+        }
+    }
 
     /// Swaps the session into the slot, which the terminal shows. Requests
     /// that come faster than the core answers, such as a key held down or
