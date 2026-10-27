@@ -11,8 +11,8 @@ struct SidebarView: View {
     @FocusState private var listFocused: Bool
 
     var body: some View {
-        // One row of its own above the cards: the counts sit in the title
-        // bar, beside the traffic lights.
+        // One row of its own above the cards: Irie's mark, its name and the
+        // counts sit in the title bar, beside the traffic lights.
         VStack(spacing: 0) {
             FindField()
             content
@@ -21,9 +21,9 @@ struct SidebarView: View {
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
-            ToolbarItem(placement: .automatic) { Counts() }
+            ToolbarItem(placement: .automatic) { TitleBar() }
         }
-        // The toggle would crowd the counts out of the title bar; View >
+        // The toggle would crowd them out of the title bar; View >
         // Hide Sidebar (SidebarCommands) still hides it.
         .toolbar(removing: .sidebarToggle)
         .modifier(OutsideMoveConfirmation())
@@ -348,11 +348,32 @@ private struct Actions: View {
 
 /// A count per state, in the title bar above the sidebar. A count shows the
 /// first session, in list order, in that state.
+/// What the sidebar puts in the title bar: the sun over the waves, the name
+/// Irie and the counts, in one compact row beside the traffic lights.
+private struct TitleBar: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            HStack(spacing: 3) {
+                SunMark().frame(width: 14, height: 14)
+                Text("Irie").font(.system(size: 13, weight: .heavy, design: .rounded))
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Irie")
+            .accessibilityAddTraits(.isHeader)
+            Counts()
+        }
+        // The title bar sizes the item to its content; a point either side
+        // keeps the capsules' edges whole.
+        .padding(.horizontal, 1)
+        .fixedSize()
+    }
+}
+
 private struct Counts: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 2) {
             switch store.link {
             case .online:
                 count(.needs, color: Theme.needs, label: "need you")
@@ -364,10 +385,6 @@ private struct Counts: View {
                 EmptyView()
             }
         }
-        // The title bar sizes the item to its content; a point either side
-        // keeps the capsules' edges whole.
-        .padding(.horizontal, 1)
-        .fixedSize()
     }
 
     /// A count, which shows the first session in that state. It is drawn
@@ -376,15 +393,15 @@ private struct Counts: View {
     private func count(_ g: Look.Group, color: Color, label: String) -> some View {
         let rows = store.sessions.filter { Look($0).group == g }
         let go = { if let first = rows.first { store.show(first.id) } }
-        return HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
+        return HStack(spacing: 3) {
+            Circle().fill(color).frame(width: 5, height: 5)
             // Two digits' width, so a tenth session doesn't push the others.
-            Text("\(rows.count)").font(.system(size: 11.5, weight: .bold, design: .rounded)).monospacedDigit()
-                .frame(minWidth: 15)
+            Text("\(rows.count)").font(.system(size: 10.5, weight: .bold, design: .rounded)).monospacedDigit()
+                .frame(minWidth: 12)
         }
         .foregroundStyle(color)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 1.5)
         .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
         .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
         .opacity(rows.isEmpty ? 0.5 : 1)
