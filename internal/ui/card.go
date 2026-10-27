@@ -133,7 +133,7 @@ func stateLabel(s ipc.Session) string {
 	case ipc.StateStarting:
 		return "Starting"
 	case ipc.StateDone:
-		return "Done"
+		return "To verify"
 	case ipc.StateIdle:
 		return "Idle"
 	}

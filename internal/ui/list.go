@@ -61,12 +61,13 @@ func outsideItemKey(o ipc.OutsideSession) string { return "outside:" + o.Key() }
 var stateGroups = []struct{ key, title string }{
 	{"state:needs", "Needs you"},
 	{"state:working", "Working"},
-	{"state:done", "Done"},
+	{"state:done", "To verify"},
 }
 
 // stateGroup is the State view's group of a session: what needs you
 // (failed, needs you, stalled), what is under way (working, starting,
-// pausing, paused, frozen) and what has stopped (done, idle, exited).
+// pausing, paused, frozen) and what has stopped, which waits for you to
+// verify it (done, idle, exited).
 func stateGroup(s ipc.Session) string {
 	switch {
 	case needsYou(s):

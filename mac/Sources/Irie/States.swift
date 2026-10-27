@@ -40,7 +40,7 @@ enum Look: Equatable {
         case .pausing: return "Pausing"
         case .working: return "Working"
         case .starting: return "Starting"
-        case .done: return "Done"
+        case .done: return "To verify"
         case .idle: return "Idle"
         }
     }
@@ -102,7 +102,7 @@ enum Look: Equatable {
             switch self {
             case .needs: return "Needs you"
             case .working: return "Working"
-            case .done: return "Done"
+            case .done: return "To verify"
             }
         }
     }

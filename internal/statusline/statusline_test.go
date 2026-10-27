@@ -80,8 +80,8 @@ func TestLineLeadsWithTheState(t *testing.T) {
 	}{
 		{ipc.StatusReply{State: ipc.StateWorking}, "◐ working"},
 		{ipc.StatusReply{State: ipc.StateWorking, Subagents: []ipc.Subagent{explore, dev}}, "◐ working + 2 helpers"},
-		{ipc.StatusReply{State: ipc.StateDone}, "✓ done"},
-		{ipc.StatusReply{State: ipc.StateIdle}, "✓ done"},
+		{ipc.StatusReply{State: ipc.StateDone}, "✓ to verify"},
+		{ipc.StatusReply{State: ipc.StateIdle}, "✓ to verify"},
 		// A turn that ended while its helpers run is not done.
 		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore}}, "◐ waiting on 1 helper: Explore"},
 		{ipc.StatusReply{State: ipc.StateIdle, Subagents: []ipc.Subagent{explore, dev, explore}}, "◐ waiting on 3 helpers: Explore ×2, dev"},
@@ -103,7 +103,7 @@ func TestLineColours(t *testing.T) {
 	u, _ := Parse([]byte(sample))
 	// Done is green, a need red; the rest is faint.
 	got := Line(u, &ipc.StatusReply{State: ipc.StateDone}, 0)
-	if !strings.HasPrefix(got, "\x1b[32m✓ done\x1b[0m\x1b[2m · \x1b[0m\x1b[2m$1.23\x1b[0m") {
+	if !strings.HasPrefix(got, "\x1b[32m✓ to verify\x1b[0m\x1b[2m · \x1b[0m\x1b[2m$1.23\x1b[0m") {
 		t.Errorf("done line = %q", got)
 	}
 	if got := Line(u, &ipc.StatusReply{State: ipc.StateNeedsYou}, 0); !strings.HasPrefix(got, "\x1b[31m● needs you\x1b[0m") {
@@ -123,10 +123,10 @@ func TestLineFitsTheWidth(t *testing.T) {
 	u, _ := Parse([]byte(sample))
 	done := &ipc.StatusReply{State: ipc.StateDone}
 	// Parts drop from the end; the state stays.
-	if got := plain(Line(u, done, 40)); got != "✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41%" {
+	if got := plain(Line(u, done, 40)); got != "✓ to verify · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41%" {
 		t.Errorf("40 columns: %q", got)
 	}
-	if got := plain(Line(u, done, 3)); got != "✓ done" {
+	if got := plain(Line(u, done, 3)); got != "✓ to verify" {
 		t.Errorf("3 columns: %q", got)
 	}
 }
@@ -170,7 +170,7 @@ func TestRunForwardsAndPrintsItsOwnLine(t *testing.T) {
 	if code := Run(nil, strings.NewReader(sample), &out, &errOut, func(k string) string { return env[k] }); code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
-	if got := plain(out.String()); got != "✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41%" {
+	if got := plain(out.String()); got != "✓ to verify · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41%" {
 		t.Errorf("printed %q", got)
 	}
 	core.mu.Lock()

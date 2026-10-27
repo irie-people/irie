@@ -115,7 +115,7 @@ func TestTheStateViewGroupsByState(t *testing.T) {
 	want := []string{
 		"▾ Needs you", "irie-theme", "web-copy",
 		"▾ Working", "web-fix", "irie-tests",
-		"▾ Done", "scratch-notes", "fork-docs",
+		"▾ To verify", "scratch-notes", "fork-docs",
 	}
 	if got := outline(m); !reflect.DeepEqual(got, want) {
 		t.Errorf("outline %q, want %q", got, want)
@@ -335,12 +335,12 @@ func TestSmallPanesFallBackToRows(t *testing.T) {
 }
 
 // Under spawn.close_when_done a finished session closes itself: the header
-// has no Done count, and the State view leaves out what is done and calls
+// has no To verify count, and the State view leaves out what is done and calls
 // the last group Idle. The Repo view shows every session.
 func TestCloseWhenDoneHidesDone(t *testing.T) {
 	m := repoModel(t, 100, 80)
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &ipc.Header{CloseWhenDone: true}}})
-	if header := screen(t, m)[0]; strings.Contains(header, "done") || !strings.Contains(header, "working") {
+	if header := screen(t, m)[0]; strings.Contains(header, "to verify") || !strings.Contains(header, "working") {
 		t.Errorf("header %q", header)
 	}
 	m = send(m, keyMsg("v"))

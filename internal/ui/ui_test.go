@@ -418,7 +418,7 @@ func TestFramesLeaveTheListWhereItIs(t *testing.T) {
 	row.State = ipc.StateDone
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &row}})
 	if !strings.Contains(first(), "task-005") {
-		t.Errorf("the top card went to Done and the list followed it: first card %q", first())
+		t.Errorf("the top card went to To verify and the list followed it: first card %q", first())
 	}
 }
 
@@ -1375,7 +1375,7 @@ func TestHeaderCountsWhatNeedsYou(t *testing.T) {
 	m := statesModel(t, Options{})
 	m = send(m, tea.WindowSizeMsg{Width: 100, Height: 24})
 	header := screen(t, m)[0]
-	want := "◐1 working  ●3 needs you  ✓1 done  ‖2 paused  ◆1 frozen"
+	want := "◐1 working  ●3 needs you  ✓1 to verify  ‖2 paused  ◆1 frozen"
 	if !strings.Contains(header, want) {
 		t.Errorf("header %q lacks %q", header, want)
 	}
@@ -1391,7 +1391,7 @@ func TestHeaderCountsWhatNeedsYou(t *testing.T) {
 func TestZeroCountsAreFaint(t *testing.T) {
 	m, _ := newModel(t, 100, 24, 0)
 	raw := strings.Split(m.View().Content, "\n")[0]
-	if !strings.Contains(ansiRE.ReplaceAllString(raw, ""), "◐0 working  ●0 needs you  ✓0 done  ‖0 paused  ◆0 frozen") {
+	if !strings.Contains(ansiRE.ReplaceAllString(raw, ""), "◐0 working  ●0 needs you  ✓0 to verify  ‖0 paused  ◆0 frozen") {
 		t.Fatalf("header %q", ansiRE.ReplaceAllString(raw, ""))
 	}
 	for _, c := range cells(raw) {

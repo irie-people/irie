@@ -1,7 +1,7 @@
 import SwiftUI
 
 // The review dock (DESIGN §4.5). Under close_when_done a finished session
-// closes itself, and the sidebar keeps no Done group, so what is ready for
+// closes itself, and the sidebar keeps no To verify group, so what is ready for
 // you would otherwise vanish. The dock sits above the mode switch and lists
 // the sessions that closed on their own, newest first: the work you asked
 // for, ready to look at. A fresh one gets the done colour and a dot until
