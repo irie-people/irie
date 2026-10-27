@@ -112,11 +112,14 @@ final class KeyRouter {
 }
 
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
-/// it quits with its window.
+/// it quits with its window. `--background`, which `tools/live.sh` passes when
+/// it relaunches the app, leaves the focus where it is.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        if !CommandLine.arguments.contains("--background") {
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }
