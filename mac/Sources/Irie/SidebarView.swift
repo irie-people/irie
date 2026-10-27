@@ -22,7 +22,10 @@ struct SidebarView: View {
                 ModeSwitch()
             }
             DetailsPanel()
+            // The footer sits lighter than the list, with rounded top corners.
             TaskBar()
+                .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
+                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
