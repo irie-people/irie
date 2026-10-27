@@ -69,6 +69,7 @@ type Core struct {
 	history    map[string][]event.Event // journal events of sessions not adopted yet
 	recent     []string                 // repos used recently, newest first
 	appViews   int                      // open subscriptions of the Mac app; while any, the slot is zoomed
+	appTheme   string                   // the Mac app's palette, which the status line's agent colours follow; ui.theme until it says
 	outside    outside                  // the Claude Code sessions outside Irie (outside.go)
 	local      localState               // local.json
 	machine    localmodel.Machine       // the machine's memory, last read
@@ -431,7 +432,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
-			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel,
+			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder,
 		}}, nil
 	case ipc.OpList:
@@ -441,6 +442,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem, Closed: c.closedList()}, nil
+	case ipc.OpTheme:
+		var a ipc.ThemeArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.theme(a)
 	case ipc.OpClose:
 		var a ipc.CloseArgs
 		if err := decode(raw, &a); err != nil {

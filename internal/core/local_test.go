@@ -16,6 +16,7 @@ import (
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/testutil"
 	"github.com/irie-hq/irie/internal/testutil/ollamafake"
+	"github.com/irie-hq/irie/internal/ui"
 )
 
 // models are a model a coding agent can run, and one that cannot call
@@ -301,8 +302,22 @@ func TestTheStatusLineHearsTheStateAndTheHelpers(t *testing.T) {
 		r := status()
 		return r.State == ipc.StateWorking && len(r.Subagents) == 1 && r.Subagents[0].Type == "Explore"
 	})
+	// While it works it has its card's colour: in ui.theme's palette until
+	// the Mac app says which one it draws in.
+	if r := status(); r.State == ipc.StateWorking && r.Color != ui.AgentColor("rosewater", s.ID) {
+		t.Errorf("working colour %q, want rosewater's %q", r.Color, ui.AgentColor("rosewater", s.ID))
+	}
+	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "evergreen"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r := status(); r.State == ipc.StateWorking && r.Color != ui.AgentColor("evergreen", s.ID) {
+		t.Errorf("after the app's palette, colour %q, want evergreen's %q", r.Color, ui.AgentColor("evergreen", s.ID))
+	}
+	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "plaid"}, nil); code(err) != ipc.CodeBadArgs {
+		t.Errorf("an unknown palette: %v", err)
+	}
 	c.waitState(s.ID, ipc.StateDone)
-	if r := status(); r.State != ipc.StateDone || len(r.Subagents) != 0 {
+	if r := status(); r.State != ipc.StateDone || len(r.Subagents) != 0 || r.Color != "" {
 		t.Errorf("after the stop: %+v", r)
 	}
 }
