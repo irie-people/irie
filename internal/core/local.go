@@ -103,13 +103,13 @@ func writeJSON(path string, v any) error {
 // profile returns the named profile, ready to change: one of the config's,
 // or ollama:<model>, the local profile on that model.
 func (c *Core) profile(name string) (config.Profile, bool) {
-	p, ok := c.cfg.Profiles[name]
+	p, ok := c.cfg().Profiles[name]
 	if !ok {
 		model, isLocal := strings.CutPrefix(name, localPrefix)
 		if !isLocal || model == "" {
 			return config.Profile{}, false
 		}
-		if p, ok = c.cfg.Profiles["local"]; !ok || p.Local == nil {
+		if p, ok = c.cfg().Profiles["local"]; !ok || p.Local == nil {
 			p = config.Default().Profiles["local"]
 		}
 		p.Model = model
@@ -125,7 +125,7 @@ func (c *Core) profile(name string) (config.Profile, bool) {
 	return p, true
 }
 
-func (c *Core) ownURL() string { return fmt.Sprintf("http://127.0.0.1:%d", c.cfg.Local.Port) }
+func (c *Core) ownURL() string { return fmt.Sprintf("http://127.0.0.1:%d", c.cfg().Local.Port) }
 
 // runtimePane is the pane of Irie's own server. The caller holds c.mu.
 func (c *Core) runtimePane() *tmux.Pane {
@@ -139,8 +139,8 @@ func (c *Core) runtimePane() *tmux.Pane {
 // Irie's own. Irie's own is started when start is set and it is not
 // running. The caller holds neither c.mu nor c.localMu.
 func (c *Core) ollama(start bool) (localmodel.Ollama, bool, error) {
-	if c.cfg.Local.URL != "" {
-		return localmodel.Ollama{URL: c.cfg.Local.URL, HTTP: c.http}, false, nil
+	if c.cfg().Local.URL != "" {
+		return localmodel.Ollama{URL: c.cfg().Local.URL, HTTP: c.http}, false, nil
 	}
 	o := localmodel.Ollama{URL: c.ownURL(), HTTP: c.http}
 	c.mu.Lock()
@@ -159,7 +159,7 @@ func (c *Core) ollama(start bool) (localmodel.Ollama, bool, error) {
 // context, cache type and slots, then local.env. One slot and one model at
 // a time keep its memory to one model and one context cache.
 func (c *Core) runtimeEnv() []string {
-	l := c.cfg.Local
+	l := c.cfg().Local
 	env := map[string]string{
 		"OLLAMA_HOST":              fmt.Sprintf("127.0.0.1:%d", l.Port),
 		"OLLAMA_CONTEXT_LENGTH":    strconv.Itoa(l.Context),
@@ -182,7 +182,7 @@ func (c *Core) runtimeEnv() []string {
 // parallel is how many requests a model of the local server serves at
 // once, each with its own context cache.
 func (c *Core) parallel() int {
-	if n, err := strconv.Atoi(c.cfg.Local.Env["OLLAMA_NUM_PARALLEL"]); err == nil && n > 0 {
+	if n, err := strconv.Atoi(c.cfg().Local.Env["OLLAMA_NUM_PARALLEL"]); err == nil && n > 0 {
 		return n
 	}
 	return 1
@@ -195,7 +195,7 @@ func (c *Core) parallel() int {
 func (c *Core) startRuntime(o localmodel.Ollama) error {
 	c.localMu.Lock()
 	defer c.localMu.Unlock()
-	bin, err := localmodel.FindOllama(c.cfg.Local.Ollama)
+	bin, err := localmodel.FindOllama(c.cfg().Local.Ollama)
 	if errors.Is(err, localmodel.ErrNoOllama) {
 		return errors.New("ollama is not installed; `irie setup local` installs it")
 	}
@@ -289,14 +289,14 @@ func (c *Core) readMachine() localmodel.Machine {
 // knows: its own server's, else Ollama's guidance for agents.
 func (c *Core) serverContext(own bool) int {
 	if own {
-		return c.cfg.Local.Context
+		return c.cfg().Local.Context
 	}
 	return config.DefaultMinContext
 }
 
 func (c *Core) serverKV(own bool) string {
 	if own {
-		return c.cfg.Local.KVCache
+		return c.cfg().Local.KVCache
 	}
 	return "f16"
 }
@@ -323,7 +323,7 @@ func (c *Core) localModels(ctx context.Context, o localmodel.Ollama, own bool) (
 		c.modelCache.infos = map[string]localmodel.Info{}
 	}
 	m := c.readMachine()
-	budget := localmodel.Budget(c.cfg.Local.MemoryGiB, m)
+	budget := localmodel.Budget(c.cfg().Local.MemoryGiB, m)
 	serverCtx, kv := c.serverContext(own), c.serverKV(own)
 	c.mu.Lock()
 	measured := maps.Clone(c.local.Measured)
@@ -424,10 +424,10 @@ func (c *Core) check(ctx context.Context, o localmodel.Ollama, own bool, model s
 	m := c.readMachine()
 	w := localmodel.Want{
 		MinContext: p.Local.MinContext, KVCache: c.serverKV(own), Parallel: c.parallel(), Own: own,
-		Budget: localmodel.Budget(c.cfg.Local.MemoryGiB, m), Machine: m, Force: force,
+		Budget: localmodel.Budget(c.cfg().Local.MemoryGiB, m), Machine: m, Force: force,
 	}
 	if own {
-		w.Context = c.cfg.Local.Context
+		w.Context = c.cfg().Local.Context
 	}
 	chk := localmodel.Preflight(ctx, o, model, w)
 	c.forgetModels()

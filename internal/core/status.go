@@ -43,7 +43,7 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	row := x.wire()
 	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents}
 	if row.State == ipc.StateWorking {
-		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg.UI.Theme), x.id)
+		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.id)
 	}
 	frames := c.changes()
 	c.mu.Unlock()

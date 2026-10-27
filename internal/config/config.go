@@ -339,14 +339,20 @@ func fillRoute(r *Route) {
 // Load reads the config file at path over the defaults. A missing file gives
 // the defaults.
 func Load(path string) (Config, error) {
-	c := Default()
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return c, nil
+		return Default(), nil
 	}
 	if err != nil {
-		return c, err
+		return Default(), err
 	}
+	return Parse(data, path)
+}
+
+// Parse reads a config file's contents over the defaults; path names the
+// file in errors.
+func Parse(data []byte, path string) (Config, error) {
+	c := Default()
 
 	// Sections decode over the defaults. Profiles decode one by one, so a file
 	// that sets only profiles.claude.model keeps that profile's other defaults.
