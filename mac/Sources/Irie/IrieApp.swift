@@ -18,6 +18,7 @@ enum Launch {
 struct IrieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     /// The compact title bar: one short row for the traffic lights, the
     /// sidebar's counts and the shown session's name. The scene's
@@ -57,6 +58,10 @@ struct IrieApp: App {
                     .keyboardShortcut("f")
             }
             CommandGroup(after: .toolbar) {
+                Picker("Theme", selection: $theme) {
+                    ForEach(Palette.all) { p in Text(p.name).tag(p.id) }
+                }
+                Divider()
                 Button("Bigger Text") { store.setFontSize(store.fontSize + 1) }
                     .keyboardShortcut("=")
                 Button("Smaller Text") { store.setFontSize(store.fontSize - 1) }
@@ -111,10 +116,15 @@ extension Notification.Name {
 struct ContentView: View {
     @EnvironmentObject private var store: Store
     @State private var keys = KeyRouter()
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     var body: some View {
         NavigationSplitView {
+            // A new palette draws the sidebar afresh. The terminal area
+            // follows the palette itself, so its terminal stays attached.
+            let _ = Theme.use(theme)
             SidebarView()
+                .id(theme)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
@@ -126,7 +136,7 @@ struct ContentView: View {
                     }
                 }
         }
-        .tint(Theme.deepGreen)
+        .tint(Theme.accent)
         .onAppear { keys.install(store) }
     }
 }

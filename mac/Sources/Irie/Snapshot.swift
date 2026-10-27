@@ -13,13 +13,19 @@ enum Snapshot {
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-            // The default size in both modes, then the narrowest window and a
-            // wide one.
-            let shots: [(String, CGFloat, Bool)] = [
-                ("window-light", 1100, false), ("window-dark", 1100, true),
-                ("window-narrow", 820, false), ("window-wide", 1500, false),
-            ]
-            for (base, width, dark) in shots {
+            // Each palette in both modes at the default size, then the default
+            // palette in the narrowest window and a wide one. The palette is
+            // set in a volatile domain, so the app's saved choice is untouched.
+            var shots: [(String, String, CGFloat, Bool)] = []
+            for p in Palette.all {
+                shots.append(("\(p.id)-light", p.id, 1100, false))
+                shots.append(("\(p.id)-dark", p.id, 1100, true))
+            }
+            shots.append(("window-narrow", Palette.standard.id, 820, false))
+            shots.append(("window-wide", Palette.standard.id, 1500, false))
+            for (base, palette, width, dark) in shots {
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette], forName: UserDefaults.argumentDomain)
+                Theme.use(palette)
                 let (rep, titlebar) = window(store, dark: dark, width: width)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))

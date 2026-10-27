@@ -21,7 +21,8 @@ struct TaskBar: View {
             // first is done.
             TextField(focused ? "@repo +profile, then the task" : "What should we work on?", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(Theme.font(13.5))
+                .foregroundStyle(Theme.ink)
                 .lineLimit(3, reservesSpace: true)
                 .focused($focused)
                 .onSubmit(submit)
@@ -39,8 +40,8 @@ struct TaskBar: View {
                     }
                 }
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(Theme.sun))
-                .foregroundStyle(Color(hex: 0x1B2B22))
+                .background(Circle().fill(Theme.accentFill))
+                .foregroundStyle(Theme.onAccent)
             }
             .buttonStyle(.plain)
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.spawning)
@@ -50,17 +51,18 @@ struct TaskBar: View {
         .padding(.leading, 12)
         .padding(.trailing, 5)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field))
+        .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field)
+            .shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
-                .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
+                .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
         .padding(10)
         .overlay(alignment: .top) {
             if let n = store.notice {
                 Text(n.text)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(n.isError ? Theme.needs : Color.primary)
+                    .foregroundStyle(n.isError ? Theme.needs : Theme.ink)
                     .lineLimit(4)
                     .textSelection(.enabled)
                     .padding(.horizontal, 10)

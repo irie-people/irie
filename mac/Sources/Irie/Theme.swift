@@ -1,49 +1,235 @@
 import AppKit
 import SwiftUI
 
-/// Irie's colours: the hues of the terminal sidebar's palette
-/// (internal/ui/view.go) on warm ground, sand in light mode and cocoa in dark
-/// mode. Each has a light and a dark value, and text colours have stronger
-/// ones for Increase Contrast. Text colours keep 4.5:1 on every surface
-/// they sit on.
+/// One of Irie's palettes: a light and a dark set of swatches. Rosewater is
+/// the default; View > Theme picks Terracotta or Lilac, and the app keeps
+/// the choice. In every palette and mode, each text colour keeps 4.5:1 and
+/// each mark 3:1 on every surface it sits on (WCAG 2.2), and Increase
+/// Contrast strengthens them further. The terminal sidebar has the same
+/// palettes (internal/ui), and its tests check both the ratios and that the
+/// two sets of values match.
+struct Palette: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let light: Swatches
+    let dark: Swatches
+
+    static let all: [Palette] = [.rosewater, .terracotta, .lilac]
+    static let standard = Palette.rosewater
+    /// Where the app keeps the choice.
+    static let defaultsKey = "theme"
+
+    static func named(_ id: String?) -> Palette { all.first { $0.id == id } ?? standard }
+}
+
+/// One mode of a palette, as 0xRRGGBB.
+struct Swatches: Equatable {
+    // Solid grounds: the sidebar, the terminal's surround, cards, the
+    // details panel and fields; a quiet card's hairline; the fills of a
+    // hovered card, the selected one and one that needs you.
+    var sidebar, ground, card, panel, field: UInt32
+    var edge, hover, selection, needsTint: UInt32
+    // Text, and quieter text.
+    var ink, muted: UInt32
+    // Irie's accent: the selected card's edge and focus rings, its text
+    // form, and the start button with its arrow.
+    var accent, accentInk, accentFill, onAccent: UInt32
+    // The colour roles of DESIGN §5.3: red, green, yellow and cyan.
+    var needs, done, paused, frozen: UInt32
+    // The mark: the sun and the waves.
+    var sun, waves: UInt32
+}
+
+extension Palette {
+    static let rosewater = Palette(
+        id: "rosewater", name: "Rosewater",
+        light: Swatches(
+            sidebar: 0xFBF1EE, ground: 0xF3E3DE, card: 0xFFF9F7, panel: 0xFCEFEB, field: 0xFFFCFB,
+            edge: 0xEBD3CB, hover: 0xFFF3EF, selection: 0xF3DDEA, needsTint: 0xFEE4D8,
+            ink: 0x3D2236, muted: 0x75566A,
+            accent: 0xC4577A, accentInk: 0xA23E62, accentFill: 0xE58FA8, onAccent: 0x3D2236,
+            needs: 0xB42A1E, done: 0x44694B, paused: 0x855700, frozen: 0x286873,
+            sun: 0xF2B544, waves: 0xD9819C),
+        dark: Swatches(
+            sidebar: 0x251B22, ground: 0x1D151B, card: 0x30242C, panel: 0x2C2129, field: 0x33262F,
+            edge: 0x4A3843, hover: 0x392B34, selection: 0x45293F, needsTint: 0x4A251C,
+            ink: 0xF7E9EF, muted: 0xC2AAB7,
+            accent: 0xEE8FAD, accentInk: 0xF4A7BF, accentFill: 0xEE8FAD, onAccent: 0x2A1A24,
+            needs: 0xFF8070, done: 0x9BC9A2, paused: 0xEFC468, frozen: 0x7DC4CE,
+            sun: 0xF2B544, waves: 0xEE8FAD))
+
+    static let terracotta = Palette(
+        id: "terracotta", name: "Terracotta",
+        light: Swatches(
+            sidebar: 0xF9F2EA, ground: 0xF0E4D6, card: 0xFFFBF6, panel: 0xFBF3EA, field: 0xFFFDF9,
+            edge: 0xE7D6C3, hover: 0xFFF6EC, selection: 0xF8E0CF, needsTint: 0xFBE2E4,
+            ink: 0x3A2629, muted: 0x735E58,
+            accent: 0xC2603A, accentInk: 0xA24A26, accentFill: 0xE58A62, onAccent: 0x2B1A14,
+            needs: 0xB3203F, done: 0x46694A, paused: 0x845600, frozen: 0x286773,
+            sun: 0xF2B544, waves: 0x7FA383),
+        dark: Swatches(
+            sidebar: 0x231B17, ground: 0x1B1411, card: 0x2E241F, panel: 0x2A211C, field: 0x312722,
+            edge: 0x48392F, hover: 0x372B24, selection: 0x4A2F22, needsTint: 0x46202A,
+            ink: 0xF6EBE2, muted: 0xBFAA9B,
+            accent: 0xEE9469, accentInk: 0xF4A983, accentFill: 0xEE9469, onAccent: 0x2A1810,
+            needs: 0xFF7F96, done: 0x9CC79C, paused: 0xEFC468, frozen: 0x7EC3CC,
+            sun: 0xF2B544, waves: 0x9CC79C))
+
+    static let lilac = Palette(
+        id: "lilac", name: "Lilac",
+        light: Swatches(
+            sidebar: 0xF7F2F7, ground: 0xEEE5EF, card: 0xFFFCFF, panel: 0xF9F3F9, field: 0xFFFDFF,
+            edge: 0xE2D5E4, hover: 0xFBF5FB, selection: 0xEBDDF1, needsTint: 0xFBE4E0,
+            ink: 0x33223F, muted: 0x6C5A75,
+            accent: 0x9A5CB0, accentInk: 0x7F4495, accentFill: 0xC39AD3, onAccent: 0x2A1838,
+            needs: 0xB02E1C, done: 0x426A4F, paused: 0x845700, frozen: 0x276776,
+            sun: 0xF2B544, waves: 0xB58BC9),
+        dark: Swatches(
+            sidebar: 0x1F1A26, ground: 0x18141E, card: 0x2A2332, panel: 0x26202E, field: 0x2D2636,
+            edge: 0x433950, hover: 0x332B3C, selection: 0x3E2E4D, needsTint: 0x44221F,
+            ink: 0xF2EAF6, muted: 0xB9A9C4,
+            accent: 0xC79BE0, accentInk: 0xD2AEE8, accentFill: 0xC79BE0, onAccent: 0x241731,
+            needs: 0xFF836F, done: 0x9CC9A6, paused: 0xEFC468, frozen: 0x80C3D0,
+            sun: 0xF2B544, waves: 0xC79BE0))
+}
+
+/// Irie's colours, from the palette in use. Each follows the window's
+/// appearance: light or dark, and stronger under Increase Contrast.
 enum Theme {
-    static let sun = Color(hex: 0xF2B544)
-    /// Sun for edges and focus rings: deeper in light mode, for 3:1 on sand.
-    static let sunEdge = adaptive(light: 0xA87510, dark: 0xF2B544)
-    static let sunInk = adaptive(light: 0x8A5A00, dark: 0xF4C35F, contrastLight: 0x6B4500, contrastDark: 0xFFD27A)
-    static let deepGreen = Color(hex: 0x1E5A42)
-    static let sea = adaptive(light: 0x1E8F68, dark: 0x48C894)
-    static let needs = adaptive(light: 0xB42318, dark: 0xFF6F5B, contrastLight: 0x8E1A10, contrastDark: 0xFF8A7A)
-    static let work = adaptive(light: 0x1F64A3, dark: 0x66B6F3, contrastLight: 0x164B7A, contrastDark: 0x8CCBFF)
-    static let done = adaptive(light: 0x1A6E4C, dark: 0x48C894, contrastLight: 0x12543A, contrastDark: 0x6EE0B0)
+    /// The palette in use. The app sets it from the defaults at launch and
+    /// from View > Theme, and draws its views again when it changes.
+    static var palette = Palette.named(UserDefaults.standard.string(forKey: Palette.defaultsKey)) {
+        didSet { colors = Colors(palette) }
+    }
+
+    private static var colors = Colors(palette)
+
+    /// Makes the palette with this id the one in use, if it is not already.
+    static func use(_ id: String) {
+        if palette.id != id { palette = Palette.named(id) }
+    }
+
+    static var sidebar: Color { colors.sidebar }
+    /// What the terminal's frame sits on.
+    static var ground: Color { colors.ground }
+    static var card: Color { colors.card }
+    static var panel: Color { colors.panel }
+    static var field: Color { colors.field }
+    /// The hairline round a quiet card or a field.
+    static var edge: Color { colors.edge }
+    static var hover: Color { colors.hover }
+    static var selection: Color { colors.selection }
+    static var needsTint: Color { colors.needsTint }
+    static var ink: Color { colors.ink }
     /// Ages, paths and other quiet text: readable, unlike `.tertiary`.
-    static let muted = adaptive(light: 0x6B5C4B, dark: 0xB5A793, contrastLight: 0x4F4336, contrastDark: 0xD8CCBA)
-    // Solid surfaces: nothing behind the window shows through. The ground is
-    // what the terminal's frame sits on; the edge is the hairline round a
-    // quiet card or a field.
-    static let sidebar = adaptive(light: 0xF8F1E5, dark: 0x201A14)
-    static let ground = adaptive(light: 0xEEE4D3, dark: 0x191510)
-    static let card = adaptive(light: 0xFFFBF4, dark: 0x2A231B)
-    static let panel = adaptive(light: 0xFBF4E8, dark: 0x272019)
-    static let field = adaptive(light: 0xFFFDF8, dark: 0x2C251D)
-    static let edge = adaptive(light: 0xE4D5BD, dark: 0x3E3429)
-    // Card fills: the selected card, a hovered one, and one that needs you.
-    static let selection = adaptive(light: 0xFCEBC8, dark: 0x3B2D1B)
-    static let hover = adaptive(light: 0xFFF6E6, dark: 0x322A21)
-    static let needsTint = adaptive(light: 0xFBE8E1, dark: 0x3C2019)
+    static var muted: Color { colors.muted }
+    static var accent: Color { colors.accent }
+    static var accentInk: Color { colors.accentInk }
+    static var accentFill: Color { colors.accentFill }
+    static var onAccent: Color { colors.onAccent }
+    static var needs: Color { colors.needs }
+    static var done: Color { colors.done }
+    static var paused: Color { colors.paused }
+    static var frozen: Color { colors.frozen }
+    static var sun: Color { colors.sun }
+    static var waves: Color { colors.waves }
+    /// Gentle shadows under cards and fields.
+    static var shadow: Color { colors.shadow }
+
+    // The names from before the palettes, which other views use.
+    /// Working is drawn in ink: DESIGN §5.3 gives it the default colour.
+    static var work: Color { ink }
+    static var sunEdge: Color { accent }
+    static var sunInk: Color { accentInk }
+    static var deepGreen: Color { accent }
+    static var sea: Color { waves }
+
     static let terminalBackground = NSColor(hex: 0x14110D)
     static let terminalForeground = NSColor(hex: 0xEEE5D5)
     /// Corners: cards and fields, and the terminal's frame and the task bar.
-    static let radius: CGFloat = 12
-    static let frameRadius: CGFloat = 14
+    static let radius: CGFloat = 14
+    static let frameRadius: CGFloat = 16
 
-    static func adaptive(light: UInt32, dark: UInt32, contrastLight: UInt32? = nil, contrastDark: UInt32? = nil) -> Color {
+    /// Rounded type, as the cards use.
+    static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .rounded)
+    }
+
+    /// A colour that takes the palette's light or dark swatch for the
+    /// appearance it is drawn in. Under Increase Contrast a text colour moves
+    /// further from the grounds and a hairline toward the ink.
+    fileprivate static func dynamic(_ p: Palette, _ strength: Strength, alpha: @escaping (Bool) -> CGFloat = { _ in 1 },
+                                    _ pick: @escaping (Swatches) -> UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
-            if match == .accessibilityHighContrastDarkAqua { return NSColor(hex: contrastDark ?? dark) }
-            if match == .accessibilityHighContrastAqua { return NSColor(hex: contrastLight ?? light) }
-            return NSColor(hex: match == .darkAqua ? dark : light)
+            let dark = match == .darkAqua || match == .accessibilityHighContrastDarkAqua
+            let high = match == .accessibilityHighContrastAqua || match == .accessibilityHighContrastDarkAqua
+            let s = dark ? p.dark : p.light
+            var hex = pick(s)
+            if high {
+                switch strength {
+                case .text: hex = luminance(hex) < 0.18 ? mix(hex, 0x000000, 0.35) : mix(hex, 0xFFFFFF, 0.45)
+                case .line: hex = mix(hex, s.ink, 0.4)
+                case .none: break
+                }
+            }
+            return NSColor(hex: hex).withAlphaComponent(alpha(dark))
         })
+    }
+
+    fileprivate enum Strength { case none, text, line }
+
+    /// WCAG 2.2's relative luminance.
+    static func luminance(_ hex: UInt32) -> Double {
+        func channel(_ v: UInt32) -> Double {
+            let c = Double(v & 0xFF) / 255
+            return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(hex >> 16) + 0.7152 * channel(hex >> 8) + 0.0722 * channel(hex)
+    }
+
+    /// a moved toward b by t, channel by channel.
+    static func mix(_ a: UInt32, _ b: UInt32, _ t: Double) -> UInt32 {
+        func ch(_ shift: UInt32) -> UInt32 {
+            let x = Double((a >> shift) & 0xFF), y = Double((b >> shift) & 0xFF)
+            return UInt32((x + (y - x) * t).rounded()) << shift
+        }
+        return ch(16) | ch(8) | ch(0)
+    }
+}
+
+/// The palette's swatches as colours, made once per palette.
+private struct Colors {
+    let sidebar, ground, card, panel, field, edge, hover, selection, needsTint: Color
+    let ink, muted, accent, accentInk, accentFill, onAccent: Color
+    let needs, done, paused, frozen, sun, waves, shadow: Color
+
+    init(_ p: Palette) {
+        func surface(_ k: KeyPath<Swatches, UInt32>) -> Color { Theme.dynamic(p, .none) { $0[keyPath: k] } }
+        func text(_ k: KeyPath<Swatches, UInt32>) -> Color { Theme.dynamic(p, .text) { $0[keyPath: k] } }
+        sidebar = surface(\.sidebar)
+        ground = surface(\.ground)
+        card = surface(\.card)
+        panel = surface(\.panel)
+        field = surface(\.field)
+        edge = Theme.dynamic(p, .line) { $0.edge }
+        hover = surface(\.hover)
+        selection = surface(\.selection)
+        needsTint = surface(\.needsTint)
+        ink = text(\.ink)
+        muted = text(\.muted)
+        accent = text(\.accent)
+        accentInk = text(\.accentInk)
+        accentFill = surface(\.accentFill)
+        onAccent = text(\.onAccent)
+        needs = text(\.needs)
+        done = text(\.done)
+        paused = text(\.paused)
+        frozen = text(\.frozen)
+        sun = surface(\.sun)
+        waves = surface(\.waves)
+        // The ink, faint, in light mode; black, deeper, in dark mode.
+        shadow = Theme.dynamic(p, .none, alpha: { $0 ? 0.38 : 0.08 }) { s in s.ink < 0x808080 ? s.ink : 0x000000 }
     }
 }
 
@@ -56,53 +242,6 @@ extension NSColor {
 
 extension Color {
     init(hex: UInt32) { self.init(nsColor: NSColor(hex: hex)) }
-}
-
-/// How a row's state looks, after the sidebar's glyphs: red when it needs
-/// you, blue while it works, green when it is done.
-enum Look {
-    case needs, working, starting, done, idle, ended
-
-    init(_ s: Session) {
-        switch s.state {
-        case "needs_you", "stalled", "failed": self = .needs
-        case "working": self = .working
-        case "starting": self = .starting
-        case "done": self = .done
-        case "idle": self = .idle
-        default: self = .ended
-        }
-    }
-
-    var group: Group {
-        switch self {
-        case .needs: return .needs
-        case .working, .starting: return .working
-        case .done, .idle, .ended: return .done
-        }
-    }
-
-    /// The colour of its edge; none while it is quiet.
-    var color: Color? {
-        switch self {
-        case .needs: return Theme.needs
-        case .working, .starting: return Theme.work
-        case .done: return Theme.done
-        case .idle, .ended: return nil
-        }
-    }
-
-    enum Group: CaseIterable {
-        case needs, working, done
-
-        var title: String {
-            switch self {
-            case .needs: return "Needs you"
-            case .working: return "Working"
-            case .done: return "Done"
-            }
-        }
-    }
 }
 
 /// The sun rising over two waves: Irie's mark.
@@ -132,7 +271,7 @@ struct SunMark: View {
                     x = next
                     up.toggle()
                 }
-                ctx.stroke(wave, with: .color(Theme.sea), style: StrokeStyle(lineWidth: 2 * s, lineCap: .round))
+                ctx.stroke(wave, with: .color(Theme.waves), style: StrokeStyle(lineWidth: 2 * s, lineCap: .round))
             }
         }
         .accessibilityHidden(true)
