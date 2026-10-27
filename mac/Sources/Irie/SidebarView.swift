@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// The sidebar: a card per session, in the order they started. A state
-/// change only changes a card's mark and colours, never the order or a
-/// card's height (DESIGN §4.1), so nothing moves under the pointer. A click
-/// shows that agent's terminal and gives it the keyboard; the arrow keys
-/// walk the cards and keep the keyboard here. The selected session's
-/// details sit in a fixed panel above the task bar.
+/// The sidebar: a card per session, in groups. The Repo view is a tree, a
+/// group per repo with its sessions in the order they started and each
+/// session's helpers under it, so a state change only changes a card's mark
+/// and colours, never the order (DESIGN §4.1). The State view groups the
+/// sessions by what they need. A click shows that agent's terminal and gives
+/// it the keyboard; the arrow keys walk the cards and keep the keyboard
+/// here. The switch between the views, and the selected session's details,
+/// sit above the task bar.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
@@ -16,6 +18,9 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             FindField()
             content
+            if !store.sessions.isEmpty {
+                ModeSwitch()
+            }
             DetailsPanel()
             TaskBar()
         }
@@ -30,7 +35,7 @@ struct SidebarView: View {
     }
 
     @ViewBuilder private var content: some View {
-        let rows = store.drawnOrder
+        let groups = store.drawnGroups
         if case let .offline(why) = store.link, store.sessions.isEmpty {
             Offline(why: why, socket: store.socketPath)
         } else if store.sessions.isEmpty && store.outside.isEmpty {
@@ -39,7 +44,7 @@ struct SidebarView: View {
             } else {
                 Welcome()
             }
-        } else if rows.isEmpty && store.drawnOutside.isEmpty {
+        } else if groups.isEmpty && store.drawnOutside.isEmpty {
             Hint(text: "No sessions match “\(store.filter)”.")
         } else {
             ScrollViewReader { proxy in
@@ -47,9 +52,15 @@ struct SidebarView: View {
                     // One clock for every card's age.
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
                         LazyVStack(alignment: .leading, spacing: 6) {
-                            ForEach(rows) { s in
-                                SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil, listFocused: listFocused, now: ctx.date)
-                                    .id(s.id)
+                            ForEach(groups) { g in
+                                GroupHeader(group: g)
+                                if store.isOpen(g) {
+                                    ForEach(g.sessions) { s in
+                                        SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil, listFocused: listFocused, now: ctx.date)
+                                            .id(s.id)
+                                        HelperRows(session: s)
+                                    }
+                                }
                             }
                             OutsideSection(now: ctx.date, listFocused: listFocused)
                         }
@@ -170,14 +181,11 @@ private struct SessionCard: View {
 
     /// The second line.
     private var status: String {
-        let helpers = session.subagents.map { $0.count == 1 ? "1 helper" : "\($0.count) helpers" }
-        let what: String
         switch look {
-        case .starting: what = "Starting…"
-        case .done, .idle, .frozen, .paused, .pausing: what = look.label
-        default: what = session.detail ?? look.label
+        case .starting: return "Starting…"
+        case .done, .idle, .frozen, .paused, .pausing: return look.label
+        default: return session.detail ?? look.label
         }
-        return [helpers, what].compactMap { $0 }.joined(separator: " · ")
     }
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }
@@ -202,6 +210,114 @@ private struct SessionCard: View {
         parts.append("started " + Age.spoken(session.created, now: now))
         if let t = session.tokens { parts.append("\(t.total) tokens") }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// A group's header: its name and count, and a chevron that folds it. A
+/// folded group says how many of its sessions need you, in red.
+private struct GroupHeader: View {
+    @EnvironmentObject private var store: Store
+    let group: SessionGroup
+
+    var body: some View {
+        let open = store.isOpen(group)
+        let needs = group.sessions.filter { Look($0).loud }.count
+        let note = !open && needs > 0 && group.id != "state:needs" ? "\(needs) \(needs == 1 ? "needs" : "need") you" : nil
+        Button { store.fold(group) } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8.5, weight: .heavy))
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 10)
+                Text(group.title)
+                    .font(Theme.font(12, .heavy))
+                    .foregroundStyle(group.id == "state:needs" ? Theme.needs : Theme.ink)
+                    .lineLimit(1)
+                if let note {
+                    Text("· " + note).font(Theme.font(11.5, .bold)).foregroundStyle(Theme.needs).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Text("\(group.sessions.count)").font(Theme.font(11.5, .bold)).monospacedDigit().foregroundStyle(Theme.muted)
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(group.path.map(Age.tilde) ?? group.title)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([group.title, "\(group.sessions.count) sessions", note].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityHint(open ? "Folds the group" : "Opens the group")
+        .accessibilityAddTraits([.isHeader, .isButton])
+        .accessibilityAction { store.fold(group) }
+    }
+}
+
+/// A session's helpers, its running subagents, under its card: each one's
+/// kind and what it is doing, in red when it needs you. Three at most, then
+/// how many more.
+private struct HelperRows: View {
+    let session: Session
+
+    var body: some View {
+        let helpers = session.subagents ?? []
+        if !helpers.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(helpers.prefix(3)) { h in
+                    let loud = h.needsYou == true
+                    HStack(spacing: 5) {
+                        Text("↳").font(Theme.font(12)).foregroundStyle(Theme.muted)
+                        Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : Theme.ink)
+                        if let d = h.detail, !d.isEmpty {
+                            Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : Theme.muted)
+                        }
+                    }
+                    .lineLimit(1)
+                    .help([h.type, h.detail, h.command].compactMap { $0 }.joined(separator: "\n"))
+                }
+                if helpers.count > 3 {
+                    Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(Theme.muted)
+                }
+            }
+            .padding(.leading, 34)
+            .padding(.trailing, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// The switch between the Repo and State views, above the details.
+private struct ModeSwitch: View {
+    @EnvironmentObject private var store: Store
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(SidebarMode.allCases, id: \.self) { m in
+                let on = store.mode == m
+                Button { store.choose(m) } label: {
+                    Text(m.title)
+                        .font(Theme.font(12, .bold))
+                        .foregroundStyle(on ? Theme.ink : Theme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? Theme.card : Color.clear)
+                            .shadow(color: on ? Theme.shadow : Color.clear, radius: 1.5, y: 0.5))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(m == .state ? "Group the sessions by what they need" : "Group the sessions by repo, with their helpers")
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
+        .frame(maxWidth: 190)
+        .padding(.top, 5)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Group the sessions")
     }
 }
 

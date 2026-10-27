@@ -16,14 +16,19 @@ enum Snapshot {
             // Each palette in both modes at the default size, then the default
             // palette in the narrowest window and a wide one. The palette is
             // set in a volatile domain, so the app's saved choice is untouched.
-            var shots: [(String, String, CGFloat, Bool)] = []
+            var shots: [(String, String, CGFloat, Bool, SidebarMode)] = []
             for p in Palette.all {
-                shots.append(("\(p.id)-light", p.id, 1100, false))
-                shots.append(("\(p.id)-dark", p.id, 1100, true))
+                shots.append(("\(p.id)-light", p.id, 1100, false, .repo))
+                shots.append(("\(p.id)-dark", p.id, 1100, true, .repo))
             }
-            shots.append(("window-narrow", Palette.standard.id, 820, false))
-            shots.append(("window-wide", Palette.standard.id, 1500, false))
-            for (base, palette, width, dark) in shots {
+            shots.append(("state-light", Palette.standard.id, 1100, false, .state))
+            shots.append(("state-dark", Palette.standard.id, 1100, true, .state))
+            shots.append(("window-narrow", Palette.standard.id, 820, false, .repo))
+            shots.append(("window-wide", Palette.standard.id, 1500, false, .repo))
+            for (base, palette, width, dark, mode) in shots {
+                // Set directly, so the app's saved view and folds are untouched.
+                store.mode = mode
+                store.folded = []
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette], forName: UserDefaults.argumentDomain)
                 Theme.use(palette)
                 let (rep, titlebar) = window(store, dark: dark, width: width)

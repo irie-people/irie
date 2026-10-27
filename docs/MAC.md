@@ -6,11 +6,16 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 
 ## 1. What it shows
 
-- **A card per session**, in the order the sessions started. As in the terminal sidebar, a state change never reorders the list (DESIGN §4.1); it only changes the card's mark and colours. Each card is rounded and edged in its state's colour: red, blue or green, or a warm hairline once it is quiet.
+- **A card per session, in a tree.** The **State | Repo** switch above the details panel picks the view, and the app keeps the choice. It opens in **Repo**, a tree:
+  - each repo, by the name of its folder (with the folder above it when two repos share a name), in the order its first session started;
+  - under it, its sessions in the order they started, each followed by its helpers;
+  - then **Not in a repo**, then **Outside Irie**.
+
+  A state change never moves a card here (DESIGN §4.1); it only changes the card's mark and colours. **State** groups the sessions into **Needs you**, **Working** and **Done**, in the order they started within each group, so a card moves to another group when its state changes. A group's header shows its count; a click folds it, and a folded group says in red how many of its sessions need you. The app keeps what is folded. While the find field has text, every group is open, so what it finds shows. Each card is rounded and soft, tinted red while it needs you.
 - **A short top.** The compact title bar, 38 points tall, holds the traffic lights, Irie's sun and name, and the counts of how many need you, are working or are done; each count jumps to the first such session. Under it is one row, the find field at full width, and then the first card: 70 points from the top of the window, where the first build took 133. The title bar has no sidebar button, so all of it fits beside a sidebar at its narrowest; View > Hide Sidebar (⌃⌘S) hides the sidebar. The shown session's name starts 24 points from the sidebar's edge.
 - **Cards that never move.** Every card is two lines: the name, then what the session needs from you (in red, on a red tint), what it is doing, or how it ended, in plain words: "Running the tests", "Editing main.rs", "Asks: may it run rm -rf build?". The exact call, such as `Bash · go test ./...`, is in the details panel. Its age and token count sit in a trailing slot of fixed width. Hovering swaps that slot for quick actions, so the name never re-wraps and no card changes height under the pointer.
 - **A details panel**, a card of fixed height above the task bar, for the selected session: its state, current step, profile and branch, folder, tokens, helpers, warnings, and the last screen of a spawn that went wrong. Long lines are cut off, and the full text shows on hover.
-- **Helpers.** A session's running subagents show as a count on its card and as a line each in the panel, red when one needs you. The core reports them in each row's `subagents`, kept from the agent's SubagentStart and SubagentStop hooks.
+- **Helpers.** A session's running subagents sit under its card, a line each: its kind and what it is doing, in plain words and in red when it needs you. Three show, then how many more. The panel lists them too. The core reports them in each row's `subagents`, kept from the agent's SubagentStart and SubagentStop hooks.
 - **Tokens per session.** Each card shows the session's token count, and the panel splits it into input, output, cache read and cache write. The core reads each row's `tokens` from the session's transcript and its finished subagents' transcripts. It counts each reply once, because a reply spans several lines that all repeat its usage.
 - **Accessibility.** VoiceOver reads each card as one element: name, state, what it needs or does, when it started ("started 3 minutes ago") and its tokens. The card's actions offer what the hover buttons and the right-click menu do. Notices are announced, and errors stay until the next notice or until you edit or submit. Text colours keep 4.5:1 contrast, with stronger ones for Increase Contrast. The selected card shows a full fill and sun edge while the list has the keyboard, and a faint one otherwise.
 - **The shown agent's live terminal** on the right, in a rounded frame edged in that session's colour, or sun while it is quiet. The edge brightens while the terminal has the keyboard. Selecting a row swaps that agent in, and Return (or **Type to it**) moves the keyboard there.
@@ -53,7 +58,7 @@ The **Go**, **View** and **Edit** menus list them all.
 
 | Keys | What they do |
 |---|---|
-| Ctrl+Tab, Ctrl+Shift+Tab | Show the next or the previous session in the sidebar's order: the order they started, without the rows the filter hides, wrapping at the ends. The keyboard stays where it was. The app catches these keys before the terminal or AppKit's key-view loop sees them |
+| Ctrl+Tab, Ctrl+Shift+Tab | Show the next or the previous session in the sidebar's order: group by group, without the cards in folded groups or those the filter hides, wrapping at the ends. The keyboard stays where it was. The app catches these keys before the terminal or AppKit's key-view loop sees them |
 | Ctrl+] | Move the keyboard between the session list and the terminal |
 | ⌘1 to ⌘9 | Show the first to ninth session in the sidebar's order |
 | ⌘F | Find a session. Esc clears the search and goes back to the list |
