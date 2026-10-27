@@ -6,7 +6,8 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 
 ## 1. What it shows
 
-- **A card per session**, in the order the sessions started. As in the terminal sidebar, a state change never reorders the list (DESIGN §4.1); it only changes the card's mark and colours. Each card is rounded and edged in its state's colour: red, blue or green, or a warm hairline once it is quiet. The header counts how many need you, are working or are done. Each count jumps to the first such session.
+- **A card per session**, in the order the sessions started. As in the terminal sidebar, a state change never reorders the list (DESIGN §4.1); it only changes the card's mark and colours. Each card is rounded and edged in its state's colour: red, blue or green, or a warm hairline once it is quiet.
+- **A short top.** The counts of how many need you, are working or are done sit in the compact title bar, beside the traffic lights; each jumps to the first such session. Under them is one row, the find field, and then the first card: 70 points from the top of the window, where the first build took 133. The title bar has no sidebar button, so the counts fit; View > Hide Sidebar (⌃⌘S) hides the sidebar.
 - **Cards that never move.** Every card is two lines: the name, then what the session needs from you (in red, on a red tint), what it is doing, or how it ended. Its age and token count sit in a trailing slot of fixed width. Hovering swaps that slot for quick actions, so the name never re-wraps and no card changes height under the pointer.
 - **A details panel**, a card of fixed height above the task bar, for the selected session: its state, current step, profile and branch, folder, tokens, helpers, warnings, and the last screen of a spawn that went wrong. Long lines are cut off, and the full text shows on hover.
 - **Helpers.** A session's running subagents show as a count on its card and as a line each in the panel, red when one needs you. The core reports them in each row's `subagents`, kept from the agent's SubagentStart and SubagentStop hooks.
@@ -35,6 +36,8 @@ Two details of the generated tmux.conf follow from this. The `window-resized` ho
 
 The terminal view is [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) v1.18.0 (MIT), the newest release whose manifest builds with Swift 5.9. The script fetches it, refuses the download unless its SHA-256 matches, and compiles it once into a static library under `mac/.build`. SwiftTerm draws with Metal: its renderer compiles `Shaders.metal`, which the script copies into the app, when the app runs, so no Xcode is needed. Where Metal is missing it draws with Core Graphics.
 
+`Irie --snapshot DIR` draws the window offscreen from fixture sessions in `/home/alice`, never a core, in light and dark mode. It writes `window-light.png` and `window-dark.png` to DIR, prints the title bar's height and where the first card starts, in points, and exits. It is how a change to the views is checked without a screen. The window is ordered in far off any screen, so it never shows, and the app takes no focus. The picture is drawn with `cacheDisplay`, which gives a fully rounded edge a short straight piece at each end that the screen does not show.
+
 `IRIE_MAC_NO_SWIFTTERM=1 mac/build.sh` builds with Apple's frameworks only. The terminal then opens in a Ghostty window that follows the selected session. Where SwiftPM works (Xcode, or newer Command Line Tools), `mac/Package.swift` builds the same app.
 
 The app finds the core the way `irie` does (`internal/paths`). `--socket PATH`, or `IRIE_CORE_SOCKET`, points it at another Irie. It needs a core with `attach-info`; an older one gets a message to run the new build's `irie up`.
@@ -49,6 +52,7 @@ The **Go**, **View** and **Edit** menus list them all.
 | Ctrl+] | Move the keyboard between the session list and the terminal |
 | ⌘1 to ⌘9 | Show the first to ninth session in the sidebar's order |
 | ⌘F | Find a session. Esc clears the search and goes back to the list |
+| ⌃⌘S | Hide or show the sidebar |
 | ⌘N | New task |
 | ↑ and ↓, then Return | Pick a session in the list, then type to it. The arrows go on into Outside Irie, where they only select a row, and Return says that it runs outside Irie |
 | ⌘C, ⌘V, ⌘A | Copy, paste and select all in the terminal. A mouse drag selects in tmux, which puts the text on the pasteboard when you let go (tmux's `set-clipboard external` and OSC 52, which SwiftTerm writes to the pasteboard). ⌘C copies a selection made with Shift-drag, which bypasses tmux |
