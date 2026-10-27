@@ -30,16 +30,19 @@
 //
 // `fakeagent agents --json` lists no sessions, as `claude agents --json`
 // does on a machine with none outside Irie. The log's first line records
-// the agent's argv, pid and the names, not the values, of its environment.
+// the agent's argv, pid and the names, not the values, of its environment;
+// each SIGHUP, SIGTERM or SIGINT it gets is logged too.
 //
 // Environment:
 //
-//	IRIE_FAKE_VERSION  what --version reports (default 2.1.300); a version
-//	                   before 2.1.295 refuses settings that use onFailure
-//	IRIE_FAKE_NO_NAME  when set, --help lists no --name and --name is refused
-//	IRIE_FAKE_PACE     a pause before each step, such as 300ms
-//	IRIE_FAKE_LOG      the log file; by default fakeagent.ndjson next to the
-//	                   --settings file
+//	IRIE_FAKE_VERSION      what --version reports (default 2.1.300); a version
+//	                       before 2.1.295 refuses settings that use onFailure
+//	IRIE_FAKE_NO_NAME      when set, --help lists no --name and --name is refused
+//	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
+//	                       agent that hangs
+//	IRIE_FAKE_PACE         a pause before each step, such as 300ms
+//	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
+//	                       the --settings file
 package main
 
 import (
@@ -407,9 +410,14 @@ func (a *agent) run() int {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		<-sigs
-		a.end("other")
-		os.Exit(0)
+		for s := range sigs {
+			a.record(map[string]any{"t": "signal", "signal": s.String()})
+			if s == syscall.SIGTERM && os.Getenv("IRIE_FAKE_IGNORE_TERM") != "" {
+				continue
+			}
+			a.end("other")
+			os.Exit(0)
+		}
 	}()
 
 	source := "startup"

@@ -182,6 +182,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"header","header":{…}}` when the plan's use or the machine's memory changes (§6.3). A snapshot carries the header too.
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
+  - `{"t":"closed","closed":[…]}`: the closed sessions that `reopen` can bring back, the last closed first (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
   - `{"t":"conversation","conversation":{…}}`, sent only when `conversation:true` was requested for one session: its whole conversation first (`reset`), then the items that changed and what it waits on you for (§4.7).
 - Frames to the UI are coalesced to at most 10 per second.
 - The API version is `1`. Additions keep backwards compatibility.
@@ -201,7 +202,8 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |
 | `result` | `session` | `text`: what its agent said at the end of its last turn | M10 (§6.4) |
 | `tool` | `name`: `setup` or `models` | `session`, running `irie setup local` or `irie ctl local` | M10 (§6.4) |
-| `rename`, `park`, `unpark`, `close`, `reopen` | `session`, `name?` | none | M4 |
+| `rename`, `park`, `unpark` | `session`, `name?` | none | M4 |
+| `close`, `reopen` | `session`; for `reopen` it may be left out, which reopens the session closed last | none; `reopen`: `session` | M4 (§4.5) |
 | `undo`, `redo` | none | `label` | M4 |
 | `pause`, `resume` | `session` or `all`; `scope`: `main`, `sub:<id>` or `tree` | none | M5 |
 | `freeze`, `thaw` | `session` or `all` | none | M6 |
@@ -476,7 +478,7 @@ type Harness interface {
 - **Stops the host did not cause.** The host continues them within 100 ms, for example the agent's own Ctrl+Z handling, so an agent never wedges. tmux would do the same for its direct child, which is why the agent runs under a host and not as the pane's first process.
 - **Input.** While a session is frozen the core turns off its pane's input (`select-pane -d`), so keystrokes don't pile up, and turns it back on at thaw.
 - **Long freezes.** After `freeze.warn_after` the row warns that network streams may have dropped.
-- **Close while frozen.** SIGTERM, then SIGCONT, then SIGKILL after 5 s.
+- **Close while frozen.** SIGCONT to everything the host runs, the host last, then SIGTERM through the host, then SIGKILL after 5 s. A stopped process that catches SIGTERM, as Claude Code does, only handles it once it runs again, so the host also continues the agent's group whenever it passes a signal on.
 
 **Priority.**
 - **Level.** 0 or 1, with an optional reason. The field is an integer, so more levels can come later.
@@ -541,7 +543,7 @@ type Harness interface {
 | Priority on / off | Off / on | Cancels a note that has not been delivered. If it was delivered, sends `notes.priority_cleared` |
 | Pause / resume | Resume / pause | Releasing still sends the "held for" note |
 | Freeze / thaw | Thaw / freeze | |
-| Close | Reopen (`claude --resume <uuid>` in the same cwd) | Closing keeps the worktree. A session that never started is spawned again with its original task |
+| Close | Reopen (`claude --resume <uuid>` in the same cwd) | Closing keeps the worktree. A session that never started is spawned again with its original task. Details below |
 | Spawn | Close | Redo reopens it |
 | Note | Cancel | Only while undelivered; delivered notes are shown as such |
 
@@ -550,6 +552,11 @@ type Harness interface {
 - A new action clears the redo stack.
 - `u` undoes and `U` redoes. The header shows the labels of both.
 - Not undoable: the agents' own edits (use the agent's own rewind) and worktree contents.
+
+**Close and reopen.**
+- **Close.** In one command list the pane swaps out of the slot, if it is shown, and its `@irie_role` becomes `closing`, so the row goes at once and a restarted core still finishes the job. Then everything the host runs gets SIGCONT, in case the session is frozen, the host last, and SIGTERM goes to the host, which passes it on (§4.3). A pane still alive 5 s later gets SIGKILL: the agent's process group, every process under the host, then the host. Then its window goes. The worktree, the folder and `sessions/<id>/` stay.
+- **What is closed** is derived from the journal: a session whose last `ui.closed` came after its last `ui.reopened`, and that has no pane, the newest 100. `ui.closed` carries what reopening needs that `spec.json` does not hold: the name, the creation time, the conversation's id and whether to resume it.
+- **Reopen.** It waits until the closed session's old agent has exited, so two never share a conversation. The session comes back with the same id, name and creation time, so its row returns to its place, in the same folder on the same profile, with Irie's settings written afresh. When its agent got as far as a conversation, meaning its prompt went in or it showed life, reopen runs `claude --resume <id>`, with the id the last SessionStart named, which `/clear` changes. Otherwise its `task.md` starts again under a new id. A session moved in from outside Irie has no task, so it always resumes, and a harness that cannot resume always starts again.
 
 **Tests:** every action round-trips (do, undo, redo) to an identical state (M4–M7).
 
@@ -655,7 +662,8 @@ One JSON object per journal line and per `event` frame:
 | `freeze.on`, `freeze.off` | `pids`, `frozen_ms` | irie, host | none |
 | `priority.set` | `level`, `reason` | irie | none |
 | `note.queued`, `note.delivered` | `note`, `kind` | irie, shim | none |
-| `ui.renamed`, `ui.parked`, `ui.unparked`, `ui.closed`, `ui.reopened`, `ui.undo`, `ui.redo` | `before`, `after` | irie | none |
+| `ui.renamed`, `ui.parked`, `ui.unparked`, `ui.undo`, `ui.redo` | `before`, `after` | irie | none |
+| `ui.closed`, `ui.reopened` | `name`; `ui.closed` also `created`, `vendor_id` and `resume`, which say how reopen brings it back (§4.5) | user | none |
 | `outcome.rated` | `verdict`: `good` or `bad` | user (M10, §6.4) | none |
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
 | `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |

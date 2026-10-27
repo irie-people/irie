@@ -190,27 +190,15 @@ func SwapIn(s Snapshot, pane string, focus bool) ([][]string, error) {
 	if slot == nil {
 		return nil, errors.New("tmux: the slot is missing")
 	}
-	// -Z keeps a zoomed window zoomed.
-	keep := func(cmd ...string) []string {
-		if !slot.Zoomed {
-			return cmd
-		}
-		return append([]string{cmd[0], "-Z"}, cmd[1:]...)
-	}
+	keep := func(cmd ...string) []string { return keepZoom(slot, cmd) }
 	var cmds [][]string
 	if slot.ID != target.ID {
 		if slot.Role != RolePlaceholder {
-			var home *Pane
-			for _, p := range s.ByRole(RolePlaceholder) {
-				if p.Session != MainSession {
-					home = &p
-					break
-				}
+			home, err := goHome(s, slot)
+			if err != nil {
+				return nil, err
 			}
-			if home == nil {
-				return nil, errors.New("tmux: the shown pane has no placeholder to swap with")
-			}
-			cmds = append(cmds, keep("swap-pane", "-d", "-s", Slot, "-t", home.ID))
+			cmds = append(cmds, home)
 		}
 		cmds = append(cmds, keep("swap-pane", "-d", "-s", target.ID, "-t", Slot))
 	}
@@ -218,4 +206,37 @@ func SwapIn(s Snapshot, pane string, focus bool) ([][]string, error) {
 		cmds = append(cmds, keep("select-pane", "-t", Slot))
 	}
 	return cmds, nil
+}
+
+// SwapOut returns the command that sends pane home when the slot shows it,
+// which puts the placeholder back in the slot; none when it is not shown.
+func SwapOut(s Snapshot, pane string) ([][]string, error) {
+	slot := s.SlotPane()
+	if slot == nil || slot.ID != pane {
+		return nil, nil
+	}
+	home, err := goHome(s, slot)
+	if err != nil {
+		return nil, err
+	}
+	return [][]string{home}, nil
+}
+
+// goHome is the command that swaps the shown pane with the placeholder in
+// its own window.
+func goHome(s Snapshot, slot *Pane) ([]string, error) {
+	for _, p := range s.ByRole(RolePlaceholder) {
+		if p.Session != MainSession {
+			return keepZoom(slot, []string{"swap-pane", "-d", "-s", Slot, "-t", p.ID}), nil
+		}
+	}
+	return nil, errors.New("tmux: the shown pane has no placeholder to swap with")
+}
+
+// keepZoom adds -Z to a command on a zoomed slot, which keeps it zoomed.
+func keepZoom(slot *Pane, cmd []string) []string {
+	if !slot.Zoomed {
+		return cmd
+	}
+	return append([]string{cmd[0], "-Z"}, cmd[1:]...)
 }

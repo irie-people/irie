@@ -5,6 +5,8 @@ import SwiftUI
 /// that agent, and showing another session swaps it in place.
 struct TerminalArea: View {
     @EnvironmentObject private var store: Store
+    /// The palette's name: a change draws the ground and the frame again.
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
@@ -93,15 +95,8 @@ struct TerminalArea: View {
     }
 
     private func subtitle(_ s: Session) -> String {
-        var parts: [String] = []
-        switch Look(s) {
-        case .needs: parts.append(s.detail ?? "Needs you")
-        case .working: parts.append("Working")
-        case .starting: parts.append("Starting")
-        case .done: parts.append("Done")
-        case .idle: parts.append("Idle")
-        case .ended: parts.append(s.state == "exited" ? "Exited" : s.state.capitalized)
-        }
+        let look = Look(s)
+        var parts = [look.loud ? s.detail ?? look.label : look.label]
         if let p = s.profile, !p.isEmpty { parts.append(p) }
         if let b = s.branch, !b.isEmpty { parts.append(b) }
         if let t = s.tokens { parts.append("\(Tokens.short(t.total)) tokens") }
