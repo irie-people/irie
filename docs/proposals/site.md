@@ -28,7 +28,7 @@ All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<titl
 | The Irie window | Home | The sidebar as `internal/ui/view.go` draws it at its default 34 columns: header and counts, rows with glyphs and ages, the selected row's deep-green bar, the status strip and the command bar. Beside it, the slot with an agent at work. On a phone it crops to the sidebar |
 | How it works | How it works | You, Irie, tmux, three agents and their worktrees, with hooks running back up to Irie |
 | What the colours mean | How it works | Every state of DESIGN §5.3 with its glyph and colour; paused and frozen marked planned |
-| A spawn line | Get started | `@shop +local fix the flaky checkout test`: where, who, what, with where and who marked planned |
+| A spawn line | Get started | `@shop +local fix the flaky checkout test`: where, who, what |
 | Milestones | Roadmap | Eleven stones over two waves: done, in progress, planned |
 | The window closes | FAQ | The window is only a view; the agents live in tmux and keep going |
 | From an issue to Steak | Contribute | Issue, signed-off pull request, merge, a `steak:N` size, the public record |
@@ -77,7 +77,7 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 ## Keeping it true
 
 - **When a milestone merges.** The same pull request updates `site/roadmap.html` and the milestones picture, and removes that milestone's "Planned" marks. Each mark carries `data-m="<N>"`, so `grep -rn 'data-m="3"' site/` finds them, and `grep -rn milestone site/` finds the sentences that name one.
-- **Milestone 3.** This branch was made on top of the M3 commit, which is not on main yet. Merging it as it is would bring M3 along; then M3 flips to done in the same change.
+- **Milestone 3.** This branch was made on top of the M3 commit, which was not on main yet. The docs change that builds on it carries the M3 commit too, and marks M3 done, so M3 reaches main first or with it (open decision 4).
 - **When the first release ships.** Get started gains the install steps, and the "nothing to install yet" lines on Home, Get started and the FAQ go.
 - **Links out.** The site links to `github.com/irie-hq/irie`, `irie-hq/stake` and `steak-hq/steak`. None of them was public on 2026-10-26, so those links fail until they are.
 

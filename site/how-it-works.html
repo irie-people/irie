@@ -51,7 +51,7 @@
   <figure class="picture small">
     <svg viewBox="0 0 360 500" role="img" aria-labelledby="how-title" aria-describedby="how-desc">
       <title id="how-title">How Irie works: you give Irie tasks, Irie starts an agent for each inside tmux, and the agents report back through hooks.</title>
-      <desc id="how-desc">At the top is you. An arrow labelled tasks runs down to Irie, and one labelled who needs you runs back up. Below Irie, an arrow labelled starts runs down into a dashed box labelled tmux, which keeps them running, and one labelled hooks runs back up. Inside tmux are three Claude Code agents: one working, one that needs you, and one done. Under each agent is a folder labelled worktree, marked as planned for milestone 3.</desc>
+      <desc id="how-desc">At the top is you. An arrow labelled tasks runs down to Irie, and one labelled who needs you runs back up. Below Irie, an arrow labelled starts runs down into a dashed box labelled tmux, which keeps them running, and one labelled hooks runs back up. Inside tmux are three Claude Code agents: one working, one that needs you, and one done. Under each agent is a folder labelled worktree: its own working copy of the project.</desc>
 
       <!-- You -->
       <rect x="110" y="12" width="140" height="46" rx="23" class="s-card s-line" stroke-width="1.5"/>
@@ -107,18 +107,18 @@
         <text x="266" y="342" class="t-green">done</text>
       </g>
 
-      <!-- A worktree each: planned -->
-      <g class="s-line" stroke-width="1.5" stroke-dasharray="4 4">
+      <!-- A worktree each -->
+      <g class="s-line" stroke-width="1.5">
         <path d="M72 356V384M180 356V384M288 356V384"/>
       </g>
       <g font-size="14" text-anchor="middle">
-        <path d="M28 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <path d="M28 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5"/>
         <text x="72" y="416" class="s-ink">worktree</text>
-        <path d="M136 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <path d="M136 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5"/>
         <text x="180" y="416" class="s-ink">worktree</text>
-        <path d="M244 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <path d="M244 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5"/>
         <text x="288" y="416" class="s-ink">worktree</text>
-        <text x="180" y="466" class="s-soft">worktrees: planned, milestone 3</text>
+        <text x="180" y="466" class="s-soft">each in its own worktree</text>
       </g>
     </svg>
     <figcaption>You talk to Irie. Irie starts your agents, keeps them running and listens for news from them.</figcaption>
@@ -127,7 +127,7 @@
   <h2>You type a task</h2>
   <p>At the bottom of Irie’s list is a box for tasks. Press Tab to get there, type what you want done in plain words, and press Enter.</p>
   <p>Irie starts a <dfn>coding agent</dfn>, an AI program that works on code, on the task. A row appears in the list, named after the task’s first few words.</p>
-  <p>Unless you name one of your folders with <code>@</code>, each task gets a new, empty folder to work in.</p>
+  <p>Unless you name a project or a folder with <code>@</code>, each task gets a new, empty folder to work in.</p>
 
   <h2>Each agent runs in tmux</h2>
   <p>Irie starts every agent inside <dfn>tmux</dfn>, a free program that keeps programs running in the background. Close the window and your agents keep working.</p>
@@ -192,7 +192,7 @@
   <p>Most states have a mark of their own as well. Working and needs you share a dot, and red tells them apart.</p>
   <p>In your <dfn>terminal</dfn>, the window where you type commands, the state colours are its own red, green, yellow and cyan, so they suit your theme.</p>
 
-  <h2>Each agent gets its own worktree <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></h2>
+  <h2>Each agent gets its own worktree</h2>
   <p><dfn>git</dfn> keeps the history of a project’s code.</p>
   <p>A <dfn>worktree</dfn> is a second working copy of a project. It shares the project’s history, but has its own files and its own <dfn>branch</dfn>, or line of changes.</p>
   <p>Start a task with <code>@</code> and a project’s name, and its agent gets a fresh worktree, so agents keep out of each other’s way. You tell Irie once, in its settings, where your projects live.</p>
@@ -201,9 +201,10 @@
 
   <h2>Profiles: which agent, which model</h2>
   <p>A <dfn>profile</dfn> is a named recipe for starting an agent: which program, which <dfn>model</dfn> (the AI itself) and which settings. Every task starts from your default profile: out of the box, Claude Code with Opus 5.5 at max effort in auto mode.</p>
-  <p>You can change the default in Irie’s settings. Picking a profile per task, with <code>+</code> and its name, is planned. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></p>
+  <p>You can change the default in Irie’s settings, and pick another for one task with <code>+</code> and its name.</p>
   <p>The program is the agent’s <dfn>harness</dfn>: it turns a model into a coding agent.</p>
-  <p>Today Irie runs one harness, Claude Code. From milestone&nbsp;3 it can start any agent that runs in a terminal. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></p>
+  <p>Irie can start any agent that runs in a terminal. Only Claude Code tells Irie how it’s doing, so for other agents a row shows only whether they’re still running.</p>
+  <p>Fuller support for more agents is planned after version&nbsp;1. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></p>
 
   <h2>What stays on your computer</h2>
   <p>Irie runs on your computer and sends nothing over the internet of its own. Each agent talks to its own AI company, just as it would without Irie.</p>

@@ -32,9 +32,9 @@
   <h1>Get started</h1>
 
   <figure class="picture narrow">
-    <svg viewBox="0 0 480 130" role="img" aria-labelledby="spawn-title" aria-describedby="spawn-desc">
-      <title id="spawn-title">A spawn line read in three parts: @shop says where, +local says who, and the rest says what. Naming a project and a profile like this is planned.</title>
-      <desc id="spawn-desc">Irie’s command bar holds the line: @shop +local fix the flaky checkout test. A bracket under @shop reads where. A bracket under +local reads who. A bracket under fix the flaky checkout test reads what. Under where and who, a note reads planned.</desc>
+    <svg viewBox="0 0 480 110" role="img" aria-labelledby="spawn-title" aria-describedby="spawn-desc">
+      <title id="spawn-title">A spawn line read in three parts: @shop says where, +local says who, and the rest says what.</title>
+      <desc id="spawn-desc">Irie’s command bar holds the line: @shop +local fix the flaky checkout test. A bracket under @shop reads where. A bracket under +local reads who. A bracket under fix the flaky checkout test reads what.</desc>
       <rect x="0.75" y="0.75" width="478.5" height="52.5" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
       <g class="mono" font-size="17">
         <text x="16" y="33" class="t-sun">›</text>
@@ -52,12 +52,8 @@
         <text x="127.5" y="100">who</text>
         <text x="305.5" y="100">what</text>
       </g>
-      <g font-size="15" text-anchor="middle" class="s-soft">
-        <text x="61.5" y="122">planned</text>
-        <text x="127.5" y="122">planned</text>
-      </g>
     </svg>
-    <figcaption>A <dfn>spawn line</dfn> is what you type to start an agent: where, who and what. Today the task and a folder work, and <code>@shop</code> and <code>+local</code> are planned.</figcaption>
+    <figcaption>A <dfn>spawn line</dfn> is what you type to start an agent: where, who and what. Only the what is needed.</figcaption>
   </figure>
 
   <p class="note">There is nothing to install yet. Irie is early, so this page shows what using it will look like.</p>
@@ -82,7 +78,8 @@
     <li>
       <h3>Type a task</h3>
       <p>Press Tab to reach the task box, type what you want done in plain words, and press Enter. An agent starts on it, and a row appears in the list.</p>
-      <p>To have the agent work in one of your folders, start the line with <code>@</code> and its path, such as <code>@~/code/shop</code>, where <code>~</code> is your home folder. Otherwise each task gets a new, empty folder of its own.</p>
+      <p>To have the agent work on one of your projects, start the line with <code>@</code> and its name, such as <code>@shop</code>, or its folder, such as <code>@~/code/shop</code>. It gets a <dfn>worktree</dfn> of its own: a second working copy of the project.</p>
+      <p>Otherwise each task gets a new, empty folder of its own.</p>
     </li>
     <li>
       <h3>Watch the colours</h3>
@@ -109,12 +106,12 @@
   <h2>Reading a spawn line</h2>
   <dl class="spawn-parts">
     <dt><code>@shop</code> where</dt>
-    <dd>A fresh <dfn>worktree</dfn> of your project called shop: a second working copy of it, on its own <dfn>branch</dfn>, or line of changes. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></dd>
-    <dd>Today <code>@</code> takes a folder instead, such as <code>@~/code/shop</code>, and the agent works right there, on your own files.</dd>
+    <dd>A fresh worktree of your project called shop, on its own <dfn>branch</dfn>, or line of changes. Irie finds shop in the folders you list in its settings.</dd>
+    <dd>A folder works too, such as <code>@~/code/shop</code>, where <code>~</code> is your home folder. A folder that isn’t a project under git is used as it is.</dd>
     <dt><code>@shop!</code> where, in place</dt>
-    <dd>The project’s own folder, without a worktree. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></dd>
+    <dd>The project’s own folder, without a worktree.</dd>
     <dt><code>+local</code> who</dt>
-    <dd>Use your <dfn>profile</dfn> called local: a recipe you name for which agent and which <dfn>model</dfn>, the AI itself. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></dd>
+    <dd>Use your <dfn>profile</dfn> called local: a recipe you name for which agent and which <dfn>model</dfn>, the AI itself.</dd>
     <dt>The rest: what</dt>
     <dd>Everything else is the task, kept word for word.</dd>
   </dl>
