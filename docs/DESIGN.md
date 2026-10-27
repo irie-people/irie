@@ -1167,6 +1167,7 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
   - Take ideas only, never code, from GPL, AGPL, FSL or rider-licensed projects (for example claude-squad, crush, ntm).
   - Do not copy agent-deck's status detector: its header credits an AGPL source.
 - **Commits.** `TZ=UTC git commit`.
+- **Releases.** Irie stays below 1.0.0 until version 1 is done: M1–M11, and M12 (skills), which [the skills proposal](proposals/skills.md) puts before the first release. Until then a breaking change bumps the minor version, not the major (`bump-minor-pre-major` in `release-please-config.json`). When the last of them is on main, an empty commit with a `Release-As: 1.0.0` footer makes release-please's next release 1.0.0: `TZ=UTC git commit -s --allow-empty -m "chore: release 1.0.0" -m "Release-As: 1.0.0"`.
 
 ### M1. Launch and look (the first usable build)
 

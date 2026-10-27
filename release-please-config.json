@@ -5,6 +5,7 @@
     ".": {
       "release-type": "go",
       "initial-version": "0.1.0",
+      "bump-minor-pre-major": true,
       "extra-files": [{ "type": "generic", "path": "internal/version/version.go" }]
     }
   }
