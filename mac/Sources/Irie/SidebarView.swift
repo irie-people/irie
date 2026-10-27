@@ -93,10 +93,11 @@ struct SidebarView: View {
 }
 
 /// One session, always two lines: its name, then what it needs from you (in
-/// red), what it is doing, or how it ended. The trailing slot has a fixed
-/// width, so the name never re-wraps when the age ticks or the pointer
-/// brings up the actions. The card is rounded and edged in its state's
-/// colour, or in sun while selected.
+/// red), what it is doing, or how it ended, in plain words. The trailing
+/// slot has a fixed width, so the name never re-wraps when the age ticks or
+/// the pointer brings up the actions. The card is soft and rounded, on a
+/// gentle shadow: tinted red while it needs you, edged in the accent while
+/// selected.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -106,20 +107,19 @@ private struct SessionCard: View {
     @State private var hovering = false
 
     private var look: Look { Look(session) }
-    private var quiet: Bool { look == .done || look == .idle || look == .ended }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 9) {
             StateMark(look: look).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.name)
-                    .font(.system(size: 13, weight: quiet ? .regular : .semibold, design: .rounded))
-                    .foregroundStyle(look == .ended || look == .idle ? Theme.muted : Color.primary)
+                    .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
+                    .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(status)
-                    .font(.system(size: 11.5, weight: look == .needs ? .medium : .regular))
-                    .foregroundStyle(look == .needs ? Theme.needs : Theme.muted)
+                    .font(Theme.font(12, look.loud ? .semibold : .regular))
+                    .foregroundStyle(look.loud ? Theme.needs : Theme.muted)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -129,7 +129,7 @@ private struct SessionCard: View {
                     Text(Age.short(session.created, now: now))
                     Text(session.tokens.map { Tokens.short($0.total) } ?? " ")
                 }
-                .font(.system(size: 11)).monospacedDigit()
+                .font(Theme.font(11)).monospacedDigit()
                 .foregroundStyle(Theme.muted)
                 .opacity(hovering ? 0 : 1)
                 QuickActions(session: session)
@@ -138,16 +138,16 @@ private struct SessionCard: View {
             }
             .frame(width: 66, alignment: .trailing)
         }
-        .padding(.vertical, 6)
-        .padding(.leading, 10)
-        .padding(.trailing, 6)
-        .background(shape.fill(fill))
+        .padding(.vertical, 8)
+        .padding(.leading, 11)
+        .padding(.trailing, 7)
+        .background(shape.fill(fill).shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
         .onHover { hovering = $0 }
         .onTapGesture { store.show(session.id, focus: true) }
         .contextMenu { Actions(session: session) }
-        .help([session.name, session.detail].compactMap { $0 }.joined(separator: "\n"))
+        .help([session.name, session.detail, session.command].compactMap { $0 }.joined(separator: "\n"))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
@@ -174,12 +174,9 @@ private struct SessionCard: View {
         let helpers = session.subagents.map { $0.count == 1 ? "1 helper" : "\($0.count) helpers" }
         let what: String
         switch look {
-        case .needs: what = session.detail ?? "Needs you"
-        case .working: what = session.detail ?? "Working"
         case .starting: what = "Starting…"
-        case .done: what = "Done"
-        case .idle: what = "Idle"
-        case .ended: what = session.detail ?? "Ended"
+        case .done, .idle, .frozen, .paused, .pausing: what = look.label
+        default: what = session.detail ?? look.label
         }
         return [helpers, what].compactMap { $0 }.joined(separator: " · ")
     }
@@ -187,21 +184,21 @@ private struct SessionCard: View {
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }
 
     private var fill: Color {
-        if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.45) }
-        if look == .needs { return Theme.needsTint }
+        if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.55) }
+        if look.loud { return Theme.needsTint }
         return hovering ? Theme.hover : Theme.card
     }
 
-    /// Sun round the selected card, faint while the list lacks the keyboard,
-    /// and its state's colour round the rest.
+    /// The accent round the selected card, faint while the list lacks the
+    /// keyboard; red round one that needs you; a hairline round the rest.
     private var edge: Color {
-        if selected { return listFocused ? Theme.sunEdge : Theme.sunEdge.opacity(0.5) }
-        if hovering { return Theme.sunEdge.opacity(0.5) }
-        return look.color?.opacity(look == .needs ? 0.6 : 0.35) ?? Theme.edge
+        if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
+        if hovering { return Theme.accent.opacity(0.45) }
+        return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
     }
 
     private var spoken: String {
-        var parts = [session.name, StateMark.label(for: look)]
+        var parts = [session.name, look.label]
         if let d = session.detail, !d.isEmpty { parts.append(d) }
         parts.append("started " + Age.spoken(session.created, now: now))
         if let t = session.tokens { parts.append("\(t.total) tokens") }
@@ -259,7 +256,7 @@ private struct DetailsPanel: View {
                 details(s)
             } else {
                 Text("Pick a session to see its details.")
-                    .font(.system(size: 11.5))
+                    .font(Theme.font(12))
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -270,6 +267,7 @@ private struct DetailsPanel: View {
         .background(shape.fill(Theme.panel))
         .overlay(shape.strokeBorder(stateColor?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
         .clipShape(shape)
+        .background(shape.fill(Theme.panel).shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .padding(.horizontal, 10)
         .padding(.top, 6)
         .frame(height: Self.height)
@@ -280,9 +278,9 @@ private struct DetailsPanel: View {
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 StateMark(look: look)
-                Text(StateMark.label(for: look))
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(look == .needs ? Theme.needs : Color.primary)
+                Text(look.label)
+                    .font(Theme.font(12.5, .bold))
+                    .foregroundStyle(look.loud ? Theme.needs : Theme.ink)
                 Spacer(minLength: 4)
                 Button("Type to it") { store.show(s.id, focus: true) }
                 if let cwd = s.cwd {
@@ -290,7 +288,7 @@ private struct DetailsPanel: View {
                 }
             }
             .controlSize(.small)
-            line(s.detail, color: look == .needs ? Theme.needs : Color.primary)
+            line(s.detail, color: look.loud ? Theme.needs : Theme.ink)
             line(s.command, mono: true)
             line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
             line(s.cwd.map(Age.tilde), mono: true)
@@ -316,7 +314,7 @@ private struct DetailsPanel: View {
     @ViewBuilder private func line(_ text: String?, mono: Bool = false, color: Color = Theme.muted) -> some View {
         if let text, !text.isEmpty {
             Text(text)
-                .font(.system(size: mono ? 10.5 : 11.5, design: mono ? .monospaced : .default))
+                .font(.system(size: mono ? 10.5 : 12, design: mono ? .monospaced : .rounded))
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -380,37 +378,44 @@ private struct Counts: View {
         HStack(spacing: 2) {
             switch store.link {
             case .online:
-                count(.needs, color: Theme.needs, label: "need you")
-                count(.working, color: Theme.work, label: "working")
-                count(.done, color: Theme.done, label: "done")
+                count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
+                count([.working], mark: .working, color: Theme.ink, label: "working")
+                count([.done], mark: .done, color: Theme.done, label: "done, not yet seen")
+                if store.sessions.contains(where: { [.paused, .pausing].contains(Look($0)) }) {
+                    count([.paused, .pausing], mark: .paused, color: Theme.paused, label: "paused")
+                }
+                if store.sessions.contains(where: { Look($0) == .frozen }) {
+                    count([.frozen], mark: .frozen, color: Theme.frozen, label: "frozen")
+                }
             case .offline:
-                Text("offline").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.needs)
+                Text("offline").font(Theme.font(11, .bold)).foregroundStyle(Theme.needs)
             case .connecting:
                 EmptyView()
             }
         }
     }
 
-    /// A count, which shows the first session in that state. It is drawn
-    /// as a chip rather than a button, so the title bar puts no bezel round
-    /// it; VoiceOver still finds a button.
-    private func count(_ g: Look.Group, color: Color, label: String) -> some View {
-        let rows = store.sessions.filter { Look($0).group == g }
+    /// A count of the sessions in these states, with the first state's mark,
+    /// which shows the first such session. It is drawn as a chip rather than
+    /// a button, so the title bar puts no bezel round it; VoiceOver still
+    /// finds a button.
+    private func count(_ looks: [Look], mark: Look, color: Color, label: String) -> some View {
+        let rows = store.sessions.filter { looks.contains(Look($0)) }
         let go = { if let first = rows.first { store.show(first.id) } }
         return HStack(spacing: 3) {
-            Circle().fill(color).frame(width: 5, height: 5)
+            StateMark(look: mark, size: 10)
             // Two digits' width, so a tenth session doesn't push the others.
-            Text("\(rows.count)").font(.system(size: 10.5, weight: .bold, design: .rounded)).monospacedDigit()
+            Text("\(rows.count)").font(Theme.font(10.5, .bold)).monospacedDigit()
                 .frame(minWidth: 12)
         }
         .foregroundStyle(color)
         .padding(.horizontal, 4)
         .padding(.vertical, 1.5)
-        .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
-        .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
+        .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.05 : 0.12)))
+        .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.4), lineWidth: 1))
         .opacity(rows.isEmpty ? 0.5 : 1)
         .contentShape(Capsule())
-        .onTapGesture(perform: go)
+        .onTapGesture { go() }
         .help("\(rows.count) \(label)")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(rows.count) \(label)")
@@ -432,7 +437,7 @@ private struct FindField: View {
                 .accessibilityHidden(true)
             TextField("Find a session", text: $store.filter)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
+                .font(Theme.font(12.5))
                 .focused($focused)
                 .onExitCommand {
                     store.filter = ""
@@ -448,59 +453,16 @@ private struct FindField: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field))
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field)
+            .shadow(color: Theme.shadow, radius: 2, y: 1))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
+                .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
         .padding(.horizontal, 10)
         .padding(.top, 2)
         .padding(.bottom, 4)
         .onChange(of: store.focusFind) { focused = true }
-    }
-}
-
-/// Red when it needs you, an open ring while it works, a check when done.
-/// The marks hold still: an endless animation in a list makes the whole
-/// window lay out again on every frame.
-struct StateMark: View {
-    let look: Look
-
-    var body: some View {
-        ZStack {
-            switch look {
-            case .needs:
-                Circle().fill(Theme.needs.opacity(0.22)).frame(width: 14, height: 14)
-                Circle().fill(Theme.needs).frame(width: 8, height: 8)
-            case .working:
-                Circle().trim(from: 0, to: 0.72)
-                    .stroke(Theme.work, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .frame(width: 11, height: 11)
-                    .rotationEffect(.degrees(-90))
-            case .starting:
-                Circle().stroke(Theme.work, style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
-                    .frame(width: 11, height: 11)
-            case .done:
-                Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Theme.done)
-            case .idle:
-                Circle().stroke(Theme.muted, lineWidth: 1.5).frame(width: 8, height: 8)
-            case .ended:
-                Circle().fill(Theme.muted).frame(width: 5, height: 5)
-            }
-        }
-        .frame(width: 14, height: 14)
-        .accessibilityLabel(Self.label(for: look))
-    }
-
-    static func label(for look: Look) -> String {
-        switch look {
-        case .needs: return "Needs you"
-        case .working: return "Working"
-        case .starting: return "Starting"
-        case .done: return "Done"
-        case .idle: return "Idle"
-        case .ended: return "Ended"
-        }
     }
 }
 
@@ -510,7 +472,7 @@ private struct Offline: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(why).font(.system(size: 13, weight: .semibold))
+            Text(why).font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
             Text("Start it in a terminal with `irie up`. The app connects by itself once it’s running.")
                 .font(.system(size: 12)).foregroundStyle(Theme.muted)
             Text(Age.tilde(socket)).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.muted)
@@ -526,7 +488,7 @@ private struct Welcome: View {
     var body: some View {
         VStack(spacing: 10) {
             SunMark().frame(width: 56, height: 56)
-            Text("Everything irie.").font(.system(size: 17, weight: .semibold, design: .rounded))
+            Text("Everything irie.").font(Theme.font(18, .bold)).foregroundStyle(Theme.ink)
             Text("No agents yet. Type a task below to start one.")
                 .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
                 .multilineTextAlignment(.center)

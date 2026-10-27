@@ -85,7 +85,7 @@ extension Look {
         case "busy": self = .working
         case "idle": self = .idle
         case "waiting": self = .needs
-        default: self = .ended
+        default: self = .exited
         }
     }
 }
@@ -230,7 +230,7 @@ private struct OutsideRow: View {
             StateMark(look: look)
             Text(outside.label)
                 .font(.system(size: 12.5, design: .rounded))
-                .foregroundStyle(look == .idle || look == .ended ? Theme.muted : Color.primary)
+                .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -287,8 +287,8 @@ private struct OutsideRow: View {
     }
 
     private var edge: Color {
-        if selected { return listFocused ? Theme.sunEdge : Theme.sunEdge.opacity(0.5) }
-        if hovering { return Theme.sunEdge.opacity(0.5) }
+        if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
+        if hovering { return Theme.accent.opacity(0.45) }
         return look == .needs ? Theme.needs.opacity(0.6) : Theme.edge
     }
 
@@ -331,7 +331,7 @@ struct OutsideDetails: View {
                 StateMark(look: look)
                 Text(outside.doing)
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(look == .needs ? Theme.needs : Color.primary)
+                    .foregroundStyle(look.loud ? Theme.needs : Theme.ink)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Button(store.moving == outside.id ? "Moving…" : "Move into Irie") { store.askToMove(outside) }
@@ -341,7 +341,7 @@ struct OutsideDetails: View {
                 }
             }
             .controlSize(.small)
-            line(outside.label, color: Color.primary)
+            line(outside.label, color: Theme.ink)
             line("Outside Irie, " + outside.whereItRuns)
             line(Age.tilde(outside.cwd), mono: true)
             if outside.movable != true {
