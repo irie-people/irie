@@ -179,8 +179,23 @@ func Read(dir string, since time.Time) ([]event.Event, error) {
 // ReadKind is Read for the events of one kind. It skips the other lines
 // before decoding them, so reading a long journal stays cheap.
 func ReadKind(dir string, since time.Time, kind string) ([]event.Event, error) {
-	needle := []byte(`"kind":"` + kind + `"`)
-	return read(dir, since, func(line []byte) bool { return bytes.Contains(line, needle) })
+	return ReadKinds(dir, since, kind)
+}
+
+// ReadKinds is ReadKind for the events of any of several kinds.
+func ReadKinds(dir string, since time.Time, kinds ...string) ([]event.Event, error) {
+	needles := make([][]byte, len(kinds))
+	for i, k := range kinds {
+		needles[i] = []byte(`"kind":"` + k + `"`)
+	}
+	return read(dir, since, func(line []byte) bool {
+		for _, n := range needles {
+			if bytes.Contains(line, n) {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 // read reads the day files from since's day on, decoding the lines that

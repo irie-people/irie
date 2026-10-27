@@ -51,6 +51,7 @@ type Core struct {
 	log     *slog.Logger
 
 	spawnMu  sync.Mutex   // one spawn at a time, taken before mu
+	sendMu   sync.Mutex   // one message typed to an agent at a time, taken before mu
 	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
 	http     *http.Client // for local servers
 	sampling atomic.Bool  // a memory sample is running
@@ -75,6 +76,7 @@ type Core struct {
 	plan       ipc.Plan                 // the plan's use, from the newest status update
 	planAt     time.Time
 	outcomes   map[string]*outcome // every session's route and outcome, those gone included
+	closes     closes              // closed sessions, and agents still ending (close.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -181,6 +183,7 @@ func Run(o Options) error {
 	c.loadRecent()
 	c.loadLocal()
 	c.loadOutcomes()
+	c.loadClosed()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
@@ -226,6 +229,7 @@ func (c *Core) tick() {
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.reap()
 	c.observe(time.Now())
 	c.countTokens()
 	c.followConversations()
@@ -411,8 +415,9 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
+			ipc.OpClose, ipc.OpReopen,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -420,7 +425,23 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		c.refreshOutside(outsideEvery, false)
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem}, nil
+		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem, Closed: c.closedList()}, nil
+	case ipc.OpClose:
+		var a ipc.CloseArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.close(a)
+	case ipc.OpReopen:
+		var a ipc.ReopenArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.reopen(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.ReopenResult{Session: s}, nil
 	case ipc.OpMove:
 		var a ipc.MoveArgs
 		if err := decode(raw, &a); err != nil {
@@ -460,6 +481,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		items, notes := c.complete(a.Text)
 		return ipc.CompleteResult{Items: items, Notes: notes}, nil
+	case ipc.OpSend:
+		var a ipc.SendArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.send(a)
 	case ipc.OpConversation:
 		var a ipc.ConversationArgs
 		if err := decode(raw, &a); err != nil {

@@ -213,3 +213,45 @@ func TestUnsetVariablesNeverReachTheAgent(t *testing.T) {
 		return strings.Contains(screen, "|1") && !strings.Contains(screen, "unset")
 	})
 }
+
+func TestSIGTERMEndsAStoppedAgent(t *testing.T) {
+	// The agent's own child catches SIGTERM, as Claude Code does, and is
+	// stopped, as in a frozen session, where the host's wait does not see it.
+	// A caught signal waits until the process runs again, so the host
+	// continues the group after passing SIGTERM on.
+	inner := filepath.Join(t.TempDir(), "inner.sh")
+	if err := os.WriteFile(inner, []byte("trap 'exit 0' TERM\nwhile :; do sleep 1; done\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := startHost(t, "/bin/sh", "-c", `/bin/sh "$0" & trap "" TERM; read line`, inner)
+	host, sh := h.child(`/bin/sh -c /bin/sh "$0" & trap "" TERM; read line ` + inner)
+	var child proc
+	testutil.Eventually(t, 5*time.Second, "the agent's child did not start", func() bool {
+		for _, p := range processes(t) {
+			if p.ppid == sh.pid && p.command == "/bin/sh "+inner {
+				child = p
+				return true
+			}
+		}
+		return false
+	})
+	state := func() string {
+		for _, p := range processes(t) {
+			if p.pid == child.pid {
+				return p.stat
+			}
+		}
+		return "gone"
+	}
+	if out, err := exec.Command("kill", "-STOP", strconv.Itoa(child.pid)).CombinedOutput(); err != nil {
+		t.Fatalf("kill -STOP %d: %v: %s", child.pid, err, out)
+	}
+	testutil.Eventually(t, time.Second, "the child did not stop", func() bool { return strings.HasPrefix(state(), "T") })
+	if out, err := exec.Command("kill", "-TERM", strconv.Itoa(host)).CombinedOutput(); err != nil {
+		t.Fatalf("kill -TERM %d: %v: %s", host, err, out)
+	}
+	testutil.Eventually(t, 5*time.Second, "the stopped child never ran its SIGTERM trap", func() bool {
+		s := state()
+		return s == "gone" || strings.HasPrefix(s, "Z")
+	})
+}

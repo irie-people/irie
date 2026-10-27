@@ -220,6 +220,9 @@ func TestOutsideFramesComeOnlyOnAChange(t *testing.T) {
 	if f, ok := next(time.Second); !ok || f.T != ipc.FrameOutside || len(f.Outside) != 0 || f.Problem != "" {
 		t.Fatalf("second frame = %+v, want an empty outside frame", f)
 	}
+	if f, ok := next(time.Second); !ok || f.T != ipc.FrameClosed || len(f.Closed) != 0 {
+		t.Fatalf("third frame = %+v, want an empty closed frame", f)
+	}
 	// A first run that finds no one is no change.
 	c.setOutsideForTest([]ipc.OutsideSession{}, nil)
 	if f, ok := next(300 * time.Millisecond); ok {

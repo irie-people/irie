@@ -21,9 +21,9 @@ const maxQueue = 10000
 // remembers which rows changed; a frame then carries their latest state, as
 // one upsert or remove, or as a snapshot when several rows changed. Event
 // frames, for a client that asked for them, are never coalesced. A client
-// that sees every session also gets the sessions outside Irie, after its
-// first snapshot and whenever they change. A client that follows one
-// session's conversation gets all of it, then what changed.
+// that sees every session also gets the sessions outside Irie and the closed
+// sessions, after its first snapshot and whenever they change. A client that
+// follows one session's conversation gets all of it, then what changed.
 type subscriber struct {
 	c            *Core
 	session      string // only this session, when set
@@ -40,6 +40,7 @@ type subscriber struct {
 	header  bool        // the header changed
 	queue   []ipc.Frame // event frames not sent yet
 	outside bool        // an outside frame is due
+	closed  bool        // a closed frame is due
 	talk    bool        // a conversation frame may be due
 
 	talkSent bool   // the conversation's first frame went out; only loop uses it
@@ -62,7 +63,7 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	sub := &subscriber{
 		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
-		full: true, dirty: map[string]bool{}, outside: a.Session == "", talk: a.Conversation,
+		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "", talk: a.Conversation,
 	}
 	c.mu.Lock()
 	if a.Conversation {
@@ -159,6 +160,20 @@ func (s *subscriber) noteOutside() {
 	}
 }
 
+// noteClosed marks a closed frame due, for a client that sees every session.
+func (s *subscriber) noteClosed() {
+	if s.session != "" {
+		return
+	}
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // noteHeader tells the subscriber that the header changed.
 func (s *subscriber) noteHeader() {
 	s.mu.Lock()
@@ -207,8 +222,8 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, header, queue, outside, talk := s.full, s.dirty, s.header, s.queue, s.outside, s.talk
-		s.full, s.dirty, s.header, s.queue, s.outside, s.talk = false, map[string]bool{}, false, nil, false, false
+		full, dirty, header, queue, outside, closed, talk := s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.talk
+		s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.talk = false, map[string]bool{}, false, nil, false, false, false
 		s.mu.Unlock()
 		for _, f := range queue {
 			select {
@@ -234,6 +249,9 @@ func (s *subscriber) loop() {
 		}
 		if outside {
 			frames = append(frames, s.outsideFrame())
+		}
+		if closed {
+			frames = append(frames, s.closedFrame())
 		}
 		if talk {
 			if f, ok := s.conversationFrame(); ok {
@@ -284,6 +302,13 @@ func (s *subscriber) outsideFrame() ipc.Frame {
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
 	return ipc.Frame{T: ipc.FrameOutside, Outside: s.c.outsideList(), Problem: s.c.outside.problem}
+}
+
+// closedFrame carries the closed sessions that reopen can carry on.
+func (s *subscriber) closedFrame() ipc.Frame {
+	s.c.mu.Lock()
+	defer s.c.mu.Unlock()
+	return ipc.Frame{T: ipc.FrameClosed, Closed: s.c.closedList()}
 }
 
 // conversationFrame carries the session's conversation: all of it the first
