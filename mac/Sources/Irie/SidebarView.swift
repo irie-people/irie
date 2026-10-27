@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The sidebar: a card per session, in groups. The Repo view is a tree, a
@@ -12,6 +13,10 @@ struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
 
+    /// The least room the cards keep, however tall the details are dragged:
+    /// a group's header and two cards.
+    static let cardsLeast: CGFloat = 132
+
     var body: some View {
         // One row of its own above the cards: Irie's mark, its name and the
         // counts sit in the title bar, beside the traffic lights.
@@ -23,12 +28,13 @@ struct SidebarView: View {
                     .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
                 .zIndex(1)
             content
+                .frame(minHeight: Self.cardsLeast)
             ReviewDock()
             if !store.sessions.isEmpty {
                 ModeSwitch()
             }
-            // The details share the cards' room evenly, once there is a
-            // session to pick.
+            // The details, once there is a session to pick: small until
+            // their edge is dragged, and the cards have the rest.
             if !store.sessions.isEmpty || !store.outside.isEmpty {
                 DetailsPanel()
             }
@@ -130,8 +136,10 @@ struct SidebarView: View {
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
 /// the pointer brings up the actions. The card is soft and rounded, on a
 /// gentle shadow: washed in its agent's colour while it works, tinted red
-/// while it needs you. The selected card is edged in its session's colour,
-/// which a line carries on to the terminal's frame (TabLink.swift).
+/// while it needs you. The selected card is filled with the selection and
+/// edged in its session's colour, which a line carries on to the terminal's
+/// frame (TabLink.swift). A selected working card is a gradient, from the
+/// selection by its mark to the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -139,6 +147,9 @@ private struct SessionCard: View {
     let listFocused: Bool
     let now: Date
     @State private var hovering = false
+
+    /// The trailing slot's width: the age and tokens, or the actions.
+    private static let slot: CGFloat = 66
 
     private var look: Look { Look(session) }
     private var renaming: Bool { store.renaming == session.id }
@@ -174,18 +185,19 @@ private struct SessionCard: View {
                     Text(session.tokens.map { Tokens.short($0.total) } ?? " ")
                 }
                 .font(Theme.font(11)).monospacedDigit()
-                .foregroundStyle(Theme.muted)
+                // In ink over a selected working card's deep end.
+                .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
                 .opacity(hovering ? 0 : 1)
-                QuickActions(session: session)
+                QuickActions(session: session, ink: deep != nil)
                     .opacity(hovering ? 1 : 0)
                     .allowsHitTesting(hovering)
             }
-            .frame(width: 66, alignment: .trailing)
+            .frame(width: Self.slot, alignment: .trailing)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
-        .background(shape.fill(fill).overlay { if let wash { shape.fill(wash) } }.shadow(color: Theme.shadow, radius: 3, y: 1.5))
-        .overlay(shape.strokeBorder(edge, lineWidth: selected ? TabLink.width : 1))
+        .background(ground.shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
         .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
             if selected {
                 ends.card = bounds
@@ -239,19 +251,40 @@ private struct SessionCard: View {
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }
 
+    /// The fill, its wash, and a selected working card's deep end across the
+    /// trailing slot.
+    private var ground: some View {
+        shape.fill(fill)
+            .overlay { if let wash { shape.fill(wash) } }
+            .overlay(alignment: .trailing) {
+                if let deep {
+                    LinearGradient(colors: [deep.opacity(0), deep], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: Self.slot + Theme.inset)
+                }
+            }
+            .clipShape(shape)
+    }
+
+    /// The selection's fill is full even while the terminal has the keyboard,
+    /// so the shown session is plain to see; the edge tells where the
+    /// keyboard is.
     private var fill: Color {
-        if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.55) }
+        if selected { return Theme.selection }
         if look.loud { return Theme.needsTint }
         return hovering ? Theme.hover : Theme.card
     }
 
     /// Its own colour across the card while it works, fullest by the mark and
-    /// fading into the fill toward the trailing slot. A selected card keeps
-    /// it, over the selection's fill.
+    /// fading into the fill toward the trailing slot. A selected card turns
+    /// it round: the selection by the mark, turning to its own colour, which
+    /// deepens across the trailing slot into the colour round its terminal.
     private var wash: LinearGradient? {
         guard let c = Look.agentWash(session) else { return nil }
-        return LinearGradient(colors: [c, c.opacity(0.5)], startPoint: .leading, endPoint: .trailing)
+        let colors = selected ? [c.opacity(0), c] : [c, c.opacity(0.5)]
+        return LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
     }
+
+    private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
     /// Round the selected card, the colour of the terminal's frame and the
     /// line between them; red round one that needs you; a hairline round the
@@ -262,6 +295,11 @@ private struct SessionCard: View {
         if let tint { return tint.opacity(0.55) }
         return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
     }
+
+    /// The selected card's edge is as wide as the line from it, and bolder
+    /// while the list has the keyboard, so its colour always matches the
+    /// line's and the frame's while its width tells where the keyboard is.
+    private var edgeWidth: CGFloat { selected ? (listFocused ? 2.5 : TabLink.width) : 1 }
 
     private var spoken: String {
         var parts = [session.name, look.label]
@@ -426,12 +464,14 @@ private struct ModeSwitch: View {
 private struct QuickActions: View {
     @EnvironmentObject private var store: Store
     let session: Session
+    /// All in ink, over a selected working card's deep end.
+    let ink: Bool
 
     var body: some View {
         HStack(spacing: 0) {
             // A click on the card types to it; the folder is in the menu.
             PauseButton(session: session)
-            PromoteButton(session: session)
+            PromoteButton(session: session, ink: ink)
             Menu {
                 Actions(session: session)
             } label: {
@@ -444,17 +484,39 @@ private struct QuickActions: View {
         }
         .buttonStyle(.borderless)
         .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(Theme.muted)
+        .foregroundStyle(ink ? Theme.ink : Theme.muted)
         .accessibilityHidden(true)
     }
 }
 
-/// The selected session's details, on a card above the task bar that shares
-/// the sidebar's height evenly with the cards, edged in its state's colour:
-/// long text is cut off, and the full text is on hover. The card keeps its
-/// half however many lines it has; what doesn't fit is cut off at the bottom.
-private struct DetailsPanel: View {
+/// The selected session's details, on a card above the task bar, edged in
+/// its state's colour: long text is cut off, and the full text is on hover.
+/// It opens small, the state and one line, and shows as many whole lines as
+/// fit. Its top edge drags it taller, as far as leaves the
+/// cards their room, or shorter. The chevron, a double click on the edge or
+/// a drag to the bottom minimizes it to one line of what the agent is
+/// doing. The app keeps its height and whether it is minimized.
+struct DetailsPanel: View {
     @EnvironmentObject private var store: Store
+    /// Its height while open, in points.
+    @AppStorage(DetailsPanel.heightKey) private var height = DetailsPanel.compact
+    @AppStorage(DetailsPanel.minimizedKey) private var minimized = false
+    /// Its height as drawn: less than `height` while the cards need the room.
+    @State private var drawn: CGFloat = 0
+    /// While the edge is dragged: the height drawn, and the height kept, as
+    /// the drag began.
+    @State private var dragFrom: (drawn: CGFloat, kept: Double)?
+    @State private var overEdge = false
+
+    static let heightKey = "detailsHeight"
+    static let minimizedKey = "detailsMinimized"
+    /// Its height until the edge is dragged: the state and one line, about a
+    /// sixth of the half of the sidebar it took before it could be dragged.
+    static let compact: Double = 60
+    /// The least it opens to, the state and one line. A drag below `fold`
+    /// minimizes it.
+    private static let least: CGFloat = 58
+    private static let fold: CGFloat = 44
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
@@ -463,31 +525,137 @@ private struct DetailsPanel: View {
         let outside = store.selectedOutside
         let stateColor = outside == nil ? selected.flatMap { Look($0).color } : nil
         Group {
-            if let o = outside {
+            if minimized {
+                summary(outside)
+            } else if let o = outside {
                 OutsideDetails(outside: o)
             } else if let s = selected {
                 details(s)
             } else {
-                Text("Pick a session to see its details.")
-                    .font(Theme.font(12))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                HStack(alignment: .top, spacing: 6) {
+                    Text("Pick a session to see its details.")
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.muted)
+                    Spacer(minLength: 4)
+                    DetailsFold()
+                }
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .padding(.horizontal, Theme.inset)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
+        .padding(.vertical, minimized ? 6 : 9)
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: minimized ? nil : CGFloat(height), alignment: .top)
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { drawn = g.size.height }
+                .onChange(of: g.size.height) { drawn = g.size.height }
+        })
         .background(shape.fill(Theme.panel))
         .overlay(shape.strokeBorder(stateColor?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
         .clipShape(shape)
         .background(shape.fill(Theme.panel).shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .overlay(alignment: .top) { edge }
         .padding(.horizontal, 10)
         .padding(.top, 6)
+        // It takes its height before the cards, which keep their least.
+        .layoutPriority(1)
+    }
+
+    /// The top edge, a strip across the border: a drag makes the panel
+    /// taller or shorter, and a double click minimizes it or brings it
+    /// back. Its grip shows under the pointer.
+    private var edge: some View {
+        Capsule()
+            .fill(Theme.muted.opacity(overEdge || dragFrom != nil ? 0.55 : 0))
+            .frame(width: 32, height: 3)
+            .padding(.bottom, 1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .contentShape(Rectangle())
+            .frame(height: 10)
+            .offset(y: -4)
+            .onHover { inside in
+                overEdge = inside
+                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            }
+            .onDisappear { if overEdge { NSCursor.pop() } }
+            .onTapGesture(count: 2) { withAnimation(.easeOut(duration: 0.15)) { minimized.toggle() } }
+            // In the window's space, since the edge moves with the drag.
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag(by: $0.translation.height) }
+                .onEnded { _ in endDrag() })
+            .accessibilityElement()
+            .accessibilityLabel("Details height")
+            .accessibilityValue(minimized ? "Minimized" : "\(Int(drawn)) points")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: step(40)
+                case .decrement: step(-40)
+                @unknown default: break
+                }
+            }
+    }
+
+    private func drag(by dy: CGFloat) {
+        let from = dragFrom ?? (drawn: drawn, kept: height)
+        dragFrom = from
+        let want = from.drawn - dy
+        if want < Self.fold {
+            minimized = true
+        } else {
+            minimized = false
+            height = Double(max(want, Self.least))
+        }
+    }
+
+    /// Keeps no more than the height drawn, which the cards' room may have
+    /// cut short, or the one it had when a drag minimized it.
+    private func endDrag() {
+        guard let from = dragFrom else { return }
+        height = minimized ? from.kept : min(height, Double(drawn))
+        dragFrom = nil
+    }
+
+    /// VoiceOver's steps: taller or shorter, minimized below the least.
+    private func step(_ by: CGFloat) {
+        if minimized {
+            if by > 0 { minimized = false }
+        } else if drawn + by < Self.least {
+            minimized = true
+        } else {
+            height = Double(drawn + by)
+        }
+    }
+
+    /// The minimized panel's line: what the session needs from you, or the
+    /// call its agent is making, or what it is doing.
+    private func summary(_ outside: OutsideSession?) -> some View {
+        HStack(spacing: 6) {
+            if let o = outside {
+                StateMark(look: Look(outside: o))
+                line(o.doing, color: Theme.ink)
+            } else if let s = selected {
+                let look = Look(s)
+                StateMark(look: look)
+                if look.loud {
+                    line(s.detail ?? look.label, color: Theme.needs)
+                } else if let c = s.command, !c.isEmpty {
+                    line(c, mono: true, color: Theme.ink)
+                } else {
+                    line(s.detail ?? look.label, color: Theme.ink)
+                }
+            } else {
+                line("No session picked")
+            }
+            Spacer(minLength: 4)
+            DetailsFold()
+        }
+        .controlSize(.small)
     }
 
     private func details(_ s: Session) -> some View {
         let look = Look(s)
-        return VStack(alignment: .leading, spacing: 4) {
+        return WholeLines(spacing: 4) {
             HStack(spacing: 6) {
                 StateMark(look: look)
                 Text(look.label)
@@ -504,6 +672,7 @@ private struct DetailsPanel: View {
                         .help("Show the folder in Finder")
                         .accessibilityLabel("Show the folder in Finder")
                 }
+                DetailsFold()
             }
             .controlSize(.small)
             line(s.detail, color: look.loud ? Theme.needs : Theme.ink)
@@ -539,6 +708,49 @@ private struct DetailsPanel: View {
                 .truncationMode(.middle)
                 .help(text)
         }
+    }
+}
+
+/// The details panel's lines, down from the top, as many as fit whole: the
+/// first that would be cut off, and every line after it, is left out, so
+/// the panel never shows half a line, however tall it is.
+struct WholeLines: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let natural = heights(subviews, width).reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0))
+        return CGSize(width: width, height: min(natural, proposal.height ?? natural))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        var fits = true
+        for (view, height) in zip(subviews, heights(subviews, bounds.width)) {
+            fits = fits && y + height <= bounds.maxY + 0.5
+            // A line left out goes far below, where the panel's clip hides it.
+            view.place(at: CGPoint(x: bounds.minX, y: fits ? y : bounds.maxY + 1000),
+                       proposal: ProposedViewSize(width: bounds.width, height: height))
+            y += height + spacing
+        }
+    }
+
+    private func heights(_ subviews: Subviews, _ width: CGFloat) -> [CGFloat] {
+        subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+    }
+}
+
+/// The details panel's chevron, at the end of its first line: it minimizes
+/// the panel to one line, or brings it back.
+struct DetailsFold: View {
+    @AppStorage(DetailsPanel.minimizedKey) private var minimized = false
+
+    var body: some View {
+        Button { withAnimation(.easeOut(duration: 0.15)) { minimized.toggle() } } label: {
+            Image(systemName: minimized ? "chevron.up" : "chevron.down")
+        }
+        .help(minimized ? "Show the details" : "Minimize the details")
+        .accessibilityLabel(minimized ? "Show the details" : "Minimize the details")
     }
 }
 

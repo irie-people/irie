@@ -240,6 +240,15 @@ enum Theme {
         return computed(alpha: { $0 ? 0 : 1 }) { agentWashHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
+    /// A selected working card's trailing end: its wash taken toward its
+    /// mark's colour, which edges its terminal, as far as keeps ink at 4.5:1,
+    /// so the selection runs into the terminal's colour. Under Increase
+    /// Contrast it is clear, as the wash is.
+    static func agentDeep(slot: Int) -> Color {
+        let p = palette
+        return computed(alpha: { $0 ? 0 : 1 }) { agentDeepHex(slot: slot, palette: p, dark: $0, high: $1) }
+    }
+
     /// The slot for a session: the same one every time, from its id.
     static func agentSlot(_ id: String) -> Int {
         var h: UInt32 = 2166136261
@@ -285,6 +294,24 @@ enum Theme {
             if fits(mid) { lo = mid } else { hi = mid }
         }
         return mix(s.card, vivid, lo)
+    }
+
+    static func agentDeepHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
+        let s = dark ? p.dark : p.light
+        let wash = agentWashHex(slot: slot, palette: p, dark: dark, high: high)
+        if high { return wash }
+        let mark = agentHex(slot: slot, palette: p, dark: dark, high: high)
+        // Only the trailing slot sits there, in ink; a little over 4.5:1
+        // leaves room for rounding.
+        let ink = luminance(s.ink)
+        func fits(_ t: Double) -> Bool { ratio(luminance(mix(wash, mark, t)), ink) >= 4.6 }
+        if fits(1) { return mark }
+        var lo = 0.0, hi = 1.0
+        for _ in 0..<14 {
+            let mid = (lo + hi) / 2
+            if fits(mid) { lo = mid } else { hi = mid }
+        }
+        return mix(wash, mark, lo)
     }
 
     static func agentHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {

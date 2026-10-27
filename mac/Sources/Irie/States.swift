@@ -120,6 +120,12 @@ extension Look {
         Look(s) == .working ? Theme.agentWash(slot: Theme.agentSlot(s.id)) : nil
     }
 
+    /// Its selected card's trailing end, deep toward the colour round its
+    /// terminal, while it is working; none otherwise.
+    static func agentDeep(_ s: Session) -> Color? {
+        Look(s) == .working ? Theme.agentDeep(slot: Theme.agentSlot(s.id)) : nil
+    }
+
     /// The colour that edges the selected card and the terminal's frame, and
     /// draws the line between them: red while it needs you, green once it is
     /// done, the agent's own colour while it works, and sun otherwise.
