@@ -236,9 +236,10 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, profileName string, profile config.
 	probe.Warnings = append(warnings, probe.Warnings...)
 
 	// Spawns run one at a time, so a worktree's slug cannot race another
-	// spawn's name. Making a worktree runs git, which can take a while, so
-	// c.mu stays free meanwhile for hooks and the sidebar.
-	c.spawnMu.Lock()
+	// spawn's name, and one that a promoted session delegates goes first.
+	// Making a worktree runs git, which can take a while, so c.mu stays free
+	// meanwhile for hooks and the sidebar.
+	c.spawnMu.LockAt(c.levelOf(a.Parent, a.Continues))
 	defer c.spawnMu.Unlock()
 	base := slug(a.Task)
 	if a.Name != "" {
@@ -325,6 +326,8 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	// A reopened session starts unfrozen (freeze.go).
+	os.Remove(c.paths.FreezeFile(id))
 	s := harness.Spawn{
 		Session: id, Name: x.name, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: j.probe,
@@ -386,7 +389,9 @@ func (c *Core) launch(j job) (*session, error) {
 		opt(tmux.OptCreated, x.created.Format(time.RFC3339Nano)),
 		opt(tmux.OptVendorID, x.vendorID),
 		append([]string{"resize-window", "-t", target}, size...),
-		{"rename-window", "-t", target, x.name},
+		// A name given by rename or carried in by move is any text, which
+		// tmux would expand as a format.
+		{"rename-window", "-t", target, "--", tmux.Literal(x.name)},
 	})
 	if err != nil {
 		c.tmux.Run("kill-window", "-t", target)

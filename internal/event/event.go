@@ -65,6 +65,9 @@ const (
 	// UIShown records that the user showed a session, which turns a done
 	// session idle (DESIGN §5.3). It is an addition to the table of §5.2.
 	UIShown = "ui.shown"
+	// UIReordered records that the user put a session elsewhere in the
+	// list, by dragging it or by promoting it to the top (DESIGN §4.1).
+	UIReordered = "ui.reordered"
 	// Outcomes teach the router how accurate each profile is (DESIGN §6.4):
 	// the user's rating of a session, and a task run again on a more
 	// accurate profile, which says the first session fell short. A
@@ -81,7 +84,7 @@ func init() {
 		SpawnRequested, SpawnFailed, SessionStarted, PromptSubmitted, ToolStarted, ToolFinished, ToolFailed,
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
-		UIRenamed, UIParked, UIUnparked, UIClosed, UIReopened, UIUndo, UIRedo, UIShown,
+		UIRenamed, UIParked, UIUnparked, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
 		OutcomeRated, OutcomeEscalated, RouteFailover,
 	} {
 		kinds[k] = true

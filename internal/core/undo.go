@@ -598,9 +598,22 @@ func checkClose(c *Core, a action) []problem {
 				Detail: "Ends its agent. Its folder and conversation stay, so it can be reopened."}},
 			recommend: ipc.ChoiceApply})
 	}
-	if s := x.wire(); busy(s.State) {
-		what := "is still at work"
-		if s.State != ipc.StateWorking {
+	// A frozen session is judged by what it was doing when it froze.
+	state := x.wire().State
+	frozen := state == ipc.StateFrozen
+	if frozen {
+		state = x.track.live()
+	}
+	if busy(state) {
+		var what string
+		switch {
+		case frozen && state == ipc.StateWorking:
+			what = "is frozen in the middle of its work"
+		case frozen:
+			what = "is frozen while it waits for you"
+		case state == ipc.StateWorking:
+			what = "is still at work"
+		default:
 			what = "is waiting for you"
 		}
 		ps = append(ps, problem{code: "busy", question: fmt.Sprintf("%q %s.", x.name, what),

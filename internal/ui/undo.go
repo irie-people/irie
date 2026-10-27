@@ -10,6 +10,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -83,6 +84,14 @@ func (m *Model) undone(msg undoneMsg) {
 				break
 			}
 		}
+		// The menu takes the mouse out of play: a card it carried goes back.
+		if d := m.drag; d != nil {
+			m.drag = nil
+			if d.moved {
+				m.sortByOrder()
+				m.sel = m.sessionIndex(d.id)
+			}
+		}
 		m.setStatus("", false)
 	case ipc.DidUndo:
 		m.setStatus("undid "+r.Label, false)
@@ -107,21 +116,21 @@ func (m Model) menuKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "down", "j", "tab":
 		mn.at = min(mn.at+1, n-1)
 	case "enter", "space":
-		return m.pick(mn.at)
+		return m.answer(mn.at)
 	case "esc", "q":
 		m.menu = nil
 		m.setStatus("cancelled; nothing changed", false)
 	default:
 		if len(k) == 1 && k[0] >= '1' && int(k[0]-'1') < n {
-			return m.pick(int(k[0] - '1'))
+			return m.answer(int(k[0] - '1'))
 		}
 	}
 	return m, nil
 }
 
-// pick answers the question with option i. Cancel needs no word with the
+// answer answers the question with option i. Cancel needs no word with the
 // core: nothing changes.
-func (m Model) pick(i int) (tea.Model, tea.Cmd) {
+func (m Model) answer(i int) (tea.Model, tea.Cmd) {
 	mn := m.menu
 	m.menu = nil
 	o := mn.choice.Options[i]
@@ -132,9 +141,12 @@ func (m Model) pick(i int) (tea.Model, tea.Cmd) {
 	return m, m.undoCmd(mn.dir, mn.choice.ID, o.Key)
 }
 
-// historyLine is the header's second line, `↶ close "api-fix"  ↷ –`: what u
-// and U would do, a dash for nothing. Long labels are cut, each to its share.
+// historyLine is the header's second line, `↶ close "api-fix"  ↷ –`, on
+// the title bar's ground: what u and U would do, a dash for nothing. Long
+// labels are cut, each to its share.
 func (m Model) historyLine() string {
+	p := m.pal
+	band := func(fg color.Color) lipgloss.Style { return on(p.ground, fg) }
 	undo, redo := m.undoLabel, m.redoLabel
 	room := m.width - 2 - lipgloss.Width("↶   ↷ ")
 	uw, rw := lipgloss.Width(undo), lipgloss.Width(redo)
@@ -157,55 +169,75 @@ func (m Model) historyLine() string {
 	}
 	show := func(label string, w int) string {
 		if label == "" {
-			return styleDim.Render("–")
+			return band(p.muted).Render("–")
 		}
-		return cut(label, w)
+		return band(p.ink).Render(cut(label, w))
 	}
-	glyph := lipgloss.NewStyle().Foreground(sun)
-	line := " " + glyph.Render("↶") + " " + show(undo, uw) + "  " + glyph.Render("↷") + " " + show(redo, rw)
+	line := blank(p.ground, 1) + band(p.accentInk).Render("↶") + blank(p.ground, 1) + show(undo, uw) +
+		blank(p.ground, 2) + band(p.accentInk).Render("↷") + blank(p.ground, 1) + show(redo, rw)
 	if lipgloss.Width(line) > m.width {
-		return cut(" ↶ "+undo, m.width)
+		line = blank(p.ground, 1) + band(p.ink).Render(cut("↶ "+undo, m.width-1))
 	}
-	return line
+	return line + blank(p.ground, m.width-lipgloss.Width(line))
 }
 
-// menuLines draws the menu in at most h lines: the question, wrapped to two
-// lines when there is room, the numbered options, the highlighted one marked
-// with an edge and the recommended one saying so, then a hint when it fits.
+// menuLines draws the menu in at most h lines. With room it is a box edged
+// in the accent, as what has the keyboard is: the question, wrapped to two
+// lines when there is room, the numbered options, the highlighted one on the
+// selection fill with an edge and the recommended one saying so, then a hint
+// when it fits. Without room for the box the options come first, the
+// highlighted one always among them.
 func (m Model) menuLines(h int) []string {
-	mn := m.menu
+	p, mn := m.pal, m.menu
+	n := len(mn.choice.Options)
+	boxed := h >= n+3
 	w := m.width - 2
+	line := func(fill color.Color, ps ...piece) string {
+		if boxed {
+			return m.padded(p.accent, fill, ps...)
+		}
+		return blank(p.sidebar, 1) + spread(fill, m.width-1, ps...)
+	}
+	if boxed {
+		w = m.width - 6
+	}
 	var opts []string
 	for i, o := range mn.choice.Options {
-		text := fmt.Sprintf("%d %s", i+1, o.Label)
+		ps := []piece{{fmt.Sprintf("%d ", i+1), p.muted, false}, {o.Label, p.ink, i == mn.at}}
 		if o.Recommended {
-			text += " (recommended)"
+			ps = append(ps, piece{" (recommended)", p.muted, false})
 		}
-		text = cut(text, w)
-		if i == mn.at {
-			bar := lipgloss.NewStyle().Background(deepGreen)
-			opts = append(opts, bar.Foreground(sun).Render("▌")+bar.Foreground(onGreen).Render(text+spaces(w-lipgloss.Width(text)))+bar.Render(" "))
-		} else {
-			opts = append(opts, "  "+text)
+		switch {
+		case i != mn.at:
+			opts = append(opts, line(p.panel, ps...))
+		case boxed:
+			opts = append(opts, m.boxLine(p.accent, on(p.selection, p.accent).Render("▌")+spread(p.selection, m.width-5, ps...)))
+		default:
+			opts = append(opts, m.text(p.accent).Render("▌")+spread(p.selection, m.width-1, ps...))
 		}
+	}
+	if !boxed {
+		if n+1 <= h {
+			return append([]string{line(p.sidebar, piece{mn.choice.Question, p.ink, true})}, opts...)
+		}
+		// Too short for the question: the options that fit, the highlighted
+		// one among them.
+		from := min(max(mn.at-h+1, 0), max(n-h, 0))
+		return opts[from:min(from+h, n)]
 	}
 	question := wrap(mn.choice.Question, w)
-	if len(question) > 2 || len(question)+len(opts) > h {
+	if len(question) > 2 || len(question)+n+2 > h {
 		question = []string{cut(mn.choice.Question, w)}
 	}
-	var lines []string
+	lines := []string{m.boxTop(p.accent, "")}
 	for _, q := range question {
-		lines = append(lines, " "+styleBold.Render(q))
+		lines = append(lines, line(p.panel, piece{q, p.ink, true}))
 	}
 	lines = append(lines, opts...)
-	if hint := " " + styleDim.Render(cut("1–"+fmt.Sprint(len(opts))+" or Enter picks · Esc cancels", w)); len(lines) < h {
-		lines = append(lines, hint)
+	if len(lines)+2 <= h {
+		lines = append(lines, line(p.panel, piece{fmt.Sprintf("1–%d or Enter picks · Esc cancels", n), p.muted, false}))
 	}
-	if len(lines) > h {
-		// Too short for all of it: the options matter most.
-		lines = lines[max(0, len(lines)-h):]
-	}
-	return lines
+	return append(lines, m.boxBottom(p.accent))
 }
 
 // wrap breaks s into lines of at most w columns at spaces.

@@ -60,8 +60,8 @@ func TestTheOutsideGroupComesLastAtEveryHeight(t *testing.T) {
 		if len(lines) != h {
 			t.Fatalf("34×%d: %d lines", h, len(lines))
 		}
-		if !strings.Contains(lines[0], "☀ Irie") || !strings.HasPrefix(lines[h-1], barPrompt) {
-			t.Errorf("34×%d: header %q, bar %q", h, lines[0], lines[h-1])
+		if bar := barText(t, m); !strings.Contains(lines[0], "☀ Irie") || !strings.Contains(bar[0], barPrompt) {
+			t.Errorf("34×%d: header %q, bar %q", h, lines[0], bar)
 		}
 		for i, l := range lines {
 			if w := lipgloss.Width(l); w > 34 {
@@ -70,7 +70,7 @@ func TestTheOutsideGroupComesLastAtEveryHeight(t *testing.T) {
 		}
 		// Scrolled to the end, the group's header and rows follow Irie's.
 		m = send(m, keyMsg("end"))
-		all := strings.Join(screen(t, m), "\n")
+		all := strings.Join(listText(t, m), "\n")
 		if !strings.Contains(all, "outside-01") {
 			t.Errorf("34×%d: the last row is not on screen:\n%s", h, all)
 		}
@@ -81,46 +81,39 @@ func TestTheOutsideGroupComesLastAtEveryHeight(t *testing.T) {
 			}
 		}
 	}
-	// With the list room for every row, each is one line, with the glyph of
-	// the Irie state it matches.
+	// Among cards, each outside session is still one line, with the glyph
+	// of the Irie state it matches.
 	m, _ := withOutside(t, 34, 24, 1, 2)
 	m = send(m, keyMsg("tab"))
-	lines := screen(t, m)
-	top := m.listTop()
-	busy, _, _, _ := m.state(ipc.Session{State: ipc.StateWorking})
-	idle, _, _, _ := m.state(ipc.Session{State: ipc.StateIdle})
-	if want := []string{busy + " task-000", "Outside Irie 2 ─", idle + " outside-00", busy + " outside-01"}; !hasPrefixes(lines[top:top+4], want) {
-		t.Errorf("rows %q, want them to start %q", lines[top:top+4], want)
+	busy := m.look(ipc.Session{State: ipc.StateWorking}).glyph
+	idle := m.look(ipc.Session{State: ipc.StateIdle}).glyph
+	want := []string{"▾ Not in a repo 1", busy + " task-000 1m", "Working", "▾ Outside Irie 2", idle + " outside-00 2h", busy + " outside-01 1h"}
+	if got := listText(t, m); !reflect.DeepEqual(got, want) {
+		t.Errorf("list %q, want %q", got, want)
 	}
-}
-
-// hasPrefixes reports whether each line starts with its prefix, after the
-// selection's edge.
-func hasPrefixes(lines, prefixes []string) bool {
-	for i, p := range prefixes {
-		if !strings.HasPrefix(strings.TrimLeft(lines[i], " ▌"), p) {
-			return false
-		}
+	if y := lineOf(t, m, "outside-00"); !strings.HasPrefix(screen(t, m)[y], "   "+idle+" outside-00") {
+		t.Errorf("an outside row among cards = %q, want its glyph under the cards'", screen(t, m)[y])
 	}
-	return true
 }
 
 func TestAnOutsideRowsStatusSaysWhereItRuns(t *testing.T) {
-	m, _ := withOutside(t, 120, 24, 1, 2)
-	status := func() string { return screen(t, m)[len(screen(t, m))-2] }
-	m = send(m, keyMsg("down")) // the header
-	if !strings.Contains(status(), "other terminals") {
-		t.Errorf("header status = %q", status())
-	}
-	m = send(m, keyMsg("down"))
-	for _, want := range []string{"idle · m moves it in", "outside-00", "~/code/api", "in a terminal, pid 4000"} {
-		if !strings.Contains(status(), want) {
-			t.Errorf("status %q lacks %q", status(), want)
+	for _, h := range []int{20, 24} { // the strip, then the details card
+		m, _ := withOutside(t, 120, h, 1, 2)
+		status := func() string { return statusText(t, m) }
+		m = send(m, keyMsg("down")) // the header
+		if !strings.Contains(status(), "other terminals") || !strings.Contains(status(), "m moves an idle one in") {
+			t.Errorf("120×%d: header status = %q", h, status())
 		}
-	}
-	m = send(m, keyMsg("down"))
-	if s := status(); !strings.HasPrefix(strings.TrimSpace(s), "busy") || strings.Contains(s, "m moves") {
-		t.Errorf("busy row's status = %q", s)
+		m = send(m, keyMsg("down"))
+		for _, want := range []string{"idle · m moves it in", "outside-00", "~/code/api", "in a terminal, pid 4000"} {
+			if !strings.Contains(status(), want) {
+				t.Errorf("120×%d: status %q lacks %q", h, status(), want)
+			}
+		}
+		m = send(m, keyMsg("down"))
+		if s := status(); !strings.Contains(s, "busy") || strings.Contains(s, "m moves") {
+			t.Errorf("120×%d: busy row's status = %q", h, s)
+		}
 	}
 }
 
@@ -137,9 +130,27 @@ func TestEnterOnAnOutsideRowExplains(t *testing.T) {
 	if !strings.Contains(m.status, "runs outside Irie") || !strings.Contains(m.status, "m moves it in") || m.statusErr {
 		t.Errorf("status = %q", m.status)
 	}
-	m = send(m, tea.MouseClickMsg{X: 3, Y: m.listTop() + 3, Button: tea.MouseLeft})
-	if len(b.shows) != 0 || m.sel != 3 || !strings.Contains(m.status, "outside-01 runs outside Irie") || !strings.Contains(m.status, "busy") {
-		t.Errorf("click: shows %+v, sel %d, status %q", b.shows, m.sel, m.status)
+	m = click(m, 5, lineOf(t, m, "outside-01"))
+	if len(b.shows) != 0 || selectedName(m) != "outside-01" || !strings.Contains(m.status, "outside-01 runs outside Irie") || !strings.Contains(m.status, "busy") {
+		t.Errorf("click: shows %+v, selection %s, status %q", b.shows, selectedName(m), m.status)
+	}
+}
+
+// The Outside Irie group folds like any other.
+func TestTheOutsideGroupFolds(t *testing.T) {
+	m, _ := withOutside(t, 34, 24, 1, 3)
+	waiting := outsideSessions(3)
+	waiting[2].Status, waiting[2].WaitingFor = ipc.StatusWaiting, "a permission prompt"
+	m = send(m, outsideFrame(waiting, ""))
+	m = selectNamed(t, m, "Outside Irie")
+	m = send(m, keyMsg("enter"))
+	list := listText(t, m)
+	if last := list[len(list)-1]; last != "▸ Outside Irie 3 · 1 needs you" || strings.Contains(strings.Join(list, "\n"), "outside-00") {
+		t.Errorf("folded: %q", list)
+	}
+	m = send(m, keyMsg("space"))
+	if !strings.Contains(strings.Join(listText(t, m), "\n"), "outside-02") {
+		t.Errorf("unfolded: %q", listText(t, m))
 	}
 }
 
@@ -168,7 +179,7 @@ func TestMMovesAnIdleOutsideSessionIn(t *testing.T) {
 	m = send(m, outsideFrame(outsideSessions(2)[1:], ""))
 	moved := ipc.Session{ID: "smoved000001", Name: "outside-00", State: ipc.StateIdle, Created: now}
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &moved}})
-	if m.sel != 1 || m.sessions[1].ID != moved.ID {
+	if s, ok := m.selSession(); !ok || s.ID != moved.ID {
 		t.Errorf("selection %d in %+v, want the moved session", m.sel, m.sessions)
 	}
 
@@ -236,18 +247,20 @@ func TestOutsideRowsKeepTheirPlace(t *testing.T) {
 	}
 	m = send(m, outsideFrame(flipped, ""))
 	after := screen(t, m)
-	for i := range before {
-		if strip := func(s string) string { return strings.NewReplacer("●", "", "◐", "", "○", "").Replace(s) }; strip(before[i]) != strip(after[i]) && i < len(before)-2 {
+	// The list's lines stay; only the glyphs change. (The details card says
+	// what the selected one does now.)
+	for i := m.listTop(); i < m.listTop()+m.listHeight(); i++ {
+		if strip := func(s string) string { return strings.NewReplacer("●", "", "◐", "", "○", "").Replace(s) }; strip(before[i]) != strip(after[i]) {
 			t.Errorf("line %d moved: %q → %q", i, before[i], after[i])
 		}
 	}
-	if o, ok := m.outsideAt(m.sel); !ok || o.Name != "outside-01" {
+	if o, ok := m.selOutside(); !ok || o.Name != "outside-01" {
 		t.Errorf("selection moved to %+v", o)
 	}
 	// An Irie row that comes or goes keeps the selection on its session too.
 	added := ipc.Session{ID: "s000000000099", Name: "task-new", State: ipc.StateWorking, Created: now}
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &added}})
-	if o, ok := m.outsideAt(m.sel); !ok || o.Name != "outside-01" {
+	if o, ok := m.selOutside(); !ok || o.Name != "outside-01" {
 		t.Errorf("after a new Irie row the selection is on %+v", o)
 	}
 	// When the selected outside session goes, the selection moves on.
@@ -354,7 +367,8 @@ func TestRatingLeavesOutsideRowsAlone(t *testing.T) {
 	}
 	// Irie's own row still takes one.
 	m = send(m, keyMsg("esc"))
-	m = send(m, keyMsg("home"))
+	m = send(m, keyMsg("home")) // the first group's header
+	m = send(m, keyMsg("down"))
 	m = send(m, keyMsg("+"))
 	if want := []string{m.sessions[0].ID + " good"}; !reflect.DeepEqual(b.rates, want) {
 		t.Errorf("rates %v, want %v", b.rates, want)

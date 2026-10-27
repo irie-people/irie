@@ -52,6 +52,12 @@ enum Look: Equatable {
     /// Quiet: its name is drawn muted.
     var quiet: Bool { self == .exited || self == .exitedWithError || self == .starting || self == .idle }
 
+    /// ui.red_on_done, which the core sends: done is red instead of green.
+    static var redOnDone = false
+
+    /// Done's colour: green, or red with ui.red_on_done.
+    static var doneColor: Color { redOnDone ? Theme.needs : Theme.done }
+
     /// The mark's colour, by DESIGN §5.3's colour role: red, cyan, yellow,
     /// green, the default (ink), or dim (muted).
     var mark: Color {
@@ -60,7 +66,7 @@ enum Look: Equatable {
         case .frozen: return Theme.frozen
         case .paused, .pausing: return Theme.paused
         case .working: return Theme.ink
-        case .done: return Theme.done
+        case .done: return Look.doneColor
         case .exited, .starting, .idle: return Theme.muted
         }
     }
@@ -74,7 +80,7 @@ enum Look: Equatable {
     var color: Color? {
         switch self {
         case .failed, .needs, .stalled: return Theme.needs
-        case .done: return Theme.done
+        case .done: return Look.doneColor
         default: return nil
         }
     }
@@ -106,6 +112,12 @@ extension Look {
     /// The agent's colour for this session, while it is working; none otherwise.
     static func agentTint(_ s: Session) -> Color? {
         Look(s) == .working ? Theme.agent(slot: Theme.agentSlot(s.id)) : nil
+    }
+
+    /// Its card's ground in the agent's colour, while it is working; none
+    /// otherwise.
+    static func agentWash(_ s: Session) -> Color? {
+        Look(s) == .working ? Theme.agentWash(slot: Theme.agentSlot(s.id)) : nil
     }
 }
 

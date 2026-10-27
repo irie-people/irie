@@ -29,10 +29,24 @@ final class Store: ObservableObject {
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     @Published private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
+    /// ui.red_on_done, from the core: done sessions are drawn red. Look keeps
+    /// it for the marks; this draws the views again when it changes.
+    @Published private(set) var redOnDone = false
+    /// spawn.close_when_done, from the core: a finished session closes
+    /// itself, so the sidebar keeps no Done group and the title bar no Done
+    /// count. What closed is in history (`irie ctl history`, ⇧⌘T).
+    @Published private(set) var closeWhenDone = false
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
     @Published var spawning = false
+    /// The session whose name its card has open to edit, and the name as
+    /// typed so far.
+    @Published var renaming: String?
+    @Published var renameText = ""
+    /// The card a drag holds, and where it would land (Controls.swift).
+    @Published var dragging: String?
+    @Published var dropMark: DropMark?
     /// Bumped when the terminal should take keyboard focus.
     @Published var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
@@ -131,13 +145,22 @@ final class Store: ObservableObject {
     }
 
     private func apply(_ f: Frame) {
+        if let h = f.header, (h.redOnDone ?? false) != Look.redOnDone {
+            Look.redOnDone = h.redOnDone ?? false
+            redOnDone = Look.redOnDone
+        }
+        if let h = f.header, (h.closeWhenDone ?? false) != closeWhenDone {
+            closeWhenDone = h.closeWhenDone ?? false
+        }
         switch f.t {
         case "snapshot":
             sessions = (f.sessions ?? []).sorted(by: Self.before)
         case "upsert":
             guard let s = f.session else { return }
             if let i = sessions.firstIndex(where: { $0.id == s.id }) {
+                let moved = sessions[i].order != s.order
                 sessions[i] = s
+                if moved { sessions.sort(by: Self.before) }
             } else {
                 sessions.append(s)
                 sessions.sort(by: Self.before)
@@ -209,8 +232,20 @@ final class Store: ObservableObject {
         taskRepo = "irie"
     }
 
-    private static func before(_ a: Session, _ b: Session) -> Bool {
-        a.created != b.created ? a.created < b.created : a.id < b.id
+    /// The list's order, which the core keeps and the user sets: a new
+    /// session goes last, Promote puts one first, and a drag puts one where
+    /// it is dropped. A core without it sends no order: the order they
+    /// started.
+    static func before(_ a: Session, _ b: Session) -> Bool {
+        if let x = a.order, let y = b.order, x != y { return x < y }
+        return a.created != b.created ? a.created < b.created : a.id < b.id
+    }
+
+    /// Changes the rows at once, ahead of the core's frames, which then
+    /// confirm or correct them (Controls.swift).
+    func preview(_ change: (inout [Session]) -> Void) {
+        change(&sessions)
+        sessions.sort(by: Self.before)
     }
 
     // MARK: Keyboard
@@ -226,8 +261,11 @@ final class Store: ObservableObject {
         switch mode {
         case .state:
             return Look.Group.allCases.compactMap { g in
-                let in_ = rows.filter { Look($0).group == g }
-                return in_.isEmpty ? nil : SessionGroup(id: "state:\(g)", title: g.title, path: nil, sessions: in_)
+                // A finished session is about to close itself; what is left
+                // in the last group is idle or ended, so it is named so.
+                let in_ = rows.filter { Look($0).group == g && !(closeWhenDone && Look($0) == .done) }
+                let title = closeWhenDone && g == .done ? "Idle" : g.title
+                return in_.isEmpty ? nil : SessionGroup(id: "state:\(g)", title: title, path: nil, sessions: in_)
             }
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
@@ -329,6 +367,9 @@ final class Store: ObservableObject {
     /// in no set order and leave the terminal on a session the list doesn't
     /// highlight.
     func show(_ id: String, focus: Bool = false) {
+        // Going to another session renames the one open to edit, as clicking
+        // elsewhere does in Finder.
+        if renaming != nil && renaming != id { endRename(commit: true) }
         selection = id
         outsideSelection = nil
         wanted = (id, focus)
@@ -339,8 +380,10 @@ final class Store: ObservableObject {
                 wanted = nil
                 do {
                     _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus), as: Empty.self)
-                    // The conversation's message box, or the terminal when it shows.
-                    if next.focus, wanted == nil { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
+                    // The conversation's message box, or the terminal when it
+                    // shows; a name open to edit, after a double click's first
+                    // click, keeps the keyboard.
+                    if next.focus, wanted == nil, renaming != next.id { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
                 } catch where wanted == nil {
                     say("Couldn’t show it: \(error.localizedDescription)", error: true)
                 } catch {}
@@ -392,16 +435,52 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Opens the session's name to edit, in its card.
+    func beginRename(_ id: String) {
+        guard let s = sessions.first(where: { $0.id == id }) else { return }
+        if renaming != id {
+            endRename(commit: true)
+            renameText = s.name
+        }
+        selection = id
+        outsideSelection = nil
+        renaming = id
+    }
+
+    /// Closes the name's editor and, with commit, renames the session to
+    /// what was typed. The card shows the new name at once; the core's
+    /// answer, which numbers a name another session has, follows. The name
+    /// is the core's, so it outlasts the app, the core and installs.
+    func endRename(commit: Bool) {
+        guard let id = renaming else { return }
+        renaming = nil
+        guard commit, let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        let old = sessions[i].name
+        let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != old else { return }
+        sessions[i].name = name
+        Task {
+            do {
+                let r = try await client.call("rename", RenameArgs(session: id, name: name), as: RenameResult.self)
+                if let j = sessions.firstIndex(where: { $0.id == id }) { sessions[j].name = r.session.name }
+                say("Renamed \(old) to \(r.session.name).", error: false)
+            } catch {
+                if let j = sessions.firstIndex(where: { $0.id == id }), sessions[j].name == name { sessions[j].name = old }
+                say("Couldn’t rename \(old): \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
     /// Shows a notice above the task bar and has VoiceOver read it. A
     /// confirmation goes after 3 s; an error stays until the next notice, or
     /// until the user edits or submits (WCAG 2.2.1).
-    func say(_ text: String, error: Bool) {
+    func say(_ text: String, error: Bool, seconds: UInt64 = 3) {
         notice = Notice(text: text, isError: error)
         AccessibilityNotification.Announcement(text).post()
         guard !error else { return }
         let id = notice?.id
         Task {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if notice?.id == id { notice = nil }
         }
     }

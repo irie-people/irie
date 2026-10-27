@@ -65,7 +65,7 @@ func run(args []string) int {
 		return supervised("core", args, func(o core.Options) error { return core.Run(o) })
 	case "ui":
 		return supervised("ui", args, func(o core.Options) error {
-			return ui.Run(o.Paths.Socket(), ui.Options{RedOnDone: o.Config.UI.RedOnDone})
+			return ui.Run(o.Paths.Socket(), ui.Options{RedOnDone: o.Config.UI.RedOnDone, Theme: o.Config.UI.Theme})
 		})
 	case "host":
 		fs := flag.NewFlagSet("host", flag.ContinueOnError)
@@ -76,8 +76,9 @@ func run(args []string) int {
 		}
 		return host.Run(*spec)
 	case "placeholder":
-		cfg, _, _ := load()
-		err = ui.Placeholder(cfg.UI.FocusKey)
+		// The slot's own pane: the shown session's conversation, or the keys.
+		cfg, p, _ := load()
+		err = ui.Slot(p.Socket(), ui.SlotOptions{FocusKey: cfg.UI.FocusKey, FlipKey: cfg.UI.FlipKey, Theme: cfg.UI.Theme})
 	case "hook":
 		return hook.Run(os.Stdin, os.Stdout, os.Getenv)
 	case "statusline":

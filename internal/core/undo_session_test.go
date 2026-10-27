@@ -255,6 +255,26 @@ func TestUndoAsksBeforeStoppingAnAgentAtWork(t *testing.T) {
 	}
 }
 
+// A frozen session is judged by what it was doing when it froze: closing it
+// still stops its agent mid-task.
+func TestUndoAsksBeforeStoppingAFrozenAgent(t *testing.T) {
+	c := setup(t)
+	a := c.spawn("prompt")
+	c.waitState(a.ID, ipc.StateWorking)
+	c.freeze(a.ID, true)
+	c.waitState(a.ID, ipc.StateFrozen)
+	ch := c.ask(dirUndo)
+	if ch.Question != `"prompt" is frozen in the middle of its work.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceCancel, ipc.ChoiceApply, ipc.ChoiceSkip}) {
+		t.Errorf("question %+v", ch)
+	}
+	if r := c.answer(dirUndo, ch, ipc.ChoiceApply); r.Did != ipc.DidUndo {
+		t.Fatalf("apply %+v", r)
+	}
+	if _, ok := c.row(a.ID); ok {
+		t.Error("going ahead left the row")
+	}
+}
+
 func TestUndoAsksWhenTheSessionChanged(t *testing.T) {
 	c := setup(t)
 	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Name: "twin"})

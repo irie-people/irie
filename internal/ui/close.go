@@ -27,12 +27,12 @@ const closeConfirm = moveConfirm
 
 // closeSelected is x on a row: the first press asks, the second closes.
 func (m *Model) closeSelected() tea.Cmd {
-	if m.sel < 0 || m.sel >= len(m.sessions) {
+	s, ok := m.selSession()
+	if !ok {
 		m.closing = ""
 		m.setStatus("x x closes one of Irie's sessions; select one first", false)
 		return nil
 	}
-	s := m.sessions[m.sel]
 	if m.closing != s.ID || m.now().Sub(m.closingAt) > closeConfirm {
 		m.closing, m.closingAt = s.ID, m.now()
 		m.setStatus("Press x again to close "+s.Name+". Its folder stays, and :reopen brings it back.", false)
@@ -51,11 +51,12 @@ func (m *Model) closeCmd(s ipc.Session) tea.Cmd {
 
 // closeNamed is :close: the selected session, at once.
 func (m *Model) closeNamed() tea.Cmd {
-	if m.sel < 0 || m.sel >= len(m.sessions) {
+	s, ok := m.selSession()
+	if !ok {
 		m.setStatus(":close closes the selected session; select one of Irie's", true)
 		return nil
 	}
-	return m.closeCmd(m.sessions[m.sel])
+	return m.closeCmd(s)
 }
 
 // reopenCmd is :reopen: the core brings back the session closed last.
@@ -88,9 +89,5 @@ func (m *Model) reopened(msg reopenedMsg) {
 		return
 	}
 	m.setStatus("reopened "+msg.session.Name, false)
-	m.pending = msg.session.ID
-	if i := m.index(msg.session.ID); i >= 0 {
-		m.moveTo(i)
-		m.pending = ""
-	}
+	m.pick(msg.session.ID)
 }

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -87,22 +88,35 @@ func TestUndoErrorsAreShown(t *testing.T) {
 	if m.status != "cannot reopen api-fix: its task is gone" || !m.statusErr {
 		t.Errorf("status %q, error %v", m.status, m.statusErr)
 	}
-	if s := screen(t, m); !strings.Contains(s[len(s)-2], "cannot reopen") {
-		t.Errorf("status strip %q", s[len(s)-2])
+	if got := statusText(t, m); !strings.Contains(got, "cannot reopen") {
+		t.Errorf("status strip %q", got)
 	}
 }
 
 func TestHeaderShowsWhatUndoAndRedoWouldDo(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 3)
-	if got := screen(t, m)[1]; got != " ↶ –  ↷ –" {
+	if got := strings.TrimRight(screen(t, m)[1], " "); got != " ↶ –  ↷ –" {
 		t.Errorf("history line before any action %q", got)
 	}
 	m = send(m, historyFrame(`close "api-fix"`, ""))
-	if got := screen(t, m)[1]; got != ` ↶ close "api-fix"  ↷ –` {
+	if got := strings.TrimRight(screen(t, m)[1], " "); got != ` ↶ close "api-fix"  ↷ –` {
 		t.Errorf("history line %q", got)
 	}
-	// The rows start below the header, its line and the rule.
-	if s := screen(t, m); m.listTop() != 3 || !strings.Contains(s[3], "task-000") || !strings.Contains(s[2], "───") {
+	// It is the title bar's second line, on its ground, the glyphs in the
+	// accent's ink and nothing to do faint.
+	c := cells(strings.Split(m.View().Content, "\n")[1])
+	for _, x := range c {
+		if x.bg != rgb(m.pal.ground) {
+			t.Errorf("history line: %q is on %s, not the title bar's ground", x.r, x.bg)
+			break
+		}
+	}
+	if c[1].fg != rgb(m.pal.accentInk) || c[3].fg != rgb(m.pal.ink) || c[22].r != "–" || c[22].fg != rgb(m.pal.muted) {
+		t.Errorf("history line colours: ↶ %s, label %s, %q %s", c[1].fg, c[3].fg, c[22].r, c[22].fg)
+	}
+	painted(t, "history line", m)
+	// The rows start below the header, its line and the tabs.
+	if s := screen(t, m); m.listTop() != 3 || !strings.Contains(s[2], "State │ Repo") || !strings.Contains(s[3], "Not in a repo") {
 		t.Errorf("top of the screen:\n%s", strings.Join(s[:4], "\n"))
 	}
 	// Long labels are cut, each to its share, and say so.
@@ -116,12 +130,12 @@ func TestHeaderShowsWhatUndoAndRedoWouldDo(t *testing.T) {
 		t.Errorf("a short undo leaves the rest to redo: %q", got)
 	}
 	m = send(m, tea.WindowSizeMsg{Width: 90, Height: 24})
-	if got := screen(t, m)[1]; got != ` ↶ start "web"  ↷ close "a-very-long-session-name-indeed"` {
+	if got := strings.TrimRight(screen(t, m)[1], " "); got != ` ↶ start "web"  ↷ close "a-very-long-session-name-indeed"` {
 		t.Errorf("wide history line %q", got)
 	}
-	// A short pane has no room for it.
+	// A short pane has no room for it, nor for the tabs.
 	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 9})
-	if s := screen(t, m); strings.Contains(strings.Join(s, "\n"), "↶") || !strings.Contains(s[1], "task-000") {
+	if s := screen(t, m); strings.Contains(strings.Join(s, "\n"), "↶") || m.listTop() != 1 || !strings.Contains(s[1], "Not in a repo") {
 		t.Errorf("short pane:\n%s", strings.Join(s, "\n"))
 	}
 }
@@ -164,20 +178,26 @@ func TestAQuestionShowsAsAMenu(t *testing.T) {
 		}
 	}
 	// The highlighted option has an edge, not only a colour, and the status
-	// strip says what it will do.
-	if !strings.Contains(text, "▌1 Cancel") || !strings.Contains(s[len(s)-2], "Leaves everything as it is") {
+	// strip, here the details card, says what it will do.
+	if !strings.Contains(text, "▌1 Cancel") || !strings.Contains(statusText(t, m), "Leaves everything as it is") {
 		t.Errorf("highlight:\n%s", text)
 	}
-	for i, l := range s {
-		if lipgloss.Width(l) > 50 {
-			t.Errorf("line %d is %d columns: %q", i, lipgloss.Width(l), l)
-		}
+	// It is a box at the bottom of the list, edged in the accent as what has
+	// the keyboard is, the highlighted option on the selection fill.
+	raw := strings.Split(m.View().Content, "\n")
+	bottom := m.listTop() + m.listHeight() - 1
+	if !strings.HasPrefix(s[bottom], " ╰") || cells(raw[bottom])[1].fg != rgb(m.pal.accent) {
+		t.Errorf("the list's last line %q is not the menu's bottom edge in the accent", s[bottom])
 	}
-	if len(s) != 24 || !strings.HasPrefix(s[23], barPrompt) {
+	if c := cells(raw[lineOf(t, m, "▌1 Cancel")]); c[2].fg != rgb(m.pal.accent) || c[4].bg != rgb(m.pal.selection) || !c[5].bold {
+		t.Errorf("highlight: edge %s, fill %s, bold %v", c[2].fg, c[4].bg, c[5].bold)
+	}
+	painted(t, "the menu", m)
+	if bar := barText(t, m); len(s) != 24 || !strings.Contains(bar[0], barPrompt) {
 		t.Errorf("the menu moved the bar:\n%s", text)
 	}
 	m = send(m, keyMsg("down"))
-	if s := screen(t, m); !strings.Contains(strings.Join(s, "\n"), "▌2 Close it now") || !strings.Contains(s[len(s)-2], "Stops its agent mid-task.") {
+	if s := screen(t, m); !strings.Contains(strings.Join(s, "\n"), "▌2 Close it now") || !strings.Contains(statusText(t, m), "Stops its agent mid-task.") {
 		t.Errorf("after down:\n%s", strings.Join(s, "\n"))
 	}
 	// Keys go to the menu: x does not start a close.
@@ -185,8 +205,11 @@ func TestAQuestionShowsAsAMenu(t *testing.T) {
 	if len(b.closes) != 0 || m.menu == nil {
 		t.Errorf("x while the menu is open: closes %v", b.closes)
 	}
-	// A click on a row does nothing while it asks.
-	m = send(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: 3, Y: m.listTop()})
+	// A click on a card does nothing while it asks: nor does the button
+	// coming up, which opens a card when the menu is not there.
+	y := lineOf(t, m, "task-000")
+	m = send(m, tea.MouseClickMsg{Button: tea.MouseLeft, X: 3, Y: y})
+	m = send(m, tea.MouseReleaseMsg{Button: tea.MouseLeft, X: 3, Y: y})
 	if len(b.shows) != 0 || m.menu == nil {
 		t.Errorf("a click while the menu is open: shows %v", b.shows)
 	}
@@ -222,22 +245,53 @@ func TestNumbersPickAndEscCancels(t *testing.T) {
 		t.Errorf("1: menu %v, calls %v, status %q", m.menu, b.undos, m.status)
 	}
 	// The list has the keys again.
+	sel := m.sel
 	m = send(m, keyMsg("down"))
-	if m.sel != 1 {
-		t.Errorf("selection %d after the menu closed", m.sel)
+	if m.sel != sel+1 {
+		t.Errorf("selection %d after the menu closed, want %d", m.sel, sel+1)
 	}
 }
 
 func TestAMenuFitsAShortPane(t *testing.T) {
 	m, _ := asking(t)
-	for _, h := range []int{6, 8, 12} {
+	for _, h := range []int{6, 8, 12, 16, 30} {
 		m = send(m, tea.WindowSizeMsg{Width: 34, Height: h})
 		s := screen(t, m)
-		if len(s) != h || !strings.Contains(s[0], "Irie") || !strings.HasPrefix(s[h-1], barPrompt) {
+		if len(s) != h || !strings.Contains(s[0], "Irie") || !strings.Contains(barText(t, m)[0], barPrompt) {
 			t.Errorf("height %d:\n%s", h, strings.Join(s, "\n"))
 		}
+		painted(t, fmt.Sprintf("the menu at height %d", h), m)
 		if text := strings.Join(s, "\n"); !strings.Contains(text, "Close it now") && m.listHeight() >= 3 {
 			t.Errorf("height %d lost the options:\n%s", h, text)
 		}
+		// Above the menu only whole cards show, so every box is whole.
+		if text := strings.Join(s, "\n"); strings.Count(text, "╭") != strings.Count(text, "╰") {
+			t.Errorf("height %d: a card cut short above the menu:\n%s", h, text)
+		}
+	}
+}
+
+// A question that comes while the mouse carries a card takes the mouse out
+// of play: the card goes back to its place, and the button coming up opens
+// nothing and moves nothing.
+func TestAMenuLetsGoOfADrag(t *testing.T) {
+	rows := sessions(4)
+	for i := range rows {
+		rows[i].Order = i
+	}
+	m, b := ctlAt(t, rows, 34, 12) // one-line rows
+	from, to := lineOf(t, m, "task-000"), lineOf(t, m, "task-001")
+	m = send(m, tea.MouseClickMsg{X: 3, Y: from, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 3, Y: to, Button: tea.MouseLeft})
+	if got := order(m); got[0] != "s000000000001" {
+		t.Fatalf("while dragging: %v", got)
+	}
+	m = send(m, undoneMsg{dir: dirUndo, r: ipc.UndoResult{Label: `start "task-002"`, Did: ipc.DidAsk, Choice: busyChoice()}})
+	if got := order(m); m.menu == nil || m.drag != nil || got[0] != "s000000000000" || selectedName(m) != "task-000" {
+		t.Errorf("menu %v, drag %v, order %v, selection %s", m.menu != nil, m.drag, got, selectedName(m))
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 3, Y: to, Button: tea.MouseLeft})
+	if len(b.calls) != 0 || len(b.shows) != 0 || m.menu == nil {
+		t.Errorf("the release: calls %v, shows %v", b.calls, b.shows)
 	}
 }

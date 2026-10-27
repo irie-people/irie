@@ -16,6 +16,29 @@ struct TerminalArea: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            main
+            PhraseBar()
+        }
+        .background(Theme.ground.ignoresSafeArea())
+        .toolbarBackground(Theme.ground, for: .windowToolbar)
+        .navigationTitle(selected?.name ?? "Irie")
+        // Never empty: the title moves when a subtitle appears or goes.
+        .navigationSubtitle(selected.map(subtitle) ?? "No session")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.openInGhostty()
+                } label: {
+                    Label("Open in Ghostty", systemImage: "macwindow.on.rectangle")
+                }
+                .help("Open the terminal in a Ghostty window too")
+                .disabled(store.attach == nil)
+            }
+        }
+    }
+
+    private var main: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
             // restart, so a flap gets a banner, not a reattach.
@@ -48,29 +71,14 @@ struct TerminalArea: View {
                     .accessibilityAddTraits(.isStaticText)
             }
         }
-        .background(Theme.ground.ignoresSafeArea())
-        .toolbarBackground(Theme.ground, for: .windowToolbar)
-        .navigationTitle(selected?.name ?? "Irie")
-        // Never empty: the title moves when a subtitle appears or goes.
-        .navigationSubtitle(selected.map(subtitle) ?? "No session")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    store.openInGhostty()
-                } label: {
-                    Label("Open in Ghostty", systemImage: "macwindow.on.rectangle")
-                }
-                .help("Open the terminal in a Ghostty window too")
-                .disabled(store.attach == nil)
-            }
-        }
     }
 
     @ViewBuilder private func terminal(_ a: AttachInfo) -> some View {
         #if canImport(SwiftTerm)
         let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
         TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store)
-            .padding(10)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 18)
             .background {
                 // A click on the frame types to the terminal too.
                 frame.fill(Color(nsColor: Theme.terminalBackground))
@@ -79,7 +87,8 @@ struct TerminalArea: View {
                                                 lineWidth: 1))
                     .onTapGesture { store.focusTerminal += 1 }
             }
-            .padding(12)
+            .padding([.horizontal, .bottom], 12)
+            .padding(.top, 12)
         #else
         Placeholder(
             title: "The terminal opens in Ghostty for now",
@@ -112,16 +121,18 @@ struct TerminalArea: View {
     }
 }
 
+/// A quiet page, laid out as ConversationNote is: the two take turns in the
+/// same place.
 private struct Placeholder: View {
     let title: String
     let text: String
     var action: (String, () -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 14) {
-            SunMark().frame(width: 64, height: 64)
+        VStack(spacing: 12) {
+            SunMark().frame(width: 48, height: 48)
             Text(title).font(.system(size: 17, weight: .semibold, design: .rounded)).multilineTextAlignment(.center)
-            Text(text).font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
+            Text(text).font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
             if let action {
                 Button(action.0, action: action.1)
                     .buttonStyle(.borderedProminent)

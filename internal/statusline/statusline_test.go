@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -49,18 +50,89 @@ func TestParse(t *testing.T) {
 	}
 }
 
+// meters is the sample's line after its state.
+const meters = "$1.23 · ctx ▰▰▰▱▱▱▱▱ 41% · 5h 62% · 7d 18%"
+
+// plain is a line without its styles.
+func plain(s string) string { return regexp.MustCompile("\x1b\\[[0-9;]*m").ReplaceAllString(s, "") }
+
 func TestLine(t *testing.T) {
 	u, _ := Parse([]byte(sample))
-	if got := Line(u); got != "$1.23 · ctx 41% · 5h 62% · 7d 18%" {
+	if got := plain(Line(u, nil, 0)); got != meters {
 		t.Errorf("line = %q", got)
 	}
 	free := 0.0
-	if got := Line(Usage{CostUSD: &free}); got != "" {
+	if got := Line(Usage{CostUSD: &free}, nil, 0); got != "" {
 		t.Errorf("line for nothing to say = %q", got)
+	}
+	// A core from before states answers with none.
+	if got := plain(Line(u, &ipc.StatusReply{}, 0)); got != meters {
+		t.Errorf("line without a state = %q", got)
 	}
 }
 
-// fakeCore records the status updates it is given.
+func TestLineLeadsWithTheState(t *testing.T) {
+	u, _ := Parse([]byte(sample))
+	explore, dev := ipc.Subagent{Agent: "sub:a1", Type: "Explore"}, ipc.Subagent{Agent: "sub:b2", Type: "dev"}
+	for _, c := range []struct {
+		reply ipc.StatusReply
+		lead  string
+	}{
+		{ipc.StatusReply{State: ipc.StateWorking}, "◐ working"},
+		{ipc.StatusReply{State: ipc.StateWorking, Subagents: []ipc.Subagent{explore, dev}}, "◐ working + 2 helpers"},
+		{ipc.StatusReply{State: ipc.StateDone}, "✓ done"},
+		{ipc.StatusReply{State: ipc.StateIdle}, "✓ done"},
+		// A turn that ended while its helpers run is not done.
+		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore}}, "◐ waiting on 1 helper: Explore"},
+		{ipc.StatusReply{State: ipc.StateIdle, Subagents: []ipc.Subagent{explore, dev, explore}}, "◐ waiting on 3 helpers: Explore ×2, dev"},
+		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{{Agent: "sub:c3"}}}, "◐ waiting on 1 helper"},
+		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore, dev, {Type: "Plan"}, {Type: "scout"}, {Type: "deep"}}},
+			"◐ waiting on 5 helpers: Explore, dev, Plan and 2 more"},
+		{ipc.StatusReply{State: ipc.StateNeedsYou, Subagents: []ipc.Subagent{explore, {Type: "dev", NeedsYou: true}}}, "● dev needs you"},
+		{ipc.StatusReply{State: ipc.StateNeedsYou}, "● needs you"},
+		{ipc.StatusReply{State: ipc.StateStalled}, "● stalled"},
+		{ipc.StatusReply{State: ipc.StateStarting}, "◌ starting"},
+	} {
+		if got := plain(Line(u, &c.reply, 0)); got != c.lead+" · "+meters {
+			t.Errorf("%+v: line = %q", c.reply, got)
+		}
+	}
+}
+
+func TestLineColours(t *testing.T) {
+	u, _ := Parse([]byte(sample))
+	// Done is green, a need red; the rest is faint.
+	got := Line(u, &ipc.StatusReply{State: ipc.StateDone}, 0)
+	if !strings.HasPrefix(got, "\x1b[32m✓ done\x1b[0m\x1b[2m · \x1b[0m\x1b[2m$1.23\x1b[0m") {
+		t.Errorf("done line = %q", got)
+	}
+	if got := Line(u, &ipc.StatusReply{State: ipc.StateNeedsYou}, 0); !strings.HasPrefix(got, "\x1b[31m● needs you\x1b[0m") {
+		t.Errorf("needs line = %q", got)
+	}
+	// A share turns yellow from 70% and red from 90%.
+	hot, full := 72.0, 95.0
+	got = Line(Usage{Context: &full, FiveHour: &Window{Used: hot}}, nil, 0)
+	for _, want := range []string{"\x1b[31m▰▰▰▰▰▰▰▰\x1b[0m", "\x1b[31m95%\x1b[0m", "\x1b[33m72%\x1b[0m"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("line %q lacks %q", got, want)
+		}
+	}
+}
+
+func TestLineFitsTheWidth(t *testing.T) {
+	u, _ := Parse([]byte(sample))
+	done := &ipc.StatusReply{State: ipc.StateDone}
+	// Parts drop from the end; the state stays.
+	if got := plain(Line(u, done, 40)); got != "✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41%" {
+		t.Errorf("40 columns: %q", got)
+	}
+	if got := plain(Line(u, done, 3)); got != "✓ done" {
+		t.Errorf("3 columns: %q", got)
+	}
+}
+
+// fakeCore records the status updates it is given, and answers that the
+// session is done.
 type fakeCore struct {
 	mu   sync.Mutex
 	args []ipc.StatusArgs
@@ -75,7 +147,7 @@ func (f *fakeCore) Call(op string, raw json.RawMessage) (any, error) {
 	f.mu.Lock()
 	f.args = append(f.args, a)
 	f.mu.Unlock()
-	return nil, nil
+	return ipc.StatusReply{State: ipc.StateDone}, nil
 }
 
 func (f *fakeCore) Subscribe(json.RawMessage) (<-chan ipc.Frame, func(), error) {
@@ -91,14 +163,15 @@ func TestRunForwardsAndPrintsItsOwnLine(t *testing.T) {
 	defer l.Close()
 	core := &fakeCore{}
 	go ipc.Serve(l, core)
-	env := map[string]string{"IRIE_SESSION": "s0k3j9x2m4a7q", "IRIE_SOCKET": sock}
+	env := map[string]string{"IRIE_SESSION": "s0k3j9x2m4a7q", "IRIE_SOCKET": sock, "COLUMNS": "40"}
 
+	// The line leads with the core's answer and fits the terminal.
 	var out, errOut bytes.Buffer
 	if code := Run(nil, strings.NewReader(sample), &out, &errOut, func(k string) string { return env[k] }); code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
-	if out.String() != "$1.23 · ctx 41% · 5h 62% · 7d 18%" {
-		t.Errorf("printed %q", out.String())
+	if got := plain(out.String()); got != "✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41%" {
+		t.Errorf("printed %q", got)
 	}
 	core.mu.Lock()
 	defer core.mu.Unlock()
