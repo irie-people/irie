@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/testutil"
 )
@@ -38,6 +39,17 @@ func TestCloseWhenDoneWaitsForAnotherPrompt(t *testing.T) {
 	testutil.Eventually(t, 10*time.Second, "the session never closed", func() bool { _, ok := c.row(a.ID); return !ok })
 }
 
+func TestCloseWhenDoneLeavesAPausedSession(t *testing.T) {
+	c := setupWith(t, agentConfig{spawn: "close_when_done = true\nclose_delay = \"2s\"\n"})
+	a := c.spawn("prompt,stop")
+	c.waitState(a.ID, ipc.StateDone)
+	c.freeze(a.ID, true)
+	time.Sleep(3 * time.Second)
+	if _, ok := c.row(a.ID); !ok {
+		t.Fatal("close_when_done closed a session the user paused")
+	}
+}
+
 func TestASessionStaysOpenByDefault(t *testing.T) {
 	c := setup(t)
 	a := c.spawn("prompt,stop")
@@ -61,5 +73,16 @@ func TestLookTaskKeepsAnswerSessionsOpen(t *testing.T) {
 		if got := lookTask.MatchString(task); got != want {
 			t.Errorf("lookTask(%q) = %v, want %v", task, got, want)
 		}
+	}
+}
+
+func TestTheHeaderCarriesCloseWhenDone(t *testing.T) {
+	c := &Core{cfg: config.Default(), version: "test"}
+	if c.headerNow().CloseWhenDone {
+		t.Error("close_when_done is on by default")
+	}
+	c.cfg.Spawn.CloseWhenDone = true
+	if !c.headerNow().CloseWhenDone {
+		t.Error("the header does not carry close_when_done")
 	}
 }

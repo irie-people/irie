@@ -99,3 +99,13 @@ type SendArgs struct {
 	Session string `json:"session"`
 	Text    string `json:"text"`
 }
+
+// OpFlip is an addition to the ops of DESIGN §2.4: it turns the slot's view
+// of the session you picked between its conversation and its raw terminal
+// (DESIGN §4.7), and gives the slot the keyboard.
+const OpFlip = "flip"
+
+// FlipResult says what the slot shows now.
+type FlipResult struct {
+	Terminal bool `json:"terminal"` // the raw terminal; else the conversation
+}

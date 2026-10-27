@@ -28,7 +28,8 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | "Context aware" | v1 reading: whatever Irie does to an agent (hold, freeze, priority, a note from you) reaches it as a context note at its next tool boundary or prompt, including how long it was held. Awareness of sibling agents and context-window gauges come after v1 | §4.3, M5–M7 |
 | Reliable headless spawning | Every spawn either becomes a live agent holding its full task, or fails loudly with the reason. Works with no window open (`irie ctl spawn`) | §4.2, M1–M3 |
 | Undo/redo | An action log with inverses. The header shows what undo and redo will do | §4.5, M4–M7 |
-| Priority for tasks that become urgent on the fly | Badge, move to the top, steering note | §4.3, M7 |
+| Priority for tasks that become urgent on the fly | Badge, move to the top, its process tree gets the machine first, steering note | §4.3, M7 |
+| Put a session where you want it in the list | Drag it, in either sidebar. The core keeps one order, which survives restarts | §4.1 |
 | Default agent: Opus 5.5 on max effort in auto mode | `+claude`: `claude-opus-5-5`, `--effort max`, `--permission-mode auto`. It was the default profile until M10; since then the default is `auto`, which sends hard work and orchestration to `+claude` (§6.4). Every value can be changed in config | §5.5, M1, M10 |
 | Sessions waiting on you in red; rename; jump | States derived from hooks; keys `r`, `/` and `1`–`9` | §4.1, M2, M4 |
 | A live read-only pane for each running subagent | One mirror pane per subagent, listed under its parent | §4.4, M8 |
@@ -70,7 +71,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
 4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
-6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
+6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze, promote or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
 
 ### 2.2 Processes
 
@@ -108,7 +109,7 @@ flowchart LR
   ctl -->|"socket API"| core
   core -->|"new-window, swap-pane, capture-pane"| srv
   core -.->|"polling now, control mode in M11"| srv
-  core -->|"SIGUSR1 freeze, SIGUSR2 thaw"| host
+  core -->|"freeze: SIGSTOP, thaw: SIGCONT"| agent
   core --> files
   core -->|"tail"| tr
   mirror -->|"tail"| tr
@@ -122,7 +123,7 @@ flowchart LR
 | `irie attach` | any terminal | `exec tmux -L irie attach -t irie`. Inside another tmux it refuses unless given `--nested`. Inside Irie's own server it runs `switch-client` | tmux |
 | `irie core --supervise` | `irie-agents:core` | Holds `core.lock` (flock). Owns the registry, state derivation, gates, notes, undo log, journal, worktrees, spawning, the swap-in and observation. The supervisor restarts it with backoff (1, 2, 4 … 30 s) | socket (server), tmux, hosts (signals), transcripts |
 | `irie ui --supervise` | `irie:0.0` | The sidebar, a pure client of the socket. It never calls tmux | socket |
-| `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; freezes and thaws it; records the exit status | the agent (fork/exec), socket (best effort) |
+| `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; continues stops it did not cause, but leaves a frozen agent stopped; says who it is in `host.json`; records the exit status | the agent (fork/exec), socket (best effort) |
 | `irie hook` | started by the agent for each hook event | Forwards the event, waits while held, prints the harness's reply | socket, gate file |
 | `irie statusline` | started by Claude Code for each status line update (§6.3) | Forwards the session's cost, context and plan use, then runs the user's own status line | socket |
 | `irie runtime -- ollama serve` | `irie-agents:irie-ollama`, started on first need (§6.3) | Irie's own Ollama server, in a process group of its own, so its model runners stop with it | the agents (HTTP on 127.0.0.1) |
@@ -152,7 +153,7 @@ Generated tmux.conf, essentials:
 | `set-titles on`, `set-titles-string Irie` | Sets the Ghostty window title, which is used to find the window (§7.1) |
 | `escape-time 10` | Esc reaches agents promptly |
 
-**Swap-in.** The slot holds either the placeholder P or one agent pane A. While A is shown, A's own window holds P. To show B, the core sends one command list, so no client ever draws the in-between state:
+**Swap-in.** The slot holds either the placeholder P or one agent pane A. P also draws the conversation of the session you picked, so in the conversation view a shown session's own pane stays home and P stays in the slot (§4.7). While A is shown, A's own window holds P. To show B, the core sends one command list, so no client ever draws the in-between state:
 
 ```
 swap-pane -d -s irie:0.1 -t <P>     # only if an agent A is shown: A goes home, P returns to the slot
@@ -196,7 +197,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
-| `status` | `session`, `payload`: Claude Code's status line JSON | none | M10 (§6.3) |
+| `status` | `session`, `payload`: Claude Code's status line JSON | `state`, `subagents[]`: the session's, for Irie's own status line | M10 (§6.3) |
 | `local` | `start?` | the local server, the machine's memory, and each model weighed against it | M10 (§6.3) |
 | `route` | `task`, `parent?` | where `+auto` would run it: class, choice, reason, every profile weighed | M10 (§6.4) |
 | `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |
@@ -207,12 +208,14 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `close`, `reopen` | `session`; for `reopen` it may be left out, which reopens the session closed last | none; `reopen`: `session` | M4 (§4.5) |
 | `undo`, `redo` | none | `label` | M4 |
 | `pause`, `resume` | `session` or `all`; `scope`: `main`, `sub:<id>` or `tree` | none | M5 |
-| `freeze`, `thaw` | `session` or `all` | none | M6 |
-| `priority` | `session`, `level` (0 or 1), `reason?` | none | M7 |
+| `freeze`, `thaw` | `session` or `all` | `sessions[]`, those it froze or thawed | M6 |
+| `priority` | `session`, `level` (0 or 1), `reason?` | none. Level 1 also puts the session at the top of the list | M7 |
+| `reorder` | `session`, `before?` | none. Puts the session just before `before`, or last. Not `move`, which brings a session in from outside Irie | §4.1 |
 | `note` | `session`, `agent?`, `text` | `note` | M7 |
 | `preflight` | `profile`, `model?`, `remember?`, `force?` | `ok`, `problems[]`, `warnings[]`, the context and memory the model got | M10 |
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
 | `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle. A local profile is checked as for a spawn (§6.1) before the outside copy ends | Sessions outside Irie (§4.6) |
+| `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
 | `conversation` | `session`, `limit?` | `session`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
 
@@ -364,20 +367,30 @@ type Harness interface {
 
 ### 4.1 Session list
 
-**Layout, from top to bottom:**
-- **Header** (pinned, 1–2 lines): `Irie`, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
-- **List:** scrolls.
-- **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail.
-- **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
+The sidebar is a terminal program that reads like a web page, and like the Mac app: rounded cards with padding, a tree of repos, plain words, and a mouse that lights up what it points at. It paints every cell in the palette of `ui.theme` (§5.3, §5.5).
 
-**Rows.** Each row reads `[!][glyph] name … age`, with subagents indented under their parent (M8). Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder the list, and only you scroll it: frames from the core and a growing command bar leave the rows on screen where they are, and only a task you just started scrolls into view. The Parked group comes after them. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
+**Layout, from top to bottom:**
+- **Header** (pinned, 1–2 lines): a title bar on the palette's ground, a shade deeper than the sidebar: `Irie` and its tagline while there is room, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). Needs you counts every red row (needs you, stalled and failed), paused counts pausing too, and a zero count is faint. When the core is unreachable the header says `core offline` and the UI retries every second.
+- **Tabs** (1 line, from 10 rows): `State │ Repo`, the view in use on the selection fill. A click on a tab, or `v`, switches. The sidebar opens in Repo.
+- **List:** scrolls. Groups of sessions, each under a header that folds it.
+- **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), what it costs and its name, and its folder on the right while that leaves the rest a third of the line; or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail. From 24 rows it is a **details card**: a rounded card with the selected session's name in its border, then its state with what it costs and how it was routed, its detail, its exact call, and its branch and folder. An error or a message takes the card's four lines.
+- **Command bar** (pinned): from 10 rows a rounded box, edged in the accent while it has the keyboard, with the placeholder "What should we work on?". It grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
+
+**Groups.** The Repo view has a group per repo (a session's `repo`, its main checkout), named by the repo's folder, with parent folders added when two repos share a name (`code/irie`, `forks/irie`), in the order their first session started, then "Not in a repo". The State view has "Needs you" (failed, needs you, stalled), "Working" (working, starting, pausing, paused, frozen) and "Done" (done, idle, exited), each only while it has a session. Under `spawn.close_when_done` the State view leaves out what is done, which is about to close itself, and calls the last group "Idle" (§4.5). A header reads `▾ irie  4`; Enter, Space or a click folds it to `▸ irie  4 · 1 needs you`, which counts in red what inside needs you. Within a group sessions follow the core's one order (below), so in the Repo view a state change never moves a card.
+
+**Cards.** Each session is a rounded card a column in from each side of the pane, with a column of padding: the state's glyph, any flag beside it (§5.3: `◆` for a frozen session under a state that comes first), an `↑` in the accent for a promoted session, the name and the age on its first line, its detail in plain words on the second (red when it needs you, and the state in words when it has none), then up to three of its running helpers, `↳ Explore  Reading DESIGN.md`, and `and N more`. A card that needs you is tinted and edged in red. The selected card takes the selection fill, edged in the accent while the list has the keyboard; the card under the pointer takes the hover fill. Where the list has fewer than 8 rows, or the pane fewer than 24 columns, each session is a one-line row instead, `[glyph][↑] name … age`, in the same palette, the selected one with an accent edge. Sessions outside Irie are always one-line rows. Subagent rows (M8) sit in their parent's card, as its helpers.
+
+**Order.** The core keeps one order, which both sidebars draw and each row carries as `order`: a new session goes last, promoting one puts it first, and dragging one with the mouse puts it where it is dropped (`reorder`). The order lives in the `@irie_order` option of the `irie-agents` session, so a restarted core keeps it, and a closed session keeps its place for its reopen. Each group draws its sessions in that order, so a promoted session heads its group, and the groups keep their own order. A card or row dragged with the mouse moves among the others of its group as the pointer crosses them, in either view, and only once the pointer is where it would land, so cards of different heights never trade places back and forth; dropped, it stays, and dropped on another group it goes back. State changes never reorder a group, and only you scroll the list: frames from the core and a growing command bar leave what is on screen where it is, and only a task you just started scrolls into view, its group unfolding. The Parked group comes after the groups. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last, and folds like the others. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
 
 | Key (list focus) | Action |
 |---|---|
-| `↑` `↓`, `j` `k`, wheel, PgUp/PgDn, Home/End | Move the selection or scroll. The wheel scrolls the view without moving the selection |
-| Enter, click | Show the session in the slot and focus it |
-| Space | Show it, keep focus in the sidebar |
+| `↑` `↓`, `j` `k`, wheel, PgUp/PgDn, Home/End | Move the selection over the cards and headers that show, or scroll. The wheel scrolls the view without moving the selection |
+| Enter, click | Show the session in the slot and focus it; on a header, fold or unfold its group |
+| Space | Show it, keep focus in the sidebar; on a header, fold or unfold its group |
+| `v`, a click on a tab | Switch between the State and Repo views; the selected session stays selected |
+| The pointer | Lights the card, header or tab under it; the light goes out at the margins and when the pane loses focus |
 | `Ctrl+]` (tmux binding) | Toggle focus between sidebar and slot |
+| `Ctrl+\` (tmux binding, `ui.flip_key`) | Flip the slot between the shown session's conversation and its raw terminal (§4.7) |
 | Tab, `:` | Focus the command bar (`:` pre-fills a colon) |
 | `/` | Fuzzy jump: the list filters as you type, Enter shows the match (M4) |
 | `1`–`9` | Jump to the nth visible row (M4) |
@@ -388,14 +401,18 @@ type Harness interface {
 | `p`, `P` | Pause or resume this agent, or the whole tree (M5) |
 | `f`, `F` | Freeze or thaw this session, or all (M6) |
 | `!`, `n` | Toggle priority; write a note (M7) |
+| Drag a card or row (mouse) | Put the session where it is dropped, among the others of its group; dropped on another group, it goes back. A click opens a card, row or header when the button comes up on it |
 | `m` `m` | Move the selected session under Outside Irie into Irie (§4.6). The first press says what the move ends; any other key cancels |
 | `+`, `-` | Rate the session's work good or bad, which teaches the router (M10, §6.4) |
 
 | Edge case | Behaviour |
 |---|---|
 | Pane shorter than 6 rows | Header 1 line, command bar 1 line, at least 1 list row; the status strip is hidden |
+| Pane shorter than 10 rows | No tabs, and the command bar has no box |
+| A list shorter than 8 rows, or a pane narrower than 24 columns | One-line rows instead of cards. Typing never turns cards into rows: the rule counts a one-line command bar |
 | 200 or more sessions | Only visible rows are rendered |
-| Name wider than the sidebar | Cut with an ellipsis; the full name is in the status strip |
+| Name wider than the sidebar | Cut with an ellipsis; the status strip, or the details card's border, shows as much of it as fits |
+| Folding a group while one of its sessions is selected | The selection moves to the group's header |
 | Two clients of different sizes | `window-size latest`; the slot follows, and agent windows are resized to match |
 | The shown session exits | Its pane stays in the slot with its exit status; the row shows exited |
 | The selected session disappears | The selection moves to the next row |
@@ -407,7 +424,7 @@ type Harness interface {
 | Core crashes | Header says `core offline` | The supervisor restarts the core, which rebuilds from tmux options, `state.json` and gate files |
 | Slot pane killed by hand | Layout invariant broken | The core recreates the placeholder within a tick |
 
-**Tests:** model tests in M1 and M4 (pinned header and command bar at three heights, scrolling, park counts, jump ranking), plus tmux integration tests for the swap-in.
+**Tests:** model tests in M1 and M4 (pinned header and command bar at three heights, scrolling, park counts, jump ranking), the grouping in both views, folding, hover, clicks on tabs, headers and cards, the fallback to rows, and every cell on the palette, plus tmux integration tests for the swap-in.
 
 ### 4.2 Command bar and spawning
 
@@ -463,7 +480,7 @@ type Harness interface {
 |---|---|---|---|
 | Scope | One agent (`main` or one subagent), one tree, or all | A session's whole process tree, or all sessions | One session |
 | Takes effect | At the next tool boundary | At once | Badge and order at once; the note at the next tool boundary or prompt |
-| Mechanism | The hook shim waits | `irie host` sends SIGSTOP, later SIGCONT | Ordering plus the notes channel |
+| Mechanism | The hook shim waits | The core sends SIGSTOP, later SIGCONT; the host leaves the stops alone | Ordering; the other sessions' trees in the background; first turn in Irie's queues; the notes channel |
 | What the agent is told | On release: "held for X" | After thaw, at its next tool boundary, and only if it was working: "frozen for X" | A steering note |
 | Keys | `p` (row), `P` (tree), `:pause all` | `f`, `F` (all) | `!`, `:prio <reason>` |
 
@@ -475,16 +492,22 @@ type Harness interface {
 - **Core down.** The shim polls `gate.json` every 500 ms: while gated it keeps holding; with no gate it returns at once.
 
 **Freeze.**
-- **Stop.** The core sends SIGUSR1 to the host (`pane_pid`). The host sends SIGSTOP to the agent's process group. It then walks the agent's descendants (darwin: `sysctl kern.proc.all` via `golang.org/x/sys/unix`; linux: `/proc`) and stops every process outside that group. It repeats the walk until no new process appears, at most 3 passes, and records what it stopped.
-- **Thaw.** SIGUSR2 makes the host send SIGCONT to the recorded processes, descendants first, then to the group.
-- **Stops the host did not cause.** The host continues them within 100 ms, for example the agent's own Ctrl+Z handling, so an agent never wedges. tmux would do the same for its direct child, which is why the agent runs under a host and not as the pane's first process.
+- **Who signals.** The core, never the host. It never sends SIGUSR1 or SIGUSR2 to a host: a host from before freeze handles only SIGHUP, SIGTERM and SIGINT, so either signal would end it and its agent with it. The host is never stopped either: tmux continues a stopped pane process at once (checked on a private server), and the host would then continue its agent.
+- **Stop.** The core writes `sessions/<id>/freeze.json`, then reads the process table (darwin: `sysctl kern.proc.all` via `golang.org/x/sys/unix`; linux: `/proc`). It stops the agent's process group with one SIGSTOP, then every process under the host outside that group, parents before children, so that no running parent sees a child of its stop. It reads the table again until a pass finds nothing new, at most 5 passes. `freeze.on` records the pids, and the newest start time in the table, so that what starts later can be told apart.
+- **Hosts from before freeze.** A host says in `host.json` that it leaves its agent stopped while `freeze.json` exists. A host without one, such as those of agents that ran before the install, would continue its agent at once. So there the agent runs on and everything under it stops, and the hook shim holds the agent at its next tool call: at PreToolUse, PostToolUse and PostToolUseFailure it waits while `freeze.json` exists, with the core down too. The row says "freezing" until the agent reaches one. Each tick stops what started in a frozen tree after the freeze, such as the shim itself, and never continues anything.
+- **Thaw.** The core continues every stopped process under the host, children before parents, then removes `freeze.json`. A host that reads a stale stop report only sends a harmless SIGCONT.
+- **Restarts.** Frozen comes from the journal's `freeze.on` and `freeze.off`, so a frozen session stays frozen through a core restart, and the core never continues it on its own. A reopened session starts unfrozen.
+- **Stops the host did not cause.** The host continues them within 100 ms, for example the agent's own Ctrl+Z handling, so an agent never wedges; while the session is frozen it leaves them. tmux does the same for its direct child, which is why the agent runs under a host and not as the pane's first process.
 - **Input.** While a session is frozen the core turns off its pane's input (`select-pane -d`), so keystrokes don't pile up, and turns it back on at thaw.
 - **Long freezes.** After `freeze.warn_after` the row warns that network streams may have dropped.
 - **Close while frozen.** SIGCONT to everything the host runs, the host last, then SIGTERM through the host, then SIGKILL after 5 s. A stopped process that catches SIGTERM, as Claude Code does, only handles it once it runs again, so the host also continues the agent's group whenever it passes a signal on.
 
 **Priority.**
-- **Level.** 0 or 1, with an optional reason. The field is an integer, so more levels can come later.
-- **Order.** Prioritised sessions sit at the top, latest first. Prioritising a parked session unparks it.
+- **Level.** 0 or 1, with an optional reason. The field is an integer, so more levels can come later. The UIs call level 1 "promoted".
+- **Order.** Promoting a session puts it at the top of the list's one order, so promoted sessions sit at the top, latest first. Putting it back leaves it where it is. Prioritising a parked session unparks it.
+- **The machine first.** Without root no process can be raised above normal priority, and a nice value, once raised, can only be lowered again by root (setpriority(2), renice(8)). So while any session is promoted, the core puts every other session's process tree in macOS's background state, `setpriority(PRIO_DARWIN_PROCESS, pid, PRIO_DARWIN_BG)` as `taskpolicy -b -p` does: the lowest CPU priority, throttled disk I/O, and throttled network I/O on sockets opened from then on. The promoted trees stay as they are. Each tick puts what those trees start in the background too, which it also inherits. Putting the session back takes every process of the other trees out of the background, and a process that left a tree, such as a daemon, comes out as soon as it leaves. It takes effect before the op returns. Linux has no such state that a user can undo, so there priority orders the list and Irie's queues only.
+- **Irie's queues.** What Irie hands out one at a time serves a promoted session first, then the rest in the order they asked: spawns with their worktrees (a session's own, as `parent`, when it delegates), and messages typed to agents (`send`). A local model's server queues its own requests, which Irie cannot reorder.
+- **Memory.** macOS gives a user's process no way to set memory aside for another, so promote reserves none. The apps say so. The background processes are the ones macOS slows first.
 - **Notes.** Raising priority queues `notes.priority`. Clearing it sends `notes.priority_cleared`, but only if the first note was delivered.
 - **Paused or frozen sessions.** Priority does not resume them; the status strip says "paused, p to resume".
 
@@ -558,6 +581,7 @@ type Harness interface {
 **Close and reopen.**
 - **Close.** In one command list the pane swaps out of the slot, if it is shown, and its `@irie_role` becomes `closing`, so the row goes at once and a restarted core still finishes the job. Then everything the host runs gets SIGCONT, in case the session is frozen, the host last, and SIGTERM goes to the host, which passes it on (§4.3). A pane still alive 5 s later gets SIGKILL: the agent's process group, every process under the host, then the host. Then its window goes. The worktree, the folder and `sessions/<id>/` stay.
 - **What is closed** is derived from the journal: a session whose last `ui.closed` came after its last `ui.reopened`, and that has no pane, the newest 100. `ui.closed` carries what reopening needs that `spec.json` does not hold: the name, the creation time, the conversation's id and whether to resume it.
+- **Close when done.** With `spawn.close_when_done` a finished session closes itself, so the sidebars keep no Done group or count (the header carries the setting); whatever is left in that group is idle or ended and is named so. Nothing is lost: the session is in the closed list, which `irie ctl history [QUERY...]` searches by name or id and `irie ctl reopen [SESSION]` brings back, as `reopen` does.
 - **Reopen.** It waits until the closed session's old agent has exited, so two never share a conversation. The session comes back with the same id, name and creation time, so its row returns to its place, in the same folder on the same profile, with Irie's settings written afresh. When its agent got as far as a conversation, meaning its prompt went in or it showed life, reopen runs `claude --resume <id>`, with the id the last SessionStart named, which `/clear` changes. Otherwise its `task.md` starts again under a new id. A session moved in from outside Irie has no task, so it always resumes, and a harness that cannot resume always starts again.
 
 **Tests:** every action round-trips (do, undo, redo) to an identical state (M4–M7).
@@ -587,7 +611,7 @@ If the outside copy stopped but Irie could not start the session, the error says
 
 **Clients.**
 - **`irie ctl`.** `list` shows the sessions under `OUTSIDE IRIE`, and `move [--wait] [+PROFILE] <session-id|name>` moves one in.
-- **The sidebar.** The group comes last, after Parked, under a header with its count. Each row is one line, with the glyph and colour of the Irie state it matches (§5.3): busy as working, idle as idle, waiting for the user as needs you, and a dim `·` for anything else. Selecting a row puts what it is doing, its folder and how it runs in the status strip. `m` `m` moves it in, as `x` `x` closes: the first press says that its copy outside Irie ends, with anything it runs in the background, and any other key cancels. `:move [name]` moves it at once. Enter or Space says that it runs outside Irie instead of failing.
+- **The sidebar.** The group comes last, after Parked, under a header with its count that folds it like any group's (§4.1). Each row is one line, even among cards, with the glyph and colour of the Irie state it matches (§5.3): busy as working, idle as idle, waiting for the user as needs you, and a dim `·` for anything else. Selecting a row puts what it is doing, its folder and how it runs in the status strip. `m` `m` moves it in, as `x` `x` closes: the first press says that its copy outside Irie ends, with anything it runs in the background, and any other key cancels. `:move [name]` moves it at once. Enter or Space says that it runs outside Irie instead of failing.
 - **The Mac app.** An "Outside Irie" section after the cards, with the same one-line rows. The details panel has Move into Irie, off with the reason while the session can't move, and Copy Session ID, and a move asks first ([MAC.md](MAC.md)).
 
 **Agents keep their own identity.** An agent inherits the tmux server's environment, which came from whatever first ran `irie up`. When that was a Claude Code session in a terminal pane, every agent would carry that session's markers. These are the variables Claude Code's environment reference documents: `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID`, `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_REMOTE_SESSION_ID`, and `CLAUDE_EFFORT`, the other session's effort. Agents would also carry the terminal pane's ids and its control capability: names ending in `_PANEL_ID`, `_SURFACE_ID` or `_SOCKET_CAPABILITY`, that terminal's other `*_ID` and `*_SOCKET*` variables, and `WINDOWID`. Claude Code would take each agent for a nested session, leave it out of `claude agents` and `--resume`, and hand it the other session's inbox. It ignores the inherited marker when it sees tmux, but Irie hides `TMUX`. So the pane host drops these variables before it starts an agent, unless the profile sets them, and the core drops them from its own runs of the CLI. A core restarted on a running server therefore fixes every agent it spawns from then on. Starting the server from a clean login environment was the other option. It would reach a running server only when the server restarts, it needs the login-shell capture of §7.2, and `env -i` also drops variables that launchd rather than a shell profile sets, such as `SSH_AUTH_SOCK` on macOS.
@@ -615,9 +639,13 @@ Left out: the model's thinking, expanded skills and other meta lines, Claude Cod
 
 **Sending** (`send`). A message reaches the agent the way a person typing would, through the core, the only writer to tmux: the text goes into a tmux buffer from a file, `paste-buffer -p` pastes it into the agent's pane (bracketed when the agent asked for bracketed paste, with control characters other than tabs and newlines shown as `^X`), and Enter follows 150 ms later. Claude Code queues a message that arrives while it works for its next tool boundary. While the agent waits on you in its terminal (a permission, a question, a plan), Enter would answer that prompt, so `send` refuses with `busy` and a view offers the terminal instead. It also refuses before the agent is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste, where each newline would be Enter. One message is typed at a time. A sent message shows in `pending` until the transcript has a message from you as new as it, and for 15 minutes at most.
 
+**In the terminal.** The slot's placeholder pane (`irie placeholder`) draws the shown session's conversation, the way the Mac app does, in Bubble Tea and Lip Gloss: a header with the name and what it is doing, your messages in rounded cards, Claude's replies in Markdown, one line per call with a ✓, ✕ or ring, how long it took and the lines an edit changed, runs of reads, edits or searches as one line, subagents as `↳ Explore` lines, notes as ruled lines, what it waits on you for in a red card, and a message box that sends with Enter (Shift+Enter or Ctrl+J for a new line); PgUp, PgDn and the wheel scroll. While the agent waits on you, a banner takes the box's place. With no session picked, it lists the keys. It draws in the sidebar's palette (`ui.theme`, light or dark as the terminal is), on the palette's ground.
+- **The view.** `show` picks a session. In the conversation view, the default (`ui.view`), its own pane stays home and P stays in the slot; the picked session's row is `shown`, and P follows the row the core marks shown. In the terminal view the session's pane is swapped in, as before. `flip` (`irie ctl flip`, bound to `ui.flip_key`, Ctrl+\ by default, which Claude Code's documented shortcuts do not use) turns the view and focuses the slot. The core keeps the picked session and the view in the server options `@irie_selected` and `@irie_raw`, so a restarted core keeps them.
+- **The Mac app.** While the app is open the slot shows the picked session's raw terminal whatever the view, since the app draws its own conversation; the flip key goes to the agent then, as the focus key does. When the app closes, the view comes back.
+
 **Frames.** A follower's first frame carries the newest 1,000 items with `reset`; later ones carry only the items that changed, which a client replaces by id or appends, plus `needs`. A transcript that shrank was replaced: the conversation starts over with a `reset`.
 
-**Tests:** each kind of transcript line, read in halves, across `/clear` and replacement; stopped calls; finding the transcript Claude Code keeps; the op, the frames and `needs` with the fake agent; a sent message reaching the fake agent and leaving `pending` once the transcript has it; refusals while it asks a question and for several lines without bracketed paste.
+**Tests:** each kind of transcript line, read in halves, across `/clear` and replacement; stopped calls; finding the transcript Claude Code keeps; the op, the frames and `needs` with the fake agent; a sent message reaching the fake agent and leaving `pending` once the transcript has it; refusals while it asks a question and for several lines without bracketed paste; the slot showing a conversation, flipping to the raw terminal and back, a restarted core keeping the view, the flip key's binding, and the slot pane drawing a shown conversation in tmux; the slot program's cards, sending, banner, keys and scrolling.
 
 ---
 
@@ -688,6 +716,16 @@ Each row shows the first state in this table that applies; the table is in prece
 | done | `✓` | green | `turn.ended`, not yet viewed. Turns into idle when you show the session. `ui.red_on_done = true` shows it red instead |
 | idle | `○` | dim | done and viewed |
 
+The sidebar draws these colours from its palette (§5.5, `ui.theme`): red is the palette's needs colour, green its done, yellow its paused and cyan its frozen; default is ink and dim is muted, so a dim red or dim yellow row has a red or yellow glyph and a muted name. In every palette, light and dark, each text colour reads at 4.5:1 and the accent at 3:1 on every surface (WCAG 2.2, 1.4.3 and 1.4.11). The sidebar paints every cell's background itself, so this holds whatever the terminal's theme is. It asks the terminal for its background (OSC 11, which tmux answers with the attached client's) and draws the dark set until an answer comes. Each state has its own glyph, so colour is never the only cue (1.4.1): only failed and an exit with an error code share `✕`, and only paused and pausing share `‖`. The core derives frozen (M6), and will derive paused and pausing (M5); the sidebar already draws them. The Mac app draws the same glyphs in the same roles ([MAC.md](MAC.md) §5).
+
+Before the palettes, neither sidebar followed this table exactly. The terminal sidebar:
+- drew its title and the command bar's prompt in Irie's sun yellow, which reads at 1.8:1 on a light terminal;
+- took its state colours from the terminal's own theme, so their contrast was whatever that theme gave;
+- left failed rows out of the needs-you count, though they are red;
+- had no look for frozen, paused or pausing.
+
+Two older faults were fixed just before: working shared needs you's `●`, and an exit with an error code shared a clean exit's `·`. The Mac app's faults are listed in [MAC.md](MAC.md) §5.
+
 ### 5.4 Files
 
 Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.local/share`, `~/.cache`), so paths match Linux. Directories are 0700 and files 0600.
@@ -698,7 +736,7 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_STATE_HOME/irie/tmux.conf` | Generated tmux config | core |
 | `$XDG_STATE_HOME/irie/state.json` | Snapshot (atomic rename): per session the id, name, cwd, worktree, branch, profile, vendor ids, parked, priority and order; plus the undo and redo stacks | core |
 | `$XDG_STATE_HOME/irie/journal/YYYY-MM-DD.ndjson` | Event envelopes, kept `journal.keep_days` days | core |
-| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json`, `note-<n>.md`, `status.json` (the last status line update, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
+| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json` (the host's pid, its agent's, and that it knows freeze), `freeze.json` (while the session is frozen), `note-<n>.md`, `status.json` (the last status line update, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
 | `$XDG_STATE_HOME/irie/local.json` | The model `irie setup local` chose for `+local`, and what models took in memory once loaded (§6.3) | core |
 | `$XDG_STATE_HOME/irie/{core,ui}.log` | Logs | core, ui |
 | `$XDG_STATE_HOME/irie/ghostty.json` | Id of the Irie window's Ghostty terminal | `irie` (M9) |
@@ -716,9 +754,12 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 [ui]
 sidebar_width = 34            # columns
 focus_key = "C-]"             # tmux key that toggles sidebar <-> slot
+flip_key = "C-\\"            # tmux key that flips the slot: conversation <-> raw terminal ("" for none)
+view = "conversation"         # what the slot shows first: conversation | terminal (§4.7)
 max_sub_rows = 6
 red_on_done = false
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
+theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
 
 [spawn]
 default_profile = "auto"      # auto = the lowest cost per success among profiles accurate enough (§6.4)
@@ -891,9 +932,9 @@ Every session costs something, and the spawn list says what before a task starts
 | Memory | What the session's processes take, measured | The same, plus what its model takes: weights, the context cache at the server's context, and working room |
 
 **Status line.** With `usage.status_line` (on by default), Irie's settings file makes `irie statusline` the session's status line.
-- **Forwarding.** It forwards each update to the core (op `status`). The call takes at most 300 ms and never fails.
+- **Forwarding.** It forwards each update to the core (op `status`), which answers with the session's state and running subagents. The call takes at most 300 ms and never fails.
 - **The user's own.** It then `exec`s the user's own status line on the same input. It finds it where Claude Code would: the project's local settings at the repo's main checkout, the shared project settings in the cwd, then the user's in `CLAUDE_CONFIG_DIR` or `~/.claude`. Their `padding`, `refreshInterval` and `hideVimModeIndicator` are kept.
-- **No status line of their own.** It prints a short line instead (`$1.23 · ctx 41% · 5h 62%`), because any status line hides Claude Code's footer hints.
+- **No status line of their own.** It prints a short line instead, because any status line hides Claude Code's footer hints: the session's state in the marks and colours of §5.3, then the cost, the context with a bar, and the plan's use (`✓ done · $1.23 · ctx ▰▰▰▱▱▱▱▱ 41% · 5h 62%`). A turn that ended while subagents still run is not done: the line says `◐ waiting on 2 helpers: Explore, dev`, and while the turn runs `◐ working + 2 helpers`. Shares turn yellow from 70% and red from 90%; the rest is faint. Parts drop from the end to fit `COLUMNS`. It re-runs every 2 s (`refreshInterval`), since Claude Code's updates stop while the session is idle, as when it waits on background subagents.
 - **Restarts.** The last update is kept in the session's `status.json`, so a restarted core still knows it.
 
 **Memory.**
@@ -1188,11 +1229,14 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 **Goal:** `f` stops a session's whole process tree at once, and `F` stops all sessions. Thawing resumes the tree and tells the agent.
 
 **Build:**
-- **Host.** SIGUSR1 and SIGUSR2 handling; the tree walk (`x/sys/unix` on darwin, `/proc` on linux); stop and continue order; continuing stops it did not cause; frozen status in `host.json`.
-- **Core.** Ops `freeze` and `thaw` (a session or `all`); pane input off and on; the frozen state and its warning; the frozen note; close while frozen; undo inverses.
+- **Host.** `host.json`; leaving its agent stopped while `freeze.json` exists; continuing other stops it did not cause.
+- **Core.** Ops `freeze` and `thaw` (a session or `all`); the tree walk (`internal/proc`: `x/sys/unix` on darwin, `/proc` on linux); stop and continue order; agents of hosts from before freeze; pane input off and on; the frozen state and its warning; the frozen note; close while frozen; undo inverses.
+- **Shim.** Tool calls wait while `freeze.json` exists.
 
 **Tests:**
-- **Freeze and thaw.** For a tree of host → `sh` → (`sh`, plus a child in its own process group), every process is `T` within 100 ms of freeze, and none is after thaw.
+- **Freeze and thaw.** For a tree of host → agent → (a child, plus a shell in its own process group with a child of its own), every process is `T` within 100 ms of freeze, still after 1.5 s, and none is after thaw.
+- **A host from before freeze.** Under `testutil/oldhost`, which continues every stop, everything but the agent is `T` and stays so, the agent's next tool call waits until the thaw, and nothing is stopped after it.
+- **Restart.** A frozen session is still frozen, and its processes still `T`, after a core restart.
 - **Foreign stops.** SIGTSTP to an agent that is not frozen → it runs again within 100 ms.
 - **Input.** A frozen pane has `pane_input_off` set to 1.
 - **Close.** Closing a frozen session exits within 6 s.
@@ -1207,7 +1251,8 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 **Build:** priority ordering; the note templates; the `note` op; paste delivery for generic harnesses; undo (cancel an undelivered note, otherwise send the cleared note).
 
 **Tests:**
-- **Ordering.** Three prioritised sessions are ordered latest first. Prioritising a parked session unparks it.
+- **Ordering.** Three prioritised sessions are ordered latest first. Prioritising a parked session unparks it. `reorder` puts a session before another or last, and the order survives a core restart.
+- **The machine first.** While one session is promoted, every process of the others' trees, and of a session started meanwhile, is in the background (`ps` shows priority 4), and none of the promoted tree is. Putting it back takes them all out. A promoted session's request gets the next turn.
 - **Delivery.** A note is delivered exactly once, at the next tool hook. An idle agent gets it with its next prompt. Generic delivery uses bracketed paste and keeps newlines.
 - **Undo.** Before delivery, the note is never delivered. After delivery, the cleared note is sent.
 

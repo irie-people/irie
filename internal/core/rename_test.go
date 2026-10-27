@@ -35,7 +35,8 @@ func (c *coreEnv) renames(id string) []event.Event {
 }
 
 func TestRenameSurvivesACoreRestart(t *testing.T) {
-	c := setup(t)
+	// The terminal view, so the session's own pane is in the slot.
+	c := setupWith(t, agentConfig{terminal: true})
 	a := c.spawn("task a")
 	c.waitState(a.ID, ipc.StateWorking)
 	c.show(a.ID, false)

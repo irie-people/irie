@@ -85,10 +85,17 @@ var PermissionModes = []string{"acceptEdits", "auto", "bypassPermissions", "defa
 type UI struct {
 	SidebarWidth int    `toml:"sidebar_width"` // columns
 	FocusKey     string `toml:"focus_key"`     // tmux key that toggles sidebar and slot
+	FlipKey      string `toml:"flip_key"`      // tmux key that flips the slot between conversation and terminal; "" for none
+	View         string `toml:"view"`          // what the slot shows first: conversation | terminal
 	MaxSubRows   int    `toml:"max_sub_rows"`
 	RedOnDone    bool   `toml:"red_on_done"`
 	Ghostty      string `toml:"ghostty"` // auto | off
+	Theme        string `toml:"theme"`   // the palette of the sidebar and the slot, one of Themes
 }
+
+// Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's. Each has a
+// light and a dark set; the terminal's background picks one.
+var Themes = []string{"rosewater", "terracotta", "lilac", "evergreen"}
 
 type Spawn struct {
 	DefaultProfile string        `toml:"default_profile"`
@@ -197,7 +204,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", Theme: "rosewater"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -460,11 +467,20 @@ func (c Config) Validate() error {
 	if !tmuxKey.MatchString(c.UI.FocusKey) || strings.ContainsAny(c.UI.FocusKey, `'"#`) {
 		bad("ui.focus_key = %q: must be a tmux key name such as C-]", c.UI.FocusKey)
 	}
+	if c.UI.FlipKey != "" && (!tmuxKey.MatchString(c.UI.FlipKey) || strings.ContainsAny(c.UI.FlipKey, `'"#`) || c.UI.FlipKey == c.UI.FocusKey) {
+		bad("ui.flip_key = %q: must be a tmux key name such as C-\\, other than ui.focus_key, or empty for none", c.UI.FlipKey)
+	}
+	if c.UI.View != "conversation" && c.UI.View != "terminal" {
+		bad("ui.view = %q: must be conversation or terminal", c.UI.View)
+	}
 	if c.UI.MaxSubRows < 0 {
 		bad("ui.max_sub_rows = %d: must not be negative", c.UI.MaxSubRows)
 	}
 	if c.UI.Ghostty != "auto" && c.UI.Ghostty != "off" {
 		bad("ui.ghostty = %q: must be auto or off", c.UI.Ghostty)
+	}
+	if !slices.Contains(Themes, c.UI.Theme) {
+		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))
 	}
 	if _, ok := c.Profiles[c.Spawn.DefaultProfile]; !ok && c.Spawn.DefaultProfile != Auto {
 		bad("spawn.default_profile = %q: no such profile, and not auto", c.Spawn.DefaultProfile)

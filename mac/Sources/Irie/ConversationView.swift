@@ -248,7 +248,7 @@ private struct YouTurn: View {
     private var long: Bool { text.split(separator: "\n", omittingEmptySubsequences: false).count > 12 || text.count > 1400 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Speaker(name: "You", symbol: "person.crop.circle.fill", tint: Theme.muted, time: item.when, note: note)
             VStack(alignment: .leading, spacing: 6) {
                 Text(text)
@@ -263,7 +263,7 @@ private struct YouTurn: View {
                         .foregroundStyle(Theme.sunInk)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Theme.inset)
             .padding(.vertical, 9)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
             .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
@@ -404,7 +404,7 @@ private struct CallCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(.horizontal, 10)
+            .padding(.horizontal, Theme.inset)
             .padding(.vertical, 7)
             .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
             .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
@@ -429,7 +429,9 @@ private struct CallLine: View {
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(Theme.muted)
                     .rotationEffect(.degrees(open ? 90 : 0))
-                    .frame(width: 10)
+                    // At the front of its slot, so its tip lines up with the
+                    // text of the cards around it.
+                    .frame(width: 10, alignment: .leading)
                 CallMark(state: state)
                 Text(phrase)
                     .font(.callout)
@@ -573,7 +575,7 @@ private struct HelperChip: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, Theme.inset)
         .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
@@ -649,7 +651,7 @@ struct NeedsCard: View {
             .buttonStyle(SoftButton(prominent: true))
             .help("Show \(name)’s terminal (⌥⌘T)")
         }
-        .padding(14)
+        .padding(Theme.inset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.needsTint))
         .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.needs.opacity(0.45), lineWidth: 1))
@@ -732,7 +734,7 @@ struct Composer: View {
             .help("Send (Return)")
             .accessibilityLabel("Send")
         }
-        .padding(.leading, 14)
+        .padding(.leading, Theme.inset)
         .padding(.trailing, 6)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field))
@@ -772,7 +774,7 @@ struct Composer: View {
                 .buttonStyle(SoftButton(prominent: waits))
                 .keyboardShortcut(.return, modifiers: [])
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, Theme.inset)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(waits ? Theme.needsTint : Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)

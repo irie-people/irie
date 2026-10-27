@@ -76,6 +76,8 @@ func (p Paths) UpLock() string                { return filepath.Join(p.Runtime, 
 func (p Paths) SpecFile(id string) string     { return filepath.Join(p.Session(id), "spec.json") }
 func (p Paths) TaskFile(id string) string     { return filepath.Join(p.Session(id), "task.md") }
 func (p Paths) ExitFile(id string) string     { return filepath.Join(p.Session(id), "exit.json") }
+func (p Paths) HostFile(id string) string     { return filepath.Join(p.Session(id), "host.json") }
+func (p Paths) FreezeFile(id string) string   { return filepath.Join(p.Session(id), "freeze.json") }
 func (p Paths) StatusFile(id string) string   { return filepath.Join(p.Session(id), "status.json") }
 func (p Paths) LocalFile() string             { return filepath.Join(p.State, "local.json") }
 func (p Paths) ScratchDir(slug string) string { return filepath.Join(p.Scratch(), slug) }

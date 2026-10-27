@@ -166,6 +166,9 @@ enum Theme {
     /// Corners: cards and fields, and the terminal's frame and the task bar.
     static let radius: CGFloat = 14
     static let frameRadius: CGFloat = 16
+    /// How far text sits in from the edge of a card or a field, so the text
+    /// of everything down a column starts on one line.
+    static let inset: CGFloat = 12
 
     /// Rounded type, as the cards use.
     static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
@@ -185,7 +188,7 @@ enum Theme {
             var hex = pick(s)
             if high {
                 switch strength {
-                case .text: hex = luminance(hex) < 0.18 ? mix(hex, 0x000000, 0.35) : mix(hex, 0xFFFFFF, 0.45)
+                case .text: hex = stronger(hex)
                 case .line: hex = mix(hex, s.ink, 0.4)
                 case .none: break
                 }
@@ -196,23 +199,43 @@ enum Theme {
 
     fileprivate enum Strength { case none, text, line }
 
+    /// A text colour as Increase Contrast draws it: further from the grounds.
+    private static func stronger(_ hex: UInt32) -> UInt32 {
+        luminance(hex) < 0.18 ? mix(hex, 0x000000, 0.35) : mix(hex, 0xFFFFFF, 0.45)
+    }
+
+    /// A colour worked out for the appearance it is drawn in: light or dark,
+    /// with or without Increase Contrast.
+    private static func computed(_ hex: @escaping (_ dark: Bool, _ high: Bool) -> UInt32) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
+            let dark = match == .darkAqua || match == .accessibilityHighContrastDarkAqua
+            let high = match == .accessibilityHighContrastAqua || match == .accessibilityHighContrastDarkAqua
+            return NSColor(hex: hex(dark, high))
+        })
+    }
+
     /// How many agent hues there are.
     static let agentSlots = 6
 
     /// An agent's own colour while it works. The slots fan out over the half
     /// of the colour wheel almost opposite the palette's accent (centred 180°
-    /// away, 36° apart), so they set the agents apart from each other and from
-    /// the accent that marks the selection. The brightness is found for the
-    /// card it sits on, so each keeps 3:1 (WCAG 2.2 non-text) in every palette
-    /// and mode, and Increase Contrast pushes it further.
+    /// away, 36° apart, or closer where the fan skips the needs red), so they
+    /// set the agents apart from each other, from the accent that marks the
+    /// selection, and from what needs you. The brightness is found for the
+    /// grounds its mark sits on, so each keeps 3:1 (WCAG 2.2 non-text) in
+    /// every palette and mode, and Increase Contrast pushes it further.
     static func agent(slot: Int) -> Color {
         let p = palette
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
-            let dark = match == .darkAqua || match == .accessibilityHighContrastDarkAqua
-            let high = match == .accessibilityHighContrastAqua || match == .accessibilityHighContrastDarkAqua
-            return NSColor(hex: agentHex(slot: slot, palette: p, dark: dark, high: high))
-        })
+        return computed { agentHex(slot: slot, palette: p, dark: $0, high: $1) }
+    }
+
+    /// A working card's ground: the card washed with its agent's colour, as
+    /// far as keeps the card's text at 4.5:1 and leaves its mark room for
+    /// 3:1. Increase Contrast keeps the plain card.
+    static func agentWash(slot: Int) -> Color {
+        let p = palette
+        return computed { agentWashHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
     /// The slot for a session: the same one every time, from its id.
@@ -222,23 +245,68 @@ enum Theme {
         return Int(h % UInt32(agentSlots))
     }
 
-    static func agentHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
+    /// A slot's hue, from 0 to 1. The fan leaves out 30° either side of the
+    /// palette's needs red, which is only for what needs you (DESIGN §5.3),
+    /// and spreads the slots over the rest of its half of the wheel.
+    private static func agentHue(slot: Int, _ s: Swatches) -> Double {
+        let start = hsb(s.accent).0 * 360 + 90
+        // The red's place along the fan, and the stretch of the fan it takes.
+        var red = (hsb(s.needs).0 * 360 - start).truncatingRemainder(dividingBy: 360)
+        if red < 0 { red += 360 }
+        if red >= 270 { red -= 360 }
+        let from = max(0, red - 30), gap = max(0, min(180, red + 30) - from)
+        var along = Double(slot % agentSlots) * (180 - gap) / Double(agentSlots - 1)
+        if gap > 0, along >= from { along += gap }
+        return (start + along).truncatingRemainder(dividingBy: 360) / 360
+    }
+
+    static func agentWashHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
         let s = dark ? p.dark : p.light
-        let (accentHue, _, _) = hsb(s.accent)
-        let offset = 180 + (Double(slot % agentSlots) - Double(agentSlots - 1) / 2) * 36
-        let hue = (accentHue * 360 + offset).truncatingRemainder(dividingBy: 360) / 360
-        // Contrast against the card, the ground a mark sits on most.
-        let want = high ? 4.5 : 3.2
-        let card = luminance(s.card)
-        var lo = 0.0, hi = 1.0
+        if high { return s.card }
+        let hue = agentHue(slot: slot, s)
+        // Toward the hue: at full brightness in light mode, so the wash stays
+        // a pastel rather than greying; at 0.6 in dark mode, so it adds more
+        // colour than light.
+        let vivid = rgb(hue, 0.62, dark ? 0.6 : 1)
+        // The muted text holds the least contrast on a card; a little over
+        // 4.5:1 leaves room for rounding. A dark mark can always darken, but
+        // a bright one keeps its colour only up to full brightness.
+        let muted = luminance(s.muted), brightest = luminance(rgb(hue, 0.62, 1))
+        func fits(_ t: Double) -> Bool {
+            let l = luminance(mix(s.card, vivid, t))
+            return ratio(l, muted) >= 4.6 && (!dark || ratio(l, brightest) >= 3.2)
+        }
+        var lo = 0.0, hi = dark ? 0.45 : 0.2
+        if fits(hi) { return mix(s.card, vivid, hi) }
         for _ in 0..<14 {
             let mid = (lo + hi) / 2
-            let l = luminance(rgb(hue, 0.62, mid))
-            let ratio = l > card ? (l + 0.05) / (card + 0.05) : (card + 0.05) / (l + 0.05)
-            // Light cards want the dark end, dark cards the bright end.
-            if ratio >= want { if dark { hi = mid } else { lo = mid } } else { if dark { lo = mid } else { hi = mid } }
+            if fits(mid) { lo = mid } else { hi = mid }
         }
-        return rgb(hue, 0.62, dark ? hi : lo)
+        return mix(s.card, vivid, lo)
+    }
+
+    static func agentHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
+        let s = dark ? p.dark : p.light
+        let hue = agentHue(slot: slot, s)
+        // Contrast against the grounds the mark sits on: its card's wash, and
+        // the selection once the card is picked.
+        let want = high ? 4.5 : 3.2
+        let grounds = [agentWashHex(slot: slot, palette: p, dark: dark, high: high), s.selection].map(luminance)
+        // Past full brightness the mark pales toward white, for a dark hue,
+        // such as a blue, that full brightness leaves short.
+        func mark(_ x: Double) -> UInt32 { x <= 1 ? rgb(hue, 0.62, x) : rgb(hue, 0.62 * (2 - x), 1) }
+        var lo = 0.0, hi = dark ? 2.0 : 1.0
+        for _ in 0..<14 {
+            let mid = (lo + hi) / 2
+            let l = luminance(mark(mid))
+            // Light cards want the dark end, dark cards the bright end.
+            if grounds.allSatisfy({ ratio(l, $0) >= want }) {
+                if dark { hi = mid } else { lo = mid }
+            } else {
+                if dark { lo = mid } else { hi = mid }
+            }
+        }
+        return mark(dark ? hi : lo)
     }
 
     private static func hsb(_ hex: UInt32) -> (Double, Double, Double) {
@@ -260,6 +328,11 @@ enum Theme {
             return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
         }
         return 0.2126 * channel(hex >> 16) + 0.7152 * channel(hex >> 8) + 0.0722 * channel(hex)
+    }
+
+    /// WCAG 2.2's contrast ratio between two luminances.
+    static func ratio(_ a: Double, _ b: Double) -> Double {
+        (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
 
     /// a moved toward b by t, channel by channel.

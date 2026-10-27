@@ -146,6 +146,55 @@ func TestPrintsTheReplyInClaudesDialect(t *testing.T) {
 	}
 }
 
+func TestAFrozenSessionsToolCallWaitsForTheThaw(t *testing.T) {
+	// An agent whose host predates freeze runs on while its session is
+	// frozen; its next tool call waits at the shim until the thaw, with the
+	// core down as well.
+	defer func(d time.Duration) { holdPoll = d }(holdPoll)
+	holdPoll = 10 * time.Millisecond
+	state := t.TempDir()
+	dir := filepath.Join(state, "irie", "sessions", session)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	freeze := filepath.Join(dir, "freeze.json")
+	if err := os.WriteFile(freeze, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := &core{reply: ipc.HookResult{Context: "[Irie] noted"}}
+	for _, sock := range []string{serve(t, c), filepath.Join(testutil.ShortDir(t), "none.sock")} {
+		vars := env(map[string]string{"IRIE_SOCKET": sock, "IRIE_SESSION": session, "HOME": "/home/alice", "XDG_STATE_HOME": state})
+		var out bytes.Buffer
+		done := make(chan struct{})
+		go func() {
+			Run(strings.NewReader(preToolUse), &out, vars)
+			close(done)
+		}()
+		select {
+		case <-done:
+			t.Fatalf("%s: the call went through while frozen", sock)
+		case <-time.After(200 * time.Millisecond):
+		}
+		// Other hooks never wait.
+		stop := strings.Replace(preToolUse, "PreToolUse", "Stop", 1)
+		start := time.Now()
+		Run(strings.NewReader(stop), &bytes.Buffer{}, vars)
+		if d := time.Since(start); d > time.Second {
+			t.Errorf("%s: a Stop hook waited %v", sock, d)
+		}
+		os.Remove(freeze)
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s: the call still waits after the thaw", sock)
+		}
+		if strings.Contains(sock, "none.sock") != (out.Len() == 0) {
+			t.Errorf("%s: printed %q", sock, out.String())
+		}
+		os.WriteFile(freeze, []byte("{}\n"), 0o600)
+	}
+}
+
 func TestFailsOpen(t *testing.T) {
 	defer func(d time.Duration) { replyTimeout = d }(replyTimeout)
 	replyTimeout = 300 * time.Millisecond

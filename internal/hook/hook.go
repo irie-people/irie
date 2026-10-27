@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -15,6 +16,7 @@ import (
 	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/harness"
 	"github.com/irie-hq/irie/internal/harness/claude"
+	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/paths"
 )
@@ -28,6 +30,13 @@ var replyTimeout = 2 * time.Second
 
 // maxPayload is the most the shim reads from stdin.
 const maxPayload = 256 << 20
+
+// holdPoll is how often a tool call that a freeze holds looks again.
+var holdPoll = 50 * time.Millisecond
+
+// holds are the hook events at which an agent waits while its session is
+// frozen: those before and after a tool call, which the agent waits for.
+var holds = map[string]bool{"PreToolUse": true, "PostToolUse": true, "PostToolUseFailure": true}
 
 // Run is `irie hook`. It reads IRIE_SESSION and IRIE_SOCKET from getenv and
 // returns the exit code, which is always 0.
@@ -58,20 +67,38 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	}
 
 	h := claude.Harness{}
-	c, err := ipc.Dial(socket, connectTimeout)
-	if err != nil {
-		return 0
+	r, ok := ask(socket, ipc.HookArgs{Harness: h.ID(), Session: session, Payload: payload})
+	// A frozen session's agent waits at its tool calls, while the core is
+	// down too (DESIGN §4.3). It stops waiting if the agent, its parent, is
+	// gone.
+	if p, err := paths.New(getenv, os.Getuid()); err == nil && holds[hookEvent] {
+		dir := p.Session(session)
+		for parent := os.Getppid(); host.Frozen(dir) && os.Getppid() == parent; {
+			time.Sleep(holdPoll)
+		}
 	}
-	defer c.Close()
-	c.Timeout = replyTimeout
-	var r ipc.HookResult
-	if err := c.Call(ipc.OpHook, ipc.HookArgs{Harness: h.ID(), Session: session, Payload: payload}, &r); err != nil {
+	if !ok {
 		return 0
 	}
 	// Respond needs only the event's name to pick the dialect.
 	e := event.Event{Vendor: &event.Vendor{HookEvent: hookEvent}}
 	stdout.Write(h.Respond(e, harness.HookReply{Context: r.Context, Deny: r.Deny}))
 	return 0
+}
+
+// ask forwards a hook event to the core and returns its reply.
+func ask(socket string, a ipc.HookArgs) (ipc.HookResult, bool) {
+	var r ipc.HookResult
+	c, err := ipc.Dial(socket, connectTimeout)
+	if err != nil {
+		return r, false
+	}
+	defer c.Close()
+	c.Timeout = replyTimeout
+	if err := c.Call(ipc.OpHook, a, &r); err != nil {
+		return r, false
+	}
+	return r, true
 }
 
 // whole are the payload fields the shim does not cap: a turn's last
