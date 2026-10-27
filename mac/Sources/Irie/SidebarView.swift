@@ -131,11 +131,13 @@ struct SidebarView: View {
 /// One session, always two lines: its name, then what it needs from you (in
 /// red), what it is doing, or how it ended, in plain words. The trailing
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
-/// the pointer brings up the actions. The card is soft and rounded, on a
-/// gentle shadow: washed in its agent's colour while it works, tinted red
-/// while it needs you, filled with the selection and edged in the accent
-/// while selected. A selected working card is a gradient, from the selection
-/// by its mark to the colour round its terminal at the trailing end.
+/// the pointer brings up the actions. The card is soft and rounded, and lies
+/// flat in the list, with no edge or shadow, like a window's other tabs:
+/// washed in its agent's colour while it works, tinted and edged in red
+/// while it needs you. The selected card stands up from the others, on a
+/// gentle shadow, filled with the selection and edged in the accent. A
+/// selected working card is a gradient, from the selection by its mark to
+/// the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -161,7 +163,7 @@ private struct SessionCard: View {
                 } else {
                     HStack(spacing: 4) {
                         Text(session.name)
-                            .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
+                            .font(Theme.font(13.5, look.quiet ? .medium : .semibold))
                             .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -192,7 +194,7 @@ private struct SessionCard: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
-        .background(ground.shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .background(ground.shadow(color: selected ? Theme.shadow : .clear, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
         .onHover { hovering = $0 }
@@ -277,12 +279,13 @@ private struct SessionCard: View {
     private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
     /// The accent round the selected card, faint while the list lacks the
-    /// keyboard; red round one that needs you; a hairline round the rest.
+    /// keyboard, and round the one under the pointer, fainter; red round one
+    /// that needs you. The rest have none: a working card's agent shows in
+    /// its mark and its wash.
     private var edge: Color {
         if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
         if hovering { return Theme.accent.opacity(0.45) }
-        if let tint { return tint.opacity(0.55) }
-        return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
+        return look.loud ? Theme.needs.opacity(0.5) : .clear
     }
 
     private var spoken: String {
@@ -309,7 +312,7 @@ private struct RenameField: View {
         // stays where it was drawn.
         TextField("Name", text: $store.renameText)
             .textFieldStyle(.plain)
-            .font(Theme.font(13.5, .bold))
+            .font(Theme.font(13.5, .semibold))
             .foregroundStyle(Theme.ink)
             .focused($focused)
             .frame(maxWidth: .infinity, alignment: .leading)
