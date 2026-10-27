@@ -56,6 +56,14 @@ func (w words) done() string {
 	return sentence(conjugate(w.verb, past), w.object)
 }
 
+// failed says what a call that failed tried: "Couldn't run the tests".
+func (w words) failed() string {
+	if w.question != "" && w.verb == "" {
+		return "Asked: " + w.question
+	}
+	return "Couldn’t " + strings.TrimSpace(w.verb+" "+w.object)
+}
+
 func (w words) ask() string {
 	switch {
 	case w.question != "":

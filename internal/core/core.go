@@ -87,6 +87,8 @@ type session struct {
 	track    track
 	tally    tokenTally // read from the transcripts track names
 	tokens   *ipc.Tokens
+	conv     *conversation // its conversation, read while clients follow it (conversation.go)
+	convSubs int           // the subscriptions that follow its conversation
 }
 
 func (x *session) wire() ipc.Session {
@@ -186,6 +188,7 @@ func (c *Core) tick() {
 	}
 	c.observe(time.Now())
 	c.countTokens()
+	c.followConversations()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -360,7 +363,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo, ipc.OpMove}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
 		// refreshed when they are old; a problem is in the result.
@@ -406,6 +409,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return ipc.CompleteResult{Items: c.complete(a.Text)}, nil
+	case ipc.OpConversation:
+		var a ipc.ConversationArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.conversation(a)
 	case ipc.OpAttachInfo:
 		return c.attachInfo()
 	}

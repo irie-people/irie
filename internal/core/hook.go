@@ -54,6 +54,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		}
 		c.record(x, e)
 	}
+	c.followConversation(x)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
