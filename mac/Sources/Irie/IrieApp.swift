@@ -48,6 +48,16 @@ struct IrieApp: App {
                 Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
                     .disabled(store.selection == nil || store.outsideSelection != nil)
             }
+            // Sessions close like tabs (Closing.swift). KeyRouter catches ⌘W
+            // first; the window's own Close moves to ⇧⌘W.
+            CommandGroup(after: .newItem) {
+                Button("Close Session") { if let s = store.closable { store.close(s) } }
+                    .keyboardShortcut("w")
+                    .disabled(store.closable == nil)
+                Button("Reopen Closed Session") { store.reopenLast() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                    .disabled(store.closed.isEmpty)
+            }
             // KeyRouter catches Ctrl+Tab and Ctrl+] first; the menu shows them.
             CommandMenu("Go") {
                 Button("Next Session") { store.step(1) }
@@ -104,6 +114,22 @@ final class KeyRouter {
             }
             if mods == .control, event.charactersIgnoringModifiers == "]" {
                 MainActor.assumeIsolated { store.toggleFocus() }
+                return nil
+            }
+            // In Irie's window ⌘W closes the selected session and ⇧⌘W the
+            // window, even while the terminal has the keyboard. Other
+            // windows, such as About, keep ⌘W.
+            if event.charactersIgnoringModifiers?.lowercased() == "w", mods == .command || mods == [.command, .shift],
+               let window = event.window, window === NSApp.mainWindow {
+                MainActor.assumeIsolated {
+                    if mods.contains(.shift) {
+                        window.performClose(nil)
+                    } else if let s = store.closable {
+                        store.close(s)
+                    } else {
+                        NSSound.beep()
+                    }
+                }
                 return nil
             }
             return event
