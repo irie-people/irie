@@ -16,7 +16,10 @@ final class Store: ObservableObject {
     @Published private(set) var sessions: [Session] = []
     @Published private(set) var attach: AttachInfo?
     @Published var selection: String?
-    @Published var expanded: Set<String> = []
+    /// How the sidebar groups the sessions, and the groups folded away. Both
+    /// are kept when the user changes them (choose(_:), fold(_:)).
+    @Published var mode: SidebarMode = SidebarMode(rawValue: UserDefaults.standard.string(forKey: "sidebarMode") ?? "") ?? .repo
+    @Published var folded: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "foldedGroups") ?? [])
     @Published var notice: Notice?
     @Published var spawning = false
     /// Bumped when the terminal should take keyboard focus.
@@ -143,12 +146,58 @@ final class Store: ObservableObject {
 
     // MARK: Keyboard
 
-    /// The rows in the order the sidebar draws them: the order they started,
-    /// which a state change never alters (DESIGN §4.1), without the rows the
-    /// filter hides.
-    var drawnOrder: [Session] {
+    /// The sidebar's groups, without the rows the filter hides. In the Repo
+    /// view, a group per repo in the order its first session started, then
+    /// the sessions in no repo; a state change moves nothing. In the State
+    /// view, the sessions that need you, those at work, and those done.
+    /// Within a group the sessions keep the order they started (DESIGN §4.1).
+    var drawnGroups: [SessionGroup] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        return f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
+        let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
+        switch mode {
+        case .state:
+            return Look.Group.allCases.compactMap { g in
+                let in_ = rows.filter { Look($0).group == g }
+                return in_.isEmpty ? nil : SessionGroup(id: "state:\(g)", title: g.title, path: nil, sessions: in_)
+            }
+        case .repo:
+            var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
+            for s in rows {
+                guard let r = s.repo, !r.isEmpty else {
+                    none.append(s)
+                    continue
+                }
+                if byRepo[r] == nil { order.append(r) }
+                byRepo[r, default: []].append(s)
+            }
+            let names = SessionGroup.names(order)
+            var out = order.map { SessionGroup(id: "repo:" + $0, title: names[$0] ?? $0, path: $0, sessions: byRepo[$0] ?? []) }
+            if !none.isEmpty {
+                out.append(SessionGroup(id: "repo:", title: "Not in a repo", path: nil, sessions: none))
+            }
+            return out
+        }
+    }
+
+    /// The cards in the order the sidebar draws them, without those in folded
+    /// groups or hidden by the filter. The keys that walk the sidebar follow
+    /// it.
+    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap(\.sessions) }
+
+    /// A group is open unless folded, and every group is open while the
+    /// filter has text, so what it finds shows.
+    func isOpen(_ g: SessionGroup) -> Bool {
+        !filter.trimmingCharacters(in: .whitespaces).isEmpty || !folded.contains(g.id)
+    }
+
+    func fold(_ g: SessionGroup) {
+        if folded.contains(g.id) { folded.remove(g.id) } else { folded.insert(g.id) }
+        UserDefaults.standard.set(Array(folded).sorted(), forKey: "foldedGroups")
+    }
+
+    func choose(_ m: SidebarMode) {
+        mode = m
+        UserDefaults.standard.set(m.rawValue, forKey: "sidebarMode")
     }
 
     /// Shows the next (+1) or previous (-1) row of the drawn order, wrapping
@@ -273,5 +322,36 @@ final class Store: ObservableObject {
         } catch {
             say("Couldn’t open Ghostty: \(error.localizedDescription)", error: true)
         }
+    }
+}
+
+/// How the sidebar groups the sessions: by repo, or by what they need.
+enum SidebarMode: String, CaseIterable {
+    case state, repo
+
+    var title: String { self == .state ? "State" : "Repo" }
+}
+
+/// One group of the sidebar: a repo, the sessions in no repo, or a state.
+struct SessionGroup: Identifiable, Equatable {
+    let id: String
+    let title: String
+    /// The repo's main checkout, for a repo's group.
+    let path: String?
+    let sessions: [Session]
+
+    /// A name per repo: its folder's name, with the folder above it when two
+    /// repos share a name.
+    static func names(_ paths: [String]) -> [String: String] {
+        let base = { (p: String) in (p as NSString).lastPathComponent }
+        var count: [String: Int] = [:]
+        for p in paths { count[base(p), default: 0] += 1 }
+        var out: [String: String] = [:]
+        for p in paths {
+            let b = base(p)
+            let parent = ((p as NSString).deletingLastPathComponent as NSString).lastPathComponent
+            out[p] = count[b, default: 0] > 1 && !parent.isEmpty ? "\(b) · \(parent)" : b
+        }
+        return out
     }
 }
