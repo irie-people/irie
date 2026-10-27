@@ -31,6 +31,9 @@ const (
 	RolePlaceholder = "placeholder"
 	RoleAgent       = "agent"
 	RoleMirror      = "mirror"
+	// RoleClosing is an agent pane of a closed session while its agent
+	// ends. It is out of the slot, alone in its window and in no row.
+	RoleClosing = "closing"
 )
 
 // Pane user options. They travel with a pane through swaps, so a restarted

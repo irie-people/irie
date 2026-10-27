@@ -58,6 +58,7 @@ type Core struct {
 	recent    []string                 // repos used recently, newest first
 	appViews  int                      // open subscriptions of the Mac app; while any, the slot is zoomed
 	outside   outside                  // the Claude Code sessions outside Irie (outside.go)
+	closes    closes                   // closed sessions, and agents still ending (close.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -143,6 +144,7 @@ func Run(o Options) error {
 	defer c.journal.Close()
 	c.loadHistory()
 	c.loadRecent()
+	c.loadClosed()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
@@ -184,6 +186,7 @@ func (c *Core) tick() {
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.reap()
 	c.observe(time.Now())
 	c.countTokens()
 	frames := c.changes()
@@ -360,14 +363,30 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo, ipc.OpMove}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo, ipc.OpMove, ipc.OpClose, ipc.OpReopen}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
 		// refreshed when they are old; a problem is in the result.
 		c.refreshOutside(outsideEvery, false)
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem}, nil
+		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem, Closed: c.closedList()}, nil
+	case ipc.OpClose:
+		var a ipc.CloseArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.close(a)
+	case ipc.OpReopen:
+		var a ipc.ReopenArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.reopen(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.ReopenResult{Session: s}, nil
 	case ipc.OpMove:
 		var a ipc.MoveArgs
 		if err := decode(raw, &a); err != nil {

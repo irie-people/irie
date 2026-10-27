@@ -25,6 +25,7 @@ type track struct {
 	viewed    bool                   // shown since the turn ended
 	tools     map[string]event.Event // running tools' tool.started, by tool_use_id
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
+	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
 
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads.
@@ -43,7 +44,8 @@ func (t *track) apply(e event.Event) {
 	}
 	switch e.Kind {
 	case event.SpawnRequested:
-		t.requested = e.Time()
+		// A reopened session starts over, but its tokens still count.
+		*t = track{requested: e.Time(), transcripts: t.transcripts}
 	case event.SpawnFailed:
 		t.failed = &e
 	case event.PaneExited:
@@ -51,6 +53,9 @@ func (t *track) apply(e event.Event) {
 	case event.SessionStarted:
 		t.started = true
 		t.addTranscript(e.Str("transcript"))
+		if e.Vendor != nil && e.Vendor.SessionID != "" {
+			t.vendorID = e.Vendor.SessionID
+		}
 		if e.Str("source") == "resume" && t.activity == "" {
 			// A resumed conversation, such as one moved into Irie, waits at
 			// its prompt: it is ready without one, and idle.
@@ -142,6 +147,10 @@ func toolUseID(e event.Event) string {
 // ready reports whether the spawn became a live agent: SessionStart and
 // UserPromptSubmit arrived, or the agent is plainly at work.
 func (t *track) ready() bool { return t.started && t.prompted || t.activity != "" }
+
+// conversed reports whether the agent got as far as a conversation that can
+// be carried on: its prompt went in, or it showed life, as a resumed one does.
+func (t *track) conversed() bool { return t.prompted || t.activity != "" }
 
 // awaiting reports whether Irie saw this session spawned and still waits for
 // it to become ready.

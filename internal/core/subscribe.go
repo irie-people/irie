@@ -21,8 +21,8 @@ const maxQueue = 10000
 // remembers which rows changed; a frame then carries their latest state, as
 // one upsert or remove, or as a snapshot when several rows changed. Event
 // frames, for a client that asked for them, are never coalesced. A client
-// that sees every session also gets the sessions outside Irie, after its
-// first snapshot and whenever they change.
+// that sees every session also gets the sessions outside Irie and the closed
+// sessions, after its first snapshot and whenever they change.
 type subscriber struct {
 	c       *Core
 	session string // only this session, when set
@@ -37,6 +37,7 @@ type subscriber struct {
 	dirty   map[string]bool
 	queue   []ipc.Frame // event frames not sent yet
 	outside bool        // an outside frame is due
+	closed  bool        // a closed frame is due
 }
 
 // Subscribe starts a stream of frames for one client (ipc.Handler).
@@ -52,7 +53,7 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	sub := &subscriber{
 		c: c, session: a.Session, agent: a.Agent, events: a.Events,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
-		full: true, dirty: map[string]bool{}, outside: a.Session == "",
+		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "",
 	}
 	c.mu.Lock()
 	c.subs[sub] = true
@@ -137,6 +138,20 @@ func (s *subscriber) noteOutside() {
 	}
 }
 
+// noteClosed marks a closed frame due, for a client that sees every session.
+func (s *subscriber) noteClosed() {
+	if s.session != "" {
+		return
+	}
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // event queues an event frame for a client that wants it. The caller holds
 // s.c.mu.
 func (s *subscriber) event(e event.Event) {
@@ -163,8 +178,8 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, queue, outside := s.full, s.dirty, s.queue, s.outside
-		s.full, s.dirty, s.queue, s.outside = false, map[string]bool{}, nil, false
+		full, dirty, queue, outside, closed := s.full, s.dirty, s.queue, s.outside, s.closed
+		s.full, s.dirty, s.queue, s.outside, s.closed = false, map[string]bool{}, nil, false, false
 		s.mu.Unlock()
 		for _, f := range queue {
 			select {
@@ -179,6 +194,9 @@ func (s *subscriber) loop() {
 		}
 		if outside {
 			frames = append(frames, s.outsideFrame())
+		}
+		if closed {
+			frames = append(frames, s.closedFrame())
 		}
 		if len(frames) == 0 {
 			continue
@@ -223,4 +241,11 @@ func (s *subscriber) outsideFrame() ipc.Frame {
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
 	return ipc.Frame{T: ipc.FrameOutside, Outside: s.c.outsideList(), Problem: s.c.outside.problem}
+}
+
+// closedFrame carries the closed sessions that reopen can carry on.
+func (s *subscriber) closedFrame() ipc.Frame {
+	s.c.mu.Lock()
+	defer s.c.mu.Unlock()
+	return ipc.Frame{T: ipc.FrameClosed, Closed: s.c.closedList()}
 }
