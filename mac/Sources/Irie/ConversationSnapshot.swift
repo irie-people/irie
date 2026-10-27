@@ -19,13 +19,22 @@ enum ConversationSnapshot {
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-            for dark in [false, true] {
-                let mode = dark ? "dark" : "light"
-                for (name, id) in [("conversation", Fixture.selected), ("waiting", "s01syncagent")] {
-                    let file = URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(mode).png")
-                    try render(page(store, session: id), dark: dark, to: file)
-                    print(file.path)
+            // The conversation in every palette, light and dark, and the foot
+            // of one that waits on you in the standard palette.
+            var shots: [(String, String, String, Bool)] = []
+            for p in Palette.all {
+                for dark in [false, true] {
+                    shots.append(("conversation", Fixture.selected, p.id, dark))
                 }
+            }
+            for dark in [false, true] {
+                shots.append(("waiting", "s01syncagent", Palette.standard.id, dark))
+            }
+            for (name, id, palette, dark) in shots {
+                Theme.use(palette)
+                let file = URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(palette)-\(dark ? "dark" : "light").png")
+                try render(page(store, session: id), dark: dark, to: file)
+                print(file.path)
             }
         } catch {
             FileHandle.standardError.write(Data("render-conversation: \(error.localizedDescription)\n".utf8))

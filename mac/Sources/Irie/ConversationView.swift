@@ -11,6 +11,8 @@ import SwiftUI
 struct ConversationView: View {
     @EnvironmentObject private var store: Store
     @StateObject private var model = ConversationModel()
+    /// The palette: a switch draws the view again in its colours.
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
@@ -23,6 +25,7 @@ struct ConversationView: View {
                 ConversationNote(title: "Pick a session", text: "Its conversation shows here.")
             }
         }
+        .id(theme)
         .background(Theme.ground)
         .onAppear { model.follow(store.selection, client: store.client) }
         .onChange(of: store.selection) { model.follow(store.selection, client: store.client) }
@@ -721,8 +724,8 @@ struct Composer: View {
                     }
                 }
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(Theme.sun))
-                .foregroundStyle(Color.black.opacity(0.75))
+                .background(Circle().fill(Theme.accentFill))
+                .foregroundStyle(Theme.onAccent)
             }
             .buttonStyle(.plain)
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sending || early)
@@ -821,8 +824,8 @@ struct ConversationNote: View {
     }
 }
 
-/// A soft, rounded button in the palette: filled with sun when it is the
-/// thing to do, a quiet card otherwise.
+/// A soft, rounded button in the palette: filled with its accent when it is
+/// the thing to do, a quiet card otherwise.
 struct SoftButton: ButtonStyle {
     var prominent = false
 
@@ -831,8 +834,8 @@ struct SoftButton: ButtonStyle {
             .font(.callout.weight(.medium))
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
-            .foregroundStyle(prominent ? Color.black.opacity(0.8) : Color.primary)
-            .background(Capsule().fill(prominent ? Theme.sun : Theme.card))
+            .foregroundStyle(prominent ? Theme.onAccent : Theme.ink)
+            .background(Capsule().fill(prominent ? Theme.accentFill : Theme.card))
             .overlay(Capsule().strokeBorder(prominent ? Color.clear : Theme.edge, lineWidth: 1))
             .opacity(configuration.isPressed ? 0.75 : 1)
             .contentShape(Capsule())

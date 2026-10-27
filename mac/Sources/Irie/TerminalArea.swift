@@ -10,6 +10,11 @@ struct TerminalArea: View {
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
+    private var online: Bool {
+        if case .online = store.link { return true }
+        return false
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
@@ -21,13 +26,16 @@ struct TerminalArea: View {
                     .opacity(store.showTerminal ? 1 : 0)
                     .allowsHitTesting(store.showTerminal)
                     .accessibilityHidden(!store.showTerminal)
-                if !store.showTerminal {
-                    ConversationView()
+            }
+            // The conversation needs only the core, not the terminal.
+            if !store.showTerminal && (store.attach != nil || online) {
+                ConversationView()
+            } else if store.attach == nil {
+                if case let .offline(why) = store.link {
+                    Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
+                } else {
+                    ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-            } else if case let .offline(why) = store.link {
-                Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
-            } else {
-                ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if store.attach != nil, let note = linkNote {
                 Text(note)
