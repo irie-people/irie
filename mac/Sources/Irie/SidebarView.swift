@@ -11,14 +11,21 @@ struct SidebarView: View {
     @FocusState private var listFocused: Bool
 
     var body: some View {
+        // One row of its own above the cards: the counts sit in the title
+        // bar, beside the traffic lights.
         VStack(spacing: 0) {
-            Header()
             FindField()
             content
             DetailsPanel()
             TaskBar()
         }
         .background(Theme.sidebar.ignoresSafeArea())
+        .toolbar {
+            ToolbarItem(placement: .automatic) { Counts() }
+        }
+        // The toggle would crowd the counts out of the title bar; View >
+        // Hide Sidebar (SidebarCommands) still hides it.
+        .toolbar(removing: .sidebarToggle)
         .modifier(OutsideMoveConfirmation())
     }
 
@@ -47,7 +54,7 @@ struct SidebarView: View {
                             OutsideSection(now: ctx.date, listFocused: listFocused)
                         }
                         .padding(.horizontal, 10)
-                        .padding(.top, 4)
+                        .padding(.top, 3)
                         .padding(.bottom, 8)
                     }
                 }
@@ -339,16 +346,13 @@ private struct Actions: View {
     }
 }
 
-/// The mark, the name and a count per state. A count shows the first
-/// session, in list order, in that state.
-private struct Header: View {
+/// A count per state, in the title bar above the sidebar. A count shows the
+/// first session, in list order, in that state.
+private struct Counts: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        HStack(spacing: 6) {
-            SunMark().frame(width: 18, height: 18)
-            Text("Irie").font(.system(size: 15, weight: .heavy, design: .rounded))
-            Spacer()
+        HStack(spacing: 5) {
             switch store.link {
             case .online:
                 count(.needs, color: Theme.needs, label: "need you")
@@ -360,33 +364,37 @@ private struct Header: View {
                 EmptyView()
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 3)
-        .padding(.bottom, 5)
+        // The title bar sizes the item to its content; a point either side
+        // keeps the capsules' edges whole.
+        .padding(.horizontal, 1)
+        .fixedSize()
     }
 
+    /// A count, which shows the first session in that state. It is drawn
+    /// as a chip rather than a button, so the title bar puts no bezel round
+    /// it; VoiceOver still finds a button.
     private func count(_ g: Look.Group, color: Color, label: String) -> some View {
         let rows = store.sessions.filter { Look($0).group == g }
-        return Button {
-            if let first = rows.first { store.show(first.id) }
-        } label: {
-            HStack(spacing: 4) {
-                Circle().fill(color).frame(width: 6, height: 6)
-                // Two digits' width, so a tenth session doesn't push the others.
-                Text("\(rows.count)").font(.system(size: 11.5, weight: .bold, design: .rounded)).monospacedDigit()
-                    .frame(minWidth: 15)
-            }
-            .foregroundStyle(color)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
-            .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
-            .opacity(rows.isEmpty ? 0.5 : 1)
+        let go = { if let first = rows.first { store.show(first.id) } }
+        return HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            // Two digits' width, so a tenth session doesn't push the others.
+            Text("\(rows.count)").font(.system(size: 11.5, weight: .bold, design: .rounded)).monospacedDigit()
+                .frame(minWidth: 15)
         }
-        .buttonStyle(.plain)
-        .disabled(rows.isEmpty)
+        .foregroundStyle(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
+        .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
+        .opacity(rows.isEmpty ? 0.5 : 1)
+        .contentShape(Capsule())
+        .onTapGesture(perform: go)
         .help("\(rows.count) \(label)")
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(rows.count) \(label)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { go() }
     }
 }
 
@@ -425,7 +433,8 @@ private struct FindField: View {
                 .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
         .padding(.horizontal, 10)
-        .padding(.bottom, 2)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
         .onChange(of: store.focusFind) { focused = true }
     }
 }

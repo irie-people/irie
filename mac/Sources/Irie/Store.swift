@@ -124,6 +124,13 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Fills the store with sessions no core sent, for `--snapshot`.
+    func loadFixture(_ rows: [Session], selection: String?) {
+        sessions = rows.sorted(by: Self.before)
+        self.selection = selection
+        link = .online(version: "snapshot")
+    }
+
     private static func before(_ a: Session, _ b: Session) -> Bool {
         a.created != b.created ? a.created < b.created : a.id < b.id
     }
