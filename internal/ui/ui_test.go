@@ -1391,6 +1391,33 @@ func TestHeaderCountsWhatNeedsYou(t *testing.T) {
 	}
 }
 
+// A parked session is out of the way: To verify leaves it out, though
+// needs you still counts one, and its finished turn says Parked under a
+// quiet name.
+func TestAParkedSessionIsNotToVerify(t *testing.T) {
+	m := statesAt(t, Options{}, 100, 80)
+	rows := everyState()
+	for _, i := range []int{3, 7} { // needs-row and done-row
+		rows[i].Parked = true
+		m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[i]}})
+	}
+	header := screen(t, m)[0]
+	if want := "●3 needs you  ✓0 to verify"; !strings.Contains(header, want) {
+		t.Errorf("header %q lacks %q", header, want)
+	}
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("Z"))
+	y := lineOf(t, m, "done-row")
+	if row := screen(t, m)[y+1]; !strings.Contains(row, "Parked") || strings.Contains(row, "To verify") {
+		t.Errorf("a parked finished turn's second line is %q, want Parked", row)
+	}
+	line := screen(t, m)[y]
+	x := len([]rune(line[:strings.Index(line, "done-row")]))
+	if fg := cells(strings.Split(m.View().Content, "\n")[y])[x].fg; fg != rgb(m.pal.muted) {
+		t.Errorf("a parked finished turn's name is %s, want muted", fg)
+	}
+}
+
 // A zero count is faint: muted, never its state's colour.
 func TestZeroCountsAreFaint(t *testing.T) {
 	m, _ := newModel(t, 100, 24, 0)

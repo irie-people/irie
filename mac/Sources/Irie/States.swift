@@ -87,6 +87,14 @@ enum Look: Equatable {
 }
 
 extension Look {
+    /// A session's state in plain words. A parked session is out of the way,
+    /// checked or put by for later, so its finished turn says Parked rather
+    /// than To verify.
+    static func label(_ s: Session) -> String {
+        let look = Look(s)
+        return look == .done && s.isParked ? "Parked" : look.label
+    }
+
     /// The agent's colour for this session, while it is working; none otherwise.
     static func agentTint(_ s: Session) -> Color? {
         Look(s) == .working ? Theme.agent(slot: Theme.agentSlot(s.id)) : nil

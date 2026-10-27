@@ -39,8 +39,11 @@ enum Snapshot {
             shots.append(("details-tall", Palette.standard.id, 1100, false, .repo))
             for (base, palette, width, dark, mode) in shots {
                 // Set directly, so the app's saved view and folds are untouched.
+                // Parked is open but in the List view, which shows it folded,
+                // as it starts.
                 store.mode = mode
                 store.folded = []
+                store.parkedOpen = mode != .list
                 var domain: [String: Any] = [Palette.defaultsKey: palette, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false]
                 domain.merge(details[base] ?? [:]) { $1 }
                 UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
@@ -130,7 +133,8 @@ enum Snapshot {
 }
 
 /// Sessions for the snapshot, in /home/alice. The first needs you, so it
-/// marks where the list starts; two are parked.
+/// marks where the list starts; two are parked, one of them a finished
+/// turn, which says Parked and is not counted to verify.
 enum Fixture {
     static let selected = "s02docsguide"
 
@@ -176,7 +180,7 @@ enum Fixture {
                     repo: irie, branch: "irie/warm-look", profile: "claude"),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude"),
-            Session(id: "s06scratch01", name: "summarise-the-notes", state: "idle", created: ago(9),
+            Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),
                     cwd: "/home/alice/.local/share/irie/scratch/summarise-the-notes", profile: "claude", parked: true),
             Session(id: "s07stalled01", name: "try-the-login", state: "stalled", reason: "stalled",
                     detail: "stalled: no hooks within 30s · Do you trust the files in this folder?", created: ago(6),

@@ -180,6 +180,9 @@ private struct SessionCard: View {
     private static let slot: CGFloat = 66
 
     private var look: Look { Look(session) }
+    /// Its name drawn muted: idle and the like, and a parked finished turn,
+    /// which is out of the way.
+    private var quiet: Bool { look.quiet || look == .done && session.isParked }
     private var renaming: Bool { store.renaming == session.id }
     /// Its own colour while it works, so a glance tells the agents apart.
     private var tint: Color? { Look.agentTint(session) }
@@ -193,8 +196,8 @@ private struct SessionCard: View {
                 } else {
                     HStack(spacing: 4) {
                         Text(session.name)
-                            .font(Theme.font(13.5, look.quiet ? .medium : .semibold))
-                            .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
+                            .font(Theme.font(13.5, quiet ? .medium : .semibold))
+                            .foregroundStyle(quiet ? Theme.muted : Theme.ink)
                             .lineLimit(1)
                             .truncationMode(.tail)
                         if session.isPromoted { PromotedBadge() }
@@ -273,7 +276,7 @@ private struct SessionCard: View {
         switch look {
         case .starting: return "Starting…"
         case .frozen where session.freezing == true: return "Freezing…"
-        case .done, .idle: return session.detail.flatMap { $0.isEmpty ? nil : $0 } ?? look.label
+        case .done, .idle: return session.detail.flatMap { $0.isEmpty ? nil : $0 } ?? Look.label(session)
         case .frozen, .paused, .pausing: return look.label
         default: return session.detail ?? look.label
         }
@@ -338,7 +341,7 @@ private struct SessionCard: View {
     private var edgeWidth: CGFloat { selected ? (listFocused ? 2.5 : TabLink.width) : 1 }
 
     private var spoken: String {
-        var parts = [session.name, look.label]
+        var parts = [session.name, Look.label(session)]
         if let d = session.detail, !d.isEmpty { parts.append(d) }
         parts.append("started " + Age.spoken(session.created, now: now))
         if let t = session.tokens { parts.append("\(t.total) tokens") }
@@ -499,7 +502,8 @@ private struct ModeSwitch: View {
     }
 }
 
-/// What a hovered card offers. They sit in the card's fixed trailing slot;
+/// What a hovered card offers. They sit in the card's fixed trailing slot,
+/// three icons 16 points wide and the menu 18, so the name keeps its room;
 /// VoiceOver gets them, and more, as the card's actions.
 private struct QuickActions: View {
     @EnvironmentObject private var store: Store
@@ -512,6 +516,7 @@ private struct QuickActions: View {
             // A click on the card types to it; the folder is in the menu.
             PauseButton(session: session)
             PromoteButton(session: session, ink: ink)
+            if store.canPark { ParkButton(session: session, onCard: true) }
             Menu {
                 Actions(session: session)
             } label: {
@@ -519,7 +524,7 @@ private struct QuickActions: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .frame(width: 22)
+            .frame(width: 18)
             .help("More")
         }
         .buttonStyle(.borderless)
@@ -684,7 +689,7 @@ struct DetailsPanel: View {
                 } else if let c = s.command, !c.isEmpty {
                     line(c, mono: true, color: own ?? Theme.ink)
                 } else {
-                    line(s.detail ?? look.label, color: own ?? Theme.ink)
+                    line(s.detail ?? Look.label(s), color: own ?? Theme.ink)
                 }
             } else {
                 line("No session picked")
@@ -704,7 +709,7 @@ struct DetailsPanel: View {
         return WholeLines(spacing: 4) {
             HStack(spacing: 6) {
                 StateMark(look: look, tint: Look.agentTint(s))
-                Text(look.label)
+                Text(Look.label(s))
                     .font(Theme.font(12.5, .bold))
                     .foregroundStyle(look.loud ? Theme.needs : own ?? Theme.ink)
                 Spacer(minLength: 4)
@@ -847,7 +852,8 @@ private struct TitleName: View {
 }
 
 /// A count per state, in the title bar after Irie's name. A count shows the
-/// first session, in list order, in that state.
+/// first session, in list order, in that state. A parked session is out of
+/// the way, so To verify leaves it out; it still counts when it needs you.
 private struct Counts: View {
     @EnvironmentObject private var store: Store
 
@@ -858,7 +864,7 @@ private struct Counts: View {
                 count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
                 count([.working], mark: .working, color: Theme.ink, label: "working")
                 if !store.closeWhenDone {
-                    count([.done], mark: .done, color: Look.doneColor, label: "to verify, not yet seen")
+                    count([.done], mark: .done, color: Look.doneColor, label: "to verify, not yet seen", parked: false)
                 }
                 if store.sessions.contains(where: { [.paused, .pausing].contains(Look($0)) }) {
                     count([.paused, .pausing], mark: .paused, color: Theme.paused, label: "paused")
@@ -879,11 +885,11 @@ private struct Counts: View {
     }
 
     /// A count of the sessions in these states, with the first state's mark,
-    /// which shows the first such session. It is drawn as a chip rather than
-    /// a button, so the title bar puts no bezel round it; VoiceOver still
-    /// finds a button.
-    private func count(_ looks: [Look], mark: Look, color: Color, label: String) -> some View {
-        let rows = store.sessions.filter { looks.contains(Look($0)) }
+    /// which shows the first such session; without parked, the parked ones
+    /// are left out. It is drawn as a chip rather than a button, so the title
+    /// bar puts no bezel round it; VoiceOver still finds a button.
+    private func count(_ looks: [Look], mark: Look, color: Color, label: String, parked: Bool = true) -> some View {
+        let rows = store.sessions.filter { looks.contains(Look($0)) && (parked || !$0.isParked) }
         let go = { if let first = rows.first { store.show(first.id) } }
         return HStack(spacing: 3) {
             StateMark(look: mark, size: 10)

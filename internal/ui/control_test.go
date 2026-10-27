@@ -352,6 +352,8 @@ func TestDraggingAcrossParkedsEdge(t *testing.T) {
 	}
 	m, b := ctlAt(t, rows, 34, 80)
 	m = send(m, keyMsg("esc"))
+	// Parked starts folded; Z opens it.
+	m = send(m, keyMsg("Z"))
 	y := func(name string) int { return lineOf(t, m, name) }
 	// fork-docs into Parked, between scratch-notes and web-copy.
 	m = dragAlong(m, y("fork-docs"), y("scratch-notes"))
@@ -416,9 +418,11 @@ func TestAFrozenFlagSitsBesideTheGlyph(t *testing.T) {
 	}
 }
 
-// z parks the selected session at once and the selection goes with it; z
-// again unparks it, back to its place. Z folds Parked, taking a selection
-// inside it to its header. :park and :unpark do the same as z.
+// z parks the selected session at once, out of sight in Parked, which starts
+// folded, and the selection goes to Parked's header; z again unparks it,
+// back to its place. Z opens Parked, and with it open the selection goes
+// with a session parked; Z folds it again, taking a selection inside it to
+// its header. :park and :unpark do the same as z.
 func TestZParksAndUnparks(t *testing.T) {
 	m, b := ctlAt(t, sessions(4), 34, 60)
 	m = send(m, keyMsg("esc"))
@@ -431,17 +435,23 @@ func TestZParksAndUnparks(t *testing.T) {
 	if want := []string{"park s000000000001 true"}; !slices.Equal(b.calls, want) {
 		t.Fatalf("calls = %v, want %v", b.calls, want)
 	}
-	want := []string{"▾ Not in a repo", "task-000", "task-002", "task-003", "▾ Parked", "task-001"}
+	want := []string{"▾ Not in a repo", "task-000", "task-002", "task-003", "▸ Parked"}
 	if got := outline(m); !slices.Equal(got, want) {
 		t.Errorf("outline %q, want %q", got, want)
 	}
-	if selectedName(m) != "task-001" || !strings.Contains(m.status, "parked task-001") {
+	if selectedName(m) != "Parked" || !strings.Contains(m.status, "parked task-001") {
 		t.Errorf("selection %s, status %q", selectedName(m), m.status)
 	}
-	// Z folds Parked around the selection, and opens it again.
+	// Z opens Parked, and folds it around a selection inside it.
+	m = send(m, keyMsg("Z"))
+	want = []string{"▾ Not in a repo", "task-000", "task-002", "task-003", "▾ Parked", "task-001"}
+	if got := outline(m); !slices.Equal(got, want) {
+		t.Errorf("after Z: outline %q, want %q", got, want)
+	}
+	m = selectNamed(t, m, "task-001")
 	m = send(m, keyMsg("Z"))
 	if got := outline(m); got[len(got)-1] != "▸ Parked" || selectedName(m) != "Parked" {
-		t.Errorf("after Z: outline %q, selection %s", got, selectedName(m))
+		t.Errorf("after Z again: outline %q, selection %s", got, selectedName(m))
 	}
 	m = send(m, keyMsg("Z"))
 	m = selectNamed(t, m, "task-001")
@@ -452,9 +462,13 @@ func TestZParksAndUnparks(t *testing.T) {
 	if last := b.calls[len(b.calls)-1]; last != "park s000000000001 false" || selectedName(m) != "task-001" {
 		t.Errorf("last call %q, selection %s", last, selectedName(m))
 	}
-	// Parking into a folded Parked takes the selection to its header.
+	// Parked stays open: the selection goes with a session parked into it.
 	m = selectNamed(t, m, "task-003")
 	m = send(m, keyMsg("z"))
+	if selectedName(m) != "task-003" {
+		t.Errorf("parked into an open Parked, the selection is on %s", selectedName(m))
+	}
+	// Parking into a folded Parked takes the selection to its header.
 	m = send(m, keyMsg("Z"))
 	m = selectNamed(t, m, "task-000")
 	m = send(m, keyMsg("z"))
@@ -488,6 +502,7 @@ func TestPromotingAParkedSessionUnparksIt(t *testing.T) {
 	rows[2].Parked = true
 	m, _ := ctlAt(t, rows, 34, 60)
 	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("Z"))
 	m = selectNamed(t, m, "task-002")
 	m = send(m, keyMsg("!"))
 	if got := outline(m); !slices.Equal(got, []string{"▾ Not in a repo", "task-002", "task-000", "task-001"}) {

@@ -92,10 +92,18 @@ func (m Model) look(s ipc.Session) look {
 	case ipc.StateStarting:
 		return look{"◌", p.muted, p.muted, false}
 	case ipc.StateDone:
+		mark := p.done
 		if m.redOnDone {
-			return look{"✓", p.needs, p.needs, true}
+			mark = p.needs
 		}
-		return look{"✓", p.done, p.ink, false}
+		switch {
+		case s.Parked:
+			// Out of the way, so quiet.
+			return look{"✓", mark, p.muted, false}
+		case m.redOnDone:
+			return look{"✓", mark, p.needs, true}
+		}
+		return look{"✓", mark, p.ink, false}
 	case ipc.StateIdle:
 		return look{"○", p.muted, p.muted, false}
 	}
@@ -172,9 +180,10 @@ func (m Model) header() string {
 
 // counts renders the state counts in at most w columns, in DESIGN §4.1's
 // order: with labels when they fit, else glyphs and numbers. Needs you
-// counts every red row: needs you, stalled and failed; paused counts pausing
-// too. A zero count is faint, so colour only ever means that something is
-// there, and each count keeps its glyph.
+// counts every red row: needs you, stalled and failed; to verify leaves out
+// the parked ones, which are out of the way; paused counts pausing too. A
+// zero count is faint, so colour only ever means that something is there,
+// and each count keeps its glyph.
 func (m Model) counts(w int) string {
 	working, needs, done, paused, frozen := 0, 0, 0, 0, 0
 	for _, s := range m.sessions {
@@ -183,7 +192,7 @@ func (m Model) counts(w int) string {
 			needs++
 		case s.State == ipc.StateWorking:
 			working++
-		case s.State == ipc.StateDone:
+		case s.State == ipc.StateDone && !s.Parked:
 			done++
 		case s.State == ipc.StatePaused, s.State == ipc.StatePausing:
 			paused++

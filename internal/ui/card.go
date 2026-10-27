@@ -133,6 +133,10 @@ func stateLabel(s ipc.Session) string {
 	case ipc.StateStarting:
 		return "Starting"
 	case ipc.StateDone:
+		// Parked is out of the way: checked, or put by for later.
+		if s.Parked {
+			return "Parked"
+		}
 		return "To verify"
 	case ipc.StateIdle:
 		return "Idle"
@@ -390,7 +394,7 @@ func (m Model) detailRows() (string, [][]piece) {
 		case g.outside:
 			rows = append(rows, []piece{{"Claude Code sessions in other terminals", p.muted, false}}, []piece{{"m moves an idle one in", p.muted, false}})
 		case g.key == parkedKey:
-			rows = append(rows, []piece{{"out of the way; they keep running", p.muted, false}}, []piece{{"z unparks one, Z folds them", p.muted, false}})
+			rows = append(rows, []piece{{"out of the way; they keep running", p.muted, false}}, []piece{{"z unparks one, Z folds or opens them", p.muted, false}})
 		}
 		return g.title, append(rows, []piece{{what, p.muted, false}})
 	case itemOutside:

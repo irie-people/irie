@@ -7,12 +7,12 @@ import UniformTypeIdentifiers
 // they started, and Resume continues it. Promote puts a session at the top of
 // the list and gives its process tree the machine first: the other sessions
 // run in macOS's background state. Park puts a session in the Parked group at
-// the end of the list, out of the way, and Unpark brings it back to its
-// place. The core keeps the one order both sidebars draw, and a card dragged
-// elsewhere in its group goes where it is dropped; dropped across the Parked
-// group's edge, it is parked or unparked there. Move Up and Move Down move
-// one without a drag. Each change shows at once, and the core's frames
-// confirm it.
+// the end of the list, folded until opened, so it goes out of sight and out
+// of the To verify count; Unpark brings it back to its place. The core keeps
+// the one order both sidebars draw, and a card dragged elsewhere in its group
+// goes where it is dropped; dropped across the Parked group's edge, it is
+// parked or unparked there. Move Up and Move Down move one without a drag.
+// Each change shows at once, and the core's frames confirm it.
 
 struct FreezeArgs: Encodable {
     var session: String
@@ -107,7 +107,8 @@ extension Store {
     }
 
     /// Parks a session, which puts its card in the Parked group at the end
-    /// of the list, or unparks it back to its place. It shows at once.
+    /// of the list, or unparks it back to its place. It shows at once, and
+    /// a notice says where it went, since a folded Parked hides it.
     func setParked(_ s: Session, _ on: Bool) {
         guard canPark, s.isParked != on else { return }
         preview { rows in
@@ -116,6 +117,7 @@ extension Store {
         Task {
             do {
                 _ = try await client.call(on ? "park" : "unpark", ParkArgs(session: s.id), as: Empty.self)
+                say(on ? "Parked \(s.name), out of the way at the end of the list." : "Unparked \(s.name), back in its place.", error: false)
             } catch {
                 preview { rows in
                     if let i = rows.firstIndex(where: { $0.id == s.id }) { rows[i].parked = s.parked }
@@ -208,7 +210,7 @@ struct PauseButton: View {
     var body: some View {
         let frozen = session.isFrozen
         Button { store.setFrozen(session, !frozen) } label: {
-            Image(systemName: frozen ? "play.fill" : "pause.fill").frame(width: 20, height: 18)
+            Image(systemName: frozen ? "play.fill" : "pause.fill").frame(width: 16, height: 18)
         }
         .help(frozen ? "Resume: it and everything it started carry on" : "Pause: stop it, its helpers and everything they started, at once")
         .disabled(!frozen && !session.canFreeze)
@@ -228,7 +230,7 @@ struct PromoteButton: View {
     var body: some View {
         let on = session.isPromoted
         Button { store.setPromoted(session, !on) } label: {
-            Image(systemName: on ? "arrow.up.circle.fill" : "arrow.up.circle").frame(width: 20, height: 18)
+            Image(systemName: on ? "arrow.up.circle.fill" : "arrow.up.circle").frame(width: 16, height: 18)
         }
         .foregroundStyle(ink ? Theme.ink : on ? Theme.accentInk : Theme.muted)
         .help(on ? "Promoted: click to put it back among the rest" : "Promote: put it first, with the CPU and disk first")
@@ -236,17 +238,20 @@ struct PromoteButton: View {
     }
 }
 
-/// Park, or Unpark, as an icon: in the details panel.
+/// Park, or Unpark, as an icon: on a hovered card and in the details panel.
 struct ParkButton: View {
     @EnvironmentObject private var store: Store
     let session: Session
+    /// Sized as the hovered card's other buttons are.
+    var onCard = false
 
     var body: some View {
         let on = session.isParked
         Button { store.setParked(session, !on) } label: {
             Image(systemName: on ? "parkingsign.circle.fill" : "parkingsign.circle")
+                .frame(width: onCard ? 16 : nil, height: onCard ? 18 : nil)
         }
-        .help(on ? "Unpark: put it back in its place in the list" : "Park: move it to Parked, at the end of the list")
+        .help(on ? "Unpark: put it back in its place in the list" : "Park: put it out of the way, in Parked at the end of the list")
         .accessibilityLabel(on ? "Unpark" : "Park")
     }
 }
