@@ -361,7 +361,7 @@ type Harness interface {
 ### 4.1 Session list
 
 **Layout, from top to bottom:**
-- **Header** (pinned, 1–2 lines): `Irie`, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
+- **Header** (pinned, 1–2 lines): `Irie`, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). Needs you counts every red row (needs you, stalled and failed), paused counts pausing too, and a zero count is faint. When the core is unreachable the header says `core offline` and the UI retries every second.
 - **List:** scrolls.
 - **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail.
 - **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
@@ -675,6 +675,8 @@ Each row shows the first state in this table that applies; the table is in prece
 | done | `✓` | green | `turn.ended`, not yet viewed. Turns into idle when you show the session. `ui.red_on_done = true` shows it red instead |
 | idle | `○` | dim | done and viewed |
 
+The sidebar draws these colours from its palette (§5.5, `ui.theme`): red is the palette's needs colour, green its done, yellow its paused and cyan its frozen; default is ink and dim is muted, so a dim red or dim yellow row has a red or yellow glyph and a muted name. In every palette, light and dark, each text colour reads at 4.5:1 and the accent at 3:1 on every surface (WCAG 2.2, 1.4.3 and 1.4.11). The sidebar paints every cell's background itself, so this holds whatever the terminal's theme is. It asks the terminal for its background (OSC 11, which tmux answers with the attached client's) and draws the dark set until an answer comes. Each state has its own glyph, so colour is never the only cue (1.4.1): only failed and an exit with an error code share `✕`, and only paused and pausing share `‖`. The core derives frozen, paused and pausing from M5 and M6; the sidebar already draws them.
+
 ### 5.4 Files
 
 Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.local/share`, `~/.cache`), so paths match Linux. Directories are 0700 and files 0600.
@@ -706,6 +708,7 @@ focus_key = "C-]"             # tmux key that toggles sidebar <-> slot
 max_sub_rows = 6
 red_on_done = false
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
+theme = "rosewater"           # rosewater | terracotta | lilac | evergreen, the Mac app's palettes; light or dark follows the terminal (§5.3)
 
 [spawn]
 default_profile = "auto"      # auto = the lowest cost per success among profiles accurate enough (§6.4)

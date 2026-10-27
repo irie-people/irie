@@ -87,8 +87,8 @@ func TestTheOutsideGroupComesLastAtEveryHeight(t *testing.T) {
 	m = send(m, keyMsg("tab"))
 	lines := screen(t, m)
 	top := m.listTop()
-	busy, _, _, _ := m.state(ipc.Session{State: ipc.StateWorking})
-	idle, _, _, _ := m.state(ipc.Session{State: ipc.StateIdle})
+	busy := m.look(ipc.Session{State: ipc.StateWorking}).glyph
+	idle := m.look(ipc.Session{State: ipc.StateIdle}).glyph
 	if want := []string{busy + " task-000", "Outside Irie 2 ─", idle + " outside-00", busy + " outside-01"}; !hasPrefixes(lines[top:top+4], want) {
 		t.Errorf("rows %q, want them to start %q", lines[top:top+4], want)
 	}

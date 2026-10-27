@@ -102,6 +102,7 @@ type Options struct {
 	Now       func() time.Time
 	Home      string // for ~ paths
 	RedOnDone bool   // ui.red_on_done: done rows are red, not green
+	Theme     string // ui.theme: the palette; "" is rosewater
 }
 
 // Model is the sidebar's Bubble Tea model.
@@ -110,6 +111,12 @@ type Model struct {
 	now       func() time.Time
 	home      string
 	redOnDone bool
+
+	theme theme   // ui.theme's light and dark sets
+	pal   palette // the one in use
+	dark  bool    // the terminal's background is dark, or has not been told
+	known bool    // the terminal has told its background
+	asked int     // ticks that asked for it since the last size change
 
 	width, height int
 	conn          connState
@@ -160,22 +167,13 @@ func New(b Backend, o Options) Model {
 	// The terminal's own cursor, not a drawn one, so a screen magnifier or
 	// reader can follow the typing (View places it).
 	bar.SetVirtualCursor(false)
-	styles := textarea.DefaultStyles(true)
-	styles.Focused.CursorLine = lipgloss.NewStyle()
-	styles.Focused.Prompt = lipgloss.NewStyle().Foreground(sun)
-	styles.Blurred.Prompt = styleDim
-	styles.Focused.Placeholder = styleDim
-	styles.Blurred.Placeholder = styleDim
-	// The dark defaults draw blurred text and the cursor in light grey,
-	// which all but vanishes on a light theme; the terminal's own colours
-	// suit any theme.
-	styles.Blurred.Text = lipgloss.NewStyle()
-	styles.Blurred.CursorLine = lipgloss.NewStyle()
-	styles.Cursor.Color = nil
-	styles.Cursor.Blink = false
-	bar.SetStyles(styles)
 
-	m := Model{backend: b, now: o.Now, home: o.Home, redOnDone: o.RedOnDone, sel: -1, focus: focusBar, bar: bar}
+	th, ok := themes[o.Theme]
+	if !ok {
+		th = themes[defaultTheme]
+	}
+	m := Model{backend: b, now: o.Now, home: o.Home, redOnDone: o.RedOnDone, theme: th, sel: -1, focus: focusBar, bar: bar}
+	m.setDark(true)
 	m.bar.Focus()
 	return m
 }
@@ -184,7 +182,7 @@ func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-func (m Model) Init() tea.Cmd { return tick() }
+func (m Model) Init() tea.Cmd { return tea.Batch(tick(), tea.RequestBackgroundColor) }
 
 // Heights. The header and the command bar are pinned; the list takes the
 // rest. Thin rules frame the list once the pane has room for them. Below 6
@@ -383,7 +381,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bar.MaxHeight = m.maxBar()
 		m.bar.SetWidth(m.width)
 		m.reveal()
+		// A new size may be a client of another terminal attaching.
+		m.asked = 0
+		return m, tea.RequestBackgroundColor
+	case tea.BackgroundColorMsg:
+		m.known = true
+		m.setDark(msg.IsDark())
 	case tickMsg:
+		if !m.known && m.asked < askBackground {
+			m.asked++
+			return m, tea.Batch(tick(), tea.RequestBackgroundColor)
+		}
 		return m, tick()
 	case FrameMsg:
 		m.conn = online

@@ -3,11 +3,13 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -374,9 +376,9 @@ func TestTheTerminalCursorIsInTheCommandBar(t *testing.T) {
 	}
 }
 
-// A task left in the bar while the list has the keyboard keeps the
-// terminal's own colour, which reads on a light theme too.
-func TestABlurredTaskKeepsTheTerminalsColour(t *testing.T) {
+// A task left in the bar while the list has the keyboard stays in ink, not
+// the placeholder's muted colour, so it still reads as what you typed.
+func TestABlurredTaskKeepsTheInk(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 3)
 	m = send(m, keyMsg("tab"))
 	m = typeText(m, "half a task")
@@ -386,8 +388,11 @@ func TestABlurredTaskKeepsTheTerminalsColour(t *testing.T) {
 	if !strings.Contains(ansiRE.ReplaceAllString(bar, ""), "half a task") {
 		t.Fatalf("bar = %q", bar)
 	}
-	if sgr(37).MatchString(bar) {
-		t.Errorf("blurred task drawn in light grey: %q", bar)
+	for _, c := range cells(bar) {
+		if strings.TrimSpace(c.r) != "" && c.r != "›" && c.fg != rgb(m.pal.ink) {
+			t.Errorf("blurred task: %q in %s, want ink %s", c.r, c.fg, rgb(m.pal.ink))
+			break
+		}
 	}
 }
 
@@ -533,7 +538,7 @@ func TestHeaderCounts(t *testing.T) {
 func TestZeroCountsAreNotRed(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 2)
 	header := strings.Split(m.View().Content, "\n")[0]
-	if red.MatchString(header) {
+	if hasFG(header, m.pal.needs) {
 		t.Errorf("header %q has red with nothing needing you", header)
 	}
 }
@@ -853,6 +858,9 @@ func everyState() []ipc.Session {
 		{Name: "starting-row", State: ipc.StateStarting},
 		{Name: "done-row", State: ipc.StateDone},
 		{Name: "idle-row", State: ipc.StateIdle},
+		{Name: "frozen-row", State: ipc.StateFrozen},
+		{Name: "paused-row", State: ipc.StatePaused},
+		{Name: "pausing-row", State: ipc.StatePausing},
 	}
 	for i := range rows {
 		rows[i].ID = fmt.Sprintf("s%012d", i)
@@ -887,6 +895,7 @@ func TestEveryStateHasItsGlyph(t *testing.T) {
 	for name, glyph := range map[string]string{
 		"failed-row": "✕", "exited-ok": "·", "exited-bad": "✕", "needs-row": "●", "stalled-row": "!",
 		"working-row": "◐", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
+		"frozen-row": "◆", "paused-row": "‖", "pausing-row": "‖",
 	} {
 		plain := strings.TrimLeft(ansiRE.ReplaceAllString(rowLine(t, m, name), ""), " ▌")
 		if !strings.HasPrefix(plain, glyph+" "+name) {
@@ -895,13 +904,151 @@ func TestEveryStateHasItsGlyph(t *testing.T) {
 	}
 }
 
-// sgr matches an SGR sequence that sets the basic colour n, alone or with
-// other attributes such as faint.
-func sgr(n int) *regexp.Regexp {
-	return regexp.MustCompile(fmt.Sprintf(`\x1b\[(?:[0-9]+;)*%d(?:;[0-9]+)*m`, n))
+// cell is one character on screen with the colours it is drawn in: "r;g;b",
+// or "" for the terminal's own.
+type cell struct {
+	r      string
+	fg, bg string
+	bold   bool
 }
 
-var red, green = sgr(31), sgr(32)
+// cells reads a drawn line the way a terminal does: SGR sequences set the
+// colours and a reset drops them all.
+func cells(line string) []cell {
+	var out []cell
+	var cur cell
+	for i := 0; i < len(line); {
+		if line[i] == 0x1b && i+1 < len(line) && line[i+1] == '[' {
+			j := i + 2
+			for j < len(line) && (line[j] < 0x40 || line[j] > 0x7e) {
+				j++
+			}
+			if j < len(line) && line[j] == 'm' {
+				cur = sgrApply(cur, line[i+2:j])
+			}
+			i = j + 1
+			continue
+		}
+		if loc := ansiRE.FindStringIndex(line[i:]); loc != nil && loc[0] == 0 {
+			i += loc[1]
+			continue
+		}
+		r, n := utf8.DecodeRuneInString(line[i:])
+		c := cur
+		c.r = string(r)
+		out = append(out, c)
+		i += n
+	}
+	return out
+}
+
+func sgrApply(c cell, params string) cell {
+	ps := strings.FieldsFunc(params, func(r rune) bool { return r == ';' || r == ':' })
+	if len(ps) == 0 {
+		return cell{}
+	}
+	for k := 0; k < len(ps); k++ {
+		switch p := ps[k]; {
+		case p == "0":
+			c = cell{}
+		case p == "1":
+			c.bold = true
+		case p == "22":
+			c.bold = false
+		case p == "39":
+			c.fg = ""
+		case p == "49":
+			c.bg = ""
+		case (p == "38" || p == "48") && k+4 < len(ps) && ps[k+1] == "2":
+			if v := strings.Join(ps[k+2:k+5], ";"); p == "38" {
+				c.fg = v
+			} else {
+				c.bg = v
+			}
+			k += 4
+		case (p == "38" || p == "48") && k+2 < len(ps) && ps[k+1] == "5":
+			if v := "5;" + ps[k+2]; p == "38" {
+				c.fg = v
+			} else {
+				c.bg = v
+			}
+			k += 2
+		case len(p) == 2 && (p[0] == '3' || p[0] == '9') && p[1] <= '7':
+			c.fg = "ansi " + p
+		case len(p) == 2 && p[0] == '4' && p[1] <= '7', len(p) == 3 && strings.HasPrefix(p, "10"):
+			c.bg = "ansi " + p
+		}
+	}
+	return c
+}
+
+// rgb is how cells writes c.
+func rgb(c color.Color) string {
+	r, g, b, _ := c.RGBA()
+	return fmt.Sprintf("%d;%d;%d", r>>8, g>>8, b>>8)
+}
+
+// hasFG reports whether any character of a drawn line is in c.
+func hasFG(line string, c color.Color) bool {
+	for _, x := range cells(line) {
+		if strings.TrimSpace(x.r) != "" && x.fg == rgb(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// glyphAndName returns the colours of a row's glyph and of the first letter
+// of its name.
+func glyphAndName(t *testing.T, m Model, name string) (glyph, nameFG string) {
+	t.Helper()
+	cs := cells(rowLine(t, m, name))
+	for i, c := range cs {
+		if strings.TrimSpace(c.r) == "" || c.r == "▌" {
+			continue
+		}
+		for j := i + 1; j < len(cs); j++ {
+			if strings.TrimSpace(cs[j].r) != "" {
+				return c.fg, cs[j].fg
+			}
+		}
+	}
+	t.Fatalf("row %s has no glyph and name", name)
+	return "", ""
+}
+
+// Each state is drawn in its colours of DESIGN §5.3, from the palette: red
+// is needs, green done, yellow paused, cyan frozen, default ink and dim
+// muted. A dim red or dim yellow row has the colour in its glyph and a muted
+// name.
+func TestEveryStateHasItsColours(t *testing.T) {
+	m := statesModel(t, Options{})
+	m = send(m, keyMsg("tab"))
+	p := m.pal
+	for name, want := range map[string][2]color.Color{
+		"failed-row":   {p.needs, p.needs},
+		"exited-ok":    {p.muted, p.muted},
+		"exited-bad":   {p.needs, p.muted},
+		"frozen-row":   {p.frozen, p.ink},
+		"paused-row":   {p.paused, p.ink},
+		"needs-row":    {p.needs, p.needs},
+		"stalled-row":  {p.needs, p.needs},
+		"pausing-row":  {p.paused, p.muted},
+		"working-row":  {p.ink, p.ink},
+		"starting-row": {p.muted, p.muted},
+		"done-row":     {p.done, p.ink},
+		"idle-row":     {p.muted, p.muted},
+	} {
+		if g, n := glyphAndName(t, m, name); g != rgb(want[0]) || n != rgb(want[1]) {
+			t.Errorf("%s: glyph %s and name %s, want %s and %s", name, g, n, rgb(want[0]), rgb(want[1]))
+		}
+	}
+	m = statesModel(t, Options{RedOnDone: true})
+	m = send(m, keyMsg("tab"))
+	if g, n := glyphAndName(t, m, "done-row"); g != rgb(m.pal.needs) || n != rgb(m.pal.needs) {
+		t.Errorf("red_on_done: done row's glyph %s and name %s, want the needs colour", g, n)
+	}
+}
 
 func TestRedMarksOnlyTheRowsThatNeedYou(t *testing.T) {
 	m := statesModel(t, Options{})
@@ -909,18 +1056,19 @@ func TestRedMarksOnlyTheRowsThatNeedYou(t *testing.T) {
 	for name, wantRed := range map[string]bool{
 		"failed-row": true, "exited-bad": true, "needs-row": true, "stalled-row": true,
 		"exited-ok": false, "working-row": false, "starting-row": false, "done-row": false, "idle-row": false,
+		"frozen-row": false, "paused-row": false, "pausing-row": false,
 	} {
-		if got := red.MatchString(rowLine(t, m, name)); got != wantRed {
+		if got := hasFG(rowLine(t, m, name), m.pal.needs); got != wantRed {
 			t.Errorf("%s: red %v, want %v: %q", name, got, wantRed, rowLine(t, m, name))
 		}
 	}
-	if !green.MatchString(rowLine(t, m, "done-row")) {
+	if !hasFG(rowLine(t, m, "done-row"), m.pal.done) {
 		t.Errorf("done row is not green: %q", rowLine(t, m, "done-row"))
 	}
 	// ui.red_on_done shows done in red instead.
 	m = statesModel(t, Options{RedOnDone: true})
 	m = send(m, keyMsg("tab"))
-	if !red.MatchString(rowLine(t, m, "done-row")) {
+	if !hasFG(rowLine(t, m, "done-row"), m.pal.needs) {
 		t.Errorf("red_on_done: done row %q", rowLine(t, m, "done-row"))
 	}
 }
@@ -934,7 +1082,7 @@ func TestRedIsNeverTheOnlyCue(t *testing.T) {
 	for _, s := range everyState() {
 		raw := rowLine(t, m, s.Name)
 		glyph := strings.Fields(strings.TrimLeft(ansiRE.ReplaceAllString(raw, ""), " ▌"))[0]
-		rows[red.MatchString(raw)][glyph] = s.Name
+		rows[hasFG(raw, m.pal.needs)][glyph] = s.Name
 	}
 	for glyph, name := range rows[true] {
 		if other, ok := rows[false][glyph]; ok {
@@ -943,17 +1091,35 @@ func TestRedIsNeverTheOnlyCue(t *testing.T) {
 	}
 }
 
+// The header counts, in DESIGN §4.1's order: needs you counts every red row,
+// failed ones too; paused counts pausing too.
 func TestHeaderCountsWhatNeedsYou(t *testing.T) {
 	m := statesModel(t, Options{})
-	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = send(m, tea.WindowSizeMsg{Width: 100, Height: 24})
 	header := screen(t, m)[0]
-	for _, want := range []string{"◐1 working", "●2 needs you", "✓1 done"} {
-		if !strings.Contains(header, want) {
-			t.Errorf("header %q lacks %q", header, want)
+	want := "◐1 working  ●3 needs you  ✓1 done  ‖2 paused  ◆1 frozen"
+	if !strings.Contains(header, want) {
+		t.Errorf("header %q lacks %q", header, want)
+	}
+	raw := strings.Split(m.View().Content, "\n")[0]
+	for _, c := range []color.Color{m.pal.needs, m.pal.done, m.pal.paused, m.pal.frozen} {
+		if !hasFG(raw, c) {
+			t.Errorf("header %q: no count in %s", raw, rgb(c))
 		}
 	}
-	if raw := strings.Split(m.View().Content, "\n")[0]; !red.MatchString(raw) {
-		t.Errorf("header %q: the needs-you count is not red", raw)
+}
+
+// A zero count is faint: muted, never its state's colour.
+func TestZeroCountsAreFaint(t *testing.T) {
+	m, _ := newModel(t, 100, 24, 0)
+	raw := strings.Split(m.View().Content, "\n")[0]
+	if !strings.Contains(ansiRE.ReplaceAllString(raw, ""), "◐0 working  ●0 needs you  ✓0 done  ‖0 paused  ◆0 frozen") {
+		t.Fatalf("header %q", ansiRE.ReplaceAllString(raw, ""))
+	}
+	for _, c := range cells(raw) {
+		if strings.ContainsAny(c.r, "◐●✓‖◆0") && c.fg != rgb(m.pal.muted) {
+			t.Errorf("zero count %q in %s, want muted", c.r, c.fg)
+		}
 	}
 }
 

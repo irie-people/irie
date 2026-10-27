@@ -9,7 +9,6 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"image/color"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -95,44 +94,44 @@ func (m Model) line(i int) string {
 		return m.groupHeader(i)
 	}
 	o, _ := m.outsideAt(i)
-	g, c, dim, loud := m.outsideGlyph(o)
 	a := ""
 	if !o.Started.IsZero() {
 		a = age(m.now().Sub(o.Started))
 	}
-	return m.paint(i, g, c, dim, loud, outsideLabel(o), a)
+	return m.paint(i, m.outsideLook(o), outsideLabel(o), a)
 }
 
 // groupHeader draws the group's title and count, then a rule.
 func (m Model) groupHeader(i int) string {
-	edge, st := " ", styleDim
+	p := m.pal
+	edge, st := blank(p.sidebar, 1), m.text(p.muted)
 	if i == m.sel {
-		edge, st = styleTitle.Render("▌"), styleBold
+		edge, st = m.text(p.accent).Render("▌"), m.text(p.ink).Bold(true)
 		if m.focus != focusList {
-			edge = styleTitle.Faint(true).Render("▌")
+			edge = m.text(p.muted).Render("▌")
 		}
 	}
 	title := cut(fmt.Sprintf("Outside Irie %d", len(m.outside)), m.width-2)
 	out := edge + st.Render(title)
 	if rule := m.width - lipgloss.Width(title) - 3; rule > 0 {
-		out += " " + styleRule.Render(strings.Repeat("─", rule)) + " "
+		out += m.text(p.edge).Render(" " + strings.Repeat("─", rule) + " ")
 	}
 	return out
 }
 
-// outsideGlyph draws an outside row as the Irie state it matches: busy as
+// outsideLook draws an outside row as the Irie state it matches: busy as
 // working, idle as idle, waiting for the user as needs you. Anything else is
 // a dim dot.
-func (m Model) outsideGlyph(o ipc.OutsideSession) (glyph string, c color.Color, dim, loud bool) {
+func (m Model) outsideLook(o ipc.OutsideSession) look {
 	switch o.Status {
 	case ipc.StatusBusy:
-		return m.state(ipc.Session{State: ipc.StateWorking})
+		return m.look(ipc.Session{State: ipc.StateWorking})
 	case ipc.StatusIdle:
-		return m.state(ipc.Session{State: ipc.StateIdle})
+		return m.look(ipc.Session{State: ipc.StateIdle})
 	case ipc.StatusWaiting:
-		return m.state(ipc.Session{State: ipc.StateNeedsYou})
+		return m.look(ipc.Session{State: ipc.StateNeedsYou})
 	}
-	return "·", nil, true, false
+	return look{"·", m.pal.muted, m.pal.muted, false}
 }
 
 // outsideLabel is the name an outside row shows.
@@ -162,8 +161,9 @@ func where(o ipc.OutsideSession) string {
 // outsideStatus is the status strip for the group's header or one of its
 // rows: what it does, its name, where it runs, and whether m moves it.
 func (m Model) outsideStatus() string {
+	p := m.pal
 	if m.isGroupHeader(m.sel) {
-		return " " + styleDim.Render(cut("Claude Code sessions in other terminals · m moves an idle one in", m.width-2))
+		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut("Claude Code sessions in other terminals · m moves an idle one in", m.width-2))
 	}
 	o, _ := m.outsideAt(m.sel)
 	var doing string
@@ -182,11 +182,11 @@ func (m Model) outsideStatus() string {
 		parts = append(parts, printable(m.home2tilde(o.Cwd)))
 	}
 	parts = append(parts, where(o))
-	st := styleDim
-	if _, c, _, loud := m.outsideGlyph(o); loud {
-		st = lipgloss.NewStyle().Foreground(c)
+	c := p.muted
+	if l := m.outsideLook(o); l.loud {
+		c = l.name
 	}
-	return " " + st.Render(cut(strings.Join(parts, " · "), m.width-2))
+	return blank(p.sidebar, 1) + m.text(c).Render(cut(strings.Join(parts, " · "), m.width-2))
 }
 
 // open shows the selected session; for the group, which Irie cannot show,
