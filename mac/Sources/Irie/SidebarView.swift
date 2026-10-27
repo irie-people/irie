@@ -26,7 +26,11 @@ struct SidebarView: View {
         if case let .offline(why) = store.link, store.sessions.isEmpty {
             Offline(why: why, socket: store.socketPath)
         } else if store.sessions.isEmpty {
-            Hint(text: store.link == .connecting ? "Connecting to Irie…" : "No sessions yet. Type a task below to start one.")
+            if store.link == .connecting {
+                Hint(text: "Connecting to Irie…")
+            } else {
+                Welcome()
+            }
         } else if rows.isEmpty {
             Hint(text: "No sessions match “\(store.filter)”.")
         } else {
@@ -34,14 +38,14 @@ struct SidebarView: View {
                 ScrollView {
                     // One clock for every card's age.
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
-                        LazyVStack(alignment: .leading, spacing: 2) {
+                        LazyVStack(alignment: .leading, spacing: 6) {
                             ForEach(rows) { s in
                                 SessionCard(session: s, selected: s.id == store.selection, listFocused: listFocused, now: ctx.date)
                                     .id(s.id)
                             }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
                     }
                 }
                 .onChange(of: store.selection) {
@@ -73,7 +77,8 @@ struct SidebarView: View {
 /// One session, always two lines: its name, then what it needs from you (in
 /// red), what it is doing, or how it ended. The trailing slot has a fixed
 /// width, so the name never re-wraps when the age ticks or the pointer
-/// brings up the actions.
+/// brings up the actions. The card is rounded and edged in its state's
+/// colour, or in sun while selected.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -90,7 +95,7 @@ private struct SessionCard: View {
             StateMark(look: look).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.name)
-                    .font(.system(size: 13, weight: quiet ? .regular : .semibold))
+                    .font(.system(size: 13, weight: quiet ? .regular : .semibold, design: .rounded))
                     .foregroundStyle(look == .ended || look == .idle ? Theme.muted : Color.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -118,13 +123,9 @@ private struct SessionCard: View {
         .padding(.vertical, 6)
         .padding(.leading, 10)
         .padding(.trailing, 6)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(fill))
-        .overlay(alignment: .leading) {
-            if selected {
-                Capsule().fill(Theme.sun).frame(width: 3).padding(.vertical, 7).opacity(listFocused ? 1 : 0.45)
-            }
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(shape.fill(fill))
+        .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
+        .contentShape(shape)
         .onHover { hovering = $0 }
         .onTapGesture { store.show(session.id, focus: true) }
         .contextMenu { Actions(session: session) }
@@ -164,10 +165,20 @@ private struct SessionCard: View {
         return [helpers, what].compactMap { $0 }.joined(separator: " · ")
     }
 
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }
+
     private var fill: Color {
         if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.45) }
-        if hovering { return Theme.hover }
-        return look == .needs ? Theme.needsTint : .clear
+        if look == .needs { return Theme.needsTint }
+        return hovering ? Theme.hover : Theme.card
+    }
+
+    /// Sun round the selected card, faint while the list lacks the keyboard,
+    /// and its state's colour round the rest.
+    private var edge: Color {
+        if selected { return listFocused ? Theme.sunEdge : Theme.sunEdge.opacity(0.5) }
+        if hovering { return Theme.sunEdge.opacity(0.5) }
+        return look.color?.opacity(look == .needs ? 0.6 : 0.35) ?? Theme.edge
     }
 
     private var spoken: String {
@@ -209,15 +220,19 @@ private struct QuickActions: View {
     }
 }
 
-/// The selected session's details, in a panel of fixed height above the
-/// task bar: long text is cut off, and the full text is on hover.
+/// The selected session's details, on a card of fixed height above the task
+/// bar, edged in its state's colour: long text is cut off, and the full text
+/// is on hover.
 private struct DetailsPanel: View {
     @EnvironmentObject private var store: Store
     static let height: CGFloat = 150
 
+    private var selected: Session? { store.sessions.first { $0.id == store.selection } }
+
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
         Group {
-            if let s = store.sessions.first(where: { $0.id == store.selection }) {
+            if let s = selected {
                 details(s)
             } else {
                 Text("Pick a session to see its details.")
@@ -228,11 +243,13 @@ private struct DetailsPanel: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(shape.fill(Theme.panel))
+        .overlay(shape.strokeBorder(selected.flatMap { Look($0).color }?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
+        .clipShape(shape)
+        .padding(.horizontal, 10)
+        .padding(.top, 6)
         .frame(height: Self.height)
-        .frame(maxWidth: .infinity)
-        .clipped()
-        .background(Theme.panel)
-        .overlay(alignment: .top) { Divider() }
     }
 
     private func details(_ s: Session) -> some View {
@@ -341,13 +358,14 @@ private struct Header: View {
             HStack(spacing: 4) {
                 Circle().fill(color).frame(width: 6, height: 6)
                 // Two digits' width, so a tenth session doesn't push the others.
-                Text("\(rows.count)").font(.system(size: 11.5, weight: .bold)).monospacedDigit()
+                Text("\(rows.count)").font(.system(size: 11.5, weight: .bold, design: .rounded)).monospacedDigit()
                     .frame(minWidth: 15)
             }
             .foregroundStyle(color)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
+            .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
             .opacity(rows.isEmpty ? 0.5 : 1)
         }
         .buttonStyle(.plain)
@@ -384,11 +402,15 @@ private struct FindField: View {
                 .help("Clear")
                 .accessibilityLabel("Clear the search")
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.06)))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
+        )
         .padding(.horizontal, 10)
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
         .onChange(of: store.focusFind) { focused = true }
     }
 }
@@ -451,6 +473,22 @@ private struct Offline: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+/// What an empty Irie says: its mark, its word, and where to start.
+private struct Welcome: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            SunMark().frame(width: 56, height: 56)
+            Text("Everything irie.").font(.system(size: 17, weight: .semibold, design: .rounded))
+            Text("No agents yet. Type a task below to start one.")
+                .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
+                .multilineTextAlignment(.center)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 

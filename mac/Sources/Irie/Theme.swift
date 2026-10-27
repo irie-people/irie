@@ -1,11 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// Irie's colours (the sidebar's palette in internal/ui/view.go), each with a
-/// light and a dark value, and stronger ones for Increase Contrast. Text
-/// colours keep 4.5:1 on the surfaces they sit on.
+/// Irie's colours: the hues of the terminal sidebar's palette
+/// (internal/ui/view.go) on warm ground, sand in light mode and cocoa in dark
+/// mode. Each has a light and a dark value, and text colours have stronger
+/// ones for Increase Contrast. Text colours keep 4.5:1 on every surface
+/// they sit on.
 enum Theme {
     static let sun = Color(hex: 0xF2B544)
+    /// Sun for edges and focus rings: deeper in light mode, for 3:1 on sand.
+    static let sunEdge = adaptive(light: 0xA87510, dark: 0xF2B544)
     static let sunInk = adaptive(light: 0x8A5A00, dark: 0xF4C35F, contrastLight: 0x6B4500, contrastDark: 0xFFD27A)
     static let deepGreen = Color(hex: 0x1E5A42)
     static let sea = adaptive(light: 0x1E8F68, dark: 0x48C894)
@@ -13,17 +17,25 @@ enum Theme {
     static let work = adaptive(light: 0x1F64A3, dark: 0x66B6F3, contrastLight: 0x164B7A, contrastDark: 0x8CCBFF)
     static let done = adaptive(light: 0x1A6E4C, dark: 0x48C894, contrastLight: 0x12543A, contrastDark: 0x6EE0B0)
     /// Ages, paths and other quiet text: readable, unlike `.tertiary`.
-    static let muted = adaptive(light: 0x5B6A62, dark: 0x9FB3A8, contrastLight: 0x3E4A44, contrastDark: 0xC3D3CA)
-    // Solid surfaces: nothing behind the window shows through.
-    static let sidebar = adaptive(light: 0xF2F6F3, dark: 0x0E1D17)
-    static let panel = adaptive(light: 0xE8EFEB, dark: 0x0B1813)
-    static let field = adaptive(light: 0xFFFFFF, dark: 0x132820)
+    static let muted = adaptive(light: 0x6B5C4B, dark: 0xB5A793, contrastLight: 0x4F4336, contrastDark: 0xD8CCBA)
+    // Solid surfaces: nothing behind the window shows through. The ground is
+    // what the terminal's frame sits on; the edge is the hairline round a
+    // quiet card or a field.
+    static let sidebar = adaptive(light: 0xF8F1E5, dark: 0x201A14)
+    static let ground = adaptive(light: 0xEEE4D3, dark: 0x191510)
+    static let card = adaptive(light: 0xFFFBF4, dark: 0x2A231B)
+    static let panel = adaptive(light: 0xFBF4E8, dark: 0x272019)
+    static let field = adaptive(light: 0xFFFDF8, dark: 0x2C251D)
+    static let edge = adaptive(light: 0xE4D5BD, dark: 0x3E3429)
     // Card fills: the selected card, a hovered one, and one that needs you.
-    static let selection = adaptive(light: 0xDDEBE3, dark: 0x173C2E)
-    static let hover = Color.primary.opacity(0.06)
-    static let needsTint = adaptive(light: 0xFBEAE7, dark: 0x2A1714)
-    static let terminalBackground = NSColor(hex: 0x0A1813)
-    static let terminalForeground = NSColor(hex: 0xD6E7DE)
+    static let selection = adaptive(light: 0xFCEBC8, dark: 0x3B2D1B)
+    static let hover = adaptive(light: 0xFFF6E6, dark: 0x322A21)
+    static let needsTint = adaptive(light: 0xFBE8E1, dark: 0x3C2019)
+    static let terminalBackground = NSColor(hex: 0x14110D)
+    static let terminalForeground = NSColor(hex: 0xEEE5D5)
+    /// Corners: cards and fields, and the terminal's frame and the task bar.
+    static let radius: CGFloat = 12
+    static let frameRadius: CGFloat = 14
 
     static func adaptive(light: UInt32, dark: UInt32, contrastLight: UInt32? = nil, contrastDark: UInt32? = nil) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -67,6 +79,16 @@ enum Look {
         case .needs: return .needs
         case .working, .starting: return .working
         case .done, .idle, .ended: return .done
+        }
+    }
+
+    /// The colour of its edge; none while it is quiet.
+    var color: Color? {
+        switch self {
+        case .needs: return Theme.needs
+        case .working, .starting: return Theme.work
+        case .done: return Theme.done
+        case .idle, .ended: return nil
         }
     }
 
