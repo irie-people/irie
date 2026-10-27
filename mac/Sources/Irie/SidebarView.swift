@@ -12,8 +12,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Header()
-            FindField()
+            TopBar()
             content
             DetailsPanel()
             TaskBar()
@@ -341,14 +340,26 @@ private struct Actions: View {
 
 /// The mark, the name and a count per state. A count shows the first
 /// session, in list order, in that state.
-private struct Header: View {
+/// The one row above the sessions: the mark, the find field and the counts.
+/// The window's title bar already says Irie.
+private struct TopBar: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            SunMark().frame(width: 16, height: 16)
+            FindField()
+            Counts()
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
+    }
+}
+
+private struct Counts: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        HStack(spacing: 6) {
-            SunMark().frame(width: 18, height: 18)
-            Text("Irie").font(.system(size: 15, weight: .heavy, design: .rounded))
-            Spacer()
+        HStack(spacing: 4) {
             switch store.link {
             case .online:
                 count(.needs, color: Theme.needs, label: "need you")
@@ -360,9 +371,6 @@ private struct Header: View {
                 EmptyView()
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 3)
-        .padding(.bottom, 5)
     }
 
     private func count(_ g: Look.Group, color: Color, label: String) -> some View {
@@ -377,7 +385,7 @@ private struct Header: View {
                     .frame(minWidth: 15)
             }
             .foregroundStyle(color)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
             .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
@@ -417,15 +425,13 @@ private struct FindField: View {
                 .help("Clear")
                 .accessibilityLabel("Clear the search")
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                 .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
-        .padding(.horizontal, 10)
-        .padding(.bottom, 2)
         .onChange(of: store.focusFind) { focused = true }
     }
 }
