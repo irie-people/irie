@@ -29,11 +29,13 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | Reliable headless spawning | Every spawn either becomes a live agent holding its full task, or fails loudly with the reason. Works with no window open (`irie ctl spawn`) | §4.2, M1–M3 |
 | Undo/redo | An action log with inverses. The header shows what undo and redo will do | §4.5, M4–M7 |
 | Priority for tasks that become urgent on the fly | Badge, move to the top, steering note | §4.3, M7 |
-| Default agent: Opus 5.5 on max effort in auto mode | Default profile: `claude-opus-5-5`, `--effort max`, `--permission-mode auto`. Every value can be changed in config | §5.5, M1 |
+| Default agent: Opus 5.5 on max effort in auto mode | `+claude`: `claude-opus-5-5`, `--effort max`, `--permission-mode auto`. It was the default profile until M10; since then the default is `auto`, which sends hard work and orchestration to `+claude` (§6.4). Every value can be changed in config | §5.5, M1, M10 |
 | Sessions waiting on you in red; rename; jump | States derived from hooks; keys `r`, `/` and `1`–`9` | §4.1, M2, M4 |
 | A live read-only pane for each running subagent | One mirror pane per subagent, listed under its parent | §4.4, M8 |
 | Irie.app | Opens or focuses the one Irie window in Ghostty; has an icon; found by Spotlight | §7, M9 |
 | See every Claude Code session on the machine, and bring one in | An "Outside Irie" group with live busy and idle; "Move into Irie" carries an idle session on in an Irie pane, on request only | §4.6 |
+| Fewer tokens through local and free models that Irie sets up, in the spawn list with their cost, weighing the machine's memory | Built-in `+sonnet` and `+local`; Irie's own Ollama server; `irie setup local`; what each profile costs in the `+` list; sessions' cost and memory in the sidebar; a memory check before a model loads | §6.1, §6.3, M10 |
+| Route each task by cost, normalised by accuracy; keep orchestration on Opus; delegate to local; fail over at usage limits; set up local models from the sidebar | `+auto`, the default: the lowest cost per success among profiles accurate enough for the task's class, learning from ratings and re-runs; `irie ctl delegate`; failover; `:setup`, `:models`, `:rate`, `:route` | §6.4, M10 |
 
 ### 1.2 Not in v1
 
@@ -42,8 +44,8 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | Ghostty native splits or tabs as the engine | Agents would die when Ghostty quits, and scripting cannot move a live terminal or read its screen. tmux keeps agents alive with no window open and can swap, capture and steer panes. |
 | Embedding libghostty | It would mean rewriting Irie as a native app, and it is macOS-only. The UI already talks to the core over a socket (§2.4), so a native front-end can come later without touching the core. |
 | Full adapters for harnesses other than Claude Code | In v1 they run in the generic tier: launch, freeze, alive/exited, typed notes. Full adapters follow v1 (§3.2). |
-| Routing, budgets, RAM admission, cross-model review | These need usage oracles and capacity probes. v1 ships what they build on: profiles, the local-context preflight and the event envelope (§6.2). |
-| Cost tracking via OpenTelemetry; driving agents over ACP | After v1. The event envelope maps onto both. |
+| Budgets beyond the plan's windows, cross-model review | These need usage oracles and adapters for other suppliers. v1 routes by cost per success (§6.4) on profiles with what each costs, the plan's use from the status line, the local preflight with its memory check, and the event envelope (§6.2, §6.3). |
+| Cost tracking via OpenTelemetry; driving agents over ACP | After v1. Cost comes from Claude Code's status line instead (§6.3), and the event envelope maps onto both. |
 | Editing the user's agent config files | Hooks, settings and env are injected per launch, so there is nothing to clean up. |
 | Screen-scraping state detectors | They break whenever a vendor changes its UI. Irie reads hooks first; its only screen read is the screen tail it shows when a spawn stalls. |
 | Deleting worktrees or branches | Risk of data loss. v1 creates worktrees and never removes them. |
@@ -55,7 +57,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 2. Routing, and agents working in tandem (§6.2).
 3. Pop an agent out into its own native Ghostty tab (§7.4).
 4. Sibling awareness (which agents work in the same repo, and on which branches), context-window gauges, and a focus mode (prioritise one session and pause the rest at their next tool call).
-5. Cost tracking through an OTLP receiver, `irie gc` for old worktrees, and desktop notifications when a session turns red.
+5. Cost for harnesses other than Claude Code, `irie gc` for old worktrees, and desktop notifications when a session turns red.
 
 ---
 
@@ -122,6 +124,8 @@ flowchart LR
 | `irie ui --supervise` | `irie:0.0` | The sidebar, a pure client of the socket. It never calls tmux | socket |
 | `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; freezes and thaws it; records the exit status | the agent (fork/exec), socket (best effort) |
 | `irie hook` | started by the agent for each hook event | Forwards the event, waits while held, prints the harness's reply | socket, gate file |
+| `irie statusline` | started by Claude Code for each status line update (§6.3) | Forwards the session's cost, context and plan use, then runs the user's own status line | socket |
+| `irie runtime -- ollama serve` | `irie-agents:irie-ollama`, started on first need (§6.3) | Irie's own Ollama server, in a process group of its own, so its model runners stop with it | the agents (HTTP on 127.0.0.1) |
 | `irie mirror` | subagent panes (M8) | Read-only live view of one subagent | socket, transcript |
 | `irie ctl` | anywhere | Scripting and tests: `list`, `spawn`, `show`, `watch`, `pause`, and so on | socket |
 | `irie placeholder` | the slot when nothing is shown | Shows the keys | none |
@@ -132,8 +136,8 @@ flowchart LR
 |---|---|---|
 | Server | `tmux -L irie -f $XDG_STATE_HOME/irie/tmux.conf`, generated by the core. The user's own tmux.conf is never read | Socket name from `tmux.socket` |
 | Session `irie`, window 0 | Pane 0: `irie ui --supervise`, `ui.sidebar_width` columns wide. Pane 1: the slot | `window-size latest` |
-| Session `irie-agents` | Window `core`. One window per agent, each with a single pane running `irie host`. One window per subagent mirror (M8) | Agent windows use `window-size manual`, resized to the slot's size, and `remain-on-exit on` |
-| Pane user options | `@irie_session`, `@irie_agent` (`main` or `sub:<id>`), `@irie_role` (`agent`, `mirror` or `placeholder`), `@irie_name`, `@irie_created`, `@irie_vendor_id` | These travel with the pane through swaps. A restarted core rebuilds its registry from them |
+| Session `irie-agents` | Window `core`. One window per agent, each with a single pane running `irie host`. One window per subagent mirror (M8). Window `irie-ollama` for Irie's own Ollama server, once a local profile needs it (§6.3) | Agent windows use `window-size manual`, resized to the slot's size, and `remain-on-exit on` |
+| Pane user options | `@irie_session`, `@irie_agent` (`main` or `sub:<id>`), `@irie_role` (`agent`, `mirror`, `placeholder` or `runtime`), `@irie_name`, `@irie_created`, `@irie_vendor_id` | These travel with the pane through swaps. A restarted core rebuilds its registry from them, and finds its Ollama server by `runtime` |
 
 Generated tmux.conf, essentials:
 
@@ -175,6 +179,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"snapshot","sessions":[…],"header":{…}}`
   - `{"t":"upsert","session":{…}}` and `{"t":"remove","id":"…"}`
   - `{"t":"history","undo":"…","redo":"…"}`
+  - `{"t":"header","header":{…}}` when the plan's use or the machine's memory changes (§6.3). A snapshot carries the header too.
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
   - `{"t":"conversation","conversation":{…}}`, sent only when `conversation:true` was requested for one session: its whole conversation first (`reset`), then the items that changed and what it waits on you for (§4.7).
@@ -186,18 +191,25 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `hello` | `client`, `api` | `version`, `api`, `features[]`, which name the ops served, `move` among them | M1 |
 | `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
 | `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session` | M1 (`view`: Mac app; `conversation`: §4.7) |
-| `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?`, `name?`, `force?` | `session` | M1 (`repo`, `profile` M3; `force` M10) |
+| `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?` (`auto` routes it), `name?`, `force?`, `delegate?`, `parent?`, `permission_mode?`, `continues?` | `session` | M1 (`repo`, `profile` M3; `force`, `delegate`, `parent`, `permission_mode`, `continues` M10) |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
+| `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
+| `status` | `session`, `payload`: Claude Code's status line JSON | none | M10 (§6.3) |
+| `local` | `start?` | the local server, the machine's memory, and each model weighed against it | M10 (§6.3) |
+| `route` | `task`, `parent?` | where `+auto` would run it: class, choice, reason, every profile weighed | M10 (§6.4) |
+| `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |
+| `result` | `session` | `text`: what its agent said at the end of its last turn | M10 (§6.4) |
+| `tool` | `name`: `setup` or `models` | `session`, running `irie setup local` or `irie ctl local` | M10 (§6.4) |
 | `rename`, `park`, `unpark`, `close`, `reopen` | `session`, `name?` | none | M4 |
 | `undo`, `redo` | none | `label` | M4 |
 | `pause`, `resume` | `session` or `all`; `scope`: `main`, `sub:<id>` or `tree` | none | M5 |
 | `freeze`, `thaw` | `session` or `all` | none | M6 |
 | `priority` | `session`, `level` (0 or 1), `reason?` | none | M7 |
 | `note` | `session`, `agent?`, `text` | `note` | M7 |
-| `preflight` | `profile` | `ok`, `problems[]` | M10 |
+| `preflight` | `profile`, `model?`, `remember?`, `force?` | `ok`, `problems[]`, `warnings[]`, the context and memory the model got | M10 |
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
-| `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle | Sessions outside Irie (§4.6) |
+| `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle. A local profile is checked as for a spawn (§6.1) before the outside copy ends | Sessions outside Irie (§4.6) |
 | `conversation` | `session`, `limit?` | `session`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
 
@@ -229,12 +241,13 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/ui/` | Bubble Tea sidebar | M1 |
 | `internal/event/`, `internal/journal/` | Envelope, kinds, NDJSON journal | M2 |
 | `internal/hook/` | Shim logic | M2 |
-| `internal/testutil/` | `BuildIrie`, tmux test server, `ShortDir`; `fakeagent/` from M2 | M1–M2 |
+| `internal/testutil/` | `BuildIrie`, tmux test server, `ShortDir`; `fakeagent/` from M2; `fakeollama/` and `ollamafake/` from M10 | M1–M2, M10 |
 | `internal/repo/`, `internal/worktree/` | Repo lookup, worktrees | M3 |
 | `internal/transcript/`, `internal/mirror/` | JSONL follower and parser, mirror view | M8 |
 | `internal/ghostty/`, `internal/macapp/`, `internal/loginenv/` | AppleScript driver, Irie.app bundle, login-shell env capture | M9 |
 | `tools/mkicon/` | Icon generator | M9 |
-| `internal/localmodel/` | Runtime probes and preflight | M10 |
+| `internal/localmodel/` | Ollama client, memory estimates and the machine's memory, preflight, setup suggestions, `irie runtime` | M10 |
+| `internal/statusline/` | `irie statusline`: cost, context and plan use from Claude Code's status line | M10 |
 | `e2e/` | Opt-in tests against the real Claude Code | M11 |
 
 ---
@@ -286,9 +299,9 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | Session id | Pre-assigned with `--session-id` (a v4 UUID), so Irie knows the vendor id before any hook fires and can reopen the session |
 | Reopen (undo of close) | `claude --resume <uuid>` with the same model, effort, mode and settings flags, in the same cwd |
 | Resume (move into Irie, §4.6) | `claude <profile flags> --settings <file> --resume <uuid>`: no `--session-id`, since a resumed session keeps its id, and no task, since it waits for input. `--name` is left out; the conversation keeps its own |
-| Env | Adds `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`. Removes `TMUX` and `TMUX_PANE` (`spawn.hide_tmux`), so an agent's own `tmux` commands cannot reach Irie's server. Removes the inherited variables that tie a process to another Claude Code session or terminal pane (§4.6), unless the profile sets them |
+| Env | Adds `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`. Removes `TMUX` and `TMUX_PANE` (`spawn.hide_tmux`), so an agent's own `tmux` commands cannot reach Irie's server. Removes the inherited variables that tie a process to another Claude Code session or terminal pane (§4.6), unless the profile sets them. A local profile also gets the environment that points Claude Code at its model (§6.1), under the profile's own `env` |
 | Versions | `claude --version` must be 2.1.295 or later for `onFailure`. Older versions still spawn, but pause is disabled for that session and the row says why. Optional flags (`--name`) are detected from `claude --help` once per version; an unsupported optional flag is dropped with a warning. Required values (model, effort, permission mode) are never dropped: if the CLI rejects one, the spawn fails visibly |
-| `--settings` | From M2. The settings file adds hooks for this session only. Claude Code merges hook lists, so the user's own hooks still run |
+| `--settings` | From M2. The settings file adds hooks for this session only. Claude Code merges hook lists, so the user's own hooks still run. With `usage.status_line` it also sets `statusLine` to `irie statusline`; that key does not merge, so Irie's runs the user's own (§6.3) |
 
 **Hooks in `claude-settings.json`.** Every hook uses `{"type":"command","command":"<IRIE_BIN> hook"}`.
 
@@ -373,6 +386,7 @@ type Harness interface {
 | `f`, `F` | Freeze or thaw this session, or all (M6) |
 | `!`, `n` | Toggle priority; write a note (M7) |
 | `m` `m` | Move the selected session under Outside Irie into Irie (§4.6). The first press says what the move ends; any other key cancels |
+| `+`, `-` | Rate the session's work good or bad, which teaches the router (M10, §6.4) |
 
 | Edge case | Behaviour |
 |---|---|
@@ -399,8 +413,8 @@ type Harness interface {
 | Plain text | A new task, kept verbatim, with no length cap |
 | `@name`, `@path` | Run in a new worktree of that git repo (M3). A path that is not a git repo runs in place. M1 accepts only absolute or `~` paths and runs in place |
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
-| `+profile` | Use that profile instead of `spawn.default_profile` (M3) |
-| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6) |
+| `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10) |
+| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
 
@@ -545,7 +559,7 @@ People also run Claude Code in other terminals and in the background, so the age
 
 **Discovery.**
 - **Source.** `claude agents --json` prints the active sessions, interactive and background, as a JSON array and exits ("for scripting; does not require a TTY"). Claude Code's agent view docs call it the supported way to read session state from outside. Irie reads `sessionId` (the full id that `--resume` takes), `id` (a background session's short id, which `claude stop` takes), `name`, `kind`, `status` (`busy`, `waiting`, `idle`, or another value, kept as it comes), `waitingFor`, `state`, `pid`, `cwd` and `startedAt`. Only stdout is parsed, since the CLI may warn on stderr. Ids that are not well formed are dropped, because they go on a command line, and display strings lose their control characters, because they reach terminals.
-- **Command.** The default profile's `command`, or the first Claude Code profile's when the default runs another harness, with the environment an agent of that profile gets (§3.3). A profile that points elsewhere is respected.
+- **Command.** The default profile's `command`, or the first Claude Code profile's when the default runs another harness, with the environment an agent of that profile gets (§3.3). When the default is `auto` (§6.4), it is the strongest profile auto routes to, `+claude` unless `route` says otherwise. A profile that points elsewhere is respected.
 - **When.** Every 3 s, only while someone looks: a tmux client attached to session `irie` (`session_attached`), or a Mac app view. A `list` also refreshes a list older than that, since whoever lists is looking. One run costs about 0.1 s of CPU, so this costs about 4% of one core while anyone looks and nothing otherwise, and a session that turns idle can be moved within 3 s. Runs never overlap, and each has a 5 s timeout.
 - **Irie's own.** Sessions Irie hosts are left out: those whose `sessionId` is a live Irie session's vendor id (the id Irie passed with `--session-id`, or resumed with `--resume`), and those whose `pid` runs under a live agent pane's host, which catches an agent after `/clear` changed its id and a `claude` started by a wrapper script. The process table comes from `ps -A -o pid= -o ppid=`, read only when both lists have something to match.
 - **Failure.** When the command is missing, times out or prints bad JSON, the core keeps the last list and sends the problem with it once: `problem` in the outside frame, `outside_problem` in `list`. The sidebar shows it in the status strip. The log gets a line when a problem starts and one when it ends; the journal gets nothing.
@@ -556,7 +570,7 @@ People also run Claude Code in other terminals and in the background, so the age
 **Move into Irie** (`move`, with `vendor_id` and an optional `profile`).
 1. It takes its turn with spawns and lists the sessions again, so the decision rests on what Claude Code says now. It refuses, with `busy`, a session that is not idle: busy, waiting for the user, or without a live process. It refuses with `not_found` a session that is not listed, and with `bad_args` one that already runs in Irie or whose folder is gone.
 2. It ends the outside copy: `claude stop <id>` for `kind: background`, so its supervisor does not start it again, and SIGTERM to `pid` for an interactive one. It waits up to 5 s for the process to exit; Claude Code's SessionEnd hooks get 1.5 s by default. It never sends SIGKILL. If the process does not exit, nothing is spawned and the error says so; the session may still run where it was.
-3. It spawns an Irie session in place, with no worktree, in exactly the same `cwd`, because Claude Code finds a conversation by its folder: `claude <profile flags> --settings <file> --resume <sessionId>` (§3.3). A resumed session keeps its id unless `--fork-session` is given, so there is no `--session-id`, and it waits for input, so there is no task. The row keeps the session's name (numbered when an Irie row has it), Irie's per-launch settings and hooks, and the chosen profile; by default, the profile that lists the sessions.
+3. It spawns an Irie session in place, with no worktree, in exactly the same `cwd`, because Claude Code finds a conversation by its folder: `claude <profile flags> --settings <file> --resume <sessionId>` (§3.3). A resumed session keeps its id unless `--fork-session` is given, so there is no `--session-id`, and it waits for input, so there is no task. The row keeps the session's name (numbered when an Irie row has it), Irie's per-launch settings and hooks, and the chosen profile; by default, the profile that lists the sessions. A local profile's model is checked, and loaded, as for a spawn (§6.1), before the outside copy ends, so a refusal leaves it running.
 4. `SessionStart` with source `resume` makes it ready, and idle, so it is never stalled for want of `UserPromptSubmit` (§4.2).
 5. The journal records `spawn.requested` with `resume` (the vendor id) and `kind`.
 
@@ -625,14 +639,14 @@ One JSON object per journal line and per `event` frame:
 
 | Kind | Data | From | Nearest standard term (ACP / OSC 7501) |
 |---|---|---|---|
-| `spawn.requested` | `task_bytes`, `cwd`, `repo`, `worktree`, `branch`, `profile`; for a move (§4.6) `resume` (the vendor id) and `kind`, and no `task_bytes` | irie | none |
+| `spawn.requested` | `task_bytes`, `cwd`, `repo`, `worktree`, `branch`, `profile`; for a move (§4.6) `resume` (the vendor id) and `kind`, and no `task_bytes`; from M10 `class`, `task_hash`, and `routed`, `route`, `parent`, `continues` when they apply (§6.4) | irie | none |
 | `spawn.failed` | `reason`, `exit`, `tail` | irie, host | error |
 | `session.started` | `transcript`, `model`, `permission_mode` | SessionStart | `session/new` |
 | `prompt.submitted` | `chars` | UserPromptSubmit | user message / working |
 | `tool.started` | `tool`, `summary`, `phrase` (the call in plain words: "Running the tests") | PreToolUse | `tool_call` pending / working |
 | `tool.finished`, `tool.failed` | `tool`, `ms` | PostToolUse, PostToolUseFailure | `tool_call_update` completed / failed |
 | `input.needed` | `reason`: `permission`, `question`, `plan`, `elicitation`, `stalled`; `phrase` for a permission, a question or a plan ("Asks: may it run rm -rf build?") | PermissionRequest, Notification, PreToolUse(AskUserQuestion, ExitPlanMode), Elicitation, readiness timer | `request_permission` / blocked |
-| `turn.ended` | none | Stop | stop reason `end_turn` / done |
+| `turn.ended` | `message`: the turn's last message, cut; whole in `result.md` (M10) | Stop | stop reason `end_turn` / done |
 | `turn.failed` | `error` | StopFailure | error |
 | `subagent.started`, `subagent.finished` | `agent_type`, `transcript` | SubagentStart, SubagentStop | none (an ACP RFD covers subagents) |
 | `session.ended` | `reason` | SessionEnd | `session/close` |
@@ -642,6 +656,9 @@ One JSON object per journal line and per `event` frame:
 | `priority.set` | `level`, `reason` | irie | none |
 | `note.queued`, `note.delivered` | `note`, `kind` | irie, shim | none |
 | `ui.renamed`, `ui.parked`, `ui.unparked`, `ui.closed`, `ui.reopened`, `ui.undo`, `ui.redo` | `before`, `after` | irie | none |
+| `outcome.rated` | `verdict`: `good` or `bad` | user (M10, §6.4) | none |
+| `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
+| `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |
 
 ### 5.3 Derived state
 
@@ -671,7 +688,8 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_STATE_HOME/irie/tmux.conf` | Generated tmux config | core |
 | `$XDG_STATE_HOME/irie/state.json` | Snapshot (atomic rename): per session the id, name, cwd, worktree, branch, profile, vendor ids, parked, priority and order; plus the undo and redo stacks | core |
 | `$XDG_STATE_HOME/irie/journal/YYYY-MM-DD.ndjson` | Event envelopes, kept `journal.keep_days` days | core |
-| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json`, `note-<n>.md` | core, host |
+| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json`, `note-<n>.md`, `status.json` (the last status line update, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
+| `$XDG_STATE_HOME/irie/local.json` | The model `irie setup local` chose for `+local`, and what models took in memory once loaded (§6.3) | core |
 | `$XDG_STATE_HOME/irie/{core,ui}.log` | Logs | core, ui |
 | `$XDG_STATE_HOME/irie/ghostty.json` | Id of the Irie window's Ghostty terminal | `irie` (M9) |
 | `$XDG_RUNTIME_DIR/irie/`, or `$TMPDIR/irie-<uid>/` if unset (macOS) | `core.sock`, `core.lock`, `app.lock`. macOS limits socket paths to about 104 bytes, so this path must stay short | core |
@@ -693,12 +711,12 @@ red_on_done = false
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
 
 [spawn]
-default_profile = "claude"
+default_profile = "auto"      # auto = the lowest cost per success among profiles accurate enough (§6.4)
 default_cwd = ""              # "" = new scratch dir per task
 ready_timeout = "30s"
 hide_tmux = true              # remove TMUX/TMUX_PANE from agent env
 
-[profiles.claude]             # the default agent
+[profiles.claude]             # the strongest: hard work and orchestration
 harness = "claude-code"
 command = "claude"
 model = "claude-opus-5-5"
@@ -706,18 +724,68 @@ effort = "max"
 permission_mode = "auto"
 args = []
 env = {}
+cost = ""                     # what the + list says it costs; "" = Irie's own reading (§6.3)
 
-# [profiles.local]            # example: Claude Code on a local model (§6.1)
-# harness = "claude-code"
-# model = "gpt-oss:20b"
-# env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:11434", ANTHROPIC_AUTH_TOKEN = "ollama" }
-# local = { runtime = "ollama", min_context = 65536, enforce = true }
+[profiles.sonnet]             # built in: fewer tokens for most coding tasks
+harness = "claude-code"
+command = "claude"
+model = "claude-sonnet-5-5"
+effort = "medium"
+permission_mode = "auto"
+
+[profiles.haiku]              # built in: a fortieth of Opus's price, for small work
+harness = "claude-code"
+command = "claude"
+model = "claude-haiku-5-5"
+permission_mode = "auto"
+
+[profiles.local]              # built in: Claude Code on a local model (§6.1), no tokens
+harness = "claude-code"
+command = "claude"
+model = ""                    # "" = the one `irie setup local` chose; +ollama:<model> names any other
+local = { runtime = "ollama", min_context = 65536, enforce = true }
 
 # [profiles.aider]            # example: generic harness
 # harness = "generic"
 # command = "aider"
 # args = ["--model", "ollama_chat/gpt-oss:20b"]
 # task = "paste"              # arg | paste
+# cost = "free, 50 requests a day"
+
+[local]                       # the Ollama server local profiles run on (§6.3)
+ollama = ""                   # "" = PATH, then the usual install places
+url = ""                      # a server you run, e.g. "http://127.0.0.1:11434"; "" = Irie runs its own
+port = 11435                  # Irie's own server, on 127.0.0.1
+context = 65536               # its OLLAMA_CONTEXT_LENGTH
+kv_cache = "q8_0"             # f16 | q8_0 | q4_0; q8_0 takes about half the memory of f16
+memory_gib = 0                # the most local models may take; 0 = two thirds of the machine's
+env = {}                      # more settings for its server, such as OLLAMA_MODELS
+
+[route]                       # how auto picks a profile (§6.4)
+profiles = ["local", "haiku", "sonnet", "claude"]
+min_accuracy = 0.85           # a profile below this for a task's class is never chosen
+prior_weight = 10             # how many outcomes the starting guesses below count as
+pressure = 80                 # from this much of the plan's five hours, in percent, its tokens cost more
+failover = true               # carry a task on, on a cheaper profile, when a usage limit stops it
+delegate = true               # tell Claude Code sessions they can hand subtasks to cheaper profiles
+delegate_mode = "acceptEdits" # the permission mode of a delegated session
+
+[route.accuracy]              # starting guesses: the share done right the first time, by class
+local = { small = 0.85, medium = 0.40, hard = 0.05 }
+haiku = { small = 0.92, medium = 0.70, hard = 0.30 }
+sonnet = { small = 0.96, medium = 0.88, hard = 0.65 }
+claude = { small = 0.98, medium = 0.94, hard = 0.90 }
+
+[route.cost]                  # starting guesses: a task's cost relative to one on +claude
+local = 0.0
+haiku = 0.02
+sonnet = 0.25
+claude = 1.0
+
+[route.words]                 # what makes a task small, medium or hard; each list replaces the built-in one
+# small = ["typo", "rename", "docstring", …]
+# medium = ["implement", "fix", "test", …]
+# hard = ["design", "refactor", "debug", "review", "orchestrat", …]
 
 [repos]
 roots = []                    # e.g. ["~/code"]; scanned two levels deep for git repos
@@ -754,6 +822,9 @@ socket = "irie"
 keep_days = 30
 tool_input = "summary"        # summary | none
 
+[usage]
+status_line = true            # be Claude Code's status line, to read cost and plan use; yours still runs (§6.3)
+
 [env]
 capture = "login-shell"       # login-shell | none  (used when started from Irie.app)
 ```
@@ -764,32 +835,136 @@ capture = "login-shell"       # login-shell | none  (used when started from Irie
 
 ### 6.1 What v1 needs
 
-Claude Code reaches a local model through any server that speaks the Anthropic Messages API (`/v1/messages`): Ollama, LM Studio and llama-server all do. A profile sets `ANTHROPIC_BASE_URL`, a placeholder `ANTHROPIC_AUTH_TOKEN` and the model tag (see `profiles.local` above). The danger is context size. Ollama defaults to a 4096-token context below 24 GiB of VRAM and silently cuts longer prompts, so an agent loses its instructions without any error. Before spawning on a local profile, v1 runs a preflight (M10):
+Claude Code reaches a local model through any server that speaks the Anthropic Messages API (`/v1/messages`): Ollama, LM Studio and llama-server all do. Pointed at one by hand, two things go wrong. The first is context size: Ollama defaults to a 4096-token context below 24 GiB of VRAM and silently cuts longer prompts, so an agent loses its instructions without any error. The second is model names: Claude Code's subagents and background tasks ask for its opus, sonnet and haiku aliases, which a local server does not have. A local profile (`local = { runtime = "ollama", … }`, such as the built-in `+local`) gets both right from Irie:
+
+- **Environment.** As Ollama's own launcher (`ollama launch claude`) does, Irie sets `ANTHROPIC_BASE_URL` to the server, a placeholder `ANTHROPIC_AUTH_TOKEN`, an empty `ANTHROPIC_API_KEY` (one in the user's environment would win over the token), every alias (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL`) and `CLAUDE_CODE_SUBAGENT_MODEL` to the model, `CLAUDE_CODE_AUTO_MODE_SERVER=0` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. It sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the context the preflight measured: for a model ID it does not recognise, Claude Code otherwise assumes 200K and compacts far too late. From 100k it also sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, whose minimum that is. The profile's own `env` wins over all of these.
+- **Context.** Irie runs its own Ollama server with the context it needs (§6.3), so nothing of the user's Ollama setup has to change. A server the user runs at `local.url` is checked as it is.
+
+Before spawning on a local profile, v1 runs a preflight (M10):
 
 | Runtime | Context probe | Fix shown on refusal |
 |---|---|---|
-| Ollama | Send a 1-token `POST /v1/messages` so the model loads exactly as the agent will load it, then read `context_length` from `GET /api/ps` | Set `OLLAMA_CONTEXT_LENGTH` (for the macOS app: `launchctl setenv`, then restart Ollama), or bake `PARAMETER num_ctx` into a Modelfile. The OpenAI and Anthropic shims cannot set the context per request |
-| LM Studio | `GET /api/v1/models`, field `loaded_instances[].config.context_length` | `lms load <model> --context-length <n>` |
-| llama-server | `GET /props` (`n_ctx`) and `GET /slots` (context per slot) | `-c <n>`, which is the total and is divided across `-np` slots |
+| Ollama | Send a 1-token `POST /v1/messages` so the model loads exactly as the agent will load it, then read `context_length` from `GET /api/ps` | On Irie's own server: raise `local.context`. On the user's: set `OLLAMA_CONTEXT_LENGTH` (for the macOS app: its context length setting, or `launchctl setenv`, then restart Ollama), or leave `local.url` empty so Irie runs its own. The OpenAI and Anthropic shims cannot set the context per request |
+| LM Studio (after M10) | `GET /api/v1/models`, field `loaded_instances[].config.context_length` | `lms load <model> --context-length <n>` |
+| llama-server (after M10) | `GET /props` (`n_ctx`) and `GET /slots` (context per slot) | `-c <n>`, which is the total and is divided across `-np` slots |
 
 **Preflight rules.**
-- **Threshold.** Refuse below `min_context` (default 65536, Ollama's guidance for coding agents). A refusal names the runtime, the measured context and the fix.
+- **Model.** The profile's own, else the one `irie setup local` chose, else the only one the server has that an agent can run and the machine can hold. With several, the refusal lists them, cheapest in memory first; with none, it points to `irie setup local`.
+- **Tools.** A model whose capabilities (`/api/show`) lack `tools` is refused.
+- **Threshold.** Refuse below `min_context` (default 65536, Ollama's guidance for coding agents). A model trained for less is refused before it is loaded. A refusal names the runtime, the measured context and the fix.
+- **Memory.** Refused when what the model takes (§6.3) is above the budget, or above what is free now less the reserve. The load happens only after this check.
 - **Unreachable runtime.** Refused: "not reachable at <url>".
-- **Bypass.** `enforce = false` in the profile, or `irie ctl spawn --force`, spawns anyway with a "low context" badge.
-- **Env.** Set `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to the measured context when it is at least 100k (that variable's minimum). Below that, warn that Claude Code will compact too late for long sessions. Also set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`.
-- **Expectations.** Local sessions carry a `local` tag. Anthropic does not support Claude Code on non-Claude models, so tool-use quality is the model's own. Ollama's shims ignore `tool_choice`.
+- **Bypass.** `enforce = false` in the profile, or `irie ctl spawn --force`, spawns anyway, with the problems as the row's warnings.
+- **Expectations.** Local sessions carry a `local` tag, shown in the status strip. Anthropic does not support Claude Code on non-Claude models, so tool-use quality is the model's own. Ollama's shims ignore `tool_choice`.
 
 ### 6.2 After v1: routing and agents in tandem
 
 | Step | What | Builds on |
 |---|---|---|
-| Tiers | Profiles named by tier (`+fast` for a local model, `+strong` for cloud). A task keeps its profile for its whole life | v1 profiles |
-| Budget-aware choice | A per-task router skips a supplier whose subscription window is nearly used up and prefers local when it fits. Inputs: Claude Code's status-line `rate_limits`, captured by an Irie status-line helper; CodexBar's `usage --format json` and `guard` for other suppliers | Envelope, profiles |
-| RAM admission | Before a local spawn, check model weights plus per-session KV cache against free memory and memory pressure (Ollama `/api/ps`, LM Studio's model list, llama-server `/slots`). Refuse or queue | M10 probes |
-| Failover at a boundary | A `StopFailure` with `rate_limit` offers to reopen the task on another profile | Events, reopen |
-| In tandem: delegation | An orchestrator runs `irie ctl spawn +profile "<subtask>"` (or an MCP tool that wraps it) to start a sibling on another supplier or on a local model. The sibling's result comes back as a note | Socket API, notes |
+| Tiers | v1 builds in `+sonnet` and `+local` beside `+claude` (§6.3). More profiles by tier (`+fast`, `+strong`) can follow. A task keeps its profile for its whole life | v1 profiles |
+| Budget-aware choice | A per-task router skips a supplier whose subscription window is nearly used up and prefers local when it fits. Inputs: Claude Code's status-line `rate_limits`, which `irie statusline` captures from v1 (§6.3); CodexBar's `usage --format json` and `guard` for other suppliers | Envelope, profiles, §6.3 |
+| RAM admission | v1 checks a local model's memory against the budget and the free memory before an Ollama spawn, and refuses (§6.3). Queueing the spawn until memory frees, and LM Studio's and llama-server's models, come later | M10 |
+| Failover at a boundary | v1 carries a task on after a `StopFailure` with `rate_limit`, in the same directory, on a cheaper profile accurate enough for it (§6.4). Reopening the same conversation on another profile comes with reopen (M4) | Events, §6.4 |
+| In tandem: delegation | v1: an orchestrator runs `irie ctl delegate "<subtask>"`, which picks a cheaper profile accurate enough, waits, and prints the result (§6.4). Later: an MCP tool that wraps it, siblings on other suppliers, and results as notes | Socket API, §6.4 |
 | In tandem: review | When a turn ends, an optional reviewer profile from a different supplier reviews the worktree's diff. Its findings become a normalised record plus a note to the worker; at most two rounds | Worktrees, notes, adapters for other suppliers |
 | Shared context | A per-repo roster of active agents, their tasks and branches, delivered as a note at spawn | Envelope |
+
+### 6.3 Cost: tokens and memory
+
+Every session costs something, and the spawn list says what before a task starts. A cloud model costs tokens. Every agent also costs the machine's memory, and a local model a lot of it.
+
+| Cost | Cloud profile | Local profile |
+|---|---|---|
+| Tokens | Claude Code's own figure at list price (`cost.total_cost_usd`), and on Pro and Max the plan's five-hour and weekly use (`rate_limits`), from its status line | None |
+| Memory | What the session's processes take, measured | The same, plus what its model takes: weights, the context cache at the server's context, and working room |
+
+**Status line.** With `usage.status_line` (on by default), Irie's settings file makes `irie statusline` the session's status line.
+- **Forwarding.** It forwards each update to the core (op `status`). The call takes at most 300 ms and never fails.
+- **The user's own.** It then `exec`s the user's own status line on the same input. It finds it where Claude Code would: the project's local settings at the repo's main checkout, the shared project settings in the cwd, then the user's in `CLAUDE_CONFIG_DIR` or `~/.claude`. Their `padding`, `refreshInterval` and `hideVimModeIndicator` are kept.
+- **No status line of their own.** It prints a short line instead (`$1.23 · ctx 41% · 5h 62%`), because any status line hides Claude Code's footer hints.
+- **Restarts.** The last update is kept in the session's `status.json`, so a restarted core still knows it.
+
+**Memory.**
+- **Measuring.** Every five ticks the core measures each session's process tree (one run of `ps`), what the models of its own server take (`/api/ps`), and what the machine has free (macOS `kern.memorystatus_level`; Linux `MemAvailable`).
+- **Budget.** Local models may take `local.memory_gib`, else two thirds of physical memory. That leaves room for the system, the agents and the user's own programs; it is also what Ollama reports as GPU memory on an 18 GiB Apple-silicon Mac.
+- **Reserve.** A model load must leave 2 GiB free, or a tenth of memory when that is more.
+- **Estimate.** What a model takes is estimated before it loads: its weights, plus its context cache at the server's context and cache type, plus working room. The cache's shape comes from `/api/show`: K/V heads per layer, which hybrid models such as Qwen3.5 give layer by layer, and the key and value widths.
+- **Measurement.** Once the model is loaded, its size from `/api/ps` replaces the estimate, kept in `local.json`. Against Ollama 0.40.6, a 9B Qwen3.5-family model at a 64k `q8_0` context was estimated at 4.9 GB and took 4.1 GB, so the estimate errs high.
+
+**The spawn list.** Tab after `+` lists the profiles, then each local model an agent can run on (tools, a long enough context, within the budget) as `+ollama:<model>`, cheapest in memory first. With one candidate, its note goes to the status strip:
+
+| Profile | Note |
+|---|---|
+| `+claude` | `opus-5-5 max · plan 5h 62% · ~$1.40 a session · ~640 MB a session` |
+| `+local` | `qwen3.5:9b · local, $0 · ~8.4 GB`. A measured size drops the `~`; `in memory` once loaded; `too big` past the budget; `short of memory` when what is free now cannot take it |
+| A generic profile | Its command and `cost` |
+
+The status strip shows a session's cost (`$1.23 ctx 41% 640 MB`, or `local` for a local model). The header shows `mem low` when less than the reserve is free, and the plan's five-hour use (`5h62%`).
+
+**Irie's own Ollama server.**
+- **Start.** The first time a local profile needs a server, the core starts `irie runtime -- ollama serve` in window `irie-ollama` of `irie-agents`. A need is a spawn, Tab after `+`, `irie setup local` or `irie ctl local`; Tab starts it in the background and never waits for it.
+- **Settings.** It runs with `OLLAMA_HOST=127.0.0.1:<local.port>`, `OLLAMA_CONTEXT_LENGTH=<local.context>` and `OLLAMA_KV_CACHE_TYPE=<local.kv_cache>`, with flash attention, which a quantised cache needs. It has one slot and one loaded model, then `local.env`.
+- **Nothing changes for the user.** It runs the user's own `ollama` binary and shares their model store, so nothing downloads twice, and no setting of the user's Ollama changes. The reasoning is the same as for the private tmux server.
+- **One model at a time.** That keeps its memory to one model and one cache. Loading another model unloads the first, and the check warns when a live session runs on the one that would go.
+- **Stopping.** `irie runtime` keeps the server in a process group of its own and turns a hangup into SIGTERM for that group. Ollama unloads its runners on SIGTERM. A hangup, which tmux sends when it goes, would end Ollama at once and leave each runner holding its model's memory; whatever of the group is left after the server exits is stopped too.
+
+**`irie setup local`.**
+1. **Install.** Installs Ollama by its official route when it is missing, only after a yes. On macOS that is Homebrew's `ollama` formula when `brew` is there, else the app from ollama.com; on Linux, Ollama's install script.
+2. **Start and weigh.** Starts the server, then shows the machine's memory and each model weighed against it.
+3. **Pick.** The largest Qwen3.5 that fits the budget, when the server has it (Qwen3.5 is the local model of Ollama's Claude Code guide). Else the largest model there that fits. Else that Qwen3.5, to pull.
+4. **Pull.** Pulls the model, after a yes.
+5. **Check.** Checks it as a spawn would, and makes it `+local`'s.
+
+`irie ctl local` prints the same table, and `irie ctl preflight` runs the check alone.
+
+**Not done, and why.**
+- **Bundling Ollama.** Its macOS app is about 650 MB and has its own security updates, and the user's own install is one command away.
+- **One session split between cloud and local**, such as an Opus orchestrator with local subagents. Claude Code sends every request to one `ANTHROPIC_BASE_URL`, so that needs a proxy that carries the user's Claude credentials, which §9 rules out. Separate sessions and `irie ctl spawn +local` delegation (§6.2) get the same effect.
+- **Free cloud tiers built in.** They change too often to ship as defaults. A user adds one as a profile with a `cost` label. As of 2026-10-26:
+  - Gemini CLI's free Google sign-in moved to Antigravity CLI for unpaid users on 2026-06-18.
+  - Qwen Code's free OAuth tier was reported closed in April 2026.
+  - OpenRouter's free models allow 50 requests a day (1,000 after $10 of credits), and an agent's task spends dozens.
+  - Ollama's cloud gives starter credits and one request at a time.
+
+### 6.4 Routing by cost per success
+
+A cheap model that gets a task wrong costs a retry and the user's attention, so the router does not pick the cheapest profile. It picks the cheapest **per successful task**, and only among profiles accurate enough for the task. Hard work, orchestration included, stays on the strongest model, where Opus orchestrators give the best results; mechanical work goes where it costs least.
+
+**The rule.** `spawn.default_profile` is `auto`, so a task with no `+profile` is routed; `+auto` routes explicitly, and any other `+profile` overrides.
+1. **Class.** The task gets a class, `small`, `medium` or `hard`, from its words (`route.words`) and its size. Hard words count three, medium words one, and small words minus two; a long task or one with a list of steps counts more. Hard words include `design`, `refactor`, `debug`, `review`, `orchestrat`, `milestone` and `why`; small ones include `typo`, `rename`, `docstring`, `summarize` and `README`.
+2. **Accuracy.** For each profile in `route.profiles`, its accuracy on that class is the mean of a beta distribution: the starting guess (`route.accuracy`), counted as `route.prior_weight` outcomes, plus the user's own outcomes on that profile and class.
+3. **Cost.** Cost per attempt is relative to the strongest profile: the starting guess (`route.cost`), replaced by what its sessions of that class cost, from their status lines, once three or more say.
+   - A local model costs no tokens, only a hundredth of an Opus task in memory weight when its model takes the whole budget. It can be chosen only when Irie's Ollama server has a model for it and the machine can hold that model now (§6.3).
+   - Profiles on the user's Claude plan cost up to five times more as its five hours pass `route.pressure` percent, and none can run at a window's limit.
+4. **Choice.** The cheapest cost per success (cost ÷ accuracy) among usable profiles at or above `route.min_accuracy` wins, the more accurate on a tie. If none reaches the floor, the most accurate usable profile runs it.
+
+With the starting guesses and a floor of 85%, small work goes to `+local` when it is ready (else `+haiku`), medium work to `+sonnet`, and hard work to `+claude`. To keep medium work on Opus too, raise `route.min_accuracy` to 0.9 or more.
+
+**Learning.** Outcomes are folded from the journal, like every row's state, over its 30 days:
+
+| Outcome | Counts as |
+|---|---|
+| The user rates a session (`+` or `-` on its row, `:rate good\|bad`, `irie ctl rate`) | good or bad; the latest rating stands |
+| The same task (its words, ignoring case and spacing) is spawned within two hours on a profile with a higher starting accuracy for its class | bad for the earlier session (`outcome.escalated`), unless rated good |
+| A turn ended, 30 minutes have passed, and neither of the above happened | good |
+| A turn stopped at a usage limit, or no turn ended | nothing |
+
+With a weight of 10, a profile's own record outweighs the guess after about ten outcomes. `irie ctl route "<task>"` and `:route <task>` show the class, each profile's accuracy with its number of outcomes, cost and cost per success, and the choice.
+
+**Delegation.** A Claude Code session on a profile with cheaper ones in `route.profiles`, which was not itself delegated, is told at session start (SessionStart `additionalContext`) that it can delegate.
+- **The call.** `"$IRIE_BIN" ctl delegate "<subtask>"` routes the subtask among the profiles cheaper than the caller's. A profile with no starting cost counts as the dearest.
+- **Where it runs.** In the caller's directory, with `route.delegate_mode` (`acceptEdits`), so it can edit without asking; a command still needs the user.
+- **The result.** The call waits until the session's turn ends and prints the agent's last message: Stop's `last_assistant_message`, which the shim passes whole and the core keeps in `result.md`.
+- **Exit codes.** 3 when no cheaper profile is accurate enough ("do it yourself"); 4 when the session is still at work at `--timeout` (10 minutes), where it goes on as a row marked `↳ delegated`.
+- **Choosing what to hand on.** The note asks for self-contained, mechanical subtasks on files the caller is not editing, and keeps planning, design and review with the caller.
+
+**Failover.** With `route.failover`, a turn that stops with `rate_limit` makes the core route the task again among profiles cheaper than the session's, keeping its class.
+- **Carrying on.** A profile accurate enough carries it on in the same directory. Its task opens with a note that the earlier session stopped at its limit and that its work so far is there to check.
+- **Waiting.** When none is accurate enough, as for hard work after Opus's limit, the task waits for the reset, as Claude Code does, and the session's `route.failover` event says so.
+- **When the plan is out.** At a window's limit, every profile on the plan is unusable, so only a local model can carry the task on.
+- **Once.** A session fails over once.
+
+**In the sidebar.** `:setup` runs `irie setup local` as a tool session, shown in the slot with the focus to answer its questions; `:models` runs `irie ctl local`. A tool session takes no task and is at work from its start. The status strip shows a routed session's class and profile (`small→local`), `↳ delegated`, and its rating.
 
 ---
 
@@ -1065,18 +1240,49 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 2. Press Enter on it in Spotlight again. The same window comes forward.
 3. Close the window and launch Irie again. It reattaches, with every agent still running.
 
-### M10. Local models: context preflight
+### M10. Local models, cost and routing
 
-**Goal:** a Claude Code profile pointed at Ollama, LM Studio or llama-server refuses to spawn when the server's context is below `min_context`, and says how to fix it.
+**Goal:** `+local` runs Claude Code on a model of Irie's own Ollama server with the context it needs. A spawn is refused, saying how to fix it, when the server's context is below `min_context` or the machine cannot hold the model. The spawn list and the sidebar say what each profile and session costs in tokens and memory. A task with no profile goes to the profile with the lowest cost per success among those accurate enough, which learns from the user's outcomes; Opus sessions can delegate subtasks, and a usage limit fails a task over (§6.1, §6.3, §6.4).
 
-**Build:** `localmodel` probes (§6.1); the preflight in spawn; env shaping; per-runtime fix texts; `irie ctl preflight <profile>`; `irie ctl spawn --force`.
+**Build:**
+- **Package `localmodel`.** The Ollama client, memory estimates and the machine's memory, the preflight with per-server fix texts, setup suggestions, and `irie runtime`.
+- **Core.** Irie's own server in `irie-agents:irie-ollama`; the preflight and env shaping in spawn; `+ollama:<model>` profiles; ops `local`, `preflight` and `status`; memory sampling; the header frame; notes in `complete`.
+- **Claude adapter and status line.** The adapter's local environment and its status line; `irie statusline`.
+- **CLI and sidebar.** `irie setup local`, `irie ctl local`, `irie ctl preflight`, `irie ctl spawn --force`; costs in the sidebar.
+- **Routing.** Package `route` (classes, the beta accuracy, the choice); `+auto` as the default; the built-in `+haiku`; outcomes folded from the journal; ops `route`, `rate`, `result` and `tool`.
+- **Delegation and failover.** `irie ctl delegate`, `ctl route` and `ctl rate`; the delegation note at session start; failover on `rate_limit`.
+- **Sidebar commands.** `:setup`, `:models`, `:rate`, `:route`, and `+`/`-` on a row.
+- **Not yet.** The LM Studio and llama-server probes come after M10.
 
 **Tests:**
-- **Probes.** For each runtime, against an `httptest` fake: context 4096 is refused with that runtime's fix text; 65536 is allowed; an unreachable runtime is refused with "not reachable at <url>".
-- **Override.** `--force` spawns with the "low context" badge.
+- **Preflight.** Against an `httptest` fake:
+  - Context 4096 is refused with the fix for that server, Irie's own or the user's; 65536 is allowed.
+  - An unreachable server is refused with "not reachable at <url>".
+  - A model without tools, or trained for less than `min_context`, is refused without loading.
+  - A model above the budget, or above the free memory less the reserve, is refused before it loads; with `--force`, one short of free memory loads with a warning.
+- **Estimates.** A model's cache shape is read from per-layer and single K/V head counts; cache memory scales with context, cache type and slots.
+- **Spawn.** A `+local` spawn starts Irie's own server once (a restarted core finds it again), with the context, cache and slot settings. It points the agent at the server with every alias pinned and `CLAUDE_CODE_MAX_CONTEXT_TOKENS` set to the measured context.
+- **Override.** `--force` spawns on a 4k server, with the problem as a warning.
+- **`irie runtime`.** A hangup stops the server and its runners; a runner the server leaves behind, or one that ignores SIGTERM, is stopped too.
+- **Cost.** The fake agent runs the status line: the row gets the cost and context and the header the plan's use; the user's own status line gets the same input and its output is shown; a restarted core keeps the cost. Sessions' memory is measured.
 - **Env.** `CLAUDE_CODE_AUTO_COMPACT_WINDOW` is set only when the context is at least 100k.
+- **Routing.** Classes from wording and size; the choice is the cheapest per success at the floor, never one below it, and the most accurate when none reaches it.
+  - With a cheap and a strong fake profile: a small task goes to the cheap one and a hard one to the strong one.
+  - One bad rating against priors worth two outcomes sends small work to the strong profile, and a good one brings it back.
+  - A task run again on the strong profile marks the first session escalated.
+  - A restarted core keeps all of it.
+- **Delegation.** The strong session is told it can delegate; the delegated one is not. `irie ctl delegate` runs a small subtask on the cheap profile with `acceptEdits` and prints its last message whole, and exits 3 for a hard one.
+- **Failover.** A small task stopped by `rate_limit` carries on, on the cheap profile, in the same directory, keeping its class; a hard one waits.
+- **Sidebar commands.** `:setup` opens a tool session in the slot; `:rate`, `+` and `-` rate the selected row; `:route` says the choice.
 
-**Manual check:** point a `+local` profile at Ollama with its default settings. The spawn is refused, with a message naming `OLLAMA_CONTEXT_LENGTH`. Set it, restart Ollama, and the spawn works.
+**Manual check:**
+1. Run `irie setup local`. It shows this machine's memory and each model weighed against it, then pulls and checks the model it picked.
+2. Type `+` and press Tab: the profiles and the local models appear, cheapest in memory first. Tab on `+local` says what it runs and costs.
+3. Spawn `+local fix a typo`. Its row says `local`, and `irie ctl local` shows the model in memory.
+4. Quit Irie: no Ollama runner is left holding memory.
+5. Type `fix the typo in README` with no profile: it runs on `+local` (`small→local`). Type `review this branch`: it runs on `+claude`. `:route <task>` explains each.
+6. In an Opus session, ask it to delegate a docstring. It runs `irie ctl delegate`, a `↳ delegated` row appears, and the result comes back to Opus.
+7. Press `-` on a local session twice: `irie ctl route "fix a typo"` shows local's accuracy falling, and small work moving to `+haiku`.
 
 ### M11. Control-mode events and real-Claude smoke tests
 
@@ -1109,9 +1315,19 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 | Agents run `tmux` commands | They could break Irie's server | `TMUX` removed from the agent env; a private `-L` socket |
 | Licence contamination | The project could not ship under Apache-2.0 | The rules in §8.1; PROVENANCE checked in every PR |
 | Event volume | Two shim processes per tool call; redraw storms | The shim answers in under 10 ms; UI frames coalesced to 10/s; no spinners; ages tick once a second |
-| A local runtime silently truncates prompts | The agent loses its instructions without an error | Preflight refuses below `min_context` (M10) |
+| A local runtime silently truncates prompts | The agent loses its instructions without an error | Preflight refuses below `min_context`; `CLAUDE_CODE_MAX_CONTEXT_TOKENS` makes Claude Code compact at the real window (M10) |
+| A local model does not fit, or two Ollama servers each hold one | The machine swaps or the model runs on the CPU | The memory check before a load counts what is free now; Irie's own server holds one model at a time; a model past the budget is refused; the header shows `mem low` (§6.3) |
+| An Ollama runner outlives its server | A model's memory stays taken with nothing to free it | `irie runtime` turns a hangup into SIGTERM for the server's process group and stops what is left of it (§6.3) |
+| Irie's status line hides the user's own | The user loses their status line in Irie sessions | `irie statusline` runs theirs on the same input, with their padding and refresh; `usage.status_line = false` turns it off (§6.3) |
+| Memory estimates are wrong for a new architecture | A model is refused that would fit, or the reverse | Estimates err high; the measured size replaces the estimate after the first load; `--force` and `local.memory_gib` override (§6.3) |
+| Free tiers and model lists change | Built-in claims go stale | No free cloud tier is built in; profiles carry their own `cost`; setup's suggestions are dated (§6.3) |
+| The router sends hard work to a weak model | Wrong work, and the user's time | The accuracy floor; hard words keep orchestration on Opus; ratings and re-runs lower a profile's accuracy; `+profile` overrides; `ctl route` explains (§6.4) |
+| The starting accuracies are guesses | Early choices follow them | They count as `prior_weight` outcomes, so the user's own outweigh them soon; they sit in the config (§6.4) |
+| A delegated session edits files its delegator is editing | Conflicting edits | The note asks for files the caller is not editing; the subtask runs in the caller's directory, where the caller sees its changes (§6.4) |
+| A failover repeats work | Tokens spent twice | The continuation starts from the work in the directory; a session fails over once; hard work waits for the reset (§6.4) |
 | Disk growth | Worktrees and the journal fill the disk | Journal retention; worktree sizes shown in the status strip; `irie gc` after v1 |
 | Two cores race at start | Double spawns | `flock` on `core.lock`; `irie up` is idempotent; spawn ids |
+| The server goes away under a running core | Its layout repair's `new-session` would start a new server with a sidebar and no core | Every tmux command but `irie up`'s start carries `-N`, which never starts a server |
 | Supplier policy shifts on billing or third-party tools | A feature becomes non-compliant | Irie only launches the unmodified CLI under the user's own login. It never reads or relays credentials |
 | Huge tasks or pastes | The UI lags | Paste chips; tasks handed over as files |
 

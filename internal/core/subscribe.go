@@ -37,6 +37,7 @@ type subscriber struct {
 	mu      sync.Mutex
 	full    bool
 	dirty   map[string]bool
+	header  bool        // the header changed
 	queue   []ipc.Frame // event frames not sent yet
 	outside bool        // an outside frame is due
 	talk    bool        // a conversation frame may be due
@@ -158,6 +159,17 @@ func (s *subscriber) noteOutside() {
 	}
 }
 
+// noteHeader tells the subscriber that the header changed.
+func (s *subscriber) noteHeader() {
+	s.mu.Lock()
+	s.header = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // noteConversation marks a conversation frame due.
 func (s *subscriber) noteConversation() {
 	s.mu.Lock()
@@ -195,12 +207,23 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, queue, outside, talk := s.full, s.dirty, s.queue, s.outside, s.talk
-		s.full, s.dirty, s.queue, s.outside, s.talk = false, map[string]bool{}, nil, false, false
+		full, dirty, header, queue, outside, talk := s.full, s.dirty, s.header, s.queue, s.outside, s.talk
+		s.full, s.dirty, s.header, s.queue, s.outside, s.talk = false, map[string]bool{}, false, nil, false, false
 		s.mu.Unlock()
 		for _, f := range queue {
 			select {
 			case s.out <- f:
+			case <-s.done:
+				return
+			}
+		}
+		// A snapshot carries the header; otherwise it has a frame of its own.
+		if header && !full && s.session == "" {
+			s.c.mu.Lock()
+			h := s.c.headerNow()
+			s.c.mu.Unlock()
+			select {
+			case s.out <- ipc.Frame{T: ipc.FrameHeader, Header: &h}:
 			case <-s.done:
 				return
 			}
@@ -252,7 +275,8 @@ func (s *subscriber) frame(full bool, dirty map[string]bool) ipc.Frame {
 			rows = append(rows, row)
 		}
 	}
-	return ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{Version: s.c.version}}
+	h := s.c.headerNow()
+	return ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &h}
 }
 
 // outsideFrame carries the latest sessions outside Irie.

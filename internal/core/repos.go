@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -146,19 +145,15 @@ func (c *Core) addRecent(r string) {
 
 // complete returns the tokens that Tab offers for a command-bar token: the
 // profiles for +, the repo names or directories for @.
-func (c *Core) complete(text string) []string {
-	items := []string{}
+func (c *Core) complete(text string) (items, notes []string) {
+	items = []string{}
 	switch {
 	case strings.HasPrefix(text, "+"):
-		for _, name := range slices.Sorted(maps.Keys(c.cfg.Profiles)) {
-			if strings.HasPrefix(name, text[1:]) {
-				items = append(items, "+"+name)
-			}
-		}
+		return c.completeProfiles(text)
 	case strings.HasPrefix(text, "@") && !strings.HasSuffix(text, "!"):
 		for _, v := range repo.Complete(text[1:], c.repoOptions()) {
 			items = append(items, "@"+v)
 		}
 	}
-	return items
+	return items, nil
 }

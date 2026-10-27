@@ -37,11 +37,22 @@ func (c *Core) move(a ipc.MoveArgs) (ipc.Session, error) {
 	if err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", profileName, err)
 	}
+	// `claude stop` gets the profile's environment without a local model's.
 	env := c.agentEnv(profile)
+	// A local profile's model is checked, and may be loaded, as for a spawn
+	// (DESIGN §6.1), and before the outside copy ends.
+	var warnings []string
+	if profile.Local != nil {
+		if warnings, err = c.prepareLocal(profileName, &profile, false); err != nil {
+			c.log.Warn("move refused", "profile", profileName, "err", err)
+			return ipc.Session{}, err
+		}
+	}
 	var probe harness.Probe
 	if p, ok := h.(harness.Prober); ok {
-		probe = p.Probe(profile, env)
+		probe = p.Probe(profile, c.agentEnv(profile))
 	}
+	probe.Warnings = append(warnings, probe.Warnings...)
 
 	// One spawn or move at a time, and the decision rests on what Claude
 	// Code says now, not on the last poll.
@@ -78,7 +89,7 @@ func (c *Core) move(a ipc.MoveArgs) (ipc.Session, error) {
 		name = slug(filepath.Base(o.Cwd))
 	}
 	x, err := c.launch(job{
-		place: place{name: unique(name, c.names()), cwd: o.Cwd}, profile: profileName, h: h, probe: probe,
+		place: place{name: unique(name, c.names()), cwd: o.Cwd}, profile: profileName, run: profile, h: h, probe: probe,
 		resume: o.VendorID, data: map[string]any{"resume": o.VendorID, "kind": o.Kind},
 	})
 	if err == nil {
@@ -107,9 +118,9 @@ func (c *Core) resumeProfile(name string) (string, config.Profile, error) {
 		}
 		return name, p, nil
 	}
-	p, ok := c.cfg.Profiles[name]
+	p, ok := c.profile(name)
 	if !ok {
-		return "", config.Profile{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s", name, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "))
+		return "", config.Profile{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, and +%s<model> for a local model", name, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "), localPrefix)
 	}
 	if p.Harness != "claude-code" {
 		return "", config.Profile{}, ipc.Errorf(ipc.CodeBadArgs, "profile +%s runs %s, which cannot carry a Claude Code conversation on", name, p.Harness)

@@ -74,9 +74,15 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	return 0
 }
 
-// shrink caps every string of a JSON payload at event.MaxString bytes and
-// records, under irie_lengths, how many characters each cut string had, by
-// its dotted path. It also returns the payload's hook_event_name.
+// whole are the payload fields the shim does not cap: a turn's last
+// message, which a delegated session reports back whole (DESIGN §6.4). The
+// journal still cuts it.
+var whole = map[string]bool{"last_assistant_message": true}
+
+// shrink caps every string of a JSON payload at event.MaxString bytes, but
+// those in whole, and records, under irie_lengths, how many characters each
+// cut string had, by its dotted path. It also returns the payload's
+// hook_event_name.
 func shrink(raw []byte) (json.RawMessage, string, error) {
 	var v map[string]any
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -86,7 +92,9 @@ func shrink(raw []byte) (json.RawMessage, string, error) {
 	}
 	lengths := map[string]int{}
 	for k, item := range v {
-		v[k] = walk(item, k, lengths)
+		if !whole[k] {
+			v[k] = walk(item, k, lengths)
+		}
 	}
 	if len(lengths) > 0 {
 		v["irie_lengths"] = lengths

@@ -31,6 +31,12 @@ type agentConfig struct {
 	readyTimeout string            // spawn.ready_timeout
 	env          map[string]string // profiles.fake.env
 	extra        string            // more TOML, such as [repos] or more profiles
+	// The [local] section's body. By default it names an ollama that is not
+	// there, so no test starts the machine's own.
+	local string
+	// usage.status_line, off unless a test is about it: it reads the user's
+	// Claude Code settings.
+	statusLine bool
 }
 
 func (a agentConfig) toml(fake string) string {
@@ -57,6 +63,11 @@ func (a agentConfig) toml(fake string) string {
 	if a.extra != "" {
 		b.WriteString("\n" + a.extra)
 	}
+	local := a.local
+	if local == "" {
+		local = "ollama = \"/nonexistent/ollama\"\n"
+	}
+	fmt.Fprintf(&b, "\n[local]\n%s\n[usage]\nstatus_line = %v\n", local, a.statusLine)
 	return b.String()
 }
 

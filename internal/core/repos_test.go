@@ -297,12 +297,18 @@ func TestAGenericProfileGetsItsTask(t *testing.T) {
 
 	// An unknown profile spawns nothing and names the profiles there are.
 	err := c.call("spawn", ipc.SpawnArgs{Task: "x", Profile: "nope"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "nope") || !strings.Contains(err.Error(), "cat, claude, echo, fake") {
+	if err == nil || !strings.Contains(err.Error(), "nope") || !strings.Contains(err.Error(), "cat, claude, echo, fake, haiku, local, sonnet, +auto") {
 		t.Errorf("+nope: %v", err)
 	}
 	var r ipc.CompleteResult
-	if err := c.call("complete", ipc.CompleteArgs{Text: "+"}, &r); err != nil || !slices.Equal(r.Items, []string{"+cat", "+claude", "+echo", "+fake"}) {
+	if err := c.call("complete", ipc.CompleteArgs{Text: "+"}, &r); err != nil || !slices.Equal(r.Items, []string{"+auto", "+cat", "+claude", "+echo", "+fake", "+haiku", "+local", "+sonnet"}) {
 		t.Errorf("complete + = %q, %v", r.Items, err)
+	}
+	// Each profile says what it runs and costs, a profile with live sessions
+	// what one takes in memory too, and auto where it sends each class.
+	if len(r.Notes) != len(r.Items) || !strings.Contains(r.Notes[0], "hard→claude") || !strings.HasPrefix(r.Notes[1], "/bin/cat") ||
+		!strings.Contains(r.Notes[2], "opus-5-5 max") || !strings.Contains(r.Notes[6], "local, $0") || !strings.Contains(r.Notes[7], "sonnet-5-5 medium") {
+		t.Errorf("notes = %q", r.Notes)
 	}
 }
 

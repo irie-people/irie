@@ -107,7 +107,9 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 		return []event.Event{ev(event.InputNeeded, with(map[string]any{"reason": event.ReasonElicitation},
 			"message", p.str("message"), "server", p.str("mcp_server_name")))}, nil
 	case "Stop":
-		return []event.Event{ev(event.TurnEnded, map[string]any{})}, nil
+		// The turn's last message is what a delegated session reports back
+		// (DESIGN §6.4).
+		return []event.Event{ev(event.TurnEnded, with(map[string]any{}, "message", p.str("last_assistant_message")))}, nil
 	case "StopFailure":
 		return []event.Event{ev(event.TurnFailed, with(map[string]any{}, "error", p.str("error")))}, nil
 	case "SubagentStart":

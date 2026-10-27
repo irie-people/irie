@@ -17,16 +17,24 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/route"
 )
 
 // Backend is what the sidebar asks of the core.
 type Backend interface {
 	Spawn(ipc.SpawnArgs) (ipc.Session, error)
 	Show(id string, focus bool) error
-	// Complete returns the tokens that complete an @ or + token.
-	Complete(text string) ([]string, error)
+	// Complete returns the tokens that complete an @ or + token, and for a
+	// + token what each profile runs and costs.
+	Complete(text string) (ipc.CompleteResult, error)
 	// Move carries a session that runs outside Irie on in Irie.
 	Move(vendorID, profile string) (ipc.Session, error)
+	// Rate rates a session's work good or bad, which teaches the router.
+	Rate(id, verdict string) error
+	// Tool starts a tool session: local setup, or the local models.
+	Tool(name string) (ipc.Session, error)
+	// Route says where a task would run, and why.
+	Route(task string) (route.Choice, error)
 }
 
 // FrameMsg carries one frame of the core's subscription.
@@ -45,9 +53,26 @@ type (
 	completedMsg struct {
 		token string // what was completed
 		items []string
+		notes []string // what each item runs and costs, for profiles
 		err   error
 	}
+	ratedMsg struct {
+		name, verdict string
+		err           error
+	}
+	toolMsg struct {
+		session ipc.Session
+		err     error
+	}
+	routedMsg struct {
+		choice route.Choice
+		err    error
+	}
 )
+
+// commands are what the command bar takes after a colon (DESIGN §4.2,
+// §4.6, §6.4).
+const commands = ":move [NAME], :setup, :models, :rate good|bad, :route TASK"
 
 type focusArea int
 
@@ -89,6 +114,7 @@ type Model struct {
 	width, height int
 	conn          connState
 	gotSnapshot   bool
+	head          ipc.Header // the plan's use and the machine's memory
 
 	sessions []ipc.Session
 	sel      int // selected row, -1 when the list is empty
@@ -276,8 +302,16 @@ func (m *Model) apply(f ipc.Frame) {
 	switch f.T {
 	case ipc.FrameOutside:
 		m.setOutside(f)
+	case ipc.FrameHeader:
+		if f.Header != nil {
+			m.head = *f.Header
+		}
+		return
 	case ipc.FrameSnapshot:
 		m.sessions = slices.Clone(f.Sessions)
+		if f.Header != nil {
+			m.head = *f.Header
+		}
 		if !m.gotSnapshot && len(m.sessions) > 0 && m.bar.Value() == "" {
 			m.setFocus(focusList)
 		}
@@ -379,6 +413,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.moved(msg)
 	case completedMsg:
 		m.completed(msg)
+	case ratedMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+		} else {
+			m.setStatus(fmt.Sprintf("rated %s %s; the router learns from it", msg.name, msg.verdict), false)
+		}
+	case toolMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+			return m, nil
+		}
+		// A tool session waits for its user: it goes into the slot.
+		m.bar.Reset()
+		m.chips = nil
+		m.setFocus(focusList)
+		m.pending = msg.session.ID
+		if i := m.index(msg.session.ID); i >= 0 {
+			m.moveTo(i)
+			m.pending = ""
+		}
+		id, b := msg.session.ID, m.backend
+		return m, func() tea.Msg { return shownMsg{err: b.Show(id, true)} }
+	case routedMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+		} else {
+			m.setStatus(msg.choice.Reason, false)
+		}
 	case tea.PasteMsg:
 		if m.focus != focusBar {
 			m.setFocus(focusBar)
@@ -454,6 +516,10 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "m":
 		cmd := m.moveSelected()
 		return m, cmd
+	case "+":
+		return m, m.rateCmd(ipc.Good)
+	case "-":
+		return m, m.rateCmd(ipc.Bad)
 	case "tab":
 		m.setFocus(focusBar)
 	case ":":
@@ -469,8 +535,8 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.spawning {
 			return m, nil
 		}
-		if cmd, ok := m.barCommand(); ok {
-			return m, cmd
+		if first, _, _ := strings.Cut(strings.TrimSpace(m.bar.Value()), "\n"); strings.HasPrefix(first, ":") {
+			return m.command(first)
 		}
 		args, err := ParseTask(m.bar.Value(), m.home)
 		if err != nil {
@@ -498,8 +564,8 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		b := m.backend
 		return m, func() tea.Msg {
-			items, err := b.Complete(word)
-			return completedMsg{token: word, items: items, err: err}
+			r, err := b.Complete(word)
+			return completedMsg{token: word, items: r.Items, notes: r.Notes, err: err}
 		}
 	}
 	// As the bar grows the list shows fewer rows, but the rows it shows stay
@@ -508,6 +574,53 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.bar, cmd = m.bar.Update(msg)
 	m.clamp()
 	return m, cmd
+}
+
+// rateCmd rates the selected session. A row outside Irie has nothing to
+// rate.
+func (m Model) rateCmd(verdict string) tea.Cmd {
+	if m.sel < 0 || m.sel >= len(m.sessions) {
+		return nil
+	}
+	s, b := m.sessions[m.sel], m.backend
+	return func() tea.Msg { return ratedMsg{name: s.Name, verdict: verdict, err: b.Rate(s.ID, verdict)} }
+}
+
+// command runs a command bar command: a line that starts with a colon.
+func (m Model) command(line string) (tea.Model, tea.Cmd) {
+	name, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
+	arg = strings.TrimSpace(arg)
+	b := m.backend
+	done := func(cmd tea.Cmd) (tea.Model, tea.Cmd) {
+		m.bar.Reset()
+		m.chips = nil
+		return m, cmd
+	}
+	switch {
+	case name == "move":
+		o, err := m.pickOutside(arg)
+		if err != nil {
+			m.setStatus(err.Error(), true)
+			return m, nil
+		}
+		m.setFocus(focusList)
+		return done(m.moveCmd(o))
+	case name == "setup" && (arg == "" || arg == "local"):
+		m.setStatus("starting local setup…", false)
+		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolSetup); return toolMsg{session: s, err: err} }
+	case name == "models" && arg == "":
+		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolModels); return toolMsg{session: s, err: err} }
+	case name == "rate" && (arg == ipc.Good || arg == ipc.Bad):
+		if m.sel < 0 || m.sel >= len(m.sessions) {
+			m.setStatus("no session to rate; select one of Irie's", true)
+			return m, nil
+		}
+		return done(m.rateCmd(arg))
+	case name == "route" && arg != "":
+		return m, func() tea.Msg { ch, err := b.Route(arg); return routedMsg{choice: ch, err: err} }
+	}
+	m.setStatus(fmt.Sprintf("unknown command :%s; the commands are %s", name, commands), true)
+	return m, nil
 }
 
 // wordAtCursor returns the part before the cursor of the word it is in,
@@ -528,8 +641,9 @@ func (m Model) wordAtCursor() (word string, start int, ok bool) {
 }
 
 // completed applies Tab's answer, unless the bar has moved on: one
-// candidate replaces the token, several complete their common start and
-// are listed in the status strip.
+// candidate replaces the token, and the status strip says what a profile
+// runs and costs; several complete their common start and are listed in
+// the status strip.
 func (m *Model) completed(msg completedMsg) {
 	word, start, ok := m.wordAtCursor()
 	if !ok || word != msg.token {
@@ -543,7 +657,11 @@ func (m *Model) completed(msg completedMsg) {
 	case len(msg.items) == 1:
 		// A directory leaves the cursor in the path, for the next part.
 		m.replaceWord(start, word, msg.items[0], !strings.HasSuffix(msg.items[0], "/"))
-		m.setStatus("", false)
+		note := ""
+		if len(msg.notes) == 1 {
+			note = msg.notes[0]
+		}
+		m.setStatus(note, false)
 	default:
 		if p := commonPrefix(msg.items); len([]rune(p)) > len([]rune(word)) {
 			m.replaceWord(start, word, p, false)
