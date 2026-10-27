@@ -33,8 +33,10 @@ type track struct {
 	priority int          // the level of the last priority.set
 
 	// The session's transcripts, then its finished subagents', in the
-	// order the hooks named them: what the token tally reads.
+	// order the hooks named them: what the token tally reads. own are the
+	// session's own, whose titles name it (title.go).
 	transcripts []string
+	own         []string
 }
 
 const (
@@ -50,7 +52,7 @@ func (t *track) apply(e event.Event) {
 	switch e.Kind {
 	case event.SpawnRequested:
 		// A reopened session starts over, but its tokens still count.
-		*t = track{requested: e.Time(), transcripts: t.transcripts}
+		*t = track{requested: e.Time(), transcripts: t.transcripts, own: t.own}
 	case event.SpawnFailed:
 		t.failed = &e
 	case event.PaneExited:
@@ -58,6 +60,9 @@ func (t *track) apply(e event.Event) {
 	case event.SessionStarted:
 		t.started = true
 		t.addTranscript(e.Str("transcript"))
+		if p := e.Str("transcript"); p != "" && !slices.Contains(t.own, p) {
+			t.own = append(t.own, p)
+		}
 		if e.Vendor != nil && e.Vendor.SessionID != "" {
 			t.vendorID = e.Vendor.SessionID
 		}

@@ -49,6 +49,8 @@ type closes struct {
 type closedRecord struct {
 	ID       string
 	Name     string
+	Named    bool // the user chose the name (title.go)
+	Old      bool // closed before Irie recorded named: reopen settles it (oldName)
 	Created  time.Time
 	Closed   time.Time
 	VendorID string // the conversation reopen carries on
@@ -82,6 +84,8 @@ func closedFrom(e event.Event) closedRecord {
 	r := closedRecord{ID: e.Session, Name: e.Str("name"), Closed: e.Time(), VendorID: e.Str("vendor_id")}
 	r.Created, _ = time.Parse(time.RFC3339Nano, e.Str("created"))
 	r.Resume, _ = e.Data["resume"].(bool)
+	named, ok := e.Data["named"].(bool)
+	r.Named, r.Old = named, !ok
 	return r
 }
 
@@ -163,7 +167,7 @@ func (c *Core) closeLocked(id string) error {
 	r := c.reopenable(x)
 	r.Closed = time.Now().UTC().Truncate(time.Millisecond)
 	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: event.SourceUser, Kind: event.UIClosed, Data: map[string]any{
-		"name": x.name, "created": x.created.Format(time.RFC3339Nano), "vendor_id": r.VendorID, "resume": r.Resume,
+		"name": x.name, "named": r.Named, "created": x.created.Format(time.RFC3339Nano), "vendor_id": r.VendorID, "resume": r.Resume,
 	}})
 	c.addClosed(r)
 	delete(c.sessions, id)
@@ -180,7 +184,7 @@ func (c *Core) closeLocked(id string) error {
 // and a session that came in without a task, as a move does, always resumes.
 // The caller holds c.mu.
 func (c *Core) reopenable(x *session) closedRecord {
-	r := closedRecord{ID: x.id, Name: x.name, Created: x.created, VendorID: x.vendorID}
+	r := closedRecord{ID: x.id, Name: x.name, Named: x.named, Created: x.created, VendorID: x.vendorID}
 	if x.track.vendorID != "" {
 		r.VendorID = x.track.vendorID
 	}
@@ -391,8 +395,11 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	}
 	// A new run writes its own exit status.
 	os.Remove(c.paths.ExitFile(r.ID))
+	if r.Old {
+		r.Name, r.Named = c.oldName(r.ID, r.Name)
+	}
 	c.mu.Lock()
-	j.place.name = unique(r.Name, c.names())
+	j.place.name, j.place.named = unique(r.Name, c.names(nil)), r.Named
 	x, err := c.launch(j)
 	if err == nil {
 		c.dropClosed(r.ID)

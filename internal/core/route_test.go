@@ -233,6 +233,11 @@ func TestAUsageLimitFailsOver(t *testing.T) {
 	if cont.Cwd != s.Cwd || cont.Class != route.Small || !cont.Routed {
 		t.Errorf("continuation = %+v, original cwd %s", cont, s.Cwd)
 	}
+	// It goes on under the name, which was not the user's, so Claude Code
+	// may title it.
+	if cont.Name != s.Name+"-2" || c.pane(cont.Pane)["@irie_named"] != "0" {
+		t.Errorf("continuation named %q, pane %v; want %q", cont.Name, c.pane(cont.Pane), s.Name+"-2")
+	}
 	task, _ := os.ReadFile(c.paths.TaskFile(cont.ID))
 	if !strings.HasPrefix(string(task), "[Irie] This task ran on +fake, which stopped at its usage limit.") || !strings.Contains(string(task), "fix the typo") {
 		t.Errorf("continuation task = %q", task)

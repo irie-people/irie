@@ -439,10 +439,14 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 		argv = append(argv, a.(string))
 	}
 	settings := filepath.Join(c.paths.Session(s.ID), "claude-settings.json")
-	for flag, want := range map[string]string{"--settings": settings, "--session-id": s.VendorID, "--name": s.Name} {
+	for flag, want := range map[string]string{"--settings": settings, "--session-id": s.VendorID} {
 		if i := slices.Index(argv, flag); i < 0 || argv[i+1] != want {
 			t.Errorf("argv %q: want %s %s", argv, flag, want)
 		}
+	}
+	// Given no name, Claude Code titles the session itself (title.go).
+	if slices.Contains(argv, "--name") {
+		t.Errorf("argv %q: --name for a session given no name", argv)
 	}
 	if fi, err := os.Stat(settings); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("settings file: %v", err)

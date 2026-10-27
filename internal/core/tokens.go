@@ -11,15 +11,17 @@ import (
 // tokenTally counts a session's model usage from its Claude Code
 // transcripts (JSONL). A reply spans one line per content block and each
 // line repeats the reply's usage, so each message id counts once. Each file
-// is read on from where the last read stopped.
+// is read on from where the last read stopped. The same reads catch the
+// titles Claude Code gives the session (title.go).
 type tokenTally struct {
 	files map[string]*transcriptCount
 }
 
 type transcriptCount struct {
 	follower
-	byID map[string]ipc.Tokens // usage per message id
-	sum  ipc.Tokens
+	byID  map[string]ipc.Tokens // usage per message id
+	sum   ipc.Tokens
+	title string // the newest title read and not yet taken
 }
 
 // maxRead caps one read, so a long transcript is caught up over a few ticks.
@@ -94,12 +96,28 @@ func (t *tokenTally) update(paths []string) (ipc.Tokens, bool) {
 	return total, seen
 }
 
+// title returns the newest title that the transcripts at paths gained since
+// the last call, if any.
+func (t *tokenTally) title(paths []string) (string, bool) {
+	title, ok := "", false
+	for _, p := range paths {
+		if f := t.files[p]; f != nil && f.title != "" {
+			title, ok, f.title = f.title, true, ""
+		}
+	}
+	return title, ok
+}
+
 func (f *transcriptCount) read(path string) {
 	// Replaced or cut short: count it again from the start.
-	f.follower.read(path, func() { f.byID, f.sum = map[string]ipc.Tokens{}, ipc.Tokens{} }, f.line)
+	f.follower.read(path, func() { f.byID, f.sum, f.title = map[string]ipc.Tokens{}, ipc.Tokens{}, "" }, f.line)
 }
 
 func (f *transcriptCount) line(b []byte) {
+	if t, ok := titleLine(b); ok {
+		f.title = t
+		return
+	}
 	if !bytes.Contains(b, []byte(`"usage"`)) {
 		return
 	}
