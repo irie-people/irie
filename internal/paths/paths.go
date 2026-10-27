@@ -78,6 +78,7 @@ func (p Paths) TaskFile(id string) string     { return filepath.Join(p.Session(i
 func (p Paths) ExitFile(id string) string     { return filepath.Join(p.Session(id), "exit.json") }
 func (p Paths) StatusFile(id string) string   { return filepath.Join(p.Session(id), "status.json") }
 func (p Paths) LocalFile() string             { return filepath.Join(p.State, "local.json") }
+func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
 func (p Paths) ScratchDir(slug string) string { return filepath.Join(p.Scratch(), slug) }
 
 // EnsureState creates the state and data directories with mode 0700.
