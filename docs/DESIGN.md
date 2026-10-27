@@ -68,6 +68,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
 4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
+6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
 
 ### 2.2 Processes
 
