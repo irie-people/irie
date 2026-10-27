@@ -176,6 +176,7 @@ private struct SessionCard: View {
                 Button("Copy the branch name") { store.copy(branch, what: "branch name") }
             }
             Button("Copy the session ID") { store.copy(session.id, what: "session ID") }
+            Button("Close the session") { store.close(session) }
         }
     }
 
@@ -458,6 +459,8 @@ private struct Actions: View {
             Button("Copy Branch Name") { store.copy(branch, what: "branch name") }
         }
         Button("Copy Session ID") { store.copy(session.id, what: "session ID") }
+        Divider()
+        Button("Close Session") { store.close(session) }
     }
 }
 

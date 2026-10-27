@@ -92,6 +92,8 @@ struct Frame: Decodable {
     /// An outside frame: the sessions outside Irie, and why the list may be old.
     var outside: [OutsideSession]?
     var problem: String?
+    /// A closed frame: the sessions reopen can bring back, the last closed first.
+    var closed: [ClosedSession]?
 }
 
 struct HelloArgs: Encodable {
