@@ -61,7 +61,8 @@ type Item struct {
 	ID   string    `json:"id"`
 	Kind string    `json:"kind"`
 	Time time.Time `json:"time"`
-	// Text is a message, the agent's Markdown, a note, or what a need asks.
+	// Text is a message, the agent's Markdown, a note, what a need asks, or
+	// a subagent's task in a few words.
 	Text string `json:"text,omitempty"`
 	// Phrase is a tool call or a subagent in plain words: "Running the
 	// tests" while it runs, "Ran the tests" once it has.

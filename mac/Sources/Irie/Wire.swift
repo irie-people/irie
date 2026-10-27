@@ -122,11 +122,25 @@ struct SpawnArgs: Encodable {
     var repo: String?
     var inPlace: Bool?
     var profile: String?
+    /// A model for this task instead of its profile's; only a core whose
+    /// hello lists spawn-model takes it.
+    var model: String?
 
     enum CodingKeys: String, CodingKey {
-        case task, repo, profile
+        case task, repo, profile, model
         case inPlace = "in_place"
     }
+}
+
+/// An @ or + word to complete: "@" lists the repos, "+" the agents.
+struct CompleteArgs: Encodable {
+    var text: String
+}
+
+struct CompleteResult: Decodable {
+    var items: [String]
+    /// What each item runs and costs, for the + words.
+    var notes: [String]?
 }
 
 struct SpawnResult: Decodable {

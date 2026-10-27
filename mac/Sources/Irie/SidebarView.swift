@@ -22,7 +22,10 @@ struct SidebarView: View {
                 ModeSwitch()
             }
             DetailsPanel()
+            // The footer sits lighter than the list, with rounded top corners.
             TaskBar()
+                .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
+                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
@@ -118,10 +121,12 @@ private struct SessionCard: View {
     @State private var hovering = false
 
     private var look: Look { Look(session) }
+    /// Its own colour while it works, so a glance tells the agents apart.
+    private var tint: Color? { Look.agentTint(session) }
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
-            StateMark(look: look).padding(.top, 2)
+            StateMark(look: look, tint: tint).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.name)
                     .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
@@ -202,6 +207,7 @@ private struct SessionCard: View {
     private var edge: Color {
         if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
         if hovering { return Theme.accent.opacity(0.45) }
+        if let tint { return tint.opacity(0.55) }
         return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
     }
 
