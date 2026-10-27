@@ -170,7 +170,7 @@ func state(r ipc.StatusReply, own string) seg {
 		}
 	case ipc.StateDone, ipc.StateIdle:
 		if n == 0 {
-			s.add(green, "✓ done")
+			s.add(green, "✓ to verify")
 		} else if k := kinds(r.Subagents); k != "" {
 			s.add("", "◐ waiting on "+helpers(n)+": "+k)
 		} else {

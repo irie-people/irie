@@ -199,7 +199,7 @@ func (m Model) counts(w int) string {
 	}{
 		{"◐", "working", working, p.ink},
 		{"●", "needs you", needs, p.needs},
-		{"✓", "done", done, m.look(ipc.Session{State: ipc.StateDone}).mark},
+		{"✓", "to verify", done, m.look(ipc.Session{State: ipc.StateDone}).mark},
 		{"‖", "paused", paused, p.paused},
 		{"◆", "frozen", frozen, p.frozen},
 	}
@@ -207,8 +207,8 @@ func (m Model) counts(w int) string {
 		var parts []string
 		for _, x := range all {
 			// With close_when_done a finished session closes itself: no
-			// Done count, and history has what closed.
-			if x.label == "done" && m.head.CloseWhenDone {
+			// To verify count, and history has what closed.
+			if x.label == "to verify" && m.head.CloseWhenDone {
 				continue
 			}
 			text := fmt.Sprintf("%s%d", x.glyph, x.n)

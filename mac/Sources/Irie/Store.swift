@@ -35,8 +35,8 @@ final class Store: ObservableObject {
     /// it for the marks; this draws the views again when it changes.
     @Published private(set) var redOnDone = false
     /// spawn.close_when_done, from the core: a finished session closes
-    /// itself, so the sidebar keeps no Done group and the title bar no Done
-    /// count. What closed is in history (`irie ctl history`, ⇧⌘T).
+    /// itself, so the sidebar keeps no To verify group and the title bar no
+    /// To verify count. What closed is in history (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
