@@ -153,7 +153,7 @@ Generated tmux.conf, essentials:
 | `set-titles on`, `set-titles-string Irie` | Sets the Ghostty window title, which is used to find the window (§7.1) |
 | `escape-time 10` | Esc reaches agents promptly |
 
-**Swap-in.** The slot holds either the placeholder P or one agent pane A. While A is shown, A's own window holds P. To show B, the core sends one command list, so no client ever draws the in-between state:
+**Swap-in.** The slot holds either the placeholder P or one agent pane A. P also draws the conversation of the session you picked, so in the conversation view a shown session's own pane stays home and P stays in the slot (§4.7). While A is shown, A's own window holds P. To show B, the core sends one command list, so no client ever draws the in-between state:
 
 ```
 swap-pane -d -s irie:0.1 -t <P>     # only if an agent A is shown: A goes home, P returns to the slot
@@ -215,6 +215,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `preflight` | `profile`, `model?`, `remember?`, `force?` | `ok`, `problems[]`, `warnings[]`, the context and memory the model got | M10 |
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
 | `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle. A local profile is checked as for a spawn (§6.1) before the outside copy ends | Sessions outside Irie (§4.6) |
+| `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
 | `conversation` | `session`, `limit?` | `session`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
 
@@ -380,6 +381,7 @@ type Harness interface {
 | Enter, click | Show the session in the slot and focus it |
 | Space | Show it, keep focus in the sidebar |
 | `Ctrl+]` (tmux binding) | Toggle focus between sidebar and slot |
+| `Ctrl+\` (tmux binding, `ui.flip_key`) | Flip the slot between the shown session's conversation and its raw terminal (§4.7) |
 | Tab, `:` | Focus the command bar (`:` pre-fills a colon) |
 | `/` | Fuzzy jump: the list filters as you type, Enter shows the match (M4) |
 | `1`–`9` | Jump to the nth visible row (M4) |
@@ -625,9 +627,13 @@ Left out: the model's thinking, expanded skills and other meta lines, Claude Cod
 
 **Sending** (`send`). A message reaches the agent the way a person typing would, through the core, the only writer to tmux: the text goes into a tmux buffer from a file, `paste-buffer -p` pastes it into the agent's pane (bracketed when the agent asked for bracketed paste, with control characters other than tabs and newlines shown as `^X`), and Enter follows 150 ms later. Claude Code queues a message that arrives while it works for its next tool boundary. While the agent waits on you in its terminal (a permission, a question, a plan), Enter would answer that prompt, so `send` refuses with `busy` and a view offers the terminal instead. It also refuses before the agent is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste, where each newline would be Enter. One message is typed at a time. A sent message shows in `pending` until the transcript has a message from you as new as it, and for 15 minutes at most.
 
+**In the terminal.** The slot's placeholder pane (`irie placeholder`) draws the shown session's conversation, the way the Mac app does, in Bubble Tea and Lip Gloss: a header with the name and what it is doing, your messages in rounded cards, Claude's replies in Markdown, one line per call with a ✓, ✕ or ring, how long it took and the lines an edit changed, runs of reads, edits or searches as one line, subagents as `↳ Explore` lines, notes as ruled lines, what it waits on you for in a red card, and a message box that sends with Enter (Shift+Enter or Ctrl+J for a new line); PgUp, PgDn and the wheel scroll. While the agent waits on you, a banner takes the box's place. With no session picked, it lists the keys.
+- **The view.** `show` picks a session. In the conversation view, the default (`ui.view`), its own pane stays home and P stays in the slot; the picked session's row is `shown`, and P follows the row the core marks shown. In the terminal view the session's pane is swapped in, as before. `flip` (`irie ctl flip`, bound to `ui.flip_key`, Ctrl+\ by default, which Claude Code's documented shortcuts do not use) turns the view and focuses the slot. The core keeps the picked session and the view in the server options `@irie_selected` and `@irie_raw`, so a restarted core keeps them.
+- **The Mac app.** While the app is open the slot shows the picked session's raw terminal whatever the view, since the app draws its own conversation; the flip key goes to the agent then, as the focus key does. When the app closes, the view comes back.
+
 **Frames.** A follower's first frame carries the newest 1,000 items with `reset`; later ones carry only the items that changed, which a client replaces by id or appends, plus `needs`. A transcript that shrank was replaced: the conversation starts over with a `reset`.
 
-**Tests:** each kind of transcript line, read in halves, across `/clear` and replacement; stopped calls; finding the transcript Claude Code keeps; the op, the frames and `needs` with the fake agent; a sent message reaching the fake agent and leaving `pending` once the transcript has it; refusals while it asks a question and for several lines without bracketed paste.
+**Tests:** each kind of transcript line, read in halves, across `/clear` and replacement; stopped calls; finding the transcript Claude Code keeps; the op, the frames and `needs` with the fake agent; a sent message reaching the fake agent and leaving `pending` once the transcript has it; refusals while it asks a question and for several lines without bracketed paste; the slot showing a conversation, flipping to the raw terminal and back, a restarted core keeping the view, the flip key's binding, and the slot pane drawing a shown conversation in tmux; the slot program's cards, sending, banner, keys and scrolling.
 
 ---
 
@@ -726,6 +732,8 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 [ui]
 sidebar_width = 34            # columns
 focus_key = "C-]"             # tmux key that toggles sidebar <-> slot
+flip_key = "C-\\"            # tmux key that flips the slot: conversation <-> raw terminal ("" for none)
+view = "conversation"         # what the slot shows first: conversation | terminal (§4.7)
 max_sub_rows = 6
 red_on_done = false
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)

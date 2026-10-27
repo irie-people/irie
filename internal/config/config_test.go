@@ -21,7 +21,7 @@ func writeFile(t *testing.T, body string) string {
 
 func TestDefaultsMatchDesign(t *testing.T) {
 	c := Default()
-	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"}); c.UI != want {
+	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second}); c.Spawn != want {
@@ -127,6 +127,8 @@ func TestFileOverridesEachKey(t *testing.T) {
 [ui]
 sidebar_width = 40
 focus_key = "C-o"
+flip_key = "M-t"
+view = "terminal"
 max_sub_rows = 3
 red_on_done = true
 ghostty = "off"
@@ -198,7 +200,7 @@ status_line = false
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", MaxSubRows: 3, RedOnDone: true, Ghostty: "off"}); c.UI != want {
+	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second}); c.Spawn != want {

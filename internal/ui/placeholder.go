@@ -7,13 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Placeholder is `irie placeholder`: what the slot shows while no session
-// is shown. It lists the keys and ignores input.
-func Placeholder(focusKey string) error {
-	_, err := tea.NewProgram(placeholder{focusKey: keyLabel(focusKey)}).Run()
-	return err
-}
-
 // keyLabel turns a tmux key name such as C-] into Ctrl+].
 func keyLabel(k string) string {
 	for _, m := range [][2]string{{"C-", "Ctrl+"}, {"M-", "Alt+"}, {"S-", "Shift+"}} {
@@ -22,9 +15,12 @@ func keyLabel(k string) string {
 	return k
 }
 
+// placeholder is what the slot shows while no session is shown (Slot):
+// the keys. It ignores input.
 type placeholder struct {
 	w, h     int
 	focusKey string
+	flipKey  string // "" when there is no flip key
 }
 
 func (placeholder) Init() tea.Cmd { return nil }
@@ -67,8 +63,9 @@ func (p placeholder) View() tea.View {
 		{[]string{"Space"}, "show it, stay in the sidebar"},
 	}
 	focus := key{[]string{p.focusKey}, "move between the sidebar and here"}
+	flip := key{[]string{p.flipKey}, "flip between its conversation and its terminal"}
 	width := 0
-	for _, k := range append([]key{focus}, inSidebar...) {
+	for _, k := range append([]key{focus, flip}, inSidebar...) {
 		w := 0
 		for _, c := range k.caps {
 			w += lipgloss.Width(c) + 2
@@ -82,7 +79,11 @@ func (p placeholder) View() tea.View {
 		}
 		return caps + spaces(width-lipgloss.Width(caps)) + "  " + styleDim.Render(k.what)
 	}
-	keys := []string{line(focus), "", styleDim.Render("In the sidebar:")}
+	keys := []string{line(focus)}
+	if p.flipKey != "" {
+		keys = append(keys, line(flip))
+	}
+	keys = append(keys, "", styleDim.Render("In the sidebar:"))
 	for _, k := range inSidebar {
 		keys = append(keys, line(k))
 	}

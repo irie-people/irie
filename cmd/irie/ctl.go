@@ -42,6 +42,8 @@ const ctlUsage = `usage: irie ctl <command>
   irie ctl rename SESSION NAME...        rename a session, by its id or name,
                                          and print the name it got: numbered
                                          when another session has it
+  irie ctl flip                          flip the slot between the shown session's
+                                         conversation and its raw terminal
   irie ctl send SESSION TEXT...          type a message to a session's agent, as
                                          a person would; TEXT - reads stdin
   irie ctl conversation [--json] [--follow] SESSION
@@ -95,6 +97,8 @@ func ctl(args []string) error {
 		return ctlConversation(args[1:])
 	case "send":
 		return ctlSend(args[1:])
+	case "flip":
+		return ctlFlip(args[1:])
 	case "watch":
 		return ctlWatch(args[1:])
 	case "move":
@@ -608,4 +612,16 @@ func ctlReopen(args []string) error {
 	}
 	fmt.Println(r.Session.ID)
 	return nil
+}
+
+func ctlFlip(args []string) error {
+	if len(args) > 0 {
+		return errors.New("usage: irie ctl flip")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var r ipc.FlipResult
+	return ipc.Call(sock, 10*time.Second, ipc.OpFlip, nil, &r)
 }

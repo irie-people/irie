@@ -76,8 +76,9 @@ func run(args []string) int {
 		}
 		return host.Run(*spec)
 	case "placeholder":
-		cfg, _, _ := load()
-		err = ui.Placeholder(cfg.UI.FocusKey)
+		// The slot's own pane: the shown session's conversation, or the keys.
+		cfg, p, _ := load()
+		err = ui.Slot(p.Socket(), ui.SlotOptions{FocusKey: cfg.UI.FocusKey, FlipKey: cfg.UI.FlipKey})
 	case "hook":
 		return hook.Run(os.Stdin, os.Stdout, os.Getenv)
 	case "statusline":

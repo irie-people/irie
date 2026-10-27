@@ -68,7 +68,7 @@ func (c *coreEnv) waitGone(pane string, d time.Duration) {
 }
 
 func TestCloseSwapsThePaneOutAndEndsTheAgentGently(t *testing.T) {
-	c := setup(t)
+	c := setupWith(t, agentConfig{terminal: true})
 	a, b := c.spawn("prompt"), c.spawn("prompt")
 	c.waitState(a.ID, ipc.StateWorking)
 	c.waitState(b.ID, ipc.StateWorking)
