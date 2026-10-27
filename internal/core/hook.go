@@ -44,7 +44,8 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
 	var reply ipc.HookResult
-	failover := false
+	failover, turnEnded := false, false
+	x.quiet++
 	for _, e := range evs {
 		input := call.Input
 		if c.cfg.Journal.ToolInput == "none" {
@@ -61,6 +62,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			c.saveResult(x, msg)
 		}
 		c.record(x, e)
+		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:
 			reply.Context = c.delegateHint(x)
@@ -68,7 +70,13 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			failover = true
 		}
 	}
+	if n := c.takeNote(x, evs); n != "" {
+		reply.Context = strings.TrimSpace(reply.Context + "\n\n" + n)
+	}
 	c.followConversation(x)
+	if turnEnded && c.cfg.Spawn.CloseWhenDone {
+		c.closeWhenDone(x)
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

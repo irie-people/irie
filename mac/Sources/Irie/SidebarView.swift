@@ -16,7 +16,12 @@ struct SidebarView: View {
         // One row of its own above the cards: Irie's mark, its name and the
         // counts sit in the title bar, beside the traffic lights.
         VStack(spacing: 0) {
+            // The header sits lighter than the list, with rounded bottom
+            // corners, like the footer.
             FindField()
+                .background(UnevenRoundedRectangle(bottomLeadingRadius: Theme.frameRadius, bottomTrailingRadius: Theme.frameRadius, style: .continuous)
+                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
+                .zIndex(1)
             content
             if !store.sessions.isEmpty {
                 ModeSwitch()
@@ -130,17 +135,20 @@ private struct SessionCard: View {
     private var tint: Color? { Look.agentTint(session) }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
+        HStack(alignment: .top, spacing: 8) {
             StateMark(look: look, tint: tint).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 if renaming {
                     RenameField(session: session)
                 } else {
-                    Text(session.name)
-                        .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
-                        .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 4) {
+                        Text(session.name)
+                            .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
+                            .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if session.isPromoted { PromotedBadge() }
+                    }
                 }
                 Text(status)
                     .font(Theme.font(12, look.loud ? .semibold : .regular))
@@ -164,8 +172,7 @@ private struct SessionCard: View {
             .frame(width: 66, alignment: .trailing)
         }
         .padding(.vertical, 8)
-        .padding(.leading, 11)
-        .padding(.trailing, 7)
+        .padding(.horizontal, Theme.inset)
         .background(shape.fill(fill).shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
@@ -173,6 +180,7 @@ private struct SessionCard: View {
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
         // A double click opens the name to edit; its first click showed it.
         .simultaneousGesture(TapGesture(count: 2).onEnded { store.beginRename(session.id) })
+        .modifier(Reorderable(session: session))
         .contextMenu { Actions(session: session) }
         .help([session.name, session.detail, session.command].compactMap { $0 }.joined(separator: "\n"))
         // While the name is open to edit, VoiceOver reaches the field.
@@ -181,6 +189,10 @@ private struct SessionCard: View {
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { store.show(session.id, focus: true) }
         .accessibilityActions {
+            Button(session.isFrozen ? "Resume" : "Pause") { store.setFrozen(session, !session.isFrozen) }
+            Button(session.isPromoted ? "Stop promoting" : "Promote to the top") { store.setPromoted(session, !session.isPromoted) }
+            if store.canMove(session, by: -1) { Button("Move up") { store.move(session, by: -1) } }
+            if store.canMove(session, by: 1) { Button("Move down") { store.move(session, by: 1) } }
             Button("Rename") { store.beginRename(session.id) }
             if let cwd = session.cwd {
                 Button("Show the folder in Finder") { store.reveal(cwd) }
@@ -202,6 +214,7 @@ private struct SessionCard: View {
     private var status: String {
         switch look {
         case .starting: return "Starting…"
+        case .frozen where session.freezing == true: return "Freezing…"
         case .done, .idle, .frozen, .paused, .pausing: return look.label
         default: return session.detail ?? look.label
         }
@@ -340,8 +353,9 @@ private struct HelperRows: View {
                     Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(Theme.muted)
                 }
             }
+            // Under the card's name: its inset, its mark and the gap.
             .padding(.leading, 34)
-            .padding(.trailing, 8)
+            .padding(.trailing, Theme.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
         }
@@ -389,11 +403,9 @@ private struct QuickActions: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Button { store.show(session.id, focus: true) } label: { Image(systemName: "keyboard").frame(width: 20, height: 18) }
-                .help("Type to it")
-            Button { if let cwd = session.cwd { store.reveal(cwd) } } label: { Image(systemName: "folder").frame(width: 20, height: 18) }
-                .help("Show the folder in Finder")
-                .disabled(session.cwd == nil)
+            // A click on the card types to it; the folder is in the menu.
+            PauseButton(session: session)
+            PromoteButton(session: session)
             Menu {
                 Actions(session: session)
             } label: {
@@ -436,7 +448,7 @@ private struct DetailsPanel: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, Theme.inset)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(shape.fill(Theme.panel))
@@ -470,6 +482,7 @@ private struct DetailsPanel: View {
             }
             .controlSize(.small)
             line(s.detail, color: look.loud ? Theme.needs : Theme.ink)
+            ControlLines(session: s)
             line(s.command, mono: true)
             line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
             line(s.cwd.map(Age.tilde), mono: true)
@@ -517,6 +530,8 @@ private struct Actions: View {
         }
         Button("Rename…") { store.beginRename(session.id) }
         Divider()
+        ControlItems(session: session)
+        Divider()
         if let cwd = session.cwd {
             Button("Show Folder in Finder") { store.reveal(cwd) }
             Button("Copy Folder Path") { store.copy(cwd, what: "folder path") }
@@ -562,7 +577,9 @@ private struct Counts: View {
             case .online:
                 count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
                 count([.working], mark: .working, color: Theme.ink, label: "working")
-                count([.done], mark: .done, color: Look.doneColor, label: "done, not yet seen")
+                if !store.closeWhenDone {
+                    count([.done], mark: .done, color: Look.doneColor, label: "done, not yet seen")
+                }
                 if store.sessions.contains(where: { [.paused, .pausing].contains(Look($0)) }) {
                     count([.paused, .pausing], mark: .paused, color: Theme.paused, label: "paused")
                 }
@@ -633,7 +650,7 @@ private struct FindField: View {
                 .help("Clear")
                 .accessibilityLabel("Clear the search")
         }
-        .padding(.horizontal, 9)
+        .padding(.horizontal, Theme.inset)
         .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field)
             .shadow(color: Theme.shadow, radius: 2, y: 1))
@@ -641,9 +658,7 @@ private struct FindField: View {
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                 .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
-        .padding(.horizontal, 10)
-        .padding(.top, 2)
-        .padding(.bottom, 4)
+        .padding(10)
         .onChange(of: store.focusFind) { focused = true }
     }
 }

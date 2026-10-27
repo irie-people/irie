@@ -326,6 +326,7 @@ func TestEveryCellIsOnThePalette(t *testing.T) {
 			m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &plan}})
 			helped := everyState()[5]
 			helped.Subagents = []ipc.Subagent{{Type: "Explore", Detail: "Reading DESIGN.md"}, {NeedsYou: true, Detail: "Asks: may it edit go.mod?"}, {}, {}}
+			helped.Priority = 1 // and promoted, with its badge
 			m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &helped}})
 			painted(t, name+", list", m)
 			for y := range h {
@@ -363,5 +364,58 @@ func TestEveryCellIsOnThePalette(t *testing.T) {
 		m, _ := newModel(t, 34, 24, 0)
 		m = send(m, tea.BackgroundColorMsg{Color: lipgloss.Color(bg)})
 		painted(t, bg+" the placeholder", m)
+	}
+}
+
+// The slot's pane, the conversation and the keys, draws in the sidebar's
+// palette on its ground, every cell of it, light or dark.
+func TestTheSlotIsOnThePalette(t *testing.T) {
+	t.Cleanup(func() { slotColours(themes[defaultTheme].dark) })
+	check := func(name string, m *slotModel) {
+		t.Helper()
+		lines := strings.Split(m.View().Content, "\n")
+		if len(lines) != m.h {
+			t.Errorf("%s: %d lines, want %d", name, len(lines), m.h)
+		}
+		for i, l := range lines {
+			if w := lipgloss.Width(l); w != m.w {
+				t.Errorf("%s: line %d is %d columns, want %d", name, i, w, m.w)
+			}
+			for _, c := range cells(l) {
+				if c.bg != rgb(m.pal.ground) {
+					t.Errorf("%s: line %d: %q is on %q, not the ground: %q", name, i, c.r, c.bg, ansiRE.ReplaceAllString(l, ""))
+					break
+				}
+			}
+		}
+	}
+	for _, bg := range []string{"#101010", "#FAFAFA"} {
+		for _, state := range []string{ipc.StateWorking, ipc.StateNeedsYou, ipc.StateExited} {
+			m, _ := aSlot(t, state)
+			m = slotSend(m, tea.BackgroundColorMsg{Color: lipgloss.Color(bg)})
+			check(bg+" "+state, m)
+		}
+		m := newSlot(&fakeSlotBackend{}, SlotOptions{FocusKey: "C-]", FlipKey: `C-\`})
+		m = slotSend(m, tea.WindowSizeMsg{Width: 90, Height: 40})
+		m = slotSend(m, tea.BackgroundColorMsg{Color: lipgloss.Color(bg)})
+		check(bg+" the keys", m)
+	}
+}
+
+// The slot takes ui.theme and the terminal's background as the sidebar does.
+func TestTheSlotFollowsTheTheme(t *testing.T) {
+	t.Cleanup(func() { slotColours(themes[defaultTheme].dark) })
+	m := newSlot(&fakeSlotBackend{}, SlotOptions{FocusKey: "C-]", Theme: "lilac"})
+	if m.pal != themes["lilac"].dark || !asksForBackground(m.Init()) {
+		t.Fatalf("a new slot is not lilac's dark set, or does not ask for the background")
+	}
+	m = slotSend(m, tea.WindowSizeMsg{Width: 60, Height: 30})
+	m = slotSend(m, tea.BackgroundColorMsg{Color: lipgloss.Color("#FAFAFA")})
+	first := cells(strings.Split(m.View().Content, "\n")[0])[0]
+	if m.pal != themes["lilac"].light || first.bg != rgb(themes["lilac"].light.ground) {
+		t.Errorf("on a light terminal the slot is on %s", first.bg)
+	}
+	if _, cmd := m.Update(tea.WindowSizeMsg{Width: 70, Height: 30}); !asksForBackground(cmd) {
+		t.Error("a new size does not ask for the background")
 	}
 }

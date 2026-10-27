@@ -85,10 +85,12 @@ var PermissionModes = []string{"acceptEdits", "auto", "bypassPermissions", "defa
 type UI struct {
 	SidebarWidth int    `toml:"sidebar_width"` // columns
 	FocusKey     string `toml:"focus_key"`     // tmux key that toggles sidebar and slot
+	FlipKey      string `toml:"flip_key"`      // tmux key that flips the slot between conversation and terminal; "" for none
+	View         string `toml:"view"`          // what the slot shows first: conversation | terminal
 	MaxSubRows   int    `toml:"max_sub_rows"`
 	RedOnDone    bool   `toml:"red_on_done"`
 	Ghostty      string `toml:"ghostty"` // auto | off
-	Theme        string `toml:"theme"`   // the sidebar's palette, one of Themes
+	Theme        string `toml:"theme"`   // the palette of the sidebar and the slot, one of Themes
 }
 
 // Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's. Each has a
@@ -100,6 +102,8 @@ type Spawn struct {
 	DefaultCwd     string        `toml:"default_cwd"` // "" = a new scratch dir per task
 	ReadyTimeout   time.Duration `toml:"ready_timeout"`
 	HideTmux       bool          `toml:"hide_tmux"`
+	CloseWhenDone  bool          `toml:"close_when_done"` // close a session once its turn ends and it stays quiet for close_delay
+	CloseDelay     time.Duration `toml:"close_delay"`     // how long a finished session waits before it closes
 }
 
 // Profile is a named launch recipe.
@@ -200,11 +204,12 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", Theme: "rosewater"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", Theme: "rosewater"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
 			HideTmux:       true,
+			CloseDelay:     30 * time.Second,
 		},
 		Profiles: map[string]Profile{
 			"claude": {
@@ -462,6 +467,12 @@ func (c Config) Validate() error {
 	if !tmuxKey.MatchString(c.UI.FocusKey) || strings.ContainsAny(c.UI.FocusKey, `'"#`) {
 		bad("ui.focus_key = %q: must be a tmux key name such as C-]", c.UI.FocusKey)
 	}
+	if c.UI.FlipKey != "" && (!tmuxKey.MatchString(c.UI.FlipKey) || strings.ContainsAny(c.UI.FlipKey, `'"#`) || c.UI.FlipKey == c.UI.FocusKey) {
+		bad("ui.flip_key = %q: must be a tmux key name such as C-\\, other than ui.focus_key, or empty for none", c.UI.FlipKey)
+	}
+	if c.UI.View != "conversation" && c.UI.View != "terminal" {
+		bad("ui.view = %q: must be conversation or terminal", c.UI.View)
+	}
 	if c.UI.MaxSubRows < 0 {
 		bad("ui.max_sub_rows = %d: must not be negative", c.UI.MaxSubRows)
 	}
@@ -514,6 +525,9 @@ func (c Config) Validate() error {
 	}
 	if c.Spawn.ReadyTimeout <= 0 {
 		bad("spawn.ready_timeout = %v: must be positive", c.Spawn.ReadyTimeout)
+	}
+	if c.Spawn.CloseDelay < 0 {
+		bad("spawn.close_delay = %v: must not be negative", c.Spawn.CloseDelay)
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.Profiles)) {
 		p := c.Profiles[name]

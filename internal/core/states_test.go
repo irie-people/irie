@@ -520,7 +520,7 @@ func TestARestartedCoreKeepsTheDerivedStates(t *testing.T) {
 }
 
 func TestCtlSpawnsWithNoWindowOpen(t *testing.T) {
-	c := prepare(t, agentConfig{})
+	c := prepare(t, agentConfig{terminal: true})
 	ctl := func(args ...string) (string, string, error) {
 		t.Helper()
 		cmd := exec.Command(c.bin, append([]string{"ctl"}, args...)...)

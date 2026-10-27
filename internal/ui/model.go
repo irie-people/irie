@@ -85,7 +85,7 @@ type (
 
 // commands are what the command bar takes after a colon (DESIGN §4.2,
 // §4.6, §6.4).
-const commands = ":rename NAME, :move [NAME], :close, :reopen, :setup, :models, :rate good|bad, :route TASK"
+const commands = ":rename NAME, :move [NAME], :close, :reopen, :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON]"
 
 type focusArea int
 
@@ -143,6 +143,7 @@ type Model struct {
 	offset   int             // the first entry on screen
 	hover    string          // the key of the entry or tab under the pointer
 	pending  string
+	drag     *drag // what the mouse holds (control.go)
 
 	outside        []ipc.OutsideSession // the Outside Irie group, after the sessions (outside.go)
 	outsideProblem string
@@ -275,6 +276,8 @@ func (m *Model) apply(f ipc.Frame) {
 		}
 		m.sessions = slices.Delete(m.sessions, i, i+1)
 	}
+	// Rows keep the core's one order (control.go).
+	m.sortByOrder()
 	items := m.items()
 	// The selection follows its entry; when that went, it moves to the next.
 	if i := keyIndex(items, selected); i >= 0 {
@@ -426,6 +429,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.hover = m.hoverAt(msg.X, msg.Y)
 	case tea.MouseMotionMsg:
+		// With the button held the pointer carries what it took hold of;
+		// else it lights what it is over.
+		if msg.Button == tea.MouseLeft && m.drag != nil {
+			m.hover = ""
+			m.dragTo(msg.Y)
+			break
+		}
 		m.hover = m.hoverAt(msg.X, msg.Y)
 	case tea.BlurMsg:
 		m.hover = ""
@@ -439,17 +449,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		if i, _, ok := m.at(msg.Y); ok {
-			// A click selects what it is on: a card or row shows its
-			// session, a header folds its group.
-			m.sel = i
-			m.setFocus(focusList)
-			cmd := m.open(true)
-			m.reveal()
-			return m, cmd
+			// The press takes hold of what it is on. The release opens it,
+			// as a click does, or drops a card a drag carried (control.go).
+			m.press(i)
+			return m, nil
 		}
 		if msg.Y >= m.barTop()-b2i(m.tabbed()) {
 			m.setFocus(focusBar)
 		}
+	case tea.MouseReleaseMsg:
+		return m.release(msg.Y)
+	case controlledMsg:
+		m.controlled(msg)
 	case tea.KeyPressMsg:
 		if m.focus == focusBar {
 			return m.barKey(msg)
@@ -488,6 +499,10 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "m":
 		cmd := m.moveSelected()
 		return m, cmd
+	case "f", "F":
+		return m.freezeKey(msg.String() == "F")
+	case "!":
+		return m.promoteKey("")
 	case "r":
 		// The name is edited in the command bar, with its keys and the
 		// terminal's own cursor; Enter renames, Esc keeps the name.
@@ -524,6 +539,16 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if first, _, _ := strings.Cut(strings.TrimSpace(m.bar.Value()), "\n"); strings.HasPrefix(first, ":") {
 			return m.command(first)
+		}
+		if q, ok := ParseHows(m.bar.Value()); ok {
+			if s := FindSession(m.sessions, q); s != nil {
+				m.setStatus(Hows(*s), false)
+			} else {
+				m.setStatus("no agent matches “"+q+"”", true)
+			}
+			m.bar.Reset()
+			m.chips = nil
+			return m, nil
 		}
 		args, err := ParseTask(m.bar.Value(), m.home)
 		if err != nil {
@@ -583,6 +608,9 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 		m.bar.Reset()
 		m.chips = nil
 		return m, cmd
+	}
+	if model, cmd, ok := m.controlCommand(name, arg); ok {
+		return model, cmd
 	}
 	switch {
 	case name == "move":

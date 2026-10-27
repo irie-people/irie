@@ -28,9 +28,17 @@ struct Session: Codable, Identifiable, Equatable {
     var shown: Bool?
     var subagents: [Subagent]?
     var tokens: Tokens?
+    /// Its place in the list, which the user sets; when it was frozen, and
+    /// whether its agent still runs on to its next tool call; 1 while it is
+    /// promoted (Controls.swift).
+    var order: Int?
+    var frozen: Date?
+    var freezing: Bool?
+    var priority: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, tokens
+        case order, frozen, freezing, priority
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -102,9 +110,13 @@ struct Frame: Decodable {
 struct Header: Decodable {
     /// ui.red_on_done: a done session is drawn red, not green.
     var redOnDone: Bool?
+    /// spawn.close_when_done: finished sessions close themselves, so there
+    /// is no Done group or count.
+    var closeWhenDone: Bool?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
+        case closeWhenDone = "close_when_done"
     }
 }
 

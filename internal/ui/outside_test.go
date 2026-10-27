@@ -130,7 +130,7 @@ func TestEnterOnAnOutsideRowExplains(t *testing.T) {
 	if !strings.Contains(m.status, "runs outside Irie") || !strings.Contains(m.status, "m moves it in") || m.statusErr {
 		t.Errorf("status = %q", m.status)
 	}
-	m = send(m, tea.MouseClickMsg{X: 5, Y: lineOf(t, m, "outside-01"), Button: tea.MouseLeft})
+	m = click(m, 5, lineOf(t, m, "outside-01"))
 	if len(b.shows) != 0 || selectedName(m) != "outside-01" || !strings.Contains(m.status, "outside-01 runs outside Irie") || !strings.Contains(m.status, "busy") {
 		t.Errorf("click: shows %+v, selection %s, status %q", b.shows, selectedName(m), m.status)
 	}

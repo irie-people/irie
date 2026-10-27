@@ -85,8 +85,33 @@ func (m Model) padded(edge, fill color.Color, ps ...piece) string {
 	return m.boxLine(edge, blank(fill, 1)+spread(fill, m.width-6, ps...)+blank(fill, 1))
 }
 
-// label is a state in plain words.
-func label(s ipc.Session) string {
+// marks are what a session's line starts with: its state's glyph, then the
+// flags of DESIGN §5.3 next to it (◆ when it is frozen under a state that
+// comes first), then for a promoted session an ↑ in the accent, else a
+// space before the name.
+func (m Model) marks(s ipc.Session) []piece {
+	p, l := m.pal, m.look(s)
+	ps := []piece{{l.glyph, l.mark, false}}
+	if s.Frozen != nil && s.State != ipc.StateFrozen {
+		ps = append(ps, piece{"◆", p.frozen, false})
+	}
+	if s.Priority > 0 {
+		return append(ps, piece{"↑", p.accent, true})
+	}
+	return append(ps, piece{" ", p.ink, false})
+}
+
+// columns is how many columns pieces take.
+func columns(ps []piece) int {
+	n := 0
+	for _, p := range ps {
+		n += lipgloss.Width(p.text)
+	}
+	return n
+}
+
+// stateLabel is a state in plain words.
+func stateLabel(s ipc.Session) string {
 	switch s.State {
 	case ipc.StateFailed:
 		return "Failed"
@@ -142,19 +167,20 @@ func (m Model) card(it item, selected, hovered bool) []string {
 	}
 	w := m.width - 6
 	a := age(m.now().Sub(s.Created))
-	nameW := max(w-3-lipgloss.Width(a), 1)
+	marks := m.marks(s)
+	nameW := max(w-columns(marks)-1-lipgloss.Width(a), 1)
 	name := cut(s.Name, nameW)
 	detail, dc := s.Detail, p.muted
 	if detail == "" {
-		detail = label(s)
+		detail = stateLabel(s)
 	}
 	if needs {
 		dc = p.needs
 	}
+	first := append(marks, piece{name, l.name, selected}, piece{spaces(nameW - lipgloss.Width(name) + 1), p.ink, false}, piece{a, p.muted, false})
 	lines := []string{
 		m.boxTop(edge, ""),
-		m.padded(edge, fill, piece{l.glyph, l.mark, false}, piece{" ", p.ink, false}, piece{name, l.name, selected},
-			piece{spaces(nameW - lipgloss.Width(name) + 1), p.ink, false}, piece{a, p.muted, false}),
+		m.padded(edge, fill, first...),
 		m.padded(edge, fill, piece{detail, dc, false}),
 	}
 	for i, sub := range s.Subagents {
@@ -198,21 +224,21 @@ func (m Model) rowFill(selected, hovered bool) color.Color {
 	return m.pal.sidebar
 }
 
-// row draws a one-line entry, `[edge][glyph] name … age`. Among cards it
+// row draws a one-line entry, `[edge][marks]name … age`. Among cards it
 // lines up with their glyphs and ages and keeps the margin.
-func (m Model) row(l look, name, a string, selected, hovered bool) string {
+func (m Model) row(marks []piece, nameFG color.Color, name, a string, selected, hovered bool) string {
 	p := m.pal
 	fill := m.rowFill(selected, hovered)
 	lead, trail, w := 0, 1, m.width-1
 	if !m.compact() {
 		lead, trail, w = 2, 2, m.width-2
 	}
-	nameW := max(w-lead-trail-3-lipgloss.Width(a), 1)
+	nameW := max(w-lead-trail-columns(marks)-1-lipgloss.Width(a), 1)
 	name = cut(name, nameW)
-	out := m.edgeMark(selected) + spread(fill, w,
-		piece{spaces(lead), p.ink, false}, piece{l.glyph, l.mark, false}, piece{" ", p.ink, false},
-		piece{name, l.name, selected && m.focus != focusList},
-		piece{spaces(nameW - lipgloss.Width(name) + 1), p.ink, false}, piece{a, p.muted, false})
+	ps := append([]piece{{spaces(lead), p.ink, false}}, marks...)
+	out := m.edgeMark(selected) + spread(fill, w, append(ps,
+		piece{name, nameFG, selected && m.focus != focusList},
+		piece{spaces(nameW - lipgloss.Width(name) + 1), p.ink, false}, piece{a, p.muted, false})...)
 	if !m.compact() {
 		out += blank(p.sidebar, 1)
 	}
@@ -251,11 +277,12 @@ func (m Model) entry(items []item, i int) []string {
 		if !o.Started.IsZero() {
 			a = age(m.now().Sub(o.Started))
 		}
-		return []string{m.row(m.outsideLook(o), outsideLabel(o), a, selected, hovered)}
+		l := m.outsideLook(o)
+		return []string{m.row([]piece{{l.glyph, l.mark, false}, {" ", m.pal.ink, false}}, l.name, outsideLabel(o), a, selected, hovered)}
 	}
 	if m.compact() {
 		s := m.sessions[it.s]
-		return []string{m.row(m.look(s), s.Name, age(m.now().Sub(s.Created)), selected, hovered)}
+		return []string{m.row(m.marks(s), m.look(s).name, s.Name, age(m.now().Sub(s.Created)), selected, hovered)}
 	}
 	return m.card(it, selected, hovered)
 }
@@ -373,13 +400,22 @@ func (m Model) detailRows() (string, [][]piece) {
 	}
 	s := m.sessions[it.s]
 	l := m.look(s)
-	state := []piece{{l.glyph + " ", l.mark, false}, {label(s), l.name, false}}
+	// The marks without the badge, which the words say instead.
+	marks := m.marks(s)
+	state := append(marks[:len(marks)-1], piece{" " + stateLabel(s), l.name, false})
+	if s.Priority > 0 {
+		state = append(state, piece{" · ↑ promoted", p.ink, false})
+	}
 	if c := strings.TrimSpace(cost(s) + " " + routed(s)); c != "" {
 		state = append(state, piece{" · " + c, p.muted, false})
 	}
 	detail, dc := s.Detail, p.muted
 	if detail == "" && len(s.Warnings) > 0 {
 		detail = s.Warnings[0]
+	}
+	// What freezing or promoting it means comes first, as in the strip.
+	if fl := frozenLine(s); fl != "" {
+		detail = strings.TrimSuffix(fl+" · "+detail, " · ")
 	}
 	if l.loud {
 		dc = l.name

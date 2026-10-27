@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -191,6 +192,57 @@ func TestStopsTheHostDidNotCauseAreContinued(t *testing.T) {
 	// Without the host the agent would still be stopped after this pause.
 	time.Sleep(300 * time.Millisecond)
 	testutil.Eventually(t, time.Second, "stopped agent was not continued", func() bool {
+		for _, p := range processes(t) {
+			if p.pid == c.pid {
+				return !strings.HasPrefix(p.stat, "T")
+			}
+		}
+		return false
+	})
+}
+
+func TestTheHostSaysWhoItIsInHostJSON(t *testing.T) {
+	h := startHost(t, "sleep", "600")
+	host, c := h.child("sleep 600")
+	var info Info
+	testutil.Eventually(t, 5*time.Second, "no host.json", func() bool {
+		var err error
+		info, err = ReadInfo(filepath.Join(h.dir, InfoFile))
+		return err == nil
+	})
+	if info != (Info{PID: host, Agent: c.pid, Freeze: 1}) {
+		t.Errorf("host.json = %+v, want pid %d, agent %d, freeze 1", info, host, c.pid)
+	}
+}
+
+func TestAFrozenAgentStaysStopped(t *testing.T) {
+	// The core stops a frozen session's agent itself; the host must not
+	// continue it, as it continues stops it did not cause.
+	h := startHost(t, "sleep", "600")
+	_, c := h.child("sleep 600")
+	freeze := filepath.Join(h.dir, FreezeFile)
+	if err := os.WriteFile(freeze, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !Frozen(h.dir) {
+		t.Fatal("Frozen does not see freeze.json")
+	}
+	if err := syscall.Kill(-c.pid, syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	for _, p := range processes(t) {
+		if p.pid == c.pid && !strings.HasPrefix(p.stat, "T") {
+			t.Fatalf("the frozen agent runs again: %s", p.stat)
+		}
+	}
+	// Thawed, the agent runs, and a later stop is someone else's again.
+	syscall.Kill(-c.pid, syscall.SIGCONT)
+	os.Remove(freeze)
+	if err := syscall.Kill(c.pid, syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, 2*time.Second, "a stop after the thaw was not continued", func() bool {
 		for _, p := range processes(t) {
 			if p.pid == c.pid {
 				return !strings.HasPrefix(p.stat, "T")

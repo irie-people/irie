@@ -192,7 +192,7 @@ func TestGroupsFold(t *testing.T) {
 		t.Errorf("after Space: %q", got)
 	}
 	// A click on a header selects and folds it.
-	m = send(m, tea.MouseClickMsg{X: 4, Y: lineOf(t, m, "website"), Button: tea.MouseLeft})
+	m = click(m, 4, lineOf(t, m, "website"))
 	if selectedName(m) != "website" || outline(m)[0] != "▸ website" {
 		t.Errorf("after a click: selection %s, outline %q", selectedName(m), outline(m))
 	}
@@ -331,5 +331,29 @@ func TestSmallPanesFallBackToRows(t *testing.T) {
 	}
 	if m.compact() {
 		t.Error("a growing command bar turned the cards into rows")
+	}
+}
+
+// Under spawn.close_when_done a finished session closes itself: the header
+// has no Done count, and the State view leaves out what is done and calls
+// the last group Idle. The Repo view shows every session.
+func TestCloseWhenDoneHidesDone(t *testing.T) {
+	m := repoModel(t, 100, 80)
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &ipc.Header{CloseWhenDone: true}}})
+	if header := screen(t, m)[0]; strings.Contains(header, "done") || !strings.Contains(header, "working") {
+		t.Errorf("header %q", header)
+	}
+	m = send(m, keyMsg("v"))
+	want := []string{
+		"▾ Needs you", "irie-theme", "web-copy",
+		"▾ Working", "web-fix", "irie-tests",
+		"▾ Idle", "scratch-notes",
+	}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("State view %q, want %q", got, want)
+	}
+	m = send(m, keyMsg("v"))
+	if got := strings.Join(outline(m), " "); !strings.Contains(got, "fork-docs") {
+		t.Errorf("the Repo view lost the done session: %s", got)
 	}
 }

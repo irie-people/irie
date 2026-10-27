@@ -117,12 +117,20 @@ func tail(p string, n int) string {
 }
 
 // groups returns the groups of Irie's sessions in the current view, in
-// order, with the indexes of their sessions in start order. A state change
-// never moves a session in the Repo view.
+// order, with the indexes of their sessions in the core's order (control.go).
+// A state change never moves a session in the Repo view.
+//
+// Under spawn.close_when_done a finished session closes itself, so the
+// State view leaves out the done ones, which are about to go, and calls
+// what is left of that group Idle (DESIGN §4.5).
 func (m Model) groups() ([]*group, [][]int) {
 	var keys []string
 	members := map[string][]int{}
+	closing := m.view == byState && m.head.CloseWhenDone
 	for i, s := range m.sessions {
+		if closing && s.State == ipc.StateDone {
+			continue
+		}
 		k := stateGroup(s)
 		if m.view == byRepo {
 			k = notInARepo
@@ -143,6 +151,9 @@ func (m Model) groups() ([]*group, [][]int) {
 				keys = append(keys, g.key)
 			}
 			titles[g.key] = g.title
+		}
+		if closing {
+			titles["state:done"] = "Idle"
 		}
 	} else {
 		var repos []string

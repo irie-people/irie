@@ -570,6 +570,14 @@ func TestEnterShowsWithFocusAndSpaceWithout(t *testing.T) {
 	}
 }
 
+// click presses the left button at x, y and lets it come up there.
+func click(m Model, x, y int) Model {
+	m = send(m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	return send(m, tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft})
+}
+
+// A click shows a row, or a card from any of its lines, when the button
+// comes up on it.
 func TestClickShowsTheRow(t *testing.T) {
 	for _, h := range []int{12, 24} { // a row, then any line of a card
 		m, b := newModel(t, 34, h, 3)
@@ -578,11 +586,21 @@ func TestClickShowsTheRow(t *testing.T) {
 			y-- // the card's top border
 		}
 		m = send(m, tea.MouseClickMsg{X: 3, Y: y, Button: tea.MouseLeft})
+		if len(b.shows) != 0 {
+			t.Errorf("34×%d: shown before the button came up: %+v", h, b.shows)
+		}
+		m = send(m, tea.MouseReleaseMsg{X: 3, Y: y, Button: tea.MouseLeft})
 		if want := []showCall{{"s000000000002", true}}; !reflect.DeepEqual(b.shows, want) {
 			t.Errorf("34×%d: shows = %+v, want %+v", h, b.shows, want)
 		}
 		if selectedName(m) != "task-002" {
 			t.Errorf("34×%d: selection = %s", h, selectedName(m))
+		}
+		// The button coming up elsewhere opens nothing.
+		m = send(m, tea.MouseClickMsg{X: 3, Y: lineOf(t, m, "task-000"), Button: tea.MouseLeft})
+		m = send(m, tea.MouseReleaseMsg{X: 3, Y: 0, Button: tea.MouseLeft})
+		if len(b.shows) != 1 {
+			t.Errorf("34×%d: a press that came up elsewhere opened %+v", h, b.shows[1:])
 		}
 	}
 }
