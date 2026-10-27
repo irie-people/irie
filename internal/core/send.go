@@ -57,6 +57,7 @@ func (c *Core) send(a ipc.SendArgs) error {
 		c.mu.Unlock()
 		return err
 	}
+	x.quiet++
 	cv, _ := c.conversationOf(x)
 	cv.sent(text, time.Now(), working)
 	c.tellConversation(x)

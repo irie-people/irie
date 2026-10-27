@@ -24,7 +24,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -135,6 +135,8 @@ ghostty = "off"
 default_profile = "fast"
 default_cwd = "/home/alice/scratch"
 ready_timeout = "45s"
+close_when_done = true
+close_delay = "5s"
 hide_tmux = false
 
 [profiles.claude]
@@ -199,7 +201,7 @@ status_line = false
 	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", MaxSubRows: 3, RedOnDone: true, Ghostty: "off"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	wantClaude := Profile{
@@ -389,6 +391,7 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[ui]\nfocus_key = \"C-] x\"\n", "focus_key"},
 		{"[ui]\nmax_sub_rows = -1\n", "max_sub_rows"},
 		{"[spawn]\nready_timeout = \"-1s\"\n", "ready_timeout"},
+		{"[spawn]\nclose_delay = \"-1s\"\n", "close_delay"},
 		{"[profiles.claude]\nharness = \"bogus\"\n", "harness"},
 		{"[tmux]\nsocket = \"a/b\"\n", "socket"},
 		{"[tmux]\npath = \"tmux\"\n", "path"},

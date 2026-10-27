@@ -189,6 +189,32 @@ func (c *Core) reopenable(x *session) closedRecord {
 	return r
 }
 
+// closeWhenDone closes x once close_delay passes with nothing more from it:
+// no event, no message typed to it, nothing it needs from you and no
+// subagent running. A session that gets one more prompt is not done. The
+// close is the user's own, so it can be undone with reopen. The caller holds
+// c.mu.
+func (c *Core) closeWhenDone(x *session) {
+	id, quiet := x.id, x.quiet
+	time.AfterFunc(c.cfg.Spawn.CloseDelay, func() {
+		c.mu.Lock()
+		x := c.sessions[id]
+		if x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || len(x.track.subs) > 0 {
+			c.mu.Unlock()
+			return
+		}
+		err := c.closeLocked(id)
+		frames := c.changes()
+		c.mu.Unlock()
+		c.publish(frames)
+		if err != nil {
+			c.log.Warn("close when done", "session", id, "err", err)
+			return
+		}
+		c.publishClosed()
+	})
+}
+
 // reap gives every closing pane an ending, such as those a restarted core
 // finds. The caller holds c.mu.
 func (c *Core) reap() {

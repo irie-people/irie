@@ -16,7 +16,12 @@ struct SidebarView: View {
         // One row of its own above the cards: Irie's mark, its name and the
         // counts sit in the title bar, beside the traffic lights.
         VStack(spacing: 0) {
+            // The header sits lighter than the list, with rounded bottom
+            // corners, like the footer.
             FindField()
+                .background(UnevenRoundedRectangle(bottomLeadingRadius: Theme.frameRadius, bottomTrailingRadius: Theme.frameRadius, style: .continuous)
+                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
+                .zIndex(1)
             content
             if !store.sessions.isEmpty {
                 ModeSwitch()
@@ -572,7 +577,9 @@ private struct Counts: View {
             case .online:
                 count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
                 count([.working], mark: .working, color: Theme.ink, label: "working")
-                count([.done], mark: .done, color: Look.doneColor, label: "done, not yet seen")
+                if !store.closeWhenDone {
+                    count([.done], mark: .done, color: Look.doneColor, label: "done, not yet seen")
+                }
                 if store.sessions.contains(where: { [.paused, .pausing].contains(Look($0)) }) {
                     count([.paused, .pausing], mark: .paused, color: Theme.paused, label: "paused")
                 }
@@ -651,9 +658,7 @@ private struct FindField: View {
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                 .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
-        .padding(.horizontal, 10)
-        .padding(.top, 2)
-        .padding(.bottom, 4)
+        .padding(10)
         .onChange(of: store.focusFind) { focused = true }
     }
 }

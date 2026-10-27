@@ -30,6 +30,14 @@ const ctlUsage = `usage: irie ctl <command>
                                          until the agent is ready, and fails if it
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short
+  irie ctl history [--json] [QUERY...]   the sessions that closed, newest first, whose
+                                         name or id has every QUERY word. With
+                                         spawn.close_when_done a finished session
+                                         closes itself and the sidebar has no Done
+                                         group: look here instead
+  irie ctl reopen [SESSION]              bring a closed session back, by id or name
+                                         (the one closed last with none), carrying
+                                         on its conversation; prints its new id
   irie ctl show [--focus] SESSION        show a session in the slot
   irie ctl rename SESSION NAME...        rename a session, by its id or name,
                                          and print the name it got: numbered
@@ -75,6 +83,10 @@ func ctl(args []string) error {
 		return ctlList(args[1:])
 	case "spawn":
 		return ctlSpawn(args[1:])
+	case "history":
+		return ctlHistory(args[1:])
+	case "reopen":
+		return ctlReopen(args[1:])
 	case "show":
 		return ctlShow(args[1:])
 	case "rename":
@@ -513,4 +525,87 @@ func ctlSend(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+}
+
+// matchClosed are the closed sessions whose name or id holds every word of
+// query, case folded, in the order given (newest first).
+func matchClosed(closed []ipc.ClosedSession, query []string) []ipc.ClosedSession {
+	var out []ipc.ClosedSession
+	for _, c := range closed {
+		hay := strings.ToLower(c.Name + " " + c.ID)
+		ok := true
+		for _, w := range query {
+			ok = ok && strings.Contains(hay, strings.ToLower(w))
+		}
+		if ok {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// ctlHistory lists the sessions that closed, which reopen can bring back.
+func ctlHistory(args []string) error {
+	fs := flag.NewFlagSet("ctl history", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print the closed sessions as JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var r ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &r); err != nil {
+		return err
+	}
+	got := matchClosed(r.Closed, fs.Args())
+	if *asJSON {
+		if got == nil {
+			got = []ipc.ClosedSession{}
+		}
+		return json.NewEncoder(os.Stdout).Encode(got)
+	}
+	if len(got) == 0 {
+		fmt.Println("no closed sessions match")
+		return nil
+	}
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "SESSION\tCLOSED\tNAME")
+	for _, c := range got {
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", c.ID, c.Closed.Local().Format("Jan 2 15:04"), c.Name)
+	}
+	return tw.Flush()
+}
+
+// ctlReopen brings a closed session back, found by id or name; with none
+// named, the one closed last.
+func ctlReopen(args []string) error {
+	if len(args) > 1 {
+		return errors.New("usage: irie ctl reopen [SESSION]")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	id := ""
+	if len(args) == 1 {
+		var l ipc.ListResult
+		if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+			return err
+		}
+		id = args[0]
+		for _, c := range l.Closed {
+			if c.ID == args[0] || strings.EqualFold(c.Name, args[0]) {
+				id = c.ID
+				break
+			}
+		}
+	}
+	var r ipc.ReopenResult
+	if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: id}, &r); err != nil {
+		return err
+	}
+	fmt.Println(r.Session.ID)
+	return nil
 }
