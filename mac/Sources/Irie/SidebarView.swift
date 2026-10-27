@@ -133,7 +133,9 @@ struct SidebarView: View {
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
 /// the pointer brings up the actions. The card is soft and rounded, on a
 /// gentle shadow: washed in its agent's colour while it works, tinted red
-/// while it needs you, edged in the accent while selected.
+/// while it needs you, filled with the selection and edged in the accent
+/// while selected. A selected working card is a gradient, from the selection
+/// by its mark to the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -141,6 +143,9 @@ private struct SessionCard: View {
     let listFocused: Bool
     let now: Date
     @State private var hovering = false
+
+    /// The trailing slot's width: the age and tokens, or the actions.
+    private static let slot: CGFloat = 66
 
     private var look: Look { Look(session) }
     private var renaming: Bool { store.renaming == session.id }
@@ -176,17 +181,18 @@ private struct SessionCard: View {
                     Text(session.tokens.map { Tokens.short($0.total) } ?? " ")
                 }
                 .font(Theme.font(11)).monospacedDigit()
-                .foregroundStyle(Theme.muted)
+                // In ink over a selected working card's deep end.
+                .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
                 .opacity(hovering ? 0 : 1)
-                QuickActions(session: session)
+                QuickActions(session: session, ink: deep != nil)
                     .opacity(hovering ? 1 : 0)
                     .allowsHitTesting(hovering)
             }
-            .frame(width: 66, alignment: .trailing)
+            .frame(width: Self.slot, alignment: .trailing)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
-        .background(shape.fill(fill).overlay { if let wash { shape.fill(wash) } }.shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .background(ground.shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
         .onHover { hovering = $0 }
@@ -235,19 +241,40 @@ private struct SessionCard: View {
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }
 
+    /// The fill, its wash, and a selected working card's deep end across the
+    /// trailing slot.
+    private var ground: some View {
+        shape.fill(fill)
+            .overlay { if let wash { shape.fill(wash) } }
+            .overlay(alignment: .trailing) {
+                if let deep {
+                    LinearGradient(colors: [deep.opacity(0), deep], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: Self.slot + Theme.inset)
+                }
+            }
+            .clipShape(shape)
+    }
+
+    /// The selection's fill is full even while the terminal has the keyboard,
+    /// so the shown session is plain to see; the edge tells where the
+    /// keyboard is.
     private var fill: Color {
-        if selected { return listFocused ? Theme.selection : Theme.selection.opacity(0.55) }
+        if selected { return Theme.selection }
         if look.loud { return Theme.needsTint }
         return hovering ? Theme.hover : Theme.card
     }
 
     /// Its own colour across the card while it works, fullest by the mark and
-    /// fading into the fill toward the trailing slot. A selected card keeps
-    /// it, over the selection's fill and edged in the accent.
+    /// fading into the fill toward the trailing slot. A selected card turns
+    /// it round: the selection by the mark, turning to its own colour, which
+    /// deepens across the trailing slot into the colour round its terminal.
     private var wash: LinearGradient? {
         guard let c = Look.agentWash(session) else { return nil }
-        return LinearGradient(colors: [c, c.opacity(0.5)], startPoint: .leading, endPoint: .trailing)
+        let colors = selected ? [c.opacity(0), c] : [c, c.opacity(0.5)]
+        return LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
     }
+
+    private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
     /// The accent round the selected card, faint while the list lacks the
     /// keyboard; red round one that needs you; a hairline round the rest.
@@ -421,12 +448,14 @@ private struct ModeSwitch: View {
 private struct QuickActions: View {
     @EnvironmentObject private var store: Store
     let session: Session
+    /// All in ink, over a selected working card's deep end.
+    let ink: Bool
 
     var body: some View {
         HStack(spacing: 0) {
             // A click on the card types to it; the folder is in the menu.
             PauseButton(session: session)
-            PromoteButton(session: session)
+            PromoteButton(session: session, ink: ink)
             Menu {
                 Actions(session: session)
             } label: {
@@ -439,7 +468,7 @@ private struct QuickActions: View {
         }
         .buttonStyle(.borderless)
         .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(Theme.muted)
+        .foregroundStyle(ink ? Theme.ink : Theme.muted)
         .accessibilityHidden(true)
     }
 }

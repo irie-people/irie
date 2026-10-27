@@ -52,12 +52,22 @@ agents() {
 }
 
 mkdir -p "$data/bin"
+# The lock holds the pid of the install that took it, so one whose install
+# died can be told from one still running, and a bare rmdir cannot remove a
+# running install's lock: two at once would leave `live` with the later one,
+# dropping the other's change.
 lock=$data/bin/live.lock
 if ! mkdir "$lock" 2>/dev/null; then
-	say "another install is running; if none is, rmdir $lock"
+	pid=$(cat "$lock/pid" 2>/dev/null || true)
+	if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+		say "the install that took the lock, pid $pid, is gone; rm -r $lock, then run this again"
+	else
+		say "another install is running${pid:+, pid $pid}; wait for it to finish, then run this again"
+	fi
 	exit 1
 fi
-trap 'rmdir "$lock"' EXIT
+echo $$ >"$lock/pid"
+trap 'rm -f "$lock/pid"; rmdir "$lock"' EXIT
 trap 'exit 1' HUP INT TERM
 
 if [ "${1:-}" = --rollback ]; then
