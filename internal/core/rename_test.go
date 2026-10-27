@@ -76,6 +76,34 @@ func TestRenameSurvivesACoreRestart(t *testing.T) {
 	})
 }
 
+// Close keeps the new name, through a restart, and reopen brings the
+// session back under it, with the name as typed on its new window too.
+func TestRenameSurvivesCloseAndReopen(t *testing.T) {
+	c := setupWith(t, agentConfig{readyTimeout: "1s"})
+	a := c.spawn("prompt")
+	c.waitState(a.ID, ipc.StateWorking)
+	name := "Fix the login #{session_name}"
+	if _, err := c.rename(a.ID, name); err != nil {
+		t.Fatal(err)
+	}
+	c.closeSession(a.ID)
+	c.waitGone(a.Pane, 3*time.Second)
+	c.restartCore()
+	if r := c.listAll(); len(r.Closed) != 1 || r.Closed[0].Name != name {
+		t.Fatalf("closed = %+v, want %q", r.Closed, name)
+	}
+	s, err := c.reopen(a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Name != name || c.pane(s.Pane)["@irie_name"] != name {
+		t.Errorf("reopened as %q, pane %v; want %q", s.Name, c.pane(s.Pane), name)
+	}
+	if w := c.Tmux(t, "display-message", "-p", "-t", s.Pane, "#{window_name}"); w != name {
+		t.Errorf("the reopened window is named %q, want %q", w, name)
+	}
+}
+
 func TestRenameNumbersATakenNameAndRefusesNone(t *testing.T) {
 	c := setup(t)
 	a := c.spawn("task a")
