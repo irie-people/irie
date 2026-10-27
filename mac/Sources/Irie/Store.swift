@@ -33,6 +33,17 @@ final class Store: ObservableObject {
     @Published private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
     @Published private(set) var canPark = false
+    /// Cards parked or unparked from under the pointer, each with whether
+    /// it is drawn parked: it stays where it was until the pointer leaves
+    /// it, so a second click on the same spot takes it back (Controls.swift).
+    @Published var lingering: [String: Bool] = [:]
+    /// The card under the pointer.
+    var hovered: String?
+    /// Whether the core keeps a history to undo, and what undo and redo
+    /// would take next (Undo.swift).
+    @Published private(set) var canUndo = false
+    @Published private(set) var undoLabel: String?
+    @Published private(set) var redoLabel: String?
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     @Published private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
@@ -105,6 +116,8 @@ final class Store: ObservableObject {
         let id = UUID()
         var text: String
         var isError: Bool
+        /// It offers Undo, which takes back the step it reports.
+        var undo = false
     }
 
     let client: CoreClient
@@ -144,6 +157,7 @@ final class Store: ObservableObject {
                 canPickModel = hello.features.contains("spawn-model")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
+                canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
                 // The store lives as long as the app.
@@ -197,11 +211,16 @@ final class Store: ObservableObject {
             }
         case "remove":
             sessions.removeAll { $0.id == f.id }
+            if let id = f.id { lingering[id] = nil }
         case "outside":
             applyOutside(f)
             return
         case "closed":
             closed = f.closed ?? []
+            return
+        case "history":
+            undoLabel = f.undo.flatMap { $0.isEmpty ? nil : $0 }
+            redoLabel = f.redo.flatMap { $0.isEmpty ? nil : $0 }
             return
         default:
             return
@@ -262,6 +281,7 @@ final class Store: ObservableObject {
         canPickModel = true
         canConfigure = true
         canPark = true
+        canUndo = true
         taskRepo = "irie"
     }
 
@@ -292,17 +312,17 @@ final class Store: ObservableObject {
     var drawnGroups: [SessionGroup] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
         let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
-        let parked = rows.filter(\.isParked)
+        let parked = rows.filter(drawnParked)
         var out: [SessionGroup] = []
         switch mode {
         case .list:
-            let active = rows.filter { !$0.isParked }
+            let active = rows.filter { !drawnParked($0) }
             if !active.isEmpty {
                 out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: active))
             }
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
-            for s in rows where !s.isParked {
+            for s in rows where !drawnParked(s) {
                 guard let r = s.repo, !r.isEmpty else {
                     none.append(s)
                     continue
@@ -322,10 +342,14 @@ final class Store: ObservableObject {
         return out
     }
 
-    /// The id of the group a session is drawn in: Parked while it is parked,
-    /// else the list or its repo's group.
+    /// Whether a session is drawn in Parked: whether it is parked, or for a
+    /// card that lingers under the pointer, whether it was.
+    func drawnParked(_ s: Session) -> Bool { lingering[s.id] ?? s.isParked }
+
+    /// The id of the group a session is drawn in: Parked while it is drawn
+    /// parked, else the list or its repo's group.
     func groupID(of s: Session) -> String {
-        if s.isParked { return SessionGroup.parked }
+        if drawnParked(s) { return SessionGroup.parked }
         switch mode {
         case .list: return SessionGroup.list
         case .repo: return "repo:" + (s.repo ?? "")
@@ -575,8 +599,8 @@ final class Store: ObservableObject {
     /// Shows a notice above the task bar and has VoiceOver read it. A
     /// confirmation goes after 3 s; an error stays until the next notice, or
     /// until the user edits or submits (WCAG 2.2.1).
-    func say(_ text: String, error: Bool, seconds: UInt64 = 3) {
-        notice = Notice(text: text, isError: error)
+    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false) {
+        notice = Notice(text: text, isError: error, undo: undo && canUndo)
         AccessibilityNotification.Announcement(text).post()
         guard !error else { return }
         let id = notice?.id

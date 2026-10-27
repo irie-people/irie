@@ -332,6 +332,18 @@ func parked(rows []ipc.Session) []string {
 	return out
 }
 
+// park parks a session (on) or unparks it, as the sidebars' z does.
+func (c *coreEnv) park(id string, on bool) {
+	c.t.Helper()
+	op := ipc.OpUnpark
+	if on {
+		op = ipc.OpPark
+	}
+	if err := c.call(op, ipc.ParkArgs{Session: id}, nil); err != nil {
+		c.t.Fatalf("%s %s: %v", op, id, err)
+	}
+}
+
 func TestParkKeepsThePlaceThroughARestartAndPromoteUnparks(t *testing.T) {
 	c := setup(t)
 	for _, n := range []string{"alpha", "beta", "gamma"} {

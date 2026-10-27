@@ -421,3 +421,105 @@ func TestAFailedUndoLeavesTheHistoryAsItWas(t *testing.T) {
 		t.Error("the undo did not work once it could")
 	}
 }
+
+func TestUndoAndRedoOfAParkAndAnUnpark(t *testing.T) {
+	c := setup(t)
+	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "alpha"})
+	c.park(a.ID, true)
+	// Parking it again changes nothing, so it is no step.
+	c.park(a.ID, true)
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `park "alpha"`}) || len(h.Redo) != 0 {
+		t.Fatalf("history %v / %v", labels(h.Undo), labels(h.Redo))
+	}
+	if r := c.step(dirUndo); r.Label != `park "alpha"` {
+		t.Errorf("undo %+v", r)
+	}
+	if got := parked(c.list()); len(got) != 0 {
+		t.Errorf("after undoing the park, parked = %v", got)
+	}
+	c.step(dirRedo)
+	if got := parked(c.list()); !slices.Equal(got, []string{"alpha"}) {
+		t.Errorf("after redoing the park, parked = %v", got)
+	}
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `park "alpha"`}) || len(h.Redo) != 0 {
+		t.Errorf("history after undo and redo %v / %v", labels(h.Undo), labels(h.Redo))
+	}
+
+	// An unpark by hand is a step of its own: undoing it parks the session
+	// again.
+	c.park(a.ID, false)
+	c.park(a.ID, false)
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `park "alpha"`, `unpark "alpha"`}) {
+		t.Errorf("history after an unpark %v", labels(h.Undo))
+	}
+	if r := c.step(dirUndo); r.Label != `unpark "alpha"` {
+		t.Errorf("undo %+v", r)
+	}
+	if got := parked(c.list()); !slices.Equal(got, []string{"alpha"}) {
+		t.Errorf("after undoing the unpark, parked = %v", got)
+	}
+
+	// A new name is no matter, and the step takes it.
+	if _, err := c.rename(a.ID, "beta"); err != nil {
+		t.Fatal(err)
+	}
+	if r := c.step(dirRedo); r.Label != `unpark "beta"` {
+		t.Errorf("redo after a rename %+v", r)
+	}
+	if got := parked(c.list()); len(got) != 0 {
+		t.Errorf("after redoing the unpark, parked = %v", got)
+	}
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `park "alpha"`, `unpark "beta"`}) || len(h.Redo) != 0 {
+		t.Errorf("history after the redo %v / %v", labels(h.Undo), labels(h.Redo))
+	}
+	if got, want := c.uiSteps(a.ID), []string{"ui.undo park open>open", "ui.redo park open>open", "ui.undo unpark open>open", "ui.redo unpark open>open"}; !slices.Equal(got, want) {
+		t.Errorf("journal %v, want %v", got, want)
+	}
+}
+
+// Promote unparks a session with no step of its own, so undoing a park
+// after it finds nothing to do: it asks, and settling moves on. A closed
+// session has nothing to unpark.
+func TestUndoOfAParkAsksWhenItIsUnparkedOrClosed(t *testing.T) {
+	c := setup(t)
+	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "alpha"})
+	c.park(a.ID, true)
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: a.ID, Level: 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := parked(c.list()); len(got) != 0 {
+		t.Fatalf("after promoting it, parked = %v", got)
+	}
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `park "alpha"`}) {
+		t.Errorf("history after promoting it %v", labels(h.Undo))
+	}
+	ch := c.ask(dirUndo)
+	if ch.Question != `"alpha" is not parked any more.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceSettle, ipc.ChoiceSkip, ipc.ChoiceCancel}) || !ch.Options[0].Recommended {
+		t.Errorf("question %+v", ch)
+	}
+	if r := c.answer(dirUndo, ch, ipc.ChoiceSettle); r.Did != ipc.DidSettle {
+		t.Errorf("settle %+v", r)
+	}
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`}) || !slices.Equal(labels(h.Redo), []string{`park "alpha"`}) {
+		t.Errorf("history after settle %v / %v", labels(h.Undo), labels(h.Redo))
+	}
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: a.ID, Level: 0}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Redo parks it again. Leave its close out of the history, so the park
+	// is next while it is closed.
+	c.step(dirRedo)
+	c.closeSession(a.ID)
+	c.editHistory(func(h *history) { h.Undo = h.Undo[:2] })
+	ch = c.ask(dirUndo)
+	if ch.Question != `"alpha" is closed, so there is nothing to unpark.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceSkip, ipc.ChoiceCancel}) || !ch.Options[0].Recommended {
+		t.Errorf("question %+v", ch)
+	}
+	if r := c.answer(dirUndo, ch, ipc.ChoiceSkip); r.Did != ipc.DidSkip {
+		t.Errorf("skip %+v", r)
+	}
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`}) || len(h.Redo) != 0 {
+		t.Errorf("history after skip %v / %v", labels(h.Undo), labels(h.Redo))
+	}
+}

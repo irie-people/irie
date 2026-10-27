@@ -8,11 +8,14 @@ import UniformTypeIdentifiers
 // the list and gives its process tree the machine first: the other sessions
 // run in macOS's background state. Park puts a session in the Parked group at
 // the end of the list, folded until opened, so it goes out of sight and out
-// of the To verify count; Unpark brings it back to its place. The core keeps
-// the one order both sidebars draw, and a card dragged elsewhere in its group
-// goes where it is dropped; dropped across the Parked group's edge, it is
-// parked or unparked there. Move Up and Move Down move one without a drag.
-// Each change shows at once, and the core's frames confirm it.
+// of the To verify count; Unpark brings it back to its place. Parked or
+// unparked from the card under the pointer, the card stays put until the
+// pointer leaves it, so a second click on the same spot takes it back; a
+// notice offers Undo too. The core keeps the one order both sidebars draw,
+// and a card dragged elsewhere in its group goes where it is dropped;
+// dropped across the Parked group's edge, it is parked or unparked there.
+// Move Up and Move Down move one without a drag. Each change shows at once,
+// and the core's frames confirm it.
 
 struct FreezeArgs: Encodable {
     var session: String
@@ -80,6 +83,7 @@ extension Store {
     /// Promotes a session to the top, which unparks it, or puts it back
     /// among the rest, where it stays. It shows at once.
     func setPromoted(_ s: Session, _ on: Bool) {
+        if on { lingering[s.id] = nil }
         preview { rows in
             guard let i = rows.firstIndex(where: { $0.id == s.id }) else { return }
             rows[i].priority = on ? 1 : 0
@@ -108,22 +112,58 @@ extension Store {
 
     /// Parks a session, which puts its card in the Parked group at the end
     /// of the list, or unparks it back to its place. It shows at once, and
-    /// a notice says where it went, since a folded Parked hides it.
-    func setParked(_ s: Session, _ on: Bool) {
+    /// a notice says where it went, since a folded Parked hides it, with
+    /// Undo. From the card under the pointer (fromPointer), the card stays
+    /// where it is, drawn parked or not, until the pointer leaves it: what
+    /// slid under the pointer, such as Parked's header, which folds, or the
+    /// next card's Park, would take the click meant to take it back.
+    func setParked(_ s: Session, _ on: Bool, fromPointer: Bool = false) {
         guard canPark, s.isParked != on else { return }
+        if fromPointer, hovered == s.id {
+            if let drawn = lingering[s.id] {
+                // Back the way it is drawn.
+                if drawn == on { lingering[s.id] = nil }
+            } else {
+                lingering[s.id] = s.isParked
+            }
+        } else {
+            lingering[s.id] = nil
+        }
         preview { rows in
             if let i = rows.firstIndex(where: { $0.id == s.id }) { rows[i].parked = on }
         }
         Task {
             do {
                 _ = try await client.call(on ? "park" : "unpark", ParkArgs(session: s.id), as: Empty.self)
-                say(on ? "Parked \(s.name), out of the way at the end of the list." : "Unparked \(s.name), back in its place.", error: false)
+                say(on ? "Parked \(s.name), out of the way at the end of the list." : "Unparked \(s.name), back in its place.",
+                    error: false, seconds: 6, undo: true)
             } catch {
+                lingering[s.id] = nil
                 preview { rows in
                     if let i = rows.firstIndex(where: { $0.id == s.id }) { rows[i].parked = s.parked }
                 }
                 say("Couldn’t \(on ? "park" : "unpark") \(s.name): \(error.localizedDescription)", error: true)
             }
+        }
+    }
+
+    /// The pointer came onto a card or left it. A card that lingers there
+    /// takes its place once the pointer leaves it.
+    func hover(_ id: String, _ inside: Bool) {
+        if inside {
+            hovered = id
+            return
+        }
+        if hovered == id { hovered = nil }
+        settle(id)
+    }
+
+    /// Puts a lingering card, or with none named every one, where it now
+    /// belongs.
+    func settle(_ id: String? = nil) {
+        guard id.map({ lingering[$0] != nil }) ?? !lingering.isEmpty else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            if let id { lingering[id] = nil } else { lingering = [:] }
         }
     }
 
@@ -149,8 +189,8 @@ extension Store {
     /// repo's cards.
     func canDrop(onto target: Session) -> Bool {
         guard let id = dragging, id != target.id, var held = sessions.first(where: { $0.id == id }) else { return false }
-        guard held.isParked == target.isParked || canPark else { return false }
-        held.parked = target.isParked
+        guard held.isParked == drawnParked(target) || canPark else { return false }
+        held.parked = drawnParked(target)
         return groupID(of: held) == groupID(of: target)
     }
 
@@ -168,7 +208,7 @@ extension Store {
     func reorder(_ id: String, onto target: Session) {
         guard let from = sessions.firstIndex(where: { $0.id == id }),
               let to = sessions.firstIndex(where: { $0.id == target.id }), from != to else { return }
-        setParked(sessions[from], target.isParked)
+        setParked(sessions[from], drawnParked(target))
         var ids = sessions.map(\.id)
         let moving = ids.remove(at: from)
         guard let t = ids.firstIndex(of: target.id) else { return }
@@ -247,7 +287,7 @@ struct ParkButton: View {
 
     var body: some View {
         let on = session.isParked
-        Button { store.setParked(session, !on) } label: {
+        Button { store.setParked(session, !on, fromPointer: onCard) } label: {
             Image(systemName: on ? "parkingsign.circle.fill" : "parkingsign.circle")
                 .frame(width: onCard ? 16 : nil, height: onCard ? 18 : nil)
         }
@@ -269,7 +309,7 @@ struct ControlItems: View {
         }
         Button(session.isPromoted ? "Stop Promoting" : "Promote to the Top") { store.setPromoted(session, !session.isPromoted) }
         if store.canPark {
-            Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) }
+            Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked, fromPointer: true) }
         }
         Button("Move Up") { store.move(session, by: -1) }.disabled(!store.canMove(session, by: -1))
         Button("Move Down") { store.move(session, by: 1) }.disabled(!store.canMove(session, by: 1))
@@ -287,13 +327,17 @@ struct PromotedBadge: View {
     }
 }
 
-/// What the details panel says about a frozen or promoted session, in
-/// short lines with the whole story on hover: plainly what Irie does, and
+/// What the details panel says about a frozen, promoted or parked session,
+/// in short lines with the whole story on hover: plainly what Irie does, and
 /// that memory is not something it can set aside.
 struct ControlLines: View {
     let session: Session
 
     var body: some View {
+        if session.isParked {
+            lineText("Parked: out of the way, still running",
+                     more: "It waits in Parked at the end of the list and keeps running, and it still turns red when it needs you. Unpark puts it back in its place.")
+        }
         if session.isFrozen {
             if session.freezing == true {
                 lineText("Freezing at its next tool call",
@@ -330,6 +374,7 @@ struct Reorderable: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onDrag {
+                store.settle()
                 store.dragging = session.id
                 return NSItemProvider(object: session.id as NSString)
             }

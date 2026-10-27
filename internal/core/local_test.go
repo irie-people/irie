@@ -317,8 +317,12 @@ func TestTheStatusLineHearsTheStateAndTheHelpers(t *testing.T) {
 		t.Errorf("an unknown palette: %v", err)
 	}
 	c.waitState(s.ID, ipc.StateDone)
-	if r := status(); r.State != ipc.StateDone || len(r.Subagents) != 0 || r.Color != "" {
+	if r := status(); r.State != ipc.StateDone || len(r.Subagents) != 0 || r.Color != "" || r.Parked {
 		t.Errorf("after the stop: %+v", r)
+	}
+	c.park(s.ID, true)
+	if r := status(); r.State != ipc.StateDone || !r.Parked {
+		t.Errorf("parked: %+v", r)
 	}
 }
 

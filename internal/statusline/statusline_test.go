@@ -99,6 +99,25 @@ func TestLineLeadsWithTheState(t *testing.T) {
 	}
 }
 
+// A parked session is out of the way: a turn that is over is quiet, and
+// not to verify. While helpers run it waits on them as any session does.
+func TestLineOfAParkedSession(t *testing.T) {
+	u, _ := Parse([]byte(sample))
+	for _, st := range []string{ipc.StateDone, ipc.StateIdle} {
+		got := Line(u, &ipc.StatusReply{State: st, Parked: true}, 0)
+		if !strings.HasPrefix(got, "\x1b[2m✓ parked\x1b[0m\x1b[2m · \x1b[0m") || plain(got) != "✓ parked · "+meters {
+			t.Errorf("%s and parked: line = %q", st, got)
+		}
+	}
+	waiting := ipc.StatusReply{State: ipc.StateDone, Parked: true, Subagents: []ipc.Subagent{{Agent: "sub:a1", Type: "Explore"}}}
+	if got := plain(Line(u, &waiting, 0)); got != "◐ waiting on 1 helper: Explore · "+meters {
+		t.Errorf("parked with a helper: line = %q", got)
+	}
+	if got := Line(u, &ipc.StatusReply{State: ipc.StateNeedsYou, Parked: true}, 0); !strings.HasPrefix(got, "\x1b[31m● needs you\x1b[0m") {
+		t.Errorf("parked and needing you: line = %q", got)
+	}
+}
+
 func TestLineColours(t *testing.T) {
 	u, _ := Parse([]byte(sample))
 	// Done is green, a need red; the rest is faint.

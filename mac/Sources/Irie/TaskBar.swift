@@ -80,13 +80,28 @@ struct TaskBar: View {
             .accessibilityLabel("Start the task")
     }
 
+    /// A notice that reports a step the history can take back, such as a
+    /// park, offers Undo at its end, in the one place that never moves.
     @ViewBuilder private var notice: some View {
             if let n = store.notice {
-                Text(n.text)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(n.isError ? Theme.needs : Theme.ink)
-                    .lineLimit(4)
-                    .textSelection(.enabled)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(n.text)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(n.isError ? Theme.needs : Theme.ink)
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if n.undo {
+                        Button("Undo") {
+                            store.dismissNotice()
+                            store.undo()
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.accentInk)
+                        .help("Take it back (⌘Z)")
+                    }
+                }
                     .padding(.horizontal, Theme.inset)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -18,8 +18,8 @@ import (
 // §6.3): what the session has cost, how full its context is, and the
 // plan's use, which is the account's and so the newest update's. The
 // session's last update is kept in status.json, for a restarted core. It
-// answers with the session's state and running subagents, and while it
-// works its own colour.
+// answers with the session's state and running subagents, whether it is
+// parked, and while it works its own colour.
 func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	u, err := statusline.Parse(a.Payload)
 	if err != nil {
@@ -41,7 +41,7 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 		c.plan = ipc.Plan{FiveHour: u.FiveHour, SevenDay: u.SevenDay}
 	}
 	row := x.wire()
-	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents}
+	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents, Parked: row.Parked}
 	if row.State == ipc.StateWorking {
 		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.id)
 	}

@@ -545,6 +545,9 @@ type StatusReply struct {
 	// Color is the session's own colour while it works, as "#rrggbb": its
 	// card's mark in the Mac app's dark mode, which reads on its terminal.
 	Color string `json:"color,omitempty"`
+	// Parked is whether the session is in the Parked group, out of the
+	// way: a turn of it that is over is not to verify.
+	Parked bool `json:"parked,omitempty"`
 }
 
 // ThemeArgs name the Mac app's palette, one of config.Themes.

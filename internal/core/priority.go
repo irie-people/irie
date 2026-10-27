@@ -28,7 +28,8 @@ type bgProc struct {
 
 // setPriority promotes a session (level 1), which also puts it at the top
 // of the list and unparks it, or puts it back (level 0). It takes effect
-// before it returns.
+// before it returns. The unpark goes with the promotion, so it is no step
+// of the history.
 func (c *Core) setPriority(a ipc.PriorityArgs) error {
 	if a.Level < 0 || a.Level > 1 {
 		return ipc.Errorf(ipc.CodeBadArgs, "priority level %d: it is 0 or 1", a.Level)

@@ -117,6 +117,10 @@ struct Frame: Decodable {
     var closed: [ClosedSession]?
     /// A snapshot's or a header frame's header.
     var header: Header?
+    /// A history frame: what undo and redo would take next, empty when
+    /// nothing (Undo.swift).
+    var undo: String?
+    var redo: String?
 }
 
 /// What a snapshot says besides its rows.

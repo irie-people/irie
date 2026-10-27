@@ -144,7 +144,9 @@ func Line(u Usage, st *ipc.StatusReply, width int) string {
 
 // state leads the line with the session's state, working in own, the
 // session's colour, when it has one. A turn that ended while its helpers
-// still run is not done: the line says what it waits on.
+// still run is not done: the line says what it waits on. A parked session
+// is out of the way, so its turn that is over is quiet and not to verify,
+// as the sidebars count it.
 func state(r ipc.StatusReply, own string) seg {
 	var s seg
 	n := len(r.Subagents)
@@ -169,7 +171,9 @@ func state(r ipc.StatusReply, own string) seg {
 			s.add(own, "◐ working + "+helpers(n))
 		}
 	case ipc.StateDone, ipc.StateIdle:
-		if n == 0 {
+		if n == 0 && r.Parked {
+			s.add(faint, "✓ parked")
+		} else if n == 0 {
 			s.add(green, "✓ to verify")
 		} else if k := kinds(r.Subagents); k != "" {
 			s.add("", "◐ waiting on "+helpers(n)+": "+k)

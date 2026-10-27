@@ -18,11 +18,11 @@ func TestCloseTargetIsTheNamedSessionOrYourOwn(t *testing.T) {
 		{[]string{"s01a"}, "", "s01a"},
 		{[]string{"gone"}, "s02b", "gone"},
 	} {
-		if got, err := closeTarget(c.args, c.own, sessions); err != nil || got != c.want {
+		if got, err := sessionTarget("close", c.args, c.own, sessions); err != nil || got != c.want {
 			t.Errorf("%v, own %q: %q, %v; want %q", c.args, c.own, got, err, c.want)
 		}
 	}
-	if got, err := closeTarget(nil, "", sessions); err == nil {
+	if got, err := sessionTarget("close", nil, "", sessions); err == nil {
 		t.Errorf("no SESSION and no session of its own: %q, want an error", got)
 	}
 }

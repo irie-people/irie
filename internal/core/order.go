@@ -10,9 +10,12 @@ package core
 // Parking a session puts it in the Parked group at the end of the list and
 // leaves the order be, so unparking brings it back to its place. Park is
 // in the journal (ui.parked, ui.unparked), which a restarted core replays.
+// A park or unpark the user asks for is a step of the history (DESIGN
+// §4.5), so undo takes it back.
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -138,30 +141,86 @@ func (c *Core) toTop(id string) {
 	c.setOrder(slices.Insert(ids, 0, id))
 }
 
-// park parks a session (on) or unparks it. Parking one that is parked
-// already, or unparking one that is not, changes nothing.
-func (c *Core) park(a ipc.ParkArgs, on bool) error {
+// park parks a session (on) or unparks it, and reports whether that
+// changed anything: parking one that is parked already, or unparking one
+// that is not, changes nothing. It records no step: the op does
+// (control.go), and undo and redo park through it too.
+func (c *Core) park(a ipc.ParkArgs, on bool) (bool, error) {
 	c.mu.Lock()
-	err := c.setParked(a.Session, on)
+	changed, err := c.setParked(a.Session, on)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	return err
+	return changed, err
 }
 
-// setParked parks or unparks session id. The caller holds c.mu.
-func (c *Core) setParked(id string, on bool) error {
+// setParked parks or unparks session id, and reports whether that changed
+// anything. The caller holds c.mu.
+func (c *Core) setParked(id string, on bool) (bool, error) {
 	x := c.sessions[id]
 	if x == nil {
-		return ipc.Errorf(ipc.CodeNotFound, "no session %q", id)
+		return false, ipc.Errorf(ipc.CodeNotFound, "no session %q", id)
 	}
 	if x.track.parked == on {
-		return nil
+		return false, nil
 	}
 	kind := event.UIParked
 	if !on {
 		kind = event.UIUnparked
 	}
 	c.record(x, event.Event{Source: event.SourceUser, Kind: kind})
-	return nil
+	return true, nil
+}
+
+// Action kinds of park (undo.go).
+const (
+	actPark   = "park"
+	actUnpark = "unpark"
+)
+
+func init() {
+	parkEff := effect{check: checkPark(true), do: doPark(true)}
+	unparkEff := effect{check: checkPark(false), do: doPark(false)}
+	registerAction(actPark, actionKind{verb: "park", undo: unparkEff, redo: parkEff})
+	registerAction(actUnpark, actionKind{verb: "unpark", undo: parkEff, redo: unparkEff})
+}
+
+// checkPark is what makes parking a's session (on), or unparking it,
+// uncertain: that it is closed or gone, or already as the step would leave
+// it. A new name is no matter; the step takes it (doPark).
+func checkPark(on bool) func(c *Core, a action) []problem {
+	verb, already := "unpark", "is not parked any more"
+	if on {
+		verb, already = "park", "is parked already"
+	}
+	return func(c *Core, a action) []problem {
+		x := c.sessions[a.Session]
+		if x == nil {
+			if _, ok := c.closedRecord(a.Session); ok {
+				return []problem{{code: "closed", question: fmt.Sprintf("%q is closed, so there is nothing to %s.", c.nameOf(a.Session), verb), recommend: ipc.ChoiceSkip}}
+			}
+			return []problem{gone(a)}
+		}
+		if x.track.parked == on {
+			return []problem{{code: "already", question: fmt.Sprintf("%q %s.", x.name, already),
+				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
+					Detail: fmt.Sprintf("Nothing needs %sing, so the history moves on as if Irie had %sed it.", verb, verb)}},
+				recommend: ipc.ChoiceSettle}}
+		}
+		return nil
+	}
+}
+
+// doPark parks a's session (on) or unparks it the way the op does, with no
+// step of its own, and takes the name it has now.
+func doPark(on bool) func(c *Core, a action) (action, error) {
+	return func(c *Core, a action) (action, error) {
+		if _, err := c.park(ipc.ParkArgs{Session: a.Session}, on); err != nil {
+			return a, err
+		}
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		a.Name = c.nameOf(a.Session)
+		return a, nil
+	}
 }

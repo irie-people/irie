@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +23,11 @@ const controlUsage = `  irie ctl freeze SESSION|--all          stop a session's 
   irie ctl reorder [--before OTHER] SESSION
                                          put a session just before another in
                                          the list, or last
+  irie ctl park [SESSION]                put a session out of the way, in the
+                                         Parked group at the end of the list:
+                                         by id or name, or with none the one
+                                         this runs in
+  irie ctl unpark [SESSION]              bring it back to its place
 `
 
 // ctlFreeze is `irie ctl freeze` (on) and `irie ctl thaw`.
@@ -82,4 +88,30 @@ func ctlReorder(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpReorder, ipc.ReorderArgs{Session: fs.Arg(0), Before: *before}, nil)
+}
+
+// ctlPark is `irie ctl park` (on) and `irie ctl unpark`. It finds the
+// session as ctl close does: by id or name, or with none the one it runs
+// in.
+func ctlPark(args []string, on bool) error {
+	name, op := "unpark", ipc.OpUnpark
+	if on {
+		name, op = "park", ipc.OpPark
+	}
+	if len(args) > 1 {
+		return fmt.Errorf("usage: irie ctl %s [SESSION]", name)
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+		return err
+	}
+	id, err := sessionTarget(name, args, os.Getenv("IRIE_SESSION"), l.Sessions)
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, op, ipc.ParkArgs{Session: id}, nil)
 }
