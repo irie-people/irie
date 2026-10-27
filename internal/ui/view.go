@@ -189,6 +189,11 @@ func (m Model) counts(w int) string {
 	for _, long := range []bool{true, false} {
 		var parts []string
 		for _, x := range all {
+			// With close_when_done a finished session closes itself: no
+			// Done count, and history has what closed.
+			if x.label == "done" && m.head.CloseWhenDone {
+				continue
+			}
 			text := fmt.Sprintf("%s%d", x.glyph, x.n)
 			if long {
 				text += " " + x.label
