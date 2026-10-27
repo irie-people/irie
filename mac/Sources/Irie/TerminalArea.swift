@@ -26,6 +26,19 @@ struct TerminalArea: View {
         // Never empty: the title moves when a subtitle appears or goes.
         .navigationSubtitle(selected.map(subtitle) ?? "No session")
         .toolbar {
+            // The principal slot replaces the system title, so the name and
+            // subtitle centre on the bar's midline beside the button.
+            ToolbarItem(placement: .principal) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(selected?.name ?? "Irie")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(selected.map(subtitle) ?? "No session")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     store.openInGhostty()

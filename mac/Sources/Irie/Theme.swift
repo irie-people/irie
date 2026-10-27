@@ -206,12 +206,13 @@ enum Theme {
 
     /// A colour worked out for the appearance it is drawn in: light or dark,
     /// with or without Increase Contrast.
-    private static func computed(_ hex: @escaping (_ dark: Bool, _ high: Bool) -> UInt32) -> Color {
+    private static func computed(alpha: @escaping (_ high: Bool) -> CGFloat = { _ in 1 },
+                                 _ hex: @escaping (_ dark: Bool, _ high: Bool) -> UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
             let dark = match == .darkAqua || match == .accessibilityHighContrastDarkAqua
             let high = match == .accessibilityHighContrastAqua || match == .accessibilityHighContrastDarkAqua
-            return NSColor(hex: hex(dark, high))
+            return NSColor(hex: hex(dark, high)).withAlphaComponent(alpha(high))
         })
     }
 
@@ -232,10 +233,11 @@ enum Theme {
 
     /// A working card's ground: the card washed with its agent's colour, as
     /// far as keeps the card's text at 4.5:1 and leaves its mark room for
-    /// 3:1. Increase Contrast keeps the plain card.
+    /// 3:1. It lies over the card's fill, the selection's too. Under Increase
+    /// Contrast it is clear, so the plain fill shows.
     static func agentWash(slot: Int) -> Color {
         let p = palette
-        return computed { agentWashHex(slot: slot, palette: p, dark: $0, high: $1) }
+        return computed(alpha: { $0 ? 0 : 1 }) { agentWashHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
     /// The slot for a session: the same one every time, from its id.
@@ -289,7 +291,8 @@ enum Theme {
         let s = dark ? p.dark : p.light
         let hue = agentHue(slot: slot, s)
         // Contrast against the grounds the mark sits on: its card's wash, and
-        // the selection once the card is picked.
+        // the selection, under the wash once the card is picked and plain
+        // under Increase Contrast.
         let want = high ? 4.5 : 3.2
         let grounds = [agentWashHex(slot: slot, palette: p, dark: dark, high: high), s.selection].map(luminance)
         // Past full brightness the mark pales toward white, for a dark hue,

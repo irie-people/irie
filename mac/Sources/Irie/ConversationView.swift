@@ -117,7 +117,8 @@ struct FeedContent: View {
             }
         }
         .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+        .padding(.top, 30)
+        .padding(.bottom, 18)
         .frame(maxWidth: 780)
         .frame(maxWidth: .infinity)
     }
