@@ -258,6 +258,13 @@ func TestTheConversationOpAndItsFrames(t *testing.T) {
 	s := c.spawn("prompt,tool:Bash,stop")
 	c.waitState(s.ID, ipc.StateDone)
 	path := c.transcriptOf(s.ID)
+	var none json.RawMessage
+	if err := c.call(ipc.OpConversation, ipc.ConversationArgs{Session: s.ID}, &none); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(none), `"items":[]`) || strings.Contains(string(none), `"transcript"`) {
+		t.Errorf("before its transcript is written: %s", none)
+	}
 	appendFile(t, path, userSays("u1", 0, "prompt,tool:Bash,stop")+
 		assistantSays("a1", 1, toolUse("toolu_1", "Bash", map[string]any{"command": "go test ./..."}))+
 		toolResult("r1", 3, "toolu_1", false, "ok", nil))
