@@ -73,9 +73,9 @@ struct TerminalArea: View {
         #endif
     }
 
-    /// The frame's colour: the shown session's, or sun while it is quiet. It
+    /// The frame's colour: the shown session's (its own while it works), or sun while it is quiet. It
     /// deepens a little while the terminal has the keyboard.
-    private var edge: Color { selected.flatMap { Look($0).color } ?? Theme.sunEdge }
+    private var edge: Color { selected.flatMap { Look($0).color ?? Look.agentTint($0) } ?? Theme.sunEdge }
 
     /// What the banner says while the core is away.
     private var linkNote: String? {

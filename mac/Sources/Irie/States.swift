@@ -102,6 +102,13 @@ enum Look: Equatable {
     }
 }
 
+extension Look {
+    /// The agent's colour for this session, while it is working; none otherwise.
+    static func agentTint(_ s: Session) -> Color? {
+        Look(s) == .working ? Theme.agent(slot: Theme.agentSlot(s.id)) : nil
+    }
+}
+
 /// A state's glyph from DESIGN §5.3, drawn: ✕ failed, · exited (✕ with an
 /// error code), ◆ frozen, ‖ paused, ● needs you, ! stalled, ‖ pausing,
 /// ◐ working, ◌ starting, ✓ done and ○ idle. The marks hold still: an
@@ -110,12 +117,14 @@ enum Look: Equatable {
 struct StateMark: View {
     let look: Look
     var size: CGFloat = 14
+    /// The agent's own colour, which a working mark takes in place of ink.
+    var tint: Color? = nil
 
     var body: some View {
         Canvas { ctx, box in
             let k = min(box.width, box.height) / 16
             ctx.scaleBy(x: k, y: k)
-            let ink = GraphicsContext.Shading.color(look.mark)
+            let ink = GraphicsContext.Shading.color(look == .working ? tint ?? look.mark : look.mark)
             func line(_ points: [(CGFloat, CGFloat)]...) -> Path {
                 var p = Path()
                 for run in points {
