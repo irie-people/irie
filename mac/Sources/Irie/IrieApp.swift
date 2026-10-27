@@ -41,8 +41,10 @@ struct IrieApp: App {
         .commands {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
-                Button("New Task") { NotificationCenter.default.post(name: .irieNewTask, object: nil) }
+                Button("New Task…") { store.newTaskSheet = true }
                     .keyboardShortcut("n")
+                Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
+                    .keyboardShortcut("n", modifiers: [.command, .option])
                 Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
                     .disabled(store.selection == nil || store.outsideSelection != nil)
             }
@@ -121,7 +123,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension Notification.Name {
-    static let irieNewTask = Notification.Name("irieNewTask")
+    /// Gives the task bar the keyboard.
+    static let irieQuickTask = Notification.Name("irieQuickTask")
 }
 
 struct ContentView: View {
@@ -148,6 +151,12 @@ struct ContentView: View {
                 }
         }
         .tint(Theme.accent)
-        .onAppear { keys.install(store) }
+        .sheet(isPresented: $store.newTaskSheet) {
+            NewTaskSheet().environmentObject(store)
+        }
+        .onAppear {
+            keys.install(store)
+            WindowCloseItem.install()
+        }
     }
 }
