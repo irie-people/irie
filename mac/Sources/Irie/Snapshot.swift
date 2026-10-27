@@ -13,9 +13,15 @@ enum Snapshot {
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-            for dark in [false, true] {
-                let (rep, titlebar) = window(store, dark: dark)
-                let name = "window-\(dark ? "dark" : "light").png"
+            // The default size in both modes, then the narrowest window and a
+            // wide one.
+            let shots: [(String, CGFloat, Bool)] = [
+                ("window-light", 1100, false), ("window-dark", 1100, true),
+                ("window-narrow", 820, false), ("window-wide", 1500, false),
+            ]
+            for (base, width, dark) in shots {
+                let (rep, titlebar) = window(store, dark: dark, width: width)
+                let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 let top = firstCardTop(rep, below: titlebar)
                 print("\(name): title bar \(fmt(titlebar)) pt, first card at \(top.map(fmt) ?? "?") pt")
@@ -29,8 +35,8 @@ enum Snapshot {
 
     /// The window as the app draws it, at 2x, and its title bar's height in
     /// points. It is ordered in far off any screen, so it never shows.
-    private static func window(_ store: Store, dark: Bool) -> (NSBitmapImageRep, CGFloat) {
-        let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: 1100, height: 720),
+    private static func window(_ store: Store, dark: Bool, width: CGFloat) -> (NSBitmapImageRep, CGFloat) {
+        let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: 720),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
