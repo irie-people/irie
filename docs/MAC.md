@@ -16,7 +16,8 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 - **The shown agent's live terminal** on the right, in a rounded frame edged in that session's colour, or sun while it is quiet. The edge brightens while the terminal has the keyboard. Selecting a row swaps that agent in, and Return (or **Type to it**) moves the keyboard there.
 - **A task bar** at the foot of the sidebar, always three lines tall; longer text scrolls inside it. It takes the same `@repo`, `@repo!` and `+profile` words as the terminal sidebar (DESIGN §4.2). It keeps the keyboard while a task starts; once the task has started, the app shows the new agent and gives its terminal the keyboard. Notices float above it rather than pushing the list.
 - **Warm, solid colours:** sand in light mode and cocoa in dark mode, with the terminal sidebar's sun, sea and state colours (`Theme.swift`). Nothing behind the window shows through.
-- **Right-click on a row:** show and type to it, open it in Ghostty, show the folder in Finder, copy the folder path, branch name or session ID.
+- **Right-click on a row:** show and type to it, open it in Ghostty, rename it, show the folder in Finder, copy the folder path, branch name or session ID.
+- **Renaming a session.** Double-click its card, or choose **Rename…** from the card's ⋯ or right-click menu or **File > Rename Session…**, and the name opens to edit in place, at its own size, so the card keeps its height. Return renames the session, Esc keeps the name, and clicking elsewhere renames it, as in Finder. A name can be any text: the core makes runs of spaces one space and numbers a name another session has (`rename`, DESIGN §2.4). The name is the core's, so it stays through restarts of the app and the core, and through installs. VoiceOver offers **Rename** among the card's actions.
 - **Outside Irie.** Claude Code sessions that run in other terminals or in the background follow the cards, under a header with their count (DESIGN §4.6). Each is one line, in the order it started, with the mark of the state it matches, so a state change never moves or resizes it. A click or the arrow keys select one, and the details panel shows what it is doing, where it runs and its folder, with **Move into Irie** and **Copy Session ID**. While the session is busy or waits for you, the button is off and the panel says why. A move asks first, because the session's copy outside Irie ends, and anything it runs in the background stops. Then the conversation carries on in an Irie pane, and its terminal takes the keyboard. Right-click a row for the same, and to show or copy its folder. The keys that show a session skip these rows, since Irie can't show them.
 
 ## 2. How the terminal gets into the window
@@ -62,7 +63,7 @@ The **Go**, **View** and **Edit** menus list them all.
 
 These come with the core features they need, or after:
 
-- pause, freeze, rename, park, close, undo and priority controls (M4 to M7);
+- pause, freeze, park, close, undo and priority controls (M4 to M7);
 - buttons that answer a question or approve a command;
 - choosing a local model for small jobs;
 - an icon, and a signed, notarized app.

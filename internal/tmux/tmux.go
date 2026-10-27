@@ -83,9 +83,11 @@ type Runner struct {
 // command builds a tmux command. Only start may start the server: every
 // other command gets -N, so one that would start a server, such as the
 // new-session of a layout repair that runs while the server goes away,
-// fails instead of bringing a server back without its core.
+// fails instead of bringing a server back without its core. -u: without a
+// UTF-8 locale, as when Irie.app starts the server, tmux would print every
+// non-ASCII character of a session's name, or any option, as "_".
 func (r *Runner) command(start bool, args ...string) *exec.Cmd {
-	flags := []string{"-L", r.Socket}
+	flags := []string{"-u", "-L", r.Socket}
 	if !start {
 		flags = append(flags, "-N")
 	}
@@ -121,6 +123,11 @@ func (r *Runner) run(start bool, args ...string) (string, error) {
 func (r *Runner) RunList(cmds [][]string) (string, error) {
 	return r.Run(listArgs(cmds)...)
 }
+
+// Literal makes s plain text in an argument that tmux expands as a format,
+// such as a window's name, where #{…} is replaced and #(…) runs a shell
+// command: ## is a literal #.
+func Literal(s string) string { return strings.ReplaceAll(s, "#", "##") }
 
 // listArgs joins commands with ";" arguments. tmux reads an argument that
 // ends in ";" as the end of a command, so such a semicolon is escaped.

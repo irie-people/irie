@@ -70,15 +70,19 @@ struct SidebarView: View {
             .focused($listFocused)
             .onChange(of: store.focusSidebar) { listFocused = true }
             // The arrows walk on into the outside rows, which they only select.
+            // A name open to edit keeps its keys.
             .onKeyPress(.upArrow) {
+                guard store.renaming == nil else { return .ignored }
                 store.walk(-1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
+                guard store.renaming == nil else { return .ignored }
                 store.walk(1)
                 return .handled
             }
             .onKeyPress(.return) {
+                guard store.renaming == nil else { return .ignored }
                 if let o = store.selectedOutside {
                     store.explainOutside(o)
                     return .handled
@@ -107,16 +111,21 @@ private struct SessionCard: View {
 
     private var look: Look { Look(session) }
     private var quiet: Bool { look == .done || look == .idle || look == .ended }
+    private var renaming: Bool { store.renaming == session.id }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             StateMark(look: look).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.name)
-                    .font(.system(size: 13, weight: quiet ? .regular : .semibold, design: .rounded))
-                    .foregroundStyle(look == .ended || look == .idle ? Theme.muted : Color.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                if renaming {
+                    RenameField(session: session)
+                } else {
+                    Text(session.name)
+                        .font(.system(size: 13, weight: quiet ? .regular : .semibold, design: .rounded))
+                        .foregroundStyle(look == .ended || look == .idle ? Theme.muted : Color.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 Text(status)
                     .font(.system(size: 11.5, weight: look == .needs ? .medium : .regular))
                     .foregroundStyle(look == .needs ? Theme.needs : Theme.muted)
@@ -145,14 +154,18 @@ private struct SessionCard: View {
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
         .onHover { hovering = $0 }
-        .onTapGesture { store.show(session.id, focus: true) }
+        .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
+        // A double click opens the name to edit; its first click showed it.
+        .simultaneousGesture(TapGesture(count: 2).onEnded { store.beginRename(session.id) })
         .contextMenu { Actions(session: session) }
         .help([session.name, session.detail].compactMap { $0 }.joined(separator: "\n"))
-        .accessibilityElement(children: .ignore)
+        // While the name is open to edit, VoiceOver reaches the field.
+        .accessibilityElement(children: renaming ? AccessibilityChildBehavior.contain : .ignore)
         .accessibilityLabel(spoken)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { store.show(session.id, focus: true) }
         .accessibilityActions {
+            Button("Rename") { store.beginRename(session.id) }
             if let cwd = session.cwd {
                 Button("Show the folder in Finder") { store.reveal(cwd) }
                 Button("Copy the folder path") { store.copy(cwd, what: "folder path") }
@@ -205,6 +218,45 @@ private struct SessionCard: View {
         parts.append("started " + Age.spoken(session.created, now: now))
         if let t = session.tokens { parts.append("\(t.total) tokens") }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// A session's name, open to edit in its card at the name's size, so the
+/// card keeps its height. Return renames the session, Esc keeps the name,
+/// and clicking elsewhere renames it, as in Finder. What is typed lives in
+/// the store, which renames it when another session is shown.
+private struct RenameField: View {
+    @EnvironmentObject private var store: Store
+    let session: Session
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
+        // A frame like the find field's, just outside the text, so the name
+        // stays where it was drawn.
+        TextField("Name", text: $store.renameText)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .focused($focused)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 3)
+            .background(shape.fill(Theme.field))
+            .overlay(shape.strokeBorder(Theme.sunEdge, lineWidth: 1))
+            .padding(.horizontal, -3)
+            // After the card has drawn it, so the field can take the keyboard.
+            .task { focused = true }
+            .onSubmit {
+                store.endRename(commit: true)
+                store.focusSidebar += 1
+            }
+            .onExitCommand {
+                store.endRename(commit: false)
+                store.focusSidebar += 1
+            }
+            .onChange(of: focused) {
+                if !focused { store.endRename(commit: true) }
+            }
+            .accessibilityLabel("New name for \(session.name)")
     }
 }
 
@@ -334,6 +386,7 @@ private struct Actions: View {
             store.show(session.id)
             store.openInGhostty()
         }
+        Button("Rename…") { store.beginRename(session.id) }
         Divider()
         if let cwd = session.cwd {
             Button("Show Folder in Finder") { store.reveal(cwd) }

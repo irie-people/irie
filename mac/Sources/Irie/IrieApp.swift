@@ -38,6 +38,8 @@ struct IrieApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Task") { NotificationCenter.default.post(name: .irieNewTask, object: nil) }
                     .keyboardShortcut("n")
+                Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
+                    .disabled(store.selection == nil || store.outsideSelection != nil)
             }
             // KeyRouter catches Ctrl+Tab and Ctrl+] first; the menu shows them.
             CommandMenu("Go") {

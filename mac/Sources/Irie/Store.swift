@@ -19,6 +19,10 @@ final class Store: ObservableObject {
     @Published var expanded: Set<String> = []
     @Published var notice: Notice?
     @Published var spawning = false
+    /// The session whose name its card has open to edit, and the name as
+    /// typed so far.
+    @Published var renaming: String?
+    @Published var renameText = ""
     /// Bumped when the terminal should take keyboard focus.
     @Published var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
@@ -187,12 +191,17 @@ final class Store: ObservableObject {
 
     /// Swaps the session into the slot, which the terminal shows.
     func show(_ id: String, focus: Bool = false) {
+        // Going to another session renames the one open to edit, as clicking
+        // elsewhere does in Finder.
+        if renaming != nil && renaming != id { endRename(commit: true) }
         selection = id
         outsideSelection = nil
         Task {
             do {
                 _ = try await client.call("show", ShowArgs(session: id, focus: focus), as: Empty.self)
-                if focus { focusTerminal += 1 }
+                // A double click's first click shows the session; its name,
+                // open to edit, keeps the keyboard.
+                if focus && renaming != id { focusTerminal += 1 }
             } catch {
                 say("Couldn’t show it: \(error.localizedDescription)", error: true)
             }
@@ -220,6 +229,42 @@ final class Store: ObservableObject {
         } catch {
             say(error.localizedDescription, error: true)
             return false
+        }
+    }
+
+    /// Opens the session's name to edit, in its card.
+    func beginRename(_ id: String) {
+        guard let s = sessions.first(where: { $0.id == id }) else { return }
+        if renaming != id {
+            endRename(commit: true)
+            renameText = s.name
+        }
+        selection = id
+        outsideSelection = nil
+        renaming = id
+    }
+
+    /// Closes the name's editor and, with commit, renames the session to
+    /// what was typed. The card shows the new name at once; the core's
+    /// answer, which numbers a name another session has, follows. The name
+    /// is the core's, so it outlasts the app, the core and installs.
+    func endRename(commit: Bool) {
+        guard let id = renaming else { return }
+        renaming = nil
+        guard commit, let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        let old = sessions[i].name
+        let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != old else { return }
+        sessions[i].name = name
+        Task {
+            do {
+                let r = try await client.call("rename", RenameArgs(session: id, name: name), as: RenameResult.self)
+                if let j = sessions.firstIndex(where: { $0.id == id }) { sessions[j].name = r.session.name }
+                say("Renamed \(old) to \(r.session.name).", error: false)
+            } catch {
+                if let j = sessions.firstIndex(where: { $0.id == id }), sessions[j].name == name { sessions[j].name = old }
+                say("Couldn’t rename \(old): \(error.localizedDescription)", error: true)
+            }
         }
     }
 

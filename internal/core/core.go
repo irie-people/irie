@@ -411,7 +411,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpRename,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 		}}, nil
 	case ipc.OpList:
@@ -447,6 +447,16 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return nil, c.show(a)
+	case ipc.OpRename:
+		var a ipc.RenameArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.rename(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.RenameResult{Session: s}, nil
 	case ipc.OpHook:
 		var a ipc.HookArgs
 		if err := decode(raw, &a); err != nil {

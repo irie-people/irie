@@ -31,6 +31,9 @@ const ctlUsage = `usage: irie ctl <command>
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short
   irie ctl show [--focus] SESSION        show a session in the slot
+  irie ctl rename SESSION NAME...        rename a session, by its id or name,
+                                         and print the name it got: numbered
+                                         when another session has it
   irie ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -72,6 +75,8 @@ func ctl(args []string) error {
 		return ctlSpawn(args[1:])
 	case "show":
 		return ctlShow(args[1:])
+	case "rename":
+		return ctlRename(args[1:])
 	case "conversation":
 		return ctlConversation(args[1:])
 	case "watch":
@@ -142,6 +147,33 @@ func ctlList(args []string) error {
 		}
 	}
 	return tw.Flush()
+}
+
+// ctlRename renames one of Irie's sessions, which it finds by id or name.
+func ctlRename(args []string) error {
+	if len(args) < 2 {
+		return errors.New("usage: irie ctl rename SESSION NAME...")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+		return err
+	}
+	id := args[0]
+	for _, s := range l.Sessions {
+		if s.Name == args[0] {
+			id = s.ID
+		}
+	}
+	var r ipc.RenameResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpRename, ipc.RenameArgs{Session: id, Name: strings.Join(args[1:], " ")}, &r); err != nil {
+		return err
+	}
+	fmt.Println(r.Session.Name)
+	return nil
 }
 
 func or(s, fallback string) string {

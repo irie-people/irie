@@ -133,6 +133,17 @@ struct ShowArgs: Encodable {
     var focus: Bool
 }
 
+struct RenameArgs: Encodable {
+    var session: String
+    var name: String
+}
+
+/// The session with the name the core gave it, numbered when another
+/// session has it.
+struct RenameResult: Decodable {
+    var session: Session
+}
+
 struct Empty: Codable {}
 
 struct WireError: Decodable, Error, LocalizedError {
