@@ -25,6 +25,8 @@ type Backend interface {
 	Show(id string, focus bool) error
 	// Complete returns the tokens that complete an @ or + token.
 	Complete(text string) ([]string, error)
+	// Move carries a session that runs outside Irie on in Irie.
+	Move(vendorID, profile string) (ipc.Session, error)
 }
 
 // FrameMsg carries one frame of the core's subscription.
@@ -92,6 +94,12 @@ type Model struct {
 	sel      int // selected row, -1 when the list is empty
 	offset   int // first visible row
 	pending  string
+
+	outside        []ipc.OutsideSession // the Outside Irie group, after the sessions (outside.go)
+	outsideProblem string
+	moving         bool
+	confirming     string    // the outside session a first m asked to move
+	confirmedAt    time.Time // when it asked
 
 	focus     focusArea
 	bar       textarea.Model
@@ -195,12 +203,13 @@ func (m *Model) setFocus(f focusArea) {
 func (m *Model) setStatus(s string, isErr bool) { m.status, m.statusErr = s, isErr }
 
 func (m *Model) clamp() {
-	if len(m.sessions) == 0 {
+	n := m.rowCount()
+	if n == 0 {
 		m.sel, m.offset = -1, 0
 		return
 	}
-	m.sel = min(max(m.sel, 0), len(m.sessions)-1)
-	m.offset = min(max(m.offset, 0), max(0, len(m.sessions)-m.listHeight()))
+	m.sel = min(max(m.sel, 0), n-1)
+	m.offset = min(max(m.offset, 0), max(0, n-m.listHeight()))
 }
 
 // reveal scrolls so the selected row is visible.
@@ -227,8 +236,8 @@ func (m *Model) moveTo(i int) {
 
 func (m *Model) scroll(n int) {
 	m.offset += n
-	if len(m.sessions) > 0 {
-		m.offset = min(max(m.offset, 0), max(0, len(m.sessions)-m.listHeight()))
+	if rows := m.rowCount(); rows > 0 {
+		m.offset = min(max(m.offset, 0), max(0, rows-m.listHeight()))
 	} else {
 		m.offset = 0
 	}
@@ -246,11 +255,13 @@ func before(a, b ipc.Session) bool {
 }
 
 func (m *Model) apply(f ipc.Frame) {
-	selected := ""
+	selected, outsideSel := "", m.outsideKey(m.sel)
 	if m.sel >= 0 && m.sel < len(m.sessions) {
 		selected = m.sessions[m.sel].ID
 	}
 	switch f.T {
+	case ipc.FrameOutside:
+		m.setOutside(f)
 	case ipc.FrameSnapshot:
 		m.sessions = slices.Clone(f.Sessions)
 		if !m.gotSnapshot && len(m.sessions) > 0 && m.bar.Value() == "" {
@@ -285,19 +296,22 @@ func (m *Model) apply(f ipc.Frame) {
 	if selected != "" {
 		m.sel = m.index(selected)
 	}
+	if i := m.outsideIndex(outsideSel); i >= 0 {
+		m.sel = i
+	}
 	if m.pending != "" {
 		if i := m.index(m.pending); i >= 0 {
 			m.sel, m.pending = i, ""
 		}
 	}
-	if m.sel < 0 && len(m.sessions) > 0 {
+	if m.sel < 0 && m.rowCount() > 0 {
 		m.sel = 0
 	}
 	m.reveal()
 }
 
 func (m Model) showCmd(focus bool) tea.Cmd {
-	if m.sel < 0 {
+	if m.sel < 0 || m.sel >= len(m.sessions) {
 		return nil
 	}
 	id, b := m.sessions[m.sel].ID, m.backend
@@ -337,6 +351,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setStatus(msg.err.Error(), true)
 		}
+	case movedMsg:
+		m.moved(msg)
 	case completedMsg:
 		m.completed(msg)
 	case tea.PasteMsg:
@@ -369,11 +385,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft {
 			break
 		}
+		m.confirming = ""
 		if row := msg.Y - m.listTop(); row >= 0 && row < m.listHeight() {
-			if i := m.offset + row; i < len(m.sessions) {
+			if i := m.offset + row; i < m.rowCount() {
 				m.sel = i
 				m.setFocus(focusList)
-				return m, m.showCmd(true)
+				cmd := m.open(true)
+				return m, cmd
 			}
 		}
 		if msg.Y >= m.height-m.barHeight() {
@@ -390,6 +408,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.setStatus("", false)
+	if msg.String() != "m" {
+		m.confirming = "" // any other key cancels a move
+	}
 	switch msg.String() {
 	case "up", "k":
 		m.moveTo(m.sel - 1)
@@ -402,11 +423,13 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "home":
 		m.moveTo(0)
 	case "end":
-		m.moveTo(len(m.sessions) - 1)
-	case "enter":
-		return m, m.showCmd(true)
-	case "space":
-		return m, m.showCmd(false)
+		m.moveTo(m.rowCount() - 1)
+	case "enter", "space":
+		cmd := m.open(msg.String() == "enter")
+		return m, cmd
+	case "m":
+		cmd := m.moveSelected()
+		return m, cmd
 	case "tab":
 		m.setFocus(focusBar)
 	case ":":
@@ -421,6 +444,9 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.spawning {
 			return m, nil
+		}
+		if cmd, ok := m.barCommand(); ok {
+			return m, cmd
 		}
 		args, err := ParseTask(m.bar.Value(), m.home)
 		if err != nil {

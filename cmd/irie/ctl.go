@@ -30,6 +30,11 @@ const ctlUsage = `usage: irie ctl <command>
                                          and fails if it is not
   irie ctl show [--focus] SESSION        show a session in the slot
   irie ctl watch [--session SESSION]     print events as NDJSON until interrupted
+  irie ctl move [--wait] [+PROFILE] SESSION
+                                         carry an idle Claude Code session that
+                                         runs outside Irie on in Irie, and print
+                                         its new session id. SESSION is its id or
+                                         name, as ctl list shows under OUTSIDE IRIE
 `
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
@@ -46,6 +51,8 @@ func ctl(args []string) error {
 		return ctlShow(args[1:])
 	case "watch":
 		return ctlWatch(args[1:])
+	case "move":
+		return ctlMove(args[1:])
 	}
 	return fmt.Errorf("unknown ctl command %q\n\n%s", args[0], ctlUsage)
 }
@@ -85,7 +92,107 @@ func ctlList(args []string) error {
 	for _, s := range r.Sessions {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, s.Detail)
 	}
+	// Claude Code sessions that run outside Irie, under a heading of their
+	// own; ctl move takes them by id or name.
+	if len(r.Outside) > 0 || r.OutsideProblem != "" {
+		fmt.Fprintln(tw, "\nOUTSIDE IRIE")
+		if r.OutsideProblem != "" {
+			fmt.Fprintln(tw, r.OutsideProblem)
+		}
+	}
+	if len(r.Outside) > 0 {
+		fmt.Fprintln(tw, "SESSION\tSTATUS\tKIND\tNAME\tCWD")
+		for _, o := range r.Outside {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", or(o.VendorID, "-"), or(o.Status, "-"), o.Kind, or(o.Name, "-"), o.Cwd)
+		}
+	}
 	return tw.Flush()
+}
+
+func or(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
+}
+
+// ctlMove moves a session that runs outside Irie in. It finds the session
+// by its full id, its short id or its name in the core's list.
+func ctlMove(args []string) error {
+	const usage = "usage: irie ctl move [--wait] [+PROFILE] SESSION"
+	fs := flag.NewFlagSet("ctl move", flag.ContinueOnError)
+	wait := fs.Bool("wait", false, "wait until the moved session is ready, and fail if it is not")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest, profile := fs.Args(), ""
+	if len(rest) > 0 && strings.HasPrefix(rest[0], "+") {
+		profile, rest = rest[0][1:], rest[1:]
+	}
+	if len(rest) != 1 || rest[0] == "" {
+		return errors.New(usage)
+	}
+	if err := up(nil); err != nil {
+		return err
+	}
+	cfg, p, err := load()
+	if err != nil {
+		return err
+	}
+	var r ipc.ListResult
+	if err := ipc.Call(p.Socket(), 15*time.Second, ipc.OpList, nil, &r); err != nil {
+		return err
+	}
+	id, err := pickOutside(r, rest[0])
+	if err != nil {
+		return err
+	}
+	var res ipc.MoveResult
+	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpMove, ipc.MoveArgs{VendorID: id, Profile: profile}, &res); err != nil {
+		return err
+	}
+	fmt.Println(res.Session.ID)
+	if !*wait {
+		return nil
+	}
+	return waitReady(p.Socket(), res.Session.ID, cfg.Spawn.ReadyTimeout+5*time.Second)
+}
+
+// pickOutside returns the vendor id of the outside session that what names:
+// its full id, its short id, or its name when only one has it. A full id
+// that is not listed goes to the core as it is, which says why it cannot
+// move.
+func pickOutside(r ipc.ListResult, what string) (string, error) {
+	var named []ipc.OutsideSession
+	for _, o := range r.Outside {
+		switch {
+		case o.VendorID == what || o.ID == what && o.VendorID != "":
+			return o.VendorID, nil
+		case o.Name == what:
+			named = append(named, o)
+		}
+	}
+	switch len(named) {
+	case 1:
+		if named[0].VendorID == "" {
+			return "", fmt.Errorf("%s has no session id yet, so it cannot move", what)
+		}
+		return named[0].VendorID, nil
+	case 0:
+		if len(what) == 36 && strings.Count(what, "-") == 4 {
+			return what, nil
+		}
+		msg := fmt.Sprintf("no Claude Code session %q runs outside Irie; `irie ctl list` shows them", what)
+		if r.OutsideProblem != "" {
+			msg += " (" + r.OutsideProblem + ")"
+		}
+		return "", errors.New(msg)
+	}
+	var ids []string
+	for _, o := range named {
+		ids = append(ids, or(o.VendorID, "-")+" in "+o.Cwd)
+	}
+	return "", fmt.Errorf("%d sessions are named %q; give one's id: %s", len(named), what, strings.Join(ids, ", "))
 }
 
 // spawnTimeout bounds a spawn, which may make a worktree and check out its

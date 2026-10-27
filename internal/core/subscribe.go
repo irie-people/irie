@@ -20,7 +20,9 @@ const maxQueue = 10000
 // subscriber coalesces changes for one client. Between two frames it only
 // remembers which rows changed; a frame then carries their latest state, as
 // one upsert or remove, or as a snapshot when several rows changed. Event
-// frames, for a client that asked for them, are never coalesced.
+// frames, for a client that asked for them, are never coalesced. A client
+// that sees every session also gets the sessions outside Irie, after its
+// first snapshot and whenever they change.
 type subscriber struct {
 	c       *Core
 	session string // only this session, when set
@@ -30,10 +32,11 @@ type subscriber struct {
 	wake    chan struct{}
 	done    chan struct{}
 
-	mu    sync.Mutex
-	full  bool
-	dirty map[string]bool
-	queue []ipc.Frame // event frames not sent yet
+	mu      sync.Mutex
+	full    bool
+	dirty   map[string]bool
+	queue   []ipc.Frame // event frames not sent yet
+	outside bool        // an outside frame is due
 }
 
 // Subscribe starts a stream of frames for one client (ipc.Handler).
@@ -49,7 +52,7 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	sub := &subscriber{
 		c: c, session: a.Session, agent: a.Agent, events: a.Events,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
-		full: true, dirty: map[string]bool{},
+		full: true, dirty: map[string]bool{}, outside: a.Session == "",
 	}
 	c.mu.Lock()
 	c.subs[sub] = true
@@ -58,7 +61,8 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	}
 	c.mu.Unlock()
 	if app {
-		go c.tick() // zoom the slot now, not at the next tick
+		go c.tick()                              // zoom the slot now, not at the next tick
+		go c.refreshOutside(outsideEvery, false) // someone looks now
 	}
 	sub.wake <- struct{}{}
 	go sub.loop()
@@ -118,6 +122,21 @@ func (s *subscriber) note(frames []ipc.Frame) {
 	}
 }
 
+// noteOutside marks an outside frame due, for a client that sees every
+// session.
+func (s *subscriber) noteOutside() {
+	if s.session != "" {
+		return
+	}
+	s.mu.Lock()
+	s.outside = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // event queues an event frame for a client that wants it. The caller holds
 // s.c.mu.
 func (s *subscriber) event(e event.Event) {
@@ -144,8 +163,8 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, queue := s.full, s.dirty, s.queue
-		s.full, s.dirty, s.queue = false, map[string]bool{}, nil
+		full, dirty, queue, outside := s.full, s.dirty, s.queue, s.outside
+		s.full, s.dirty, s.queue, s.outside = false, map[string]bool{}, nil, false
 		s.mu.Unlock()
 		for _, f := range queue {
 			select {
@@ -154,14 +173,22 @@ func (s *subscriber) loop() {
 				return
 			}
 		}
-		if !full && len(dirty) == 0 {
+		var frames []ipc.Frame
+		if full || len(dirty) > 0 {
+			frames = append(frames, s.frame(full, dirty))
+		}
+		if outside {
+			frames = append(frames, s.outsideFrame())
+		}
+		if len(frames) == 0 {
 			continue
 		}
-		f := s.frame(full, dirty)
-		select {
-		case s.out <- f:
-		case <-s.done:
-			return
+		for _, f := range frames {
+			select {
+			case s.out <- f:
+			case <-s.done:
+				return
+			}
 		}
 		select {
 		case <-time.After(frameGap):
@@ -189,4 +216,11 @@ func (s *subscriber) frame(full bool, dirty map[string]bool) ipc.Frame {
 		}
 	}
 	return ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{Version: s.c.version}}
+}
+
+// outsideFrame carries the latest sessions outside Irie.
+func (s *subscriber) outsideFrame() ipc.Frame {
+	s.c.mu.Lock()
+	defer s.c.mu.Unlock()
+	return ipc.Frame{T: ipc.FrameOutside, Outside: s.c.outsideList(), Problem: s.c.outside.problem}
 }

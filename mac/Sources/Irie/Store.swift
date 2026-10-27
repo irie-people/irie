@@ -31,6 +31,13 @@ final class Store: ObservableObject {
     weak var terminalView: NSView?
     /// Whether the terminal has the keyboard, which brightens its frame.
     @Published var terminalHasKeys = false
+    /// The Claude Code sessions outside Irie, the one selected, the one a
+    /// move asks about, and the one moving (OutsideSection.swift).
+    @Published var outside: [OutsideSession] = []
+    @Published var outsideSelection: String?
+    @Published var confirmingMove: OutsideSession?
+    @Published var moving: String?
+    var outsideProblem = ""
 
     static let defaultFontSize: CGFloat = 13
 
@@ -103,6 +110,9 @@ final class Store: ObservableObject {
             }
         case "remove":
             sessions.removeAll { $0.id == f.id }
+        case "outside":
+            applyOutside(f)
+            return
         default:
             return
         }
@@ -171,6 +181,7 @@ final class Store: ObservableObject {
     /// Swaps the session into the slot, which the terminal shows.
     func show(_ id: String, focus: Bool = false) {
         selection = id
+        outsideSelection = nil
         Task {
             do {
                 _ = try await client.call("show", ShowArgs(session: id, focus: focus), as: Empty.self)
