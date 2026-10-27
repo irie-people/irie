@@ -700,7 +700,15 @@ Each row shows the first state in this table that applies; the table is in prece
 | done | `✓` | green | `turn.ended`, not yet viewed. Turns into idle when you show the session. `ui.red_on_done = true` shows it red instead |
 | idle | `○` | dim | done and viewed |
 
-The sidebar draws these colours from its palette (§5.5, `ui.theme`): red is the palette's needs colour, green its done, yellow its paused and cyan its frozen; default is ink and dim is muted, so a dim red or dim yellow row has a red or yellow glyph and a muted name. In every palette, light and dark, each text colour reads at 4.5:1 and the accent at 3:1 on every surface (WCAG 2.2, 1.4.3 and 1.4.11). The sidebar paints every cell's background itself, so this holds whatever the terminal's theme is. It asks the terminal for its background (OSC 11, which tmux answers with the attached client's) and draws the dark set until an answer comes. Each state has its own glyph, so colour is never the only cue (1.4.1): only failed and an exit with an error code share `✕`, and only paused and pausing share `‖`. The core derives frozen, paused and pausing from M5 and M6; the sidebar already draws them.
+The sidebar draws these colours from its palette (§5.5, `ui.theme`): red is the palette's needs colour, green its done, yellow its paused and cyan its frozen; default is ink and dim is muted, so a dim red or dim yellow row has a red or yellow glyph and a muted name. In every palette, light and dark, each text colour reads at 4.5:1 and the accent at 3:1 on every surface (WCAG 2.2, 1.4.3 and 1.4.11). The sidebar paints every cell's background itself, so this holds whatever the terminal's theme is. It asks the terminal for its background (OSC 11, which tmux answers with the attached client's) and draws the dark set until an answer comes. Each state has its own glyph, so colour is never the only cue (1.4.1): only failed and an exit with an error code share `✕`, and only paused and pausing share `‖`. The core derives frozen, paused and pausing from M5 and M6; the sidebar already draws them. The Mac app draws the same glyphs in the same roles ([MAC.md](MAC.md) §5).
+
+Before the palettes, neither sidebar followed this table exactly. The terminal sidebar:
+- drew its title and the command bar's prompt in Irie's sun yellow, which reads at 1.8:1 on a light terminal;
+- took its state colours from the terminal's own theme, so their contrast was whatever that theme gave;
+- left failed rows out of the needs-you count, though they are red;
+- had no look for frozen, paused or pausing.
+
+Two older faults were fixed just before: working shared needs you's `●`, and an exit with an error code shared a clean exit's `·`. The Mac app's faults are listed in [MAC.md](MAC.md) §5.
 
 ### 5.4 Files
 
