@@ -84,28 +84,6 @@ enum Look: Equatable {
         default: return nil
         }
     }
-
-    /// The group it joins in the sidebar's State view, and which count in the
-    /// title bar it adds to.
-    var group: Group {
-        switch self {
-        case .failed, .needs, .stalled: return .needs
-        case .working, .starting, .pausing, .paused, .frozen: return .working
-        case .done, .idle, .exited, .exitedWithError: return .done
-        }
-    }
-
-    enum Group: CaseIterable {
-        case needs, working, done
-
-        var title: String {
-            switch self {
-            case .needs: return "Needs you"
-            case .working: return "Working"
-            case .done: return "To verify"
-            }
-        }
-    }
 }
 
 extension Look {

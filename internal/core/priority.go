@@ -27,7 +27,8 @@ type bgProc struct {
 }
 
 // setPriority promotes a session (level 1), which also puts it at the top
-// of the list, or puts it back (level 0). It takes effect before it returns.
+// of the list and unparks it, or puts it back (level 0). It takes effect
+// before it returns.
 func (c *Core) setPriority(a ipc.PriorityArgs) error {
 	if a.Level < 0 || a.Level > 1 {
 		return ipc.Errorf(ipc.CodeBadArgs, "priority level %d: it is 0 or 1", a.Level)
@@ -40,6 +41,7 @@ func (c *Core) setPriority(a ipc.PriorityArgs) error {
 	}
 	if a.Level > 0 {
 		c.toTop(x.id)
+		c.setParked(x.id, false)
 	}
 	if x.track.priority != a.Level {
 		data := map[string]any{"level": a.Level}

@@ -321,6 +321,76 @@ func TestReorderKeepsOneOrderThroughARestart(t *testing.T) {
 	}
 }
 
+// parked are the names of the parked rows, in the list's order.
+func parked(rows []ipc.Session) []string {
+	var out []string
+	for _, s := range rows {
+		if s.Parked {
+			out = append(out, s.Name)
+		}
+	}
+	return out
+}
+
+func TestParkKeepsThePlaceThroughARestartAndPromoteUnparks(t *testing.T) {
+	c := setup(t)
+	for _, n := range []string{"alpha", "beta", "gamma"} {
+		c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: n})
+	}
+	id := map[string]string{}
+	for _, s := range c.list() {
+		id[s.Name] = s.ID
+	}
+	order := []string{"alpha", "beta", "gamma"}
+	for _, n := range []string{"alpha", "gamma"} {
+		if err := c.call(ipc.OpPark, ipc.ParkArgs{Session: id[n]}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Parking twice changes nothing.
+	if err := c.call(ipc.OpPark, ipc.ParkArgs{Session: id["gamma"]}, nil); err != nil {
+		t.Fatal(err)
+	}
+	rows := c.list()
+	if got := parked(rows); !slices.Equal(got, []string{"alpha", "gamma"}) {
+		t.Errorf("parked = %v, want alpha and gamma", got)
+	}
+	// Parking leaves the order be, so unparking brings a session back to
+	// its place.
+	if got := names(rows); !slices.Equal(got, order) {
+		t.Errorf("order = %v, want %v", got, order)
+	}
+	c.restartCore()
+	if got := parked(c.list()); !slices.Equal(got, []string{"alpha", "gamma"}) {
+		t.Errorf("after a restart, parked = %v", got)
+	}
+	if err := c.call(ipc.OpUnpark, ipc.ParkArgs{Session: id["alpha"]}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := parked(c.list()); !slices.Equal(got, []string{"gamma"}) {
+		t.Errorf("after unparking alpha, parked = %v", got)
+	}
+	// Promoting a parked session unparks it (DESIGN §4.3).
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["gamma"], Level: 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	rows = c.list()
+	if got := parked(rows); len(got) > 0 {
+		t.Errorf("after promoting gamma, parked = %v", got)
+	}
+	if got := names(rows); !slices.Equal(got, []string{"gamma", "alpha", "beta"}) {
+		t.Errorf("after promoting gamma: %v", got)
+	}
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["gamma"], Level: 0}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range []string{ipc.OpPark, ipc.OpUnpark} {
+		if err := c.call(op, ipc.ParkArgs{Session: "s000000000000"}, nil); err == nil || !strings.Contains(err.Error(), "no session") {
+			t.Errorf("%s of no session: %v", op, err)
+		}
+	}
+}
+
 // pri is a process's scheduling priority, which macOS's background state
 // lowers to 4.
 func pri(t *testing.T, pid int) string {

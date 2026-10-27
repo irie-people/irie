@@ -336,9 +336,13 @@ func TestEveryCellIsOnThePalette(t *testing.T) {
 				painted(t, fmt.Sprintf("%s, hovering row %d", name, y), m)
 			}
 			m = send(m, keyMsg("v"))
-			painted(t, name+", by state", m)
-			m = send(m, keyMsg("home"))
-			m = send(m, keyMsg("enter"))
+			painted(t, name+", as one list", m)
+			// Parked, with a red row in it, open and folded.
+			parked := everyState()[3]
+			parked.Parked = true
+			m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &parked}})
+			painted(t, name+", parked", m)
+			m = send(m, keyMsg("Z"))
 			painted(t, name+", folded", m)
 			m = send(m, keyMsg("v"))
 			for range 4 {

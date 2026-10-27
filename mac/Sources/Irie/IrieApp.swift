@@ -60,6 +60,9 @@ struct IrieApp: App {
                 Button("Reopen Closed Session") { store.reopenLast() }
                     .keyboardShortcut("t", modifiers: [.command, .shift])
                     .disabled(store.closed.isEmpty)
+                // The sidebar's z key does it while the list has the keyboard.
+                Button(store.closable?.isParked == true ? "Unpark Session" : "Park Session") { store.toggleParked() }
+                    .disabled(store.closable == nil || !store.canPark)
             }
             // KeyRouter catches Ctrl+Tab and Ctrl+] first; the menu shows them.
             CommandMenu("Go") {

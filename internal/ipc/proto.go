@@ -148,6 +148,7 @@ type Session struct {
 
 	// Where the user put it and what they did to it (control.go).
 	Order    int        `json:"order"`              // its place in the list, from 0 at the top
+	Parked   bool       `json:"parked,omitempty"`   // in the Parked group at the end of the list
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call

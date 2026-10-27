@@ -406,21 +406,20 @@ func TestFramesLeaveTheListWhereItIs(t *testing.T) {
 	if selectedName(m) != "task-000" {
 		t.Errorf("selection moved to %s", selectedName(m))
 	}
-	// In the State view a card that changes state moves group; the one on
-	// top leaving does not scroll the list to where it went.
+	// Nor in the List view: the card on top that finishes stays on top.
 	m, _ = newModel(t, 34, 24, 100)
 	m = send(m, keyMsg("v"))
 	for range 5 {
 		m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
 	}
-	if !strings.Contains(first(), "task-004") {
+	if !strings.Contains(first(), "task-005") {
 		t.Fatalf("first card after scrolling = %q", first())
 	}
-	row = sessions(100)[4]
+	row = sessions(100)[5]
 	row.State = ipc.StateDone
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &row}})
 	if !strings.Contains(first(), "task-005") {
-		t.Errorf("the top card went to To verify and the list followed it: first card %q", first())
+		t.Errorf("a card that finished moved: first card %q", first())
 	}
 }
 
@@ -742,7 +741,7 @@ func TestZeroCountsAreNotRed(t *testing.T) {
 func TestTabsAndTheBoxNeedRoom(t *testing.T) {
 	m, _ := newModel(t, 34, 9, 3)
 	for i, l := range screen(t, m) {
-		if strings.Contains(l, "State │ Repo") || strings.ContainsAny(l, "╭╰") {
+		if strings.Contains(l, "List │ Repo") || strings.ContainsAny(l, "╭╰") {
 			t.Errorf("height 9: line %d = %q", i, l)
 		}
 	}
@@ -751,7 +750,7 @@ func TestTabsAndTheBoxNeedRoom(t *testing.T) {
 	// The header has its second line, what undo and redo would do, above
 	// the tabs.
 	top := m.listTop()
-	if !strings.Contains(lines[1], "↶") || lines[2] != "  State │ Repo                    " || !strings.HasPrefix(lines[9], " ╰") || !strings.HasPrefix(lines[7], " ╭") {
+	if !strings.Contains(lines[1], "↶") || lines[2] != "  List │ Repo                     " || !strings.HasPrefix(lines[9], " ╰") || !strings.HasPrefix(lines[7], " ╭") {
 		t.Errorf("height 10: no history line and tabs under the header, or no box around the bar:\n%s", strings.Join(lines, "\n"))
 	}
 	if !strings.Contains(lines[top], "Not in a repo") || !strings.Contains(lines[top+1], "task-000") {

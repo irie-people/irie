@@ -18,7 +18,7 @@ final class Store: ObservableObject {
     @Published var selection: String?
     /// How the sidebar groups the sessions, and the groups folded away. Both
     /// are kept when the user changes them (choose(_:), fold(_:)).
-    @Published var mode: SidebarMode = SidebarMode(rawValue: UserDefaults.standard.string(forKey: "sidebarMode") ?? "") ?? .repo
+    @Published var mode: SidebarMode = SidebarMode(saved: UserDefaults.standard.string(forKey: "sidebarMode"))
     @Published var folded: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "foldedGroups") ?? [])
     /// The repos the @ words know and the agents the + words name, with what
     /// each runs: what the task bar's menu and the new-task sheet offer.
@@ -28,6 +28,8 @@ final class Store: ObservableObject {
     @Published private(set) var canPickModel = false
     /// Whether the core reads and edits its config for the Settings window.
     @Published private(set) var canConfigure = false
+    /// Whether the core parks sessions (Controls.swift).
+    @Published private(set) var canPark = false
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     @Published private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
@@ -35,8 +37,8 @@ final class Store: ObservableObject {
     /// it for the marks; this draws the views again when it changes.
     @Published private(set) var redOnDone = false
     /// spawn.close_when_done, from the core: a finished session closes
-    /// itself, so the sidebar keeps no To verify group and the title bar no
-    /// To verify count. What closed is in history (`irie ctl history`, ⇧⌘T).
+    /// itself, so the title bar keeps no To verify count, and the review dock
+    /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
@@ -132,6 +134,7 @@ final class Store: ObservableObject {
                 link = .online(version: hello.version)
                 canPickModel = hello.features.contains("spawn-model")
                 canConfigure = hello.features.contains("config")
+                canPark = hello.features.contains("park")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
                 // The store lives as long as the app.
@@ -246,6 +249,7 @@ final class Store: ObservableObject {
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
         canConfigure = true
+        canPark = true
         taskRepo = "irie"
     }
 
@@ -267,26 +271,26 @@ final class Store: ObservableObject {
 
     // MARK: Keyboard
 
-    /// The sidebar's groups, without the rows the filter hides. In the Repo
-    /// view, a group per repo in the order its first session started, then
-    /// the sessions in no repo; a state change moves nothing. In the State
-    /// view, the sessions that need you, those at work, and those done.
-    /// Within a group the sessions keep the order they started (DESIGN §4.1).
+    /// The sidebar's groups, without the rows the filter hides. In the List
+    /// view, one list; in the Repo view, a group per repo in the order its
+    /// first session started, then the sessions in no repo. Then the Parked
+    /// group. Within a group the sessions keep the list's one order, which
+    /// only the user changes, so a state change never moves a card (DESIGN
+    /// §4.1).
     var drawnGroups: [SessionGroup] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
         let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
+        let parked = rows.filter(\.isParked)
+        var out: [SessionGroup] = []
         switch mode {
-        case .state:
-            return Look.Group.allCases.compactMap { g in
-                // A finished session is about to close itself; what is left
-                // in the last group is idle or ended, so it is named so.
-                let in_ = rows.filter { Look($0).group == g && !(closeWhenDone && Look($0) == .done) }
-                let title = closeWhenDone && g == .done ? "Idle" : g.title
-                return in_.isEmpty ? nil : SessionGroup(id: "state:\(g)", title: title, path: nil, sessions: in_)
+        case .list:
+            let active = rows.filter { !$0.isParked }
+            if !active.isEmpty {
+                out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: active))
             }
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
-            for s in rows {
+            for s in rows where !s.isParked {
                 guard let r = s.repo, !r.isEmpty else {
                     none.append(s)
                     continue
@@ -295,11 +299,24 @@ final class Store: ObservableObject {
                 byRepo[r, default: []].append(s)
             }
             let names = SessionGroup.names(order)
-            var out = order.map { SessionGroup(id: "repo:" + $0, title: names[$0] ?? $0, path: $0, sessions: byRepo[$0] ?? []) }
+            out = order.map { SessionGroup(id: "repo:" + $0, title: names[$0] ?? $0, path: $0, sessions: byRepo[$0] ?? []) }
             if !none.isEmpty {
                 out.append(SessionGroup(id: "repo:", title: "Not in a repo", path: nil, sessions: none))
             }
-            return out
+        }
+        if !parked.isEmpty {
+            out.append(SessionGroup(id: SessionGroup.parked, title: "Parked", path: nil, sessions: parked))
+        }
+        return out
+    }
+
+    /// The id of the group a session is drawn in: Parked while it is parked,
+    /// else the list or its repo's group.
+    func groupID(of s: Session) -> String {
+        if s.isParked { return SessionGroup.parked }
+        switch mode {
+        case .list: return SessionGroup.list
+        case .repo: return "repo:" + (s.repo ?? "")
         }
     }
 
@@ -537,20 +554,32 @@ final class Store: ObservableObject {
     }
 }
 
-/// How the sidebar groups the sessions: by repo, or by what they need.
+/// How the sidebar groups the sessions: one list, or a group per repo.
+/// Either way the parked ones come last, in the Parked group.
 enum SidebarMode: String, CaseIterable {
-    case state, repo
+    case list, repo
 
-    var title: String { self == .state ? "State" : "Repo" }
+    /// The mode the app kept. The State view of earlier builds, which moved
+    /// a card whenever its state changed, is the List view now.
+    init(saved: String?) {
+        self = saved == "state" ? .list : SidebarMode(rawValue: saved ?? "") ?? .repo
+    }
+
+    var title: String { self == .list ? "List" : "Repo" }
 }
 
-/// One group of the sidebar: a repo, the sessions in no repo, or a state.
+/// One group of the sidebar: the list, a repo, the sessions in no repo, or
+/// the parked ones.
 struct SessionGroup: Identifiable, Equatable {
     let id: String
     let title: String
     /// The repo's main checkout, for a repo's group.
     let path: String?
     let sessions: [Session]
+
+    /// The List view's one group, which has no header, and the Parked group.
+    static let list = "list"
+    static let parked = "parked"
 
     /// A name per repo: its folder's name, with the folder above it when two
     /// repos share a name.

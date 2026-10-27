@@ -13,6 +13,10 @@ const (
 	// OpReorder puts a session elsewhere in the list. Move, its near
 	// namesake, brings in a session from outside Irie.
 	OpReorder = "reorder"
+	// OpPark puts a session in the Parked group at the end of the list;
+	// OpUnpark brings it back to its place.
+	OpPark   = "park"
+	OpUnpark = "unpark"
 )
 
 // StateFrozen is the state of a frozen session (DESIGN §5.3). It comes
@@ -44,4 +48,9 @@ type PriorityArgs struct {
 type ReorderArgs struct {
 	Session string `json:"session"`
 	Before  string `json:"before,omitempty"`
+}
+
+// ParkArgs name the session to park or unpark.
+type ParkArgs struct {
+	Session string `json:"session"`
 }

@@ -25,8 +25,8 @@ enum Snapshot {
                 shots.append(("\(p.id)-light", p.id, 1100, false, .repo))
                 shots.append(("\(p.id)-dark", p.id, 1100, true, .repo))
             }
-            shots.append(("state-light", Palette.standard.id, 1100, false, .state))
-            shots.append(("state-dark", Palette.standard.id, 1100, true, .state))
+            shots.append(("list-light", Palette.standard.id, 1100, false, .list))
+            shots.append(("list-dark", Palette.standard.id, 1100, true, .list))
             shots.append(("window-narrow", Palette.standard.id, 820, false, .repo))
             shots.append(("window-wide", Palette.standard.id, 1500, false, .repo))
             // The details at their default size, but for these two: minimized
@@ -130,7 +130,7 @@ enum Snapshot {
 }
 
 /// Sessions for the snapshot, in /home/alice. The first needs you, so it
-/// marks where the list starts.
+/// marks where the list starts; two are parked.
 enum Fixture {
     static let selected = "s02docsguide"
 
@@ -177,12 +177,12 @@ enum Fixture {
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude"),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "idle", created: ago(9),
-                    cwd: "/home/alice/.local/share/irie/scratch/summarise-the-notes", profile: "claude"),
+                    cwd: "/home/alice/.local/share/irie/scratch/summarise-the-notes", profile: "claude", parked: true),
             Session(id: "s07stalled01", name: "try-the-login", state: "stalled", reason: "stalled",
                     detail: "stalled: no hooks within 30s · Do you trust the files in this folder?", created: ago(6),
                     cwd: "/home/alice/scratch/try-the-login", profile: "claude"),
             Session(id: "s08exited01", name: "old-experiment", state: "exited", detail: "exited 1", exitCode: 1,
-                    created: ago(4), cwd: "/home/alice/scratch/old-experiment", profile: "claude"),
+                    created: ago(4), cwd: "/home/alice/scratch/old-experiment", profile: "claude", parked: true),
             Session(id: "s09starting", name: "write-the-changelog", state: "starting", created: ago(0.2),
                     cwd: irie + "-write-the-changelog", repo: irie, branch: "irie/write-the-changelog", profile: "claude"),
         ]

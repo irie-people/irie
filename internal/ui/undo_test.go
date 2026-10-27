@@ -116,7 +116,7 @@ func TestHeaderShowsWhatUndoAndRedoWouldDo(t *testing.T) {
 	}
 	painted(t, "history line", m)
 	// The rows start below the header, its line and the tabs.
-	if s := screen(t, m); m.listTop() != 3 || !strings.Contains(s[2], "State │ Repo") || !strings.Contains(s[3], "Not in a repo") {
+	if s := screen(t, m); m.listTop() != 3 || !strings.Contains(s[2], "List │ Repo") || !strings.Contains(s[3], "Not in a repo") {
 		t.Errorf("top of the screen:\n%s", strings.Join(s[:4], "\n"))
 	}
 	// Long labels are cut, each to its share, and say so.

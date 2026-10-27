@@ -35,10 +35,12 @@ type track struct {
 	waiting   int
 	waitingOn string
 
-	// What the user did to the session as a whole (freeze.go, priority.go).
+	// What the user did to the session as a whole (freeze.go, priority.go,
+	// order.go).
 	frozen   *event.Event // freeze.on, until freeze.off
 	held     bool         // a frozen session's running agent came to a tool call, where the shim holds it
 	priority int          // the level of the last priority.set
+	parked   bool         // ui.parked, until ui.unparked
 
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads. own are the
@@ -142,6 +144,10 @@ func (t *track) apply(e event.Event) {
 		t.frozen, t.held = nil, false
 	case event.PrioritySet:
 		t.priority, _ = e.Int("level")
+	case event.UIParked:
+		t.parked = true
+	case event.UIUnparked:
+		t.parked = false
 	}
 }
 
@@ -287,7 +293,7 @@ func (t *track) live() string {
 // it was doing.
 func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	s.State = t.state(dead)
-	s.Priority = t.priority
+	s.Priority, s.Parked = t.priority, t.parked
 	code := func(e *event.Event, key string) *int {
 		if n, ok := e.Int(key); ok {
 			return &n
