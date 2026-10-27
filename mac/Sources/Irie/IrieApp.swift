@@ -118,6 +118,13 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
+                .toolbar {
+                    // Room between the sidebar's edge and the title, which
+                    // the title bar would otherwise set almost against it.
+                    ToolbarItem(placement: .navigation) {
+                        Color.clear.frame(width: 6, height: 1).accessibilityHidden(true)
+                    }
+                }
         }
         .tint(Theme.deepGreen)
         .onAppear { keys.install(store) }
