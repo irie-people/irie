@@ -235,6 +235,10 @@ func (m Model) counts(w int) string {
 // statusLine is the one-line status strip, for panes under 24 rows.
 func (m Model) statusLine() string {
 	p := m.pal
+	if mn := m.menu; mn != nil {
+		// What the highlighted answer will do.
+		return blank(p.sidebar, 1) + m.text(p.muted).Render(cut(mn.choice.Options[mn.at].Detail, m.width-2))
+	}
 	if m.status != "" {
 		c := p.muted
 		if m.statusErr {
@@ -348,18 +352,33 @@ func (m Model) View() tea.View {
 	// Every line is painted on the sidebar's own ground, padded to the
 	// pane's width, so the palette's contrast holds on any terminal theme.
 	lines := []string{m.ground(m.header())}
+	if m.headerLines() > 1 {
+		lines = append(lines, m.ground(m.historyLine()))
+	}
 	if m.tabbed() {
 		lines = append(lines, m.ground(m.tabBar()))
 	}
 	// The list: whole entries from the offset; the last may be cut short.
-	items, list := m.items(), make([]string, 0, m.listHeight())
-	for i := m.offset; i < len(items) && len(list) < m.listHeight(); i++ {
-		list = append(list, m.entry(items, i)...)
+	// A question about an undo or redo covers the bottom of the list, and
+	// above it only whole entries show.
+	var menu []string
+	room := m.listHeight()
+	if m.menu != nil {
+		menu = m.menuLines(room)
+		room -= len(menu)
 	}
-	for len(list) < m.listHeight() {
+	items, list := m.items(), make([]string, 0, m.listHeight())
+	for i := m.offset; i < len(items) && len(list) < room; i++ {
+		e := m.entry(items, i)
+		if menu != nil && len(list)+len(e) > room {
+			break
+		}
+		list = append(list, e...)
+	}
+	for len(list) < room {
 		list = append(list, "")
 	}
-	for _, l := range list[:m.listHeight()] {
+	for _, l := range append(list[:room], menu...) {
 		lines = append(lines, m.ground(l))
 	}
 	switch {

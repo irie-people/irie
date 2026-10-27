@@ -8,7 +8,7 @@ import SwiftUI
 /// sessions by what they need. A click shows that agent's terminal and gives
 /// it the keyboard; the arrow keys walk the cards and keep the keyboard
 /// here. The switch between the views, and the selected session's details,
-/// sit above the task bar.
+/// sit above the task bar, on one panel with it.
 struct SidebarView: View {
     @EnvironmentObject private var store: Store
     @FocusState private var listFocused: Bool
@@ -30,18 +30,24 @@ struct SidebarView: View {
             content
                 .frame(minHeight: Self.cardsLeast)
             ReviewDock()
-            if !store.sessions.isEmpty {
-                ModeSwitch()
+            // The footer sits lighter than the list, with rounded top
+            // corners: the switch between the views, the details and the
+            // task bar, on one panel.
+            VStack(spacing: 0) {
+                if !store.sessions.isEmpty {
+                    ModeSwitch()
+                }
+                // The details, once there is a session to pick: small until
+                // their edge is dragged, and the cards have the rest.
+                if !store.sessions.isEmpty || !store.outside.isEmpty {
+                    DetailsPanel()
+                }
+                TaskBar()
             }
-            // The details, once there is a session to pick: small until
-            // their edge is dragged, and the cards have the rest.
-            if !store.sessions.isEmpty || !store.outside.isEmpty {
-                DetailsPanel()
-            }
-            // The footer sits lighter than the list, with rounded top corners.
-            TaskBar()
-                .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
-                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
+                .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            // It takes its height before the cards, which keep their least.
+            .layoutPriority(1)
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
@@ -90,6 +96,9 @@ struct SidebarView: View {
                         .padding(.bottom, 8)
                     }
                 }
+                // The line from the selected card shows while the card's
+                // middle is in sight here (TabLink.swift).
+                .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { $0.list = $1 }
                 .onChange(of: store.selection) {
                     if let id = store.selection { proxy.scrollTo(id) }
                 }
@@ -133,9 +142,10 @@ struct SidebarView: View {
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
 /// the pointer brings up the actions. The card is soft and rounded, on a
 /// gentle shadow: washed in its agent's colour while it works, tinted red
-/// while it needs you, filled with the selection and edged in the accent
-/// while selected. A selected working card is a gradient, from the selection
-/// by its mark to the colour round its terminal at the trailing end.
+/// while it needs you. The selected card is filled with the selection and
+/// edged in its session's colour, which a line carries on to the terminal's
+/// frame (TabLink.swift). A selected working card is a gradient, from the
+/// selection by its mark to the colour round its terminal at the trailing end.
 private struct SessionCard: View {
     @EnvironmentObject private var store: Store
     let session: Session
@@ -193,7 +203,13 @@ private struct SessionCard: View {
         .padding(.vertical, 8)
         .padding(.horizontal, Theme.inset)
         .background(ground.shadow(color: Theme.shadow, radius: 3, y: 1.5))
-        .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
+        .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
+        .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
+            if selected {
+                ends.card = bounds
+                ends.color = edge
+            }
+        }
         .contentShape(shape)
         .onHover { hovering = $0 }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
@@ -276,14 +292,20 @@ private struct SessionCard: View {
 
     private var deep: Color? { selected ? Look.agentDeep(session) : nil }
 
-    /// The accent round the selected card, faint while the list lacks the
-    /// keyboard; red round one that needs you; a hairline round the rest.
+    /// Round the selected card, the colour of the terminal's frame and the
+    /// line between them; red round one that needs you; a hairline round the
+    /// rest.
     private var edge: Color {
-        if selected { return listFocused ? Theme.accent : Theme.accent.opacity(0.5) }
+        if selected { return Look.edge(session) }
         if hovering { return Theme.accent.opacity(0.45) }
         if let tint { return tint.opacity(0.55) }
         return look.loud ? Theme.needs.opacity(0.5) : Theme.edge
     }
+
+    /// The selected card's edge is as wide as the line from it, and bolder
+    /// while the list has the keyboard, so its colour always matches the
+    /// line's and the frame's while its width tells where the keyboard is.
+    private var edgeWidth: CGFloat { selected ? (listFocused ? 2.5 : TabLink.width) : 1 }
 
     private var spoken: String {
         var parts = [session.name, look.label]
@@ -439,7 +461,8 @@ private struct ModeSwitch: View {
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
         .frame(maxWidth: 190)
-        .padding(.top, 5)
+        // As far from the footer's top as the task bar is from its foot.
+        .padding(.top, 10)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Group the sessions")
     }
@@ -547,8 +570,6 @@ struct DetailsPanel: View {
         .overlay(alignment: .top) { edge }
         .padding(.horizontal, 10)
         .padding(.top, 6)
-        // It takes its height before the cards, which keep their least.
-        .layoutPriority(1)
     }
 
     /// The top edge, a strip across the border: a drag makes the panel
@@ -792,6 +813,8 @@ private struct TitleName: View {
         // The title bar sizes the item to its content; a point either side
         // keeps the capsules' edges whole.
         .padding(.horizontal, 1)
+        // The gap to the count badges, which sit in their own toolbar item.
+        .padding(.trailing, 6)
         .fixedSize()
     }
 }

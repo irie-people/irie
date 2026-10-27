@@ -57,8 +57,9 @@ final class Store: ObservableObject {
     @Published private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
     weak var terminalView: NSView?
-    /// Whether the terminal has the keyboard, which brightens its frame.
-    @Published var terminalHasKeys = false
+    /// Whether the rows are `--snapshot`'s, which draws the terminal's frame
+    /// round an empty terminal, as no core attaches one.
+    private(set) var isFixture = false
     /// The right side shows the live terminal instead of the conversation
     /// (View > Terminal, ⌥⌘T); remembered across launches.
     @Published var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
@@ -229,6 +230,7 @@ final class Store: ObservableObject {
 
     /// Fills the store with sessions no core sent, for `--snapshot`.
     func loadFixture(_ rows: [Session], selection: String?) {
+        isFixture = true
         sessions = rows.sorted(by: Self.before)
         self.selection = selection
         link = .online(version: "snapshot")

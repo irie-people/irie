@@ -64,11 +64,14 @@ struct TerminalArea: View {
                     .opacity(store.showTerminal ? 1 : 0)
                     .allowsHitTesting(store.showTerminal)
                     .accessibilityHidden(!store.showTerminal)
+            } else if store.isFixture, store.showTerminal {
+                // `--snapshot` attaches no terminal: the frame round an empty one.
+                framed(Color.clear)
             }
             // The conversation needs only the core, not the terminal.
             if !store.showTerminal && (store.attach != nil || online) {
                 ConversationView()
-            } else if store.attach == nil {
+            } else if store.attach == nil, !store.isFixture {
                 if case let .offline(why) = store.link {
                     Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
                 } else {
@@ -90,20 +93,7 @@ struct TerminalArea: View {
 
     @ViewBuilder private func terminal(_ a: AttachInfo) -> some View {
         #if canImport(SwiftTerm)
-        let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
-        TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 18)
-            .background {
-                // A click on the frame types to the terminal too.
-                frame.fill(Color(nsColor: Theme.terminalBackground))
-                    .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
-                    .overlay(frame.strokeBorder(edge.opacity(store.terminalHasKeys ? 0.6 : 0.35),
-                                                lineWidth: 1))
-                    .onTapGesture { store.focusTerminal += 1 }
-            }
-            .padding([.horizontal, .bottom], 12)
-            .padding(.top, 12)
+        framed(TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store))
         #else
         Placeholder(
             title: "The terminal opens in Ghostty for now",
@@ -113,9 +103,31 @@ struct TerminalArea: View {
         #endif
     }
 
-    /// The frame's colour: the shown session's (its own while it works), or sun while it is quiet. It
-    /// deepens a little while the terminal has the keyboard.
-    private var edge: Color { selected.flatMap { Look($0).color ?? Look.agentTint($0) } ?? Theme.sunEdge }
+    /// The terminal in its rounded frame, edged in the shown session's colour,
+    /// where the line from its card ends while it shows (TabLink.swift).
+    private func framed(_ terminal: some View) -> some View {
+        let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
+        let shows = store.showTerminal
+        return terminal
+            .padding(.vertical, 10)
+            .padding(.horizontal, 18)
+            .background {
+                // A click on the frame types to the terminal too.
+                frame.fill(Color(nsColor: Theme.terminalBackground))
+                    .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
+                    .overlay(frame.strokeBorder(edge, lineWidth: TabLink.width))
+                    .onTapGesture { store.focusTerminal += 1 }
+            }
+            .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
+                if shows { ends.frame = bounds }
+            }
+            .padding([.horizontal, .bottom], 12)
+            .padding(.top, 12)
+    }
+
+    /// The frame's colour: the shown session's edge, as round its card
+    /// (Look.edge), or sun with none shown.
+    private var edge: Color { selected.map(Look.edge) ?? Theme.sunEdge }
 
     /// What the banner says while the core is away.
     private var linkNote: String? {
