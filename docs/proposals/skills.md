@@ -340,6 +340,12 @@ ECC is the MIT repository formerly called everything-claude-code.
 | 9 | Talking to upstream | Ask Vercel for a license file, Upstash for a pinned CLI version in `find-docs`, and Storybook whether `handle-pr-comments` stays where it is | Open the three issues before M12 |
 | 10 | The next harness | a. pi, with its adapter. b. opencode | Whichever adapter lands first |
 
+**Decided 2026-10-27:**
+- **Decision 1:** a larger set than §6.1's five. The default set is every licensed candidate: `frontend-design`, `webapp-testing` and `mcp-builder` (anthropics/skills); `handle-pr-comments` (storybookjs/storybook); `find-docs` (upstash/context7); `ponytail` (DietrichGebert/ponytail); and `codebase-onboarding`, `context-budget` and `agent-harness-construction` (ECC). `vercel-composition-patterns` joins once its repository has a license file. `verification-before-completion` is not in the set. M12 rewrites §6 to match, and keeps §6.2's cautions in the docs and in `irie skills`. `find-docs` runs `npx ctx7@latest` and sends questions to Context7, `ponytail` changes a whole session's working style, and `codebase-onboarding` writes a `CLAUDE.md`, so each can be switched off on its own.
+- **Decision 3:** option a. Fetch by default on first run, with the status-strip notice.
+- **Decision 8:** option a. M12 is queued after the Irie milestone in progress and before the first release.
+- **Decisions 2, 4, 5, 6, 7 and 10:** the recommendations stand. **Decision 9** waits until the project account exists.
+
 ## Checks for this proposal
 
 Every file in the appendix was downloaded at its commit from `raw.githubusercontent.com`, hashed, and checked against the blob id in that commit's tree, read with a blobless `git fetch`. Every candidate was read in full, and its frontmatter checked for the fields in §4.1. The scripts are not part of the change.
