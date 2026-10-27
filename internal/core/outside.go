@@ -57,16 +57,16 @@ type outside struct {
 // strongest profile it routes to (DESIGN §6.4); else the first Claude Code
 // profile by name.
 func (c *Core) claudeProfile() (string, config.Profile, bool) {
-	name := c.cfg.Spawn.DefaultProfile
+	name := c.cfg().Spawn.DefaultProfile
 	if name == config.Auto {
-		name = strongest(c.cfg.Route)
+		name = strongest(c.cfg().Route)
 	}
-	if p, ok := c.cfg.Profiles[name]; ok && p.Harness == "claude-code" {
+	if p, ok := c.cfg().Profiles[name]; ok && p.Harness == "claude-code" {
 		return name, p, true
 	}
-	for _, name := range slices.Sorted(maps.Keys(c.cfg.Profiles)) {
-		if c.cfg.Profiles[name].Harness == "claude-code" {
-			return name, c.cfg.Profiles[name], true
+	for _, name := range slices.Sorted(maps.Keys(c.cfg().Profiles)) {
+		if c.cfg().Profiles[name].Harness == "claude-code" {
+			return name, c.cfg().Profiles[name], true
 		}
 	}
 	return "", config.Profile{}, false

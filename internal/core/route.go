@@ -180,7 +180,7 @@ func strongest(r config.Route) string {
 // its five hours fill: from route.pressure percent used, up to five times
 // at the limit. At the limit of either window, the plan cannot take a task.
 func (c *Core) planPressure(plan ipc.Plan) (factor float64, blocked bool, note string) {
-	r := c.cfg.Route
+	r := c.cfg().Route
 	for _, w := range []*ipc.Window{plan.FiveHour, plan.SevenDay} {
 		if w != nil && w.Used >= 100 {
 			note = "the plan's limit is reached"
@@ -229,7 +229,7 @@ func (c *Core) localReady(name string, p config.Profile, probe bool) (need, budg
 	}
 	m := ms[i]
 	machine := c.readMachine()
-	budget = localmodel.Budget(c.cfg.Local.MemoryGiB, machine)
+	budget = localmodel.Budget(c.cfg().Local.MemoryGiB, machine)
 	switch {
 	case m.Why != "":
 		return 0, 0, model + " " + m.Why, false
@@ -254,7 +254,7 @@ func (c *Core) localReady(name string, p config.Profile, probe bool) (need, budg
 // win is checked, starting Irie's Ollama server; without, it is judged as
 // it stands. The caller holds no lock.
 func (c *Core) choose(class, why string, only []string, probe bool) route.Choice {
-	r := c.cfg.Route
+	r := c.cfg().Route
 	c.mu.Lock()
 	stats := c.stats(time.Now())
 	plan := c.plan
@@ -311,14 +311,14 @@ func (c *Core) parentProfile(id string) string {
 	if o := c.outcomes[id]; o != nil && o.profile != "" {
 		return o.profile
 	}
-	return strongest(c.cfg.Route)
+	return strongest(c.cfg().Route)
 }
 
 // autoRoute picks a spawn's profile. A delegated task, or one carried on
 // after a usage limit, runs only on a profile cheaper than the session it
 // comes from, and only on one accurate enough.
 func (c *Core) autoRoute(a ipc.SpawnArgs, class, why string) (route.Choice, error) {
-	r := c.cfg.Route
+	r := c.cfg().Route
 	only, from := r.Profiles, ""
 	switch {
 	case a.Delegate && a.Parent != "":
@@ -348,7 +348,7 @@ func (c *Core) autoRoute(a ipc.SpawnArgs, class, why string) (route.Choice, erro
 // profile: the user running it again says that session fell short. A
 // session rated good keeps its rating. The caller holds c.mu.
 func (c *Core) escalate(hash, class, profile string, now time.Time) {
-	pr, ok := c.cfg.Route.Prior(profile)
+	pr, ok := c.cfg().Route.Prior(profile)
 	if !ok {
 		return
 	}
@@ -358,7 +358,7 @@ func (c *Core) escalate(hash, class, profile string, now time.Time) {
 		if x == nil || o.hash != hash || o.profile == profile || o.rated == ipc.Good || o.escalated || now.Sub(o.spawned) > escalateWithin {
 			continue
 		}
-		if op, ok := c.cfg.Route.Prior(o.profile); ok && op.Accuracy[class] < pr.Accuracy[class] {
+		if op, ok := c.cfg().Route.Prior(o.profile); ok && op.Accuracy[class] < pr.Accuracy[class] {
 			c.record(x, event.Event{Source: event.SourceIrie, Kind: event.OutcomeEscalated, Data: map[string]any{"profile": profile}})
 		}
 	}
@@ -372,7 +372,7 @@ const delegateNote = `[Irie] To save tokens, you can hand a small, self-containe
 // session on a cloud profile with cheaper ones to hand work to, which was
 // not delegated itself. The caller holds c.mu.
 func (c *Core) delegateHint(x *session) string {
-	r := c.cfg.Route
+	r := c.cfg().Route
 	if !r.Delegate || x.harness != "claude-code" || x.local || x.out == nil || x.out.parent != "" {
 		return ""
 	}
@@ -454,7 +454,7 @@ func (c *Core) routeDry(a ipc.RouteArgs) (route.Choice, error) {
 	if strings.TrimSpace(a.Task) == "" {
 		return route.Choice{}, ipc.Errorf(ipc.CodeBadArgs, "empty task")
 	}
-	class, why := route.Classify(a.Task, c.cfg.Route.Words)
+	class, why := route.Classify(a.Task, c.cfg().Route.Words)
 	ch, err := c.autoRoute(ipc.SpawnArgs{Task: a.Task, Delegate: a.Parent != "", Parent: a.Parent}, class, why)
 	if err != nil && ch.Class == "" {
 		return ch, err
@@ -481,7 +481,7 @@ func (c *Core) result(a ipc.ResultArgs) (ipc.ResultResult, error) {
 func (c *Core) autoNote() string {
 	var parts []string
 	for _, class := range route.Classes {
-		ch := c.choose(class, "", c.cfg.Route.Profiles, false)
+		ch := c.choose(class, "", c.cfg().Route.Profiles, false)
 		to := ch.Profile
 		if to == "" {
 			to = "none"

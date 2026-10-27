@@ -40,7 +40,7 @@ const (
 func (c *Core) tabModels() ([]ipc.LocalModel, string) {
 	o, own, err := c.ollama(false)
 	if errors.Is(err, errLocalDown) {
-		if _, err := localmodel.FindOllama(c.cfg.Local.Ollama); err != nil {
+		if _, err := localmodel.FindOllama(c.cfg().Local.Ollama); err != nil {
 			return nil, serverNone
 		}
 		go func() {
@@ -69,21 +69,21 @@ func (c *Core) completeProfiles(text string) ([]string, []string) {
 	if strings.HasPrefix(localPrefix, prefix) || strings.HasPrefix(prefix, localPrefix) || strings.HasPrefix("local", prefix) {
 		models, server = c.tabModels()
 	} else {
-		for name, p := range c.cfg.Profiles {
+		for name, p := range c.cfg().Profiles {
 			if p.Local != nil && strings.HasPrefix(name, prefix) {
 				models, server = c.tabModels()
 				break
 			}
 		}
 	}
-	for _, name := range slices.Sorted(maps.Keys(c.cfg.Profiles)) {
+	for _, name := range slices.Sorted(maps.Keys(c.cfg().Profiles)) {
 		if strings.HasPrefix(config.Auto, prefix) && config.Auto < name && !slices.Contains(items, "+"+config.Auto) {
 			items = append(items, "+"+config.Auto)
 			notes = append(notes, c.autoNote())
 		}
 		if strings.HasPrefix(name, prefix) {
 			items = append(items, "+"+name)
-			notes = append(notes, c.profileNote(name, c.cfg.Profiles[name], models, server))
+			notes = append(notes, c.profileNote(name, c.cfg().Profiles[name], models, server))
 		}
 	}
 	if strings.HasPrefix(config.Auto, prefix) && !slices.Contains(items, "+"+config.Auto) {
@@ -91,7 +91,7 @@ func (c *Core) completeProfiles(text string) ([]string, []string) {
 		notes = append(notes, c.autoNote())
 	}
 	for _, m := range models {
-		if name := localPrefix + m.Name; runnable(m) && strings.HasPrefix(name, prefix) && c.cfg.Profiles[name].Harness == "" {
+		if name := localPrefix + m.Name; runnable(m) && strings.HasPrefix(name, prefix) && c.cfg().Profiles[name].Harness == "" {
 			items = append(items, "+"+name)
 			c.mu.Lock()
 			mem := c.memoryNow()

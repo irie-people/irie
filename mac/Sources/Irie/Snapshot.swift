@@ -59,6 +59,17 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // Each tab of the Settings window, from a fixture config.
+            store.settings.loadFixture(try Wire.decoder.decode(ConfigResult.self, from: Data(Fixture.config.utf8)))
+            for tab in SettingsView.Tab.allCases {
+                for dark in [false, true] {
+                    let page = SettingsView.page(tab, model: store.settings).environmentObject(store).tint(Theme.accent)
+                    let (rep, _) = window(page, dark: dark, width: SettingsView.size.width, height: SettingsView.size.height)
+                    let name = "settings-\(tab.rawValue)-\(dark ? "dark" : "light").png"
+                    try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                    print(name)
+                }
+            }
         } catch {
             FileHandle.standardError.write(Data("snapshot: \(error.localizedDescription)\n".utf8))
             exit(1)
@@ -122,6 +133,28 @@ enum Snapshot {
 /// marks where the list starts.
 enum Fixture {
     static let selected = "s02docsguide"
+
+    /// The config op's answer for a file with a profile, repos and the jot
+    /// dog of its own, as the core writes it (config.Tree).
+    static let config = #"""
+    {"path": "/home/alice/.config/irie/config.toml", "config": {
+        "dog": {"land": {"irie": "live"}, "nudges": 2, "watch": true},
+        "local": {"context": 65536, "env": {}, "kv_cache": "q8_0", "memory_gib": 0, "ollama": "", "port": 11435, "url": ""},
+        "profiles": {
+            "claude": {"command": "claude", "effort": "max", "harness": "claude-code", "model": "claude-opus-5-5", "permission_mode": "auto"},
+            "clean": {"command": "", "effort": "max", "harness": "claude-code", "model": "claude-opus-5-5", "permission_mode": "auto"},
+            "haiku": {"command": "claude", "effort": "", "harness": "claude-code", "model": "claude-haiku-5-5", "permission_mode": "auto"},
+            "local": {"command": "claude", "effort": "", "harness": "claude-code", "local": {"enforce": true, "min_context": 65536, "runtime": "ollama"}, "model": "", "permission_mode": ""},
+            "sonnet": {"command": "claude", "effort": "medium", "harness": "claude-code", "model": "claude-sonnet-5-5", "permission_mode": "auto"}
+        },
+        "repos": {"aliases": {"irie": "~/code/irie", "notes": "~/notes"}, "roots": ["~/code"]},
+        "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
+        "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "hide_tmux": true, "ready_timeout": "30s"},
+        "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
+        "usage": {"status_line": true},
+        "worktree": {"base": "HEAD", "branch_prefix": "irie/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
+    }}
+    """#
 
     static var sessions: [Session] {
         let now = Date()

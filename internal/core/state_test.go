@@ -303,11 +303,12 @@ func TestRowsSayPlainWordsAndKeepTheCall(t *testing.T) {
 }
 
 func TestTheHeaderCarriesRedOnDone(t *testing.T) {
-	c := &Core{cfg: config.Default(), version: "test"}
+	c := &Core{version: "test"}
+	c.useConfig(config.Default())
 	if c.headerNow().RedOnDone {
 		t.Error("red_on_done is on by default")
 	}
-	c.cfg.UI.RedOnDone = true
+	c.cfg().UI.RedOnDone = true
 	if !c.headerNow().RedOnDone {
 		t.Error("the header lacks ui.red_on_done")
 	}

@@ -33,12 +33,17 @@ const ctlUsage = `usage: irie ctl <command>
   irie ctl history [--json] [QUERY...]   the sessions that closed, newest first, whose
                                          name or id has every QUERY word. With
                                          spawn.close_when_done a finished session
-                                         closes itself and the sidebar has no Done
-                                         group: look here instead
+                                         closes itself, so the sidebar has no
+                                         To verify group: look here instead
   irie ctl dog [--json]                  the jots that are not through: those whose
                                          turn is over but whose work is not committed,
                                          or not yet in their repo's land branch
                                          (dog.land), with those closed in the last day
+  irie ctl close [SESSION]               close a session, by id or name, or with
+                                         none the one this runs in: an agent
+                                         closes its own once you approve its
+                                         work. history lists it and reopen
+                                         brings it back
   irie ctl reopen [SESSION]              bring a closed session back, by id or name
                                          (the one closed last with none), carrying
                                          on its conversation; prints its new id
@@ -91,6 +96,8 @@ func ctl(args []string) error {
 		return ctlSpawn(args[1:])
 	case "history":
 		return ctlHistory(args[1:])
+	case "close":
+		return ctlClose(args[1:])
 	case "reopen":
 		return ctlReopen(args[1:])
 	case "dog":
@@ -618,6 +625,46 @@ func ctlReopen(args []string) error {
 	}
 	fmt.Println(r.Session.ID)
 	return nil
+}
+
+// ctlClose closes a session, found by id or name; with none named, the one
+// it runs in, which is how an agent closes its own once the user approves
+// its work (DESIGN §4.5).
+func ctlClose(args []string) error {
+	if len(args) > 1 {
+		return errors.New("usage: irie ctl close [SESSION]")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+		return err
+	}
+	id, err := closeTarget(args, os.Getenv("IRIE_SESSION"), l.Sessions)
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpClose, ipc.CloseArgs{Session: id}, nil)
+}
+
+// closeTarget is the id of the session ctl close closes: the one args
+// names, by id or name, or else own, the session the command runs in. A
+// name that fits no session goes to the core as it is, which says so.
+func closeTarget(args []string, own string, sessions []ipc.Session) (string, error) {
+	if len(args) == 0 {
+		if own == "" {
+			return "", errors.New("usage: irie ctl close [SESSION]: with no SESSION it closes the session it runs in, and it runs in none")
+		}
+		return own, nil
+	}
+	for _, s := range sessions {
+		if s.ID == args[0] || strings.EqualFold(s.Name, args[0]) {
+			return s.ID, nil
+		}
+	}
+	return args[0], nil
 }
 
 func ctlFlip(args []string) error {

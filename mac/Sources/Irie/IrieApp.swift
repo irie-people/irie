@@ -95,6 +95,11 @@ struct IrieApp: App {
                     .keyboardShortcut("t", modifiers: [.command, .option])
             }
         }
+        // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
+        Settings {
+            SettingsView(model: store.settings)
+                .environmentObject(store)
+        }
     }
 }
 
@@ -104,14 +109,16 @@ struct IrieApp: App {
 @MainActor
 final class KeyRouter {
     private var monitor: Any?
+    /// Irie's own window, where the sessions are (WindowReader).
+    weak var window: NSWindow?
 
     func install(_ store: Store) {
         guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak store] event in
-            guard let store else { return event }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak store] event in
+            guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            if event.keyCode == 48, mods == .control || mods == [.control, .shift], // Tab
-               event.window === NSApp.mainWindow {
+            let irie = MainActor.assumeIsolated { event.window != nil && event.window === self.window }
+            if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
             }
@@ -120,12 +127,13 @@ final class KeyRouter {
                 return nil
             }
             // In Irie's window ⌘W closes the selected session and ⇧⌘W the
-            // window, even while the terminal has the keyboard. Other
-            // windows, such as About, keep ⌘W.
+            // window, even while the terminal has the keyboard. In any other
+            // window, such as Settings or About, either closes that window:
+            // the menu's ⌘W is Close Session.
             if event.charactersIgnoringModifiers?.lowercased() == "w", mods == .command || mods == [.command, .shift],
-               let window = event.window, window === NSApp.mainWindow {
+               let window = event.window {
                 MainActor.assumeIsolated {
-                    if mods.contains(.shift) {
+                    if !irie || mods.contains(.shift) {
                         window.performClose(nil)
                     } else if let s = store.closable {
                         store.close(s)
@@ -146,6 +154,7 @@ final class KeyRouter {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
+        AppearanceChoice.apply()
         if !CommandLine.arguments.contains("--background") {
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -191,10 +200,35 @@ struct ContentView: View {
         .sheet(isPresented: $store.newTaskSheet) {
             NewTaskSheet().environmentObject(store)
         }
+        .background(WindowReader { keys.window = $0 })
         .onAppear {
             keys.install(store)
             WindowCloseItem.install()
         }
         .onChange(of: theme) { store.sendTheme(theme) }
+    }
+}
+
+/// Hands over the window a view is in, once it is in one.
+struct WindowReader: NSViewRepresentable {
+    let found: (NSWindow) -> Void
+
+    func makeNSView(context _: Context) -> NSView { Reader(found) }
+    func updateNSView(_: NSView, context _: Context) {}
+
+    final class Reader: NSView {
+        let found: (NSWindow) -> Void
+
+        init(_ found: @escaping (NSWindow) -> Void) {
+            self.found = found
+            super.init(frame: .zero)
+        }
+
+        required init?(coder _: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { found(window) }
+        }
     }
 }

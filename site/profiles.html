@@ -269,6 +269,19 @@ task = "paste"</code></pre>
       </tbody>
     </table>
   </div>
+  <h3 id="dog">[dog]</h3>
+  <p>The jot dog sees each task you start through to the end. When a task’s turn ends with work left in its own worktree, files not committed or commits not yet in its repo’s land branch, it sends the agent back once to finish, and the task’s card says what is left until the work lands. It only reads: it never commits, merges or deletes anything.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>watch</code></td><td><code>true</code></td><td>Look in a task’s own worktree when its turn ends, and say on its card what is left.</td></tr>
+        <tr><td><code>nudges</code></td><td><code>2</code></td><td>How many times the dog sends one task back to finish, between two of your messages. <code>0</code> only watches. It never sends one back while the agent waits on work of its own in the background, or when it asks you something.</td></tr>
+        <tr><td><code>land</code></td><td><code>{}</code></td><td>By repo, the branch its work must reach to be through, such as <code>{ shop = "main" }</code>. Name a repo by its alias, its folder’s name or its path. A repo without one is through once its work is committed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <p>Settings for later milestones aren’t accepted yet, and Irie would stop with an unknown-setting error. <code>[notes]</code> comes with milestones 5 and 7, <code>[freeze]</code> with milestone 6, <code>[subagents]</code> with milestone 8 and <code>[env]</code> with milestone 9.</p>
 
   <nav class="docs-nav" aria-label="Docs">

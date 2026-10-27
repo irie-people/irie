@@ -42,7 +42,8 @@ type Options struct {
 
 // Core is the running core.
 type Core struct {
-	cfg     config.Config
+	conf    atomic.Pointer[config.Config] // the config in effect, which settings swap whole (settings.go)
+	confMu  sync.Mutex                    // one edit of the config file at a time
 	paths   paths.Paths
 	tmux    *tmux.Runner
 	bin     string
@@ -170,12 +171,20 @@ func (c *Core) countTokens() {
 }
 
 func newCore(o Options, r *tmux.Runner) *Core {
-	return &Core{
-		cfg: o.Config, paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
+	c := &Core{
+		paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
 		history: map[string][]event.Event{}, outcomes: map[string]*outcome{},
 	}
+	c.useConfig(o.Config)
+	return c
 }
+
+// cfg is the config in effect. A change in the settings swaps in a new one
+// whole, so two reads may see two configs, each of them sound.
+func (c *Core) cfg() *config.Config { return c.conf.Load() }
+
+func (c *Core) useConfig(cfg config.Config) { c.conf.Store(&cfg) }
 
 // Run is `irie core`. It holds core.lock, builds the layout, then serves the
 // socket and polls tmux once a second until it is told to stop.
@@ -250,7 +259,7 @@ func Run(o Options) error {
 
 // want is the layout to keep. The caller holds c.mu.
 func (c *Core) want() tmux.Want {
-	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg.UI.SidebarWidth, Version: c.version, Zoom: c.appViews > 0}
+	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg().UI.SidebarWidth, Version: c.version, Zoom: c.appViews > 0}
 }
 
 // tick polls tmux, repairs the layout, records what tmux and the clock say
@@ -351,7 +360,7 @@ func (c *Core) adopt(p tmux.Pane) *session {
 	}
 	c.loadStatus(x)
 	if x.harness == "" {
-		x.harness = c.cfg.Profiles[x.profile].Harness
+		x.harness = c.cfg().Profiles[x.profile].Harness
 	}
 	x.observed = true
 	if h, err := harnessFor(x.harness); err == nil {
@@ -460,7 +469,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
-			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog,
+			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -487,6 +496,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return nil, nil
 	case ipc.OpDog:
 		return c.dogList()
+	case ipc.OpConfig:
+		var a ipc.ConfigArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.settings(a)
 	case ipc.OpReopen:
 		var a ipc.ReopenArgs
 		if err := decode(raw, &a); err != nil {

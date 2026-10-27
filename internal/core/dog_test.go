@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/testutil"
@@ -216,8 +217,9 @@ func TestAsksUser(t *testing.T) {
 func TestLandOfFindsTheRepoByPathAliasOrName(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	c := &Core{}
-	c.cfg.Repos.Aliases = map[string]string{"site": "~/code/website"}
-	c.cfg.Dog.Land = map[string]string{"site": "release", "api": "main", "~/code/irie": "live"}
+	c.useConfig(config.Default())
+	c.cfg().Repos.Aliases = map[string]string{"site": "~/code/website"}
+	c.cfg().Dog.Land = map[string]string{"site": "release", "api": "main", "~/code/irie": "live"}
 	for r, want := range map[string]string{
 		filepath.Join(home, "code/website"): "release",
 		"/home/alice/src/api":               "main",
