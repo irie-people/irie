@@ -98,6 +98,15 @@ struct TaskBar: View {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty, !store.spawning else { return }
         store.dismissNotice()
+        if let q = Hows.parse(input) {
+            if let s = Hows.find(store.sessions, q) {
+                store.say(Hows.line(s), error: false, seconds: 8)
+            } else {
+                store.say("No agent matches “\(q)”.", error: true)
+            }
+            text = ""
+            return
+        }
         Task {
             if await store.spawn(input) {
                 text = ""
