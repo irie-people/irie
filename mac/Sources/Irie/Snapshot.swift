@@ -74,6 +74,7 @@ enum Snapshot {
                          backing: .buffered, defer: false)
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         w.toolbarStyle = IrieApp.toolbarStyle
+        w.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
         let host = NSHostingView(rootView: root)
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
