@@ -106,12 +106,18 @@ func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool
 
 func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
 
+// tagline is the catch phrase in the title bar.
+const tagline = "you've got this 🌴"
+
+// header is the title bar: a deep-green band with the name, the tagline when
+// it fits, and the state counts on the right.
 func (m Model) header() string {
-	title := " " + styleTitle.Render("☀ Irie")
+	bar := lipgloss.NewStyle().Background(deepGreen)
+	title := bar.Foreground(sun).Bold(true).Render(" ☀ Irie")
 	right := ""
 	switch m.conn {
 	case offline:
-		right = styleRed.Render("core offline")
+		right = bar.Foreground(lipgloss.Red).Render("core offline")
 	case online:
 		// Low memory comes first, then the plan's use, then the counts,
 		// each kept only while it fits.
@@ -143,7 +149,12 @@ func (m Model) header() string {
 			extra = extra[:len(extra)-1]
 		}
 	}
-	return title + spaces(m.width-lipgloss.Width(title)-lipgloss.Width(right)-1) + right
+	left := title
+	if phrase := "   " + tagline; lipgloss.Width(title)+lipgloss.Width(phrase)+lipgloss.Width(right)+2 <= m.width {
+		left += bar.Foreground(onGreen).Faint(true).Render(phrase)
+	}
+	gap := bar.Render(spaces(m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1))
+	return left + gap + right + bar.Render(" ")
 }
 
 // counts renders the state counts in at most w columns: with labels when
@@ -182,9 +193,9 @@ func (m Model) counts(w int) string {
 			if long {
 				text += " " + x.label
 			}
-			st := lipgloss.NewStyle().Foreground(x.c)
+			st := lipgloss.NewStyle().Foreground(x.c).Background(deepGreen)
 			if x.n == 0 {
-				st = styleDim
+				st = styleDim.Background(deepGreen)
 			}
 			parts = append(parts, st.Render(text))
 		}
@@ -192,6 +203,7 @@ func (m Model) counts(w int) string {
 		if long {
 			sep = "  "
 		}
+		sep = lipgloss.NewStyle().Background(deepGreen).Render(sep)
 		if line := strings.Join(parts, sep); lipgloss.Width(line) <= w {
 			return line
 		}
@@ -262,7 +274,7 @@ func (m Model) statusLine() string {
 	}
 	// What the selected row is doing or needs, in plain words, with the call
 	// it is about; else what Irie cannot do for it; then what it costs; then
-	// its full name and directory.
+	// its full name on the left and its directory right-aligned.
 	s := m.sessions[m.sel]
 	var parts []string
 	switch {
@@ -280,14 +292,24 @@ func (m Model) statusLine() string {
 		parts = append(parts, r)
 	}
 	parts = append(parts, s.Name)
-	if s.Cwd != "" {
-		parts = append(parts, m.home2tilde(s.Cwd))
-	}
 	st := styleDim
 	if _, c, _, loud := m.state(s); loud {
 		st = lipgloss.NewStyle().Foreground(c)
 	}
-	return " " + st.Render(cut(strings.Join(parts, " · "), m.width-2))
+	w := m.width - 2
+	left := strings.Join(parts, " · ")
+	dir := ""
+	if s.Cwd != "" {
+		dir = m.home2tilde(s.Cwd)
+	}
+	// The directory is dropped when it would leave the left column under a
+	// third of the line.
+	if dir == "" || w-lipgloss.Width(dir)-2 < w/3 {
+		return " " + st.Render(cut(left, w))
+	}
+	left = cut(left, w-lipgloss.Width(dir)-2)
+	gap := spaces(w - lipgloss.Width(left) - lipgloss.Width(dir))
+	return " " + st.Render(left) + gap + styleDim.Render(dir)
 }
 
 // cost is what a session costs: dollars at list price for a cloud model,
