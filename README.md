@@ -37,6 +37,7 @@ The website has the docs, from installing Irie to a merged change. Its pages are
 - [Tasks, repos and worktrees](https://irie-hq.github.io/irie/tasks.html): `@repo`, `@repo!`, `+profile`, Tab completion, pastes, and what a worktree gets
 - [Profiles and models](https://irie-hq.github.io/irie/profiles.html): the config file, every setting with its default, and profiles for local models
 - [Other agents](https://irie-hq.github.io/irie/agents.html): any agent that runs in a terminal, including a launcher or harness your own team built, and what Irie sees of each
+- [Themes](https://irie-hq.github.io/irie/themes.html): the four planned colour themes, Rosewater, Terracotta, Lilac and Evergreen, in light and dark
 - [Keys and commands](https://irie-hq.github.io/irie/keys.html): every key, and `irie ctl` for scripts
 - [Recipes](https://irie-hq.github.io/irie/recipes.html): from an idea to a merged change, with what works today and what is planned
 - [Irie at work](https://irie-hq.github.io/irie/work.html): Irie at a company: cost, data, managed Claude Code settings, AI providers, proxies, and what isn't there yet
