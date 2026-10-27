@@ -28,6 +28,9 @@ struct IrieApp: App {
     /// sidebar's counts and the shown session's name. The scene's
     /// windowToolbarStyle below says the same for SwiftUI.
     static let toolbarStyle: NSWindow.ToolbarStyle = .unifiedCompact
+    /// The bar hides the window's own title: TerminalArea draws the shown
+    /// session's name and subtitle as the toolbar's principal item.
+    static let showsTitle = false
 
     var body: some Scene {
         Window("Irie", id: "main") {
@@ -37,7 +40,7 @@ struct IrieApp: App {
                 .task { store.start() }
         }
         .defaultSize(width: 1200, height: 760)
-        .windowToolbarStyle(.unifiedCompact)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: Self.showsTitle))
         .commands {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
@@ -179,6 +182,8 @@ struct ContentView: View {
                     }
                 }
         }
+        // The line from the selected card to the terminal, over both columns.
+        .overlayPreferenceValue(TabLinkKey.self) { TabLink(ends: $0) }
         .tint(Theme.accent)
         .sheet(isPresented: $store.newTaskSheet) {
             NewTaskSheet().environmentObject(store)

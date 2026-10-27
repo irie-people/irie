@@ -9,6 +9,10 @@ import SwiftUI
 enum Snapshot {
     static func run(into dir: String) -> Never {
         NSApplication.shared.setActivationPolicy(.accessory)
+        // The terminal view, with the frame and the line from the selected
+        // card, whichever view the app has saved, which a volatile domain
+        // leaves untouched.
+        UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)
         let store = Store(socketPath: "/nonexistent/irie-snapshot.sock")
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
@@ -25,11 +29,21 @@ enum Snapshot {
             shots.append(("state-dark", Palette.standard.id, 1100, true, .state))
             shots.append(("window-narrow", Palette.standard.id, 820, false, .repo))
             shots.append(("window-wide", Palette.standard.id, 1500, false, .repo))
+            // The details at their default size, but for these two: minimized
+            // to a line, and dragged as tall as the cards allow.
+            let details: [String: [String: Any]] = [
+                "details-minimized": [DetailsPanel.minimizedKey: true],
+                "details-tall": [DetailsPanel.heightKey: 2000.0],
+            ]
+            shots.append(("details-minimized", Palette.standard.id, 1100, false, .repo))
+            shots.append(("details-tall", Palette.standard.id, 1100, false, .repo))
             for (base, palette, width, dark, mode) in shots {
                 // Set directly, so the app's saved view and folds are untouched.
                 store.mode = mode
                 store.folded = []
-                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette], forName: UserDefaults.argumentDomain)
+                var domain: [String: Any] = [Palette.defaultsKey: palette, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false]
+                domain.merge(details[base] ?? [:]) { $1 }
+                UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
                 Theme.use(palette)
                 let (rep, titlebar) = window(ContentView().environmentObject(store), dark: dark, width: width, height: 720)
                 let name = base + ".png"
@@ -60,6 +74,7 @@ enum Snapshot {
                          backing: .buffered, defer: false)
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         w.toolbarStyle = IrieApp.toolbarStyle
+        w.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
         let host = NSHostingView(rootView: root)
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host

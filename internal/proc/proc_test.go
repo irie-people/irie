@@ -117,6 +117,11 @@ func TestSetBackgroundTakesAProcessInAndOut(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	// Out of the background first: while a session is promoted, the others'
+	// processes, a test one of them runs too, start their children there.
+	if err := SetBackground(pid, false); err != nil {
+		t.Fatal(err)
+	}
 	before := pri()
 	if err := SetBackground(pid, true); err != nil {
 		t.Fatal(err)

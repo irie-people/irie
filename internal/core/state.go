@@ -26,6 +26,7 @@ type track struct {
 	tools     map[string]event.Event // running tools' tool.started, by tool_use_id
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
 	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
+	resumed   bool                   // spawn.requested carried a conversation on, as a reopen or a move does
 
 	// What the user did to the session as a whole (freeze.go, priority.go).
 	frozen   *event.Event // freeze.on, until freeze.off
@@ -52,7 +53,7 @@ func (t *track) apply(e event.Event) {
 	switch e.Kind {
 	case event.SpawnRequested:
 		// A reopened session starts over, but its tokens still count.
-		*t = track{requested: e.Time(), transcripts: t.transcripts, own: t.own}
+		*t = track{requested: e.Time(), transcripts: t.transcripts, own: t.own, resumed: e.Str("resume") != ""}
 	case event.SpawnFailed:
 		t.failed = &e
 	case event.PaneExited:
@@ -167,8 +168,9 @@ func toolUseID(e event.Event) string {
 func (t *track) ready() bool { return t.started && t.prompted || t.activity != "" }
 
 // conversed reports whether the agent got as far as a conversation that can
-// be carried on: its prompt went in, or it showed life, as a resumed one does.
-func (t *track) conversed() bool { return t.prompted || t.activity != "" }
+// be carried on: its prompt went in, or it showed life, or it carries one on
+// already, even before it shows life, as a reopen does.
+func (t *track) conversed() bool { return t.prompted || t.activity != "" || t.resumed }
 
 // awaiting reports whether Irie saw this session spawned and still waits for
 // it to become ready.

@@ -57,8 +57,9 @@ final class Store: ObservableObject {
     @Published private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
     weak var terminalView: NSView?
-    /// Whether the terminal has the keyboard, which brightens its frame.
-    @Published var terminalHasKeys = false
+    /// Whether the rows are `--snapshot`'s, which draws the terminal's frame
+    /// round an empty terminal, as no core attaches one.
+    private(set) var isFixture = false
     /// The right side shows the live terminal instead of the conversation
     /// (View > Terminal, ⌥⌘T); remembered across launches.
     @Published var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
@@ -222,6 +223,7 @@ final class Store: ObservableObject {
 
     /// Fills the store with sessions no core sent, for `--snapshot`.
     func loadFixture(_ rows: [Session], selection: String?) {
+        isFixture = true
         sessions = rows.sorted(by: Self.before)
         self.selection = selection
         link = .online(version: "snapshot")
@@ -424,8 +426,10 @@ final class Store: ObservableObject {
             // A task in a repo may make a worktree and check out submodules first.
             let r = try await client.call("spawn", args, timeout: 600, as: SpawnResult.self)
             say("Started \(r.session.name).", error: false)
-            // Straight to the new agent, ready to type to.
-            show(r.session.id, focus: true)
+            // It starts behind the session on show, so a task typed mid-work
+            // never pulls the view or the keyboard away. With nothing on
+            // show, it comes straight up, ready to type to.
+            if selection == nil { show(r.session.id, focus: true) }
             // A repo it ran in is now among the recent ones.
             loadChoices()
             return true

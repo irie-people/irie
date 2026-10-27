@@ -49,6 +49,10 @@ const (
 	// undo, carries the session on again (DESIGN §2.4, §4.5).
 	OpClose  = "close"
 	OpReopen = "reopen"
+	// OpUndo and OpRedo step back and forth through the history of what
+	// the user did (DESIGN §2.4, §4.5).
+	OpUndo = "undo"
+	OpRedo = "redo"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -67,6 +71,7 @@ const (
 	CodeAmbiguous  = "ambiguous" // a name that fits more than one thing; the message lists them
 	CodeBusy       = "busy"      // the session is busy or still running, so this cannot happen now
 	CodeInternal   = "internal"
+	CodeStale      = "stale" // an answer to a question whose situation has moved on; nothing was done
 	// CodeNeedsStronger refuses a delegated task that no profile cheaper
 	// than its delegator is accurate enough for.
 	CodeNeedsStronger = "needs_stronger"
@@ -234,6 +239,58 @@ type ReopenArgs struct {
 
 type ReopenResult struct {
 	Session Session `json:"session"`
+}
+
+// UndoArgs ask to undo or redo the latest step of the history. On their
+// own they undo it, unless that is uncertain: then nothing changes and the
+// result asks a Choice. ChoiceID and Choice answer it: the question's id,
+// which the core checks against the history's head, and the key picked.
+type UndoArgs struct {
+	ChoiceID string `json:"choice_id,omitempty"`
+	Choice   string `json:"choice,omitempty"`
+}
+
+// What an undo or redo did (UndoResult.Did).
+const (
+	DidUndo   = "undone"
+	DidRedo   = "redone"
+	DidSettle = "settled"   // things were already that way: the step moved to the other stack
+	DidSkip   = "skipped"   // the step left the history; nothing else changed
+	DidCancel = "cancelled" // nothing changed
+	DidAsk    = "asked"     // nothing changed: Choice asks what to do
+)
+
+// The keys every Choice offers, and those its other options use.
+const (
+	ChoiceApply  = "apply"  // go ahead anyway
+	ChoiceSettle = "settle" // count the step done as things stand
+	ChoiceSkip   = "skip"
+	ChoiceCancel = "cancel"
+)
+
+// UndoResult is what an undo or redo did, to the step labelled Label.
+type UndoResult struct {
+	Label  string  `json:"label"`
+	Did    string  `json:"did"`
+	Choice *Choice `json:"choice,omitempty"` // when Did is DidAsk
+}
+
+// Choice is a question the core asks before an uncertain undo or redo:
+// two to four options in plain words, the recommended one first, and always
+// skip and cancel among them.
+type Choice struct {
+	ID       string         `json:"id"`
+	Question string         `json:"question"`
+	Options  []ChoiceOption `json:"options"`
+}
+
+// ChoiceOption is one answer to a Choice: its key, what it says, and what
+// it will do.
+type ChoiceOption struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Detail      string `json:"detail"`
+	Recommended bool   `json:"recommended,omitempty"`
 }
 
 type SubscribeArgs struct {
@@ -459,6 +516,10 @@ const (
 	// closed first: once after the first snapshot, then whenever they
 	// change. A subscription to one session gets none.
 	FrameClosed = "closed"
+	// FrameHistory carries the labels of what undo and redo would do next,
+	// empty when nothing: once after the first snapshot, then whenever they
+	// change. A subscription to one session gets none.
+	FrameHistory = "history"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
@@ -472,13 +533,15 @@ type Frame struct {
 	Outside  []OutsideSession `json:"outside,omitempty"`  // outside
 	Problem  string           `json:"problem,omitempty"`  // outside: why the list may be old
 	Closed   []ClosedSession  `json:"closed,omitempty"`   // closed
+	Undo     string           `json:"undo,omitempty"`     // history
+	Redo     string           `json:"redo,omitempty"`     // history
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
 // the sessions of a snapshot, an outside frame and a closed frame, even when
-// there are none.
+// there are none, and both labels of a history frame.
 func (f Frame) MarshalJSON() ([]byte, error) {
 	switch f.T {
 	case FrameSnapshot:
@@ -529,6 +592,12 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T      string          `json:"t"`
 			Closed []ClosedSession `json:"closed"`
 		}{f.T, c})
+	case FrameHistory:
+		return json.Marshal(struct {
+			T    string `json:"t"`
+			Undo string `json:"undo"`
+			Redo string `json:"redo"`
+		}{f.T, f.Undo, f.Redo})
 	case FrameHeader:
 		h := f.Header
 		if h == nil {

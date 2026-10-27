@@ -170,13 +170,16 @@ struct PauseButton: View {
 struct PromoteButton: View {
     @EnvironmentObject private var store: Store
     let session: Session
+    /// In ink, where the accent's text colour falls short of 3:1, such as a
+    /// selected working card's deep end; the filled arrow still shows it on.
+    var ink = false
 
     var body: some View {
         let on = session.isPromoted
         Button { store.setPromoted(session, !on) } label: {
             Image(systemName: on ? "arrow.up.circle.fill" : "arrow.up.circle").frame(width: 20, height: 18)
         }
-        .foregroundStyle(on ? Theme.accentInk : Theme.muted)
+        .foregroundStyle(ink ? Theme.ink : on ? Theme.accentInk : Theme.muted)
         .help(on ? "Promoted: click to put it back among the rest" : "Promote: put it first, with the CPU and disk first")
         .accessibilityLabel(on ? "Stop promoting" : "Promote")
     }
