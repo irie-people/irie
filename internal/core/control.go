@@ -41,7 +41,18 @@ func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err
 		if err := decode(raw, &a); err != nil {
 			return nil, true, err
 		}
-		return nil, true, c.park(a, op == ipc.OpPark)
+		// Only a park or unpark that changed something is a step of the
+		// history.
+		changed, err := c.park(a, op == ipc.OpPark)
+		if err != nil || !changed {
+			return nil, true, err
+		}
+		kind := actUnpark
+		if op == ipc.OpPark {
+			kind = actPark
+		}
+		c.recordAction(kind, a.Session, nil)
+		return nil, true, nil
 	}
 	return nil, false, nil
 }

@@ -259,8 +259,9 @@ type problem struct {
 var actionKinds = map[string]actionKind{}
 
 // registerAction adds a kind of undoable action. A later action, such as
-// rename or park, registers its kind here and calls recordAction once it
-// has been done; undo, redo, questions, state.json and the header follow.
+// rename, registers its kind here, as park does (order.go), and calls
+// recordAction once it has been done; undo, redo, questions, state.json
+// and the header follow.
 func registerAction(kind string, k actionKind) {
 	if _, dup := actionKinds[kind]; dup {
 		panic("core: action kind registered twice: " + kind)

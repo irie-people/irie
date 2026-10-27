@@ -132,6 +132,8 @@ func ctl(args []string) error {
 		return ctlPromote(args[1:], map[string]int{"promote": 1}[args[0]])
 	case "reorder":
 		return ctlReorder(args[1:])
+	case "park", "unpark":
+		return ctlPark(args[1:], args[0] == "park")
 	}
 	return fmt.Errorf("unknown ctl command %q\n\n%s", args[0], ctlUsage)
 }
@@ -166,10 +168,32 @@ func ctlList(args []string) error {
 	if *asJSON {
 		return json.NewEncoder(os.Stdout).Encode(r)
 	}
-	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "SESSION\tSTATE\tNAME\tDETAIL")
+	return printList(os.Stdout, r)
+}
+
+// printList prints the list as text, in the sidebars' order: the sessions
+// that are not parked, then the parked ones and those that run outside
+// Irie, each under a heading of their own.
+func printList(w io.Writer, r ipc.ListResult) error {
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	rows := func(list []ipc.Session) {
+		fmt.Fprintln(tw, "SESSION\tSTATE\tNAME\tDETAIL")
+		for _, s := range list {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, s.Detail)
+		}
+	}
+	var rest, parked []ipc.Session
 	for _, s := range r.Sessions {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, s.Detail)
+		if s.Parked {
+			parked = append(parked, s)
+		} else {
+			rest = append(rest, s)
+		}
+	}
+	rows(rest)
+	if len(parked) > 0 {
+		fmt.Fprintln(tw, "\nPARKED")
+		rows(parked)
 	}
 	// Claude Code sessions that run outside Irie, under a heading of their
 	// own; ctl move takes them by id or name.
@@ -642,20 +666,21 @@ func ctlClose(args []string) error {
 	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
 		return err
 	}
-	id, err := closeTarget(args, os.Getenv("IRIE_SESSION"), l.Sessions)
+	id, err := sessionTarget("close", args, os.Getenv("IRIE_SESSION"), l.Sessions)
 	if err != nil {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpClose, ipc.CloseArgs{Session: id}, nil)
 }
 
-// closeTarget is the id of the session ctl close closes: the one args
-// names, by id or name, or else own, the session the command runs in. A
-// name that fits no session goes to the core as it is, which says so.
-func closeTarget(args []string, own string, sessions []ipc.Session) (string, error) {
+// sessionTarget is the id of the session ctl close, park or unpark, the
+// command verb, acts on: the one args names, by id or name, or else own,
+// the session the command runs in. A name that fits no session goes to the
+// core as it is, which says so.
+func sessionTarget(verb string, args []string, own string, sessions []ipc.Session) (string, error) {
 	if len(args) == 0 {
 		if own == "" {
-			return "", errors.New("usage: irie ctl close [SESSION]: with no SESSION it closes the session it runs in, and it runs in none")
+			return "", fmt.Errorf("usage: irie ctl %s [SESSION]: with no SESSION it %ss the session it runs in, and it runs in none", verb, verb)
 		}
 		return own, nil
 	}
