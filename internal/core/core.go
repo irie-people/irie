@@ -20,6 +20,7 @@ import (
 
 	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/event"
+	"github.com/irie-hq/irie/internal/harness"
 	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/journal"
@@ -45,6 +46,8 @@ type Core struct {
 	version string
 	log     *slog.Logger
 
+	spawnMu sync.Mutex // one spawn at a time, taken before mu
+
 	mu        sync.Mutex // guards everything below, and serialises tmux calls
 	sessions  map[string]*session
 	snap      tmux.Snapshot
@@ -52,6 +55,7 @@ type Core struct {
 	subs      map[*subscriber]bool
 	journal   *journal.Journal
 	history   map[string][]event.Event // journal events of sessions not adopted yet
+	recent    []string                 // repos used recently, newest first
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -62,11 +66,19 @@ type session struct {
 	agent    string
 	created  time.Time
 	cwd      string
+	repo     string   // the main checkout of the task's repo, when it runs in one
+	worktree string   // the worktree Irie made for the task
+	branch   string   // the worktree's branch
+	copied   []string // local files copied into the worktree
 	profile  string
 	harness  string
+	observed bool // its harness reports through hooks; else the task is in once the agent runs
+	paste    bool // its task is pasted into the terminal
 	vendorID string
 	warnings []string
 	pane     string
+	command  string // the pane's foreground command
+	bracket  bool   // the agent asked for bracketed paste
 	dead     bool
 	exitCode int
 	shown    bool
@@ -76,7 +88,8 @@ type session struct {
 func (x *session) wire() ipc.Session {
 	s := ipc.Session{
 		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
-		Cwd: x.cwd, Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown,
+		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
+		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown,
 	}
 	x.track.describe(&s, x.dead, x.exitCode)
 	return s
@@ -115,6 +128,7 @@ func Run(o Options) error {
 	}
 	defer c.journal.Close()
 	c.loadHistory()
+	c.loadRecent()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
@@ -202,7 +216,7 @@ func (c *Core) sync(s tmux.Snapshot) {
 			x = c.adopt(p)
 			c.sessions[x.id] = x
 		}
-		x.pane, x.dead, x.exitCode = p.ID, p.Dead, p.DeadStatus
+		x.pane, x.dead, x.exitCode, x.command, x.bracket = p.ID, p.Dead, p.DeadStatus, p.Command, p.BracketPaste
 		x.shown = slot != nil && slot.ID == p.ID
 	}
 	for id := range c.sessions {
@@ -222,9 +236,14 @@ func (c *Core) adopt(p tmux.Pane) *session {
 	}
 	if spec, err := host.ReadSpec(c.paths.SpecFile(x.id)); err == nil {
 		x.cwd, x.profile, x.harness, x.warnings = spec.Cwd, spec.Profile, spec.Harness, spec.Warnings
+		x.repo, x.worktree, x.branch, x.copied, x.paste = spec.Repo, spec.Worktree, spec.Branch, spec.Copied, spec.Paste
 	}
 	if x.harness == "" {
 		x.harness = c.cfg.Profiles[x.profile].Harness
+	}
+	x.observed = true
+	if h, err := harnessFor(x.harness); err == nil {
+		x.observed = h.Levels().Has(harness.Observed)
 	}
 	for _, e := range c.history[x.id] {
 		x.track.apply(e)
@@ -324,7 +343,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete}}, nil
 	case ipc.OpList:
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -351,6 +370,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.hook(a)
+	case ipc.OpComplete:
+		var a ipc.CompleteArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return ipc.CompleteResult{Items: c.complete(a.Text)}, nil
 	}
 	return nil, ipc.Errorf(ipc.CodeUnknownOp, "unknown op %q", op)
 }

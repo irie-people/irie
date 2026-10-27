@@ -13,12 +13,11 @@ import (
 	"github.com/irie-hq/irie/internal/harness"
 )
 
-// InlineMax is the largest task passed inline as an argument. It keeps the
-// argument under Linux's 128 KiB per-argument limit and macOS's 1 MiB total.
-const InlineMax = 100 << 10
-
-// TaskFile is the file in the session dir that holds the task verbatim.
-const TaskFile = "task.md"
+// InlineMax and TaskFile are the task-size rule every adapter shares.
+const (
+	InlineMax = harness.InlineMax
+	TaskFile  = harness.TaskFile
+)
 
 // SettingsFile is the file in the session dir passed with --settings. It
 // adds Irie's hooks for this session only; Claude Code merges hook lists, so
@@ -28,6 +27,11 @@ const SettingsFile = "claude-settings.json"
 type Harness struct{}
 
 func (Harness) ID() string { return "claude-code" }
+
+// Levels: Claude Code supports every level (DESIGN §3.2).
+func (Harness) Levels() harness.Levels {
+	return harness.Generic | harness.Observed | harness.Held | harness.Subagents
+}
 
 // Launch builds:
 //
@@ -62,26 +66,12 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	if s.Probe.Flags["--name"] && s.Name != "" {
 		argv = append(argv, "--name", s.Name)
 	}
-	argv = append(argv, TaskArg(s.Task, s.Dir))
+	argv = append(argv, harness.TaskArg(s.Task, s.Dir))
 	env := maps.Clone(p.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
 	return argv, env, map[string][]byte{TaskFile: []byte(s.Task), SettingsFile: settings}, nil
-}
-
-// TaskArg is the task argument: the task itself when it fits, otherwise a
-// pointer to the task file in dir. An argument cannot hold a NUL byte, so such
-// a task also goes through the file.
-func TaskArg(task, dir string) string {
-	if len(task) > InlineMax || strings.IndexByte(task, 0) >= 0 {
-		return "Your full task is in " + filepath.Join(dir, TaskFile) + ". Read all of it before doing anything else."
-	}
-	// A leading space keeps the CLI from reading the task as a flag.
-	if strings.HasPrefix(task, "-") {
-		return " " + task
-	}
-	return task
 }
 
 // heldExtra is how far the tool hooks' timeout sits above hold.max, so the

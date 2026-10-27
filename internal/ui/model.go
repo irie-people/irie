@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
@@ -22,6 +23,8 @@ import (
 type Backend interface {
 	Spawn(ipc.SpawnArgs) (ipc.Session, error)
 	Show(id string, focus bool) error
+	// Complete returns the tokens that complete an @ or + token.
+	Complete(text string) ([]string, error)
 }
 
 // FrameMsg carries one frame of the core's subscription.
@@ -35,8 +38,13 @@ type (
 		session ipc.Session
 		err     error
 	}
-	shownMsg struct{ err error }
-	tickMsg  struct{}
+	shownMsg     struct{ err error }
+	tickMsg      struct{}
+	completedMsg struct {
+		token string // what was completed
+		items []string
+		err   error
+	}
 )
 
 type focusArea int
@@ -87,6 +95,7 @@ type Model struct {
 
 	focus     focusArea
 	bar       textarea.Model
+	chips     []chip // pastes over chipMin, shown in the bar by their labels
 	spawning  bool
 	status    string
 	statusErr bool
@@ -316,8 +325,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.bar.Reset()
+		m.chips = nil
 		m.setFocus(focusList)
-		m.setStatus("", false)
+		m.setStatus(spawnSummary(msg.session), false)
 		m.pending = msg.session.ID
 		if i := m.index(msg.session.ID); i >= 0 {
 			m.moveTo(i)
@@ -327,9 +337,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setStatus(msg.err.Error(), true)
 		}
+	case completedMsg:
+		m.completed(msg)
 	case tea.PasteMsg:
 		if m.focus != focusBar {
 			m.setFocus(focusBar)
+		}
+		if len(msg.Content) > chipMin {
+			c := newChip(msg.Content)
+			m.chips = append(m.chips, c)
+			m.bar.InsertString(c.label)
+			m.reveal()
+			return m, nil
 		}
 		if n := strings.Count(m.bar.Value(), "\n") + strings.Count(msg.Content, "\n") + 1; n > maxBarContent {
 			m.setStatus(fmt.Sprintf("paste too long for the command bar (%d lines); save it to a file and name the file in the task", n), true)
@@ -408,6 +427,7 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.setStatus(err.Error(), true)
 			return m, nil
 		}
+		args.Task = expand(args.Task, m.chips)
 		m.spawning = true
 		m.setStatus("starting…", false)
 		b := m.backend
@@ -417,14 +437,109 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "esc":
 		m.bar.Reset()
+		m.chips = nil
 		m.setStatus("", false)
 		m.setFocus(focusList)
 		return m, nil
 	case "tab":
-		return m, nil
+		word, _, ok := m.wordAtCursor()
+		if !ok || word == "" || !strings.ContainsAny(word[:1], "@+") {
+			return m, nil
+		}
+		b := m.backend
+		return m, func() tea.Msg {
+			items, err := b.Complete(word)
+			return completedMsg{token: word, items: items, err: err}
+		}
 	}
 	var cmd tea.Cmd
 	m.bar, cmd = m.bar.Update(msg)
 	m.reveal()
 	return m, cmd
+}
+
+// wordAtCursor returns the part before the cursor of the word it is in,
+// and the column where that word starts. Tokens live on the first line, so
+// ok is false on the others.
+func (m Model) wordAtCursor() (word string, start int, ok bool) {
+	if m.bar.Line() != 0 {
+		return "", 0, false
+	}
+	first, _, _ := strings.Cut(m.bar.Value(), "\n")
+	line := []rune(first)
+	col := min(m.bar.Column(), len(line))
+	start = col
+	for start > 0 && !unicode.IsSpace(line[start-1]) {
+		start--
+	}
+	return string(line[start:col]), start, true
+}
+
+// completed applies Tab's answer, unless the bar has moved on: one
+// candidate replaces the token, several complete their common start and
+// are listed in the status strip.
+func (m *Model) completed(msg completedMsg) {
+	word, start, ok := m.wordAtCursor()
+	if !ok || word != msg.token {
+		return
+	}
+	switch {
+	case msg.err != nil:
+		m.setStatus(msg.err.Error(), true)
+	case len(msg.items) == 0:
+		m.setStatus("no match for "+word, false)
+	case len(msg.items) == 1:
+		// A directory leaves the cursor in the path, for the next part.
+		m.replaceWord(start, word, msg.items[0], !strings.HasSuffix(msg.items[0], "/"))
+		m.setStatus("", false)
+	default:
+		if p := commonPrefix(msg.items); len([]rune(p)) > len([]rune(word)) {
+			m.replaceWord(start, word, p, false)
+		}
+		m.setStatus(strings.Join(msg.items, "  "), false)
+	}
+}
+
+// replaceWord puts repl in place of the first line's word at start, with a
+// space after it when space is set and none follows, and moves the cursor
+// to its end.
+func (m *Model) replaceWord(start int, word, repl string, space bool) {
+	lines := strings.Split(m.bar.Value(), "\n")
+	line := []rune(lines[0])
+	tail := line[start+len([]rune(word)):]
+	if space && (len(tail) == 0 || !unicode.IsSpace(tail[0])) {
+		repl += " "
+	}
+	lines[0] = string(line[:start]) + repl + string(tail)
+	m.bar.SetValue(strings.Join(lines, "\n"))
+	m.bar.MoveToBegin()
+	m.bar.SetCursorColumn(start + len([]rune(repl)))
+	m.reveal()
+}
+
+func commonPrefix(items []string) string {
+	p := []rune(items[0])
+	for _, s := range items[1:] {
+		r := []rune(s)
+		n := 0
+		for n < len(p) && n < len(r) && p[n] == r[n] {
+			n++
+		}
+		p = p[:n]
+	}
+	return string(p)
+}
+
+// spawnSummary is what the status strip says about a new session: the
+// worktree it got, the local files copied into it, and what Irie could not
+// do or carry over.
+func spawnSummary(s ipc.Session) string {
+	var parts []string
+	if s.Branch != "" {
+		parts = append(parts, "worktree "+s.Branch)
+	}
+	if len(s.Copied) > 0 {
+		parts = append(parts, "copied "+strings.Join(s.Copied, ", "))
+	}
+	return strings.Join(append(parts, s.Warnings...), " · ")
 }

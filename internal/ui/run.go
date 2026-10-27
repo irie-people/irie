@@ -9,16 +9,26 @@ import (
 	"github.com/irie-hq/irie/internal/ipc"
 )
 
-// callTimeout bounds one spawn or show.
+// callTimeout bounds one show or completion.
 const callTimeout = 10 * time.Second
+
+// spawnTimeout bounds one spawn, which may make a worktree and check out its
+// submodules first.
+const spawnTimeout = 10 * time.Minute
 
 // socketBackend sends the sidebar's requests to the core.
 type socketBackend struct{ socket string }
 
 func (b socketBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	var r ipc.SpawnResult
-	err := ipc.Call(b.socket, callTimeout, ipc.OpSpawn, a, &r)
+	err := ipc.Call(b.socket, spawnTimeout, ipc.OpSpawn, a, &r)
 	return r.Session, err
+}
+
+func (b socketBackend) Complete(text string) ([]string, error) {
+	var r ipc.CompleteResult
+	err := ipc.Call(b.socket, callTimeout, ipc.OpComplete, ipc.CompleteArgs{Text: text}, &r)
+	return r.Items, err
 }
 
 func (b socketBackend) Show(id string, focus bool) error {

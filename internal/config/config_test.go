@@ -42,6 +42,19 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if len(c.Profiles) != 1 {
 		t.Errorf("default profiles = %v, want only claude", c.Profiles)
 	}
+	if want := (Repos{Roots: []string{}, Aliases: map[string]string{}}); !reflect.DeepEqual(c.Repos, want) {
+		t.Errorf("repos = %+v, want %+v", c.Repos, want)
+	}
+	wantTree := Worktree{
+		Root:         "",
+		Base:         "HEAD",
+		BranchPrefix: "irie/",
+		Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
+		Submodules:   true,
+	}
+	if !reflect.DeepEqual(c.Worktree, wantTree) {
+		t.Errorf("worktree = %+v, want %+v", c.Worktree, wantTree)
+	}
 	if want := (Tmux{Path: "", Socket: "irie"}); c.Tmux != want {
 		t.Errorf("tmux = %+v, want %+v", c.Tmux, want)
 	}
@@ -93,6 +106,23 @@ env = { FOO = "bar" }
 [profiles.fast]
 model = "claude-haiku-5-5"
 
+[profiles.aider]
+harness = "generic"
+command = "aider"
+args = ["--model", "ollama_chat/gpt-oss:20b"]
+task = "paste"
+
+[repos]
+roots = ["~/code", "/home/alice/src"]
+aliases = { web = "~/code/website" }
+
+[worktree]
+root = "/home/alice/trees"
+base = "origin/main"
+branch_prefix = "agent/"
+copy = [".env.local"]
+submodules = false
+
 [tmux]
 path = "/opt/homebrew/bin/tmux"
 socket = "irie-alt"
@@ -128,6 +158,22 @@ max = "2h"
 	if got := c.Profiles["fast"]; got.Model != "claude-haiku-5-5" || got.Harness != "claude-code" {
 		t.Errorf("profiles.fast = %+v", got)
 	}
+	wantAider := Profile{
+		Harness: "generic",
+		Command: "aider",
+		Args:    []string{"--model", "ollama_chat/gpt-oss:20b"},
+		Env:     map[string]string{},
+		Task:    "paste",
+	}
+	if got := c.Profiles["aider"]; !reflect.DeepEqual(got, wantAider) {
+		t.Errorf("profiles.aider = %+v, want %+v", got, wantAider)
+	}
+	if want := (Repos{Roots: []string{"~/code", "/home/alice/src"}, Aliases: map[string]string{"web": "~/code/website"}}); !reflect.DeepEqual(c.Repos, want) {
+		t.Errorf("repos = %+v, want %+v", c.Repos, want)
+	}
+	if want := (Worktree{Root: "/home/alice/trees", Base: "origin/main", BranchPrefix: "agent/", Copy: []string{".env.local"}, Submodules: false}); !reflect.DeepEqual(c.Worktree, want) {
+		t.Errorf("worktree = %+v, want %+v", c.Worktree, want)
+	}
 	if want := (Tmux{Path: "/opt/homebrew/bin/tmux", Socket: "irie-alt"}); c.Tmux != want {
 		t.Errorf("tmux = %+v, want %+v", c.Tmux, want)
 	}
@@ -138,8 +184,18 @@ max = "2h"
 		t.Errorf("hold = %+v, want %+v", c.Hold, want)
 	}
 	// The defaults themselves are untouched.
-	if Default().Profiles["claude"].Model != "claude-opus-5-5" {
+	if d := Default(); d.Profiles["claude"].Model != "claude-opus-5-5" || len(d.Worktree.Copy) != 2 || len(d.Repos.Aliases) != 0 {
 		t.Error("loading a file changed the defaults")
+	}
+}
+
+func TestAnEmptyCopyListCopiesNothing(t *testing.T) {
+	c, err := Load(writeFile(t, "[worktree]\ncopy = []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Worktree.Copy == nil || len(c.Worktree.Copy) != 0 {
+		t.Errorf("worktree.copy = %#v, want an empty list", c.Worktree.Copy)
 	}
 }
 
@@ -163,6 +219,8 @@ func TestUnknownKeyIsNamed(t *testing.T) {
 		{"top_level = 1\n", "top_level"},
 		{"[journal]\nkeepdays = 3\n", "journal.keepdays"},
 		{"[hold]\nmaximum = \"1h\"\n", "hold.maximum"},
+		{"[repos]\nroot = []\n", "repos.root"},
+		{"[worktree]\nbranchprefix = \"x/\"\n", "worktree.branchprefix"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
@@ -190,6 +248,22 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[journal]\nkeep_days = 0\n", "keep_days"},
 		{"[journal]\ntool_input = \"everything\"\n", "tool_input"},
 		{"[hold]\nmax = \"0s\"\n", "hold.max"},
+		{"[repos]\nroots = [\"code\"]\n", "repos.roots"},
+		{"[repos.aliases]\nweb = \"code/website\"\n", "repos.aliases.web"},
+		{"[repos.aliases]\n\"we b\" = \"/home/alice/code/website\"\n", "repos.aliases"},
+		{"[repos.aliases]\n\"web!\" = \"/home/alice/code/website\"\n", "repos.aliases"},
+		{"[worktree]\nroot = \"trees\"\n", "worktree.root"},
+		{"[worktree]\nbase = \"\"\n", "worktree.base"},
+		{"[worktree]\nbase = \"-x\"\n", "worktree.base"},
+		{"[worktree]\nbranch_prefix = \"a b/\"\n", "worktree.branch_prefix"},
+		{"[worktree]\nbranch_prefix = \"a..b/\"\n", "worktree.branch_prefix"},
+		{"[worktree]\ncopy = [\"../outside\"]\n", "worktree.copy"},
+		{"[worktree]\ncopy = [\"/etc/hosts\"]\n", "worktree.copy"},
+		{"[worktree]\ncopy = [\"\"]\n", "worktree.copy"},
+		{"[profiles.claude]\ntask = \"type\"\n", "task"},
+		{"[profiles.claude]\ntask = \"paste\"\n", "task"},
+		{"[profiles.g]\nharness = \"generic\"\n", "profiles.g.command"},
+		{"[profiles.g]\nharness = \"generic\"\ncommand = \"aider\"\nmodel = \"claude-opus-5-5\"\n", "profiles.g.model"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
@@ -207,7 +281,7 @@ func TestPrintRoundTrips(t *testing.T) {
 	if err := Default().Write(&buf); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`} {
+	for _, want := range []string{`model = "claude-opus-5-5"`, `ready_timeout = "30s"`, `socket = "irie"`, `keep_days = 30`, `tool_input = "summary"`, `branch_prefix = "irie/"`, `submodules = true`} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("printed config lacks %s:\n%s", want, buf.String())
 		}

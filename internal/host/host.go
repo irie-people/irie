@@ -29,6 +29,11 @@ type Spec struct {
 	Unset    []string          `json:"unset,omitempty"` // removed from it, such as TMUX
 	Cwd      string            `json:"cwd"`
 	Warnings []string          `json:"warnings,omitempty"` // what Irie cannot do for this session
+	Repo     string            `json:"repo,omitempty"`     // the main checkout of the task's repo
+	Worktree string            `json:"worktree,omitempty"` // the worktree Irie made for the task
+	Branch   string            `json:"branch,omitempty"`
+	Copied   []string          `json:"copied,omitempty"` // local files copied into the worktree
+	Paste    bool              `json:"paste,omitempty"`  // the core pastes the task into the terminal once the agent runs
 }
 
 // Exit is exit.json, written when the agent exits.

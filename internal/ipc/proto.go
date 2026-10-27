@@ -19,6 +19,9 @@ const (
 	OpSpawn     = "spawn"
 	OpShow      = "show"
 	OpHook      = "hook"
+	// OpComplete is an addition to the ops of DESIGN §2.4: the candidates
+	// Tab offers for an @ or + token of the command bar (M3).
+	OpComplete = "complete"
 )
 
 // Error codes.
@@ -27,6 +30,7 @@ const (
 	CodeBadArgs    = "bad_args"
 	CodeUnknownOp  = "unknown_op"
 	CodeNotFound   = "not_found"
+	CodeAmbiguous  = "ambiguous" // a name that fits more than one thing; the message lists them
 	CodeInternal   = "internal"
 )
 
@@ -55,6 +59,10 @@ type Session struct {
 	ExitCode *int      `json:"exit_code,omitempty"`
 	Created  time.Time `json:"created"`
 	Cwd      string    `json:"cwd,omitempty"`
+	Repo     string    `json:"repo,omitempty"`     // the main checkout of the repo the task runs in
+	Worktree string    `json:"worktree,omitempty"` // the worktree Irie made for the task
+	Branch   string    `json:"branch,omitempty"`   // the worktree's branch
+	Copied   []string  `json:"copied,omitempty"`   // the local files copied into the worktree
 	Profile  string    `json:"profile,omitempty"`
 	VendorID string    `json:"vendor_id,omitempty"`
 	Pane     string    `json:"pane,omitempty"`
@@ -88,15 +96,32 @@ type SubscribeArgs struct {
 	Agent   string `json:"agent,omitempty"`
 }
 
+// SpawnArgs start a task. Cwd runs it in place in a directory. Repo is the
+// name or path of an @ token: a git repo gets a new worktree, or with InPlace
+// runs in its own checkout; any other directory runs in place. Profile picks
+// the profile instead of spawn.default_profile.
 type SpawnArgs struct {
 	Task    string `json:"task"`
 	Cwd     string `json:"cwd,omitempty"`
+	Repo    string `json:"repo,omitempty"`
 	InPlace bool   `json:"in_place,omitempty"`
+	Profile string `json:"profile,omitempty"`
 	Name    string `json:"name,omitempty"`
 }
 
 type SpawnResult struct {
 	Session Session `json:"session"`
+}
+
+// CompleteArgs carry the command bar token to complete, such as "@web" or
+// "+fa".
+type CompleteArgs struct {
+	Text string `json:"text"`
+}
+
+// CompleteResult lists the whole tokens that complete it, sorted.
+type CompleteResult struct {
+	Items []string `json:"items"`
 }
 
 type ShowArgs struct {

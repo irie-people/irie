@@ -223,3 +223,26 @@ func TestReadSkipsMalformedLines(t *testing.T) {
 		t.Errorf("a missing journal: %v, %v", evs, err)
 	}
 }
+
+func TestReadKindReadsOnlyThatKind(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "journal")
+	c := &clock{t: time.Date(2026, 10, 24, 9, 0, 0, 0, time.UTC)}
+	j := open(t, dir, c, 30)
+	appendKinds(t, j, event.SpawnRequested, event.ToolStarted)
+	c.t = c.t.Add(48 * time.Hour)
+	appendKinds(t, j, event.PromptSubmitted, event.SpawnRequested)
+	evs, err := ReadKind(dir, time.Time{}, event.SpawnRequested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evs) != 2 || evs[0].Seq != 1 || evs[1].Seq != 4 || evs[1].Kind != event.SpawnRequested {
+		t.Errorf("ReadKind = %+v, want seqs 1 and 4", evs)
+	}
+	// since counts whole days, as Read does.
+	if evs, err := ReadKind(dir, c.t, event.SpawnRequested); err != nil || len(evs) != 1 || evs[0].Seq != 4 {
+		t.Errorf("ReadKind since the last day = %+v, %v", evs, err)
+	}
+	if evs, err := ReadKind(filepath.Join(t.TempDir(), "none"), time.Time{}, event.SpawnRequested); err != nil || len(evs) != 0 {
+		t.Errorf("ReadKind of no journal = %+v, %v", evs, err)
+	}
+}

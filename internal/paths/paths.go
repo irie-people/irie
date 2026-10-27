@@ -69,6 +69,7 @@ func (p Paths) Session(id string) string      { return filepath.Join(p.Sessions(
 func (p Paths) CoreLog() string               { return filepath.Join(p.State, "core.log") }
 func (p Paths) UILog() string                 { return filepath.Join(p.State, "ui.log") }
 func (p Paths) Scratch() string               { return filepath.Join(p.Data, "scratch") }
+func (p Paths) Worktrees() string             { return filepath.Join(p.Data, "worktrees") }
 func (p Paths) Socket() string                { return filepath.Join(p.Runtime, "core.sock") }
 func (p Paths) CoreLock() string              { return filepath.Join(p.Runtime, "core.lock") }
 func (p Paths) UpLock() string                { return filepath.Join(p.Runtime, "up.lock") }

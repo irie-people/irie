@@ -1,6 +1,6 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
-// the ui, spawn, profiles, tmux, journal and hold sections.
+// the ui, spawn, profiles, repos, worktree, tmux, journal and hold sections.
 package config
 
 import (
@@ -23,6 +23,8 @@ type Config struct {
 	UI       UI                 `toml:"ui"`
 	Spawn    Spawn              `toml:"spawn"`
 	Profiles map[string]Profile `toml:"profiles"`
+	Repos    Repos              `toml:"repos"`
+	Worktree Worktree           `toml:"worktree"`
 	Tmux     Tmux               `toml:"tmux"`
 	Journal  Journal            `toml:"journal"`
 	Hold     Hold               `toml:"hold"`
@@ -52,6 +54,23 @@ type Profile struct {
 	PermissionMode string            `toml:"permission_mode"`
 	Args           []string          `toml:"args"`
 	Env            map[string]string `toml:"env"`
+	Task           string            `toml:"task"` // how a generic agent gets its task: arg | paste; "" = arg
+}
+
+// Repos is where an @name finds its repo: aliases first, then the git repos
+// two levels under the roots.
+type Repos struct {
+	Roots   []string          `toml:"roots"`   // absolute or ~ paths
+	Aliases map[string]string `toml:"aliases"` // name → absolute or ~ path
+}
+
+// Worktree is how an @repo task gets its own checkout.
+type Worktree struct {
+	Root         string   `toml:"root"` // "" = $XDG_DATA_HOME/irie/worktrees
+	Base         string   `toml:"base"` // what a new branch starts from
+	BranchPrefix string   `toml:"branch_prefix"`
+	Copy         []string `toml:"copy"` // untracked files copied in, besides those of the repo's .worktreeinclude
+	Submodules   bool     `toml:"submodules"`
 }
 
 type Tmux struct {
@@ -71,7 +90,13 @@ type Hold struct {
 }
 
 // Harnesses lists the harness ids this version can launch.
-var Harnesses = []string{"claude-code"}
+var Harnesses = []string{"claude-code", "generic"}
+
+// How a generic agent gets its task (profile.task).
+const (
+	TaskArg   = "arg"   // as its last argument
+	TaskPaste = "paste" // pasted into its terminal once it runs, then Enter
+)
 
 // Default returns the built-in config. The default agent is Opus 5.5 on max
 // effort in auto mode.
@@ -93,6 +118,13 @@ func Default() Config {
 				Args:           []string{},
 				Env:            map[string]string{},
 			},
+		},
+		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
+		Worktree: Worktree{
+			Base:         "HEAD",
+			BranchPrefix: "irie/",
+			Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
+			Submodules:   true,
 		},
 		Tmux:    Tmux{Socket: "irie"},
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
@@ -118,10 +150,12 @@ func Load(path string) (Config, error) {
 		UI       *UI                       `toml:"ui"`
 		Spawn    *Spawn                    `toml:"spawn"`
 		Profiles map[string]toml.Primitive `toml:"profiles"`
+		Repos    *Repos                    `toml:"repos"`
+		Worktree *Worktree                 `toml:"worktree"`
 		Tmux     *Tmux                     `toml:"tmux"`
 		Journal  *Journal                  `toml:"journal"`
 		Hold     *Hold                     `toml:"hold"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold}
+	}{UI: &c.UI, Spawn: &c.Spawn, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -144,6 +178,15 @@ func Load(path string) (Config, error) {
 		}
 		c.Profiles[name] = p
 	}
+	if c.Repos.Roots == nil {
+		c.Repos.Roots = []string{}
+	}
+	if c.Repos.Aliases == nil {
+		c.Repos.Aliases = map[string]string{}
+	}
+	if c.Worktree.Copy == nil {
+		c.Worktree.Copy = []string{}
+	}
 	if keys := md.Undecoded(); len(keys) > 0 {
 		names := make([]string, len(keys))
 		for i, k := range keys {
@@ -158,9 +201,39 @@ func Load(path string) (Config, error) {
 }
 
 var (
-	socketName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	tmuxKey    = regexp.MustCompile(`^[!-~]+$`) // printable, no spaces
+	socketName  = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	tmuxKey     = regexp.MustCompile(`^[!-~]+$`) // printable, no spaces
+	repoName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	branchChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 )
+
+// pathLike reports whether p is an absolute path or a ~ path.
+func pathLike(p string) bool { return filepath.IsAbs(p) || p == "~" || strings.HasPrefix(p, "~/") }
+
+// branchPrefix reports whether p can start a git branch name: the safe part
+// of git's ref rules, so that a name it builds never reads as an option or
+// a range.
+func branchPrefix(p string) bool {
+	if p == "" {
+		return true
+	}
+	if !branchChars.MatchString(p) || strings.Contains(p, "..") || strings.Contains(p, "//") || strings.HasPrefix(p, "/") || strings.HasPrefix(p, "-") {
+		return false
+	}
+	for _, part := range strings.Split(p, "/") {
+		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return true
+}
+
+// inRepo reports whether p is a path inside a repo: relative, and never
+// climbing out of it.
+func inRepo(p string) bool {
+	clean := filepath.Clean(p)
+	return p != "" && clean != "." && !filepath.IsAbs(p) && !slices.Contains(strings.Split(filepath.ToSlash(clean), "/"), "..")
+}
 
 // Validate checks values that decode but make no sense.
 func (c Config) Validate() error {
@@ -186,8 +259,56 @@ func (c Config) Validate() error {
 		bad("spawn.ready_timeout = %v: must be positive", c.Spawn.ReadyTimeout)
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.Profiles)) {
-		if h := c.Profiles[name].Harness; !slices.Contains(Harnesses, h) {
-			bad("profiles.%s.harness = %q: must be one of %s", name, h, strings.Join(Harnesses, ", "))
+		p := c.Profiles[name]
+		if !slices.Contains(Harnesses, p.Harness) {
+			bad("profiles.%s.harness = %q: must be one of %s", name, p.Harness, strings.Join(Harnesses, ", "))
+		}
+		switch p.Task {
+		case "", TaskArg:
+		case TaskPaste:
+			if p.Harness != "generic" {
+				bad("profiles.%s.task = %q: only the generic harness takes its task by paste", name, p.Task)
+			}
+		default:
+			bad("profiles.%s.task = %q: must be arg or paste", name, p.Task)
+		}
+		if p.Harness != "generic" {
+			continue
+		}
+		if p.Command == "" {
+			bad("profiles.%s.command: the generic harness needs a command", name)
+		}
+		for _, f := range [][2]string{{"model", p.Model}, {"effort", p.Effort}, {"permission_mode", p.PermissionMode}} {
+			if f[1] != "" {
+				bad("profiles.%s.%s = %q: the generic harness has no such setting; put the CLI's own flags in args", name, f[0], f[1])
+			}
+		}
+	}
+	for _, r := range c.Repos.Roots {
+		if !pathLike(r) {
+			bad("repos.roots: %q must be an absolute or ~/ path", r)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Repos.Aliases)) {
+		if !repoName.MatchString(name) {
+			bad("repos.aliases: %q: a name is letters, digits, '.', '_' and '-', and starts with a letter or digit", name)
+		}
+		if p := c.Repos.Aliases[name]; !pathLike(p) {
+			bad("repos.aliases.%s = %q: must be an absolute or ~/ path", name, p)
+		}
+	}
+	if c.Worktree.Root != "" && !pathLike(c.Worktree.Root) {
+		bad("worktree.root = %q: must be an absolute or ~/ path", c.Worktree.Root)
+	}
+	if strings.TrimSpace(c.Worktree.Base) == "" || strings.HasPrefix(c.Worktree.Base, "-") {
+		bad("worktree.base = %q: must name a commit, such as HEAD", c.Worktree.Base)
+	}
+	if !branchPrefix(c.Worktree.BranchPrefix) {
+		bad("worktree.branch_prefix = %q: must be able to start a git branch name, such as irie/", c.Worktree.BranchPrefix)
+	}
+	for _, f := range c.Worktree.Copy {
+		if !inRepo(f) {
+			bad("worktree.copy: %q must be a path inside the repo", f)
 		}
 	}
 	if !socketName.MatchString(c.Tmux.Socket) {

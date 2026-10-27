@@ -14,16 +14,20 @@ import (
 
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/paths"
+	"github.com/irie-hq/irie/internal/ui"
 )
 
 const ctlUsage = `usage: irie ctl <command>
 
   irie ctl list [--json]                 the sessions and their states
-  irie ctl spawn [--wait] [--cwd DIR] [--name NAME] TASK...
+  irie ctl spawn [--wait] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
-                                         starting Irie if needed. TASK - reads the
-                                         task from stdin. --wait waits until the
-                                         agent is ready, and fails if it is not
+                                         starting Irie if needed. @REPO runs it in
+                                         a new worktree of that repo, @REPO! in the
+                                         repo's own checkout; +PROFILE picks the
+                                         agent. TASK - reads the task from stdin.
+                                         --wait waits until the agent is ready,
+                                         and fails if it is not
   irie ctl show [--focus] SESSION        show a session in the slot
   irie ctl watch [--session SESSION]     print events as NDJSON until interrupted
 `
@@ -84,6 +88,10 @@ func ctlList(args []string) error {
 	return tw.Flush()
 }
 
+// spawnTimeout bounds a spawn, which may make a worktree and check out its
+// submodules first.
+const spawnTimeout = 10 * time.Minute
+
 func ctlSpawn(args []string) error {
 	fs := flag.NewFlagSet("ctl spawn", flag.ContinueOnError)
 	cwd := fs.String("cwd", "", "run the task in this directory")
@@ -92,7 +100,14 @@ func ctlSpawn(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	task := strings.Join(fs.Args(), " ")
+	// The @ and + tokens of the command bar may lead the task.
+	home, _ := os.UserHomeDir()
+	var a ipc.SpawnArgs
+	words, err := ui.SpawnTokens(&a, fs.Args(), home)
+	if err != nil {
+		return err
+	}
+	task := strings.Join(words, " ")
 	if task == "-" {
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {
@@ -101,7 +116,10 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl spawn [--wait] [--cwd DIR] [--name NAME] TASK...")
+		return errors.New("usage: irie ctl spawn [--wait] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
+	}
+	if *cwd != "" && a.Repo != "" {
+		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
 	}
 	dir := *cwd
 	if dir != "" && dir != "~" && !strings.HasPrefix(dir, "~/") {
@@ -119,8 +137,9 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
+	a.Task, a.Cwd, a.Name = task, dir, *name
 	var r ipc.SpawnResult
-	if err := ipc.Call(p.Socket(), 30*time.Second, ipc.OpSpawn, ipc.SpawnArgs{Task: task, Cwd: dir, Name: *name}, &r); err != nil {
+	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		return err
 	}
 	fmt.Println(r.Session.ID)

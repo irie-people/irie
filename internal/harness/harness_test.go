@@ -20,3 +20,15 @@ func TestNewUUIDIsVersion4(t *testing.T) {
 		seen[u] = true
 	}
 }
+
+func TestLevels(t *testing.T) {
+	l := Generic | Observed
+	if !l.Has(Generic) || !l.Has(Observed) || !l.Has(Generic|Observed) || l.Has(Held) || l.Has(Observed|Held) {
+		t.Errorf("Has is wrong for %v", l)
+	}
+	for l, want := range map[Levels]string{Generic: "G", Generic | Observed | Held | Subagents: "GOHS", 0: "-"} {
+		if got := l.String(); got != want {
+			t.Errorf("%d.String() = %q, want %q", l, got, want)
+		}
+	}
+}

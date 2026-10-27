@@ -23,9 +23,12 @@ type showCall struct {
 }
 
 type fakeBackend struct {
-	spawns   []ipc.SpawnArgs
-	shows    []showCall
-	spawnErr error
+	spawns    []ipc.SpawnArgs
+	shows     []showCall
+	spawnErr  error
+	spawned   *ipc.Session // what Spawn returns, when set
+	completes []string
+	items     map[string][]string // Complete's answers
 }
 
 func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
@@ -33,12 +36,20 @@ func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	if f.spawnErr != nil {
 		return ipc.Session{}, f.spawnErr
 	}
+	if f.spawned != nil {
+		return *f.spawned, nil
+	}
 	return ipc.Session{ID: fmt.Sprintf("snew%08d", len(f.spawns)), Name: "new"}, nil
 }
 
 func (f *fakeBackend) Show(id string, focus bool) error {
 	f.shows = append(f.shows, showCall{id, focus})
 	return nil
+}
+
+func (f *fakeBackend) Complete(text string) ([]string, error) {
+	f.completes = append(f.completes, text)
+	return f.items[text], nil
 }
 
 func sessions(n int) []ipc.Session {
@@ -93,6 +104,8 @@ func keyMsg(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
 	case "home":
 		return tea.KeyPressMsg{Code: tea.KeyHome}
 	case "end":
@@ -304,7 +317,7 @@ func TestSubmitSpawnsAndSelectsTheNewRow(t *testing.T) {
 	}
 	m = typeText(m, "@/home/alice/code/website describe this repo")
 	m = send(m, keyMsg("enter"))
-	want := []ipc.SpawnArgs{{Task: "describe this repo", Cwd: "/home/alice/code/website"}}
+	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website"}}
 	if !reflect.DeepEqual(b.spawns, want) {
 		t.Fatalf("spawns = %+v, want %+v", b.spawns, want)
 	}
@@ -437,17 +450,29 @@ func TestParseTask(t *testing.T) {
 		err  string
 	}{
 		{in: "fix the flaky test", want: ipc.SpawnArgs{Task: "fix the flaky test"}},
-		{in: "@/home/alice/code/x fix it", want: ipc.SpawnArgs{Task: "fix it", Cwd: "/home/alice/code/x"}},
-		{in: "fix it @~/code/x", want: ipc.SpawnArgs{Task: "fix it", Cwd: "/home/alice/code/x"}},
-		{in: "@~ list my files", want: ipc.SpawnArgs{Task: "list my files", Cwd: "/home/alice"}},
-		{in: "fix @/abs   the bug", want: ipc.SpawnArgs{Task: "fix the bug", Cwd: "/abs"}},
-		{in: "@/abs first line\nsecond @/not/a/token\n", want: ipc.SpawnArgs{Task: "first line\nsecond @/not/a/token\n", Cwd: "/abs"}},
-		{in: "@/abs\nthe task is on line two", want: ipc.SpawnArgs{Task: "the task is on line two", Cwd: "/abs"}},
+		{in: "@/home/alice/code/x fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x"}},
+		{in: "fix it @~/code/x", want: ipc.SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x"}},
+		{in: "@~ list my files", want: ipc.SpawnArgs{Task: "list my files", Repo: "/home/alice"}},
+		{in: "fix @/abs   the bug", want: ipc.SpawnArgs{Task: "fix the bug", Repo: "/abs"}},
+		{in: "@/abs first line\nsecond @/not/a/token\n", want: ipc.SpawnArgs{Task: "first line\nsecond @/not/a/token\n", Repo: "/abs"}},
+		{in: "@/abs\nthe task is on line two", want: ipc.SpawnArgs{Task: "the task is on line two", Repo: "/abs"}},
 		{in: "mail alice@example.com about it", want: ipc.SpawnArgs{Task: "mail alice@example.com about it"}},
 		{in: "  keep   inner  spacing  ", want: ipc.SpawnArgs{Task: "keep   inner  spacing"}},
-		{in: "@website fix it", err: "@website"},
+		{in: "@website fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "website"}},
+		{in: "@clients/api fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "clients/api"}},
+		{in: "@website! fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "website", InPlace: true}},
+		{in: "@~/code/x! fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x", InPlace: true}},
+		{in: "+fast fix it", want: ipc.SpawnArgs{Task: "fix it", Profile: "fast"}},
+		{in: "fix it +aider @web!", want: ipc.SpawnArgs{Task: "fix it", Repo: "web", InPlace: true, Profile: "aider"}},
+		{in: "c++ is fine, and so is a+b", want: ipc.SpawnArgs{Task: "c++ is fine, and so is a+b"}},
 		{in: "@/a @/b fix it", err: "one @"},
+		{in: "+a +b fix it", err: "one +"},
+		{in: "@ fix it", err: "@"},
+		{in: "+ fix it", err: "+"},
+		{in: "@web!! fix it", err: "@web!!"},
+		{in: "@./src fix it", err: "@./src"},
 		{in: "@/abs", err: "empty"},
+		{in: "@web +fast", err: "empty"},
 		{in: " \n\t", err: "empty"},
 		{in: ":pause", err: ":pause"},
 	} {
@@ -468,19 +493,196 @@ func TestParseTask(t *testing.T) {
 	}
 }
 
-func TestOversizedPasteIsRefusedNotCut(t *testing.T) {
-	m, _ := newModel(t, 34, 24, 0)
-	big := strings.Repeat("x\n", 20000)
-	m = send(m, tea.PasteMsg{Content: big})
-	if m.bar.Value() != "" {
-		t.Errorf("bar holds %d bytes of a paste it could not hold whole", len(m.bar.Value()))
+func TestSpawnTokensLeadTheWords(t *testing.T) {
+	var a ipc.SpawnArgs
+	rest, err := SpawnTokens(&a, []string{"@web!", "+fast", "fix", "@it", "+now"}, "/home/alice")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !m.statusErr || !strings.Contains(m.status, "paste") {
+	if want := (ipc.SpawnArgs{Repo: "web", InPlace: true, Profile: "fast"}); a != want {
+		t.Errorf("args = %+v, want %+v", a, want)
+	}
+	// Words after the first that is not a token belong to the task.
+	if want := []string{"fix", "@it", "+now"}; !reflect.DeepEqual(rest, want) {
+		t.Errorf("rest = %q, want %q", rest, want)
+	}
+	if _, err := SpawnTokens(&ipc.SpawnArgs{}, []string{"@a", "@b", "x"}, "/home/alice"); err == nil {
+		t.Error("two @ tokens accepted")
+	}
+}
+
+// big is a paste over the chip threshold: 9,000 bytes on 1,000 lines.
+var big = strings.Repeat("12345678\n", 1000)
+
+func TestABigPasteBecomesAChipAndIsSentWhole(t *testing.T) {
+	m, b := newModel(t, 34, 24, 0)
+	m = typeText(m, "@web fix this: ")
+	m = send(m, tea.PasteMsg{Content: big})
+	m = typeText(m, " and say why")
+	if v := m.bar.Value(); v != "@web fix this: [paste 9.0 KB · 1,000 lines] and say why" {
+		t.Errorf("bar = %q", v)
+	}
+	m = send(m, keyMsg("enter"))
+	if len(b.spawns) != 1 {
+		t.Fatalf("spawns = %d", len(b.spawns))
+	}
+	if a := b.spawns[0]; a.Repo != "web" || a.Task != "fix this: "+big+" and say why" {
+		t.Errorf("spawned repo %q, task of %d bytes, want the whole paste in place", a.Repo, len(a.Task))
+	}
+	// The chip goes with the submitted task.
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "next")
+	m = send(m, keyMsg("enter"))
+	if a := b.spawns[1]; a.Task != "next" {
+		t.Errorf("second task = %q", a.Task)
+	}
+}
+
+func TestSmallPastesGoInTheBar(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 0)
+	small := strings.Repeat("x", 8<<10)
+	m = send(m, tea.PasteMsg{Content: small})
+	if m.bar.Value() != small {
+		t.Errorf("an 8 KiB paste did not go into the bar as text")
+	}
+}
+
+func TestChipsWithTheSameLabelKeepTheirOrder(t *testing.T) {
+	m, b := newModel(t, 34, 24, 0)
+	one, two := strings.Repeat("a", 9000), strings.Repeat("b", 9000)
+	m = send(m, tea.PasteMsg{Content: one})
+	m = typeText(m, " then ")
+	m = send(m, tea.PasteMsg{Content: two})
+	m = send(m, keyMsg("enter"))
+	if a := b.spawns[0]; a.Task != one+" then "+two {
+		t.Errorf("task = %.20q…, want both pastes in order", a.Task)
+	}
+}
+
+func TestEscDropsTheChips(t *testing.T) {
+	m, b := newModel(t, 34, 24, 2)
+	m = send(m, keyMsg("tab"))
+	m = send(m, tea.PasteMsg{Content: big})
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "[paste 9.0 KB · 1,000 lines]")
+	m = send(m, keyMsg("enter"))
+	if a := b.spawns[0]; a.Task != "[paste 9.0 KB · 1,000 lines]" {
+		t.Errorf("task = %.40q…, want only what was typed", a.Task)
+	}
+}
+
+func TestChipLabels(t *testing.T) {
+	for content, want := range map[string]string{
+		strings.Repeat("x", 9000):                                 "[paste 9.0 KB · 1 line]",
+		strings.Repeat("a line of text\n", 140000) + "and a tail": "[paste 2.1 MB · 140,001 lines]",
+		// DESIGN §4.2's example.
+		strings.Repeat(strings.Repeat("x", 66)+"\n", 31204): "[paste 2.1 MB · 31,204 lines]",
+	} {
+		if got := chipLabel(content); got != want {
+			t.Errorf("chipLabel(%d bytes) = %q, want %q", len(content), got, want)
+		}
+	}
+}
+
+func TestChipsEndLinesWithLF(t *testing.T) {
+	m, b := newModel(t, 34, 24, 0)
+	crlf := strings.Repeat("windows line\r\n", 700) + strings.Repeat("old mac line\r", 300)
+	m = send(m, tea.PasteMsg{Content: crlf})
+	m = send(m, keyMsg("enter"))
+	want := strings.Repeat("windows line\n", 700) + strings.Repeat("old mac line\n", 300)
+	if a := b.spawns[0]; a.Task != want {
+		t.Errorf("task has %d CRs, want every line ended by LF", strings.Count(a.Task, "\r"))
+	}
+}
+
+func TestTabCompletesTheTokenAtTheCursor(t *testing.T) {
+	m, b := newModel(t, 34, 24, 0)
+	b.items = map[string][]string{
+		"@we":   {"@website"},
+		"@cl":   {"@clients/acme", "@clients/api"},
+		"@~/co": {"@~/code/"},
+		"+fa":   {"+fast"},
+	}
+	m = typeText(m, "@we")
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "@website " {
+		t.Errorf("one candidate: bar = %q", v)
+	}
+	m = typeText(m, "+fa")
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "@website +fast " {
+		t.Errorf("a profile: bar = %q", v)
+	}
+
+	// Several candidates: their common prefix, and the list in the status strip.
+	m.bar.Reset()
+	m = typeText(m, "@cl")
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "@clients/a" {
+		t.Errorf("two candidates: bar = %q", v)
+	}
+	if !strings.Contains(m.status, "@clients/acme") || !strings.Contains(m.status, "@clients/api") {
 		t.Errorf("status = %q", m.status)
 	}
-	m = send(m, tea.PasteMsg{Content: "small\npaste"})
-	if m.bar.Value() != "small\npaste" {
-		t.Errorf("bar = %q", m.bar.Value())
+
+	// A directory keeps the cursor inside the path.
+	m.bar.Reset()
+	m = typeText(m, "@~/co")
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "@~/code/" {
+		t.Errorf("a directory: bar = %q", v)
+	}
+
+	// No candidates leaves the bar and says so.
+	m.bar.Reset()
+	m = typeText(m, "@zz")
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "@zz" || !strings.Contains(m.status, "no match") {
+		t.Errorf("no match: bar %q, status %q", v, m.status)
+	}
+
+	// Tab after a plain word asks nothing.
+	m.bar.Reset()
+	b.completes = nil
+	m = typeText(m, "fix it")
+	m = send(m, keyMsg("tab"))
+	if len(b.completes) != 0 || m.bar.Value() != "fix it" {
+		t.Errorf("completes %q, bar %q", b.completes, m.bar.Value())
+	}
+}
+
+func TestTabCompletesInsideTheFirstLine(t *testing.T) {
+	m, b := newModel(t, 34, 24, 0)
+	b.items = map[string][]string{"@we": {"@website"}}
+	m = typeText(m, "@we fix it")
+	for range len(" fix it") {
+		m = send(m, keyMsg("left"))
+	}
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "@website fix it" {
+		t.Errorf("bar = %q", v)
+	}
+	m = typeText(m, "!")
+	if v := m.bar.Value(); v != "@website! fix it" {
+		t.Errorf("the cursor did not stay after the token: bar = %q", v)
+	}
+}
+
+func TestTheStatusStripSaysWhereATaskWent(t *testing.T) {
+	m, b := newModel(t, 80, 24, 0)
+	b.spawned = &ipc.Session{
+		ID: "snew00000001", Name: "fix-it", Branch: "irie/fix-it", Worktree: "/home/alice/.local/share/irie/worktrees/website/fix-it",
+		Copied:   []string{".env", "CLAUDE.local.md"},
+		Warnings: []string{"2 uncommitted changes in the main checkout were not carried over"},
+	}
+	m = typeText(m, "@website fix it")
+	m = send(m, keyMsg("enter"))
+	status := screen(t, m)[len(screen(t, m))-2]
+	for _, want := range []string{"irie/fix-it", "copied .env, CLAUDE.local.md", "2 uncommitted changes"} {
+		if !strings.Contains(status, want) {
+			t.Errorf("status strip %q lacks %q", status, want)
+		}
 	}
 }
 

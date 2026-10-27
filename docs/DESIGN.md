@@ -422,7 +422,7 @@ type Harness interface {
 |---|---|
 | `claude` not on PATH | The pane exits with 127, and the session is failed with the shell's message |
 | A flag value rejected (e.g. `auto` unknown to this CLI or account) | Failed, with the CLI's own message. No silent fallback to another mode |
-| Trust or login prompt at first start | Stalled (red). Swap it in and answer. If Claude Code trusts subdirectories of a trusted folder, trusting `worktree.root` once covers every worktree (check in M3) |
+| Trust or login prompt at first start | Stalled (red). Swap it in and answer. Claude Code keys trust on a repo's root, and in a worktree on its main checkout's root, so trusting a repo once covers every worktree of it (checked in M3) |
 | Two tasks with the same first words | Slugs `x` and `x-2` |
 | Core down when a spawn is requested | `irie up` restarts it; spawn ids make retries idempotent |
 | The task names a repo that does not exist | Nothing is spawned; the status strip lists the closest names |

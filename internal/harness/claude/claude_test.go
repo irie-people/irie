@@ -350,3 +350,9 @@ func TestSessionIDFlagCarriesTheVendorID(t *testing.T) {
 		t.Errorf("argv = %q", argv)
 	}
 }
+
+func TestClaudeCodeHasEveryLevel(t *testing.T) {
+	if l := (Harness{}).Levels(); l != harness.Generic|harness.Observed|harness.Held|harness.Subagents {
+		t.Errorf("levels %v, want GOHS", l)
+	}
+}

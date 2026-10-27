@@ -1,6 +1,7 @@
 // Package testutil holds helpers shared by Irie's tests: once-per-package
 // builds of the irie binary and the fake agent, short directories for unix
-// sockets, isolated XDG environments and private tmux servers.
+// sockets, isolated XDG environments, private tmux servers and temp git
+// repos kept away from the user's own git config.
 package testutil
 
 import (
@@ -215,6 +216,92 @@ func (e *Env) Tmux(t testing.TB, args ...string) string {
 func (e *Env) TryTmux(args ...string) (string, error) {
 	out, err := e.tmuxCmd(args...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
+}
+
+// NeedGit skips the test when git is not installed and returns its path.
+func NeedGit(t testing.TB) string {
+	t.Helper()
+	p, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	return p
+}
+
+// gitEnv are the variables that point git at a repo, or feed it config,
+// from outside: a test never inherits them.
+var gitEnv = []string{
+	"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_NO_REPLACE_OBJECTS",
+	"GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+}
+
+// IsolateGit keeps git, in the test and in every process it starts, away
+// from the user's own git config and from any repo the caller's environment
+// points at. Git never looks for a repo above the temp dirs, and commits get
+// a fixed identity.
+func IsolateGit(t *testing.T) {
+	t.Helper()
+	for _, k := range gitEnv {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
+	}
+	for k, v := range map[string]string{
+		"GIT_CONFIG_GLOBAL":       "/dev/null",
+		"GIT_CONFIG_NOSYSTEM":     "1",
+		"GIT_CEILING_DIRECTORIES": os.TempDir() + ":/tmp",
+		"GIT_AUTHOR_NAME":         "alice",
+		"GIT_AUTHOR_EMAIL":        "alice@example.com",
+		"GIT_COMMITTER_NAME":      "alice",
+		"GIT_COMMITTER_EMAIL":     "alice@example.com",
+	} {
+		t.Setenv(k, v)
+	}
+}
+
+// Git runs git in dir and returns its trimmed output, failing the test when
+// git fails. dir must be absolute, so a test never reaches the repo it runs
+// in by accident.
+func Git(t testing.TB, dir string, args ...string) string {
+	t.Helper()
+	if !filepath.IsAbs(dir) {
+		t.Fatalf("git in %q: not an absolute path", dir)
+	}
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git -C %s %s: %v\n%s", dir, strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// WriteFiles writes files under dir, path → contents, making directories as
+// needed.
+func WriteFiles(t testing.TB, dir string, files map[string]string) {
+	t.Helper()
+	for name, body := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// NewRepo makes a git repo at dir, on branch main, whose one commit holds
+// files. Call IsolateGit first.
+func NewRepo(t *testing.T, dir string, files map[string]string) string {
+	t.Helper()
+	NeedGit(t)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	Git(t, dir, "init", "-q", "-b", "main")
+	WriteFiles(t, dir, files)
+	Git(t, dir, "add", "-A")
+	Git(t, dir, "commit", "-q", "-m", "First commit")
+	return dir
 }
 
 // Eventually polls cond every 20 ms until it returns true, and fails the test

@@ -6,6 +6,7 @@ package journal
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -57,7 +58,7 @@ func Open(dir string, o Options) (*Journal, error) {
 		return nil, err
 	}
 	for i := len(files) - 1; i >= 0 && j.seq == 0; i-- {
-		evs, _ := readFile(filepath.Join(dir, files[i]))
+		evs, _ := readFile(filepath.Join(dir, files[i]), nil)
 		for _, e := range evs {
 			j.seq = max(j.seq, e.Seq)
 		}
@@ -172,6 +173,19 @@ func days(dir string) ([]string, error) {
 // Lines that are not valid envelopes, such as one a crash cut short, are
 // skipped. A missing journal has no events.
 func Read(dir string, since time.Time) ([]event.Event, error) {
+	return read(dir, since, nil)
+}
+
+// ReadKind is Read for the events of one kind. It skips the other lines
+// before decoding them, so reading a long journal stays cheap.
+func ReadKind(dir string, since time.Time, kind string) ([]event.Event, error) {
+	needle := []byte(`"kind":"` + kind + `"`)
+	return read(dir, since, func(line []byte) bool { return bytes.Contains(line, needle) })
+}
+
+// read reads the day files from since's day on, decoding the lines that
+// keep accepts, or every line when keep is nil.
+func read(dir string, since time.Time, keep func([]byte) bool) ([]event.Event, error) {
 	files, err := days(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -188,7 +202,7 @@ func Read(dir string, since time.Time) ([]event.Event, error) {
 		if f < from {
 			continue
 		}
-		evs, err := readFile(filepath.Join(dir, f))
+		evs, err := readFile(filepath.Join(dir, f), keep)
 		if err != nil {
 			return out, err
 		}
@@ -197,7 +211,7 @@ func Read(dir string, since time.Time) ([]event.Event, error) {
 	return out, nil
 }
 
-func readFile(path string) ([]event.Event, error) {
+func readFile(path string, keep func([]byte) bool) ([]event.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -207,6 +221,9 @@ func readFile(path string) ([]event.Event, error) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64<<10), 16<<20)
 	for sc.Scan() {
+		if keep != nil && !keep(sc.Bytes()) {
+			continue
+		}
 		var e event.Event
 		if json.Unmarshal(sc.Bytes(), &e) == nil && event.Validate(e) == nil {
 			out = append(out, e)

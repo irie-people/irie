@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/irie-hq/irie/internal/testutil"
 )
@@ -394,5 +395,32 @@ func TestKilledSlotIsRepaired(t *testing.T) {
 	}
 	if n := len(s.ByRole(RolePlaceholder)); n != 1 {
 		t.Errorf("%d placeholders", n)
+	}
+}
+
+func TestSnapshotReadsTheCommandAndPasteMode(t *testing.T) {
+	r, _ := startServer(t)
+	run(t, r, "new-window", "-d", "-t", AgentsSession+":", "-n", "paste", "--", "/bin/sh", "-c", `printf '\033[?2004h'; exec sleep 600`)
+	pane := func(window string) (Pane, bool) {
+		s, err := r.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range s.Panes {
+			if p.WindowID == window {
+				return p, true
+			}
+		}
+		return Pane{}, false
+	}
+	id := run(t, r, "display-message", "-p", "-t", AgentsSession+":=paste", "#{window_id}")
+	testutil.Eventually(t, 5*time.Second, "the pane did not ask for bracketed paste", func() bool {
+		p, ok := pane(id)
+		return ok && p.BracketPaste && p.Command == "sleep"
+	})
+	core := run(t, r, "display-message", "-p", "-t", AgentsSession+":0", "#{window_id}")
+	// The core window runs a script that never asks for it.
+	if p, ok := pane(core); !ok || p.BracketPaste || p.Command == "" {
+		t.Errorf("core pane = %+v", p)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/harness"
 	"github.com/irie-hq/irie/internal/harness/claude"
+	"github.com/irie-hq/irie/internal/harness/generic"
 	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/tmux"
@@ -27,6 +28,8 @@ func harnessFor(id string) (harness.Harness, error) {
 	switch id {
 	case "claude-code":
 		return claude.Harness{}, nil
+	case "generic":
+		return generic.Harness{}, nil
 	}
 	return nil, fmt.Errorf("no harness %q", id)
 }
@@ -85,13 +88,17 @@ func numbered(name string, n int) string {
 	return name + "-" + strconv.Itoa(n)
 }
 
-// uniqueName returns name, or name-2, name-3 … when a session has it. The
-// caller holds c.mu.
-func (c *Core) uniqueName(name string) string {
+// names returns the names the sessions have. The caller holds c.mu.
+func (c *Core) names() map[string]bool {
 	taken := map[string]bool{}
 	for _, x := range c.sessions {
 		taken[x.name] = true
 	}
+	return taken
+}
+
+// unique returns name, or name-2, name-3 … when it is taken.
+func unique(name string, taken map[string]bool) string {
 	for n := 1; ; n++ {
 		if !taken[numbered(name, n)] {
 			return numbered(name, n)
@@ -139,15 +146,25 @@ func (c *Core) workdir(requested, name string) (string, error) {
 }
 
 // spawn runs the spawn pipeline (DESIGN §4.2): the task never travels
-// through tmux and is never typed into a TUI. It goes to the agent as an
-// argument, or as a file when it is large. Whether the agent then comes up,
-// fails or stalls, observe and the hooks tell.
+// through tmux and is never typed into a TUI, unless a generic profile asks
+// for it to be pasted. It goes to the agent as an argument, or as a file
+// when it is large. Whether the agent then comes up, fails or stalls,
+// observe and the hooks tell.
 func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	if strings.TrimSpace(a.Task) == "" {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "empty task")
 	}
-	profileName := c.cfg.Spawn.DefaultProfile
-	profile := c.cfg.Profiles[profileName]
+	if a.Cwd != "" && a.Repo != "" {
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "a task runs in a cwd or in a repo, not both")
+	}
+	profileName := a.Profile
+	if profileName == "" {
+		profileName = c.cfg.Spawn.DefaultProfile
+	}
+	profile, ok := c.cfg.Profiles[profileName]
+	if !ok {
+		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s", profileName, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "))
+	}
 	h, err := harnessFor(profile.Harness)
 	if err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", profileName, err)
@@ -158,8 +175,25 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 		probe = p.Probe(profile, c.agentEnv(profile))
 	}
 
+	// Spawns run one at a time, so a worktree's slug cannot race another
+	// spawn's name. Making a worktree runs git, which can take a while, so
+	// c.mu stays free meanwhile for hooks and the sidebar.
+	c.spawnMu.Lock()
+	defer c.spawnMu.Unlock()
+	base := slug(a.Task)
+	if a.Name != "" {
+		base = slug(a.Name)
+	}
+	pl, err := c.place(a, base)
+	if err != nil {
+		c.log.Warn("spawn failed", "err", err)
+		return ipc.Session{}, err
+	}
 	c.mu.Lock()
-	x, err := c.launch(a, profileName, h, probe)
+	x, err := c.launch(a, pl, profileName, h, probe)
+	if err == nil && pl.repo != "" {
+		c.addRecent(pl.repo)
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -167,7 +201,7 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 		c.log.Warn("spawn failed", "err", err)
 		return ipc.Session{}, err
 	}
-	c.log.Info("spawned", "session", x.id, "name", x.name, "cwd", x.cwd)
+	c.log.Info("spawned", "session", x.id, "name", x.name, "cwd", x.cwd, "worktree", x.worktree)
 	return x.wire(), nil
 }
 
@@ -183,35 +217,29 @@ func (c *Core) agentEnv(p config.Profile) []string {
 }
 
 // launch writes the session's files, creates its window and records the
-// spawn. The caller holds c.mu.
-func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness, probe harness.Probe) (*session, error) {
+// spawn, in the place that place found. The caller holds c.mu.
+func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.Harness, probe harness.Probe) (*session, error) {
 	if err := c.refresh(); err != nil {
-		return nil, err
-	}
-	base := slug(a.Task)
-	if a.Name != "" {
-		base = slug(a.Name)
-	}
-	name := c.uniqueName(base)
-	cwd, err := c.workdir(a.Cwd, name)
-	if err != nil {
 		return nil, err
 	}
 	id := newID(time.Now())
 	for c.sessions[id] != nil {
 		id = newID(time.Now())
 	}
+	profile := c.cfg.Profiles[profileName]
 	x := &session{
-		id: id, name: name, agent: "main", created: time.Now().UTC().Truncate(time.Millisecond),
-		cwd: cwd, profile: profileName, harness: h.ID(), vendorID: harness.NewUUID(), warnings: probe.Warnings,
+		id: id, name: pl.name, agent: "main", created: time.Now().UTC().Truncate(time.Millisecond),
+		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
+		profile: profileName, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
+		vendorID: harness.NewUUID(), warnings: append(slices.Clone(pl.warnings), probe.Warnings...),
 	}
 
 	dir := c.paths.Session(id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	argv, env, files, err := h.Launch(c.cfg.Profiles[profileName], harness.Spawn{
-		Session: id, Name: name, Task: a.Task, Cwd: cwd, Dir: dir, VendorID: x.vendorID,
+	argv, env, files, err := h.Launch(profile, harness.Spawn{
+		Session: id, Name: x.name, Task: a.Task, Cwd: x.cwd, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: probe,
 	})
 	if err != nil {
@@ -234,7 +262,8 @@ func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness, pr
 	}
 	spec := c.paths.SpecFile(id)
 	if err := host.WriteSpec(spec, host.Spec{
-		Session: id, Profile: profileName, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: cwd, Warnings: probe.Warnings,
+		Session: id, Profile: profileName, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: x.cwd, Warnings: x.warnings,
+		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
 	}); err != nil {
 		return nil, err
 	}
@@ -251,15 +280,15 @@ func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness, pr
 	opt := func(k, v string) []string { return []string{"set-option", "-p", "-t", target, k, v} }
 	out, err := c.tmux.RunList([][]string{
 		{"set-option", "-t", tmux.AgentsSession, "default-size", fmt.Sprintf("%dx%d", w, ht)},
-		{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", id, "-c", cwd, "-P", "-F", "#{pane_id}", "--", c.bin, "host", "--spec", spec},
+		{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", id, "-c", x.cwd, "-P", "-F", "#{pane_id}", "--", c.bin, "host", "--spec", spec},
 		opt(tmux.OptSession, id),
 		opt(tmux.OptAgent, x.agent),
 		opt(tmux.OptRole, tmux.RoleAgent),
-		opt(tmux.OptName, name),
+		opt(tmux.OptName, x.name),
 		opt(tmux.OptCreated, x.created.Format(time.RFC3339Nano)),
 		opt(tmux.OptVendorID, x.vendorID),
 		append([]string{"resize-window", "-t", target}, size...),
-		{"rename-window", "-t", target, name},
+		{"rename-window", "-t", target, x.name},
 	})
 	if err != nil {
 		c.tmux.Run("kill-window", "-t", target)
@@ -267,8 +296,12 @@ func (c *Core) launch(a ipc.SpawnArgs, profileName string, h harness.Harness, pr
 	}
 	x.pane = strings.TrimSpace(out)
 	c.sessions[id] = x
-	c.record(x, event.Event{Source: event.SourceIrie, Kind: event.SpawnRequested, Data: map[string]any{
-		"task_bytes": len(a.Task), "cwd": cwd, "profile": profileName,
-	}})
+	data := map[string]any{"task_bytes": len(a.Task), "cwd": x.cwd, "profile": profileName}
+	for k, v := range map[string]string{"repo": x.repo, "worktree": x.worktree, "branch": x.branch} {
+		if v != "" {
+			data[k] = v
+		}
+	}
+	c.record(x, event.Event{Source: event.SourceIrie, Kind: event.SpawnRequested, Data: data})
 	return x, nil
 }

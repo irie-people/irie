@@ -174,6 +174,8 @@ type Pane struct {
 	DeadStatus   int
 	Width        int
 	Height       int
+	Command      string // the pane's foreground command, such as irie for an agent's host
+	BracketPaste bool   // the program in the pane asked for bracketed paste
 
 	// Irie's pane options.
 	Role        string
@@ -189,6 +191,7 @@ var paneFormat = []string{
 	"session_name", "window_id", "window_index", "window_panes", "window_width", "window_height",
 	"pane_id", "pane_index", "pane_pid", "pane_dead", "pane_dead_status", "pane_width", "pane_height",
 	OptRole, OptSession, OptAgent, OptName, OptCreated, OptVersion, OptVendorID,
+	"pane_current_command", "bracket_paste_flag",
 }
 
 // Snapshot is every pane of the server at one moment.
@@ -213,6 +216,7 @@ func (r *Runner) Snapshot() (Snapshot, error) {
 			Session: f[0], WindowID: f[1], WindowIndex: n(2), WindowPanes: n(3), WindowWidth: n(4), WindowHeight: n(5),
 			ID: f[6], Index: n(7), PID: n(8), Dead: f[9] == "1", DeadStatus: n(10), Width: n(11), Height: n(12),
 			Role: f[13], IrieSession: f[14], Agent: f[15], Name: f[16], Created: f[17], Version: f[18], VendorID: f[19],
+			Command: f[20], BracketPaste: f[21] == "1",
 		})
 	}
 	return s, nil

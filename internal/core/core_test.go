@@ -30,6 +30,7 @@ type agentConfig struct {
 	mode         string            // profiles.fake.permission_mode; auto when empty
 	readyTimeout string            // spawn.ready_timeout
 	env          map[string]string // profiles.fake.env
+	extra        string            // more TOML, such as [repos] or more profiles
 }
 
 func (a agentConfig) toml(fake string) string {
@@ -52,6 +53,9 @@ func (a agentConfig) toml(fake string) string {
 			kv = append(kv, fmt.Sprintf("%s = %q", k, a.env[k]))
 		}
 		b.WriteString("env = { " + strings.Join(kv, ", ") + " }\n")
+	}
+	if a.extra != "" {
+		b.WriteString("\n" + a.extra)
 	}
 	return b.String()
 }
@@ -77,6 +81,8 @@ func setupWith(t *testing.T, a agentConfig) *coreEnv {
 func prepare(t *testing.T, a agentConfig) *coreEnv {
 	t.Helper()
 	testutil.NeedTmux(t)
+	// The core runs git for @repo tasks: never with the user's git config.
+	testutil.IsolateGit(t)
 	bin := testutil.BuildIrie(t)
 	fake := testutil.BuildFakeAgent(t)
 	e := testutil.NewEnv(t)
