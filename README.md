@@ -20,7 +20,19 @@ Run every coding agent you have, from any supplier, on any model, cloud or local
 
 ## Status
 
-Early and unreleased. Nothing to install yet.
+Early and unreleased. There's no release to download yet, but you can build Irie from source: see [Install](https://irie-hq.github.io/irie/install.html).
+
+## Docs
+
+The website has the docs, from installing Irie to a merged change. Its pages are in [`site/`](site/), and open from disk too.
+
+- [Install](https://irie-hq.github.io/irie/install.html): build Irie from source, and what it does on its first run
+- [Your first session](https://irie-hq.github.io/irie/first-session.html): type a task, read its row, look in, and answer an agent that needs you
+- [Tasks, repos and worktrees](https://irie-hq.github.io/irie/tasks.html): `@repo`, `@repo!`, `+profile`, Tab completion, pastes, and what a worktree gets
+- [Profiles and models](https://irie-hq.github.io/irie/profiles.html): the config file, every setting with its default, and profiles for local models
+- [Keys and commands](https://irie-hq.github.io/irie/keys.html): every key, and `irie ctl` for scripts
+- [Recipes](https://irie-hq.github.io/irie/recipes.html): from an idea to a merged change, with what works today and what is planned
+- [Troubleshooting](https://irie-hq.github.io/irie/troubleshooting.html): each stall, failure and message, and what to do about it
 
 ## Free, and paid back
 

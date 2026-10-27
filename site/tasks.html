@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Tasks, repos and worktrees · Irie</title>
+<meta name="description" content="Where Irie's agents work: @repo, @repo!, +profile, Tab completion and pastes, and what a worktree gets.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Tasks, repos and worktrees</h1>
+
+  <figure class="picture small">
+    <svg viewBox="0 0 400 372" role="img" aria-labelledby="wt-title" aria-describedby="wt-desc">
+      <title id="wt-title">Two tasks with @shop, each in a worktree of its own, with the project’s local files copied in. Uncommitted changes stay in the checkout.</title>
+      <desc id="wt-desc">At the top, the checkout ~/code/shop holds tracked files, the local files .env and CLAUDE.local.md, and uncommitted changes, which stay there. Arrows marked two tasks with @shop lead down to two worktrees side by side, both in ~/.local/share/irie/worktrees/shop/. The first is on the branch irie/fix-cart-total, the second on irie/add-dark-mode. Each holds the tracked files and copies of .env and CLAUDE.local.md.</desc>
+
+      <!-- The checkout -->
+      <path d="M70 22a8 8 0 0 1 8-8h52l10 10h182a8 8 0 0 1 8 8v100a8 8 0 0 1-8 8h-244a8 8 0 0 1-8-8z" class="s-card s-line" stroke-width="1.5"/>
+      <text x="88" y="52" font-size="15" font-weight="700" class="mono s-ink">~/code/shop</text>
+      <text x="88" y="76" font-size="14" class="s-ink">tracked files</text>
+      <text x="88" y="98" font-size="14" class="s-ink"><tspan class="mono" font-size="13">.env</tspan>, <tspan class="mono" font-size="13">CLAUDE.local.md</tspan> <tspan class="s-soft">(local)</tspan></text>
+      <text x="88" y="120" font-size="14" class="s-soft">uncommitted changes stay here</text>
+
+      <!-- Two tasks -->
+      <path d="M200 140V160M102 160H298M102 160V184M298 160V184" fill="none" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M96 182l6 10l6-10z" class="s-ink"/>
+      <path d="M292 182l6 10l6-10z" class="s-ink"/>
+      <text x="200" y="180" text-anchor="middle" font-size="13" class="s-soft">two tasks with @shop</text>
+
+      <!-- Two worktrees -->
+      <path d="M8 204a8 8 0 0 1 8-8h44l10 10h118a8 8 0 0 1 8 8v108a8 8 0 0 1-8 8h-172a8 8 0 0 1-8-8z" class="s-card s-line" stroke-width="1.5"/>
+      <path d="M204 204a8 8 0 0 1 8-8h44l10 10h118a8 8 0 0 1 8 8v108a8 8 0 0 1-8 8h-172a8 8 0 0 1-8-8z" class="s-card s-line" stroke-width="1.5"/>
+      <g font-size="13.5" font-weight="700" class="mono s-ink">
+        <text x="22" y="234">irie/fix-cart-total</text>
+        <text x="218" y="234">irie/add-dark-mode</text>
+      </g>
+      <g font-size="13" class="s-soft">
+        <text x="22" y="255">a worktree</text>
+        <text x="218" y="255">a worktree</text>
+      </g>
+      <g font-size="14" class="s-ink">
+        <text x="22" y="279">tracked files</text>
+        <text x="218" y="279">tracked files</text>
+      </g>
+      <g font-size="13" class="mono s-mark">
+        <text x="22" y="300">+ .env</text>
+        <text x="22" y="319">+ CLAUDE.local.md</text>
+        <text x="218" y="300">+ .env</text>
+        <text x="218" y="319">+ CLAUDE.local.md</text>
+      </g>
+
+      <!-- Where they live -->
+      <path d="M8 342v6h384v-6" fill="none" class="s-line" stroke-width="1.5"/>
+      <text x="200" y="366" text-anchor="middle" font-size="13" class="mono s-soft">~/.local/share/irie/worktrees/shop/</text>
+    </svg>
+    <figcaption>Each <code>@shop</code> task gets a worktree and a branch of its own, with your local files copied in. Changes you haven’t committed stay in your checkout.</figcaption>
+  </figure>
+
+  <p>Whatever you type in the task box is a task. Its first line can also say where the agent works, with <code>@</code>, and which agent it is, with <code>+</code>.</p>
+
+  <h2 id="box">The task box</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Key</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>Enter</kbd></td><td>Start the task.</td></tr>
+        <tr><td><kbd>Shift</kbd>+<kbd>Enter</kbd>, <kbd>Ctrl</kbd>+<kbd>J</kbd></td><td>A new line.</td></tr>
+        <tr><td><kbd>Tab</kbd></td><td>Complete the <code>@</code> or <code>+</code> word under the cursor.</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Clear the box and go back to the list.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The box grows to 8 lines as you type, then scrolls. A task has no length limit, and the agent gets it word for word.</p>
+
+  <h2 id="where">Where a task runs</h2>
+  <p>A <dfn>repo</dfn>, short for repository, is a project whose history <dfn>git</dfn> keeps. A <dfn>worktree</dfn> is a second working copy of a repo, on a <dfn>branch</dfn>, or line of changes, of its own.</p>
+  <p>Agents in different worktrees can’t trip over each other’s edits.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">You type</th><th scope="col">The agent works in</th></tr></thead>
+      <tbody>
+        <tr><td>No <code>@</code></td><td>A new, empty folder: <code>~/.local/share/irie/scratch/&lt;name&gt;</code>. Or <code>spawn.default_cwd</code>, if you set it.</td></tr>
+        <tr><td><code>@shop</code></td><td>A new worktree of the repo called shop.</td></tr>
+        <tr><td><code>@~/code/shop</code></td><td>A new worktree of the repo in that folder. Name a folder inside the repo, and the agent starts in the same folder of the worktree.</td></tr>
+        <tr><td><code>@shop!</code>, <code>@~/code/shop!</code></td><td>The repo’s own folder, without a worktree.</td></tr>
+        <tr><td><code>@~/notes</code></td><td>That folder itself, when it isn’t in a repo.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="rules">
+    <li>The <code>@</code> and <code>+</code> words can go anywhere on the first line. Irie takes them out, and the rest goes to the agent as you wrote it.</li>
+    <li>One <code>@</code> and one <code>+</code> per task.</li>
+    <li>Write a folder from your home folder, <code>~/</code>, or from the top, <code>/</code>, such as <code>@/home/alice/code/shop</code>. Paths such as <code>./shop</code> aren’t accepted.</li>
+  </ul>
+
+  <h2 id="repo-names">How @ finds a repo</h2>
+  <p>A name such as <code>@shop</code> is looked up in three places, in this order:</p>
+  <ol class="rules">
+    <li>The names you give in <code>repos.aliases</code>.</li>
+    <li>Repos in the folders you list in <code>repos.roots</code>, two levels deep. A repo on the second level also goes by its path, such as <code>clients/api</code>.</li>
+    <li>The last 20 repos you used.</li>
+  </ol>
+<pre><code>[repos]
+roots = ["~/code"]
+aliases = { web = "~/code/website" }</code></pre>
+  <p>These lines go in Irie’s settings file. <a href="profiles.html#file">Profiles and models</a> says where it is, and how to make Irie read a change.</p>
+  <p>The first place that knows the name answers. If no repo there has exactly that name, one that differs only in capital letters will do.</p>
+  <p>If a name fits two repos, nothing starts, and the line under the list names both, so you can give the folder instead. If it fits none, the line suggests the closest names.</p>
+
+  <h2 id="worktrees">Worktrees</h2>
+  <p>For <code>@shop</code>, Irie makes the worktree before the agent starts:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col"></th><th scope="col">The worktree</th><th scope="col">Setting</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Folder</th><td><code>~/.local/share/irie/worktrees/shop/&lt;name&gt;</code>, outside your repo</td><td><code>worktree.root</code></td></tr>
+        <tr><th scope="row">Branch</th><td><code>irie/&lt;name&gt;</code>, new</td><td><code>worktree.branch_prefix</code></td></tr>
+        <tr><th scope="row">Starts from</th><td>The commit your checkout is on</td><td><code>worktree.base</code></td></tr>
+        <tr><th scope="row">Name</th><td>The row’s name, with <code>-2</code>, <code>-3</code> and so on when a row, folder or branch already has it</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Your own files stay as they are. Irie never deletes a worktree or a branch.</p>
+
+  <h3 id="gets">What a worktree gets</h3>
+  <ul class="rules">
+    <li>Every file git keeps, as it is in the starting commit.</li>
+    <li>Your local files that git leaves out: the ones your repo’s <code>.worktreeinclude</code> names, if git ignores them, and the ones <code>worktree.copy</code> names, which by default are <code>.claude/settings.local.json</code> and <code>CLAUDE.local.md</code>. A file the worktree already has is left alone.</li>
+    <li>The repo’s submodules, checked out, when it has a <code>.gitmodules</code> file.</li>
+  </ul>
+  <p><code>.worktreeinclude</code> is a file at the top of your repo, written like a <code>.gitignore</code>, and Claude Code reads it too. This one gives every worktree your local <code>.env</code> file:</p>
+<pre><code>.env</code></pre>
+
+  <h3 id="behind">What stays behind</h3>
+  <p>Changes you haven’t committed stay in your checkout. The line under the list says how many, such as <code>1 uncommitted change in the main checkout was not carried over</code>.</p>
+  <p>Commit first if the agent needs them. Right after a task starts, the same line names its branch and what was copied: <code>worktree irie/fix-cart-total · copied .env, CLAUDE.local.md</code>.</p>
+  <p>A repo with no commits yet has nothing to start a branch from. Commit once, or add <code>!</code> to work in its own folder.</p>
+
+  <h3 id="trust">Trust</h3>
+  <p>Claude Code asks you to trust a folder the first time it works there. It keeps your answer for the whole repo, so a repo you trust once is trusted in all its worktrees.</p>
+
+  <h3 id="cleanup">When you’re done</h3>
+  <p>Review the branch and merge it the way you like. Then remove the worktree and the branch, from your checkout:</p>
+<pre><code>cd ~/code/shop
+git worktree remove ~/.local/share/irie/worktrees/shop/fix-cart-total
+git branch -d irie/fix-cart-total</code></pre>
+  <p>git won’t remove a worktree that holds changes or files it doesn’t know, such as a copied <code>CLAUDE.local.md</code> that your repo doesn’t ignore. Look inside first; if nothing there is needed, add <code>--force</code>.</p>
+  <p><code>git branch -d</code> won’t delete a branch that isn’t merged yet, which keeps unmerged work safe. Clearing out old worktrees from Irie is planned. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></p>
+
+  <h2 id="profile">Pick the agent with +</h2>
+  <p><code>+</code> and a <dfn>profile</dfn>’s name picks the agent and its AI model for one task, such as <code>+local</code>. Without one, a task uses <code>spawn.default_profile</code>: out of the box, Claude Code with Opus 5.5 at max effort in auto mode.</p>
+  <p>A name Irie doesn’t know starts nothing, and the line under the list names the profiles there are. <a href="profiles.html">Profiles and models</a> shows how to make your own.</p>
+
+  <h2 id="tab">Tab completion</h2>
+  <p>Press <kbd>Tab</kbd> with the cursor in an <code>@</code> or <code>+</code> word on the first line:</p>
+  <ul class="rules">
+    <li><code>+</code> completes profile names.</li>
+    <li><code>@</code> completes the names of the repos Irie knows, whatever their capital letters.</li>
+    <li><code>@~/</code> and <code>@/</code> complete folders. Hidden folders come up once you type a dot.</li>
+  </ul>
+  <p>One match fills in the word and a space. A folder leaves the cursor at its end, so you can go on into it.</p>
+  <p>Several matches fill in what they have in common, and the line under the list shows them all.</p>
+
+  <h2 id="pastes">Pastes and big tasks</h2>
+  <p>A short paste goes into the box as text. One over 8 KiB, which is 8,192 bytes, shows as a chip instead, such as <code>[paste 32.8 KB · 700 lines]</code>, and goes to the agent whole when you press Enter, tabs and all.</p>
+  <p>Type around a chip as you like. Delete its label to drop the paste.</p>
+  <p>A task over 100 KiB is handed over as a file: the agent is told to read all of it before it does anything else. Irie keeps every task in its records, in <code>~/.local/state/irie/sessions/&lt;id&gt;/task.md</code>.</p>
+  <p>From a script, <code>irie ctl spawn @shop - &lt; task.md</code> reads a task of any size from a file: see <a href="keys.html#ctl-spawn">irie ctl spawn</a>.</p>
+
+  <h2 id="row-names">Names</h2>
+  <p>A row is named after the first five words of its task’s first line, in small letters joined by dashes, up to 32 characters: <code>fix-the-flaky-checkout-test</code>. A name that’s taken gets <code>-2</code>, <code>-3</code> and so on.</p>
+  <p>A worktree and its branch take the same name. <code>irie ctl spawn --name</code> picks the name yourself, and renaming a row later is planned. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="profiles.html">Profiles and models</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html" aria-current="page">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

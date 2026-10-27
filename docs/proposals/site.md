@@ -19,6 +19,23 @@ Every page opens with its title and then its picture, before any text.
 | FAQ | `faq.html` | Close the window and the agents keep going | Short answers to a newcomer's questions: what an agent is, which agents, local models, cost, the name |
 | Contribute | `contribute.html` | From an issue to Steak | The four steps of CONTRIBUTING, "Free, and paid back" and the Steak links from the README, and the house rules from AGENTS.md |
 
+### Docs
+
+Added on 2026-10-26, for using Irie rather than learning about it. A "Docs" item in the navigation leads to `docs.html`, which lists the pages in order; each docs page ends with the next page and a list of all of them. They follow the same rules as the rest of the site.
+
+| Page | File | Picture | What it covers |
+|---|---|---|---|
+| Docs | `docs.html` | Seven stones on a path | The pages in order, and what the marks mean |
+| Install | `install.html` | A terminal building Irie | Building from source with Go; what `irie` does on its first run; updating, keeping and removing it |
+| Your first session | `first-session.html` | The window on a first run | Typing a task, reading the row, looking in, answering an agent, a finished task |
+| Tasks, repos and worktrees | `tasks.html` | Two `@shop` tasks in worktrees | The task box, `@`, `@!` and `+`, how `@` finds a repo, worktrees, Tab completion, pastes, names |
+| Profiles and models | `profiles.html` | `+local` picking a profile | The settings file and when a change takes effect, profiles, local models, generic agents, every setting |
+| Keys and commands | `keys.html` | Irie's key guide as keycaps | Every key, the keys to come, every command, `irie ctl` |
+| Recipes | `recipes.html` | Three branches merged into main | Seven recipes, each with what works today and what is planned |
+| Troubleshooting | `troubleshooting.html` | Rows in trouble | Each state, message and warning, what to do, and where Irie keeps things |
+
+Their facts come from the code and its `--help` output, checked by running Irie in a private session with its own folders and tmux socket.
+
 ## Pictures
 
 All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<title>` that names it and a `<desc>` that describes it, so it has alt text. Terminal pictures stay dark in both themes, as most terminals are; diagrams follow the page's theme.
@@ -49,7 +66,7 @@ Recordings come later. Each one has an empty box now, sized 16:10, whose caption
 - **Contrast.** Text meets WCAG 2.2 AA, 4.5:1, in both themes; large text and meaningful graphics meet 3:1. So "done" is deep green in the light theme and sea in the dark one, and a sun-coloured shape that means something gets a dark outline.
 - **Type.** The system's own fonts, sans for text and monospace for terminal text.
 - **Nothing third-party.** Static HTML and one stylesheet. No JavaScript, no build step, no web fonts, no trackers or analytics.
-- **Status marks.** "Built" for what is on main, which is not the same as released: there is nothing to install yet. "Planned" for the rest, linking to its milestone on the roadmap.
+- **Status marks.** "Built" for what is on main, which is not the same as released: there is no release yet, only building from source. "Planned" for the rest, linking to its milestone on the roadmap.
 
 ## Writing
 
@@ -79,7 +96,8 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 
 - **When a milestone merges.** The same pull request updates `site/roadmap.html` and the milestones picture, and removes that milestone's "Planned" marks. Each mark carries `data-m="<N>"`, so `grep -rn 'data-m="3"' site/` finds them, and `grep -rn milestone site/` finds the sentences that name one.
 - **Milestone 3.** This branch was made on top of the M3 commit, which was not on main yet. The docs change that builds on it carries the M3 commit too, and marks M3 done, so M3 reaches main first or with it (open decision 4).
-- **When the first release ships.** Get started gains the install steps, and the "nothing to install yet" lines on Home, Get started and the FAQ go.
+- **When behaviour changes.** The same pull request updates the docs: keys are in `keys.html`, settings in `profiles.html`, and messages in `troubleshooting.html`.
+- **When the first release ships.** Install gains the download, and the "no download yet" lines on Home, Get started, the FAQ and the README go.
 - **Links out.** The site links to `github.com/irie-hq/irie`, `irie-hq/stake` and `steak-hq/steak`. None of them was public on 2026-10-26, so those links fail until they are.
 
 ## Open decisions

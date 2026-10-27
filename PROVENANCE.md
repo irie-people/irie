@@ -79,6 +79,13 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme ; https://developer.mozilla.org/en-US/docs/Web/CSS/color-scheme | Light and dark themes from the system setting, with no switch and no script; `color-scheme: light dark` and its meta tag for the browser's own controls (site) |
 | 2026-10-26 | https://developer.mozilla.org/en-US/docs/Web/CSS/aspect-ratio ; https://developer.mozilla.org/en-US/docs/Web/SVG/Reference/Attribute/preserveAspectRatio | Boxes sized before their recordings exist; `xMinYMin slice` inside a box that narrows on small screens, so the window picture crops to the sidebar (site) |
 | 2026-10-26 | Chrome DevTools Protocol, https://github.com/ChromeDevTools/devtools-protocol (pdl/domains/Emulation.pdl) | `Emulation.setDeviceMetricsOverride` and `Emulation.setEmulatedMedia` with `prefers-color-scheme`: the browser check of every page at three widths in both themes. The check script is not part of the repository (site) |
+| 2026-10-26 | https://go.dev/doc/install | Go's default folder for `go install`, `$HOME/go/bin`, and the line that puts it on PATH, `export PATH="$PATH:$(go env GOPATH)/bin"`: the Install page (docs) |
+| 2026-10-26 | https://code.claude.com/docs/en/setup | Installing Claude Code, `claude --version` as the check, and signing in by running `claude`: the Install page and its link (docs) |
+| 2026-10-26 | https://github.com/tmux/tmux/wiki/Installing ; https://git-scm.com/install/ ; https://ghostty.org/download | Where to get tmux, git and Ghostty: links on the Install page (docs) |
+| 2026-10-26 | https://docs.ollama.com/context-length | A 4k context below 24 GiB of video memory, `OLLAMA_CONTEXT_LENGTH=64000 ollama serve` or the app's setting, and at least 64000 tokens for coding tools: Profiles for local models (docs) |
+| 2026-10-26 | https://docs.ollama.com/integrations/claude-code | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN = "ollama"` and an empty `ANTHROPIC_API_KEY` for Claude Code on Ollama: the `local` profile example (docs) |
+| 2026-10-26 | git 2.43.0 manual pages (local `man git-worktree`, `man git-branch`), checked on a scratch repo | `git worktree remove` refuses a worktree with modified or untracked files unless `--force`, while ignored files don't stop it; `git branch -d` refuses an unmerged branch or one a worktree has checked out: cleaning up after a task (docs) |
+| 2026-10-26 | https://developer.mozilla.org/en-US/docs/Web/API/Document/elementsFromPoint | What is painted behind each picture's text, so the browser check measures its contrast against the shape behind it, with the Chrome DevTools Protocol entry above (docs) |
 
 ## Third-party code
 

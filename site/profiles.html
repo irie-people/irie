@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Profiles and models · Irie</title>
+<meta name="description" content="Irie's settings file, every setting and its default, and profiles for cloud and local models.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Profiles and models</h1>
+
+  <figure class="picture small">
+    <svg viewBox="0 0 400 340" role="img" aria-labelledby="prof-title" aria-describedby="prof-desc">
+      <title id="prof-title">How +local picks a profile: a plain task uses the default profile, claude, with Opus 5.5 in the cloud; a task with +local uses the profile local, with gpt-oss:20b on your own computer.</title>
+      <desc id="prof-desc">At the top, Irie’s task box holds two tasks: @shop fix the cart total, and @shop +local add comments to cart.go. An arrow leads from the first to the profile claude, the default: Claude Code with claude-opus-5-5, at max effort in auto mode, which runs in the cloud on Anthropic’s servers. An arrow leads from the second to the profile local: Claude Code with gpt-oss:20b, pointed at Ollama, which runs on your own computer.</desc>
+
+      <!-- The task box -->
+      <rect x="0.75" y="0.75" width="398.5" height="72.5" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+      <g font-size="15" class="mono">
+        <text x="14" y="30" class="t-sun">›</text>
+        <text x="34" y="30" class="t-ink">@shop fix the cart total</text>
+        <text x="14" y="58" class="t-sun">›</text>
+        <text x="34" y="58" class="t-ink">@shop <tspan class="t-sun" font-weight="700">+local</tspan> add comments to cart.go</text>
+      </g>
+
+      <!-- To the profiles -->
+      <path d="M100 80V102M300 80V102" fill="none" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M94 100l6 10l6-10z M294 100l6 10l6-10z" class="s-ink"/>
+      <rect x="8.75" y="116.75" width="186.5" height="100.5" rx="12" class="s-card s-line" stroke-width="1.5"/>
+      <rect x="204.75" y="116.75" width="186.5" height="100.5" rx="12" class="s-card s-line" stroke-width="1.5"/>
+      <text x="22" y="143" class="s-ink"><tspan class="mono" font-size="15" font-weight="700">claude</tspan><tspan font-size="13" class="s-soft"> (the default)</tspan></text>
+      <text x="218" y="143" font-size="15" font-weight="700" class="mono s-ink">local</text>
+      <g font-size="14" class="s-ink">
+        <text x="22" y="166">Claude Code</text>
+        <text x="218" y="166">Claude Code</text>
+      </g>
+      <g font-size="13" class="mono s-ink">
+        <text x="22" y="187">claude-opus-5-5</text>
+        <text x="218" y="187">gpt-oss:20b</text>
+      </g>
+      <g font-size="13" class="s-soft">
+        <text x="22" y="206">max effort, auto mode</text>
+        <text x="218" y="206">pointed at Ollama</text>
+      </g>
+
+      <!-- Where each model runs -->
+      <path d="M102 220V240M298 220V240" fill="none" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M96 238l6 10l6-10z M292 238l6 10l6-10z" class="s-ink"/>
+      <path d="M80 290h44a12 12 0 0 0 1-24a17 17 0 0 0-32-6a12 12 0 0 0-13 30z" class="s-card s-line" stroke-width="1.5"/>
+      <rect x="272.75" y="256.75" width="50.5" height="32.5" rx="4" class="s-card s-line" stroke-width="1.5"/>
+      <path d="M287 298h22M298 289.5V298" fill="none" class="s-line" stroke-width="2"/>
+      <g font-size="14" text-anchor="middle" class="s-ink">
+        <text x="102" y="316">Anthropic’s servers</text>
+        <text x="298" y="316">your computer</text>
+      </g>
+      <g font-size="13" text-anchor="middle" class="s-soft">
+        <text x="102" y="334">in the cloud</text>
+        <text x="298" y="334">with Ollama</text>
+      </g>
+    </svg>
+    <figcaption>A <dfn>profile</dfn> is a recipe you name for starting an agent. <code>+local</code> picks one for a task; without a <code>+</code>, a task uses the default.</figcaption>
+  </figure>
+
+  <p>Irie’s settings live in one file. It says which agents and AI <dfn>models</dfn> Irie can start, where your projects are, and how Irie behaves.</p>
+
+  <h2 id="file">The settings file</h2>
+<pre><code><span class="prompt">$ </span>irie config path
+/home/alice/.config/irie/config.toml</code></pre>
+  <p>The file is written in <dfn>TOML</dfn>: <code>[sections]</code> and <code>key = value</code> lines. Irie doesn’t make it; until you do, every setting has its default.</p>
+  <p>Every setting is optional. A setting Irie doesn’t know stops it with an error that names the setting, and so does a value that makes no sense, such as a default profile that doesn’t exist.</p>
+<pre><code><span class="prompt">$ </span>irie config print</code></pre>
+  <p>This prints the settings in effect: the defaults, with your file on top. Use it to check a change.</p>
+  <p>If you set <code>XDG_CONFIG_HOME</code>, the file is <code>$XDG_CONFIG_HOME/irie/config.toml</code> instead.</p>
+
+  <h3 id="apply">When a change takes effect</h3>
+  <p>Irie reads the file when its core starts, and a running core keeps the settings it started with.</p>
+  <ul class="rules">
+    <li><code>ui.sidebar_width</code> and <code>ui.focus_key</code> take effect at the next <code>irie</code> or <code>irie up</code>, which restarts the core for them.</li>
+    <li>For any other setting, restart the core yourself. Your agents keep running.</li>
+  </ul>
+<pre><code>tmux -L irie respawn-pane -k -t irie-agents:core</code></pre>
+  <p>The list reads <code>ui.red_on_done</code> when it starts. After changing that one, restart the list as well:</p>
+<pre><code>tmux -L irie respawn-pane -k -t irie:0.0</code></pre>
+
+  <h2 id="profiles">Profiles</h2>
+  <p>A profile names the program to start, the model to ask for and its settings. A task uses <code>spawn.default_profile</code>, unless its first line names another with <code>+</code>.</p>
+  <p>The built-in profile, <code>claude</code>, is Claude Code with Opus 5.5 at max effort in auto mode:</p>
+<pre><code>[profiles.claude]
+harness = "claude-code"
+command = "claude"
+model = "claude-opus-5-5"
+effort = "max"
+permission_mode = "auto"
+args = []
+env = {}</code></pre>
+  <p>To change it, set only the keys you want. This keeps the rest of <code>claude</code> and lowers its effort:</p>
+<pre><code>[profiles.claude]
+effort = "high"</code></pre>
+  <p>A new profile starts empty instead: Claude Code, with no model, effort or permission mode, so Claude Code’s own defaults apply. Give it the ones you want:</p>
+<pre><code>[profiles.fast]
+model = "claude-sonnet-5-5"
+effort = "low"</code></pre>
+  <p>Then <code>+fast fix the typo in the README</code> uses it. <code>spawn.default_profile = "fast"</code> would make it the default.</p>
+
+  <h3 id="claude-code">What a Claude Code profile runs</h3>
+<pre><code>claude &lt;args&gt; --model &lt;model&gt; --effort &lt;effort&gt; --permission-mode &lt;mode&gt; \
+  --settings &lt;file&gt; --session-id &lt;id&gt; --name &lt;name&gt; &lt;task&gt;</code></pre>
+  <ul class="rules">
+    <li>A setting left empty leaves its flag out.</li>
+    <li><code>--settings</code> adds Irie’s <dfn>hooks</dfn> for this agent only: small commands Claude Code runs to tell Irie how it’s doing. Your own settings files aren’t touched, and your own hooks still run.</li>
+    <li><code>--name</code> is passed only when <code>claude --help</code> lists it.</li>
+    <li>If Claude Code turns down a value, such as a model your account can’t use, the agent fails with Claude Code’s own message. Irie never swaps in another value.</li>
+  </ul>
+
+  <h3 id="local">Profiles for local models</h3>
+  <p>Claude Code can use a model on your own computer through a server that speaks Anthropic’s API, such as Ollama, LM Studio or llama-server. A profile points it there with environment settings. This one uses <a href="https://docs.ollama.com/integrations/claude-code">Ollama’s settings for Claude Code</a>:</p>
+<pre><code>[profiles.local]
+model = "gpt-oss:20b"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:11434", ANTHROPIC_AUTH_TOKEN = "ollama", ANTHROPIC_API_KEY = "" }</code></pre>
+  <p>Fetch the model first, with <code>ollama pull gpt-oss:20b</code>. Then start small jobs with <code>+local</code>, such as <code>@shop +local add comments to cart.go</code>.</p>
+  <p><strong>Give it room.</strong> A model holds only so much text at a time, its context, counted in tokens: pieces of words. With under 24 GiB of video memory, Ollama gives a model 4,096 tokens and quietly cuts anything longer, so an agent can lose its instructions without a word.</p>
+  <p>Ollama asks for at least 64,000 tokens for coding tools. Start it with <code>OLLAMA_CONTEXT_LENGTH=64000 ollama serve</code>, or set it in the Ollama app’s settings: see <a href="https://docs.ollama.com/context-length">Ollama on context length</a>.</p>
+  <p><strong>How well it works</strong> is up to the model: Anthropic doesn’t support Claude Code on other companies’ models.</p>
+  <p>Irie checking a local model’s context before an agent starts, and saying how to fix it, is planned. Its <code>local</code> setting for profiles isn’t accepted yet. <a class="tag" href="roadmap.html#m10" data-m="10">Planned</a></p>
+
+  <h3 id="generic">Any other agent</h3>
+  <p>A profile with <code>harness = "generic"</code> starts any program that runs in a terminal. Irie then sees only whether the program is still running: its row shows working until it ends.</p>
+<pre><code>[profiles.aider]
+harness = "generic"
+command = "aider"
+args = ["--model", "ollama_chat/gpt-oss:20b"]
+task = "paste"</code></pre>
+  <ul class="rules">
+    <li><code>command</code> is required, and the program’s own flags go in <code>args</code>. <code>model</code>, <code>effort</code> and <code>permission_mode</code> aren’t allowed here.</li>
+    <li><code>task = "arg"</code>, the default, adds the task as the program’s last argument.</li>
+    <li><code>task = "paste"</code> types the task into the program once it’s running, then presses Enter. It suits programs that take their task at a prompt.</li>
+  </ul>
+  <p>Fuller support for more agents, starting with Codex CLI, is planned after version 1. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></p>
+
+  <h2 id="settings">Every setting</h2>
+  <p>These are all the settings Irie knows, with their defaults. Durations are written like <code>"30s"</code>, <code>"5m"</code> or <code>"24h"</code>, and folders as absolute or <code>~/</code> paths.</p>
+
+  <h3 id="ui">[ui]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>sidebar_width</code></td><td><code>34</code></td><td>The list’s width, in columns. At least 10.</td></tr>
+        <tr><td><code>focus_key</code></td><td><code>"C-]"</code></td><td>The key that moves between the list and the agent, as tmux names keys: <code>C-]</code> is Ctrl+].</td></tr>
+        <tr><td><code>red_on_done</code></td><td><code>false</code></td><td>Show done rows in red, like rows that need you.</td></tr>
+        <tr><td><code>max_sub_rows</code></td><td><code>6</code></td><td>How many of an agent’s helpers to list under it. <a class="tag" href="roadmap.html#m8" data-m="8">Planned</a></td></tr>
+        <tr><td><code>ghostty</code></td><td><code>"auto"</code></td><td><code>auto</code> or <code>off</code>: whether Irie opens a Ghostty window of its own. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="spawn">[spawn]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>default_profile</code></td><td><code>"claude"</code></td><td>The profile a task uses when it names none.</td></tr>
+        <tr><td><code>default_cwd</code></td><td><code>""</code></td><td>Where a task runs when it names no repo or folder. Empty means a new, empty folder for each task.</td></tr>
+        <tr><td><code>ready_timeout</code></td><td><code>"30s"</code></td><td>How long an agent has to get going before its row shows stalled.</td></tr>
+        <tr><td><code>hide_tmux</code></td><td><code>true</code></td><td>Hide Irie’s tmux from agents, so their own tmux commands can’t reach it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="profile-keys">[profiles.&lt;name&gt;]</h3>
+  <p>The defaults of a new profile. The built-in <code>claude</code> profile has its own values, shown above.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>harness</code></td><td><code>"claude-code"</code></td><td><code>claude-code</code> or <code>generic</code>: how Irie starts and follows the program.</td></tr>
+        <tr><td><code>command</code></td><td><code>""</code></td><td>The program. Empty runs <code>claude</code> for <code>claude-code</code>; <code>generic</code> needs one.</td></tr>
+        <tr><td><code>model</code></td><td><code>""</code></td><td>The model to ask for, with <code>--model</code>. Claude Code only.</td></tr>
+        <tr><td><code>effort</code></td><td><code>""</code></td><td>How hard the model thinks, with <code>--effort</code>. Claude Code only.</td></tr>
+        <tr><td><code>permission_mode</code></td><td><code>""</code></td><td>What the agent may do without asking, with <code>--permission-mode</code>. Claude Code only.</td></tr>
+        <tr><td><code>args</code></td><td><code>[]</code></td><td>More arguments, right after the program.</td></tr>
+        <tr><td><code>env</code></td><td><code>{}</code></td><td>Environment settings added for the agent.</td></tr>
+        <tr><td><code>task</code></td><td><code>""</code></td><td><code>arg</code> or <code>paste</code>: how a <code>generic</code> program gets its task. Empty means <code>arg</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="repos">[repos]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>roots</code></td><td><code>[]</code></td><td>Folders to find repos in, two levels deep, such as <code>["~/code"]</code>.</td></tr>
+        <tr><td><code>aliases</code></td><td><code>{}</code></td><td>Names for repos, such as <code>{ web = "~/code/website" }</code>. A name is letters, digits, dots, dashes and underscores.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="worktree">[worktree]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>root</code></td><td><code>""</code></td><td>Where worktrees go. Empty means <code>~/.local/share/irie/worktrees</code>.</td></tr>
+        <tr><td><code>base</code></td><td><code>"HEAD"</code></td><td>The commit a new branch starts from. <code>HEAD</code> is the one your checkout is on; <code>"main"</code> would always start from main.</td></tr>
+        <tr><td><code>branch_prefix</code></td><td><code>"irie/"</code></td><td>Put in front of every branch name.</td></tr>
+        <tr><td><code>copy</code></td><td><code>[".claude/settings.local.json", "CLAUDE.local.md"]</code></td><td>Local files to copy into each worktree when your repo has them, as well as the ones <code>.worktreeinclude</code> names. Paths inside the repo.</td></tr>
+        <tr><td><code>submodules</code></td><td><code>true</code></td><td>Check out the repo’s submodules in each worktree.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="tmux">[tmux]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>path</code></td><td><code>""</code></td><td>The tmux program, as an absolute path. Empty means tmux on your PATH, then in <code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code> and <code>/usr/bin</code>.</td></tr>
+        <tr><td><code>socket</code></td><td><code>"irie"</code></td><td>The name of Irie’s own tmux, as in <code>tmux -L irie</code>. Change it only while Irie isn’t running.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="journal">[journal]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>keep_days</code></td><td><code>30</code></td><td>How many days of records Irie keeps. At least 1.</td></tr>
+        <tr><td><code>tool_input</code></td><td><code>"summary"</code></td><td><code>summary</code> or <code>none</code>: whether the records keep a line about each step, such as the command an agent ran.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="hold">[hold]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>max</code></td><td><code>"24h"</code></td><td>The longest Irie will hold a paused agent. Pausing is planned, but this already sets how long Irie’s hooks may take. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Settings for later milestones aren’t accepted yet, and Irie would stop with an unknown-setting error. <code>[notes]</code> comes with milestones 5 and 7, <code>[freeze]</code> with milestone 6, <code>[subagents]</code> with milestone 8 and <code>[env]</code> with milestone 9.</p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="keys.html">Keys and commands</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html" aria-current="page">Profiles and models</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

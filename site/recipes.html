@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Recipes · Irie</title>
+<meta name="description" content="From an idea to a merged change with Irie: agents side by side in worktrees, local and cloud models, scripts, and more.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<!-- Marks used by the pictures, drawn as shapes so they look the same in
+     every font. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <path id="g-check" d="M-4.8 0.2 L-1.6 3.6 L4.8 -4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Recipes</h1>
+
+  <figure class="picture small">
+    <svg viewBox="0 0 400 392" role="img" aria-labelledby="rec-title" aria-describedby="rec-desc">
+      <title id="rec-title">One feature, saved carts, split between three agents: each works on its own branch in its own worktree, and each branch is merged back into main.</title>
+      <desc id="rec-desc">A line labelled main runs down the left. From one commit on it, three branches fan out to the right. On each branch sits an agent’s box with a green tick and a worktree: api, page and tests. Lower down, each branch curves back and joins main again.</desc>
+
+      <rect x="100.75" y="8.75" width="198.5" height="38.5" rx="19" class="s-card s-line" stroke-width="1.5"/>
+      <text x="200" y="33" text-anchor="middle" class="s-ink"><tspan font-size="14" class="s-soft">one feature: </tspan><tspan font-size="16" font-weight="700">saved carts</tspan></text>
+
+      <!-- main, and three branches that leave it and come back -->
+      <path d="M56 64V354" fill="none" class="s-stroke-ink" stroke-width="3" stroke-linecap="round"/>
+      <g fill="none" class="s-stroke-sea" stroke-width="3" stroke-linecap="round">
+        <path d="M56 84C56 116 146 106 146 142V240C146 262 56 260 56 284"/>
+        <path d="M56 84C56 124 236 106 236 142V240C236 268 56 280 56 306"/>
+        <path d="M56 84C56 132 326 106 326 142V240C326 274 56 300 56 328"/>
+      </g>
+      <circle cx="56" cy="84" r="7" class="s-ink"/>
+      <g class="s-done">
+        <circle cx="56" cy="284" r="6"/><circle cx="56" cy="306" r="6"/><circle cx="56" cy="328" r="6"/>
+      </g>
+      <text x="56" y="378" text-anchor="middle" font-size="15" font-weight="700" class="s-ink">main</text>
+
+      <!-- An agent in its worktree on each branch -->
+      <g class="t-bg t-frame" stroke-width="1.5">
+        <rect x="104.75" y="160.75" width="82.5" height="62.5" rx="10"/>
+        <rect x="194.75" y="160.75" width="82.5" height="62.5" rx="10"/>
+        <rect x="284.75" y="160.75" width="82.5" height="62.5" rx="10"/>
+      </g>
+      <use href="#g-check" x="122" y="185" class="t-green"/>
+      <use href="#g-check" x="212" y="185" class="t-green"/>
+      <use href="#g-check" x="302" y="185" class="t-green"/>
+      <g font-size="15" class="mono t-ink">
+        <text x="134" y="190">api</text>
+        <text x="224" y="190">page</text>
+        <text x="314" y="190">tests</text>
+      </g>
+      <g font-size="12" text-anchor="middle" class="mono t-faint">
+        <text x="146" y="212">worktree</text>
+        <text x="236" y="212">worktree</text>
+        <text x="326" y="212">worktree</text>
+      </g>
+    </svg>
+    <figcaption>One feature, three agents, three worktrees. You review each branch, then merge it.</figcaption>
+  </figure>
+
+  <p>Ways to get real work done with Irie, from an idea to a merged change. Each one says what works today and what is planned.</p>
+  <ul class="links">
+    <li><a href="#parallel">Several agents on one feature</a></li>
+    <li><a href="#local-and-cloud">A local model for small jobs, a cloud model for hard ones</a></li>
+    <li><a href="#scripts">Scripting Irie with <code>irie ctl spawn --wait</code></a></li>
+    <li><a href="#in-place">A quick fix in your own checkout</a></li>
+    <li><a href="#long-input">Hand over a long log or spec</a></li>
+    <li><a href="#away">Keep agents working while you’re away</a></li>
+    <li><a href="#handoff">Let an agent hand work to another</a></li>
+  </ul>
+
+  <h2 id="parallel">Several agents on one feature</h2>
+  <p>Split a feature into parts that touch different files, and give each part to its own agent. Each works in its own <dfn>worktree</dfn>, a second working copy of your project, so they don’t trip over each other.</p>
+  <ol class="rules">
+    <li>Commit your work first. Agents start from your last commit, and changes you haven’t committed stay behind.</li>
+    <li>Start one task per part, each with <code>@shop</code>:
+<pre><code>@shop add an API for saved carts: GET and PUT /api/carts/{id}
+@shop build the saved carts page, calling GET /api/carts/{id}
+@shop write tests for saving and loading carts</code></pre></li>
+    <li>Watch the rows. Answer the ones that turn red, and leave the rest alone.</li>
+    <li>When a row shows <code>✓</code>, look in, then read its <dfn>branch</dfn>, its line of changes, from your checkout:
+<pre><code>cd ~/code/shop
+git log --oneline HEAD..irie/add-an-api-for-saved
+git diff HEAD...irie/add-an-api-for-saved</code></pre></li>
+    <li>Merge each branch, or push it and open a <dfn>pull request</dfn>, a change sent for review:
+<pre><code>git merge irie/add-an-api-for-saved</code></pre></li>
+    <li>Once a branch is merged, remove its worktree and branch: see <a href="tasks.html#cleanup">When you’re done</a>.</li>
+  </ol>
+  <p>Agents don’t see each other’s changes until you merge them. For a part that builds on another, merge the first, then start the next.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>A worktree and a branch for every <code>@shop</code> task, with your local files copied in.</li>
+    <li>Rows that turn red when an agent needs you, whichever row you’re looking at.</li>
+  </ul>
+  <h3>What is planned</h3>
+  <ul class="rules">
+    <li>Sending a working agent a note, such as a change its neighbour made. <a class="tag" href="roadmap.html#m7" data-m="7">Planned</a></li>
+    <li>Telling each agent which others work in the same repo, and on which branches. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
+    <li>A review of each branch by another company’s model before it reaches you. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
+  </ul>
+
+  <h2 id="local-and-cloud">A local model for small jobs, a cloud model for hard ones</h2>
+  <p>Keep the default, Claude Code with Opus 5.5, for hard work, and add a <dfn>profile</dfn> for a model on your own computer. A profile is a recipe you name for starting an agent.</p>
+<pre><code>[profiles.local]
+model = "gpt-oss:20b"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:11434", ANTHROPIC_AUTH_TOKEN = "ollama", ANTHROPIC_API_KEY = "" }</code></pre>
+  <p>Restart Irie’s core so it reads the new profile: <a href="profiles.html#apply">see how</a>. Then choose for each task:</p>
+<pre><code>@shop +local add comments to cart.go
+@shop +local rename the variable tot to total in cart.go
+@shop redesign the checkout flow</code></pre>
+  <p>Give the local model jobs that are easy to check, such as comments, renames and small tests, and look over what it did. Give it enough room first: see <a href="profiles.html#local">Profiles for local models</a>.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>A profile per model, picked for each task with <code>+</code>, and completed with Tab.</li>
+    <li>Any local server that speaks Anthropic’s API, such as Ollama, LM Studio or llama-server.</li>
+  </ul>
+  <h3>What is planned</h3>
+  <ul class="rules">
+    <li>A check that a local model has room enough before its agent starts, with the fix if it hasn’t. <a class="tag" href="roadmap.html#m10" data-m="10">Planned</a></li>
+    <li>Irie choosing the profile for you, by how hard the task is and how much of your plan is left. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
+    <li>Moving a task to another profile when it hits a usage limit. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
+  </ul>
+
+  <h2 id="scripts">Scripting Irie with irie ctl spawn --wait</h2>
+  <p>A <dfn>script</dfn>, a file of commands run in a row, can start agents and wait for them, with no window open. This one starts a task, then checks every 10 seconds until it’s done or needs you:</p>
+<pre><code>#!/bin/sh
+set -e
+id=$(irie ctl spawn --wait @shop "fix the flaky checkout test")
+while :; do
+  state=$(irie ctl list | awk -v id="$id" '$1 == id { print $2 }')
+  case $state in
+    done|idle) echo "$id is done"; break ;;
+    needs_you|stalled|failed|exited) echo "$id: $state" >&amp;2; exit 1 ;;
+  esac
+  sleep 10
+done</code></pre>
+  <p><code>--wait</code> returns once the agent is working, and fails if it never gets there, so <code>set -e</code> stops the script. Start many tasks from a file, one per line:</p>
+<pre><code>while IFS= read -r task; do
+  irie ctl spawn @shop "$task"
+done &lt; tasks.txt</code></pre>
+  <p>Pass a long task as a file, and follow one agent’s steps as they happen:</p>
+<pre><code>irie ctl spawn --wait --name refactor-cart @shop - &lt; refactor.md
+irie ctl watch --session "$id"</code></pre>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li><code>irie ctl spawn</code>, <code>list</code>, <code>show</code> and <code>watch</code>, all described in <a href="keys.html#ctl">Keys and commands</a>.</li>
+    <li>Starting Irie on the first spawn, with no window open.</li>
+  </ul>
+  <h3>What is planned</h3>
+  <ul class="rules">
+    <li>Pausing, freezing and sending notes from scripts, as each arrives. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></li>
+    <li><code>irie ctl preflight</code> and <code>spawn --force</code> for local models. <a class="tag" href="roadmap.html#m10" data-m="10">Planned</a></li>
+  </ul>
+
+  <h2 id="in-place">A quick fix in your own checkout</h2>
+  <p>When a worktree is more than a job needs, add <code>!</code> to work in the repo’s own folder:</p>
+<pre><code>@shop! fix the typo in the README</code></pre>
+  <p>The agent then works on your own files, next to any changes you haven’t committed. Give it one job at a time there.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li><code>@shop!</code> and <code>@~/code/shop!</code>, and any folder outside git.</li>
+  </ul>
+
+  <h2 id="long-input">Hand over a long log or spec</h2>
+  <p>Paste it straight into the task box. Anything over 8 KiB shows as a chip, such as <code>[paste 32.8 KB · 700 lines]</code>, and reaches the agent whole:</p>
+<pre><code>@shop explain why this test fails: [paste 32.8 KB · 700 lines]</code></pre>
+  <p>Or keep it in a file and pass it to <code>irie ctl spawn</code> with <code>-</code>. A task over 100 KiB goes to the agent as a file it’s told to read in full.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>Tasks and pastes of any size, sent word for word.</li>
+  </ul>
+
+  <h2 id="away">Keep agents working while you’re away</h2>
+  <p>Your agents live in tmux, not in the window, so they keep working after you close it. Open it again later with <code>irie</code>.</p>
+  <p>Irie can also run on another computer, such as a Linux server, and you can check in over <dfn>SSH</dfn>, a safe way to use another computer’s terminal:</p>
+<pre><code>ssh alice@example.com
+irie</code></pre>
+  <p>Several windows can show the same Irie at once, from one computer or many.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>Closing the window, opening it again, and opening it from more than one place.</li>
+  </ul>
+  <h3>What is planned</h3>
+  <ul class="rules">
+    <li>Opening Irie from the Mac’s Spotlight, in a Ghostty window of its own. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></li>
+    <li>A desktop alert when an agent needs you. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
+  </ul>
+
+  <h2 id="handoff">Let an agent hand work to another</h2>
+  <p>The agents Irie starts can run <code>irie ctl spawn</code> themselves. So an agent can hand a small part of its work to a helper on another profile, each in its own row.</p>
+<pre><code>Split this refactor into parts. Start a helper for each small part with
+"$IRIE_BIN" ctl spawn --wait @shop +local "&lt;the part&gt;"
+and read their branches before you merge them.</code></pre>
+  <p><code>IRIE_BIN</code> holds the path to <code>irie</code>, which Irie gives every agent it starts.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>Agents starting helpers with <code>irie ctl spawn</code>, and checking on them with <code>irie ctl list</code>.</li>
+  </ul>
+  <h3>What is planned</h3>
+  <ul class="rules">
+    <li>The helper’s result coming back to the first agent as a note. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
+  </ul>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="troubleshooting.html">Troubleshooting</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html" aria-current="page">Recipes</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>
