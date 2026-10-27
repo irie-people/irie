@@ -21,7 +21,7 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 - **The shown session's conversation** on the right, by default (DESIGN §4.7). You and Claude take turns: your messages on soft cards, Claude's replies in Markdown. Each tool call is one line in plain words ("Ran the tests ✓ 40 s"), with how long it took and the lines an edit changed, and opens to its exact command or path, or a failed call to its output. Two or more reads, edits or searches in a row gather into one line ("Edited 3 files +42 −7"). Subagents are chips with their kind and task, and what they do now while they run. A session that started before Irie followed conversations says so and offers its terminal. The view follows the selection and keeps to the newest turn while you are at the bottom.
 - **A message box** at the foot of the conversation types to the agent through the core, the way a person would (`send`): Return sends it, and an agent at work reads it at its next step. It shows as pending until the agent takes it. While the agent waits on you in its terminal (a permission, a question, a plan), a banner offers the terminal instead of the box, and a card at the end says what it asks, with a question's choices or the plan. Answering still happens in the terminal.
 - **The shown agent's live terminal** behind the conversation, a flip away (**View > Terminal**, ⌥⌘T, or **Terminal** under the message box). It stays attached while the conversation shows, so the flip is instant; the choice is remembered. The terminal sits in a rounded frame edged in that session's colour, or sun while it is quiet. The edge is a thin, soft line that deepens a little while the terminal has the keyboard. Selecting a row swaps that agent in, and Return (or **Type to it**) moves the keyboard to the message box, or to the terminal while it shows.
-- **A task bar** at the foot of the sidebar, always three lines tall; longer text scrolls inside it. It takes the same `@repo`, `@repo!` and `+profile` words as the terminal sidebar (DESIGN §4.2). It keeps the keyboard while a task starts; once the task has started, the app shows the new agent and gives its terminal the keyboard. Notices float above it rather than pushing the list.
+- **A task bar** at the foot of the sidebar, always three lines tall; longer text scrolls inside it. Beside the text, a menu picks where a task runs: a repo the `@` words know (a new worktree of it), a folder chosen with **Choose a Folder…**, or **Not in a repo** (a new scratch folder). The app keeps the choice. The bar takes the same `@repo`, `@repo!` and `+profile` words as the terminal sidebar (DESIGN §4.2), and an `@repo` in the text wins over the menu, which then shows it. It keeps the keyboard while a task starts; once the task has started, the app shows the new agent and gives its terminal the keyboard. Notices float above it rather than pushing the list.
 - **Four palettes**, in View > Theme (`Theme.swift`):
   - **Rosewater**, the default: blush and cream, rose accents, plum ink.
   - **Terracotta**: oat and peach, terracotta accents, cocoa-plum ink.
@@ -29,7 +29,8 @@ Irie for Mac is a native app for the people who would never open a terminal, and
   - **Evergreen**: ivory and sage, deep forest-green accents, brass sun, moss-black ink.
 
   Each has a light and a dark set, sage for done and the sun and waves of Irie's mark. The grounds are solid, so nothing behind the window shows through. In every palette and mode, text keeps 4.5:1 and marks 3:1 on every surface they sit on, and Increase Contrast moves text further from the grounds and hairlines toward the ink (WCAG 2.2). Cards and fields are rounded, on gentle shadows, in rounded type. The app keeps the choice; changing it draws the sidebar afresh while the terminal stays attached.
-- **Right-click on a row,** or its ⋯ button: show and type to it, open it in Ghostty, show the folder in Finder, copy the folder path, branch name or session ID, and close it.
+- **Right-click on a row,** or its ⋯ button: show and type to it, open it in Ghostty, rename it, show the folder in Finder, copy the folder path, branch name or session ID, and close it.
+- **Renaming a session.** Double-click its card, or choose **Rename…** from the card's ⋯ or right-click menu or **File > Rename Session…**, and the name opens to edit in place, at its own size, so the card keeps its height. Return renames the session, Esc keeps the name, and clicking elsewhere renames it, as in Finder. A name can be any text: the core makes runs of spaces one space and numbers a name another session has (`rename`, DESIGN §2.4). The name is the core's, so it stays through restarts of the app and the core, and through installs. VoiceOver offers **Rename** among the card's actions.
 - **Sessions close like tabs.** Close Session (⌘W, or Close in a row's menu) closes it at once, without asking, and the next session in the list takes its place. The core swaps its pane out, ends its agent gently and removes its row; its worktree and folder stay (DESIGN §4.5). Reopen Closed Session (⇧⌘T) is the undo: the session comes back in its place in the list, carrying its conversation on.
 - **Outside Irie.** Claude Code sessions that run in other terminals or in the background follow the cards, under a header with their count (DESIGN §4.6). Each is one line, in the order it started, with the mark of the state it matches, so a state change never moves or resizes it. A click or the arrow keys select one, and the details panel shows what it is doing, where it runs and its folder, with **Move into Irie** and **Copy Session ID**. While the session is busy or waits for you, the button is off and the panel says why. A move asks first, because the session's copy outside Irie ends, and anything it runs in the background stops. Then the conversation carries on in an Irie pane, and its terminal takes the keyboard. Right-click a row for the same, and to show or copy its folder. The keys that show a session skip these rows, since Irie can't show them.
 
@@ -71,7 +72,8 @@ The **File**, **Go**, **View** and **Edit** menus list them all.
 | ⌘1 to ⌘9 | Show the first to ninth session in the sidebar's order |
 | ⌘F | Find a session. Esc clears the search and goes back to the list |
 | ⌃⌘S | Hide or show the sidebar |
-| ⌘N | New task |
+| ⌘N | New task: a sheet with the repo, whether the task gets its own worktree, the agent (every `+` profile, auto routing and the local models, each with what it runs and costs), the model, and the text. A model applies to a Claude Code profile: its own, or the latest Fable, Opus or Sonnet. The `@repo` and `+agent` words in the text win over the menus. ⌘Return starts it, and the repo chosen becomes the task bar's |
+| ⌥⌘N | Type a task in the task bar |
 | ⌘W | Close the selected session, even while the terminal has the keyboard. The app catches it first |
 | ⇧⌘T | Reopen the session closed last |
 | ⇧⌘W | Close the window. Agents keep running, and the app quits with it |
@@ -93,13 +95,13 @@ Before the palettes, the app did not follow §5.3:
 - The done count also counted idle and exited sessions, which the terminal sidebar does not.
 - Frozen, paused and pausing had no look at all. The core derives them from milestones 5 and 6, and they are drawn now.
 
-The app does not read `ui.red_on_done` yet, because the core does not pass the config on, so done is always green here.
+With `ui.red_on_done` set, the core's header says so and the app draws done in red, as the terminal sidebar does.
 
 ## 6. Not yet
 
 These come with the core features they need, or after:
 
-- pause, freeze, rename, park and priority controls, and undo beyond reopening a closed session (M4 to M7);
+- pause, freeze, park and priority controls, and undo beyond reopening a closed session (M4 to M7);
 - buttons that answer a question or approve a command;
 - choosing a local model for small jobs;
 - an icon, and a signed, notarized app.

@@ -28,6 +28,9 @@ const (
 	// OpMove is an addition to the ops of DESIGN §2.4: it carries an idle
 	// Claude Code session that runs outside Irie on in an Irie pane (§4.6).
 	OpMove = "move"
+	// OpRename gives a session a new name, which a restarted core keeps
+	// (DESIGN §2.4, M4).
+	OpRename = "rename"
 	// OpPreflight checks a local profile's model before a spawn (M10).
 	OpPreflight = "preflight"
 	// OpLocal and OpStatus are additions for local models and cost
@@ -47,6 +50,9 @@ const (
 	OpClose  = "close"
 	OpReopen = "reopen"
 )
+
+// FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
+const FeatureSpawnModel = "spawn-model"
 
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
@@ -143,9 +149,12 @@ type Subagent struct {
 
 // Header is what the sidebar shows that is not a row.
 type Header struct {
-	Version string  `json:"version,omitempty"`
-	Plan    *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
-	Memory  *Memory `json:"memory,omitempty"` // the machine's memory
+	Version string `json:"version,omitempty"`
+	// RedOnDone is ui.red_on_done: a done session is drawn red, not green
+	// (DESIGN §5.3), in every sidebar.
+	RedOnDone bool    `json:"red_on_done,omitempty"`
+	Plan      *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
+	Memory    *Memory `json:"memory,omitempty"` // the machine's memory
 }
 
 // Window is one window of a plan's use, such as the five hours.
@@ -252,6 +261,11 @@ type SpawnArgs struct {
 	Delegate       bool   `json:"delegate,omitempty"`
 	Parent         string `json:"parent,omitempty"`
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// Model runs this task on a model other than its profile's: an alias
+	// such as opus or sonnet, or a model's full name. Only a Claude Code
+	// profile takes it; a local model has its own +ollama: profile. The
+	// Mac app's new-task sheet sends it (docs/MAC.md).
+	Model string `json:"model,omitempty"`
 	// Continues is the session a failover carries the task on from.
 	Continues string `json:"continues,omitempty"`
 }
@@ -378,6 +392,18 @@ type ShowArgs struct {
 	Session string `json:"session"`
 	Agent   string `json:"agent,omitempty"`
 	Focus   bool   `json:"focus"`
+}
+
+// RenameArgs give a session a new name. The core makes its whitespace and
+// control characters single spaces, and numbers a name another row has.
+type RenameArgs struct {
+	Session string `json:"session"`
+	Name    string `json:"name"`
+}
+
+// RenameResult is the session with the name it got.
+type RenameResult struct {
+	Session Session `json:"session"`
 }
 
 // HookArgs carry one hook event from the shim: the harness's own payload,

@@ -20,8 +20,26 @@ final class Store: ObservableObject {
     /// are kept when the user changes them (choose(_:), fold(_:)).
     @Published var mode: SidebarMode = SidebarMode(rawValue: UserDefaults.standard.string(forKey: "sidebarMode") ?? "") ?? .repo
     @Published var folded: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "foldedGroups") ?? [])
+    /// The repos the @ words know and the agents the + words name, with what
+    /// each runs: what the task bar's menu and the new-task sheet offer.
+    @Published private(set) var repoNames: [String] = []
+    @Published private(set) var agents: [Agent] = []
+    /// Whether the core takes a model for one task.
+    @Published private(set) var canPickModel = false
+    /// Where a task runs when its text names no @repo: a repo's name or a
+    /// folder's path, or nil for a new scratch folder. Kept between runs.
+    @Published private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
+    /// ui.red_on_done, from the core: done sessions are drawn red. Look keeps
+    /// it for the marks; this draws the views again when it changes.
+    @Published private(set) var redOnDone = false
+    /// Whether the new-task sheet is open (⌘N).
+    @Published var newTaskSheet = false
     @Published var notice: Notice?
     @Published var spawning = false
+    /// The session whose name its card has open to edit, and the name as
+    /// typed so far.
+    @Published var renaming: String?
+    @Published var renameText = ""
     /// Bumped when the terminal should take keyboard focus.
     @Published var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
@@ -98,6 +116,8 @@ final class Store: ObservableObject {
                 }
                 attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
                 link = .online(version: hello.version)
+                canPickModel = hello.features.contains("spawn-model")
+                loadChoices()
                 // The store lives as long as the app.
                 try await client.subscribe { frame in
                     Task { @MainActor in self.apply(frame) }
@@ -118,6 +138,10 @@ final class Store: ObservableObject {
     }
 
     private func apply(_ f: Frame) {
+        if let h = f.header, (h.redOnDone ?? false) != Look.redOnDone {
+            Look.redOnDone = h.redOnDone ?? false
+            redOnDone = Look.redOnDone
+        }
         switch f.t {
         case "snapshot":
             sessions = (f.sessions ?? []).sorted(by: Self.before)
@@ -148,11 +172,52 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Asks the core for the repos the @ words know and the agents the +
+    /// words name. A core that answers neither leaves the menus as they are.
+    func loadChoices() {
+        Task {
+            if let r = try? await client.call("complete", CompleteArgs(text: "@"), timeout: 5, as: CompleteResult.self) {
+                repoNames = r.items.map { String($0.dropFirst()) }
+            }
+            if let r = try? await client.call("complete", CompleteArgs(text: "+"), timeout: 5, as: CompleteResult.self) {
+                agents = r.items.enumerated().map { i, item in
+                    Agent(name: String(item.dropFirst()), note: r.notes.flatMap { i < $0.count ? $0[i] : nil } ?? "")
+                }
+            }
+        }
+    }
+
+    /// Where the task bar's tasks run: a repo's name or a folder's path, or
+    /// nil for a new scratch folder.
+    func setTaskRepo(_ r: String?) {
+        taskRepo = r
+        UserDefaults.standard.set(r, forKey: "taskRepo")
+    }
+
+    /// Asks for a folder for the task bar's tasks: a git repo gets a worktree,
+    /// any other folder runs in place.
+    func chooseTaskFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use This Folder"
+        panel.message = "Tasks will run in this folder: a git repo gets its own worktree."
+        if panel.runModal() == .OK, let url = panel.url {
+            setTaskRepo(url.path)
+        }
+    }
+
     /// Fills the store with sessions no core sent, for `--snapshot`.
     func loadFixture(_ rows: [Session], selection: String?) {
         sessions = rows.sorted(by: Self.before)
         self.selection = selection
         link = .online(version: "snapshot")
+        repoNames = ["bigup", "irie", "notes"]
+        agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
+                  Agent(name: "claude", note: "claude-opus-5-5 · max")]
+        canPickModel = true
+        taskRepo = "irie"
     }
 
     private static func before(_ a: Session, _ b: Session) -> Bool {
@@ -275,6 +340,9 @@ final class Store: ObservableObject {
     /// in no set order and leave the terminal on a session the list doesn't
     /// highlight.
     func show(_ id: String, focus: Bool = false) {
+        // Going to another session renames the one open to edit, as clicking
+        // elsewhere does in Finder.
+        if renaming != nil && renaming != id { endRename(commit: true) }
         selection = id
         outsideSelection = nil
         wanted = (id, focus)
@@ -285,8 +353,10 @@ final class Store: ObservableObject {
                 wanted = nil
                 do {
                     _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus), as: Empty.self)
-                    // The conversation's message box, or the terminal when it shows.
-                    if next.focus, wanted == nil { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
+                    // The conversation's message box, or the terminal when it
+                    // shows; a name open to edit, after a double click's first
+                    // click, keeps the keyboard.
+                    if next.focus, wanted == nil, renaming != next.id { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
                 } catch where wanted == nil {
                     say("Couldn’t show it: \(error.localizedDescription)", error: true)
                 } catch {}
@@ -295,15 +365,32 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Starts a task typed in the task bar. Returns whether it started.
+    /// Starts a task typed in the task bar. With no @repo in its text it
+    /// runs where the bar's menu says. Returns whether it started.
     func spawn(_ input: String) async -> Bool {
-        let args: SpawnArgs
+        await spawn(input, repo: taskRepo, worktree: true, agent: nil, model: nil)
+    }
+
+    /// Starts a task from the bar or the new-task sheet. The @repo and
+    /// +agent words in its text win over the menus' repo and agent.
+    func spawn(_ input: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
+        var args: SpawnArgs
         do {
             args = try TaskParser.parse(input, home: NSHomeDirectory())
         } catch {
             say(error.localizedDescription, error: true)
             return false
         }
+        if args.repo == nil, let repo {
+            args.repo = repo
+            args.inPlace = worktree ? nil : true
+        }
+        if args.profile == nil { args.profile = agent }
+        if canPickModel { args.model = model }
+        return await run(args)
+    }
+
+    private func run(_ args: SpawnArgs) async -> Bool {
         spawning = true
         defer { spawning = false }
         do {
@@ -312,10 +399,48 @@ final class Store: ObservableObject {
             say("Started \(r.session.name).", error: false)
             // Straight to the new agent, ready to type to.
             show(r.session.id, focus: true)
+            // A repo it ran in is now among the recent ones.
+            loadChoices()
             return true
         } catch {
             say(error.localizedDescription, error: true)
             return false
+        }
+    }
+
+    /// Opens the session's name to edit, in its card.
+    func beginRename(_ id: String) {
+        guard let s = sessions.first(where: { $0.id == id }) else { return }
+        if renaming != id {
+            endRename(commit: true)
+            renameText = s.name
+        }
+        selection = id
+        outsideSelection = nil
+        renaming = id
+    }
+
+    /// Closes the name's editor and, with commit, renames the session to
+    /// what was typed. The card shows the new name at once; the core's
+    /// answer, which numbers a name another session has, follows. The name
+    /// is the core's, so it outlasts the app, the core and installs.
+    func endRename(commit: Bool) {
+        guard let id = renaming else { return }
+        renaming = nil
+        guard commit, let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        let old = sessions[i].name
+        let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != old else { return }
+        sessions[i].name = name
+        Task {
+            do {
+                let r = try await client.call("rename", RenameArgs(session: id, name: name), as: RenameResult.self)
+                if let j = sessions.firstIndex(where: { $0.id == id }) { sessions[j].name = r.session.name }
+                say("Renamed \(old) to \(r.session.name).", error: false)
+            } catch {
+                if let j = sessions.firstIndex(where: { $0.id == id }), sessions[j].name == name { sessions[j].name = old }
+                say("Couldn’t rename \(old): \(error.localizedDescription)", error: true)
+            }
         }
     }
 
@@ -395,4 +520,22 @@ struct SessionGroup: Identifiable, Equatable {
         }
         return out
     }
+}
+
+/// An agent the + words name: a profile, auto routing or a local model, and
+/// what it runs and costs.
+struct Agent: Identifiable, Equatable {
+    let name: String
+    let note: String
+
+    var id: String { name }
+    /// Whether it takes a model for one task: a Claude Code profile does;
+    /// routing and local models pick their own.
+    var takesModel: Bool { name != "auto" && !name.hasPrefix("ollama:") }
+}
+
+extension String {
+    /// A repo's name or a folder's path as the menus show it: a path by its
+    /// last folder.
+    var repoLabel: String { hasPrefix("/") || hasPrefix("~") ? (self as NSString).lastPathComponent : self }
 }

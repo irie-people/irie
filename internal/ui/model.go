@@ -24,6 +24,9 @@ import (
 type Backend interface {
 	Spawn(ipc.SpawnArgs) (ipc.Session, error)
 	Show(id string, focus bool) error
+	// Rename gives a session a new name and returns it with the name the
+	// core gave it.
+	Rename(id, name string) (ipc.Session, error)
 	// Complete returns the tokens that complete an @ or + token, and for a
 	// + token what each profile runs and costs.
 	Complete(text string) (ipc.CompleteResult, error)
@@ -64,6 +67,11 @@ type (
 		name, verdict string
 		err           error
 	}
+	renamedMsg struct {
+		before  string
+		session ipc.Session
+		err     error
+	}
 	toolMsg struct {
 		session ipc.Session
 		err     error
@@ -76,7 +84,7 @@ type (
 
 // commands are what the command bar takes after a colon (DESIGN §4.2,
 // §4.6, §6.4).
-const commands = ":move [NAME], :close, :reopen, :setup, :models, :rate good|bad, :route TASK"
+const commands = ":rename NAME, :move [NAME], :close, :reopen, :setup, :models, :rate good|bad, :route TASK"
 
 type focusArea int
 
@@ -416,6 +424,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setStatus(msg.err.Error(), true)
 		}
+	case renamedMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+		} else {
+			m.setStatus(fmt.Sprintf("renamed %s to %s", msg.before, msg.session.Name), false)
+		}
 	case movedMsg:
 		m.moved(msg)
 	case closedMsg:
@@ -530,6 +544,17 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "m":
 		cmd := m.moveSelected()
 		return m, cmd
+	case "r":
+		// The name is edited in the command bar, with its keys and the
+		// terminal's own cursor; Enter renames, Esc keeps the name.
+		if m.sel < 0 || m.sel >= len(m.sessions) {
+			m.setStatus("select one of Irie's sessions to rename it", true)
+			break
+		}
+		m.setFocus(focusBar)
+		m.bar.SetValue(":rename " + m.sessions[m.sel].Name)
+		m.clamp()
+		m.setStatus("Enter renames it, Esc keeps its name", false)
 	case "x":
 		cmd := m.closeSelected()
 		return m, cmd
@@ -622,6 +647,17 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 		}
 		m.setFocus(focusList)
 		return done(m.moveCmd(o))
+	case name == "rename" && arg != "":
+		if m.sel < 0 || m.sel >= len(m.sessions) {
+			m.setStatus("no session to rename; select one of Irie's", true)
+			return m, nil
+		}
+		s := m.sessions[m.sel]
+		m.setFocus(focusList)
+		return done(func() tea.Msg {
+			r, err := b.Rename(s.ID, arg)
+			return renamedMsg{before: s.Name, session: r, err: err}
+		})
 	case name == "setup" && (arg == "" || arg == "local"):
 		m.setStatus("starting local setup…", false)
 		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolSetup); return toolMsg{session: s, err: err} }

@@ -199,6 +199,12 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	case a.Delegate:
 		profile.PermissionMode = c.cfg.Route.DelegateMode
 	}
+	if a.Model != "" {
+		if profile.Harness != "claude-code" || profile.Local != nil {
+			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "+%s takes no model for one task: pick a Claude Code profile, or +%s<model> for a local model", profileName, localPrefix)
+		}
+		profile.Model = a.Model
+	}
 	// A local profile's model is checked, and may be loaded, before
 	// anything else; like probing, it happens before taking the lock.
 	var warnings []string
@@ -380,7 +386,9 @@ func (c *Core) launch(j job) (*session, error) {
 		opt(tmux.OptCreated, x.created.Format(time.RFC3339Nano)),
 		opt(tmux.OptVendorID, x.vendorID),
 		append([]string{"resize-window", "-t", target}, size...),
-		{"rename-window", "-t", target, x.name},
+		// A name given by rename or carried in by move is any text, which
+		// tmux would expand as a format.
+		{"rename-window", "-t", target, "--", tmux.Literal(x.name)},
 	})
 	if err != nil {
 		c.tmux.Run("kill-window", "-t", target)
