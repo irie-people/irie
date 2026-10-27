@@ -196,6 +196,63 @@ enum Theme {
 
     fileprivate enum Strength { case none, text, line }
 
+    /// How many agent hues there are.
+    static let agentSlots = 6
+
+    /// An agent's own colour while it works. The slots fan out over the half
+    /// of the colour wheel almost opposite the palette's accent (centred 180°
+    /// away, 36° apart), so they set the agents apart from each other and from
+    /// the accent that marks the selection. The brightness is found for the
+    /// card it sits on, so each keeps 3:1 (WCAG 2.2 non-text) in every palette
+    /// and mode, and Increase Contrast pushes it further.
+    static func agent(slot: Int) -> Color {
+        let p = palette
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
+            let dark = match == .darkAqua || match == .accessibilityHighContrastDarkAqua
+            let high = match == .accessibilityHighContrastAqua || match == .accessibilityHighContrastDarkAqua
+            return NSColor(hex: agentHex(slot: slot, palette: p, dark: dark, high: high))
+        })
+    }
+
+    /// The slot for a session: the same one every time, from its id.
+    static func agentSlot(_ id: String) -> Int {
+        var h: UInt32 = 2166136261
+        for b in id.utf8 { h = (h ^ UInt32(b)) &* 16777619 }
+        return Int(h % UInt32(agentSlots))
+    }
+
+    static func agentHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
+        let s = dark ? p.dark : p.light
+        let (accentHue, _, _) = hsb(s.accent)
+        let offset = 180 + (Double(slot % agentSlots) - Double(agentSlots - 1) / 2) * 36
+        let hue = (accentHue * 360 + offset).truncatingRemainder(dividingBy: 360) / 360
+        // Contrast against the card, the ground a mark sits on most.
+        let want = high ? 4.5 : 3.2
+        let card = luminance(s.card)
+        var lo = 0.0, hi = 1.0
+        for _ in 0..<14 {
+            let mid = (lo + hi) / 2
+            let l = luminance(rgb(hue, 0.62, mid))
+            let ratio = l > card ? (l + 0.05) / (card + 0.05) : (card + 0.05) / (l + 0.05)
+            // Light cards want the dark end, dark cards the bright end.
+            if ratio >= want { if dark { hi = mid } else { lo = mid } } else { if dark { lo = mid } else { hi = mid } }
+        }
+        return rgb(hue, 0.62, dark ? hi : lo)
+    }
+
+    private static func hsb(_ hex: UInt32) -> (Double, Double, Double) {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        NSColor(hex: hex).getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        return (Double(h), Double(s), Double(b))
+    }
+
+    private static func rgb(_ h: Double, _ s: Double, _ b: Double) -> UInt32 {
+        let c = NSColor(hue: CGFloat(h), saturation: CGFloat(s), brightness: CGFloat(b), alpha: 1).usingColorSpace(.sRGB)!
+        func ch(_ v: CGFloat) -> UInt32 { UInt32((v * 255).rounded()) }
+        return ch(c.redComponent) << 16 | ch(c.greenComponent) << 8 | ch(c.blueComponent)
+    }
+
     /// WCAG 2.2's relative luminance.
     static func luminance(_ hex: UInt32) -> Double {
         func channel(_ v: UInt32) -> Double {
