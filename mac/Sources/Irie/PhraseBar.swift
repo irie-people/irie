@@ -23,6 +23,7 @@ struct PhraseBar: View {
         "Trust the process, check the diff.",
     ]
 
+    @EnvironmentObject private var store: Store
     @State private var index = Int.random(in: 0..<Self.phrases.count)
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
@@ -37,6 +38,17 @@ struct PhraseBar: View {
             .padding(.horizontal, 16)
             .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
                 .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            .overlay(alignment: .trailing) {
+                // The core's version, muted, in the bottom right corner.
+                if case let .online(version) = store.link {
+                    Text(version)
+                        .font(Theme.font(10.5))
+                        .foregroundStyle(Theme.muted.opacity(0.7))
+                        .lineLimit(1)
+                        .padding(.trailing, 16)
+                        .allowsHitTesting(false)
+                }
+            }
             .transition(.opacity)
             .animation(.easeInOut(duration: 0.8), value: index)
             .onReceive(tick) { _ in index = (index + 1) % Self.phrases.count }
