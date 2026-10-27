@@ -194,6 +194,19 @@ func TestPromptToolStopIsWorkingThenDone(t *testing.T) {
 	c.waitState(s.ID, ipc.StateIdle)
 }
 
+func TestASubagentIsListedUnderItsSessionUntilItStops(t *testing.T) {
+	c := setup(t)
+	s := c.spawn("prompt,sub:helper1:tool:Grep+sleep:2s,stop")
+	testutil.Eventually(t, 5*time.Second, "the subagent was not listed", func() bool {
+		r, _ := c.row(s.ID)
+		return len(r.Subagents) == 1 && r.Subagents[0].Agent == "sub:helper1" && r.Subagents[0].Type == "Explore"
+	})
+	c.waitState(s.ID, ipc.StateDone)
+	if r, _ := c.row(s.ID); len(r.Subagents) != 0 {
+		t.Errorf("after the stop: subagents %+v", r.Subagents)
+	}
+}
+
 func TestRedUntilAnswered(t *testing.T) {
 	c := setup(t)
 	permission := c.spawn("prompt,permission,tool:Bash")

@@ -35,6 +35,13 @@ func (b socketBackend) Show(id string, focus bool) error {
 	return ipc.Call(b.socket, callTimeout, ipc.OpShow, ipc.ShowArgs{Session: id, Focus: focus}, nil)
 }
 
+// Move waits as long as a spawn: a move waits its turn behind one.
+func (b socketBackend) Move(vendorID, profile string) (ipc.Session, error) {
+	var r ipc.MoveResult
+	err := ipc.Call(b.socket, spawnTimeout, ipc.OpMove, ipc.MoveArgs{VendorID: vendorID, Profile: profile}, &r)
+	return r.Session, err
+}
+
 // Run is `irie ui`: the sidebar, fed by the core at socket.
 func Run(socket string, o Options) error {
 	if o.Home == "" {

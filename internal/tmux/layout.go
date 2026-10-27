@@ -12,6 +12,7 @@ type Want struct {
 	Bin          string // irie binary run by the panes Plan creates
 	SidebarWidth int
 	Version      string // recorded on the sidebar and placeholder panes Plan starts
+	Zoom         bool   // the slot fills irie:0, for the Mac app (docs/MAC.md)
 }
 
 func (w Want) ui() []string          { return []string{w.Bin, "ui", "--supervise"} }
@@ -30,7 +31,8 @@ func isAgentPane(p Pane) bool { return p.Role == RoleAgent || p.Role == RoleMirr
 //   - irie:0 has exactly two panes, and pane 0 is the sidebar;
 //   - the slot holds the placeholder or exactly one agent or mirror pane;
 //   - every agent pane is either in the slot or alone in its own window;
-//   - the sidebar is SidebarWidth wide;
+//   - the slot is zoomed exactly when Zoom is set;
+//   - the sidebar is SidebarWidth wide, unless the slot is zoomed;
 //   - every agent window has the slot's size.
 //
 // Plan never kills an agent pane.
@@ -145,8 +147,17 @@ func Plan(s Snapshot, w Want) [][]string {
 		}
 	}
 
-	// Sizes.
-	if ui.Width != w.SidebarWidth && ui.WindowWidth > w.SidebarWidth+2 {
+	// Zoom. While the Mac app is open the slot fills irie:0, so the app's
+	// tmux client shows only the agent. resize-pane -Z unzooms a zoomed
+	// window, or zooms the slot.
+	onSlot := slot.Zoomed && slot.Active // a zoomed window's active pane is the zoomed one
+	if w.Zoom && !onSlot || !w.Zoom && slot.Zoomed {
+		return [][]string{{"resize-pane", "-Z", "-t", Slot}}
+	}
+
+	// Sizes. A zoomed slot is the window's size, so the sidebar keeps its
+	// width for when the zoom ends.
+	if !slot.Zoomed && ui.Width != w.SidebarWidth && ui.WindowWidth > w.SidebarWidth+2 {
 		return [][]string{{"resize-pane", "-t", ui.ID, "-x", strconv.Itoa(w.SidebarWidth)}}
 	}
 	var cmds [][]string
@@ -168,7 +179,8 @@ func Plan(s Snapshot, w Want) [][]string {
 
 // SwapIn returns the commands that show pane in the slot. While an agent is
 // shown its own window holds the placeholder, so it first goes home, then
-// pane moves in (DESIGN §2.3). Run them as one command list.
+// pane moves in (DESIGN §2.3). Run them as one command list. A zoomed slot
+// stays zoomed.
 func SwapIn(s Snapshot, pane string, focus bool) ([][]string, error) {
 	target := s.Pane(pane)
 	if target == nil {
@@ -177,6 +189,13 @@ func SwapIn(s Snapshot, pane string, focus bool) ([][]string, error) {
 	slot := s.SlotPane()
 	if slot == nil {
 		return nil, errors.New("tmux: the slot is missing")
+	}
+	// -Z keeps a zoomed window zoomed.
+	keep := func(cmd ...string) []string {
+		if !slot.Zoomed {
+			return cmd
+		}
+		return append([]string{cmd[0], "-Z"}, cmd[1:]...)
 	}
 	var cmds [][]string
 	if slot.ID != target.ID {
@@ -191,12 +210,12 @@ func SwapIn(s Snapshot, pane string, focus bool) ([][]string, error) {
 			if home == nil {
 				return nil, errors.New("tmux: the shown pane has no placeholder to swap with")
 			}
-			cmds = append(cmds, []string{"swap-pane", "-d", "-s", Slot, "-t", home.ID})
+			cmds = append(cmds, keep("swap-pane", "-d", "-s", Slot, "-t", home.ID))
 		}
-		cmds = append(cmds, []string{"swap-pane", "-d", "-s", target.ID, "-t", Slot})
+		cmds = append(cmds, keep("swap-pane", "-d", "-s", target.ID, "-t", Slot))
 	}
 	if focus {
-		cmds = append(cmds, []string{"select-pane", "-t", Slot})
+		cmds = append(cmds, keep("select-pane", "-t", Slot))
 	}
 	return cmds, nil
 }
