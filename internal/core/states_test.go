@@ -214,14 +214,15 @@ func TestRedUntilAnswered(t *testing.T) {
 	limited := c.spawn("prompt,stopfail:rate_limit")
 
 	r := c.waitState(permission.ID, ipc.StateNeedsYou)
-	if r.Reason != "permission" || !strings.Contains(r.Detail, "Bash") {
+	// The row asks in plain words; the call it asks about is in its command.
+	if r.Reason != "permission" || r.Detail != "Asks: may it run rm -rf build?" || r.Command != "Bash · rm -rf build" {
 		t.Errorf("permission row = %+v", r)
 	}
 	c.keys(permission, "Enter")
 	c.waitState(permission.ID, ipc.StateWorking)
 
 	r = c.waitState(question.ID, ipc.StateNeedsYou)
-	if r.Reason != "question" || !strings.Contains(r.Detail, "Which colour should the button be?") {
+	if r.Reason != "question" || !strings.Contains(strings.ToLower(r.Detail), "which colour should the button be?") {
 		t.Errorf("question row = %+v", r)
 	}
 
