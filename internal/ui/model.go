@@ -39,6 +39,10 @@ type Backend interface {
 	// closed last when id is empty.
 	Close(id string) error
 	Reopen(id string) (ipc.Session, error)
+	// Undo and Redo step back and forth through the history; a choice
+	// answers a question the core asked.
+	Undo(ipc.UndoArgs) (ipc.UndoResult, error)
+	Redo(ipc.UndoArgs) (ipc.UndoResult, error)
 }
 
 // FrameMsg carries one frame of the core's subscription.
@@ -76,7 +80,7 @@ type (
 
 // commands are what the command bar takes after a colon (DESIGN §4.2,
 // §4.6, §6.4).
-const commands = ":move [NAME], :close, :reopen, :setup, :models, :rate good|bad, :route TASK"
+const commands = ":move [NAME], :close, :reopen, :undo, :redo, :setup, :models, :rate good|bad, :route TASK"
 
 type focusArea int
 
@@ -133,6 +137,9 @@ type Model struct {
 	closing        string    // the session a first x asked to close (close.go)
 	closingAt      time.Time // when it asked
 	reopening      bool
+
+	undoLabel, redoLabel string      // what u and U would do next, from the history frame (undo.go)
+	menu                 *choiceMenu // a question about an undo or redo, while it waits for an answer
 
 	focus     focusArea
 	bar       textarea.Model
@@ -194,16 +201,25 @@ func tick() tea.Cmd {
 func (m Model) Init() tea.Cmd { return tick() }
 
 // Heights. The header and the command bar are pinned; the list takes the
-// rest. Thin rules frame the list once the pane has room for them. Below 6
-// rows the status strip is hidden and the bar is one line.
+// rest. Thin rules frame the list once the pane has room for them, and the
+// header gains its second line, what undo and redo would do. Below 6 rows the
+// status strip is hidden and the bar is one line.
 
 func (m Model) statusVisible() bool { return m.height >= 6 }
 
 func (m Model) ruled() bool { return m.height >= 10 }
 
+// headerLines is 2 when the header shows the history's line, else 1.
+func (m Model) headerLines() int {
+	if m.ruled() {
+		return 2
+	}
+	return 1
+}
+
 // chrome is the number of rows that are neither the list nor the bar.
 func (m Model) chrome() int {
-	n := 1
+	n := m.headerLines()
 	if m.statusVisible() {
 		n++
 	}
@@ -216,7 +232,7 @@ func (m Model) chrome() int {
 // listTop is the screen row of the first list row.
 func (m Model) listTop() int {
 	if m.ruled() {
-		return 2
+		return m.headerLines() + 1
 	}
 	return 1
 }
@@ -313,6 +329,9 @@ func (m *Model) apply(f ipc.Frame) {
 		if f.Header != nil {
 			m.head = *f.Header
 		}
+		return
+	case ipc.FrameHistory:
+		m.undoLabel, m.redoLabel = f.Undo, f.Redo
 		return
 	case ipc.FrameSnapshot:
 		m.sessions = slices.Clone(f.Sessions)
@@ -422,6 +441,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.closedDone(msg)
 	case reopenedMsg:
 		m.reopened(msg)
+	case undoneMsg:
+		m.undone(msg)
 	case completedMsg:
 		m.completed(msg)
 	case ratedMsg:
@@ -479,7 +500,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scroll(1)
 		}
 	case tea.MouseClickMsg:
-		if msg.Button != tea.MouseLeft {
+		if msg.Button != tea.MouseLeft || m.menu != nil {
 			break
 		}
 		m.confirming, m.closing = "", ""
@@ -495,6 +516,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setFocus(focusBar)
 		}
 	case tea.KeyPressMsg:
+		if m.menu != nil {
+			return m.menuKey(msg)
+		}
 		if m.focus == focusBar {
 			return m.barKey(msg)
 		}
@@ -533,6 +557,10 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		cmd := m.closeSelected()
 		return m, cmd
+	case "u":
+		return m, m.undoCmd(dirUndo, "", "")
+	case "U":
+		return m, m.undoCmd(dirRedo, "", "")
 	case "+":
 		return m, m.rateCmd(ipc.Good)
 	case "-":
@@ -639,6 +667,9 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 	case name == "reopen" && arg == "":
 		m.setFocus(focusList)
 		return done(m.reopenCmd())
+	case (name == dirUndo || name == dirRedo) && arg == "":
+		m.setFocus(focusList)
+		return done(m.undoCmd(name, "", ""))
 	case name == "route" && arg != "":
 		return m, func() tea.Msg { ch, err := b.Route(arg); return routedMsg{choice: ch, err: err} }
 	}

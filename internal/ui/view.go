@@ -255,6 +255,10 @@ func (m Model) paint(i int, g string, c color.Color, dim, loud bool, name, a str
 }
 
 func (m Model) statusLine() string {
+	if mn := m.menu; mn != nil {
+		// What the highlighted answer will do.
+		return " " + styleDim.Render(cut(mn.choice.Options[mn.at].Detail, m.width-2))
+	}
 	if m.status != "" {
 		st := styleDim
 		if m.statusErr {
@@ -356,16 +360,25 @@ func (m Model) View() tea.View {
 		return v
 	}
 	lines := []string{m.header()}
+	if m.headerLines() > 1 {
+		lines = append(lines, m.historyLine())
+	}
 	if m.ruled() {
 		lines = append(lines, m.rule())
 	}
-	for i := range m.listHeight() {
+	// A question about an undo or redo covers the bottom of the list.
+	var menu []string
+	if m.menu != nil {
+		menu = m.menuLines(m.listHeight())
+	}
+	for i := range m.listHeight() - len(menu) {
 		if r := m.offset + i; r < m.rowCount() {
 			lines = append(lines, m.line(r))
 		} else {
 			lines = append(lines, "")
 		}
 	}
+	lines = append(lines, menu...)
 	if m.ruled() {
 		lines = append(lines, m.rule())
 	}

@@ -40,6 +40,8 @@ type fakeBackend struct {
 	closes    []string     // the ids Close was given
 	reopens   []string     // the ids Reopen was given
 	reopenErr error
+	undos     []string // dir choice_id choice, each Undo and Redo
+	undoReply func(dir string, a ipc.UndoArgs) (ipc.UndoResult, error)
 }
 
 func (f *fakeBackend) Rate(id, verdict string) error {
@@ -551,11 +553,14 @@ func TestRulesNeedRoom(t *testing.T) {
 	}
 	m, _ = newModel(t, 34, 10, 3)
 	lines := screen(t, m)
-	if !isRule(lines[1]) || !isRule(lines[len(lines)-3]) {
+	// The header has its second line, what undo and redo would do, above
+	// the rule.
+	top := m.listTop()
+	if !strings.Contains(lines[1], "↶") || !isRule(lines[top-1]) || !isRule(lines[len(lines)-3]) {
 		t.Errorf("height 10: no rules under the header and above the status strip:\n%s", strings.Join(lines, "\n"))
 	}
-	if !strings.Contains(lines[2], "task-000") {
-		t.Errorf("height 10: line 2 = %q, want the first row", lines[2])
+	if !strings.Contains(lines[top], "task-000") {
+		t.Errorf("height 10: line %d = %q, want the first row", top, lines[top])
 	}
 }
 
