@@ -135,7 +135,7 @@ private struct SessionCard: View {
     private var tint: Color? { Look.agentTint(session) }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
+        HStack(alignment: .top, spacing: 8) {
             StateMark(look: look, tint: tint).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 if renaming {
@@ -172,8 +172,7 @@ private struct SessionCard: View {
             .frame(width: 66, alignment: .trailing)
         }
         .padding(.vertical, 8)
-        .padding(.leading, 11)
-        .padding(.trailing, 7)
+        .padding(.horizontal, Theme.inset)
         .background(shape.fill(fill).shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)
@@ -354,8 +353,9 @@ private struct HelperRows: View {
                     Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(Theme.muted)
                 }
             }
+            // Under the card's name: its inset, its mark and the gap.
             .padding(.leading, 34)
-            .padding(.trailing, 8)
+            .padding(.trailing, Theme.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
         }
@@ -448,7 +448,7 @@ private struct DetailsPanel: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, Theme.inset)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(shape.fill(Theme.panel))
@@ -650,7 +650,7 @@ private struct FindField: View {
                 .help("Clear")
                 .accessibilityLabel("Clear the search")
         }
-        .padding(.horizontal, 9)
+        .padding(.horizontal, Theme.inset)
         .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field)
             .shadow(color: Theme.shadow, radius: 2, y: 1))

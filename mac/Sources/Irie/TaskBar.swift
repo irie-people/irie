@@ -34,9 +34,11 @@ struct TaskBar: View {
                 startButton
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 5)
-        .padding(.vertical, 5)
+        .padding(.leading, Theme.inset)
+        // The menu and the start button sit in the corner, as the message
+        // box's send button does.
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
         .fixedSize(horizontal: false, vertical: true)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field)
             .shadow(color: Theme.shadow, radius: 3, y: 1.5))
@@ -76,7 +78,7 @@ struct TaskBar: View {
                     .foregroundStyle(n.isError ? Theme.needs : Theme.ink)
                     .lineLimit(4)
                     .textSelection(.enabled)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, Theme.inset)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
