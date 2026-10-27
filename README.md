@@ -18,6 +18,12 @@ Run every coding agent you have, from any supplier, on any model, cloud or local
 
 **Many models, one love.** A fast local model for the small jobs, a strong cloud model for the hard ones, and a second opinion from a different supplier before anything reaches you.
 
+## What it is
+
+One Go program, `irie`, that runs on your computer, and an optional Mac app. It starts each agent in a private tmux server, follows Claude Code through hooks it adds to each session, and keeps its records in folders only you can open.
+
+It has no server, account or telemetry, and sends nothing over the network of its own: your agents talk to their own providers, as they would without it. [What Irie is](https://irie-hq.github.io/irie/what-irie-is.html) lists every part, file, connection and word it says to an agent, and how to check each one yourself.
+
 ## Status
 
 Early and unreleased. There's no release to download yet, but you can build Irie from source: see [Install](https://irie-hq.github.io/irie/install.html).
@@ -30,8 +36,11 @@ The website has the docs, from installing Irie to a merged change. Its pages are
 - [Your first session](https://irie-hq.github.io/irie/first-session.html): type a task, read its row, look in, and answer an agent that needs you
 - [Tasks, repos and worktrees](https://irie-hq.github.io/irie/tasks.html): `@repo`, `@repo!`, `+profile`, Tab completion, pastes, and what a worktree gets
 - [Profiles and models](https://irie-hq.github.io/irie/profiles.html): the config file, every setting with its default, and profiles for local models
+- [Other agents](https://irie-hq.github.io/irie/agents.html): any agent that runs in a terminal, including a launcher or harness your own team built, and what Irie sees of each
+- [Themes](https://irie-hq.github.io/irie/themes.html): the four planned colour themes, Rosewater, Terracotta, Lilac and Evergreen, in light and dark
 - [Keys and commands](https://irie-hq.github.io/irie/keys.html): every key, and `irie ctl` for scripts
 - [Recipes](https://irie-hq.github.io/irie/recipes.html): from an idea to a merged change, with what works today and what is planned
+- [Irie at work](https://irie-hq.github.io/irie/work.html): Irie at a company: cost, data, managed Claude Code settings, AI providers, proxies, and what isn't there yet
 - [Troubleshooting](https://irie-hq.github.io/irie/troubleshooting.html): each stall, failure and message, and what to do about it
 
 ## Free, and paid back
