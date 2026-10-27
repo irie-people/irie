@@ -1,0 +1,73 @@
+name: Bug report
+description: Irie does something wrong, or not what its docs say.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Search the [issues](https://github.com/irie-hq/irie/issues) first, and see [Troubleshooting](https://irie-hq.github.io/irie/troubleshooting.html), which lists each stall, failure and message.
+
+        For a security problem, don't open an issue: see [SECURITY.md](https://github.com/irie-hq/irie/blob/main/SECURITY.md).
+
+        Leave out anything that identifies a person: use `alice`, `/home/alice` and `example.com` in paths, names and logs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what Irie did. Copy the line under the list, or the message `irie` printed.
+      placeholder: 'I typed "@shop fix the cart total", and the row turned red with "stalled: no hooks within 30s".'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The fewest steps that show it, starting from opening Irie.
+      placeholder: |
+        1. Run irie
+        2. Type ...
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: irie version
+      description: What `irie version` prints.
+      placeholder: irie 0.1.0-dev+3f2a9c41d07e
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: tools
+    attributes:
+      label: tmux and agent versions
+      description: What `tmux -V` prints, and `claude --version`, or the version of the agent your profile runs.
+      placeholder: tmux 3.7b, 2.1.310 (Claude Code)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The lines of `~/.local/state/irie/core.log` from around the time, or what `irie ctl list --json` prints. Take anything private out first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I searched the issues for this bug.
+          required: true
+        - label: Nothing in this report identifies a person, such as a name, an email, a home path or a hostname.
+          required: true

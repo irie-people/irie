@@ -76,14 +76,14 @@ func (m Model) home2tilde(p string) string {
 // state returns a row's glyph and colour (DESIGN §5.3). A nil colour is the
 // terminal's own; a dim row is drawn faint. A loud row, one that needs you,
 // takes the colour for its name too. Each state has its own glyph, so colour
-// is never the only cue.
+// is never the only cue; an exit with an error code shares failed's ✕.
 func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool) {
 	switch s.State {
 	case ipc.StateFailed:
 		return "✕", lipgloss.Red, false, true
 	case ipc.StateExited:
 		if s.ExitCode != nil && *s.ExitCode != 0 {
-			return "·", lipgloss.Red, true, false
+			return "✕", lipgloss.Red, true, false
 		}
 		return "·", nil, true, false
 	case ipc.StateNeedsYou:
@@ -100,7 +100,7 @@ func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool
 	case ipc.StateIdle:
 		return "○", nil, true, false
 	}
-	return "●", nil, false, false
+	return "◐", nil, false, false
 }
 
 func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
@@ -140,7 +140,7 @@ func (m Model) counts(w int) string {
 		n            int
 		c            color.Color
 	}{
-		{"●", "working", working, nil},
+		{"◐", "working", working, nil},
 		{"●", "needs you", needs, lipgloss.Red},
 		{"✓", "done", done, lipgloss.Green},
 		{"‖", "paused", paused, lipgloss.Yellow},
@@ -177,9 +177,14 @@ func (m Model) rule() string {
 func (m Model) row(i int) string {
 	s := m.sessions[i]
 	g, c, dim, loud := m.state(s)
-	a := age(m.now().Sub(s.Created))
+	return m.paint(i, g, c, dim, loud, s.Name, age(m.now().Sub(s.Created)))
+}
+
+// paint draws list row i, `[edge][glyph] name … age`, with the glyph's
+// colour and, for a row that is dim or loud, its name's.
+func (m Model) paint(i int, g string, c color.Color, dim, loud bool, name, a string) string {
 	nameW := m.width - 5 - lipgloss.Width(a)
-	name := cut(s.Name, nameW)
+	name = cut(name, nameW)
 	gap := spaces(nameW - lipgloss.Width(name))
 	if i == m.sel && m.focus == focusList {
 		// The selection is a deep-green bar with a sun-coloured edge.
@@ -223,6 +228,9 @@ func (m Model) statusLine() string {
 		}
 		return " " + styleDim.Render(cut(hint, m.width-2))
 	}
+	if m.sel >= len(m.sessions) {
+		return m.outsideStatus()
+	}
 	// What the selected row is doing or needs, else what Irie cannot do for
 	// it, then its full name and directory.
 	s := m.sessions[m.sel]
@@ -256,8 +264,8 @@ func (m Model) View() tea.View {
 		lines = append(lines, m.rule())
 	}
 	for i := range m.listHeight() {
-		if r := m.offset + i; r < len(m.sessions) {
-			lines = append(lines, m.row(r))
+		if r := m.offset + i; r < m.rowCount() {
+			lines = append(lines, m.line(r))
 		} else {
 			lines = append(lines, "")
 		}
@@ -272,11 +280,19 @@ func (m Model) View() tea.View {
 	if h := m.barHeight(); len(bar) > h {
 		bar = bar[:h]
 	}
+	barTop := len(lines)
 	lines = append(lines, bar...)
 	if len(lines) > m.height {
 		// Too short for everything: keep the header and the command bar.
-		lines = append(lines[:max(1, m.height-len(bar))], bar...)[:m.height]
+		barTop = max(1, m.height-len(bar))
+		lines = append(lines[:barTop], bar...)[:m.height]
 	}
 	v.SetContent(strings.Join(lines, "\n"))
+	// The terminal's cursor marks the place in the command bar while it has
+	// the keyboard.
+	if c := m.bar.Cursor(); c != nil && c.Y < len(bar) && barTop+c.Y < m.height {
+		c.Y += barTop
+		v.Cursor = c
+	}
 	return v
 }

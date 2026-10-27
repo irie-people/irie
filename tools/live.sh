@@ -79,9 +79,34 @@ if [ -n "$live" ] && ! git merge-base --is-ancestor "$live" HEAD; then
 	exit 1
 fi
 
+# A build put in by hand skips the branch, so the running core's own build
+# must be in this checkout as well.
+sock=$({ "$bin" config print 2>/dev/null || true; } |
+	sed -n '/^\[tmux\]/,/^\[/s/^[[:space:]]*socket[[:space:]]*=[[:space:]]*"\(.*\)"$/\1/p')
+core=$(tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
+corebin=
+if [ -n "$core" ]; then
+	corebin=$(ps -o command= -p "$core" | cut -d' ' -f1)
+	corerev=$(rev "$corebin")
+	if [ -n "$corerev" ] && ! git merge-base --is-ancestor "$corerev" HEAD; then
+		say "the running Irie was built from $(git log -1 --format='%h %s' "$corerev" 2>/dev/null || echo "$corerev"), which this checkout lacks"
+		say "merge it, then run this again: git merge $corerev"
+		exit 1
+	fi
+fi
+
 go vet ./...
 go test ./...
-go build -o "$bin.new" ./cmd/irie
+
+# A change outside the Go code needs no new core, so the running one stays,
+# unless it runs from somewhere else.
+gonew=1
+installed=$(rev "$bin")
+if [ -n "$installed" ] && { [ -z "$corebin" ] || [ "$corebin" = "$bin" ]; } &&
+	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal 2>/dev/null; then
+	gonew=
+fi
+if [ -n "$gonew" ]; then go build -o "$bin.new" ./cmd/irie; fi
 
 newapp=
 if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/dev/null; }; then
@@ -94,16 +119,18 @@ fi
 
 # The rename leaves running processes on the old file, which .prev keeps.
 up=
-if running "$bin.new"; then up=1; fi
-if [ -e "$bin" ]; then ln -f "$bin" "$bin.prev"; fi
-mv -f "$bin.new" "$bin"
-if [ -n "$up" ] && ! "$bin" up; then
-	say "the new build did not come up, so the previous one goes back"
-	if [ -e "$bin.prev" ]; then
-		mv -f "$bin.prev" "$bin"
-		"$bin" up || true
+if [ -n "$gonew" ]; then
+	if running "$bin.new"; then up=1; fi
+	if [ -e "$bin" ]; then ln -f "$bin" "$bin.prev"; fi
+	mv -f "$bin.new" "$bin"
+	if [ -n "$up" ] && ! "$bin" up; then
+		say "the new build did not come up, so the previous one goes back"
+		if [ -e "$bin.prev" ]; then
+			mv -f "$bin.prev" "$bin"
+			"$bin" up || true
+		fi
+		exit 1
 	fi
-	exit 1
 fi
 
 pids=
@@ -134,7 +161,9 @@ fi
 
 git update-ref refs/heads/live "$head"
 what=$(git log -1 --format='%h %s')
-if [ -n "$up" ]; then
+if [ -z "$gonew" ]; then
+	say "$what is live; the Go code did not change, so the core kept running"
+elif [ -n "$up" ]; then
 	say "$what is live; every agent kept running"
 else
 	say "$what is installed; Irie is not running, and $bin starts it"

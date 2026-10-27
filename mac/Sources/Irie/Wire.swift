@@ -86,6 +86,9 @@ struct Frame: Decodable {
     var sessions: [Session]?
     var session: Session?
     var id: String?
+    /// An outside frame: the sessions outside Irie, and why the list may be old.
+    var outside: [OutsideSession]?
+    var problem: String?
 }
 
 struct HelloArgs: Encodable {

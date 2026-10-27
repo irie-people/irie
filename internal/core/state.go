@@ -51,6 +51,11 @@ func (t *track) apply(e event.Event) {
 	case event.SessionStarted:
 		t.started = true
 		t.addTranscript(e.Str("transcript"))
+		if e.Str("source") == "resume" && t.activity == "" {
+			// A resumed conversation, such as one moved into Irie, waits at
+			// its prompt: it is ready without one, and idle.
+			t.activity, t.viewed = done, true
+		}
 	case event.PromptSubmitted:
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
 	case event.ToolStarted:

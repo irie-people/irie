@@ -33,6 +33,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | Sessions waiting on you in red; rename; jump | States derived from hooks; keys `r`, `/` and `1`–`9` | §4.1, M2, M4 |
 | A live read-only pane for each running subagent | One mirror pane per subagent, listed under its parent | §4.4, M8 |
 | Irie.app | Opens or focuses the one Irie window in Ghostty; has an icon; found by Spotlight | §7, M9 |
+| See every Claude Code session on the machine, and bring one in | An "Outside Irie" group with live busy and idle; "Move into Irie" carries an idle session on in an Irie pane, on request only | §4.6 |
 
 ### 1.2 Not in v1
 
@@ -174,13 +175,14 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"upsert","session":{…}}` and `{"t":"remove","id":"…"}`
   - `{"t":"history","undo":"…","redo":"…"}`
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
+  - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
 - Frames to the UI are coalesced to at most 10 per second.
 - The API version is `1`. Additions keep backwards compatibility.
 
 | Op | Args | Result | From |
 |---|---|---|---|
-| `hello` | `client`, `api` | `version`, `api`, `features[]` | M1 |
-| `list` | none | `sessions[]` | M1 |
+| `hello` | `client`, `api` | `version`, `api`, `features[]`, which name the ops served, `move` among them | M1 |
+| `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
 | `subscribe` | `events?`, `session?`, `agent?`, `view?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed | M1 (`view`: Mac app) |
 | `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?`, `name?`, `force?` | `session` | M1 (`repo`, `profile` M3; `force` M10) |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
@@ -193,6 +195,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `note` | `session`, `agent?`, `text` | `note` | M7 |
 | `preflight` | `profile` | `ok`, `problems[]` | M10 |
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
+| `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle | Sessions outside Irie (§4.6) |
 
 ### 2.5 Observation
 
@@ -278,7 +281,8 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | Task argument | Passed inline when it is at most 100 KiB, which keeps it under Linux's 128 KiB per-argument limit and macOS's 1 MiB total. Otherwise the argument is: `Your full task is in <path>/task.md. Read all of it before doing anything else.` A task that begins with `-` gets a leading space |
 | Session id | Pre-assigned with `--session-id` (a v4 UUID), so Irie knows the vendor id before any hook fires and can reopen the session |
 | Reopen (undo of close) | `claude --resume <uuid>` with the same model, effort, mode and settings flags, in the same cwd |
-| Env | Adds `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`. Removes `TMUX` and `TMUX_PANE` (`spawn.hide_tmux`), so an agent's own `tmux` commands cannot reach Irie's server |
+| Resume (move into Irie, §4.6) | `claude <profile flags> --settings <file> --resume <uuid>`: no `--session-id`, since a resumed session keeps its id, and no task, since it waits for input. `--name` is left out; the conversation keeps its own |
+| Env | Adds `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`. Removes `TMUX` and `TMUX_PANE` (`spawn.hide_tmux`), so an agent's own `tmux` commands cannot reach Irie's server. Removes the inherited variables that tie a process to another Claude Code session or terminal pane (§4.6), unless the profile sets them |
 | Versions | `claude --version` must be 2.1.295 or later for `onFailure`. Older versions still spawn, but pause is disabled for that session and the row says why. Optional flags (`--name`) are detected from `claude --help` once per version; an unsupported optional flag is dropped with a warning. Required values (model, effort, permission mode) are never dropped: if the CLI rejects one, the spawn fails visibly |
 | `--settings` | From M2. The settings file adds hooks for this session only. Claude Code merges hook lists, so the user's own hooks still run |
 
@@ -341,12 +345,12 @@ type Harness interface {
 ### 4.1 Session list
 
 **Layout, from top to bottom:**
-- **Header** (pinned, 1–2 lines): `Irie`, then counts (`●3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
+- **Header** (pinned, 1–2 lines): `Irie`, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
 - **List:** scrolls.
 - **Status strip** (1 line): the selected row's detail (current tool, why it needs you, copied files) or the last error.
-- **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself.
+- **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
 
-**Rows.** Each row reads `[!][glyph] name … age`, with subagents indented under their parent (M8). Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder the list. The Parked group comes last. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
+**Rows.** Each row reads `[!][glyph] name … age`, with subagents indented under their parent (M8). Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder the list, and only you scroll it: frames from the core and a growing command bar leave the rows on screen where they are, and only a task you just started scrolls into view. The Parked group comes after them. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
 
 | Key (list focus) | Action |
 |---|---|
@@ -364,6 +368,7 @@ type Harness interface {
 | `p`, `P` | Pause or resume this agent, or the whole tree (M5) |
 | `f`, `F` | Freeze or thaw this session, or all (M6) |
 | `!`, `n` | Toggle priority; write a note (M7) |
+| `m` `m` | Move the selected session under Outside Irie into Irie (§4.6). The first press says what the move ends; any other key cancels |
 
 | Edge case | Behaviour |
 |---|---|
@@ -391,7 +396,7 @@ type Harness interface {
 | `@name`, `@path` | Run in a new worktree of that git repo (M3). A path that is not a git repo runs in place. M1 accepts only absolute or `~` paths and runs in place |
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
 | `+profile` | Use that profile instead of `spawn.default_profile` (M3) |
-| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach` |
+| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6) |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
 
@@ -402,7 +407,7 @@ type Harness interface {
 4. In one command list, run `new-window -d -t irie-agents: -n <slug> -P -F '#{pane_id}' '<irie> host --spec <path>'` and set the pane options and the window size.
 5. The host calls `setpgid`, makes the agent the foreground process group of its terminal, execs it, then waits with `WUNTRACED` and writes `exit.json`.
 6. The agent receives the task as an argument (§3.3).
-7. Readiness (M2): if `SessionStart` and `UserPromptSubmit` arrive within `spawn.ready_timeout`, the session is working. If the pane dies first, it is failed, with the exit code and the last 5 screen lines. If neither happens, it is stalled (red), with the same tail; a first-run trust prompt or a login prompt is the usual cause.
+7. Readiness (M2): if `SessionStart` and `UserPromptSubmit` arrive within `spawn.ready_timeout`, the session is working. If the pane dies first, it is failed, with the exit code and the last 5 screen lines. If neither happens, it is stalled (red), with the same tail; a first-run trust prompt or a login prompt is the usual cause. A resumed conversation (§4.6) waits for input, so `SessionStart` with source `resume` alone makes it ready, and idle.
 8. The journal records `spawn.requested`, then `session.started` or `spawn.failed`.
 
 `irie ctl spawn` runs `irie up` first, so a script can spawn with no window open.
@@ -530,6 +535,38 @@ type Harness interface {
 
 **Tests:** every action round-trips (do, undo, redo) to an identical state (M4–M7).
 
+### 4.6 Sessions outside Irie
+
+People also run Claude Code in other terminals and in the background, so the agents Irie started are only some of theirs. Irie lists every live Claude Code session on the machine in an "Outside Irie" group, with live busy and idle, and moves an idle one in on request: the same conversation then carries on in an Irie pane, with live states. Nothing moves unless the user asks.
+
+**Discovery.**
+- **Source.** `claude agents --json` prints the active sessions, interactive and background, as a JSON array and exits ("for scripting; does not require a TTY"). Claude Code's agent view docs call it the supported way to read session state from outside. Irie reads `sessionId` (the full id that `--resume` takes), `id` (a background session's short id, which `claude stop` takes), `name`, `kind`, `status` (`busy`, `waiting`, `idle`, or another value, kept as it comes), `waitingFor`, `state`, `pid`, `cwd` and `startedAt`. Only stdout is parsed, since the CLI may warn on stderr. Ids that are not well formed are dropped, because they go on a command line, and display strings lose their control characters, because they reach terminals.
+- **Command.** The default profile's `command`, or the first Claude Code profile's when the default runs another harness, with the environment an agent of that profile gets (§3.3). A profile that points elsewhere is respected.
+- **When.** Every 3 s, only while someone looks: a tmux client attached to session `irie` (`session_attached`), or a Mac app view. A `list` also refreshes a list older than that, since whoever lists is looking. One run costs about 0.1 s of CPU, so this costs about 4% of one core while anyone looks and nothing otherwise, and a session that turns idle can be moved within 3 s. Runs never overlap, and each has a 5 s timeout.
+- **Irie's own.** Sessions Irie hosts are left out: those whose `sessionId` is a live Irie session's vendor id (the id Irie passed with `--session-id`, or resumed with `--resume`), and those whose `pid` runs under a live agent pane's host, which catches an agent after `/clear` changed its id and a `claude` started by a wrapper script. The process table comes from `ps -A -o pid= -o ppid=`, read only when both lists have something to match.
+- **Failure.** When the command is missing, times out or prints bad JSON, the core keeps the last list and sends the problem with it once: `problem` in the outside frame, `outside_problem` in `list`. The sidebar shows it in the status strip. The log gets a line when a problem starts and one when it ends; the journal gets nothing.
+- **Order.** Oldest first, by `startedAt`. A status change never reorders or regroups the rows.
+
+**Wire.** Outside sessions travel apart from Irie's rows, so rows, derived states and the journal are unchanged. `list` gains `outside[]`, and a subscription gets an `outside` frame after its first snapshot and whenever the list or its problem changes (§2.4). Each entry carries `movable` and, when it cannot move, `why`, so every client applies the same rule.
+
+**Move into Irie** (`move`, with `vendor_id` and an optional `profile`).
+1. It takes its turn with spawns and lists the sessions again, so the decision rests on what Claude Code says now. It refuses, with `busy`, a session that is not idle: busy, waiting for the user, or without a live process. It refuses with `not_found` a session that is not listed, and with `bad_args` one that already runs in Irie or whose folder is gone.
+2. It ends the outside copy: `claude stop <id>` for `kind: background`, so its supervisor does not start it again, and SIGTERM to `pid` for an interactive one. It waits up to 5 s for the process to exit; Claude Code's SessionEnd hooks get 1.5 s by default. It never sends SIGKILL. If the process does not exit, nothing is spawned and the error says so; the session may still run where it was.
+3. It spawns an Irie session in place, with no worktree, in exactly the same `cwd`, because Claude Code finds a conversation by its folder: `claude <profile flags> --settings <file> --resume <sessionId>` (§3.3). A resumed session keeps its id unless `--fork-session` is given, so there is no `--session-id`, and it waits for input, so there is no task. The row keeps the session's name (numbered when an Irie row has it), Irie's per-launch settings and hooks, and the chosen profile; by default, the profile that lists the sessions.
+4. `SessionStart` with source `resume` makes it ready, and idle, so it is never stalled for want of `UserPromptSubmit` (§4.2).
+5. The journal records `spawn.requested` with `resume` (the vendor id) and `kind`.
+
+If the outside copy stopped but Irie could not start the session, the error says so and names `claude --resume <id>` and its folder.
+
+**Clients.**
+- **`irie ctl`.** `list` shows the sessions under `OUTSIDE IRIE`, and `move [--wait] [+PROFILE] <session-id|name>` moves one in.
+- **The sidebar.** The group comes last, after Parked, under a header with its count. Each row is one line, with the glyph and colour of the Irie state it matches (§5.3): busy as working, idle as idle, waiting for the user as needs you, and a dim `·` for anything else. Selecting a row puts what it is doing, its folder and how it runs in the status strip. `m` `m` moves it in, as `x` `x` closes: the first press says that its copy outside Irie ends, with anything it runs in the background, and any other key cancels. `:move [name]` moves it at once. Enter or Space says that it runs outside Irie instead of failing.
+- **The Mac app.** An "Outside Irie" section after the cards, with the same one-line rows. The details panel has Move into Irie, off with the reason while the session can't move, and Copy Session ID, and a move asks first ([MAC.md](MAC.md)).
+
+**Agents keep their own identity.** An agent inherits the tmux server's environment, which came from whatever first ran `irie up`. When that was a Claude Code session in a terminal pane, every agent would carry that session's markers. These are the variables Claude Code's environment reference documents: `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID`, `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_REMOTE_SESSION_ID`, and `CLAUDE_EFFORT`, the other session's effort. Agents would also carry the terminal pane's ids and its control capability: names ending in `_PANEL_ID`, `_SURFACE_ID` or `_SOCKET_CAPABILITY`, that terminal's other `*_ID` and `*_SOCKET*` variables, and `WINDOWID`. Claude Code would take each agent for a nested session, leave it out of `claude agents` and `--resume`, and hand it the other session's inbox. It ignores the inherited marker when it sees tmux, but Irie hides `TMUX`. So the pane host drops these variables before it starts an agent, unless the profile sets them, and the core drops them from its own runs of the CLI. A core restarted on a running server therefore fixes every agent it spawns from then on. Starting the server from a clean login environment was the other option. It would reach a running server only when the server restarts, it needs the login-shell capture of §7.2, and `env -i` also drops variables that launchd rather than a shell profile sets, such as `SSH_AUTH_SOCK` on macOS.
+
+**Tests:** parsing, with warnings on stderr and unknown statuses; leaving out Irie's own by vendor id and by pid; outside frames only on a change; the order kept across status changes; refusals of busy, waiting and unknown sessions; a move of each kind, its resume argv and readiness; the resume argv golden; the sidebar's group at three heights, and a single `m` moving nothing; and an agent of a server started with `CLAUDECODE=1` and a pane id inheriting neither.
+
 ---
 
 ## 5. Data and config
@@ -559,7 +596,7 @@ One JSON object per journal line and per `event` frame:
 
 | Kind | Data | From | Nearest standard term (ACP / OSC 7501) |
 |---|---|---|---|
-| `spawn.requested` | `task_bytes`, `cwd`, `repo`, `worktree`, `branch`, `profile` | irie | none |
+| `spawn.requested` | `task_bytes`, `cwd`, `repo`, `worktree`, `branch`, `profile`; for a move (§4.6) `resume` (the vendor id) and `kind`, and no `task_bytes` | irie | none |
 | `spawn.failed` | `reason`, `exit`, `tail` | irie, host | error |
 | `session.started` | `transcript`, `model`, `permission_mode` | SessionStart | `session/new` |
 | `prompt.submitted` | `chars` | UserPromptSubmit | user message / working |
@@ -584,13 +621,13 @@ Each row shows the first state in this table that applies; the table is in prece
 | State | Glyph | Colour | From |
 |---|---|---|---|
 | failed | `✕` | red | `spawn.failed` |
-| exited | `·` | dim (red if the code is not 0) | `pane.exited`, `session.ended` |
+| exited | `·`, or `✕` if the code is not 0 | dim (red if the code is not 0) | `pane.exited`, `session.ended` |
 | frozen | `◆` | cyan | `freeze.on` without a later `freeze.off` |
 | paused | `‖` | yellow | `gate.held` |
 | needs you | `●` | **red** | `input.needed`, `turn.failed`. Cleared by the next prompt or tool event |
 | stalled | `!` | **red** | Readiness timer |
 | pausing | `‖` | dim yellow | `gate.set` with no hold yet |
-| working | `●` | default | `prompt.submitted`, `tool.*` |
+| working | `◐` | default | `prompt.submitted`, `tool.*` |
 | starting | `◌` | dim | `spawn.requested` |
 | done | `✓` | green | `turn.ended`, not yet viewed. Turns into idle when you show the session. `ui.red_on_done = true` shows it red instead |
 | idle | `○` | dim | done and viewed |

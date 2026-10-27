@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -510,4 +511,27 @@ func TestSnapshotReadsTheCommandAndPasteMode(t *testing.T) {
 	if p, ok := pane(core); !ok || p.BracketPaste || p.Command == "" {
 		t.Errorf("core pane = %+v", p)
 	}
+}
+
+// TestSnapshotCountsAttachedClients attaches a client from inside a second
+// private server, which stands in for a terminal.
+func TestSnapshotCountsAttachedClients(t *testing.T) {
+	r, _ := startServer(t)
+	s, err := r.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := s.Attached(AgentsSession); n != 0 {
+		t.Errorf("%d clients before any attached", n)
+	}
+	term := r.Socket + "-term"
+	t.Cleanup(func() { exec.Command(r.Bin, "-L", term, "kill-server").Run() })
+	if out, err := exec.Command(r.Bin, "-L", term, "-f", "/dev/null", "new-session", "-d", "-s", "t", "-x", "80", "-y", "24", "--",
+		"env", "-u", "TMUX", r.Bin, "-L", r.Socket, "attach-session", "-t", AgentsSession).CombinedOutput(); err != nil {
+		t.Fatalf("attach a client: %v\n%s", err, out)
+	}
+	testutil.Eventually(t, 5*time.Second, "the client did not count as attached", func() bool {
+		s, err := r.Snapshot()
+		return err == nil && s.Attached(AgentsSession) == 1 && s.Attached(MainSession) == 0
+	})
 }

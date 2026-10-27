@@ -26,6 +26,6 @@ Go. The client runs every agent in tmux and draws its UI with Bubble Tea. Test w
 
 ## Trying a change
 
-If you run Irie, put a finished change into it at once: commit, then run `tools/live.sh`. It runs `go vet` and `go test`, builds `irie`, and also `Irie.app` when `mac/` changed and the app is installed or running, then swaps the build into the running Irie. The core and the sidebar restart; agents keep running. Start Irie from that build, `~/.local/share/irie/bin/irie`, and never build over it by hand.
+If you run Irie, put a finished change into it at once: commit, then run `tools/live.sh`. It runs `go vet` and `go test`, builds `irie`, and also `Irie.app` when `mac/` changed and the app is installed or running, then swaps the build into the running Irie. When the Go code changed, the core and the sidebar restart; agents keep running. Start Irie from that build, `~/.local/share/irie/bin/irie`, and never build over it by hand.
 
-The branch `live` records what is installed. The script refuses a checkout that lacks it, so one change never drops another: run `git merge live` and try again. `tools/live.sh --rollback` puts the previous build back.
+The branch `live` records what is installed. The script refuses a checkout that lacks it, or lacks the build the running core came from, so one change never drops another: run the `git merge` it prints and try again. `tools/live.sh --rollback` puts the previous build back.

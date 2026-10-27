@@ -19,19 +19,20 @@ struct SidebarView: View {
             TaskBar()
         }
         .background(Theme.sidebar.ignoresSafeArea())
+        .modifier(OutsideMoveConfirmation())
     }
 
     @ViewBuilder private var content: some View {
         let rows = store.drawnOrder
         if case let .offline(why) = store.link, store.sessions.isEmpty {
             Offline(why: why, socket: store.socketPath)
-        } else if store.sessions.isEmpty {
+        } else if store.sessions.isEmpty && store.outside.isEmpty {
             if store.link == .connecting {
                 Hint(text: "Connecting to Irie…")
             } else {
                 Welcome()
             }
-        } else if rows.isEmpty {
+        } else if rows.isEmpty && store.drawnOutside.isEmpty {
             Hint(text: "No sessions match “\(store.filter)”.")
         } else {
             ScrollViewReader { proxy in
@@ -40,31 +41,41 @@ struct SidebarView: View {
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
                         LazyVStack(alignment: .leading, spacing: 6) {
                             ForEach(rows) { s in
-                                SessionCard(session: s, selected: s.id == store.selection, listFocused: listFocused, now: ctx.date)
+                                SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil, listFocused: listFocused, now: ctx.date)
                                     .id(s.id)
                             }
+                            OutsideSection(now: ctx.date, listFocused: listFocused)
                         }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
                     }
                 }
                 .onChange(of: store.selection) {
                     if let id = store.selection { proxy.scrollTo(id) }
+                }
+                .onChange(of: store.outsideSelection) {
+                    if let k = store.outsideSelection { proxy.scrollTo("outside:" + k) }
                 }
             }
             .focusable()
             .focusEffectDisabled()
             .focused($listFocused)
             .onChange(of: store.focusSidebar) { listFocused = true }
+            // The arrows walk on into the outside rows, which they only select.
             .onKeyPress(.upArrow) {
-                store.step(-1, wrap: false)
+                store.walk(-1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
-                store.step(1, wrap: false)
+                store.walk(1)
                 return .handled
             }
             .onKeyPress(.return) {
+                if let o = store.selectedOutside {
+                    store.explainOutside(o)
+                    return .handled
+                }
                 guard let id = store.selection else { return .ignored }
                 store.show(id, focus: true)
                 return .handled
@@ -231,8 +242,12 @@ private struct DetailsPanel: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        let outside = store.selectedOutside
+        let stateColor = outside == nil ? selected.flatMap { Look($0).color } : nil
         Group {
-            if let s = selected {
+            if let o = outside {
+                OutsideDetails(outside: o)
+            } else if let s = selected {
                 details(s)
             } else {
                 Text("Pick a session to see its details.")
@@ -245,7 +260,7 @@ private struct DetailsPanel: View {
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(shape.fill(Theme.panel))
-        .overlay(shape.strokeBorder(selected.flatMap { Look($0).color }?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
+        .overlay(shape.strokeBorder(stateColor?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
         .clipShape(shape)
         .padding(.horizontal, 10)
         .padding(.top, 6)
@@ -330,9 +345,9 @@ private struct Header: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        HStack(spacing: 7) {
-            SunMark().frame(width: 22, height: 22)
-            Text("Irie").font(.system(size: 18, weight: .heavy, design: .rounded))
+        HStack(spacing: 6) {
+            SunMark().frame(width: 18, height: 18)
+            Text("Irie").font(.system(size: 15, weight: .heavy, design: .rounded))
             Spacer()
             switch store.link {
             case .online:
@@ -346,8 +361,8 @@ private struct Header: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.top, 3)
+        .padding(.bottom, 5)
     }
 
     private func count(_ g: Look.Group, color: Color, label: String) -> some View {
@@ -363,7 +378,7 @@ private struct Header: View {
             }
             .foregroundStyle(color)
             .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+            .padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.06 : 0.14)))
             .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.45), lineWidth: 1))
             .opacity(rows.isEmpty ? 0.5 : 1)
@@ -403,14 +418,14 @@ private struct FindField: View {
                 .accessibilityLabel("Clear the search")
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                 .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
         .padding(.horizontal, 10)
-        .padding(.bottom, 6)
+        .padding(.bottom, 2)
         .onChange(of: store.focusFind) { focused = true }
     }
 }
