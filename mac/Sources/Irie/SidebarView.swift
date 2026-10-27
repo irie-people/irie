@@ -23,6 +23,7 @@ struct SidebarView: View {
                     .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
                 .zIndex(1)
             content
+            ReviewDock()
             if !store.sessions.isEmpty {
                 ModeSwitch()
             }
