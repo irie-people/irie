@@ -426,8 +426,10 @@ final class Store: ObservableObject {
             // A task in a repo may make a worktree and check out submodules first.
             let r = try await client.call("spawn", args, timeout: 600, as: SpawnResult.self)
             say("Started \(r.session.name).", error: false)
-            // Straight to the new agent, ready to type to.
-            show(r.session.id, focus: true)
+            // It starts behind the session on show, so a task typed mid-work
+            // never pulls the view or the keyboard away. With nothing on
+            // show, it comes straight up, ready to type to.
+            if selection == nil { show(r.session.id, focus: true) }
             // A repo it ran in is now among the recent ones.
             loadChoices()
             return true
