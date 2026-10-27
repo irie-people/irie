@@ -1258,6 +1258,7 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 | A failover repeats work | Tokens spent twice | The continuation starts from the work in the directory; a session fails over once; hard work waits for the reset (§6.4) |
 | Disk growth | Worktrees and the journal fill the disk | Journal retention; worktree sizes shown in the status strip; `irie gc` after v1 |
 | Two cores race at start | Double spawns | `flock` on `core.lock`; `irie up` is idempotent; spawn ids |
+| The server goes away under a running core | Its layout repair's `new-session` would start a new server with a sidebar and no core | Every tmux command but `irie up`'s start carries `-N`, which never starts a server |
 | Supplier policy shifts on billing or third-party tools | A feature becomes non-compliant | Irie only launches the unmodified CLI under the user's own login. It never reads or relays credentials |
 | Huge tasks or pastes | The UI lags | Paste chips; tasks handed over as files |
 

@@ -90,6 +90,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-27 | https://platform.claude.com/docs/en/about-claude/pricing | List prices of Opus 5.5 ($4 in, $20 out per million tokens), Sonnet 5.5 (half of that) and Haiku 5.5 ($0.10, $0.50): the starting costs of the route profiles and the built-in `haiku` profile (DESIGN §6.4) |
 | 2026-10-27 | https://code.claude.com/docs/en/hooks.md (read again for routing) | `last_assistant_message` on Stop and SubagentStop, rather than reading the transcript; SessionStart's `additionalContext` given before the first prompt, and its `source` values; StopFailure's error types, `rate_limit` among them: delegation's result and note, and failover (DESIGN §6.4) |
 | 2026-10-27 | https://en.wikipedia.org/wiki/Beta_distribution | The mean of a beta distribution, so a prior counted as a number of outcomes moves with observed ones: a profile's accuracy (DESIGN §6.4) |
+| 2026-10-27 | tmux 3.7b manual page (local `man tmux`), and a run of `tmux -N` with no server | `-N`: "Do not start the server even if the command would normally do so", and that it then says "Error connecting to": only `irie up` starts the server (DESIGN §9) |
 
 ## Third-party code
 
