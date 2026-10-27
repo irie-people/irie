@@ -10,6 +10,11 @@ struct TaskBar: View {
     @EnvironmentObject private var store: Store
     @State private var text = ""
     @FocusState private var focused: Bool
+    /// Tasks started from the bar, newest last, kept across launches. ↑ walks
+    /// back through them and ↓ forward again, ending on what was being typed.
+    @State private var history = UserDefaults.standard.stringArray(forKey: "taskHistory") ?? []
+    @State private var recall: Int?
+    @State private var draft = ""
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
@@ -23,6 +28,8 @@ struct TaskBar: View {
                 .lineLimit(3, reservesSpace: true)
                 .focused($focused)
                 .onSubmit(submit)
+                .onKeyPress(.upArrow) { step(-1) }
+                .onKeyPress(.downArrow) { step(1) }
                 .onChange(of: text) {
                     if store.notice?.isError == true { store.dismissNotice() }
                 }
@@ -36,7 +43,8 @@ struct TaskBar: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, 5)
-        .padding(.vertical, 5)
+        .padding(.top, 10)
+        .padding(.bottom, 5)
         .fixedSize(horizontal: false, vertical: true)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field)
             .shadow(color: Theme.shadow, radius: 3, y: 1.5))
@@ -94,6 +102,31 @@ struct TaskBar: View {
             }
     }
 
+    /// ↑/↓ recall only from an empty bar or while already walking the history,
+    /// so they still move the caret in text being typed.
+    private func step(_ dir: Int) -> KeyPress.Result {
+        guard !history.isEmpty, recall != nil || text.isEmpty else { return .ignored }
+        let at = (recall ?? history.count) + dir
+        if recall == nil { draft = text }
+        if at < 0 { return .handled }
+        if at >= history.count {
+            recall = nil
+            text = draft
+        } else {
+            recall = at
+            text = history[at]
+        }
+        return .handled
+    }
+
+    private func remember(_ input: String) {
+        history.removeAll { $0 == input }
+        history.append(input)
+        history = Array(history.suffix(50))
+        UserDefaults.standard.set(history, forKey: "taskHistory")
+        recall = nil
+    }
+
     private func submit() {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty, !store.spawning else { return }
@@ -109,6 +142,7 @@ struct TaskBar: View {
         }
         Task {
             if await store.spawn(input) {
+                remember(input)
                 text = ""
                 focused = false // the store gives the new agent's terminal the keyboard
             }
