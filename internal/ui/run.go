@@ -36,6 +36,12 @@ func (b socketBackend) Show(id string, focus bool) error {
 	return ipc.Call(b.socket, callTimeout, ipc.OpShow, ipc.ShowArgs{Session: id, Focus: focus}, nil)
 }
 
+func (b socketBackend) Rename(id, name string) (ipc.Session, error) {
+	var r ipc.RenameResult
+	err := ipc.Call(b.socket, callTimeout, ipc.OpRename, ipc.RenameArgs{Session: id, Name: name}, &r)
+	return r.Session, err
+}
+
 // Move waits as long as a spawn: a move waits its turn behind one.
 func (b socketBackend) Move(vendorID, profile string) (ipc.Session, error) {
 	var r ipc.MoveResult

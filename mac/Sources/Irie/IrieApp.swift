@@ -45,6 +45,8 @@ struct IrieApp: App {
                     .keyboardShortcut("n")
                 Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                     .keyboardShortcut("n", modifiers: [.command, .option])
+                Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
+                    .disabled(store.selection == nil || store.outsideSelection != nil)
             }
             // Sessions close like tabs (Closing.swift). KeyRouter catches ⌘W
             // first; the window's own Close moves to ⇧⌘W.

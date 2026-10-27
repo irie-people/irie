@@ -28,6 +28,9 @@ const (
 	// OpMove is an addition to the ops of DESIGN §2.4: it carries an idle
 	// Claude Code session that runs outside Irie on in an Irie pane (§4.6).
 	OpMove = "move"
+	// OpRename gives a session a new name, which a restarted core keeps
+	// (DESIGN §2.4, M4).
+	OpRename = "rename"
 	// OpPreflight checks a local profile's model before a spawn (M10).
 	OpPreflight = "preflight"
 	// OpLocal and OpStatus are additions for local models and cost
@@ -389,6 +392,18 @@ type ShowArgs struct {
 	Session string `json:"session"`
 	Agent   string `json:"agent,omitempty"`
 	Focus   bool   `json:"focus"`
+}
+
+// RenameArgs give a session a new name. The core makes its whitespace and
+// control characters single spaces, and numbers a name another row has.
+type RenameArgs struct {
+	Session string `json:"session"`
+	Name    string `json:"name"`
+}
+
+// RenameResult is the session with the name it got.
+type RenameResult struct {
+	Session Session `json:"session"`
 }
 
 // HookArgs carry one hook event from the shim: the harness's own payload,

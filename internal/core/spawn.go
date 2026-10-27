@@ -386,7 +386,9 @@ func (c *Core) launch(j job) (*session, error) {
 		opt(tmux.OptCreated, x.created.Format(time.RFC3339Nano)),
 		opt(tmux.OptVendorID, x.vendorID),
 		append([]string{"resize-window", "-t", target}, size...),
-		{"rename-window", "-t", target, x.name},
+		// A name given by rename or carried in by move is any text, which
+		// tmux would expand as a format.
+		{"rename-window", "-t", target, "--", tmux.Literal(x.name)},
 	})
 	if err != nil {
 		c.tmux.Run("kill-window", "-t", target)
