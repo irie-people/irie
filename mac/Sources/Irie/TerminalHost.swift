@@ -21,6 +21,9 @@ struct TerminalHost: NSViewRepresentable {
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.nativeBackgroundColor = Theme.terminalBackground
         view.nativeForegroundColor = Theme.terminalForeground
+        view.onKeyboard = { [weak store] has in
+            if let store, store.terminalHasKeys != has { store.terminalHasKeys = has }
+        }
         store.terminalView = view
         context.coordinator.view = view
         context.coordinator.focusToken = focusToken
@@ -69,9 +72,20 @@ struct TerminalHost: NSViewRepresentable {
 /// needed; without Metal it keeps drawing with Core Graphics.
 final class IrieTerminalView: LocalProcessTerminalView {
     private var triedMetal = false
+    private var responder: NSKeyValueObservation?
+    /// Told whether the terminal has the keyboard.
+    var onKeyboard: ((Bool) -> Void)?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        // The window's first responder is key-value observable. Report after
+        // this turn, since SwiftUI may be updating views when focus moves.
+        responder = window?.observe(\.firstResponder) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.onKeyboard?(self.window?.firstResponder === self)
+            }
+        }
         guard let window, !triedMetal else { return }
         triedMetal = true
         try? setUseMetal(true)

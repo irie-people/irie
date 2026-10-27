@@ -25,10 +25,13 @@ struct TerminalArea: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Theme.field).shadow(radius: 3, y: 1))
+                    .overlay(Capsule().strokeBorder(Theme.edge, lineWidth: 1))
                     .padding(.top, 8)
                     .accessibilityAddTraits(.isStaticText)
             }
         }
+        .background(Theme.ground.ignoresSafeArea())
+        .toolbarBackground(Theme.ground, for: .windowToolbar)
         .navigationTitle(selected?.name ?? "Irie")
         // Never empty: the title moves when a subtitle appears or goes.
         .navigationSubtitle(selected.map(subtitle) ?? "No session")
@@ -47,8 +50,18 @@ struct TerminalArea: View {
 
     @ViewBuilder private func terminal(_ a: AttachInfo) -> some View {
         #if canImport(SwiftTerm)
+        let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
         TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store)
-            .background(Color(nsColor: Theme.terminalBackground))
+            .padding(10)
+            .background {
+                // A click on the frame types to the terminal too.
+                frame.fill(Color(nsColor: Theme.terminalBackground))
+                    .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
+                    .overlay(frame.strokeBorder(edge.opacity(store.terminalHasKeys ? 1 : 0.45),
+                                                lineWidth: store.terminalHasKeys ? 2 : 1))
+                    .onTapGesture { store.focusTerminal += 1 }
+            }
+            .padding(12)
         #else
         Placeholder(
             title: "The terminal opens in Ghostty for now",
@@ -57,6 +70,10 @@ struct TerminalArea: View {
         )
         #endif
     }
+
+    /// The frame's colour: the shown session's, or sun while it is quiet. It
+    /// brightens while the terminal has the keyboard.
+    private var edge: Color { selected.flatMap { Look($0).color } ?? Theme.sunEdge }
 
     /// What the banner says while the core is away.
     private var linkNote: String? {

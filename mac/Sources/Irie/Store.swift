@@ -29,6 +29,8 @@ final class Store: ObservableObject {
     @Published private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
     weak var terminalView: NSView?
+    /// Whether the terminal has the keyboard, which brightens its frame.
+    @Published var terminalHasKeys = false
 
     static let defaultFontSize: CGFloat = 13
 
@@ -194,7 +196,8 @@ final class Store: ObservableObject {
             // A task in a repo may make a worktree and check out submodules first.
             let r = try await client.call("spawn", args, timeout: 600, as: SpawnResult.self)
             say("Started \(r.session.name).", error: false)
-            show(r.session.id)
+            // Straight to the new agent, ready to type to.
+            show(r.session.id, focus: true)
             return true
         } catch {
             say(error.localizedDescription, error: true)

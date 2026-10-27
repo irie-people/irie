@@ -16,9 +16,10 @@ struct TaskBar: View {
                 .foregroundStyle(Theme.muted)
                 .padding(.top, 2)
                 .accessibilityHidden(true)
-            // It keeps the keyboard while a task starts; submit() refuses a
-            // second start until the first is done.
-            TextField(focused ? "@repo +profile, then the task" : "New task…", text: $text, axis: .vertical)
+            // It keeps the keyboard while a task starts, then hands it to the
+            // new agent's terminal; submit() refuses a second start until the
+            // first is done.
+            TextField(focused ? "@repo +profile, then the task" : "What should we work on?", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .lineLimit(3, reservesSpace: true)
@@ -46,13 +47,13 @@ struct TaskBar: View {
             .help("Start (Return)")
             .accessibilityLabel("Start the task")
         }
-        .padding(.leading, 10)
+        .padding(.leading, 12)
         .padding(.trailing, 5)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.field))
+        .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(focused ? Theme.sea : Color.primary.opacity(0.12), lineWidth: focused ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
+                .strokeBorder(focused ? Theme.sunEdge : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
         .padding(10)
         .overlay(alignment: .top) {
@@ -65,7 +66,13 @@ struct TaskBar: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.field).shadow(radius: 3, y: 1))
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                            .fill(Theme.field)
+                            .shadow(radius: 3, y: 1)
+                            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                                .strokeBorder(n.isError ? Theme.needs.opacity(0.6) : Theme.edge, lineWidth: 1))
+                    )
                     .padding(.horizontal, 10)
                     // 4 points above the field, over the bar's padding and the list
                     .alignmentGuide(.top) { d in d[.bottom] - 6 }
@@ -82,7 +89,10 @@ struct TaskBar: View {
         guard !input.isEmpty, !store.spawning else { return }
         store.dismissNotice()
         Task {
-            if await store.spawn(input) { text = "" }
+            if await store.spawn(input) {
+                text = ""
+                focused = false // the store gives the new agent's terminal the keyboard
+            }
         }
     }
 }
