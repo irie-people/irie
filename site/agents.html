@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Other agents · Irie</title>
+<meta name="description" content="Run any coding agent in Irie, including a launcher or harness your own team built: what Irie sees of each, what each needs, and how to try it.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<!-- Marks used by the picture: the sidebar's glyphs, drawn as shapes so
+     they look the same in every font. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="g-half"><circle r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M0-4.6a4.6 4.6 0 0 0 0 9.2z"/></g>
+    <circle id="g-dot" r="5.2"/>
+    <path id="g-check" d="M-4.8 0.2 L-1.6 3.6 L4.8 -4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle id="g-point" r="2"/>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="what-irie-is.html">What Irie is</a></li>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Other agents</h1>
+
+  <figure class="picture narrow">
+    <svg viewBox="0 0 400 296" role="img" aria-labelledby="agents-title" aria-describedby="agents-desc">
+      <title id="agents-title">What Irie sees of an agent depends on its harness: Claude Code reports working, needs you and done, while any other program shows only whether it still runs.</title>
+      <desc id="agents-desc">Two profile cards side by side. On the left, harness claude-code: Claude Code, or a launcher that runs it. An arrow leads down to its rows in Irie’s list: working, needs you in red, and done with a green tick. On the right, harness generic: any program that runs in a terminal. An arrow leads down to its rows: working, then exited once the program ends, and no needs you or done.</desc>
+
+      <!-- The two harnesses -->
+      <rect x="8.75" y="8.75" width="186.5" height="90.5" rx="12" class="s-card s-line" stroke-width="1.5"/>
+      <rect x="204.75" y="8.75" width="186.5" height="90.5" rx="12" class="s-card s-line" stroke-width="1.5"/>
+      <text x="22" y="36" font-size="15" font-weight="700" class="mono s-ink">claude-code</text>
+      <text x="218" y="36" font-size="15" font-weight="700" class="mono s-ink">generic</text>
+      <g font-size="14" class="s-soft">
+        <text x="22" y="62">Claude Code, or a</text>
+        <text x="22" y="82">launcher that runs it</text>
+        <text x="218" y="62">any program that</text>
+        <text x="218" y="82">runs in a terminal</text>
+      </g>
+
+      <!-- Down to their rows -->
+      <path d="M102 104V126M298 104V126" fill="none" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M96 124l6 10l6-10z M292 124l6 10l6-10z" class="s-ink"/>
+
+      <!-- Their rows in Irie's list -->
+      <rect x="8.75" y="140.75" width="186.5" height="146.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+      <rect x="204.75" y="140.75" width="186.5" height="146.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+      <g class="mono" font-size="15">
+        <use href="#g-half" x="30" y="178" class="t-ink"/><text x="46" y="183" class="t-ink">working</text>
+        <use href="#g-dot" x="30" y="218" class="t-red"/><text x="46" y="223" class="t-red">needs you</text>
+        <use href="#g-check" x="30" y="258" class="t-green"/><text x="46" y="263" class="t-ink">done</text>
+
+        <use href="#g-half" x="226" y="178" class="t-ink"/><text x="242" y="183" class="t-ink">working</text>
+        <use href="#g-point" x="226" y="218" class="t-faint"/><text x="242" y="223" class="t-faint">exited</text>
+        <text x="226" y="263" font-size="13" class="t-faint">no needs you or done</text>
+      </g>
+    </svg>
+    <figcaption>Claude Code tells Irie how it’s doing, so its rows show working, needs you and done. Any other program shows only whether it’s still running.</figcaption>
+  </figure>
+
+  <p>Claude Code is the agent Irie starts by default, but a <dfn>profile</dfn>, the recipe Irie starts an agent from, can start any agent that runs in a <dfn>terminal</dfn>. That includes other companies’ agents, and one your own team built.</p>
+  <p>The program behind an agent is its <dfn>harness</dfn>: it turns an AI <dfn>model</dfn> into a coding agent. A profile’s <code>harness</code> setting tells Irie which kind it starts: <code>claude-code</code> or <code>generic</code>.</p>
+
+  <h2 id="sees">What Irie sees of each</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col"></th><th scope="col"><code>claude-code</code></th><th scope="col"><code>generic</code></th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Start it on a task, in a folder of its own</th><td>Yes</td><td>Yes</td></tr>
+        <tr><th scope="row">Working, needs you and done</th><td>Yes, from its <dfn>hooks</dfn>: small commands it runs at each step</td><td>No: working until it ends</td></tr>
+        <tr><th scope="row">Its conversation in plain words</th><td>Yes</td><td>No: its terminal only</td></tr>
+        <tr><th scope="row">Cost and tokens</th><td>Yes</td><td>The <code>cost</code> text you give it</td></tr>
+        <tr><th scope="row">Freeze, promote, rename and close</th><td>Yes</td><td>Yes</td></tr>
+        <tr><th scope="row">Reopen after closing</th><td>Carries the conversation on</td><td>Starts the task again</td></tr>
+        <tr><th scope="row">Chosen by <code>+auto</code>, and handed subtasks</th><td>Yes</td><td>Leave it out: see below</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="generic">Any program</h2>
+  <p>A profile with <code>harness = "generic"</code> starts any program that runs in a terminal. This one starts aider, an open-source coding agent:</p>
+<pre><code>[profiles.aider]
+harness = "generic"
+command = "aider"
+args = ["--model", "ollama_chat/gpt-oss:20b"]
+task = "paste"
+cost = "free, on this computer"</code></pre>
+  <ul class="rules">
+    <li><code>command</code> is the program, and is required. Its own flags go in <code>args</code>; <code>model</code>, <code>effort</code> and <code>permission_mode</code> aren’t allowed here.</li>
+    <li><code>task = "arg"</code>, the default, adds the task as the program’s last argument.</li>
+    <li><code>task = "paste"</code> types the task into the program once it’s running, then presses Enter. It suits programs that take their task at a prompt.</li>
+    <li><code>env</code> adds settings to the program’s environment, such as which account to use.</li>
+    <li><code>cost</code> is what Irie’s list says it costs, in your own words.</li>
+  </ul>
+  <p>Irie can’t see a generic agent’s steps, so its row shows working until the program ends. Look in on it to see whether it needs you.</p>
+  <p>Leave generic profiles out of <code>route.profiles</code>. Irie can’t tell when their work is done, so it would learn how well they do only from your ratings, and a subtask handed to one would wait until its time ran out.</p>
+
+  <h2 id="your-own">Your team’s own agent</h2>
+  <p>Many companies wrap Claude Code in a <dfn>launcher</dfn>: a program of their own that adds the company’s settings, sign-in or safety checks, then starts Claude Code. Others build an agent of their own, and both run in Irie.</p>
+  <ul class="rules">
+    <li><strong>If it starts Claude Code,</strong> use <code>harness = "claude-code"</code> with your launcher as the <code>command</code>. Irie then sees everything it sees of Claude Code: <a href="#launcher">A launcher that starts Claude Code</a>.</li>
+    <li><strong>If it’s a program of its own,</strong> use <code>harness = "generic"</code>, as in <a href="#generic">Any program</a>. Irie starts it, keeps it running and shows whether it still runs.</li>
+    <li><strong>To see more of a program of its own,</strong> Irie needs an adapter for it: <a href="#adapter">Fuller support</a>.</li>
+  </ul>
+
+  <h3 id="launcher">A launcher that starts Claude Code</h3>
+  <p>Point <code>command</code> at your launcher, and put anything that has to come before Claude Code’s own flags in <code>args</code>. Irie adds Claude Code’s flags after them, as it would for <code>claude</code>.</p>
+<pre><code>[profiles.work]
+harness = "claude-code"
+command = "/opt/example/bin/agent-launch"
+args = ["claude"]
+model = "claude-opus-5-5"</code></pre>
+  <p>A task on <code>+work</code> then runs:</p>
+<pre><code>/opt/example/bin/agent-launch claude --model claude-opus-5-5 \
+  --settings &lt;file&gt; --session-id &lt;id&gt; --name &lt;name&gt; &lt;task&gt;</code></pre>
+  <p>For Irie to follow the agent, the launcher has to:</p>
+  <ul class="rules">
+    <li>Pass every flag and the task on to Claude Code unchanged. <code>--settings</code> carries Irie’s hooks for this one session.</li>
+    <li>Keep <code>IRIE_SESSION</code>, <code>IRIE_SOCKET</code> and <code>IRIE_BIN</code> in Claude Code’s environment. The hooks use them to find Irie.</li>
+    <li>Run Claude Code in the same terminal, in front, and end when it ends. Replacing itself with Claude Code, as the shell’s <code>exec</code> does, is simplest.</li>
+    <li>If it runs Claude Code in a sandbox, let it run <code>irie</code>, at the path in <code>IRIE_BIN</code>, and open Irie’s socket, at the path in <code>IRIE_SOCKET</code>.</li>
+    <li>Pass <code>--version</code> and <code>--help</code> on to Claude Code. Irie runs the launcher with each, once for each build of it and for 5 seconds at most, to learn which flags Claude Code takes.</li>
+  </ul>
+  <p>If Irie’s hooks can’t reach it, the agent still works, but its row turns <a href="troubleshooting.html#stalled">stalled</a> after 30 seconds. Without <code>--version</code> and <code>--help</code>, Irie leaves out <code>--name</code>, and the row says why.</p>
+  <p>If your company’s own Claude Code settings allow only the hooks it deploys, Irie’s hooks don’t run at all: see <a href="work.html#managed">Irie at work</a>.</p>
+
+  <h3 id="own-program">A program of its own</h3>
+  <p>An agent your team built that doesn’t start Claude Code runs as a generic profile:</p>
+<pre><code>[profiles.house]
+harness = "generic"
+command = "example-agent"
+args = ["--model", "claude-sonnet-5-5"]
+task = "paste"
+cost = "on the company account"</code></pre>
+  <p>Then <code>+house fix the cart total</code> runs a task on it, and every rule of <a href="#generic">Any program</a> applies.</p>
+
+  <h2 id="try">Try a new profile</h2>
+  <p>Check the settings file, then start a small task and wait for it:</p>
+<pre><code><span class="prompt">$ </span>irie config print
+<span class="prompt">$ </span>irie ctl spawn --wait +work say hello, then stop</code></pre>
+  <p>With <code>--wait</code>, the command fails and says why if the agent fails, stalls or ends before it gets going. The session’s <code>spec.json</code> shows exactly what Irie ran:</p>
+<pre><code>cat ~/.local/state/irie/sessions/&lt;id&gt;/spec.json</code></pre>
+  <p>For any other red row, <a href="troubleshooting.html">Troubleshooting</a> says what it means.</p>
+
+  <h2 id="adapter">Fuller support</h2>
+  <p>An <dfn>adapter</dfn> is code in Irie that starts one kind of agent and reads its own events. Claude Code’s is the only one so far; Codex CLI’s comes first after version 1, then others. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></p>
+  <p>An adapter can only show what the agent reports, so it needs the agent to offer these:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">For Irie to show</th><th scope="col">The agent needs</th></tr></thead>
+      <tbody>
+        <tr><td>Working, needs you and done</td><td>Hooks, a plugin or a stream of events that says when it works, asks and finishes</td></tr>
+        <tr><td>A pause at its next step <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></td><td>A hook before each step that can wait, and can pass the agent a message</td></tr>
+        <tr><td>Each helper it starts <a class="tag" href="roadmap.html#m8" data-m="8">Planned</a></td><td>Events for its helpers, with an id each, and a record of what each did</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Irie is built only from public documentation. An adapter for an agent whose docs are public can come to Irie itself: open an issue first, as <a href="contribute.html">Contribute</a> says.</p>
+  <p>An agent whose docs are private needs its adapter in your own copy of Irie, which the Apache 2.0 license allows. The interface an adapter fills in is in <a href="https://github.com/irie-hq/irie/blob/main/internal/harness/harness.go"><code>internal/harness/harness.go</code></a>, and Claude Code’s adapter, in <code>internal/harness/claude/</code>, shows one filled in.</p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="themes.html">Themes</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="agents.html" aria-current="page">Other agents</a></li>
+      <li><a href="themes.html">Themes</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="work.html">Irie at work</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>
