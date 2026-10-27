@@ -179,7 +179,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 - `subscribe` replies once, then streams frames until the client closes:
   - `{"t":"snapshot","sessions":[…],"header":{…}}`
   - `{"t":"upsert","session":{…}}` and `{"t":"remove","id":"…"}`
-  - `{"t":"history","undo":"…","redo":"…"}`
+  - `{"t":"history","undo":"…","redo":"…"}`: the labels of what `undo` and `redo` would do next, empty when nothing (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
   - `{"t":"header","header":{…}}` when the plan's use or the machine's memory changes (§6.3). A snapshot carries the header too. The header also says `red_on_done` when `ui.red_on_done` is set, so every sidebar draws done in red (§5.3).
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
@@ -206,7 +206,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `rename` | `session`, `name` | `session`, with the name it got: whitespace and control characters made single spaces, cut at 200 bytes, numbered (`-2`) when another row has it. Refuses an empty name with `bad_args`. Records `ui.renamed` | M4 |
 | `park`, `unpark` | `session` | none | M4 |
 | `close`, `reopen` | `session`; for `reopen` it may be left out, which reopens the session closed last | none; `reopen`: `session` | M4 (§4.5) |
-| `undo`, `redo` | none | `label` | M4 |
+| `undo`, `redo` | none; to answer a question, `choice_id` and `choice` (its option's key) | `label`, `did`: `undone`, `redone`, `settled`, `skipped`, `cancelled` or `asked`; when `asked`, `choice`: `id`, `question`, `options[]` (`key`, `label`, `detail`, `recommended?`). Nothing to do is `not_found`; an answer to a question that no longer fits the history's head is `stale` (§4.5) | M4 |
 | `pause`, `resume` | `session` or `all`; `scope`: `main`, `sub:<id>` or `tree` | none | M5 |
 | `freeze`, `thaw` | `session` or `all` | `sessions[]`, those it froze or thawed | M6 |
 | `priority` | `session`, `level` (0 or 1), `reason?` | none. Level 1 also puts the session at the top of the list | M7 |
@@ -370,7 +370,7 @@ type Harness interface {
 The sidebar is a terminal program that reads like a web page, and like the Mac app: rounded cards with padding, a tree of repos, plain words, and a mouse that lights up what it points at. It paints every cell in the palette of `ui.theme` (§5.3, §5.5).
 
 **Layout, from top to bottom:**
-- **Header** (pinned, 1–2 lines): a title bar on the palette's ground, a shade deeper than the sidebar: `Irie` and its tagline while there is room, then counts (`◐3 working  ●1 needs you  ✓2 to verify  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). Needs you counts every red row (needs you, stalled and failed), paused counts pausing too, and a zero count is faint. When the core is unreachable the header says `core offline` and the UI retries every second.
+- **Header** (pinned, 1–2 lines): a title bar on the palette's ground, a shade deeper than the sidebar: `Irie` and its tagline while there is room, then counts (`◐3 working  ●1 needs you  ✓2 to verify  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then, on a second line from 10 rows, the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`), each cut to its share of the width when narrow. Needs you counts every red row (needs you, stalled and failed), paused counts pausing too, and a zero count is faint. When the core is unreachable the header says `core offline` and the UI retries every second.
 - **Tabs** (1 line, from 10 rows): `State │ Repo`, the view in use on the selection fill. A click on a tab, or `v`, switches. The sidebar opens in Repo.
 - **List:** scrolls. Groups of sessions, each under a header that folds it.
 - **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), what it costs and its name, and its folder on the right while that leaves the rest a third of the line; or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail. From 24 rows it is a **details card**: a rounded card with the selected session's name in its border, then its state with what it costs and how it was routed, its detail, its exact call, and its branch and folder. An error or a message takes the card's four lines.
@@ -397,7 +397,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | `r` | Rename: the command bar opens with `:rename` and the row's name, to edit; Enter renames it, Esc keeps the name. The name survives restarts of the sidebar and the core (M4) |
 | `z` | Park or unpark; `Z` collapses or expands Parked (M4) |
 | `x` `x` | Close the session (M4, §4.5). The first press says what it closes; any other key cancels. `:close` closes it at once, and `:reopen` brings back the session closed last |
-| `u`, `U` | Undo, redo (M4) |
+| `u`, `U` | Undo, redo (M4, §4.5). When the core asks first, a small menu covers the bottom of the list, in a box edged in the accent where it fits, with only whole cards above it: the question, then numbered options, the recommended one first and marked so, the highlighted one on the selection fill with an edge; `1`–`4` or the arrows and Enter pick, Esc cancels, and the status strip says what the highlighted option will do |
 | `p`, `P` | Pause or resume this agent, or the whole tree (M5) |
 | `f`, `F` | Freeze or thaw this session, or all (M6) |
 | `!`, `n` | Toggle priority; write a note (M7) |
@@ -574,9 +574,28 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 
 **Rules.**
 - The history is linear and 100 actions deep, kept in `state.json`.
-- A new action clears the redo stack.
+- A new action clears the redo stack. Undo and redo record nothing and clear nothing; one runs at a time.
 - `u` undoes and `U` redoes. The header shows the labels of both.
 - Not undoable: the agents' own edits (use the agent's own rewind) and worktree contents.
+- Steps name sessions by id, never by row. A step that fails changes nothing, the history included. A step whose undo or redo finishes after a new action came in leaves the history, which stays linear.
+
+**Wired now.** Spawn (its label `start "name"`), close and reopen, the last two whether done with `x x`, `:close`, `:reopen` or the socket. A subtask an agent delegates (§6.4) is the agent's doing and not recorded; nor are moves (§4.6), tool sessions, or the closes `spawn.close_when_done` makes, which `reopen` and the review dock bring back. Rename, freeze, priority and reorder are not recorded yet; they, park, pause and note plug in as below.
+
+**Adding an action.** A kind registers once (`registerAction` in `internal/core/undo.go`) with the verb of its label and two effects, undo and redo. An effect is a check, which lists what makes it uncertain now, and a do, which reuses the op's own path. The op records a step once it has succeeded (`recordAction`); the history, `state.json`, the questions, the journal and the header follow. A step keeps what its kind needs in `data`, such as when a close happened.
+
+**When undo is not sure, it asks.** Nothing changes until the user picks. The core's reply asks a question with two to four options in plain words: the safest first and marked recommended, then always "Skip this one (drop it from history)" and "Cancel (change nothing)". "Go ahead" (`apply`) does it anyway, and "move on" (`settle`) counts the step as done because things are already that way. A question's id names the step, the direction and the problems accepted so far, so an answer after the history moved is refused with `stale`; one problem is asked at a time.
+
+| Case | Asks | Recommended |
+|---|---|---|
+| Close a session that is at work or waits for you, frozen or not | Close it now | Cancel |
+| Close a session renamed since (or reopened under another name) | Close it anyway | Close it anyway |
+| Close a session that is closed already, or reopen one that is open | Move on | Move on |
+| Reopen a session whose name another session took | Reopen it as `name-2` | Reopen it |
+| Reopen a session closed again since the step | Reopen it anyway | Reopen it |
+| Reopen a session that never got going, so its task starts again under a new conversation | Start its task again | Start it again; Cancel when its harness cannot resume, since that agent would forget its last run |
+| The session is gone, its folder, profile, spec or task is gone, or this version does not know the step's kind | Only skip or cancel | Skip |
+
+Reopening still waits for the old agent to end; that is never a question. Each undo and redo is journalled as `ui.undo` or `ui.redo` (§5.2).
 
 **Close and reopen.**
 - **Close.** In one command list the pane swaps out of the slot, if it is shown, and its `@irie_role` becomes `closing`, so the row goes at once and a restarted core still finishes the job. Then everything the host runs gets SIGCONT, in case the session is frozen, the host last, and SIGTERM goes to the host, which passes it on (§4.3). A pane still alive 5 s later gets SIGKILL: the agent's process group, every process under the host, then the host. Then its window goes. The worktree, the folder and `sessions/<id>/` stay.
@@ -694,7 +713,8 @@ One JSON object per journal line and per `event` frame:
 | `freeze.on`, `freeze.off` | `pids`, `frozen_ms` | irie, host | none |
 | `priority.set` | `level`, `reason` | irie | none |
 | `note.queued`, `note.delivered` | `note`, `kind` | irie, shim | none |
-| `ui.renamed`, `ui.parked`, `ui.unparked`, `ui.undo`, `ui.redo` | `before`, `after` | irie | none |
+| `ui.renamed`, `ui.parked`, `ui.unparked` | `before`, `after` | irie | none |
+| `ui.undo`, `ui.redo` | `action` (its kind), `label`, `before` and `after` (the session `open`, `closed` or `gone`), `choice` when it answered a question (§4.5) | user | none |
 | `ui.closed`, `ui.reopened` | `name`; `ui.closed` also `created`, `vendor_id` and `resume`, which say how reopen brings it back (§4.5) | user | none |
 | `outcome.rated` | `verdict`: `good` or `bad` | user (M10, §6.4) | none |
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
@@ -736,7 +756,7 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 |---|---|---|
 | `$XDG_CONFIG_HOME/irie/config.toml` | User config (§5.5) | user |
 | `$XDG_STATE_HOME/irie/tmux.conf` | Generated tmux config | core |
-| `$XDG_STATE_HOME/irie/state.json` | Snapshot (atomic rename): per session the id, name, cwd, worktree, branch, profile, vendor ids, parked, priority and order; plus the undo and redo stacks | core |
+| `$XDG_STATE_HOME/irie/state.json` | Snapshot (atomic rename): `version` and the undo and redo stacks (§4.5); from later milestones per session the id, name, cwd, worktree, branch, profile, vendor ids, parked, priority and order. Keys a version does not know are kept; a file without the stacks is an empty history, and one that is not JSON is moved to `state.json.bad` | core |
 | `$XDG_STATE_HOME/irie/journal/YYYY-MM-DD.ndjson` | Event envelopes, kept `journal.keep_days` days | core |
 | `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json` (the host's pid, its agent's, and that it knows freeze), `freeze.json` (while the session is frozen), `note-<n>.md`, `status.json` (the last status line update, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
 | `$XDG_STATE_HOME/irie/local.json` | The model `irie setup local` chose for `+local`, and what models took in memory once loaded (§6.3) | core |

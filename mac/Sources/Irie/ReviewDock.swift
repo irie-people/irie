@@ -98,7 +98,8 @@ struct ReviewDock: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
             .strokeBorder(fresh > 0 ? Look.doneColor.opacity(0.55) : Color.clear, lineWidth: 1))
         .padding(.horizontal, 10)
-        .padding(.top, 6)
+        // Clear of the footer's panel under it.
+        .padding(.vertical, 6)
     }
 
     private func row(_ c: ClosedSession, now: Date) -> some View {

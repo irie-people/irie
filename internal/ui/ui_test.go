@@ -43,6 +43,8 @@ type fakeBackend struct {
 	closes    []string     // the ids Close was given
 	reopens   []string     // the ids Reopen was given
 	reopenErr error
+	undos     []string // dir choice_id choice, each Undo and Redo
+	undoReply func(dir string, a ipc.UndoArgs) (ipc.UndoResult, error)
 }
 
 func (f *fakeBackend) Rate(id, verdict string) error {
@@ -746,11 +748,14 @@ func TestTabsAndTheBoxNeedRoom(t *testing.T) {
 	}
 	m, _ = newModel(t, 34, 10, 3)
 	lines := screen(t, m)
-	if lines[1] != "  State │ Repo                    " || !strings.HasPrefix(lines[9], " ╰") || !strings.HasPrefix(lines[7], " ╭") {
-		t.Errorf("height 10: no tabs under the header or no box around the bar:\n%s", strings.Join(lines, "\n"))
+	// The header has its second line, what undo and redo would do, above
+	// the tabs.
+	top := m.listTop()
+	if !strings.Contains(lines[1], "↶") || lines[2] != "  State │ Repo                    " || !strings.HasPrefix(lines[9], " ╰") || !strings.HasPrefix(lines[7], " ╭") {
+		t.Errorf("height 10: no history line and tabs under the header, or no box around the bar:\n%s", strings.Join(lines, "\n"))
 	}
-	if !strings.Contains(lines[2], "Not in a repo") || !strings.Contains(lines[3], "task-000") {
-		t.Errorf("height 10: lines 2 and 3 = %q, %q, want the group and its first row", lines[2], lines[3])
+	if !strings.Contains(lines[top], "Not in a repo") || !strings.Contains(lines[top+1], "task-000") {
+		t.Errorf("height 10: lines %d and %d = %q, %q, want the group and its first row", top, top+1, lines[top], lines[top+1])
 	}
 }
 

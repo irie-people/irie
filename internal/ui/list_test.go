@@ -144,22 +144,22 @@ func TestTheStateViewGroupsByState(t *testing.T) {
 	if m.view != byRepo || selectedName(m) != "fork-docs" {
 		t.Errorf("view %v, selection %s", m.view, selectedName(m))
 	}
-	// Clicks on the tabs.
-	lines := screen(t, m)
-	if lines[1] != "  State │ Repo                    " {
-		t.Fatalf("tab bar %q", lines[1])
+	// Clicks on the tabs, under the header's two lines.
+	lines, y := screen(t, m), m.tabsTop()
+	if y != 2 || lines[y] != "  State │ Repo                    " {
+		t.Fatalf("tab bar on line %d: %q", y, lines[y])
 	}
-	m = send(m, tea.MouseClickMsg{X: strings.Index(lines[1], "State"), Y: 1, Button: tea.MouseLeft})
+	m = send(m, tea.MouseClickMsg{X: strings.Index(lines[y], "State"), Y: y, Button: tea.MouseLeft})
 	if m.view != byState {
 		t.Errorf("a click on State left the view at %v", m.view)
 	}
-	m = send(m, tea.MouseClickMsg{X: strings.Index(lines[1], "Repo") - 2, Y: 1, Button: tea.MouseLeft})
+	m = send(m, tea.MouseClickMsg{X: strings.Index(lines[y], "Repo") - 2, Y: y, Button: tea.MouseLeft})
 	if m.view != byRepo {
 		t.Errorf("a click on Repo left the view at %v", m.view)
 	}
 	// The tab in use is on the selection fill.
-	raw := strings.Split(m.View().Content, "\n")[1]
-	if c := cells(raw); c[strings.Index(lines[1], "State")].bg != rgb(m.pal.sidebar) || c[11].bg != rgb(m.pal.selection) {
+	raw := strings.Split(m.View().Content, "\n")[y]
+	if c := cells(raw); c[strings.Index(lines[y], "State")].bg != rgb(m.pal.sidebar) || c[11].bg != rgb(m.pal.selection) {
 		t.Errorf("tabs: State on %s, Repo on %s", c[2].bg, c[11].bg)
 	}
 }
@@ -242,8 +242,8 @@ func TestHoverLightsWhatIsUnderThePointer(t *testing.T) {
 	if m.hover != "repo:/home/alice/code/irie" {
 		t.Errorf("over a header: hover %q", m.hover)
 	}
-	m = send(m, tea.MouseMotionMsg{X: 3, Y: 1})
-	if raw := strings.Split(m.View().Content, "\n")[1]; m.hover != tabKey(byState) || cells(raw)[3].bg != rgb(m.pal.hover) {
+	m = send(m, tea.MouseMotionMsg{X: 3, Y: m.tabsTop()})
+	if raw := strings.Split(m.View().Content, "\n")[m.tabsTop()]; m.hover != tabKey(byState) || cells(raw)[3].bg != rgb(m.pal.hover) {
 		t.Errorf("over the State tab: hover %q", m.hover)
 	}
 	m = send(m, tea.MouseMotionMsg{X: 3, Y: 0})
@@ -296,8 +296,8 @@ func TestSmallPanesFallBackToRows(t *testing.T) {
 		w, h    int
 		compact bool
 	}{
-		{34, 30, false}, {34, 14, false}, {24, 30, false},
-		{34, 13, true}, {23, 30, true}, {34, 8, true}, {34, 5, true}, {34, 3, true},
+		{34, 30, false}, {34, 15, false}, {24, 30, false},
+		{34, 14, true}, {23, 30, true}, {34, 8, true}, {34, 5, true}, {34, 3, true},
 	} {
 		m := repoModel(t, c.w, c.h)
 		if m.compact() != c.compact {
@@ -324,7 +324,7 @@ func TestSmallPanesFallBackToRows(t *testing.T) {
 			}
 		}
 	}
-	m := repoModel(t, 34, 14)
+	m := repoModel(t, 34, 15)
 	m = send(m, keyMsg("tab"))
 	for range 7 {
 		m = send(m, keyMsg("ctrl+j"))
