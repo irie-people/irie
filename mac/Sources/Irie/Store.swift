@@ -31,6 +31,18 @@ final class Store: ObservableObject {
     weak var terminalView: NSView?
     /// Whether the terminal has the keyboard, which brightens its frame.
     @Published var terminalHasKeys = false
+    /// The right side shows the live terminal instead of the conversation
+    /// (View > Terminal, ⌥⌘T); remembered across launches.
+    @Published var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
+        didSet {
+            UserDefaults.standard.set(showTerminal, forKey: "showTerminal")
+            if showTerminal { focusTerminal += 1 } else { focusMessage += 1 }
+        }
+    }
+    /// Bumped when the conversation's message box should take the keyboard.
+    @Published var focusMessage = 0
+    /// Whether the message box has the keyboard.
+    var messageHasKeys = false
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     @Published var outside: [OutsideSession] = []
@@ -166,7 +178,9 @@ final class Store: ObservableObject {
 
     /// Moves the keyboard between the session list and the terminal.
     func toggleFocus() {
-        if let t = terminalView, t.window?.firstResponder === t {
+        if !showTerminal {
+            if messageHasKeys { focusSidebar += 1 } else { focusMessage += 1 }
+        } else if let t = terminalView, t.window?.firstResponder === t {
             focusSidebar += 1
         } else {
             focusTerminal += 1
@@ -192,7 +206,8 @@ final class Store: ObservableObject {
         Task {
             do {
                 _ = try await client.call("show", ShowArgs(session: id, focus: focus), as: Empty.self)
-                if focus { focusTerminal += 1 }
+                // The conversation's message box, or the terminal when it shows.
+                if focus { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
             } catch {
                 say("Couldn’t show it: \(error.localizedDescription)", error: true)
             }

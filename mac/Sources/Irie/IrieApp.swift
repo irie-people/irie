@@ -11,6 +11,10 @@ enum Launch {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { Snapshot.run(into: dir) }
         }
+        if let i = args.firstIndex(of: "--render-conversation") {
+            let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
+            MainActor.assumeIsolated { ConversationSnapshot.run(into: dir) }
+        }
         IrieApp.main()
     }
 }
@@ -57,6 +61,10 @@ struct IrieApp: App {
                     .keyboardShortcut("f")
             }
             CommandGroup(after: .toolbar) {
+                // The conversation, or the live terminal on the right.
+                Toggle("Terminal", isOn: $store.showTerminal)
+                    .keyboardShortcut("t", modifiers: [.command, .option])
+                Divider()
                 Button("Bigger Text") { store.setFontSize(store.fontSize + 1) }
                     .keyboardShortcut("=")
                 Button("Smaller Text") { store.setFontSize(store.fontSize - 1) }

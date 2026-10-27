@@ -13,7 +13,15 @@ struct TerminalArea: View {
             // Once attached, the terminal stays: tmux outlives a core
             // restart, so a flap gets a banner, not a reattach.
             if let a = store.attach {
+                // The terminal stays attached under the conversation, so
+                // ⌥⌘T flips between them at once.
                 terminal(a)
+                    .opacity(store.showTerminal ? 1 : 0)
+                    .allowsHitTesting(store.showTerminal)
+                    .accessibilityHidden(!store.showTerminal)
+                if !store.showTerminal {
+                    ConversationView()
+                }
             } else if case let .offline(why) = store.link {
                 Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
             } else {
