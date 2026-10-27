@@ -4,7 +4,7 @@ package ui
 // other terminals, listed after Irie's own rows under a header with their
 // count. Each is one line, busy or idle by its glyph alone, in the order
 // they started, so a change of state never moves one. The selected one's
-// details go in the status strip. m, or :move, moves an idle one in.
+// details go in the status strip. m m, or :move, moves an idle one in.
 
 import (
 	"errors"
@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -211,15 +212,33 @@ func (m *Model) open(focus bool) tea.Cmd {
 	return nil
 }
 
-// moveSelected is m on a row.
+// moveConfirm is how long a first m waits for the second.
+const moveConfirm = 5 * time.Second
+
+// moveSelected is m on a row. A move ends the outside copy and anything it
+// runs in the background, so it takes a second m, as closing takes x x
+// (DESIGN §4.1); any other key in between cancels it.
 func (m *Model) moveSelected() tea.Cmd {
 	o, ok := m.outsideAt(m.sel)
 	if !ok {
 		m.setStatus("m moves a session from Outside Irie into Irie", false)
 		return nil
 	}
+	if !o.Movable || m.moving {
+		m.confirming = ""
+		return m.moveCmd(o)
+	}
+	if m.confirming != o.Key() || m.now().Sub(m.confirmedAt) > moveConfirm {
+		m.confirming, m.confirmedAt = o.Key(), m.now()
+		m.setStatus("Press m again to move "+outsideLabel(o)+" into Irie. "+endsWarning, false)
+		return nil
+	}
+	m.confirming = ""
 	return m.moveCmd(o)
 }
+
+// endsWarning says what a move ends.
+const endsWarning = "Its copy outside Irie ends, and anything it runs in the background stops."
 
 // moveCmd asks the core to move o in, when it can move.
 func (m *Model) moveCmd(o ipc.OutsideSession) tea.Cmd {

@@ -59,3 +59,14 @@ func TestOutsideKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestAnUnknownStartIsLeftOut: a zero time would read as the year 1.
+func TestAnUnknownStartIsLeftOut(t *testing.T) {
+	b, err := json.Marshal(Frame{T: FrameOutside, Outside: []OutsideSession{{Kind: KindInteractive, Cwd: "/home/alice"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"t":"outside","outside":[{"kind":"interactive","cwd":"/home/alice"}]}`; string(b) != want {
+		t.Errorf("frame = %s, want %s", b, want)
+	}
+}

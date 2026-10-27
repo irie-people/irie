@@ -31,7 +31,7 @@ type OutsideSession struct {
 	State      string    `json:"state,omitempty"`       // a background session's state, such as working or done
 	PID        int       `json:"pid,omitempty"`
 	Cwd        string    `json:"cwd"`
-	Started    time.Time `json:"started"`
+	Started    time.Time `json:"started,omitzero"`  // left out when Claude Code gave none
 	Movable    bool      `json:"movable,omitempty"` // move would take it now
 	Why        string    `json:"why,omitempty"`     // why move would not take it now
 }

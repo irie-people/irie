@@ -25,9 +25,15 @@ var inherited = []string{
 	"CLAUDE_CODE_MESSAGING_TOKEN=secret",
 	"CLAUDE_CODE_BRIDGE_SESSION_ID=session_01abc",
 	"CLAUDE_CODE_REMOTE_SESSION_ID=session_01def",
+	"CLAUDE_EFFORT=max",
 	"ACMETERM_PANEL_ID=panel-7",
 	"ACMETERM_SURFACE_ID=surface-3",
 	"ACMETERM_SOCKET_CAPABILITY=token",
+	"ACMETERM_WORKSPACE_ID=workspace-2",
+	"ACMETERM_TAB_ID=tab-5",
+	"ACMETERM_SOCKET_PATH=/tmp/acmeterm.sock",
+	"ACMETERM_THEME=dark",
+	"OTHERTERM_WORKSPACE_ID=kept",
 	"WINDOWID=88080391",
 }
 
@@ -42,7 +48,9 @@ func names(env []string) []string {
 }
 
 func TestWithoutIdentityDropsAnotherSessionsAndTerminalsMarks(t *testing.T) {
-	want := []string{"CLAUDE_CODE_FORCE_SESSION_PERSISTENCE", "CLAUDE_CODE_USE_BEDROCK", "HOME", "PATH", "SSH_AUTH_SOCK"}
+	// The terminal's other ids and its socket go with its pane's, while its
+	// settings and another terminal's ids stay.
+	want := []string{"ACMETERM_THEME", "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE", "CLAUDE_CODE_USE_BEDROCK", "HOME", "OTHERTERM_WORKSPACE_ID", "PATH", "SSH_AUTH_SOCK"}
 	if got := names(WithoutIdentity(inherited)); !slices.Equal(got, want) {
 		t.Errorf("kept %v, want %v", got, want)
 	}
@@ -51,7 +59,7 @@ func TestWithoutIdentityDropsAnotherSessionsAndTerminalsMarks(t *testing.T) {
 func TestTheAgentsEnvironmentLeavesTheMarksOut(t *testing.T) {
 	env := environ(inherited, map[string]string{"IRIE_SESSION": "s0k3j9x2m4a7q"}, []string{"TMUX"}, "/home/alice/code")
 	for _, n := range names(env) {
-		if foreign(n) {
+		if foreign(n) || strings.HasPrefix(n, "ACMETERM_") && n != "ACMETERM_THEME" {
 			t.Errorf("the agent inherits %s", n)
 		}
 	}

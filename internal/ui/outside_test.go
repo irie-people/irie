@@ -156,6 +156,7 @@ func TestMMovesAnIdleOutsideSessionIn(t *testing.T) {
 	}
 	m = send(m, keyMsg("up"))
 	m = send(m, keyMsg("m"))
+	m = send(m, keyMsg("m"))
 	if want := []string{"00000000-0000-4000-8000-000000000000"}; !reflect.DeepEqual(b.moves, want) {
 		t.Fatalf("moves = %v, want %v", b.moves, want)
 	}
@@ -176,6 +177,7 @@ func TestMMovesAnIdleOutsideSessionIn(t *testing.T) {
 	b.moveErr = errors.New("outside-00 cannot move now: it is busy")
 	m = send(m, keyMsg("esc")) // with no Irie rows the bar has focus
 	m = send(m, keyMsg("down"))
+	m = send(m, keyMsg("m"))
 	m = send(m, keyMsg("m"))
 	if !m.statusErr || !strings.Contains(m.status, "cannot move now") || m.moving {
 		t.Errorf("status %q (error %v), moving %v", m.status, m.statusErr, m.moving)
@@ -283,5 +285,49 @@ func TestOutsideNamesCannotSteerTheTerminal(t *testing.T) {
 		if strings.Contains(l, "\x1b[2J") || strings.Contains(l, "\x1b]0;") {
 			t.Errorf("a control sequence from an outside session reached the screen: %q", l)
 		}
+	}
+}
+
+// TestOneMMovesNothing: a move ends the outside copy, so like x x for
+// close it takes a second m, which any other key in between cancels.
+func TestOneMMovesNothing(t *testing.T) {
+	clock := now
+	b := &fakeBackend{}
+	m := New(b, Options{Now: func() time.Time { return clock }, Home: "/home/alice"})
+	m = send(m, tea.WindowSizeMsg{Width: 120, Height: 24})
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: sessions(1), Header: &ipc.Header{}}})
+	m = send(m, outsideFrame(outsideSessions(3), ""))
+	m = send(m, keyMsg("end")) // outside-02, idle
+
+	m = send(m, keyMsg("m"))
+	if len(b.moves) != 0 {
+		t.Fatalf("one m moved %v", b.moves)
+	}
+	if !strings.Contains(m.status, "Press m again to move outside-02 into Irie") || !strings.Contains(m.status, "background stops") {
+		t.Errorf("status = %q", m.status)
+	}
+	// Another key cancels, so the next m asks again.
+	m = send(m, keyMsg("up"))
+	m = send(m, keyMsg("down"))
+	m = send(m, keyMsg("m"))
+	if len(b.moves) != 0 || !strings.Contains(m.status, "Press m again") {
+		t.Fatalf("m after another key: moves %v, status %q", b.moves, m.status)
+	}
+	// A second m that comes too late asks again too.
+	clock = clock.Add(6 * time.Second)
+	m = send(m, keyMsg("m"))
+	if len(b.moves) != 0 || !strings.Contains(m.status, "Press m again") {
+		t.Fatalf("a late m: moves %v, status %q", b.moves, m.status)
+	}
+	clock = clock.Add(time.Second)
+	m = send(m, keyMsg("m"))
+	if want := []string{"00000000-0000-4000-8000-000000000002"}; !reflect.DeepEqual(b.moves, want) {
+		t.Errorf("m m: moves %v, want %v", b.moves, want)
+	}
+	// A busy session refuses at the first m.
+	m = send(m, keyMsg("up"))
+	m = send(m, keyMsg("m"))
+	if !m.statusErr || !strings.Contains(m.status, "busy") || len(b.moves) != 1 {
+		t.Errorf("m on a busy row: status %q, moves %v", m.status, b.moves)
 	}
 }

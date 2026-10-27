@@ -211,6 +211,8 @@ var identity = []string{
 	"CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID",
 	"CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
 	"CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID",
+	// The effort of the session that started the process, not a setting.
+	"CLAUDE_EFFORT",
 	// The X window of the terminal (tmux(1), update-environment).
 	"WINDOWID",
 }
@@ -234,13 +236,40 @@ func foreign(name string) bool {
 	return false
 }
 
+// terminals returns the prefixes of env's terminal pane variables, such as
+// ACMETERM for ACMETERM_PANEL_ID.
+func terminals(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		k, _, _ := strings.Cut(kv, "=")
+		for _, s := range paneSuffixes {
+			if p, ok := strings.CutSuffix(k, s); ok && p != "" && !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// sameTerminal reports whether name is another id or the socket of one of
+// those terminals, such as ACMETERM_WORKSPACE_ID or ACMETERM_SOCKET_PATH.
+func sameTerminal(name string, terms []string) bool {
+	for _, p := range terms {
+		if rest, ok := strings.CutPrefix(name, p+"_"); ok && (rest == "ID" || strings.HasSuffix(rest, "_ID") || strings.HasPrefix(rest, "SOCKET")) {
+			return true
+		}
+	}
+	return false
+}
+
 // WithoutIdentity returns env without the variables that tie a process to
 // the Claude Code session or terminal pane it came from. Everything else,
 // such as PATH, SSH_AUTH_SOCK or Claude Code's own settings, stays.
 func WithoutIdentity(env []string) []string {
+	terms := terminals(env)
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
-		if k, _, _ := strings.Cut(kv, "="); !foreign(k) {
+		if k, _, _ := strings.Cut(kv, "="); !foreign(k) && !sameTerminal(k, terms) {
 			out = append(out, kv)
 		}
 	}
@@ -258,10 +287,11 @@ func environ(base []string, extra map[string]string, unset []string, cwd string)
 	if cwd != "" {
 		set["PWD"] = cwd
 	}
+	terms := terminals(base)
 	env := make([]string, 0, len(base)+len(set))
 	for _, kv := range base {
 		k, _, _ := strings.Cut(kv, "=")
-		if _, ok := set[k]; !ok && !slices.Contains(unset, k) && !foreign(k) {
+		if _, ok := set[k]; !ok && !slices.Contains(unset, k) && !foreign(k) && !sameTerminal(k, terms) {
 			env = append(env, kv)
 		}
 	}

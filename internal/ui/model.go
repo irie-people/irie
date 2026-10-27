@@ -98,6 +98,8 @@ type Model struct {
 	outside        []ipc.OutsideSession // the Outside Irie group, after the sessions (outside.go)
 	outsideProblem string
 	moving         bool
+	confirming     string    // the outside session a first m asked to move
+	confirmedAt    time.Time // when it asked
 
 	focus     focusArea
 	bar       textarea.Model
@@ -383,6 +385,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft {
 			break
 		}
+		m.confirming = ""
 		if row := msg.Y - m.listTop(); row >= 0 && row < m.listHeight() {
 			if i := m.offset + row; i < m.rowCount() {
 				m.sel = i
@@ -405,6 +408,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.setStatus("", false)
+	if msg.String() != "m" {
+		m.confirming = "" // any other key cancels a move
+	}
 	switch msg.String() {
 	case "up", "k":
 		m.moveTo(m.sel - 1)
