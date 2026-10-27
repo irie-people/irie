@@ -35,7 +35,9 @@ struct SidebarView: View {
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
-            ToolbarItem(placement: .automatic) { TitleBar() }
+            ToolbarItem(placement: .navigation) { TitleName() }
+            // The primary action slot sits at the trailing edge of the title bar.
+            ToolbarItem(placement: .primaryAction) { Counts() }
         }
         // The toggle would crowd them out of the title bar; View >
         // Hide Sidebar (SidebarCommands) still hides it.
@@ -555,20 +557,17 @@ private struct Actions: View {
 
 /// A count per state, in the title bar above the sidebar. A count shows the
 /// first session, in list order, in that state.
-/// What the sidebar puts in the title bar: the sun over the waves, the name
-/// Irie and the counts, in one compact row beside the traffic lights.
-private struct TitleBar: View {
+/// What the sidebar puts in the title bar: the sun over the waves and the name
+/// Irie, beside the traffic lights. The counts sit at the trailing edge.
+private struct TitleName: View {
     var body: some View {
-        HStack(spacing: 6) {
-            HStack(spacing: 3) {
-                SunMark().frame(width: 14, height: 14)
-                Text("Irie").font(.system(size: 13, weight: .heavy, design: .rounded))
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Irie")
-            .accessibilityAddTraits(.isHeader)
-            Counts()
+        HStack(spacing: 3) {
+            SunMark().frame(width: 14, height: 14)
+            Text("Irie").font(.system(size: 13, weight: .heavy, design: .rounded))
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Irie")
+        .accessibilityAddTraits(.isHeader)
         // The title bar sizes the item to its content; a point either side
         // keeps the capsules' edges whole.
         .padding(.horizontal, 1)
@@ -580,7 +579,7 @@ private struct Counts: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 6) {
             switch store.link {
             case .online:
                 count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
