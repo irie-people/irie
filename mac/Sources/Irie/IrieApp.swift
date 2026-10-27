@@ -169,9 +169,12 @@ struct ContentView: View {
             // A new palette draws the sidebar afresh. The terminal area
             // follows the palette itself, so its terminal stays attached.
             let _ = Theme.use(theme)
+            // At its narrowest the sidebar still fits the title bar's row
+            // (sun, name and counts) beside the traffic lights; a row that
+            // doesn't fit goes into the toolbar's overflow menu.
             SidebarView()
                 .id(theme)
-                .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
+                .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
                 .toolbar {

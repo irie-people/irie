@@ -51,9 +51,15 @@ struct SidebarView: View {
         }
         .background(Theme.sidebar.ignoresSafeArea())
         .toolbar {
-            ToolbarItem(placement: .navigation) { TitleName() }
-            // The primary action slot sits at the trailing edge of the title bar.
-            ToolbarItem(placement: .primaryAction) { Counts() }
+            // Both over the sidebar, beside the traffic lights and above the
+            // find field: macOS sets automatic items in their own column's
+            // part of the bar, leading to trailing. A .navigation item goes
+            // to the detail column's bar, ahead of its title, and a
+            // .primaryAction one to the bar's leading edge. Short of room,
+            // the bar moves its trailing item into the overflow menu first,
+            // so the counts go before the name does.
+            ToolbarItem(placement: .automatic) { TitleName() }
+            ToolbarItem(placement: .automatic) { Counts() }
         }
         // The toggle would crowd them out of the title bar; View >
         // Hide Sidebar (SidebarCommands) still hides it.
@@ -797,10 +803,8 @@ private struct Actions: View {
     }
 }
 
-/// A count per state, in the title bar above the sidebar. A count shows the
-/// first session, in list order, in that state.
-/// What the sidebar puts in the title bar: the sun over the waves and the name
-/// Irie, beside the traffic lights. The counts sit at the trailing edge.
+/// What the sidebar puts first in the title bar, beside the traffic lights
+/// and above the find field: the sun over the waves and the name Irie.
 private struct TitleName: View {
     var body: some View {
         HStack(spacing: 3) {
@@ -810,15 +814,14 @@ private struct TitleName: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Irie")
         .accessibilityAddTraits(.isHeader)
-        // The title bar sizes the item to its content; a point either side
-        // keeps the capsules' edges whole.
-        .padding(.horizontal, 1)
-        // The gap to the count badges, which sit in their own toolbar item.
+        // The gap to the counts, which are an item of their own.
         .padding(.trailing, 6)
         .fixedSize()
     }
 }
 
+/// A count per state, in the title bar after Irie's name. A count shows the
+/// first session, in list order, in that state.
 private struct Counts: View {
     @EnvironmentObject private var store: Store
 
@@ -843,6 +846,10 @@ private struct Counts: View {
                 EmptyView()
             }
         }
+        // The title bar sizes the item to its content; a point either side
+        // keeps the capsules' edges whole.
+        .padding(.horizontal, 1)
+        .fixedSize()
     }
 
     /// A count of the sessions in these states, with the first state's mark,
