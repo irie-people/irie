@@ -97,6 +97,8 @@ type Spawn struct {
 	DefaultCwd     string        `toml:"default_cwd"` // "" = a new scratch dir per task
 	ReadyTimeout   time.Duration `toml:"ready_timeout"`
 	HideTmux       bool          `toml:"hide_tmux"`
+	CloseWhenDone  bool          `toml:"close_when_done"` // close a session once its turn ends and it stays quiet for close_delay
+	CloseDelay     time.Duration `toml:"close_delay"`     // how long a finished session waits before it closes
 }
 
 // Profile is a named launch recipe.
@@ -202,6 +204,7 @@ func Default() Config {
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
 			HideTmux:       true,
+			CloseDelay:     30 * time.Second,
 		},
 		Profiles: map[string]Profile{
 			"claude": {
@@ -514,6 +517,9 @@ func (c Config) Validate() error {
 	}
 	if c.Spawn.ReadyTimeout <= 0 {
 		bad("spawn.ready_timeout = %v: must be positive", c.Spawn.ReadyTimeout)
+	}
+	if c.Spawn.CloseDelay < 0 {
+		bad("spawn.close_delay = %v: must not be negative", c.Spawn.CloseDelay)
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.Profiles)) {
 		p := c.Profiles[name]

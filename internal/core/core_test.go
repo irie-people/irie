@@ -29,6 +29,7 @@ type agentConfig struct {
 	command      string            // the agent's command; the fake agent when empty
 	mode         string            // profiles.fake.permission_mode; auto when empty
 	readyTimeout string            // spawn.ready_timeout
+	spawn        string            // more of the [spawn] section, such as close_when_done
 	env          map[string]string // profiles.fake.env
 	extra        string            // more TOML, such as [repos] or more profiles
 	// The [local] section's body. By default it names an ollama that is not
@@ -55,6 +56,7 @@ func (a agentConfig) toml(fake string) string {
 	if a.readyTimeout != "" {
 		fmt.Fprintf(&b, "ready_timeout = %q\n", a.readyTimeout)
 	}
+	b.WriteString(a.spawn)
 	fmt.Fprintf(&b, "\n[profiles.fake]\ncommand = %q\nmodel = \"claude-opus-5-5\"\neffort = \"max\"\npermission_mode = %q\n", command, mode)
 	if len(a.env) > 0 {
 		var kv []string
