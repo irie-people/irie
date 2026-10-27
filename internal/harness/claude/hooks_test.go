@@ -108,6 +108,12 @@ func TestNormalize(t *testing.T) {
 		want{event.TurnEnded, "main", map[string]any{"message": "Done."}})
 	check(t, "Stop without a message", payload("Stop", `"stop_hook_active":false`),
 		want{event.TurnEnded, "main", map[string]any{}})
+	check(t, "Stop that a stop hook sent on", payload("Stop", `"stop_hook_active":true`, `"last_assistant_message":"Done."`, `"background_tasks":[]`, `"session_crons":[]`),
+		want{event.TurnEnded, "main", map[string]any{"message": "Done.", "stop_hook_active": true}})
+	check(t, "Stop with work in the background", payload("Stop", `"stop_hook_active":false`, `"last_assistant_message":"Waiting on the install."`,
+		`"background_tasks":[{"id":"task-001","type":"shell","status":"running","description":"Install the build\n  when the lock frees","command":"tools/live.sh"}]`,
+		`"session_crons":[{"id":"cron-001","schedule":"*/5 * * * *","recurring":true,"prompt":"check the build"}]`),
+		want{event.TurnEnded, "main", map[string]any{"message": "Waiting on the install.", "waiting": 2, "waiting_on": "Install the build when the lock frees"}})
 	check(t, "StopFailure", payload("StopFailure", `"error":"rate_limit"`, `"error_details":"429 Too Many Requests"`),
 		want{event.TurnFailed, "main", map[string]any{"error": "rate_limit"}})
 	check(t, "SubagentStart", payload("SubagentStart", inSub),
@@ -177,6 +183,9 @@ func TestRespond(t *testing.T) {
 		{"PreToolUse", harness.HookReply{}, ``},
 		{"PostToolUse", harness.HookReply{Deny: "no"}, ``},
 		{"Stop", note, ``},
+		{"Stop", harness.HookReply{Unfinished: "[Irie] The jot dog: 2 commits are not in live yet."},
+			`{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"[Irie] The jot dog: 2 commits are not in live yet."}}`},
+		{"SubagentStop", harness.HookReply{Unfinished: "x"}, ``},
 		{"Notification", note, ``},
 		{"PermissionRequest", note, ``},
 		{"SessionEnd", note, ``},

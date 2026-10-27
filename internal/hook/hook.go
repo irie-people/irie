@@ -28,6 +28,12 @@ const connectTimeout = 200 * time.Millisecond
 // nothing holds a call yet.
 var replyTimeout = 2 * time.Second
 
+// stopReplyTimeout bounds waiting for the answer to a Stop, for which the
+// jot dog reads the jot's worktree with git first (DESIGN §4.8). It stays
+// under the Stop hook's own timeout of 10 s, so a slow answer only lets the
+// turn end.
+var stopReplyTimeout = 8 * time.Second
+
 // maxPayload is the most the shim reads from stdin.
 const maxPayload = 256 << 20
 
@@ -67,7 +73,11 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	}
 
 	h := claude.Harness{}
-	r, ok := ask(socket, ipc.HookArgs{Harness: h.ID(), Session: session, Payload: payload})
+	wait := replyTimeout
+	if hookEvent == "Stop" {
+		wait = stopReplyTimeout
+	}
+	r, ok := ask(socket, ipc.HookArgs{Harness: h.ID(), Session: session, Payload: payload}, wait)
 	// A frozen session's agent waits at its tool calls, while the core is
 	// down too (DESIGN §4.3). It stops waiting if the agent, its parent, is
 	// gone.
@@ -82,19 +92,20 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	}
 	// Respond needs only the event's name to pick the dialect.
 	e := event.Event{Vendor: &event.Vendor{HookEvent: hookEvent}}
-	stdout.Write(h.Respond(e, harness.HookReply{Context: r.Context, Deny: r.Deny}))
+	stdout.Write(h.Respond(e, harness.HookReply{Context: r.Context, Deny: r.Deny, Unfinished: r.Unfinished}))
 	return 0
 }
 
-// ask forwards a hook event to the core and returns its reply.
-func ask(socket string, a ipc.HookArgs) (ipc.HookResult, bool) {
+// ask forwards a hook event to the core and returns its reply, waiting at
+// most wait for it.
+func ask(socket string, a ipc.HookArgs, wait time.Duration) (ipc.HookResult, bool) {
 	var r ipc.HookResult
 	c, err := ipc.Dial(socket, connectTimeout)
 	if err != nil {
 		return r, false
 	}
 	defer c.Close()
-	c.Timeout = replyTimeout
+	c.Timeout = wait
 	if err := c.Call(ipc.OpHook, a, &r); err != nil {
 		return r, false
 	}

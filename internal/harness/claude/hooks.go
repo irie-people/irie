@@ -30,6 +30,20 @@ func (p object) number(key string) (int, bool) {
 	return int(f), true
 }
 
+// flag reads a boolean, such as stop_hook_active.
+func (p object) flag(key string) bool {
+	var b bool
+	json.Unmarshal(p[key], &b)
+	return b
+}
+
+// count is how many entries an array has, such as background_tasks.
+func (p object) count(key string) int {
+	var a []json.RawMessage
+	json.Unmarshal(p[key], &a)
+	return len(a)
+}
+
 // length is a string's length before the shim cut it, in characters.
 func (p object) length(key string) (int, bool) {
 	var l map[string]float64
@@ -108,8 +122,24 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 			"message", p.str("message"), "server", p.str("mcp_server_name")))}, nil
 	case "Stop":
 		// The turn's last message is what a delegated session reports back
-		// (DESIGN §6.4).
-		return []event.Event{ev(event.TurnEnded, with(map[string]any{}, "message", p.str("last_assistant_message")))}, nil
+		// (DESIGN §6.4). The rest tells the jot dog whether the turn really
+		// ended (DESIGN §4.8): a stop hook already sent it on, or work it
+		// started in the background, or a wakeup it set, will wake it again.
+		data := with(map[string]any{}, "message", p.str("last_assistant_message"))
+		if p.flag("stop_hook_active") {
+			data["stop_hook_active"] = true
+		}
+		if n := p.count("background_tasks") + p.count("session_crons"); n > 0 {
+			data["waiting"] = n
+			var tasks []struct {
+				Description string `json:"description"`
+			}
+			json.Unmarshal(p["background_tasks"], &tasks)
+			if len(tasks) > 0 && tasks[0].Description != "" {
+				data["waiting_on"] = strings.Join(strings.Fields(tasks[0].Description), " ")
+			}
+		}
+		return []event.Event{ev(event.TurnEnded, data)}, nil
 	case "StopFailure":
 		return []event.Event{ev(event.TurnFailed, with(map[string]any{}, "error", p.str("error")))}, nil
 	case "SubagentStart":
@@ -173,9 +203,9 @@ type hookSpecific struct {
 }
 
 // Respond renders a reply as Claude Code's hook output (DESIGN §3.3): context
-// on the events that take it, and a deny on PreToolUse. It never allows a
-// call, which would bypass the user's permission rules, and it says nothing
-// on other events.
+// on the events that take it, a deny on PreToolUse, and on Stop what is left
+// to finish (DESIGN §4.8). It never allows a call, which would bypass the
+// user's permission rules, and it says nothing on other events.
 func (Harness) Respond(e event.Event, r harness.HookReply) []byte {
 	name := ""
 	if e.Vendor != nil {
@@ -190,6 +220,10 @@ func (Harness) Respond(e event.Event, r harness.HookReply) []byte {
 		out.AdditionalContext = r.Context
 	case "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart":
 		out.AdditionalContext = r.Context
+	case "Stop":
+		// Feedback, not an error: the turn goes on so the agent can finish
+		// what is left, within Claude Code's own loop guards.
+		out.AdditionalContext = r.Unfinished
 	default:
 		return nil
 	}

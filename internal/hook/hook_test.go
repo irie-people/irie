@@ -146,6 +146,26 @@ func TestPrintsTheReplyInClaudesDialect(t *testing.T) {
 	}
 }
 
+// TestAStopWaitsForTheJotDog: the core reads a jot's worktree before it
+// answers a Stop (DESIGN §4.8), so the shim waits longer for that answer
+// than for any other, and passes on what is left to finish.
+func TestAStopWaitsForTheJotDog(t *testing.T) {
+	c := &core{reply: ipc.HookResult{Unfinished: "[Irie] The jot dog: this task is not through yet."}, wait: 2500 * time.Millisecond}
+	sock := serve(t, c)
+	stop := `{"session_id":"6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f","hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"Done.","background_tasks":[],"session_crons":[]}`
+	out, _ := run(t, sock, stop)
+	if want := `{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"[Irie] The jot dog: this task is not through yet."}}`; strings.TrimSpace(out) != want {
+		t.Errorf("output = %q, want %s", out, want)
+	}
+	// Any other event gives up sooner.
+	defer func(d time.Duration) { replyTimeout = d }(replyTimeout)
+	replyTimeout = 300 * time.Millisecond
+	c.reply = ipc.HookResult{Context: "a note"}
+	if out, d := run(t, sock, preToolUse); out != "" || d > 2*time.Second {
+		t.Errorf("a slow answer to PreToolUse: %q after %v", out, d)
+	}
+}
+
 func TestAFrozenSessionsToolCallWaitsForTheThaw(t *testing.T) {
 	// An agent whose host predates freeze runs on while its session is
 	// frozen; its next tool call waits at the shim until the thaw, with the

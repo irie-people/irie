@@ -10,14 +10,15 @@ import (
 
 // step is one step of a script.
 type step struct {
-	kind string        // prompt, tool, permission, stop, stopfail, sub, sleep, exit, status, kids
-	arg  string        // the tool name, error, subagent id or cost
+	kind string        // prompt, tool, permission, stop, stopfail, sub, sleep, exit, status, kids, write, commit
+	arg  string        // the tool name, error, subagent id, cost, file, or how a stop goes (bg, ask)
 	d    time.Duration // sleep
 	n    int           // exit code
 	sub  []step        // the steps run inside a subagent
 }
 
 var (
+	fileName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 	toolName = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 	agentID  = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 	errName  = regexp.MustCompile(`^[a-z_]+$`)
@@ -46,11 +47,21 @@ func parseStep(item string, inSub bool) (step, error) {
 	name, arg, hasArg := strings.Cut(item, ":")
 	bad := func() (step, error) { return step{}, fmt.Errorf("bad step %q", item) }
 	switch name {
-	case "prompt", "stop":
+	case "prompt", "commit":
 		if hasArg || inSub {
 			return bad()
 		}
 		return step{kind: name}, nil
+	case "stop":
+		if inSub || hasArg && arg != "bg" && arg != "ask" {
+			return bad()
+		}
+		return step{kind: name, arg: arg}, nil
+	case "write":
+		if !fileName.MatchString(arg) || arg == "." || arg == ".." || inSub {
+			return bad()
+		}
+		return step{kind: name, arg: arg}, nil
 	case "ask":
 		if hasArg {
 			return bad()

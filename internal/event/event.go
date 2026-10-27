@@ -75,6 +75,10 @@ const (
 	OutcomeRated     = "outcome.rated"
 	OutcomeEscalated = "outcome.escalated"
 	RouteFailover    = "route.failover"
+	// DogNudged records that the jot dog sent a finished turn back to work,
+	// because the jot's work had not landed (DESIGN §4.8). It stands in for
+	// the turn.ended of that stop.
+	DogNudged = "dog.nudged"
 )
 
 var kinds = map[string]bool{}
@@ -85,7 +89,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover,
+		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged,
 	} {
 		kinds[k] = true
 	}
