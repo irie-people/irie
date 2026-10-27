@@ -1,0 +1,90 @@
+# Irie's config on the runners of the agent workflows
+# (docs/proposals/self-maintaining.md). Each job copies this file from main to
+# $XDG_CONFIG_HOME/irie/config.toml and starts one agent with it.
+#
+# Every agent runs in print mode (-p): it works its task, then exits, which is
+# how the workflow knows it has finished; print mode also shows no workspace
+# trust dialog and is the only mode with a budget flag. Never --bare: it skips
+# the hooks in settings files, the ones Irie passes with --settings included.
+# The workflows create the paths under /tmp/irie-ci.
+
+[spawn]
+default_profile = "author"
+ready_timeout = "3m"
+
+# The author writes the change, then answers the reviews. It may use the tools
+# listed and nothing else that would ask (dontAsk). It reads the project's
+# CLAUDE.md but no settings file of the checkout, and with the Go module
+# proxy off it cannot add a dependency.
+[profiles.author]
+harness = "claude-code"
+model = "claude-opus-5-5"
+effort = "max"
+permission_mode = "dontAsk"
+args = [
+  "-p",
+  "--max-budget-usd", "10",
+  "--no-session-persistence",
+  "--setting-sources", "user",
+  "--strict-mcp-config",
+  "--add-dir", "/tmp/irie-ci/context",
+  "--add-dir", "/tmp/irie-ci/out",
+  "--allowedTools", "Edit,Write,Bash(gofmt *),Bash(go build *),Bash(go vet *),Bash(go test *),Bash(git add *),Bash(git commit *),Bash(git status *),Bash(git diff *),Bash(git log *),Bash(git show *)",
+  "--disallowedTools", "WebFetch,WebSearch",
+]
+env = { GOPROXY = "off", GOFLAGS = "-mod=readonly", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" }
+
+# Reviewers read the pull request and write findings.json in their working
+# directory. --restricted takes away Bash and WebFetch, keeps the file tools
+# inside the working directory and ignores the settings files of the code
+# under review; acceptEdits lets them write their findings there.
+[profiles.review-opus]
+harness = "claude-code"
+model = "claude-opus-5-5"
+effort = "high"
+permission_mode = "acceptEdits"
+args = [
+  "-p",
+  "--restricted",
+  "--max-budget-usd", "3",
+  "--no-session-persistence",
+  "--strict-mcp-config",
+  "--permission-prompts", "none",
+  "--disallowedTools", "WebSearch",
+]
+env = { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" }
+
+[profiles.review-sonnet]
+harness = "claude-code"
+model = "claude-sonnet-5-5"
+effort = "high"
+permission_mode = "acceptEdits"
+args = [
+  "-p",
+  "--restricted",
+  "--max-budget-usd", "1",
+  "--no-session-persistence",
+  "--strict-mcp-config",
+  "--permission-prompts", "none",
+  "--disallowedTools", "WebSearch",
+]
+env = { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" }
+
+# Codex runs in the generic tier: Irie sees it start and exit. Its sandbox is
+# read-only, so the CLI itself writes the final answer, shaped by the schema,
+# to findings.json. It has no budget flag; the job's time cap and the OpenAI
+# project's hard spend limit bound it.
+[profiles.review-codex]
+harness = "generic"
+command = "codex"
+args = [
+  "exec",
+  "--ephemeral",
+  "--ignore-user-config",
+  "--skip-git-repo-check",
+  "--sandbox", "read-only",
+  "--model", "gpt-6.1-sol",
+  "--output-schema", "context/findings.schema.json",
+  "--output-last-message", "findings.json",
+]
+task = "arg"

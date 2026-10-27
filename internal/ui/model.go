@@ -17,14 +17,24 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/route"
 )
 
 // Backend is what the sidebar asks of the core.
 type Backend interface {
 	Spawn(ipc.SpawnArgs) (ipc.Session, error)
 	Show(id string, focus bool) error
-	// Complete returns the tokens that complete an @ or + token.
-	Complete(text string) ([]string, error)
+	// Complete returns the tokens that complete an @ or + token, and for a
+	// + token what each profile runs and costs.
+	Complete(text string) (ipc.CompleteResult, error)
+	// Move carries a session that runs outside Irie on in Irie.
+	Move(vendorID, profile string) (ipc.Session, error)
+	// Rate rates a session's work good or bad, which teaches the router.
+	Rate(id, verdict string) error
+	// Tool starts a tool session: local setup, or the local models.
+	Tool(name string) (ipc.Session, error)
+	// Route says where a task would run, and why.
+	Route(task string) (route.Choice, error)
 }
 
 // FrameMsg carries one frame of the core's subscription.
@@ -43,9 +53,26 @@ type (
 	completedMsg struct {
 		token string // what was completed
 		items []string
+		notes []string // what each item runs and costs, for profiles
 		err   error
 	}
+	ratedMsg struct {
+		name, verdict string
+		err           error
+	}
+	toolMsg struct {
+		session ipc.Session
+		err     error
+	}
+	routedMsg struct {
+		choice route.Choice
+		err    error
+	}
 )
+
+// commands are what the command bar takes after a colon (DESIGN §4.2,
+// §4.6, §6.4).
+const commands = ":move [NAME], :setup, :models, :rate good|bad, :route TASK"
 
 type focusArea int
 
@@ -87,11 +114,18 @@ type Model struct {
 	width, height int
 	conn          connState
 	gotSnapshot   bool
+	head          ipc.Header // the plan's use and the machine's memory
 
 	sessions []ipc.Session
 	sel      int // selected row, -1 when the list is empty
 	offset   int // first visible row
 	pending  string
+
+	outside        []ipc.OutsideSession // the Outside Irie group, after the sessions (outside.go)
+	outsideProblem string
+	moving         bool
+	confirming     string    // the outside session a first m asked to move
+	confirmedAt    time.Time // when it asked
 
 	focus     focusArea
 	bar       textarea.Model
@@ -123,13 +157,21 @@ func New(b Backend, o Options) Model {
 		return strings.Repeat(" ", lipgloss.Width(barPrompt))
 	})
 	bar.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "ctrl+j"))
+	// The terminal's own cursor, not a drawn one, so a screen magnifier or
+	// reader can follow the typing (View places it).
+	bar.SetVirtualCursor(false)
 	styles := textarea.DefaultStyles(true)
 	styles.Focused.CursorLine = lipgloss.NewStyle()
 	styles.Focused.Prompt = lipgloss.NewStyle().Foreground(sun)
 	styles.Blurred.Prompt = styleDim
 	styles.Focused.Placeholder = styleDim
 	styles.Blurred.Placeholder = styleDim
-	styles.Cursor.Color = sun
+	// The dark defaults draw blurred text and the cursor in light grey,
+	// which all but vanishes on a light theme; the terminal's own colours
+	// suit any theme.
+	styles.Blurred.Text = lipgloss.NewStyle()
+	styles.Blurred.CursorLine = lipgloss.NewStyle()
+	styles.Cursor.Color = nil
 	styles.Cursor.Blink = false
 	bar.SetStyles(styles)
 
@@ -195,12 +237,13 @@ func (m *Model) setFocus(f focusArea) {
 func (m *Model) setStatus(s string, isErr bool) { m.status, m.statusErr = s, isErr }
 
 func (m *Model) clamp() {
-	if len(m.sessions) == 0 {
+	n := m.rowCount()
+	if n == 0 {
 		m.sel, m.offset = -1, 0
 		return
 	}
-	m.sel = min(max(m.sel, 0), len(m.sessions)-1)
-	m.offset = min(max(m.offset, 0), max(0, len(m.sessions)-m.listHeight()))
+	m.sel = min(max(m.sel, 0), n-1)
+	m.offset = min(max(m.offset, 0), max(0, n-m.listHeight()))
 }
 
 // reveal scrolls so the selected row is visible.
@@ -227,8 +270,8 @@ func (m *Model) moveTo(i int) {
 
 func (m *Model) scroll(n int) {
 	m.offset += n
-	if len(m.sessions) > 0 {
-		m.offset = min(max(m.offset, 0), max(0, len(m.sessions)-m.listHeight()))
+	if rows := m.rowCount(); rows > 0 {
+		m.offset = min(max(m.offset, 0), max(0, rows-m.listHeight()))
 	} else {
 		m.offset = 0
 	}
@@ -246,13 +289,29 @@ func before(a, b ipc.Session) bool {
 }
 
 func (m *Model) apply(f ipc.Frame) {
-	selected := ""
+	selected, outsideSel := "", m.outsideKey(m.sel)
 	if m.sel >= 0 && m.sel < len(m.sessions) {
 		selected = m.sessions[m.sel].ID
 	}
+	// Rows that come and go above the screen leave it as it is: the first
+	// visible row stays first.
+	top := ""
+	if m.offset < len(m.sessions) {
+		top = m.sessions[m.offset].ID
+	}
 	switch f.T {
+	case ipc.FrameOutside:
+		m.setOutside(f)
+	case ipc.FrameHeader:
+		if f.Header != nil {
+			m.head = *f.Header
+		}
+		return
 	case ipc.FrameSnapshot:
 		m.sessions = slices.Clone(f.Sessions)
+		if f.Header != nil {
+			m.head = *f.Header
+		}
 		if !m.gotSnapshot && len(m.sessions) > 0 && m.bar.Value() == "" {
 			m.setFocus(focusList)
 		}
@@ -285,19 +344,32 @@ func (m *Model) apply(f ipc.Frame) {
 	if selected != "" {
 		m.sel = m.index(selected)
 	}
+	if i := m.outsideIndex(outsideSel); i >= 0 {
+		m.sel = i
+	}
+	// Only the row of a task started here scrolls into view. Nothing else
+	// the core sends moves the list, so it holds still while you read it.
+	reveal := false
 	if m.pending != "" {
 		if i := m.index(m.pending); i >= 0 {
-			m.sel, m.pending = i, ""
+			m.sel, m.pending, reveal = i, "", true
 		}
 	}
-	if m.sel < 0 && len(m.sessions) > 0 {
+	if m.sel < 0 && m.rowCount() > 0 {
 		m.sel = 0
 	}
-	m.reveal()
+	if i := m.index(top); i >= 0 {
+		m.offset = i
+	}
+	if reveal {
+		m.reveal()
+	} else {
+		m.clamp()
+	}
 }
 
 func (m Model) showCmd(focus bool) tea.Cmd {
-	if m.sel < 0 {
+	if m.sel < 0 || m.sel >= len(m.sessions) {
 		return nil
 	}
 	id, b := m.sessions[m.sel].ID, m.backend
@@ -337,8 +409,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setStatus(msg.err.Error(), true)
 		}
+	case movedMsg:
+		m.moved(msg)
 	case completedMsg:
 		m.completed(msg)
+	case ratedMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+		} else {
+			m.setStatus(fmt.Sprintf("rated %s %s; the router learns from it", msg.name, msg.verdict), false)
+		}
+	case toolMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+			return m, nil
+		}
+		// A tool session waits for its user: it goes into the slot.
+		m.bar.Reset()
+		m.chips = nil
+		m.setFocus(focusList)
+		m.pending = msg.session.ID
+		if i := m.index(msg.session.ID); i >= 0 {
+			m.moveTo(i)
+			m.pending = ""
+		}
+		id, b := msg.session.ID, m.backend
+		return m, func() tea.Msg { return shownMsg{err: b.Show(id, true)} }
+	case routedMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+		} else {
+			m.setStatus(msg.choice.Reason, false)
+		}
 	case tea.PasteMsg:
 		if m.focus != focusBar {
 			m.setFocus(focusBar)
@@ -347,7 +449,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			c := newChip(msg.Content)
 			m.chips = append(m.chips, c)
 			m.bar.InsertString(c.label)
-			m.reveal()
+			m.clamp()
 			return m, nil
 		}
 		if n := strings.Count(m.bar.Value(), "\n") + strings.Count(msg.Content, "\n") + 1; n > maxBarContent {
@@ -356,7 +458,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.bar, cmd = m.bar.Update(msg)
-		m.reveal()
+		m.clamp()
 		return m, cmd
 	case tea.MouseWheelMsg:
 		switch msg.Button {
@@ -369,11 +471,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft {
 			break
 		}
+		m.confirming = ""
 		if row := msg.Y - m.listTop(); row >= 0 && row < m.listHeight() {
-			if i := m.offset + row; i < len(m.sessions) {
+			if i := m.offset + row; i < m.rowCount() {
 				m.sel = i
 				m.setFocus(focusList)
-				return m, m.showCmd(true)
+				cmd := m.open(true)
+				return m, cmd
 			}
 		}
 		if msg.Y >= m.height-m.barHeight() {
@@ -390,6 +494,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.setStatus("", false)
+	if msg.String() != "m" {
+		m.confirming = "" // any other key cancels a move
+	}
 	switch msg.String() {
 	case "up", "k":
 		m.moveTo(m.sel - 1)
@@ -402,11 +509,17 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "home":
 		m.moveTo(0)
 	case "end":
-		m.moveTo(len(m.sessions) - 1)
-	case "enter":
-		return m, m.showCmd(true)
-	case "space":
-		return m, m.showCmd(false)
+		m.moveTo(m.rowCount() - 1)
+	case "enter", "space":
+		cmd := m.open(msg.String() == "enter")
+		return m, cmd
+	case "m":
+		cmd := m.moveSelected()
+		return m, cmd
+	case "+":
+		return m, m.rateCmd(ipc.Good)
+	case "-":
+		return m, m.rateCmd(ipc.Bad)
 	case "tab":
 		m.setFocus(focusBar)
 	case ":":
@@ -421,6 +534,9 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.spawning {
 			return m, nil
+		}
+		if first, _, _ := strings.Cut(strings.TrimSpace(m.bar.Value()), "\n"); strings.HasPrefix(first, ":") {
+			return m.command(first)
 		}
 		args, err := ParseTask(m.bar.Value(), m.home)
 		if err != nil {
@@ -448,14 +564,63 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		b := m.backend
 		return m, func() tea.Msg {
-			items, err := b.Complete(word)
-			return completedMsg{token: word, items: items, err: err}
+			r, err := b.Complete(word)
+			return completedMsg{token: word, items: r.Items, notes: r.Notes, err: err}
 		}
 	}
+	// As the bar grows the list shows fewer rows, but the rows it shows stay
+	// where they are, even when the selected one drops out of sight.
 	var cmd tea.Cmd
 	m.bar, cmd = m.bar.Update(msg)
-	m.reveal()
+	m.clamp()
 	return m, cmd
+}
+
+// rateCmd rates the selected session. A row outside Irie has nothing to
+// rate.
+func (m Model) rateCmd(verdict string) tea.Cmd {
+	if m.sel < 0 || m.sel >= len(m.sessions) {
+		return nil
+	}
+	s, b := m.sessions[m.sel], m.backend
+	return func() tea.Msg { return ratedMsg{name: s.Name, verdict: verdict, err: b.Rate(s.ID, verdict)} }
+}
+
+// command runs a command bar command: a line that starts with a colon.
+func (m Model) command(line string) (tea.Model, tea.Cmd) {
+	name, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
+	arg = strings.TrimSpace(arg)
+	b := m.backend
+	done := func(cmd tea.Cmd) (tea.Model, tea.Cmd) {
+		m.bar.Reset()
+		m.chips = nil
+		return m, cmd
+	}
+	switch {
+	case name == "move":
+		o, err := m.pickOutside(arg)
+		if err != nil {
+			m.setStatus(err.Error(), true)
+			return m, nil
+		}
+		m.setFocus(focusList)
+		return done(m.moveCmd(o))
+	case name == "setup" && (arg == "" || arg == "local"):
+		m.setStatus("starting local setup…", false)
+		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolSetup); return toolMsg{session: s, err: err} }
+	case name == "models" && arg == "":
+		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolModels); return toolMsg{session: s, err: err} }
+	case name == "rate" && (arg == ipc.Good || arg == ipc.Bad):
+		if m.sel < 0 || m.sel >= len(m.sessions) {
+			m.setStatus("no session to rate; select one of Irie's", true)
+			return m, nil
+		}
+		return done(m.rateCmd(arg))
+	case name == "route" && arg != "":
+		return m, func() tea.Msg { ch, err := b.Route(arg); return routedMsg{choice: ch, err: err} }
+	}
+	m.setStatus(fmt.Sprintf("unknown command :%s; the commands are %s", name, commands), true)
+	return m, nil
 }
 
 // wordAtCursor returns the part before the cursor of the word it is in,
@@ -476,8 +641,9 @@ func (m Model) wordAtCursor() (word string, start int, ok bool) {
 }
 
 // completed applies Tab's answer, unless the bar has moved on: one
-// candidate replaces the token, several complete their common start and
-// are listed in the status strip.
+// candidate replaces the token, and the status strip says what a profile
+// runs and costs; several complete their common start and are listed in
+// the status strip.
 func (m *Model) completed(msg completedMsg) {
 	word, start, ok := m.wordAtCursor()
 	if !ok || word != msg.token {
@@ -491,7 +657,11 @@ func (m *Model) completed(msg completedMsg) {
 	case len(msg.items) == 1:
 		// A directory leaves the cursor in the path, for the next part.
 		m.replaceWord(start, word, msg.items[0], !strings.HasSuffix(msg.items[0], "/"))
-		m.setStatus("", false)
+		note := ""
+		if len(msg.notes) == 1 {
+			note = msg.notes[0]
+		}
+		m.setStatus(note, false)
 	default:
 		if p := commonPrefix(msg.items); len([]rune(p)) > len([]rune(word)) {
 			m.replaceWord(start, word, p, false)
@@ -514,7 +684,7 @@ func (m *Model) replaceWord(start int, word, repl string, space bool) {
 	m.bar.SetValue(strings.Join(lines, "\n"))
 	m.bar.MoveToBegin()
 	m.bar.SetCursorColumn(start + len([]rune(repl)))
-	m.reveal()
+	m.clamp()
 }
 
 func commonPrefix(items []string) string {

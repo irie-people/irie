@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"reflect"
 	"regexp"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -24,7 +26,9 @@ import (
 	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/journal"
+	"github.com/irie-hq/irie/internal/localmodel"
 	"github.com/irie-hq/irie/internal/paths"
+	"github.com/irie-hq/irie/internal/statusline"
 	"github.com/irie-hq/irie/internal/tmux"
 )
 
@@ -46,16 +50,33 @@ type Core struct {
 	version string
 	log     *slog.Logger
 
-	spawnMu sync.Mutex // one spawn at a time, taken before mu
+	spawnMu  sync.Mutex   // one spawn at a time, taken before mu
+	sendMu   sync.Mutex   // one message typed to an agent at a time, taken before mu
+	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
+	http     *http.Client // for local servers
+	sampling atomic.Bool  // a memory sample is running
 
-	mu        sync.Mutex // guards everything below, and serialises tmux calls
-	sessions  map[string]*session
-	snap      tmux.Snapshot
-	published map[string]ipc.Session // what subscribers last heard
-	subs      map[*subscriber]bool
-	journal   *journal.Journal
-	history   map[string][]event.Event // journal events of sessions not adopted yet
-	recent    []string                 // repos used recently, newest first
+	modelMu    sync.Mutex // guards modelCache; taken before mu
+	modelCache modelList
+
+	mu         sync.Mutex // guards everything below, and serialises tmux calls
+	sessions   map[string]*session
+	snap       tmux.Snapshot
+	published  map[string]ipc.Session // what subscribers last heard
+	lastHeader ipc.Header             // the header subscribers last heard
+	subs       map[*subscriber]bool
+	journal    *journal.Journal
+	history    map[string][]event.Event // journal events of sessions not adopted yet
+	recent     []string                 // repos used recently, newest first
+	appViews   int                      // open subscriptions of the Mac app; while any, the slot is zoomed
+	outside    outside                  // the Claude Code sessions outside Irie (outside.go)
+	local      localState               // local.json
+	machine    localmodel.Machine       // the machine's memory, last read
+	localMem   int64                    // what the models of Irie's own server take
+	plan       ipc.Plan                 // the plan's use, from the newest status update
+	planAt     time.Time
+	outcomes   map[string]*outcome // every session's route and outcome, those gone included
+	closes     closes              // closed sessions, and agents still ending (close.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -83,23 +104,54 @@ type session struct {
 	exitCode int
 	shown    bool
 	track    track
+	tally    tokenTally // read from the transcripts track names
+	tokens   *ipc.Tokens
+	model    string           // the model the agent runs, as its profile said
+	local    bool             // a model of a local runtime
+	usage    statusline.Usage // its last status line update
+	memory   int64            // what its processes take, last measured
+	out      *outcome         // its route and how it went, shared with Core.outcomes
+	conv     *conversation    // its conversation, read while clients follow it (conversation.go)
+	convSubs int              // the subscriptions that follow its conversation
 }
 
 func (x *session) wire() ipc.Session {
 	s := ipc.Session{
 		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
-		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown,
+		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
+		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory,
+	}
+	if s.Model == "" {
+		s.Model = x.usage.Model
+	}
+	// Claude Code prices tokens at Anthropic's list price, which a local
+	// model does not charge.
+	if !x.local {
+		s.CostUSD = x.usage.CostUSD
+	}
+	if o := x.out; o != nil {
+		s.Class, s.Routed, s.Parent, s.Rated = o.class, o.routed, o.parent, o.rated
 	}
 	x.track.describe(&s, x.dead, x.exitCode)
 	return s
 }
 
+// countTokens catches each session's tally up with its transcripts. The
+// caller holds c.mu.
+func (c *Core) countTokens() {
+	for _, x := range c.sessions {
+		if t, ok := x.tally.update(x.track.transcripts); ok {
+			x.tokens = &t
+		}
+	}
+}
+
 func newCore(o Options, r *tmux.Runner) *Core {
 	return &Core{
-		cfg: o.Config, paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log,
+		cfg: o.Config, paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
-		history: map[string][]event.Event{},
+		history: map[string][]event.Event{}, outcomes: map[string]*outcome{},
 	}
 }
 
@@ -129,10 +181,14 @@ func Run(o Options) error {
 	defer c.journal.Close()
 	c.loadHistory()
 	c.loadRecent()
+	c.loadLocal()
+	c.loadOutcomes()
+	c.loadClosed()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
 	c.tick()
+	go c.sample()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -141,15 +197,19 @@ func Run(o Options) error {
 	}
 	defer l.Close()
 	go ipc.Serve(l, c)
+	go c.watchOutside()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-	for {
+	for n := 1; ; n++ {
 		select {
 		case <-t.C:
 			c.tick()
+			if n%sampleEvery == 0 {
+				go c.sample()
+			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
 			return nil
@@ -157,8 +217,9 @@ func Run(o Options) error {
 	}
 }
 
+// want is the layout to keep. The caller holds c.mu.
 func (c *Core) want() tmux.Want {
-	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg.UI.SidebarWidth, Version: c.version}
+	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg.UI.SidebarWidth, Version: c.version, Zoom: c.appViews > 0}
 }
 
 // tick polls tmux, repairs the layout, records what tmux and the clock say
@@ -168,7 +229,10 @@ func (c *Core) tick() {
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.reap()
 	c.observe(time.Now())
+	c.countTokens()
+	c.followConversations()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -230,14 +294,16 @@ func (c *Core) sync(s tmux.Snapshot) {
 // does for every session, and replays the session's journal into its state.
 func (c *Core) adopt(p tmux.Pane) *session {
 	created, _ := time.Parse(time.RFC3339Nano, p.Created)
-	x := &session{id: p.IrieSession, name: p.Name, agent: p.Agent, created: created, vendorID: p.VendorID}
+	x := &session{id: p.IrieSession, name: p.Name, agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession)}
 	if x.name == "" {
 		x.name = x.id
 	}
 	if spec, err := host.ReadSpec(c.paths.SpecFile(x.id)); err == nil {
 		x.cwd, x.profile, x.harness, x.warnings = spec.Cwd, spec.Profile, spec.Harness, spec.Warnings
 		x.repo, x.worktree, x.branch, x.copied, x.paste = spec.Repo, spec.Worktree, spec.Branch, spec.Copied, spec.Paste
+		x.model, x.local = spec.Model, spec.Local
 	}
+	c.loadStatus(x)
 	if x.harness == "" {
 		x.harness = c.cfg.Profiles[x.profile].Harness
 	}
@@ -295,6 +361,10 @@ func (c *Core) record(x *session, e event.Event) {
 		c.log.Warn("journal", "kind", e.Kind, "err", err)
 	}
 	x.track.apply(e)
+	if x.out == nil {
+		x.out = c.outcome(x.id)
+	}
+	x.out.apply(e)
 	for s := range c.subs {
 		s.event(e)
 	}
@@ -343,11 +413,45 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{
+			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend,
+			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
+			ipc.OpClose, ipc.OpReopen,
+		}}, nil
 	case ipc.OpList:
+		// Whoever lists is looking, so the sessions outside Irie are
+		// refreshed when they are old; a problem is in the result.
+		c.refreshOutside(outsideEvery, false)
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		return ipc.ListResult{Sessions: c.list()}, nil
+		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem, Closed: c.closedList()}, nil
+	case ipc.OpClose:
+		var a ipc.CloseArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.close(a)
+	case ipc.OpReopen:
+		var a ipc.ReopenArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.reopen(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.ReopenResult{Session: s}, nil
+	case ipc.OpMove:
+		var a ipc.MoveArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.move(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.MoveResult{Session: s}, nil
 	case ipc.OpSpawn:
 		var a ipc.SpawnArgs
 		if err := decode(raw, &a); err != nil {
@@ -375,9 +479,82 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.CompleteResult{Items: c.complete(a.Text)}, nil
+		items, notes := c.complete(a.Text)
+		return ipc.CompleteResult{Items: items, Notes: notes}, nil
+	case ipc.OpSend:
+		var a ipc.SendArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.send(a)
+	case ipc.OpConversation:
+		var a ipc.ConversationArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.conversation(a)
+	case ipc.OpAttachInfo:
+		return c.attachInfo()
+	case ipc.OpPreflight:
+		var a ipc.PreflightArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.preflight(a)
+	case ipc.OpLocal:
+		var a ipc.LocalArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.localStatus(a)
+	case ipc.OpStatus:
+		var a ipc.StatusArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.status(a)
+	case ipc.OpRate:
+		var a ipc.RateArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.rate(a)
+	case ipc.OpRoute:
+		var a ipc.RouteArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.routeDry(a)
+	case ipc.OpResult:
+		var a ipc.ResultArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.result(a)
+	case ipc.OpTool:
+		var a ipc.ToolArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.tool(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.SpawnResult{Session: s}, nil
 	}
 	return nil, ipc.Errorf(ipc.CodeUnknownOp, "unknown op %q", op)
+}
+
+// attachInfo tells a terminal outside Irie, such as the Mac app's, how to
+// attach to the session that holds the slot.
+func (c *Core) attachInfo() (ipc.AttachInfoResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	sock, err := c.tmux.SocketPath()
+	if err != nil {
+		return ipc.AttachInfoResult{}, err
+	}
+	return ipc.AttachInfoResult{Tmux: c.tmux.Bin, Socket: sock, Target: tmux.MainSession}, nil
 }
 
 func decode(raw json.RawMessage, v any) error {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -194,6 +195,19 @@ func TestPromptToolStopIsWorkingThenDone(t *testing.T) {
 	c.waitState(s.ID, ipc.StateIdle)
 }
 
+func TestASubagentIsListedUnderItsSessionUntilItStops(t *testing.T) {
+	c := setup(t)
+	s := c.spawn("prompt,sub:helper1:tool:Grep+sleep:2s,stop")
+	testutil.Eventually(t, 5*time.Second, "the subagent was not listed", func() bool {
+		r, _ := c.row(s.ID)
+		return len(r.Subagents) == 1 && r.Subagents[0].Agent == "sub:helper1" && r.Subagents[0].Type == "Explore"
+	})
+	c.waitState(s.ID, ipc.StateDone)
+	if r, _ := c.row(s.ID); len(r.Subagents) != 0 {
+		t.Errorf("after the stop: subagents %+v", r.Subagents)
+	}
+}
+
 func TestRedUntilAnswered(t *testing.T) {
 	c := setup(t)
 	permission := c.spawn("prompt,permission,tool:Bash")
@@ -201,20 +215,38 @@ func TestRedUntilAnswered(t *testing.T) {
 	limited := c.spawn("prompt,stopfail:rate_limit")
 
 	r := c.waitState(permission.ID, ipc.StateNeedsYou)
-	if r.Reason != "permission" || !strings.Contains(r.Detail, "Bash") {
+	// The row asks in plain words; the call it asks about is in its command.
+	if r.Reason != "permission" || r.Detail != "Asks: may it run rm -rf build?" || r.Command != "Bash · rm -rf build" {
 		t.Errorf("permission row = %+v", r)
 	}
 	c.keys(permission, "Enter")
 	c.waitState(permission.ID, ipc.StateWorking)
 
 	r = c.waitState(question.ID, ipc.StateNeedsYou)
-	if r.Reason != "question" || !strings.Contains(r.Detail, "Which colour should the button be?") {
+	if r.Reason != "question" || !strings.Contains(strings.ToLower(r.Detail), "which colour should the button be?") {
 		t.Errorf("question row = %+v", r)
 	}
 
 	r = c.waitState(limited.ID, ipc.StateNeedsYou)
 	if r.Reason != "rate_limit" || !strings.Contains(r.Detail, "rate_limit") {
 		t.Errorf("rate-limited row = %+v", r)
+	}
+
+	// Tool calls and what they ask are in plain words too.
+	said := map[string]string{}
+	for _, e := range c.journal() {
+		if p := e.Str("phrase"); p != "" {
+			said[p] = e.Kind
+		}
+	}
+	for p, kind := range map[string]string{
+		"Deleting build":                           event.ToolStarted,
+		"Asks: may it run rm -rf build?":           event.InputNeeded,
+		"Asks: which colour should the button be?": event.InputNeeded,
+	} {
+		if said[p] != kind {
+			t.Errorf("no %s says %q: %v", kind, p, said)
+		}
 	}
 }
 
@@ -415,9 +447,14 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 	if fi, err := os.Stat(settings); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("settings file: %v", err)
 	}
-	// M2 has nothing to say back, so every reply is empty.
+	// Irie says nothing back, but for the delegation note when the session
+	// starts (DESIGN §6.4).
 	for _, r := range log {
-		if r["t"] == "hook" && (r["exit"] != 0.0 || r["stdout"] != "") {
+		if r["t"] != "hook" {
+			continue
+		}
+		hint := r["event"] == "SessionStart" && strings.Contains(fmt.Sprint(r["stdout"]), "ctl delegate")
+		if r["exit"] != 0.0 || r["stdout"] != "" && !hint {
 			t.Errorf("hook reply %v", r)
 		}
 	}

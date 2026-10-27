@@ -1,0 +1,100 @@
+import SwiftUI
+
+/// The task bar at the foot of the sidebar. It is always three lines tall,
+/// and longer text scrolls inside it. Nothing appears or vanishes around it,
+/// so the list above never shifts: the hint is the placeholder, and notices
+/// float above the bar.
+struct TaskBar: View {
+    @EnvironmentObject private var store: Store
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.muted)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
+            // It keeps the keyboard while a task starts, then hands it to the
+            // new agent's terminal; submit() refuses a second start until the
+            // first is done.
+            TextField(focused ? "@repo +profile, then the task" : "What should we work on?", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(Theme.font(13.5))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(3, reservesSpace: true)
+                .focused($focused)
+                .onSubmit(submit)
+                .onChange(of: text) {
+                    if store.notice?.isError == true { store.dismissNotice() }
+                }
+                .accessibilityLabel("New task")
+                .accessibilityHint("Start with @repo or +profile to pick where and who. Return starts it.")
+            Button(action: submit) {
+                Group {
+                    if store.spawning {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.up").font(.system(size: 12, weight: .bold))
+                    }
+                }
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Theme.accentFill))
+                .foregroundStyle(Theme.onAccent)
+            }
+            .buttonStyle(.plain)
+            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.spawning)
+            .help("Start (Return)")
+            .accessibilityLabel("Start the task")
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 5)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field)
+            .shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
+                .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)
+        )
+        .padding(10)
+        .overlay(alignment: .top) {
+            if let n = store.notice {
+                Text(n.text)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(n.isError ? Theme.needs : Theme.ink)
+                    .lineLimit(4)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                            .fill(Theme.field)
+                            .shadow(radius: 3, y: 1)
+                            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                                .strokeBorder(n.isError ? Theme.needs.opacity(0.6) : Theme.edge, lineWidth: 1))
+                    )
+                    .padding(.horizontal, 10)
+                    // 4 points above the field, over the bar's padding and the list
+                    .alignmentGuide(.top) { d in d[.bottom] - 6 }
+                    .transition(.opacity)
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: store.notice)
+        .onReceive(NotificationCenter.default.publisher(for: .irieNewTask)) { _ in focused = true }
+    }
+
+    private func submit() {
+        let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty, !store.spawning else { return }
+        store.dismissNotice()
+        Task {
+            if await store.spawn(input) {
+                text = ""
+                focused = false // the store gives the new agent's terminal the keyboard
+            }
+        }
+    }
+}

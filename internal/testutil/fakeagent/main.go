@@ -18,19 +18,31 @@
 //	                  subagent, then SubagentStop
 //	sleep:<duration>  a pause
 //	exit:<n>          exit with code n at once, without SessionEnd
+//	status:<cost>     run the status line command of --settings with
+//	                  Claude-shaped JSON, as the status line docs describe:
+//	                  that cost in dollars, 12% of the context, and 33% of
+//	                  the plan's five hours
 //
 // Any other task runs the script "prompt". After the script the agent idles:
 // each line typed is a prompt and a turn, and EOF or a hangup ends the
-// session with SessionEnd.
+// session with SessionEnd. With --resume and no task it starts from a
+// resume and idles at once.
+//
+// `fakeagent agents --json` lists no sessions, as `claude agents --json`
+// does on a machine with none outside Irie. The log's first line records
+// the agent's argv, pid and the names, not the values, of its environment;
+// each SIGHUP, SIGTERM or SIGINT it gets is logged too.
 //
 // Environment:
 //
-//	IRIE_FAKE_VERSION  what --version reports (default 2.1.300); a version
-//	                   before 2.1.295 refuses settings that use onFailure
-//	IRIE_FAKE_NO_NAME  when set, --help lists no --name and --name is refused
-//	IRIE_FAKE_PACE     a pause before each step, such as 300ms
-//	IRIE_FAKE_LOG      the log file; by default fakeagent.ndjson next to the
-//	                   --settings file
+//	IRIE_FAKE_VERSION      what --version reports (default 2.1.300); a version
+//	                       before 2.1.295 refuses settings that use onFailure
+//	IRIE_FAKE_NO_NAME      when set, --help lists no --name and --name is refused
+//	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
+//	                       agent that hangs
+//	IRIE_FAKE_PACE         a pause before each step, such as 300ms
+//	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
+//	                       the --settings file
 package main
 
 import (
@@ -156,6 +168,14 @@ Options:
 `
 
 func run(args []string) int {
+	if len(args) > 0 && args[0] == "agents" {
+		if !slices.Contains(args[1:], "--json") {
+			fmt.Fprintln(os.Stderr, "fakeagent: agents needs --json")
+			return 1
+		}
+		fmt.Println("[]")
+		return 0
+	}
 	o, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -378,15 +398,26 @@ func (a *agent) run() int {
 			env[k] = v
 		}
 	}
-	a.record(map[string]any{"t": "start", "argv": os.Args[1:], "cwd": a.cwd, "env": env, "session_id": a.sessionID})
+	var names []string
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		names = append(names, k)
+	}
+	slices.Sort(names)
+	a.record(map[string]any{"t": "start", "argv": os.Args[1:], "cwd": a.cwd, "env": env, "env_names": names, "pid": os.Getpid(), "session_id": a.sessionID})
 	fmt.Printf("fakeagent %s · session %s\n", a.version, a.sessionID)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		<-sigs
-		a.end("other")
-		os.Exit(0)
+		for s := range sigs {
+			a.record(map[string]any{"t": "signal", "signal": s.String()})
+			if s == syscall.SIGTERM && os.Getenv("IRIE_FAKE_IGNORE_TERM") != "" {
+				continue
+			}
+			a.end("other")
+			os.Exit(0)
+		}
 	}()
 
 	source := "startup"
@@ -476,13 +507,67 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		a.record(map[string]any{"t": "exit", "code": s.n})
 		fmt.Printf("fakeagent: exit %d\n", s.n)
 		return s.n, true
+	case "status":
+		a.status(s.arg)
 	}
 	return 0, false
 }
 
+// status runs the settings' status line command once, as Claude Code does
+// after a change: JSON on stdin, through sh, in the session's directory.
+func (a *agent) status(cost string) {
+	command := loadStatusLine(a.o.settings)
+	if command == "" {
+		a.record(map[string]any{"t": "status", "error": "no status line"})
+		return
+	}
+	usd, _ := strconv.ParseFloat(cost, 64)
+	in, _ := json.Marshal(map[string]any{
+		"session_id": a.sessionID, "transcript_path": a.transcript, "cwd": a.cwd,
+		"model":          map[string]any{"id": a.model, "display_name": "Fake"},
+		"workspace":      map[string]any{"current_dir": a.cwd, "project_dir": a.cwd},
+		"version":        a.version,
+		"cost":           map[string]any{"total_cost_usd": usd, "total_duration_ms": 1000, "total_api_duration_ms": 500},
+		"context_window": map[string]any{"total_input_tokens": 24000, "total_output_tokens": 800, "context_window_size": 200000, "used_percentage": 12, "remaining_percentage": 88},
+		"rate_limits":    map[string]any{"five_hour": map[string]any{"used_percentage": 33, "resets_at": time.Now().Add(2 * time.Hour).Unix()}},
+	})
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stdin, cmd.Dir = bytes.NewReader(in), a.cwd
+	out, err := cmd.Output()
+	exit := 0
+	if err != nil {
+		exit = -1
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			exit = ee.ExitCode()
+		}
+	}
+	a.record(map[string]any{"t": "status", "stdout": string(out), "exit": exit})
+}
+
+// loadStatusLine returns the status line command of a --settings value.
+func loadStatusLine(value string) string {
+	b := []byte(value)
+	if !strings.HasPrefix(strings.TrimSpace(value), "{") {
+		var err error
+		if b, err = os.ReadFile(value); err != nil {
+			return ""
+		}
+	}
+	var s struct {
+		StatusLine struct {
+			Type    string `json:"type"`
+			Command string `json:"command"`
+		} `json:"statusLine"`
+	}
+	json.Unmarshal(b, &s)
+	return s.StatusLine.Command
+}
+
 func (a *agent) stop() {
 	fmt.Println("✓ done")
-	a.fire("Stop", "", map[string]any{"stop_hook_active": false, "last_assistant_message": "Done.", "background_tasks": []any{}, "session_crons": []any{}})
+	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
+	a.fire("Stop", "", map[string]any{"stop_hook_active": false, "last_assistant_message": "Done: " + first, "background_tasks": []any{}, "session_crons": []any{}})
 }
 
 func (a *agent) toolID() string {

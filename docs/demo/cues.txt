@@ -1,0 +1,60 @@
+# What each demo task does, and when (docs/demo/README.md). The stand-in
+# agent (docs/demo/claude) runs the script of the first entry whose words
+# the task contains; "*" matches any task. An entry is "words | script",
+# and indented lines carry its script on.
+#
+# Steps are the fakeagent's (internal/testutil/fakeagent): prompt, tool:NAME,
+# ask (a question), permission (Bash wants to run rm -rf build), stop and
+# sleep:DURATION. ask and permission wait until a line is typed into the
+# agent's terminal. (steps) * N repeats steps N times.
+#
+# The tools here take no file path, so no sandbox path reaches the
+# sidebar's detail line.
+
+# The walkthrough
+research rate limiting |
+	prompt, sleep:3s, tool:WebSearch, sleep:5s, tool:WebFetch, sleep:5s,
+	tool:WebSearch, sleep:4s, tool:WebFetch, sleep:4s, tool:TodoWrite, sleep:3s, stop
+add rate limiting |
+	prompt, sleep:3s,
+	(tool:Grep, sleep:7s, tool:MultiEdit, sleep:8s, tool:TodoWrite, sleep:7s, tool:MultiEdit, sleep:8s) * 14,
+	stop
+fix the flaky checkout test |
+	prompt, sleep:2s,
+	(tool:Grep, sleep:6s, tool:Glob, sleep:6s, tool:MultiEdit, sleep:7s, tool:TodoWrite, sleep:6s) * 16,
+	stop
+restyle the signup button |
+	prompt, sleep:3s,
+	(tool:Grep, sleep:6s, tool:Glob, sleep:6s, tool:MultiEdit, sleep:7s) * 4, tool:Grep, sleep:1s,
+	ask, sleep:2s, tool:MultiEdit, sleep:5s, tool:MultiEdit, sleep:4s, stop
+retry failed webhooks |
+	prompt, sleep:3s,
+	(tool:Grep, sleep:7s, tool:MultiEdit, sleep:8s) * 6, tool:Grep, sleep:4s,
+	permission, sleep:2s, tool:MultiEdit, sleep:5s, tool:TodoWrite, sleep:4s, stop
+fix a typo in the readme |
+	prompt, sleep:3s, tool:Grep, sleep:4s, tool:MultiEdit, sleep:5s, stop
+find the slow request |
+	prompt, sleep:3s, tool:Grep, sleep:5s, tool:Grep, sleep:5s, tool:MultiEdit, sleep:6s,
+	tool:TodoWrite, sleep:4s, stop
+update the changelog |
+	prompt, sleep:3s, tool:Grep, sleep:5s, tool:MultiEdit, sleep:6s, stop
+
+# The short; the walkthrough also bumps the go version and writes tests
+# for the cart
+add a health check |
+	prompt, sleep:2s, (tool:Grep, sleep:4s, tool:MultiEdit, sleep:5s) * 3, stop
+pick a colour |
+	prompt, sleep:2s, tool:Grep, sleep:4s, tool:Glob, sleep:4s, ask,
+	sleep:2s, tool:MultiEdit, sleep:4s, stop
+tidy the webhook retries |
+	prompt, sleep:2s, (tool:Grep, sleep:5s, tool:MultiEdit, sleep:5s) * 3, stop
+bump the go version |
+	prompt, sleep:2s, tool:Grep, sleep:5s, tool:MultiEdit, sleep:6s, tool:TodoWrite, sleep:5s, stop
+write tests for the cart |
+	prompt, sleep:2s, (tool:Grep, sleep:5s, tool:MultiEdit, sleep:6s) * 10, stop
+translate the signup page |
+	prompt, sleep:2s, (tool:Glob, sleep:6s, tool:MultiEdit, sleep:6s) * 10, stop
+
+# Anything else, such as a task typed by hand into the sandbox.
+* |
+	prompt, sleep:3s, tool:Grep, sleep:5s, tool:MultiEdit, sleep:5s, tool:TodoWrite, sleep:4s, stop

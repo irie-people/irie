@@ -105,6 +105,8 @@ func TestNormalize(t *testing.T) {
 	check(t, "Elicitation", payload("Elicitation", `"mcp_server_name":"tracker"`, `"message":"Pick a project"`, `"mode":"form"`),
 		want{event.InputNeeded, "main", map[string]any{"message": "Pick a project", "reason": "elicitation", "server": "tracker"}})
 	check(t, "Stop", payload("Stop", `"stop_hook_active":false`, `"last_assistant_message":"Done."`),
+		want{event.TurnEnded, "main", map[string]any{"message": "Done."}})
+	check(t, "Stop without a message", payload("Stop", `"stop_hook_active":false`),
 		want{event.TurnEnded, "main", map[string]any{}})
 	check(t, "StopFailure", payload("StopFailure", `"error":"rate_limit"`, `"error_details":"429 Too Many Requests"`),
 		want{event.TurnFailed, "main", map[string]any{"error": "rate_limit"}})
@@ -215,6 +217,12 @@ func TestVersions(t *testing.T) {
 // Claude Code, and counts its runs in a file next to it.
 func fakeCLI(t *testing.T, version, help string) (path, runs string) {
 	t.Helper()
+	// This script answers at once, but a loaded machine can be slow to start
+	// it. Only TestProbeGivesUpOnAHungCLI, which writes its own, wants the
+	// timeout to fire.
+	old := probeTimeout
+	probeTimeout = time.Minute
+	t.Cleanup(func() { probeTimeout = old })
 	dir := t.TempDir()
 	path, runs = filepath.Join(dir, "claude"), filepath.Join(dir, "runs")
 	script := "#!/bin/sh\necho run >> '" + runs + "'\nfor a; do case $a in\n" +

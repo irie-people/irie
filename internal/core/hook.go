@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -19,7 +20,9 @@ import (
 var toolInputKeys = []string{"summary", "question"}
 
 // hook takes one hook event from the shim (DESIGN §3.3) and records it.
-// Nothing holds a call yet and there are no notes, so the reply is empty.
+// Nothing holds a call yet. A session that starts may be told it can
+// delegate (DESIGN §6.4); a turn's last message is kept whole for
+// delegation; a turn stopped at a usage limit may fail over.
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	h, err := harnessFor(a.Harness)
 	if err != nil {
@@ -29,24 +32,71 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	if err != nil {
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
 	}
+	var call struct {
+		Tool  string          `json:"tool_name"`
+		Input json.RawMessage `json:"tool_input"`
+	}
+	json.Unmarshal(a.Payload, &call)
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
 		c.mu.Unlock()
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
+	var reply ipc.HookResult
+	failover := false
 	for _, e := range evs {
+		input := call.Input
 		if c.cfg.Journal.ToolInput == "none" {
 			for _, k := range toolInputKeys {
 				delete(e.Data, k)
 			}
+			input = nil
+		}
+		if p := eventPhrase(e, call.Tool, input); p != "" {
+			e.Data["phrase"] = p
+		}
+		// The journal cuts strings, so the whole message is kept first.
+		if msg := e.Str("message"); e.Kind == event.TurnEnded && e.Agent == event.Main && msg != "" {
+			c.saveResult(x, msg)
 		}
 		c.record(x, e)
+		switch {
+		case e.Kind == event.SessionStarted:
+			reply.Context = c.delegateHint(x)
+		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg.Route.Failover:
+			failover = true
+		}
 	}
+	c.followConversation(x)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	return ipc.HookResult{}, nil
+	if failover {
+		go c.failover(a.Session)
+	}
+	return reply, nil
+}
+
+// eventPhrase is what an event of a tool call says in plain words (Phrase):
+// what a tool.started does, or what an input.needed of a permission prompt,
+// a question or a plan asks. Other events say nothing more.
+func eventPhrase(e event.Event, tool string, input json.RawMessage) string {
+	switch {
+	case tool == "":
+		return ""
+	case e.Kind == event.ToolStarted:
+		return Phrase(tool, input)
+	case e.Kind != event.InputNeeded:
+		return ""
+	}
+	switch e.Str("reason") {
+	case event.ReasonPermission:
+		return PhraseAsk(tool, input)
+	case event.ReasonQuestion, event.ReasonPlan:
+		return Phrase(tool, input)
+	}
+	return ""
 }
 
 // failedReason is spawn.failed's reason when the pane dies first.

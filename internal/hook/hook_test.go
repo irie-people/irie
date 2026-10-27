@@ -108,6 +108,23 @@ func TestForwardsAndCapsStrings(t *testing.T) {
 	}
 }
 
+func TestATurnsLastMessageGoesWhole(t *testing.T) {
+	// A delegated session reports it back whole; the journal cuts it.
+	c := &core{}
+	sock := serve(t, c)
+	big := strings.Repeat("ü", 4000)
+	stop := `{"session_id":"6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f","hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"` + big + `","transcript_path":"` + big + `"}`
+	run(t, sock, stop)
+	var p map[string]any
+	json.Unmarshal((<-c.got).Payload, &p)
+	if p["last_assistant_message"] != big {
+		t.Errorf("the last message is %d bytes, want all %d", len(p["last_assistant_message"].(string)), len(big))
+	}
+	if s, _ := p["transcript_path"].(string); len(s) > event.MaxString {
+		t.Errorf("other strings are not cut: %d bytes", len(s))
+	}
+}
+
 func TestPrintsTheReplyInClaudesDialect(t *testing.T) {
 	c := &core{reply: ipc.HookResult{Context: "[Irie] Note from the user: the staging database is down"}}
 	sock := serve(t, c)

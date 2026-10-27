@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/route"
 )
 
 var now = time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC)
@@ -29,6 +30,28 @@ type fakeBackend struct {
 	spawned   *ipc.Session // what Spawn returns, when set
 	completes []string
 	items     map[string][]string // Complete's answers
+	notes     map[string][]string // and its notes
+	moves     []string            // the vendor ids Move was given
+	moveErr   error
+	rates     []string // id verdict
+	tools     []string
+	routes    []string
+	choice    route.Choice // what Route returns
+}
+
+func (f *fakeBackend) Rate(id, verdict string) error {
+	f.rates = append(f.rates, id+" "+verdict)
+	return nil
+}
+
+func (f *fakeBackend) Tool(name string) (ipc.Session, error) {
+	f.tools = append(f.tools, name)
+	return ipc.Session{ID: "s0000000tool0", Name: name}, nil
+}
+
+func (f *fakeBackend) Route(task string) (route.Choice, error) {
+	f.routes = append(f.routes, task)
+	return f.choice, nil
 }
 
 func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
@@ -47,9 +70,9 @@ func (f *fakeBackend) Show(id string, focus bool) error {
 	return nil
 }
 
-func (f *fakeBackend) Complete(text string) ([]string, error) {
+func (f *fakeBackend) Complete(text string) (ipc.CompleteResult, error) {
 	f.completes = append(f.completes, text)
-	return f.items[text], nil
+	return ipc.CompleteResult{Items: f.items[text], Notes: f.notes[text]}, nil
 }
 
 func sessions(n int) []ipc.Session {
@@ -241,6 +264,34 @@ func TestWheelMovesTheOffsetNotTheSelection(t *testing.T) {
 	}
 }
 
+// What the core sends never scrolls the list: you can read it while the
+// agents work.
+func TestFramesLeaveTheListWhereItIs(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 100)
+	for range 10 {
+		m = send(m, tea.MouseWheelMsg{X: 5, Y: 5, Button: tea.MouseWheelDown})
+	}
+	first := func() string { return screen(t, m)[m.listTop()] }
+	if !strings.Contains(first(), "task-010") {
+		t.Fatalf("first row after scrolling = %q", first())
+	}
+	// A row changes state while the selection is off screen.
+	row := sessions(100)[50]
+	row.State = ipc.StateNeedsYou
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &row}})
+	if !strings.Contains(first(), "task-010") {
+		t.Errorf("an upsert scrolled the list: first row %q", first())
+	}
+	// A row above the screen goes away: the rows on screen stay put.
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameRemove, ID: "s000000000003"}})
+	if !strings.Contains(first(), "task-010") {
+		t.Errorf("a removal above the screen moved the rows: first row %q", first())
+	}
+	if m.sel != 0 {
+		t.Errorf("selection moved to %d", m.sel)
+	}
+}
+
 func TestTypingThreeLinesGrowsTheBarAndShrinksTheList(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 100)
 	m = send(m, keyMsg("tab"))
@@ -265,6 +316,78 @@ func TestTypingThreeLinesGrowsTheBarAndShrinksTheList(t *testing.T) {
 	}
 	if !strings.Contains(lines[21], "one") || !strings.Contains(lines[23], "three") {
 		t.Errorf("bar lines = %q", lines[21:])
+	}
+}
+
+// A growing command bar shows fewer rows but never scrolls them, even when
+// the selected row drops out of sight.
+func TestTypingLeavesTheListWhereItIs(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 100)
+	h := m.listHeight()
+	for range h - 1 {
+		m = send(m, keyMsg("down")) // the selection is on the last row on screen
+	}
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "one")
+	m = send(m, keyMsg("ctrl+j"))
+	m = typeText(m, "two")
+	m = send(m, keyMsg("ctrl+j"))
+	m = typeText(m, "three")
+	if first := screen(t, m)[m.listTop()]; m.offset != 0 || !strings.Contains(first, "task-000") {
+		t.Errorf("typing scrolled the list: offset %d, first row %q", m.offset, first)
+	}
+	// Back in the list, the selected row is on screen again.
+	m = send(m, keyMsg("esc"))
+	rows := strings.Join(screen(t, m)[m.listTop():m.listTop()+m.listHeight()], "\n")
+	if want := fmt.Sprintf("task-%03d", h-1); !strings.Contains(rows, want) {
+		t.Errorf("%s not on screen after Esc:\n%s", want, rows)
+	}
+}
+
+// The terminal's own cursor sits where you type, so a screen magnifier or
+// reader can follow it.
+func TestTheTerminalCursorIsInTheCommandBar(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 3)
+	if c := m.View().Cursor; c != nil {
+		t.Errorf("cursor at %+v while the list has the keyboard", c.Position)
+	}
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "abc")
+	c := m.View().Cursor
+	if c == nil {
+		t.Fatal("no cursor in the command bar")
+	}
+	if want := (tea.Position{X: lipgloss.Width(barPrompt) + 3, Y: 23}); c.Position != want {
+		t.Errorf("cursor at %+v, want %+v", c.Position, want)
+	}
+	if c.Color != nil {
+		t.Errorf("cursor colour %v; the terminal's own suits its theme", c.Color)
+	}
+	m = send(m, keyMsg("ctrl+j"))
+	m = typeText(m, "de")
+	if c := m.View().Cursor; c == nil || c.Position != (tea.Position{X: lipgloss.Width(barPrompt) + 2, Y: 23}) {
+		t.Errorf("second line: cursor %+v", c)
+	}
+	m = send(m, keyMsg("esc"))
+	if c := m.View().Cursor; c != nil {
+		t.Errorf("cursor at %+v after leaving the bar", c.Position)
+	}
+}
+
+// A task left in the bar while the list has the keyboard keeps the
+// terminal's own colour, which reads on a light theme too.
+func TestABlurredTaskKeepsTheTerminalsColour(t *testing.T) {
+	m, _ := newModel(t, 34, 24, 3)
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "half a task")
+	m = send(m, tea.MouseClickMsg{X: 3, Y: m.listTop(), Button: tea.MouseLeft})
+	raw := strings.Split(m.View().Content, "\n")
+	bar := raw[len(raw)-1]
+	if !strings.Contains(ansiRE.ReplaceAllString(bar, ""), "half a task") {
+		t.Fatalf("bar = %q", bar)
+	}
+	if sgr(37).MatchString(bar) {
+		t.Errorf("blurred task drawn in light grey: %q", bar)
 	}
 }
 
@@ -398,11 +521,11 @@ func TestHeaderCounts(t *testing.T) {
 		{ID: "s2", Name: "b", State: ipc.StateWorking, Created: now},
 		{ID: "s3", Name: "c", State: ipc.StateExited, Created: now},
 	}}})
-	if got := screen(t, m)[0]; !strings.Contains(got, "●2 working") {
+	if got := screen(t, m)[0]; !strings.Contains(got, "◐2 working") {
 		t.Errorf("wide header = %q", got)
 	}
 	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 10})
-	if got := screen(t, m)[0]; !strings.Contains(got, "●2") || strings.Contains(got, "working") {
+	if got := screen(t, m)[0]; !strings.Contains(got, "◐2") || strings.Contains(got, "working") {
 		t.Errorf("narrow header = %q", got)
 	}
 }
@@ -435,10 +558,10 @@ func TestRulesNeedRoom(t *testing.T) {
 
 func TestSelectionHasAnEdge(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 3)
-	if row := screen(t, m)[m.listTop()]; !strings.HasPrefix(row, "▌● task-000") {
+	if row := screen(t, m)[m.listTop()]; !strings.HasPrefix(row, "▌◐ task-000") {
 		t.Errorf("selected row = %q", row)
 	}
-	if row := screen(t, m)[m.listTop()+1]; !strings.HasPrefix(row, " ● task-001") {
+	if row := screen(t, m)[m.listTop()+1]; !strings.HasPrefix(row, " ◐ task-001") {
 		t.Errorf("other row = %q", row)
 	}
 }
@@ -762,8 +885,8 @@ func TestEveryStateHasItsGlyph(t *testing.T) {
 	m := statesModel(t, Options{})
 	m = send(m, keyMsg("tab")) // the selection bar would hide nothing, but keep rows plain
 	for name, glyph := range map[string]string{
-		"failed-row": "✕", "exited-ok": "·", "exited-bad": "·", "needs-row": "●", "stalled-row": "!",
-		"working-row": "●", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
+		"failed-row": "✕", "exited-ok": "·", "exited-bad": "✕", "needs-row": "●", "stalled-row": "!",
+		"working-row": "◐", "starting-row": "◌", "done-row": "✓", "idle-row": "○",
 	} {
 		plain := strings.TrimLeft(ansiRE.ReplaceAllString(rowLine(t, m, name), ""), " ▌")
 		if !strings.HasPrefix(plain, glyph+" "+name) {
@@ -802,11 +925,29 @@ func TestRedMarksOnlyTheRowsThatNeedYou(t *testing.T) {
 	}
 }
 
+// Without colour (NO_COLOR, a monochrome terminal, colour blindness) a red
+// row still looks different from every row that is not red.
+func TestRedIsNeverTheOnlyCue(t *testing.T) {
+	m := statesModel(t, Options{})
+	m = send(m, keyMsg("tab"))
+	rows := map[bool]map[string]string{true: {}, false: {}} // red → glyph → row
+	for _, s := range everyState() {
+		raw := rowLine(t, m, s.Name)
+		glyph := strings.Fields(strings.TrimLeft(ansiRE.ReplaceAllString(raw, ""), " ▌"))[0]
+		rows[red.MatchString(raw)][glyph] = s.Name
+	}
+	for glyph, name := range rows[true] {
+		if other, ok := rows[false][glyph]; ok {
+			t.Errorf("%s and %s are both %s: only red tells them apart", name, other, glyph)
+		}
+	}
+}
+
 func TestHeaderCountsWhatNeedsYou(t *testing.T) {
 	m := statesModel(t, Options{})
 	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	header := screen(t, m)[0]
-	for _, want := range []string{"●1 working", "●2 needs you", "✓1 done"} {
+	for _, want := range []string{"◐1 working", "●2 needs you", "✓1 done"} {
 		if !strings.Contains(header, want) {
 			t.Errorf("header %q lacks %q", header, want)
 		}
@@ -834,5 +975,142 @@ func TestStatusStripShowsWhyAndWhat(t *testing.T) {
 	m.sel = 6
 	if !strings.Contains(status(), "pause off: Claude Code 2.1.200") {
 		t.Errorf("status strip %q, want the warning", status())
+	}
+}
+
+func TestTabSaysWhatAProfileCosts(t *testing.T) {
+	m, b := newModel(t, 60, 24, 0)
+	b.items = map[string][]string{"+lo": {"+local"}, "+": {"+claude", "+local", "+sonnet"}}
+	b.notes = map[string][]string{
+		"+lo": {"qwen3.5:9b · local, $0 · ~8.4 GB"},
+		"+":   {"opus-5-5 max · plan 5h 62%", "qwen3.5:9b · local, $0 · ~8.4 GB", "sonnet-5-5 medium"},
+	}
+	m = typeText(m, "+lo")
+	m = send(m, keyMsg("tab"))
+	if v := m.bar.Value(); v != "+local " {
+		t.Errorf("bar = %q", v)
+	}
+	if m.status != "qwen3.5:9b · local, $0 · ~8.4 GB" {
+		t.Errorf("status = %q, want what +local runs and costs", m.status)
+	}
+	// Several candidates are listed by name.
+	m.bar.Reset()
+	m = typeText(m, "+")
+	m = send(m, keyMsg("tab"))
+	if m.status != "+claude  +local  +sonnet" {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+func TestStatusStripSaysWhatASessionCosts(t *testing.T) {
+	m, _ := newModel(t, 80, 24, 2)
+	cost, ctx := 1.234, 41.0
+	rows := sessions(2)
+	rows[0].CostUSD, rows[0].Context, rows[0].Memory = &cost, &ctx, 640_000_000
+	rows[1].Local, rows[1].Model, rows[1].Memory = true, "qwen3.5:9b", 512_000_000
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
+	m = send(m, keyMsg("esc"))
+	status := func() string { s := screen(t, m); return s[len(s)-2] }
+	m.sel = 0
+	if !strings.Contains(status(), "$1.23 ctx 41% 640 MB · task-000") {
+		t.Errorf("status strip %q", status())
+	}
+	m.sel = 1
+	if !strings.Contains(status(), "local 512 MB · task-001") {
+		t.Errorf("status strip %q", status())
+	}
+}
+
+func TestColonCommands(t *testing.T) {
+	m, b := newModel(t, 60, 24, 2)
+	enter := func(line string) {
+		m.setFocus(focusBar)
+		m.bar.Reset()
+		m = typeText(m, line)
+		m = send(m, keyMsg("enter"))
+	}
+	// Local setup runs in a session of its own, shown with the focus, so
+	// its questions can be answered.
+	enter(":setup local")
+	if !reflect.DeepEqual(b.tools, []string{"setup"}) || len(b.shows) != 1 || !b.shows[0].focus || b.shows[0].id != "s0000000tool0" {
+		t.Errorf("tools %v, shows %+v", b.tools, b.shows)
+	}
+	if len(b.spawns) != 0 {
+		t.Errorf("a command spawned a task: %+v", b.spawns)
+	}
+	enter(":models")
+	if !reflect.DeepEqual(b.tools, []string{"setup", "models"}) {
+		t.Errorf("tools %v", b.tools)
+	}
+	// A rating goes to the selected session.
+	m.sel = 1
+	enter(":rate bad")
+	if !reflect.DeepEqual(b.rates, []string{m.sessions[1].ID + " bad"}) || !strings.Contains(m.status, "rated task-001 bad") {
+		t.Errorf("rates %v, status %q", b.rates, m.status)
+	}
+	// A dry run of the router says where the task would go.
+	b.choice = route.Choice{Class: route.Small, Profile: "local", Reason: "small: local is the cheapest per success"}
+	enter(":route fix the typo")
+	if !reflect.DeepEqual(b.routes, []string{"fix the typo"}) || m.status != "small: local is the cheapest per success" {
+		t.Errorf("routes %v, status %q", b.routes, m.status)
+	}
+	enter(":bogus")
+	if !m.statusErr || !strings.Contains(m.status, ":setup, :models") {
+		t.Errorf("unknown command: %q", m.status)
+	}
+}
+
+func TestPlusAndMinusRateTheSelectedRow(t *testing.T) {
+	m, b := newModel(t, 60, 24, 3)
+	m = send(m, keyMsg("esc"))
+	m.sel = 2
+	m = send(m, keyMsg("+"))
+	m = send(m, keyMsg("-"))
+	if want := []string{m.sessions[2].ID + " good", m.sessions[2].ID + " bad"}; !reflect.DeepEqual(b.rates, want) {
+		t.Errorf("rates = %v, want %v", b.rates, want)
+	}
+	if !strings.Contains(m.status, "the router learns from it") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+func TestStatusStripSaysHowASessionWasRouted(t *testing.T) {
+	m, _ := newModel(t, 90, 24, 2)
+	rows := sessions(2)
+	rows[0].Routed, rows[0].Class, rows[0].Profile, rows[0].Rated = true, route.Small, "local", ipc.Good
+	rows[1].Parent = rows[0].ID
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
+	m = send(m, keyMsg("esc"))
+	status := func() string { s := screen(t, m); return s[len(s)-2] }
+	m.sel = 0
+	if !strings.Contains(status(), "small→local rated good · task-000") {
+		t.Errorf("status strip %q", status())
+	}
+	m.sel = 1
+	if !strings.Contains(status(), "↳ delegated · task-001") {
+		t.Errorf("status strip %q", status())
+	}
+}
+
+func TestHeaderShowsPlanUseAndLowMemory(t *testing.T) {
+	m, _ := newModel(t, 90, 24, 0)
+	header := func() string { return screen(t, m)[0] }
+	if strings.Contains(header(), "5h") || strings.Contains(header(), "mem") {
+		t.Fatalf("header %q before any use is known", header())
+	}
+	h := ipc.Header{Plan: &ipc.Plan{FiveHour: &ipc.Window{Used: 62}}, Memory: &ipc.Memory{Total: 18 << 30, Available: 1 << 30, Low: true}}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &h}})
+	if !strings.Contains(header(), "mem low 5h62%") || !strings.Contains(header(), "◐0 working") {
+		t.Errorf("header %q", header())
+	}
+	// Narrow, the counts lose their labels first, then the plan goes.
+	m = send(m, tea.WindowSizeMsg{Width: 34, Height: 24})
+	if got := header(); !strings.Contains(got, "mem low") || !strings.Contains(got, "◐0") {
+		t.Errorf("narrow header %q", got)
+	}
+	// A snapshot carries the header too.
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Header: &ipc.Header{}}})
+	if strings.Contains(header(), "mem low") {
+		t.Errorf("header %q after memory recovered", header())
 	}
 }

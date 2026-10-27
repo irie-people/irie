@@ -20,16 +20,46 @@ import (
 const ctlUsage = `usage: irie ctl <command>
 
   irie ctl list [--json]                 the sessions and their states
-  irie ctl spawn [--wait] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
+  irie ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
                                          starting Irie if needed. @REPO runs it in
                                          a new worktree of that repo, @REPO! in the
                                          repo's own checkout; +PROFILE picks the
-                                         agent. TASK - reads the task from stdin.
-                                         --wait waits until the agent is ready,
-                                         and fails if it is not
+                                         agent, +ollama:MODEL a local model. TASK -
+                                         reads the task from stdin. --wait waits
+                                         until the agent is ready, and fails if it
+                                         is not; --force spawns a local profile even
+                                         when its context or memory falls short
   irie ctl show [--focus] SESSION        show a session in the slot
+  irie ctl send SESSION TEXT...          type a message to a session's agent, as
+                                         a person would; TEXT - reads stdin
+  irie ctl conversation [--json] [--follow] SESSION
+                                         print a session's conversation, read
+                                         from its transcript; --follow keeps
+                                         printing what changes
   irie ctl watch [--session SESSION]     print events as NDJSON until interrupted
+  irie ctl move [--wait] [+PROFILE] SESSION
+                                         carry an idle Claude Code session that
+                                         runs outside Irie on in Irie, and print
+                                         its new session id. SESSION is its id or
+                                         name, as ctl list shows under OUTSIDE IRIE
+  irie ctl local [--json]                the local Ollama server, the machine's
+                                         memory, and each model weighed against it
+  irie ctl preflight [--model MODEL] [--force] [PROFILE]
+                                         check a local profile's model (default
+                                         +local) as a spawn would, loading it
+  irie ctl route [--json] TASK...        where +auto would run a task, and why:
+                                         each profile's accuracy for the task's
+                                         class, its cost and its cost per success
+  irie ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...
+                                         from an agent: run a subtask in this
+                                         directory on the cheapest profile accurate
+                                         enough for it, wait, and print its result.
+                                         Exits 3 when it needs a stronger model
+                                         than the caller's cheaper ones, 4 when it
+                                         is still running at the timeout
+  irie ctl rate SESSION good|bad         rate a session's work; the router learns
+                                         each profile's accuracy from it
 `
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
@@ -44,8 +74,24 @@ func ctl(args []string) error {
 		return ctlSpawn(args[1:])
 	case "show":
 		return ctlShow(args[1:])
+	case "conversation":
+		return ctlConversation(args[1:])
+	case "send":
+		return ctlSend(args[1:])
 	case "watch":
 		return ctlWatch(args[1:])
+	case "move":
+		return ctlMove(args[1:])
+	case "local":
+		return ctlLocal(args[1:])
+	case "preflight":
+		return ctlPreflight(args[1:])
+	case "route":
+		return ctlRoute(args[1:])
+	case "delegate":
+		return ctlDelegate(args[1:])
+	case "rate":
+		return ctlRate(args[1:])
 	}
 	return fmt.Errorf("unknown ctl command %q\n\n%s", args[0], ctlUsage)
 }
@@ -85,7 +131,107 @@ func ctlList(args []string) error {
 	for _, s := range r.Sessions {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, s.Detail)
 	}
+	// Claude Code sessions that run outside Irie, under a heading of their
+	// own; ctl move takes them by id or name.
+	if len(r.Outside) > 0 || r.OutsideProblem != "" {
+		fmt.Fprintln(tw, "\nOUTSIDE IRIE")
+		if r.OutsideProblem != "" {
+			fmt.Fprintln(tw, r.OutsideProblem)
+		}
+	}
+	if len(r.Outside) > 0 {
+		fmt.Fprintln(tw, "SESSION\tSTATUS\tKIND\tNAME\tCWD")
+		for _, o := range r.Outside {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", or(o.VendorID, "-"), or(o.Status, "-"), o.Kind, or(o.Name, "-"), o.Cwd)
+		}
+	}
 	return tw.Flush()
+}
+
+func or(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
+}
+
+// ctlMove moves a session that runs outside Irie in. It finds the session
+// by its full id, its short id or its name in the core's list.
+func ctlMove(args []string) error {
+	const usage = "usage: irie ctl move [--wait] [+PROFILE] SESSION"
+	fs := flag.NewFlagSet("ctl move", flag.ContinueOnError)
+	wait := fs.Bool("wait", false, "wait until the moved session is ready, and fail if it is not")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest, profile := fs.Args(), ""
+	if len(rest) > 0 && strings.HasPrefix(rest[0], "+") {
+		profile, rest = rest[0][1:], rest[1:]
+	}
+	if len(rest) != 1 || rest[0] == "" {
+		return errors.New(usage)
+	}
+	if err := up(nil); err != nil {
+		return err
+	}
+	cfg, p, err := load()
+	if err != nil {
+		return err
+	}
+	var r ipc.ListResult
+	if err := ipc.Call(p.Socket(), 15*time.Second, ipc.OpList, nil, &r); err != nil {
+		return err
+	}
+	id, err := pickOutside(r, rest[0])
+	if err != nil {
+		return err
+	}
+	var res ipc.MoveResult
+	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpMove, ipc.MoveArgs{VendorID: id, Profile: profile}, &res); err != nil {
+		return err
+	}
+	fmt.Println(res.Session.ID)
+	if !*wait {
+		return nil
+	}
+	return waitReady(p.Socket(), res.Session.ID, cfg.Spawn.ReadyTimeout+5*time.Second)
+}
+
+// pickOutside returns the vendor id of the outside session that what names:
+// its full id, its short id, or its name when only one has it. A full id
+// that is not listed goes to the core as it is, which says why it cannot
+// move.
+func pickOutside(r ipc.ListResult, what string) (string, error) {
+	var named []ipc.OutsideSession
+	for _, o := range r.Outside {
+		switch {
+		case o.VendorID == what || o.ID == what && o.VendorID != "":
+			return o.VendorID, nil
+		case o.Name == what:
+			named = append(named, o)
+		}
+	}
+	switch len(named) {
+	case 1:
+		if named[0].VendorID == "" {
+			return "", fmt.Errorf("%s has no session id yet, so it cannot move", what)
+		}
+		return named[0].VendorID, nil
+	case 0:
+		if len(what) == 36 && strings.Count(what, "-") == 4 {
+			return what, nil
+		}
+		msg := fmt.Sprintf("no Claude Code session %q runs outside Irie; `irie ctl list` shows them", what)
+		if r.OutsideProblem != "" {
+			msg += " (" + r.OutsideProblem + ")"
+		}
+		return "", errors.New(msg)
+	}
+	var ids []string
+	for _, o := range named {
+		ids = append(ids, or(o.VendorID, "-")+" in "+o.Cwd)
+	}
+	return "", fmt.Errorf("%d sessions are named %q; give one's id: %s", len(named), what, strings.Join(ids, ", "))
 }
 
 // spawnTimeout bounds a spawn, which may make a worktree and check out its
@@ -97,6 +243,7 @@ func ctlSpawn(args []string) error {
 	cwd := fs.String("cwd", "", "run the task in this directory")
 	name := fs.String("name", "", "name the session")
 	wait := fs.Bool("wait", false, "wait until the agent is ready, and fail if it is not")
+	force := fs.Bool("force", false, "spawn a local profile even when its context or memory falls short")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -116,7 +263,7 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl spawn [--wait] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
+		return errors.New("usage: irie ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
 	}
 	if *cwd != "" && a.Repo != "" {
 		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
@@ -137,7 +284,7 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.Task, a.Cwd, a.Name = task, dir, *name
+	a.Task, a.Cwd, a.Name, a.Force = task, dir, *name, *force
 	var r ipc.SpawnResult
 	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		return err
@@ -224,4 +371,108 @@ func ctlWatch(args []string) error {
 		}
 	}
 	return errors.New("the core went away")
+}
+
+func ctlConversation(args []string) error {
+	fs := flag.NewFlagSet("ctl conversation", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print each conversation or frame as JSON")
+	follow := fs.Bool("follow", false, "keep printing what changes")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: irie ctl conversation [--json] [--follow] SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	print := func(cv ipc.Conversation) error {
+		if *asJSON {
+			return json.NewEncoder(os.Stdout).Encode(cv)
+		}
+		if cv.Reset && len(cv.Items) == 0 && cv.Transcript == "" {
+			fmt.Println("(no transcript: this session started before Irie followed transcripts; its terminal has everything)")
+		}
+		for _, it := range cv.Items {
+			fmt.Println(conversationLine(it))
+		}
+		if cv.Needs != nil {
+			fmt.Println(conversationLine(*cv.Needs))
+		}
+		return nil
+	}
+	if !*follow {
+		var cv ipc.Conversation
+		if err := ipc.Call(sock, 10*time.Second, ipc.OpConversation, ipc.ConversationArgs{Session: fs.Arg(0)}, &cv); err != nil {
+			return err
+		}
+		return print(cv)
+	}
+	c, err := ipc.Dial(sock, time.Second)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	frames, err := c.Subscribe(ipc.SubscribeArgs{Session: fs.Arg(0), Conversation: true})
+	if err != nil {
+		return err
+	}
+	for f := range frames {
+		if f.T == ipc.FrameConversation && f.Conversation != nil {
+			if err := print(*f.Conversation); err != nil {
+				return err
+			}
+		}
+	}
+	return errors.New("the core went away")
+}
+
+// conversationLine is one item of a conversation as a line of text.
+func conversationLine(it ipc.Item) string {
+	first := func(s string) string {
+		line, rest, _ := strings.Cut(strings.TrimSpace(s), "\n")
+		if strings.TrimSpace(rest) != "" {
+			line += " …"
+		}
+		return line
+	}
+	switch it.Kind {
+	case ipc.ItemUser:
+		return "You: " + first(it.Text)
+	case ipc.ItemText:
+		return "Claude: " + first(it.Text)
+	case ipc.ItemNote:
+		return "— " + it.Text
+	case ipc.ItemNeeds:
+		return "● " + it.Text
+	}
+	mark := map[string]string{ipc.ItemRunning: "…", ipc.ItemOK: "✓", ipc.ItemError: "✕", ipc.ItemStopped: "·"}[it.State]
+	line := "  ▸ " + it.Phrase + "  " + mark
+	if it.Ms > 0 {
+		line += " " + (time.Duration(it.Ms) * time.Millisecond).Round(time.Second/10).String()
+	}
+	if it.Added > 0 || it.Removed > 0 {
+		line += fmt.Sprintf(" +%d −%d", it.Added, it.Removed)
+	}
+	return line
+}
+
+func ctlSend(args []string) error {
+	if len(args) < 2 {
+		return errors.New("usage: irie ctl send SESSION TEXT...")
+	}
+	text := strings.Join(args[1:], " ")
+	if text == "-" {
+		b, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		text = string(b)
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
 }

@@ -31,6 +31,12 @@ type agentConfig struct {
 	readyTimeout string            // spawn.ready_timeout
 	env          map[string]string // profiles.fake.env
 	extra        string            // more TOML, such as [repos] or more profiles
+	// The [local] section's body. By default it names an ollama that is not
+	// there, so no test starts the machine's own.
+	local string
+	// usage.status_line, off unless a test is about it: it reads the user's
+	// Claude Code settings.
+	statusLine bool
 }
 
 func (a agentConfig) toml(fake string) string {
@@ -57,6 +63,11 @@ func (a agentConfig) toml(fake string) string {
 	if a.extra != "" {
 		b.WriteString("\n" + a.extra)
 	}
+	local := a.local
+	if local == "" {
+		local = "ollama = \"/nonexistent/ollama\"\n"
+	}
+	fmt.Fprintf(&b, "\n[local]\n%s\n[usage]\nstatus_line = %v\n", local, a.statusLine)
 	return b.String()
 }
 
@@ -566,6 +577,51 @@ func TestTheSidebarSpawnsAndShows(t *testing.T) {
 	testutil.Eventually(t, 2*time.Second, "C-] did not move focus to the sidebar", func() bool {
 		return active() == "0"
 	})
+}
+
+func TestAppViewZoomsTheSlotWhileItIsOpen(t *testing.T) {
+	c := setup(t)
+	var info ipc.AttachInfoResult
+	if err := c.call(ipc.OpAttachInfo, nil, &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.Target != tmux.MainSession || info.Tmux == "" {
+		t.Errorf("attach-info = %+v", info)
+	}
+	if _, err := os.Stat(info.Socket); err != nil {
+		t.Errorf("attach-info socket: %v", err)
+	}
+
+	zoomed := func() bool {
+		return strings.TrimSpace(c.Tmux(t, "display-message", "-p", "-t", tmux.MainSession+":0", "#{window_zoomed_flag}")) == "1"
+	}
+	if zoomed() {
+		t.Fatal("zoomed before the app opened")
+	}
+	bad, err := ipc.Dial(c.paths.Socket(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bad.Close()
+	if _, err := bad.Subscribe(ipc.SubscribeArgs{View: "tv"}); err == nil {
+		t.Error("an unknown view was accepted")
+	}
+
+	app, err := ipc.Dial(c.paths.Socket(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Subscribe(ipc.SubscribeArgs{View: ipc.ViewApp}); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Eventually(t, 2*time.Second, "the slot did not zoom for the app", zoomed)
+	s := c.spawn("in the app")
+	c.show(s.ID, false)
+	if p := c.slot(); p == nil || p["@irie_session"] != s.ID || !zoomed() {
+		t.Errorf("after show the slot is %v, zoomed %v", p, zoomed())
+	}
+	app.Close()
+	testutil.Eventually(t, 3*time.Second, "the zoom did not end when the app closed", func() bool { return !zoomed() })
 }
 
 func TestSubscribeSendsSnapshotThenUpdates(t *testing.T) {

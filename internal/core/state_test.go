@@ -74,6 +74,61 @@ func TestTheStatesOfATurn(t *testing.T) {
 	}
 }
 
+func TestRunningSubagentsAreListedUntilTheyStop(t *testing.T) {
+	s := newScript()
+	var tr track
+	describe := func() ipc.Session {
+		var row ipc.Session
+		tr.describe(&row, false, 0)
+		return row
+	}
+	for _, e := range []event.Event{
+		s.hook(event.SessionStarted),
+		s.hook(event.PromptSubmitted),
+		s.sub(event.SubagentStarted, "agent_type", "Explore"),
+		s.sub(event.ToolStarted, "tool", "Grep", "summary", "TODO", "tool_use_id", "t1"),
+	} {
+		tr.apply(e)
+	}
+	if got := describe().Subagents; len(got) != 1 || got[0].Agent != "sub:a1b2c3" || got[0].Type != "Explore" ||
+		got[0].Detail != "Grep · TODO" || got[0].NeedsYou || got[0].Started.IsZero() {
+		t.Fatalf("subagents = %+v", got)
+	}
+
+	// What a subagent needs shows on the subagent as well as on the row.
+	tr.apply(s.sub(event.InputNeeded, "reason", event.ReasonPermission, "tool", "Bash", "summary", "rm -rf build"))
+	row := describe()
+	if row.State != ipc.StateNeedsYou || len(row.Subagents) != 1 || !row.Subagents[0].NeedsYou ||
+		row.Subagents[0].Detail != "needs permission: Bash · rm -rf build" {
+		t.Fatalf("after a need: state %s, subagents %+v", row.State, row.Subagents)
+	}
+
+	tr.apply(s.sub(event.SubagentFinished))
+	if got := describe().Subagents; len(got) != 0 {
+		t.Errorf("after the stop: subagents = %+v", got)
+	}
+
+	// A session that ends lists none.
+	tr.apply(s.sub(event.SubagentStarted, "agent_type", "Plan"))
+	tr.apply(s.hook(event.SessionEnded, "reason", "other"))
+	if got := describe().Subagents; len(got) != 0 {
+		t.Errorf("after the session ended: subagents = %+v", got)
+	}
+}
+
+func TestTheTranscriptsAreRecordedForTheTokenTally(t *testing.T) {
+	s := newScript()
+	var tr track
+	tr.apply(s.hook(event.SessionStarted, "transcript", "/home/alice/transcripts/main.jsonl"))
+	tr.apply(s.sub(event.SubagentStarted, "agent_type", "Explore"))
+	tr.apply(s.sub(event.SubagentFinished, "transcript", "/home/alice/transcripts/main/agent-a1b2c3.jsonl"))
+	tr.apply(s.hook(event.SessionStarted, "transcript", "/home/alice/transcripts/main.jsonl")) // resumed: named again
+	want := []string{"/home/alice/transcripts/main.jsonl", "/home/alice/transcripts/main/agent-a1b2c3.jsonl"}
+	if !slices.Equal(tr.transcripts, want) {
+		t.Errorf("transcripts %q, want %q", tr.transcripts, want)
+	}
+}
+
 func TestNeedsYouIsClearedByTheNextPromptOrToolEvent(t *testing.T) {
 	s := newScript()
 	var tr track
@@ -196,13 +251,52 @@ func TestWorkingShowsTheRunningTool(t *testing.T) {
 	tr.apply(s.hook(event.ToolStarted, "tool", "Bash", "summary", "go test ./...", "tool_use_id", "t1"))
 	var row ipc.Session
 	tr.describe(&row, false, 0)
-	if row.Detail != "Bash · go test ./..." {
-		t.Errorf("detail %q", row.Detail)
+	// An event from before the core recorded plain words shows the call.
+	if row.Detail != "Bash · go test ./..." || row.Command != "" {
+		t.Errorf("detail %q, command %q", row.Detail, row.Command)
 	}
 	tr.apply(s.hook(event.ToolFinished, "tool", "Bash", "tool_use_id", "t1"))
 	row = ipc.Session{}
 	tr.describe(&row, false, 0)
 	if row.Detail != "" {
 		t.Errorf("detail %q after the tool finished", row.Detail)
+	}
+}
+
+func TestRowsSayPlainWordsAndKeepTheCall(t *testing.T) {
+	s := newScript()
+	var tr track
+	describe := func() ipc.Session {
+		var row ipc.Session
+		tr.describe(&row, false, 0)
+		return row
+	}
+	tr.apply(s.hook(event.PromptSubmitted))
+	tr.apply(s.hook(event.ToolStarted, "tool", "Bash", "summary", "go test ./...", "phrase", "Running the tests", "tool_use_id", "t1"))
+	if row := describe(); row.Detail != "Running the tests" || row.Command != "Bash · go test ./..." {
+		t.Errorf("working: detail %q, command %q", row.Detail, row.Command)
+	}
+	tr.apply(s.hook(event.InputNeeded, "reason", event.ReasonPermission, "tool", "Bash", "summary", "rm -rf build",
+		"phrase", "Asks: may it run rm -rf build?"))
+	if row := describe(); row.Detail != "Asks: may it run rm -rf build?" || row.Command != "Bash · rm -rf build" {
+		t.Errorf("permission: detail %q, command %q", row.Detail, row.Command)
+	}
+
+	// A question asks in its own words and names no call.
+	tr = track{}
+	tr.apply(s.hook(event.PromptSubmitted))
+	tr.apply(s.hook(event.InputNeeded, "reason", event.ReasonQuestion, "question", "Which colour?", "tool", "AskUserQuestion",
+		"phrase", "Asks: which colour?"))
+	if row := describe(); row.Detail != "Asks: which colour?" || row.Command != "" {
+		t.Errorf("question: detail %q, command %q", row.Detail, row.Command)
+	}
+
+	// A helper says what it does the same way.
+	tr = track{}
+	tr.apply(s.hook(event.PromptSubmitted))
+	tr.apply(s.sub(event.SubagentStarted, "agent_type", "Explore"))
+	tr.apply(s.sub(event.ToolStarted, "tool", "Read", "summary", "docs/DESIGN.md", "phrase", "Reading DESIGN.md", "tool_use_id", "t2"))
+	if subs := describe().Subagents; len(subs) != 1 || subs[0].Detail != "Reading DESIGN.md" || subs[0].Command != "Read · docs/DESIGN.md" {
+		t.Errorf("helper: %+v", subs)
 	}
 }

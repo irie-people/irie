@@ -1,0 +1,312 @@
+# Irie maintains itself, part 2: the reviewer swarm (docs/proposals/self-maintaining.md).
+# agent-author starts it after each push to an agent's draft pull request. Reviewer
+# agents on different models, from different suppliers, review the commit; then a
+# job that runs no agent posts their reviews and decides: mark the pull request
+# ready for a person, have the author answer, or hand it to people. Nothing runs
+# unless the repository variable IRIE_AGENTS is "on". Each reviewer's job holds
+# only its own supplier's key; the job that runs the pull request's code holds
+# none, and runs it without sudo.
+#   environments irie-review-anthropic, irie-review-openai: secret MODEL_KEY each
+#   environment irie-bot: variable APP_CLIENT_ID, secret APP_PRIVATE_KEY (the GitHub App)
+name: agent-review
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The agent's draft pull request
+        required: true
+        type: number
+      sha:
+        description: The commit to review, which must be the pull request's head
+        required: true
+        type: string
+      round:
+        description: The review round, which must be the one due
+        required: true
+        type: number
+permissions: {}
+concurrency:
+  group: agent-review-${{ inputs.pr }}
+defaults:
+  run:
+    shell: bash
+env:
+  REPO: ${{ github.repository }}
+  BOT: ${{ vars.IRIE_BOT_LOGIN }}
+  MAX_ROUNDS: "3"
+  QUORUM: "2"
+  CLAUDE_CODE_VERSION: "2.1.310"
+  CODEX_VERSION: "0.159.0"
+  IRIE_CI: /tmp/irie-ci
+jobs:
+  gate:
+    if: vars.IRIE_AGENTS == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      issue: ${{ steps.gate.outputs.issue }}
+      reviewers: ${{ steps.gate.outputs.reviewers }}
+      context_digest: ${{ steps.gate.outputs.context_digest }}
+      handover: ${{ steps.gate.outputs.handover }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check the pull request, its issue and that this round is due
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
+          ROUND: ${{ inputs.round }}
+        run: python3 -I .github/irie/swarm.py gate-review --reviewers .github/irie/reviewers.json --context context
+      - uses: actions/upload-artifact@v4
+        with:
+          name: context
+          path: context/
+          retention-days: 3
+
+  handover:
+    # The gate refused a round that was due: hand the pull request to people. A gate
+    # that refused a duplicate or stray run says so, and then nothing is labelled.
+    needs: gate
+    if: ${{ !cancelled() && vars.IRIE_AGENTS == 'on' && needs.gate.result == 'failure' && needs.gate.outputs.handover != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Label it agent:needs-human
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+        run: |
+          gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=agent:needs-human" >/dev/null
+          gh api -X DELETE "repos/$REPO/issues/$PR/labels/agent:review" >/dev/null 2>&1 || true
+
+  checks:
+    # Runs the pull request's code: with no secret, a read-only token and no cache,
+    # and as a user without sudo, so that the code cannot read the runner's memory
+    # and the tokens in it, the one that writes this run's artifacts included.
+    needs: gate
+    if: vars.IRIE_AGENTS == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Run go vet and go test on the pull request's code, without sudo
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq tmux
+          sudo useradd --create-home tester
+          sudo cp -a . /home/tester/src
+          sudo chown -R tester: /home/tester/src
+          as_tester() { sudo -u tester -H env PATH="$PATH" bash -c "cd ~/src && $1"; }
+          {
+            echo '$ go vet ./...'
+            as_tester 'timeout 5m go vet ./...' 2>&1 && echo "go vet: ok" || echo "go vet: failed ($?)"
+            echo
+            echo '$ go test ./...'
+            as_tester 'timeout 15m go test ./...' 2>&1 && echo "go test: ok" || echo "go test: failed ($?)"
+          } >checks.full
+          head -c 200000 checks.full >checks.txt
+          grep -E '^go (vet|test): ' checks.full
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checks
+          path: checks.txt
+          retention-days: 3
+
+  review:
+    needs: [gate, checks]
+    if: vars.IRIE_AGENTS == 'on'
+    name: review (${{ matrix.reviewer }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.gate.outputs.reviewers) }}
+    environment: ${{ matrix.environment }}
+    permissions:
+      contents: read
+    steps:
+      # This job's artifact is uploaded even when the reviewer fails, with overwrite,
+      # so that it replaces anything uploaded earlier in the run under its name.
+      - name: Mark the reviewer's artifact
+        env:
+          REVIEWER: ${{ matrix.reviewer }}
+        run: mkdir -p out && echo "$REVIEWER" >out/reviewer.txt
+      - name: Check out main, for the prompts, the config and Irie
+        uses: actions/checkout@v4
+        with:
+          path: trusted
+          persist-credentials: false
+      - name: Check out the commit under review
+        uses: actions/checkout@v4
+        with:
+          path: review/pr
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: context
+          path: review/context
+      - uses: actions/download-artifact@v4
+        with:
+          name: checks
+          path: ${{ runner.temp }}/checks
+      - name: Give the reviewer its context
+        env:
+          REVIEWER: ${{ matrix.reviewer }}
+          SHA: ${{ inputs.sha }}
+          DIGEST: ${{ needs.gate.outputs.context_digest }}
+        run: |
+          # The context exactly as the gate wrote it, and of the checks only their text.
+          python3 -I trusted/.github/irie/swarm.py digest --dir review/context --expect "$DIGEST"
+          if [ -f "$RUNNER_TEMP/checks/checks.txt" ] && [ ! -L "$RUNNER_TEMP/checks/checks.txt" ]; then
+            cp "$RUNNER_TEMP/checks/checks.txt" review/context/checks.txt
+          fi
+          base=$(git -C review/pr merge-base origin/main "$SHA")
+          git -C review/pr diff "$base" "$SHA" >review/context/pr.diff
+          # Its own earlier findings and the answers to them, not the other reviewers'.
+          python3 -I trusted/.github/irie/swarm.py slice --history review/context/history.json \
+            --reviewer "$REVIEWER" --out review/context/round.json
+          rm review/context/history.json
+          cp trusted/.github/irie/findings.schema.json review/context/
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: trusted/go.mod
+          cache: false
+      - name: Install tmux and the reviewer's CLI, and build Irie
+        env:
+          CLI: ${{ matrix.cli }}
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq tmux
+          case $CLI in
+          claude) npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" ;;
+          codex) npm install -g "@openai/codex@$CODEX_VERSION" ;;
+          esac
+          bash trusted/.github/irie/setup-irie.sh trusted
+      - name: Run the reviewer through Irie
+        env:
+          ANTHROPIC_API_KEY: ${{ matrix.cli == 'claude' && secrets.MODEL_KEY || '' }}
+          CODEX_API_KEY: ${{ matrix.cli == 'codex' && secrets.MODEL_KEY || '' }}
+          PROFILE: ${{ matrix.profile }}
+          REVIEWER: ${{ matrix.reviewer }}
+        run: |
+          cat trusted/.github/irie/reviewer.md trusted/AGENTS.md >"$IRIE_CI/task.md"
+          bash trusted/.github/irie/run-agent.sh "$PROFILE" "$PWD/review" "review-$REVIEWER" "$IRIE_CI/task.md" 30
+      - name: Collect the findings
+        if: always()
+        run: if [ -f review/findings.json ]; then cp review/findings.json out/; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: findings-${{ matrix.reviewer }}
+          path: out/
+          retention-days: 3
+          overwrite: true
+
+  decide:
+    # Runs no agent and no code from the pull request. It reads the reviewers'
+    # findings as data, posts them, and takes the next step. A cancelled run stops
+    # it too.
+    needs: [gate, review]
+    if: ${{ !cancelled() && vars.IRIE_AGENTS == 'on' && needs.gate.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: irie-bot
+    permissions:
+      contents: read
+      actions: write # starts agent-author to answer
+      issues: write # labels
+      pull-requests: write # labels
+    env:
+      PR: ${{ inputs.pr }}
+      SHA: ${{ inputs.sha }}
+      ROUND: ${{ inputs.round }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        # Findings count only when the reviewers ran.
+        if: needs.review.result != 'skipped'
+        continue-on-error: true # no reviewer job may have got as far as its upload
+        with:
+          pattern: findings-*
+          path: ${{ runner.temp }}/findings
+      - name: Check the findings and decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWERS: ${{ needs.gate.outputs.reviewers }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/findings"
+          python3 -I .github/irie/swarm.py decide --findings "$RUNNER_TEMP/findings" --out "$RUNNER_TEMP/decision"
+      - name: Get a token for the bot
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Post the reviews
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          if [ "$head" != "$SHA" ]; then
+            echo "#$PR moved to $head during the review, so a person takes it from here." >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          # Comments only: a review from the bot never approves or requests changes.
+          for f in "$RUNNER_TEMP"/decision/reviews/*.json; do
+            [ -e "$f" ] || continue
+            if ! gh api -X POST "repos/$REPO/pulls/$PR/reviews" --input "$f" >/dev/null; then
+              python3 -I -c 'import json, sys; json.dump({"body": json.load(open(sys.argv[1]))["body"]}, sys.stdout)' "$f" |
+                gh api -X POST "repos/$REPO/issues/$PR/comments" --input - >/dev/null
+            fi
+          done
+      - name: Mark the pull request ready for a person
+        if: steps.decide.outputs.action == 'ready'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          JOB_TOKEN: ${{ github.token }}
+        run: |
+          gh pr ready "$PR" --repo "$REPO"
+          GH_TOKEN=$JOB_TOKEN gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=agent:ready" >/dev/null
+          GH_TOKEN=$JOB_TOKEN gh api -X DELETE "repos/$REPO/issues/$PR/labels/agent:review" >/dev/null 2>&1 || true
+          # Arm auto-merge only while a ruleset on main makes a code owner approve the
+          # latest push; GitHub then merges only after that approval and green checks.
+          if GH_TOKEN=$JOB_TOKEN gh api "repos/$REPO/rules/branches/main" | python3 -I .github/irie/swarm.py rules-ok; then
+            gh pr merge "$PR" --repo "$REPO" --auto --merge --match-head-commit "$SHA" ||
+              echo "Auto-merge was not armed; a maintainer merges by hand." >>"$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Have the author answer the review
+        if: steps.decide.outputs.action == 'answer'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.gate.outputs.issue }}
+        run: gh workflow run agent-author.yml --repo "$REPO" --ref main -f issue="$ISSUE" -f pr="$PR" -f round="$ROUND"
+      - name: Hand the pull request to people
+        if: failure() || steps.decide.outputs.action == 'stop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=agent:needs-human" >/dev/null
+          gh api -X DELETE "repos/$REPO/issues/$PR/labels/agent:review" >/dev/null 2>&1 || true

@@ -1,5 +1,7 @@
 /irie
 dist/
+/mac/build/
+/mac/.build/
 .env*
 .npmrc
 .clean-room/

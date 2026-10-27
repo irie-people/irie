@@ -21,6 +21,8 @@ import (
 	"github.com/irie-hq/irie/internal/harness/generic"
 	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/localmodel"
+	"github.com/irie-hq/irie/internal/route"
 	"github.com/irie-hq/irie/internal/tmux"
 )
 
@@ -30,6 +32,8 @@ func harnessFor(id string) (harness.Harness, error) {
 		return claude.Harness{}, nil
 	case "generic":
 		return generic.Harness{}, nil
+	case "tool":
+		return toolHarness{}, nil
 	}
 	return nil, fmt.Errorf("no harness %q", id)
 }
@@ -161,19 +165,69 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	if profileName == "" {
 		profileName = c.cfg.Spawn.DefaultProfile
 	}
-	profile, ok := c.cfg.Profiles[profileName]
-	if !ok {
-		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s", profileName, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "))
+	// A task's class teaches the router whichever profile runs it; a task
+	// carried on keeps the class of the one it continues.
+	class, why := route.Classify(a.Task, c.cfg.Route.Words)
+	if a.Continues != "" {
+		c.mu.Lock()
+		if o := c.outcomes[a.Continues]; o != nil && o.class != "" {
+			class, why = o.class, "the class of the task it carries on"
+		}
+		c.mu.Unlock()
 	}
+	extra := map[string]any{"class": class, "task_hash": route.Fingerprint(a.Task)}
+	if profileName == config.Auto {
+		ch, err := c.autoRoute(a, class, why)
+		if err != nil {
+			c.log.Info("not routed", "err", err)
+			return ipc.Session{}, err
+		}
+		profileName, extra["routed"], extra["route"] = ch.Profile, true, ch.Reason
+	}
+	for k, v := range map[string]string{"parent": a.Parent, "continues": a.Continues} {
+		if v != "" {
+			extra[k] = v
+		}
+	}
+	profile, ok := c.profile(profileName)
+	if !ok {
+		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, +%s to route by cost per success, and +%s<model> for a local model", profileName, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "), config.Auto, localPrefix)
+	}
+	switch {
+	case a.PermissionMode != "":
+		profile.PermissionMode = a.PermissionMode
+	case a.Delegate:
+		profile.PermissionMode = c.cfg.Route.DelegateMode
+	}
+	// A local profile's model is checked, and may be loaded, before
+	// anything else; like probing, it happens before taking the lock.
+	var warnings []string
+	if profile.Local != nil {
+		var err error
+		if warnings, err = c.prepareLocal(profileName, &profile, a.Force); err != nil {
+			c.log.Warn("spawn refused", "profile", profileName, "err", err)
+			return ipc.Session{}, err
+		}
+	}
+	return c.spawnProfile(a, profileName, profile, warnings, extra)
+}
+
+// spawnProfile spawns a on profile, which is ready to run: routed, its
+// local model checked. extra goes into spawn.requested.
+func (c *Core) spawnProfile(a ipc.SpawnArgs, profileName string, profile config.Profile, warnings []string, extra map[string]any) (ipc.Session, error) {
 	h, err := harnessFor(profile.Harness)
 	if err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", profileName, err)
+	}
+	if m := c.readMachine(); m.Total > 0 && m.Available < localmodel.Reserve(m) {
+		warnings = append(warnings, fmt.Sprintf("memory is low: %s free of %s", localmodel.Bytes(m.Available), localmodel.Bytes(m.Total)))
 	}
 	// Probing runs the CLI, so it happens before taking the lock.
 	var probe harness.Probe
 	if p, ok := h.(harness.Prober); ok {
 		probe = p.Probe(profile, c.agentEnv(profile))
 	}
+	probe.Warnings = append(warnings, probe.Warnings...)
 
 	// Spawns run one at a time, so a worktree's slug cannot race another
 	// spawn's name. Making a worktree runs git, which can take a while, so
@@ -190,7 +244,11 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 		return ipc.Session{}, err
 	}
 	c.mu.Lock()
-	x, err := c.launch(a, pl, profileName, h, probe)
+	if hash, _ := extra["task_hash"].(string); hash != "" {
+		class, _ := extra["class"].(string)
+		c.escalate(hash, class, profileName, time.Now())
+	}
+	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra})
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
 	}
@@ -206,42 +264,75 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 }
 
 // agentEnv is, as near as the core can tell, the environment an agent of
-// profile p starts with: the core's own without tmux's variables, and the
-// profile's.
+// profile p starts with: the core's own without tmux's variables and those
+// that tie it to another session or terminal pane, and the profile's.
 func (c *Core) agentEnv(p config.Profile) []string {
-	env := tmux.WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE")
+	env := host.WithoutIdentity(tmux.WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE"))
 	for _, k := range slices.Sorted(maps.Keys(p.Env)) {
 		env = append(env, k+"="+p.Env[k])
 	}
 	return env
 }
 
+// job is what launch starts: a new task in the place that place found, or
+// a conversation that carries on in a place of its own.
+type job struct {
+	place
+	profile string         // the profile's name
+	run     config.Profile // the profile as it runs: routed, its local model checked
+	h       harness.Harness
+	probe   harness.Probe
+	task    string         // the task; empty when the job resumes
+	resume  string         // the vendor id of the conversation to carry on
+	data    map[string]any // more data for spawn.requested
+	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
+}
+
 // launch writes the session's files, creates its window and records the
-// spawn, in the place that place found. The caller holds c.mu.
-func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.Harness, probe harness.Probe) (*session, error) {
+// spawn. The caller holds c.mu.
+func (c *Core) launch(j job) (*session, error) {
 	if err := c.refresh(); err != nil {
 		return nil, err
 	}
-	id := newID(time.Now())
+	id, created := newID(time.Now()), time.Now().UTC().Truncate(time.Millisecond)
 	for c.sessions[id] != nil {
 		id = newID(time.Now())
 	}
-	profile := c.cfg.Profiles[profileName]
+	if j.reopen != nil {
+		id, created = j.reopen.ID, j.reopen.Created
+	}
+	// A resumed conversation keeps its id; a new one gets its id from Irie.
+	vendorID := j.resume
+	if vendorID == "" {
+		vendorID = harness.NewUUID()
+	}
+	pl, h, profile := j.place, j.h, j.run
 	x := &session{
-		id: id, name: pl.name, agent: "main", created: time.Now().UTC().Truncate(time.Millisecond),
+		id: id, name: pl.name, agent: "main", created: created,
 		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
-		profile: profileName, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
-		vendorID: harness.NewUUID(), warnings: append(slices.Clone(pl.warnings), probe.Warnings...),
+		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
+		vendorID: vendorID, warnings: append(slices.Clone(pl.warnings), j.probe.Warnings...),
+		model: profile.Model, local: profile.Local != nil, out: c.outcome(id),
 	}
 
 	dir := c.paths.Session(id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	argv, env, files, err := h.Launch(profile, harness.Spawn{
-		Session: id, Name: x.name, Task: a.Task, Cwd: x.cwd, Dir: dir, VendorID: x.vendorID,
-		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: probe,
-	})
+	s := harness.Spawn{
+		Session: id, Name: x.name, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
+		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: j.probe,
+		StatusLine: c.cfg.Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
+	}
+	launch := h.Launch
+	if j.resume != "" {
+		r, ok := h.(harness.Resumer)
+		if !ok {
+			return nil, fmt.Errorf("%s cannot carry a conversation on", h.ID())
+		}
+		launch = r.Resume
+	}
+	argv, env, files, err := launch(profile, s)
 	if err != nil {
 		return nil, err
 	}
@@ -262,8 +353,9 @@ func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.H
 	}
 	spec := c.paths.SpecFile(id)
 	if err := host.WriteSpec(spec, host.Spec{
-		Session: id, Profile: profileName, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: x.cwd, Warnings: x.warnings,
+		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: x.cwd, Warnings: x.warnings,
 		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
+		Model: x.model, Local: x.local,
 	}); err != nil {
 		return nil, err
 	}
@@ -296,12 +388,21 @@ func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.H
 	}
 	x.pane = strings.TrimSpace(out)
 	c.sessions[id] = x
-	data := map[string]any{"task_bytes": len(a.Task), "cwd": x.cwd, "profile": profileName}
+	data := map[string]any{"cwd": x.cwd, "profile": j.profile}
+	if j.resume == "" {
+		data["task_bytes"] = len(j.task)
+	}
 	for k, v := range map[string]string{"repo": x.repo, "worktree": x.worktree, "branch": x.branch} {
 		if v != "" {
 			data[k] = v
 		}
 	}
+	maps.Copy(data, j.data)
 	c.record(x, event.Event{Source: event.SourceIrie, Kind: event.SpawnRequested, Data: data})
+	// A tool takes no task, so it is at work from the start, and one that
+	// finishes at once has exited rather than failed to start.
+	if h.ID() == "tool" {
+		c.record(x, event.Event{Source: event.SourceIrie, Agent: event.Main, Kind: event.PromptSubmitted, Data: map[string]any{"chars": 0}})
+	}
 	return x, nil
 }

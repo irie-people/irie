@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "description": "One reviewer's findings on one commit of an agent's pull request (docs/proposals/self-maintaining.md).",
+  "additionalProperties": false,
+  "required": ["summary", "findings"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "One paragraph: what the change does and the reviewer's overall view."
+    },
+    "findings": {
+      "type": "array",
+      "description": "At most 12. From round 2, every earlier finding again, with its status.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "status", "file", "line", "title", "body"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "NAME-N: the reviewer's name from context/round.json, a dash and a number kept across rounds."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["blocking", "should", "nit"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["open", "resolved", "withdrawn"]
+          },
+          "file": {
+            "type": "string",
+            "description": "Path in the repository, or empty for the change as a whole."
+          },
+          "line": {
+            "type": "integer",
+            "description": "Line in the new version of the file, or 0."
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "What is wrong, why it matters and what would fix it."
+          }
+        }
+      }
+    }
+  }
+}
