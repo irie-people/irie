@@ -36,7 +36,8 @@ struct MarkdownText: View {
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
+                .padding(.horizontal, Theme.inset)
+                .padding(.vertical, 10)
                 .background(RoundedRectangle(cornerRadius: Theme.radius - 2, style: .continuous).fill(Theme.panel))
                 .overlay(RoundedRectangle(cornerRadius: Theme.radius - 2, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
         case let .quote(text):
@@ -58,7 +59,8 @@ struct MarkdownText: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(.horizontal, Theme.inset)
+            .padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: Theme.radius - 2, style: .continuous).fill(Theme.panel))
         case .rule:
             Rectangle().fill(Theme.edge).frame(height: 1).padding(.vertical, 2)

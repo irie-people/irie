@@ -87,6 +87,8 @@ func (m Model) state(s ipc.Session) (glyph string, c color.Color, dim, loud bool
 			return "✕", lipgloss.Red, true, false
 		}
 		return "·", nil, true, false
+	case ipc.StateFrozen:
+		return "◆", lipgloss.Cyan, false, false
 	case ipc.StateNeedsYou:
 		return "●", lipgloss.Red, false, true
 	case ipc.StateStalled:
@@ -161,7 +163,7 @@ func (m Model) header() string {
 // they fit, else glyphs and numbers. A zero count is faint, so colour only
 // ever means that something is there.
 func (m Model) counts(w int) string {
-	working, needs, done := 0, 0, 0
+	working, needs, done, frozen := 0, 0, 0, 0
 	for _, s := range m.sessions {
 		switch s.State {
 		case ipc.StateWorking:
@@ -170,11 +172,12 @@ func (m Model) counts(w int) string {
 			needs++
 		case ipc.StateDone:
 			done++
+		case ipc.StateFrozen:
+			frozen++
 		}
 	}
-	// Paused and frozen come from gates and freezes, which this version does
-	// not have yet.
-	paused, frozen := 0, 0
+	// Paused comes from gates, which this version does not have yet.
+	paused := 0
 	all := []struct {
 		glyph, label string
 		n            int
@@ -189,6 +192,11 @@ func (m Model) counts(w int) string {
 	for _, long := range []bool{true, false} {
 		var parts []string
 		for _, x := range all {
+			// With close_when_done a finished session closes itself: no
+			// Done count, and history has what closed.
+			if x.label == "done" && m.head.CloseWhenDone {
+				continue
+			}
 			text := fmt.Sprintf("%s%d", x.glyph, x.n)
 			if long {
 				text += " " + x.label
@@ -218,12 +226,22 @@ func (m Model) rule() string {
 func (m Model) row(i int) string {
 	s := m.sessions[i]
 	g, c, dim, loud := m.state(s)
-	return m.paint(i, g, c, dim, loud, s.Name, age(m.now().Sub(s.Created)))
+	return m.paintBadged(i, g, c, dim, loud, s.Priority > 0, s.Name, age(m.now().Sub(s.Created)))
 }
 
 // paint draws list row i, `[edge][glyph] name … age`, with the glyph's
 // colour and, for a row that is dim or loud, its name's.
 func (m Model) paint(i int, g string, c color.Color, dim, loud bool, name, a string) string {
+	return m.paintBadged(i, g, c, dim, loud, false, name, a)
+}
+
+// paintBadged is paint with, for a promoted session, a sun-coloured ↑
+// between the glyph and the name.
+func (m Model) paintBadged(i int, g string, c color.Color, dim, loud, promoted bool, name, a string) string {
+	sep, badge := " ", lipgloss.NewStyle()
+	if promoted {
+		sep, badge = "↑", styleBadge
+	}
 	nameW := m.width - 5 - lipgloss.Width(a)
 	name = cut(name, nameW)
 	gap := spaces(nameW - lipgloss.Width(name))
@@ -235,8 +253,8 @@ func (m Model) paint(i int, g string, c color.Color, dim, loud bool, name, a str
 		if gc == nil {
 			gc = onGreen
 		}
-		return bar.Foreground(sun).Render("▌") + bar.Foreground(gc).Render(g) +
-			text.Render(" "+name+gap+" ") + text.Faint(true).Render(a) + text.Render(" ")
+		return bar.Foreground(sun).Render("▌") + bar.Foreground(gc).Render(g) + bar.Inherit(badge).Render(sep) +
+			text.Render(name+gap+" ") + text.Faint(true).Render(a) + text.Render(" ")
 	}
 	gs, ns := lipgloss.NewStyle().Foreground(c), lipgloss.NewStyle()
 	if loud {
@@ -251,7 +269,7 @@ func (m Model) paint(i int, g string, c color.Color, dim, loud bool, name, a str
 		edge = styleTitle.Faint(true).Render("▌")
 		ns = ns.Bold(true)
 	}
-	return edge + gs.Render(g) + " " + ns.Render(name) + gap + " " + styleDim.Render(a) + " "
+	return edge + gs.Render(g) + badge.Render(sep) + ns.Render(name) + gap + " " + styleDim.Render(a) + " "
 }
 
 func (m Model) statusLine() string {
@@ -277,6 +295,9 @@ func (m Model) statusLine() string {
 	// its full name on the left and its directory right-aligned.
 	s := m.sessions[m.sel]
 	var parts []string
+	if l := frozenLine(s); l != "" {
+		parts = append(parts, l)
+	}
 	switch {
 	case s.Detail != "" && s.Command != "":
 		parts = append(parts, s.Detail+" ("+s.Command+")")
