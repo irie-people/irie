@@ -85,6 +85,8 @@ var PermissionModes = []string{"acceptEdits", "auto", "bypassPermissions", "defa
 type UI struct {
 	SidebarWidth int    `toml:"sidebar_width"` // columns
 	FocusKey     string `toml:"focus_key"`     // tmux key that toggles sidebar and slot
+	FlipKey      string `toml:"flip_key"`      // tmux key that flips the slot between conversation and terminal; "" for none
+	View         string `toml:"view"`          // what the slot shows first: conversation | terminal
 	MaxSubRows   int    `toml:"max_sub_rows"`
 	RedOnDone    bool   `toml:"red_on_done"`
 	Ghostty      string `toml:"ghostty"` // auto | off
@@ -195,7 +197,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -456,6 +458,12 @@ func (c Config) Validate() error {
 	}
 	if !tmuxKey.MatchString(c.UI.FocusKey) || strings.ContainsAny(c.UI.FocusKey, `'"#`) {
 		bad("ui.focus_key = %q: must be a tmux key name such as C-]", c.UI.FocusKey)
+	}
+	if c.UI.FlipKey != "" && (!tmuxKey.MatchString(c.UI.FlipKey) || strings.ContainsAny(c.UI.FlipKey, `'"#`) || c.UI.FlipKey == c.UI.FocusKey) {
+		bad("ui.flip_key = %q: must be a tmux key name such as C-\\, other than ui.focus_key, or empty for none", c.UI.FlipKey)
+	}
+	if c.UI.View != "conversation" && c.UI.View != "terminal" {
+		bad("ui.view = %q: must be conversation or terminal", c.UI.View)
 	}
 	if c.UI.MaxSubRows < 0 {
 		bad("ui.max_sub_rows = %d: must not be negative", c.UI.MaxSubRows)

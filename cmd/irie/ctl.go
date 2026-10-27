@@ -31,6 +31,8 @@ const ctlUsage = `usage: irie ctl <command>
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short
   irie ctl show [--focus] SESSION        show a session in the slot
+  irie ctl flip                          flip the slot between the shown session's
+                                         conversation and its raw terminal
   irie ctl send SESSION TEXT...          type a message to a session's agent, as
                                          a person would; TEXT - reads stdin
   irie ctl conversation [--json] [--follow] SESSION
@@ -78,6 +80,8 @@ func ctl(args []string) error {
 		return ctlConversation(args[1:])
 	case "send":
 		return ctlSend(args[1:])
+	case "flip":
+		return ctlFlip(args[1:])
 	case "watch":
 		return ctlWatch(args[1:])
 	case "move":
@@ -475,4 +479,16 @@ func ctlSend(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+}
+
+func ctlFlip(args []string) error {
+	if len(args) > 0 {
+		return errors.New("usage: irie ctl flip")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var r ipc.FlipResult
+	return ipc.Call(sock, 10*time.Second, ipc.OpFlip, nil, &r)
 }

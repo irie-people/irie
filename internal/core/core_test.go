@@ -37,6 +37,9 @@ type agentConfig struct {
 	// usage.status_line, off unless a test is about it: it reads the user's
 	// Claude Code settings.
 	statusLine bool
+	// ui.view = "terminal": the slot shows a shown session's raw terminal,
+	// for the tests of swapping panes in.
+	terminal bool
 }
 
 func (a agentConfig) toml(fake string) string {
@@ -59,6 +62,9 @@ func (a agentConfig) toml(fake string) string {
 			kv = append(kv, fmt.Sprintf("%s = %q", k, a.env[k]))
 		}
 		b.WriteString("env = { " + strings.Join(kv, ", ") + " }\n")
+	}
+	if a.terminal {
+		b.WriteString("\n[ui]\nview = \"terminal\"\n")
 	}
 	if a.extra != "" {
 		b.WriteString("\n" + a.extra)
@@ -374,7 +380,7 @@ func TestSpawnInPlace(t *testing.T) {
 }
 
 func TestShowSwapsTheSessionIntoTheSlot(t *testing.T) {
-	c := setup(t)
+	c := setupWith(t, agentConfig{terminal: true})
 	a, b := c.spawn("task a"), c.spawn("task b")
 	paneA, paneB := c.pane(a.Pane), c.pane(b.Pane)
 	if paneA == nil || paneB == nil {
@@ -526,7 +532,7 @@ func TestCoreRestartGivesTheSameRows(t *testing.T) {
 // check does. A client attached from inside a second private server stands
 // in for the terminal.
 func TestTheSidebarSpawnsAndShows(t *testing.T) {
-	c := setup(t)
+	c := setupWith(t, agentConfig{terminal: true})
 	term := c.Socket + "-term"
 	termTmux := func(args ...string) string {
 		t.Helper()

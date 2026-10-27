@@ -77,6 +77,8 @@ type Core struct {
 	planAt     time.Time
 	outcomes   map[string]*outcome // every session's route and outcome, those gone included
 	closes     closes              // closed sessions, and agents still ending (close.go)
+	selected   string              // the session you picked, whose conversation or terminal the slot shows (view.go)
+	raw        bool                // the slot shows the picked session's raw terminal, not its conversation
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -187,6 +189,9 @@ func Run(o Options) error {
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
+	c.mu.Lock()
+	c.loadView()
+	c.mu.Unlock()
 	c.tick()
 	go c.sample()
 
@@ -229,6 +234,7 @@ func (c *Core) tick() {
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.keepView()
 	c.reap()
 	c.observe(time.Now())
 	c.countTokens()
@@ -281,7 +287,9 @@ func (c *Core) sync(s tmux.Snapshot) {
 			c.sessions[x.id] = x
 		}
 		x.pane, x.dead, x.exitCode, x.command, x.bracket = p.ID, p.Dead, p.DeadStatus, p.Command, p.BracketPaste
-		x.shown = slot != nil && slot.ID == p.ID
+		// Shown: its pane is in the slot, or its conversation is, which
+		// the placeholder draws.
+		x.shown = slot != nil && (slot.ID == p.ID || slot.Role == tmux.RolePlaceholder && !c.rawView() && c.selected == x.id)
 	}
 	for id := range c.sessions {
 		if !seen[id] {
@@ -415,7 +423,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen,
 		}}, nil
@@ -481,6 +489,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		items, notes := c.complete(a.Text)
 		return ipc.CompleteResult{Items: items, Notes: notes}, nil
+	case ipc.OpFlip:
+		return c.flip()
 	case ipc.OpSend:
 		var a ipc.SendArgs
 		if err := decode(raw, &a); err != nil {
@@ -590,7 +600,8 @@ func (c *Core) swapIn(id string, focus bool) error {
 	if x == nil {
 		return ipc.Errorf(ipc.CodeNotFound, "no session %q", id)
 	}
-	cmds, err := tmux.SwapIn(c.snap, x.pane, focus)
+	c.selected = id
+	cmds, err := c.viewCmds(x, focus)
 	if err != nil {
 		return err
 	}
