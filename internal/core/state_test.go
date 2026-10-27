@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-hq/irie/internal/config"
 	"github.com/irie-hq/irie/internal/event"
 	"github.com/irie-hq/irie/internal/ipc"
 )
@@ -298,5 +299,16 @@ func TestRowsSayPlainWordsAndKeepTheCall(t *testing.T) {
 	tr.apply(s.sub(event.ToolStarted, "tool", "Read", "summary", "docs/DESIGN.md", "phrase", "Reading DESIGN.md", "tool_use_id", "t2"))
 	if subs := describe().Subagents; len(subs) != 1 || subs[0].Detail != "Reading DESIGN.md" || subs[0].Command != "Read · docs/DESIGN.md" {
 		t.Errorf("helper: %+v", subs)
+	}
+}
+
+func TestTheHeaderCarriesRedOnDone(t *testing.T) {
+	c := &Core{cfg: config.Default(), version: "test"}
+	if c.headerNow().RedOnDone {
+		t.Error("red_on_done is on by default")
+	}
+	c.cfg.UI.RedOnDone = true
+	if !c.headerNow().RedOnDone {
+		t.Error("the header lacks ui.red_on_done")
 	}
 }

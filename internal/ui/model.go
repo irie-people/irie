@@ -24,6 +24,9 @@ import (
 type Backend interface {
 	Spawn(ipc.SpawnArgs) (ipc.Session, error)
 	Show(id string, focus bool) error
+	// Rename gives a session a new name and returns it with the name the
+	// core gave it.
+	Rename(id, name string) (ipc.Session, error)
 	// Complete returns the tokens that complete an @ or + token, and for a
 	// + token what each profile runs and costs.
 	Complete(text string) (ipc.CompleteResult, error)
@@ -35,6 +38,10 @@ type Backend interface {
 	Tool(name string) (ipc.Session, error)
 	// Route says where a task would run, and why.
 	Route(task string) (route.Choice, error)
+	// Close closes a session; Reopen brings back a closed one, the one
+	// closed last when id is empty.
+	Close(id string) error
+	Reopen(id string) (ipc.Session, error)
 }
 
 // FrameMsg carries one frame of the core's subscription.
@@ -60,6 +67,11 @@ type (
 		name, verdict string
 		err           error
 	}
+	renamedMsg struct {
+		before  string
+		session ipc.Session
+		err     error
+	}
 	toolMsg struct {
 		session ipc.Session
 		err     error
@@ -72,7 +84,7 @@ type (
 
 // commands are what the command bar takes after a colon (DESIGN §4.2,
 // §4.6, §6.4).
-const commands = ":move [NAME], :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON]"
+const commands = ":rename NAME, :move [NAME], :close, :reopen, :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON]"
 
 type focusArea int
 
@@ -127,6 +139,9 @@ type Model struct {
 	moving         bool
 	confirming     string    // the outside session a first m asked to move
 	confirmedAt    time.Time // when it asked
+	closing        string    // the session a first x asked to close (close.go)
+	closingAt      time.Time // when it asked
+	reopening      bool
 
 	focus     focusArea
 	bar       textarea.Model
@@ -411,8 +426,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setStatus(msg.err.Error(), true)
 		}
+	case renamedMsg:
+		if msg.err != nil {
+			m.setStatus(msg.err.Error(), true)
+		} else {
+			m.setStatus(fmt.Sprintf("renamed %s to %s", msg.before, msg.session.Name), false)
+		}
 	case movedMsg:
 		m.moved(msg)
+	case closedMsg:
+		m.closedDone(msg)
+	case reopenedMsg:
+		m.reopened(msg)
 	case completedMsg:
 		m.completed(msg)
 	case ratedMsg:
@@ -473,7 +498,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft {
 			break
 		}
-		m.confirming = ""
+		m.confirming, m.closing = "", ""
 		if i, ok := m.listRow(msg.Y); ok {
 			m.press(i)
 			return m, nil
@@ -511,6 +536,9 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() != "m" {
 		m.confirming = "" // any other key cancels a move
 	}
+	if msg.String() != "x" {
+		m.closing = "" // and a close
+	}
 	switch msg.String() {
 	case "up", "k":
 		m.moveTo(m.sel - 1)
@@ -534,6 +562,20 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.freezeKey(msg.String() == "F")
 	case "!":
 		return m.promoteKey("")
+	case "r":
+		// The name is edited in the command bar, with its keys and the
+		// terminal's own cursor; Enter renames, Esc keeps the name.
+		if m.sel < 0 || m.sel >= len(m.sessions) {
+			m.setStatus("select one of Irie's sessions to rename it", true)
+			break
+		}
+		m.setFocus(focusBar)
+		m.bar.SetValue(":rename " + m.sessions[m.sel].Name)
+		m.clamp()
+		m.setStatus("Enter renames it, Esc keeps its name", false)
+	case "x":
+		cmd := m.closeSelected()
+		return m, cmd
 	case "+":
 		return m, m.rateCmd(ipc.Good)
 	case "-":
@@ -626,6 +668,17 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 		}
 		m.setFocus(focusList)
 		return done(m.moveCmd(o))
+	case name == "rename" && arg != "":
+		if m.sel < 0 || m.sel >= len(m.sessions) {
+			m.setStatus("no session to rename; select one of Irie's", true)
+			return m, nil
+		}
+		s := m.sessions[m.sel]
+		m.setFocus(focusList)
+		return done(func() tea.Msg {
+			r, err := b.Rename(s.ID, arg)
+			return renamedMsg{before: s.Name, session: r, err: err}
+		})
 	case name == "setup" && (arg == "" || arg == "local"):
 		m.setStatus("starting local setup…", false)
 		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolSetup); return toolMsg{session: s, err: err} }
@@ -637,6 +690,12 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return done(m.rateCmd(arg))
+	case name == "close" && arg == "":
+		m.setFocus(focusList)
+		return done(m.closeNamed())
+	case name == "reopen" && arg == "":
+		m.setFocus(focusList)
+		return done(m.reopenCmd())
 	case name == "route" && arg != "":
 		return m, func() tea.Msg { ch, err := b.Route(arg); return routedMsg{choice: ch, err: err} }
 	}

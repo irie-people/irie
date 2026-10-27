@@ -221,8 +221,10 @@ func (e *Env) WriteConfig(t testing.TB, extra string) {
 	}
 }
 
+// tmuxCmd runs tmux on the private server. -u, as the core's own runner has
+// it: a name is UTF-8 whatever the test's locale.
 func (e *Env) tmuxCmd(args ...string) *exec.Cmd {
-	cmd := exec.Command("tmux", append([]string{"-L", e.Socket}, args...)...)
+	cmd := exec.Command("tmux", append([]string{"-u", "-L", e.Socket}, args...)...)
 	cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+e.TmuxTmpDir)
 	return cmd
 }
