@@ -20,7 +20,8 @@ const maxRecent = 20
 
 // place is where a new session runs, and what the user should know about it.
 type place struct {
-	name     string // the session's name; a worktree's slug follows it
+	name     string // the session's name
+	named    bool   // the user chose it (title.go)
 	cwd      string
 	repo     string // the main checkout, when the task runs in a git repo
 	worktree string
@@ -56,8 +57,10 @@ func (c *Core) worktreeOptions() worktree.Options {
 // place finds where a task runs (DESIGN §4.2): with no repo, in a.Cwd, in
 // spawn.default_cwd or in a new scratch dir; with one, in a new worktree of
 // it, or in the directory itself for in_place or a directory outside git.
-// An @name that fits no repo or several fails, and nothing is spawned. The
-// caller holds c.spawnMu and not c.mu.
+// A new scratch dir or worktree, and its branch, are named after base, the
+// first free of base, base-2 and so on. An @name that fits no repo or
+// several fails, and nothing is spawned. The place has no name yet: the
+// spawn gives it one. The caller holds c.spawnMu and not c.mu.
 func (c *Core) place(a ipc.SpawnArgs, base string) (place, error) {
 	var dir string
 	if a.Repo != "" {
@@ -77,33 +80,22 @@ func (c *Core) place(a ipc.SpawnArgs, base string) (place, error) {
 			return place{}, ipc.Errorf(ipc.CodeBadArgs, "@%s: no such directory: %s", a.Repo, repo.Tilde(dir, home()))
 		}
 	}
-	c.mu.Lock()
-	if err := c.refresh(); err != nil {
-		c.mu.Unlock()
-		return place{}, err
-	}
-	taken := c.names()
-	c.mu.Unlock()
-
 	if a.Repo == "" {
-		name := unique(base, taken)
-		cwd, err := c.workdir(a.Cwd, name)
-		return place{name: name, cwd: cwd}, err
+		cwd, err := c.workdir(a.Cwd, base)
+		return place{cwd: cwd}, err
 	}
 	r, inGit, err := worktree.Find(dir)
 	if err != nil {
 		return place{}, err
 	}
 	if !inGit || a.InPlace {
-		p := place{name: unique(base, taken), cwd: dir}
+		p := place{cwd: dir}
 		if inGit {
 			p.repo = r.Main
 		}
 		return p, nil
 	}
-	res, err := worktree.Create(worktree.Request{
-		Repo: r.Top, Name: filepath.Base(r.Main), Slug: base, Taken: func(s string) bool { return taken[s] },
-	}, c.worktreeOptions())
+	res, err := worktree.Create(worktree.Request{Repo: r.Top, Name: filepath.Base(r.Main), Slug: base}, c.worktreeOptions())
 	if err != nil {
 		return place{}, err
 	}
@@ -115,7 +107,7 @@ func (c *Core) place(a ipc.SpawnArgs, base string) (place, error) {
 		}
 	}
 	return place{
-		name: res.Slug, cwd: cwd, repo: r.Main, worktree: res.Dir, branch: res.Branch,
+		cwd: cwd, repo: r.Main, worktree: res.Dir, branch: res.Branch,
 		copied: res.Copied, warnings: res.Warnings,
 	}, nil
 }

@@ -64,7 +64,7 @@ func TaskArg(task, dir string) string {
 // Spawn describes one new session.
 type Spawn struct {
 	Session  string        // Irie session id
-	Name     string        // slug shown in the sidebar
+	Name     string        // the name the user chose for the session; "" lets the agent title it
 	Task     string        // the task, verbatim
 	Cwd      string        // working directory
 	Repo     string        // the main checkout of the task's repo, when it runs in one

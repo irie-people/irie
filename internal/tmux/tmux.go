@@ -47,6 +47,9 @@ const (
 	OptCreated  = "@irie_created"
 	OptVendorID = "@irie_vendor_id"
 	OptVersion  = "@irie_version"
+	// OptNamed is "1" when the user chose the session's name, else "0". A
+	// pane from before Irie kept it has none.
+	OptNamed = "@irie_named"
 )
 
 // ErrNoServer means the server is not running.
@@ -210,6 +213,7 @@ type Pane struct {
 	IrieSession string
 	Agent       string
 	Name        string
+	Named       string
 	Created     string
 	VendorID    string
 	Version     string
@@ -218,7 +222,7 @@ type Pane struct {
 var paneFormat = []string{
 	"session_name", "window_id", "window_index", "window_panes", "window_width", "window_height",
 	"pane_id", "pane_index", "pane_pid", "pane_dead", "pane_dead_status", "pane_width", "pane_height",
-	OptRole, OptSession, OptAgent, OptName, OptCreated, OptVersion, OptVendorID,
+	OptRole, OptSession, OptAgent, OptName, OptNamed, OptCreated, OptVersion, OptVendorID,
 	"pane_current_command", "bracket_paste_flag", "window_zoomed_flag", "pane_active", "session_attached",
 }
 
@@ -243,8 +247,8 @@ func (r *Runner) Snapshot() (Snapshot, error) {
 		s.Panes = append(s.Panes, Pane{
 			Session: f[0], WindowID: f[1], WindowIndex: n(2), WindowPanes: n(3), WindowWidth: n(4), WindowHeight: n(5),
 			ID: f[6], Index: n(7), PID: n(8), Dead: f[9] == "1", DeadStatus: n(10), Width: n(11), Height: n(12),
-			Role: f[13], IrieSession: f[14], Agent: f[15], Name: f[16], Created: f[17], Version: f[18], VendorID: f[19],
-			Command: f[20], BracketPaste: f[21] == "1", Zoomed: f[22] == "1", Active: f[23] == "1", Attached: n(24),
+			Role: f[13], IrieSession: f[14], Agent: f[15], Name: f[16], Named: f[17], Created: f[18], Version: f[19], VendorID: f[20],
+			Command: f[21], BracketPaste: f[22] == "1", Zoomed: f[23] == "1", Active: f[24] == "1", Attached: n(25),
 		})
 	}
 	return s, nil

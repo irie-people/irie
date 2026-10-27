@@ -31,7 +31,7 @@ const (
 	// Claude Code session that runs outside Irie on in an Irie pane (§4.6).
 	OpMove = "move"
 	// OpRename gives a session a new name, which a restarted core keeps
-	// (DESIGN §2.4, M4).
+	// and Claude Code's titles leave be (DESIGN §2.4, M4).
 	OpRename = "rename"
 	// OpPreflight checks a local profile's model before a spawn (M10).
 	OpPreflight = "preflight"
@@ -385,7 +385,10 @@ type SpawnArgs struct {
 	Repo    string `json:"repo,omitempty"`
 	InPlace bool   `json:"in_place,omitempty"`
 	Profile string `json:"profile,omitempty"`
-	Name    string `json:"name,omitempty"`
+	// Name names the session as the user chose: shown as given, kept from
+	// Claude Code's titles and passed to it with --name. Without one the
+	// task's first line names the session until Claude Code titles it.
+	Name string `json:"name,omitempty"`
 	// Force spawns a local profile even when its model's context or the
 	// machine's memory falls short, with a warning (M10).
 	Force bool `json:"force,omitempty"`

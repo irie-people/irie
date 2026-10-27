@@ -403,7 +403,7 @@ func (c *Core) failover(id string) {
 		c.mu.Unlock()
 		return
 	}
-	name, cwd, profile := x.name, x.cwd, x.profile
+	name, named, cwd, profile := x.name, x.named, x.cwd, x.profile
 	c.mu.Unlock()
 	task, err := os.ReadFile(c.paths.TaskFile(id))
 	if err != nil {
@@ -419,7 +419,9 @@ func (c *Core) failover(id string) {
 		c.mu.Unlock()
 		c.publish(frames)
 	}
-	s, err := c.spawn(ipc.SpawnArgs{Task: failoverNote(profile) + string(task), Cwd: cwd, Profile: config.Auto, Name: name, Continues: id})
+	// The task carries on under its name, which is the user's only when it
+	// was theirs; else Claude Code may title the new session (title.go).
+	s, err := c.spawn(ipc.SpawnArgs{Task: failoverNote(profile) + string(task), Cwd: cwd, Profile: config.Auto, Name: name, Continues: id}, named)
 	if err != nil {
 		c.log.Info("no failover", "session", id, "err", err)
 		note(map[string]any{"reason": "it waits for the limit to reset: " + err.Error()})
@@ -518,7 +520,7 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s and %s", a.Name, ipc.ToolSetup, ipc.ToolModels)
 	}
 	p := config.Profile{Harness: "tool", Command: c.bin, Args: args, Env: map[string]string{}}
-	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, "tool:"+a.Name, p, nil, map[string]any{})
+	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{})
 }
 
 // saveResult keeps a turn's last message whole, for `irie ctl delegate`.
