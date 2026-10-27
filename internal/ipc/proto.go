@@ -25,6 +25,9 @@ const (
 	// OpAttachInfo is the planned op of DESIGN §2.4, here for the Mac app:
 	// how a terminal outside Irie attaches to the slot (docs/MAC.md).
 	OpAttachInfo = "attach-info"
+	// OpMove is an addition to the ops of DESIGN §2.4: it carries an idle
+	// Claude Code session that runs outside Irie on in an Irie pane (§4.6).
+	OpMove = "move"
 )
 
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
@@ -38,6 +41,7 @@ const (
 	CodeUnknownOp  = "unknown_op"
 	CodeNotFound   = "not_found"
 	CodeAmbiguous  = "ambiguous" // a name that fits more than one thing; the message lists them
+	CodeBusy       = "busy"      // the session is busy or still running, so this cannot happen now
 	CodeInternal   = "internal"
 )
 
@@ -120,6 +124,10 @@ type HelloResult struct {
 
 type ListResult struct {
 	Sessions []Session `json:"sessions"`
+	// Outside lists the Claude Code sessions that run outside Irie, oldest
+	// first (DESIGN §4.6). OutsideProblem says why that list may be old.
+	Outside        []OutsideSession `json:"outside"`
+	OutsideProblem string           `json:"outside_problem,omitempty"`
 }
 
 type SubscribeArgs struct {
@@ -192,20 +200,27 @@ const (
 	FrameUpsert   = "upsert"
 	FrameRemove   = "remove"
 	FrameEvent    = "event" // only with SubscribeArgs.Events
+	// FrameOutside lists the sessions outside Irie (DESIGN §4.6): once
+	// after the first snapshot, then whenever the list or its problem
+	// changes. A subscription to one session gets none.
+	FrameOutside = "outside"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
 type Frame struct {
-	T        string       `json:"t"`
-	Sessions []Session    `json:"sessions,omitempty"` // snapshot
-	Header   *Header      `json:"header,omitempty"`   // snapshot
-	Session  *Session     `json:"session,omitempty"`  // upsert
-	ID       string       `json:"id,omitempty"`       // remove
-	Event    *event.Event `json:"event,omitempty"`    // event
+	T        string           `json:"t"`
+	Sessions []Session        `json:"sessions,omitempty"` // snapshot
+	Header   *Header          `json:"header,omitempty"`   // snapshot
+	Session  *Session         `json:"session,omitempty"`  // upsert
+	ID       string           `json:"id,omitempty"`       // remove
+	Event    *event.Event     `json:"event,omitempty"`    // event
+	Outside  []OutsideSession `json:"outside,omitempty"`  // outside
+	Problem  string           `json:"problem,omitempty"`  // outside: why the list may be old
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
-// the sessions of a snapshot, even when there are none.
+// the sessions of a snapshot and of an outside frame, even when there are
+// none.
 func (f Frame) MarshalJSON() ([]byte, error) {
 	switch f.T {
 	case FrameSnapshot:
@@ -237,6 +252,16 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T     string       `json:"t"`
 			Event *event.Event `json:"event"`
 		}{f.T, f.Event})
+	case FrameOutside:
+		o := f.Outside
+		if o == nil {
+			o = []OutsideSession{}
+		}
+		return json.Marshal(struct {
+			T       string           `json:"t"`
+			Outside []OutsideSession `json:"outside"`
+			Problem string           `json:"problem,omitempty"`
+		}{f.T, o, f.Problem})
 	}
 	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)
 }

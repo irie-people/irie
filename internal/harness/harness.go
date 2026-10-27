@@ -104,6 +104,16 @@ type Harness interface {
 	Respond(e event.Event, r HookReply) []byte
 }
 
+// Resumer is a harness that can carry one of its CLI's conversations on in a
+// new pane, such as a Claude Code session moved into Irie (DESIGN §4.6).
+// Reopening a closed session (§4.5) will build on it.
+type Resumer interface {
+	// Resume returns argv, extra env and files to write for a session that
+	// continues the conversation s.VendorID instead of starting one. It
+	// takes no task: the agent waits for input.
+	Resume(p config.Profile, s Spawn) (argv []string, env map[string]string, files map[string][]byte, err error)
+}
+
 // Prober is a harness that inspects its CLI before a launch.
 type Prober interface {
 	// Probe runs the profile's CLI with env to learn its version and flags.

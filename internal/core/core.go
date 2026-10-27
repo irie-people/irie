@@ -57,6 +57,7 @@ type Core struct {
 	history   map[string][]event.Event // journal events of sessions not adopted yet
 	recent    []string                 // repos used recently, newest first
 	appViews  int                      // open subscriptions of the Mac app; while any, the slot is zoomed
+	outside   outside                  // the Claude Code sessions outside Irie (outside.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -154,6 +155,7 @@ func Run(o Options) error {
 	}
 	defer l.Close()
 	go ipc.Serve(l, c)
+	go c.watchOutside()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
@@ -358,11 +360,24 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo}}, nil
+		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: []string{ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete, ipc.OpAttachInfo, ipc.OpMove}}, nil
 	case ipc.OpList:
+		// Whoever lists is looking, so the sessions outside Irie are
+		// refreshed when they are old; a problem is in the result.
+		c.refreshOutside(outsideEvery, false)
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		return ipc.ListResult{Sessions: c.list()}, nil
+		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem}, nil
+	case ipc.OpMove:
+		var a ipc.MoveArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		s, err := c.move(a)
+		if err != nil {
+			return nil, err
+		}
+		return ipc.MoveResult{Session: s}, nil
 	case ipc.OpSpawn:
 		var a ipc.SpawnArgs
 		if err := decode(raw, &a); err != nil {

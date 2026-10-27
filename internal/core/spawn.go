@@ -190,7 +190,7 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 		return ipc.Session{}, err
 	}
 	c.mu.Lock()
-	x, err := c.launch(a, pl, profileName, h, probe)
+	x, err := c.launch(job{place: pl, profile: profileName, h: h, probe: probe, task: a.Task})
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
 	}
@@ -206,19 +206,31 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 }
 
 // agentEnv is, as near as the core can tell, the environment an agent of
-// profile p starts with: the core's own without tmux's variables, and the
-// profile's.
+// profile p starts with: the core's own without tmux's variables and those
+// that tie it to another session or terminal pane, and the profile's.
 func (c *Core) agentEnv(p config.Profile) []string {
-	env := tmux.WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE")
+	env := host.WithoutIdentity(tmux.WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE"))
 	for _, k := range slices.Sorted(maps.Keys(p.Env)) {
 		env = append(env, k+"="+p.Env[k])
 	}
 	return env
 }
 
+// job is what launch starts: a new task in the place that place found, or
+// a conversation that carries on in a place of its own.
+type job struct {
+	place
+	profile string
+	h       harness.Harness
+	probe   harness.Probe
+	task    string         // the task; empty when the job resumes
+	resume  string         // the vendor id of the conversation to carry on
+	data    map[string]any // more data for spawn.requested
+}
+
 // launch writes the session's files, creates its window and records the
-// spawn, in the place that place found. The caller holds c.mu.
-func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.Harness, probe harness.Probe) (*session, error) {
+// spawn. The caller holds c.mu.
+func (c *Core) launch(j job) (*session, error) {
 	if err := c.refresh(); err != nil {
 		return nil, err
 	}
@@ -226,22 +238,37 @@ func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.H
 	for c.sessions[id] != nil {
 		id = newID(time.Now())
 	}
-	profile := c.cfg.Profiles[profileName]
+	profile := c.cfg.Profiles[j.profile]
+	// A resumed conversation keeps its id; a new one gets its id from Irie.
+	vendorID := j.resume
+	if vendorID == "" {
+		vendorID = harness.NewUUID()
+	}
+	pl, h := j.place, j.h
 	x := &session{
 		id: id, name: pl.name, agent: "main", created: time.Now().UTC().Truncate(time.Millisecond),
 		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
-		profile: profileName, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
-		vendorID: harness.NewUUID(), warnings: append(slices.Clone(pl.warnings), probe.Warnings...),
+		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
+		vendorID: vendorID, warnings: append(slices.Clone(pl.warnings), j.probe.Warnings...),
 	}
 
 	dir := c.paths.Session(id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	argv, env, files, err := h.Launch(profile, harness.Spawn{
-		Session: id, Name: x.name, Task: a.Task, Cwd: x.cwd, Dir: dir, VendorID: x.vendorID,
-		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: probe,
-	})
+	s := harness.Spawn{
+		Session: id, Name: x.name, Task: j.task, Cwd: x.cwd, Dir: dir, VendorID: x.vendorID,
+		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: j.probe,
+	}
+	launch := h.Launch
+	if j.resume != "" {
+		r, ok := h.(harness.Resumer)
+		if !ok {
+			return nil, fmt.Errorf("%s cannot carry a conversation on", h.ID())
+		}
+		launch = r.Resume
+	}
+	argv, env, files, err := launch(profile, s)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +289,7 @@ func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.H
 	}
 	spec := c.paths.SpecFile(id)
 	if err := host.WriteSpec(spec, host.Spec{
-		Session: id, Profile: profileName, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: x.cwd, Warnings: x.warnings,
+		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: x.cwd, Warnings: x.warnings,
 		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
 	}); err != nil {
 		return nil, err
@@ -296,12 +323,16 @@ func (c *Core) launch(a ipc.SpawnArgs, pl place, profileName string, h harness.H
 	}
 	x.pane = strings.TrimSpace(out)
 	c.sessions[id] = x
-	data := map[string]any{"task_bytes": len(a.Task), "cwd": x.cwd, "profile": profileName}
+	data := map[string]any{"cwd": x.cwd, "profile": j.profile}
+	if j.resume == "" {
+		data["task_bytes"] = len(j.task)
+	}
 	for k, v := range map[string]string{"repo": x.repo, "worktree": x.worktree, "branch": x.branch} {
 		if v != "" {
 			data[k] = v
 		}
 	}
+	maps.Copy(data, j.data)
 	c.record(x, event.Event{Source: event.SourceIrie, Kind: event.SpawnRequested, Data: data})
 	return x, nil
 }

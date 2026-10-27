@@ -21,7 +21,12 @@
 //
 // Any other task runs the script "prompt". After the script the agent idles:
 // each line typed is a prompt and a turn, and EOF or a hangup ends the
-// session with SessionEnd.
+// session with SessionEnd. With --resume and no task it starts from a
+// resume and idles at once.
+//
+// `fakeagent agents --json` lists no sessions, as `claude agents --json`
+// does on a machine with none outside Irie. The log's first line records
+// the agent's argv, pid and the names, not the values, of its environment.
 //
 // Environment:
 //
@@ -156,6 +161,14 @@ Options:
 `
 
 func run(args []string) int {
+	if len(args) > 0 && args[0] == "agents" {
+		if !slices.Contains(args[1:], "--json") {
+			fmt.Fprintln(os.Stderr, "fakeagent: agents needs --json")
+			return 1
+		}
+		fmt.Println("[]")
+		return 0
+	}
 	o, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -378,7 +391,13 @@ func (a *agent) run() int {
 			env[k] = v
 		}
 	}
-	a.record(map[string]any{"t": "start", "argv": os.Args[1:], "cwd": a.cwd, "env": env, "session_id": a.sessionID})
+	var names []string
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		names = append(names, k)
+	}
+	slices.Sort(names)
+	a.record(map[string]any{"t": "start", "argv": os.Args[1:], "cwd": a.cwd, "env": env, "env_names": names, "pid": os.Getpid(), "session_id": a.sessionID})
 	fmt.Printf("fakeagent %s · session %s\n", a.version, a.sessionID)
 
 	sigs := make(chan os.Signal, 1)

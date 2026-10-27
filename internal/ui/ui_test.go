@@ -29,6 +29,8 @@ type fakeBackend struct {
 	spawned   *ipc.Session // what Spawn returns, when set
 	completes []string
 	items     map[string][]string // Complete's answers
+	moves     []string            // the vendor ids Move was given
+	moveErr   error
 }
 
 func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {

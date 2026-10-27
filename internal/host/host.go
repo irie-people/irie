@@ -201,8 +201,55 @@ func setForeground(fd, pgid int) error {
 	return nil
 }
 
-// environ returns base without the unset names and with extra set, and PWD
-// set to cwd as a shell would.
+// identity are the variables by which Claude Code tells a process which
+// session started it (Claude Code's environment variable reference). An
+// agent that inherits them, from whatever started the tmux server, counts as
+// that session's child: Claude Code leaves it out of `claude agents` and
+// `--resume`, and it holds the other session's inbox socket and token. The
+// agent's own Claude Code sets its own.
+var identity = []string{
+	"CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID",
+	"CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+	"CLAUDE_CODE_BRIDGE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID",
+	// The X window of the terminal (tmux(1), update-environment).
+	"WINDOWID",
+}
+
+// paneSuffixes end the names of the variables by which a terminal tells a
+// program which of its panes it runs in, with the capability to drive it.
+// Inside Irie they would name the pane that `irie up` first ran in.
+var paneSuffixes = []string{"_PANEL_ID", "_SURFACE_ID", "_SOCKET_CAPABILITY"}
+
+// foreign reports whether the variable name ties a process to another
+// session or terminal pane, rather than setting anything up for it.
+func foreign(name string) bool {
+	if slices.Contains(identity, name) {
+		return true
+	}
+	for _, s := range paneSuffixes {
+		if strings.HasSuffix(name, s) && len(name) > len(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// WithoutIdentity returns env without the variables that tie a process to
+// the Claude Code session or terminal pane it came from. Everything else,
+// such as PATH, SSH_AUTH_SOCK or Claude Code's own settings, stays.
+func WithoutIdentity(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if k, _, _ := strings.Cut(kv, "="); !foreign(k) {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// environ returns base without the unset names and the variables that tie
+// it to another session or terminal pane, and with extra set, and PWD set to
+// cwd as a shell would. What extra sets wins.
 func environ(base []string, extra map[string]string, unset []string, cwd string) []string {
 	set := map[string]string{}
 	for k, v := range extra {
@@ -214,7 +261,7 @@ func environ(base []string, extra map[string]string, unset []string, cwd string)
 	env := make([]string, 0, len(base)+len(set))
 	for _, kv := range base {
 		k, _, _ := strings.Cut(kv, "=")
-		if _, ok := set[k]; !ok && !slices.Contains(unset, k) {
+		if _, ok := set[k]; !ok && !slices.Contains(unset, k) && !foreign(k) {
 			env = append(env, kv)
 		}
 	}
