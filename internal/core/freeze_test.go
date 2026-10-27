@@ -351,6 +351,12 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	if !proc.CanBackground {
 		t.Skip("no background state here")
 	}
+	// While a session is promoted, the running Irie keeps the others' trees
+	// in the background, a test one of them runs and all it starts as well,
+	// so nothing here could show a difference.
+	if pri(t, os.Getpid()) == "4" {
+		t.Skip("the test runs in the background, as a session's processes do while another is promoted")
+	}
 	// At once: the call returns once it is done.
 	inBackground := func(s ipc.Session) (in, out []string) {
 		for _, p := range tree(t, c.hostPID(s)) {
