@@ -65,6 +65,18 @@ func (b socketBackend) Route(task string) (route.Choice, error) {
 	return r, err
 }
 
+func (b socketBackend) Close(id string) error {
+	return ipc.Call(b.socket, callTimeout, ipc.OpClose, ipc.CloseArgs{Session: id}, nil)
+}
+
+// Reopen waits as long as a spawn: it waits for the closed agent to end,
+// then starts like one.
+func (b socketBackend) Reopen(id string) (ipc.Session, error) {
+	var r ipc.ReopenResult
+	err := ipc.Call(b.socket, spawnTimeout, ipc.OpReopen, ipc.ReopenArgs{Session: id}, &r)
+	return r.Session, err
+}
+
 // Run is `irie ui`: the sidebar, fed by the core at socket.
 func Run(socket string, o Options) error {
 	if o.Home == "" {

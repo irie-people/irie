@@ -38,6 +38,9 @@ type fakeBackend struct {
 	tools     []string
 	routes    []string
 	choice    route.Choice // what Route returns
+	closes    []string     // the ids Close was given
+	reopens   []string     // the ids Reopen was given
+	reopenErr error
 }
 
 func (f *fakeBackend) Rate(id, verdict string) error {

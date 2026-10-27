@@ -11,6 +11,10 @@ enum Launch {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { Snapshot.run(into: dir) }
         }
+        if let i = args.firstIndex(of: "--render-conversation") {
+            let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
+            MainActor.assumeIsolated { ConversationSnapshot.run(into: dir) }
+        }
         IrieApp.main()
     }
 }
@@ -18,6 +22,7 @@ enum Launch {
 struct IrieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     /// The compact title bar: one short row for the traffic lights, the
     /// sidebar's counts and the shown session's name. The scene's
@@ -59,12 +64,20 @@ struct IrieApp: App {
                     .keyboardShortcut("f")
             }
             CommandGroup(after: .toolbar) {
+                Picker("Theme", selection: $theme) {
+                    ForEach(Palette.all) { p in Text(p.name).tag(p.id) }
+                }
+                Divider()
                 Button("Bigger Text") { store.setFontSize(store.fontSize + 1) }
                     .keyboardShortcut("=")
                 Button("Smaller Text") { store.setFontSize(store.fontSize - 1) }
                     .keyboardShortcut("-")
                 Button("Actual Size") { store.setFontSize(Store.defaultFontSize) }
                     .keyboardShortcut("0")
+                Divider()
+                // The conversation, or the live terminal on the right.
+                Toggle("Terminal", isOn: $store.showTerminal)
+                    .keyboardShortcut("t", modifiers: [.command, .option])
             }
         }
     }
@@ -82,7 +95,8 @@ final class KeyRouter {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak store] event in
             guard let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            if event.keyCode == 48, mods == .control || mods == [.control, .shift] { // Tab
+            if event.keyCode == 48, mods == .control || mods == [.control, .shift], // Tab
+               event.window === NSApp.mainWindow {
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
             }
@@ -113,10 +127,15 @@ extension Notification.Name {
 struct ContentView: View {
     @EnvironmentObject private var store: Store
     @State private var keys = KeyRouter()
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     var body: some View {
         NavigationSplitView {
+            // A new palette draws the sidebar afresh. The terminal area
+            // follows the palette itself, so its terminal stays attached.
+            let _ = Theme.use(theme)
             SidebarView()
+                .id(theme)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
@@ -128,7 +147,7 @@ struct ContentView: View {
                     }
                 }
         }
-        .tint(Theme.deepGreen)
+        .tint(Theme.accent)
         .onAppear { keys.install(store) }
     }
 }

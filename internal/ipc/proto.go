@@ -45,6 +45,10 @@ const (
 	OpRoute  = "route"
 	OpResult = "result"
 	OpTool   = "tool"
+	// OpClose ends a session's agent and removes its row; OpReopen, its
+	// undo, carries the session on again (DESIGN §2.4, §4.5).
+	OpClose  = "close"
+	OpReopen = "reopen"
 )
 
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
@@ -84,7 +88,8 @@ type Session struct {
 	Agent    string    `json:"agent,omitempty"` // "main"
 	State    string    `json:"state"`
 	Reason   string    `json:"reason,omitempty"`   // why it needs you, stalled or failed
-	Detail   string    `json:"detail,omitempty"`   // one line for the status strip
+	Detail   string    `json:"detail,omitempty"`   // what it is doing or needs, in plain words, for its row
+	Command  string    `json:"command,omitempty"`  // the tool call the detail is about, as "Bash · go test ./...", for its details
 	Tail     []string  `json:"tail,omitempty"`     // the last screen lines of a stalled or failed spawn
 	Warnings []string  `json:"warnings,omitempty"` // what Irie cannot do for this session
 	ExitCode *int      `json:"exit_code,omitempty"`
@@ -134,7 +139,8 @@ type Subagent struct {
 	Agent    string    `json:"agent"`          // sub:<vendor agent id>
 	Type     string    `json:"type,omitempty"` // its kind, such as Explore
 	Started  time.Time `json:"started"`
-	Detail   string    `json:"detail,omitempty"` // what it needs, or else its newest running tool
+	Detail   string    `json:"detail,omitempty"`  // what it needs, or else what its newest running tool does, in plain words
+	Command  string    `json:"command,omitempty"` // the tool call the detail is about
 	NeedsYou bool      `json:"needs_you,omitempty"`
 }
 
@@ -185,6 +191,30 @@ type ListResult struct {
 	// first (DESIGN §4.6). OutsideProblem says why that list may be old.
 	Outside        []OutsideSession `json:"outside"`
 	OutsideProblem string           `json:"outside_problem,omitempty"`
+	// Closed lists the sessions reopen can carry on, the last closed first.
+	Closed []ClosedSession `json:"closed"`
+}
+
+// ClosedSession is a closed session that reopen can carry on.
+type ClosedSession struct {
+	ID     string    `json:"id"`
+	Name   string    `json:"name"`
+	Closed time.Time `json:"closed"`
+}
+
+// CloseArgs name the session to close.
+type CloseArgs struct {
+	Session string `json:"session"`
+}
+
+// ReopenArgs name the closed session to reopen: the one closed last when
+// Session is empty.
+type ReopenArgs struct {
+	Session string `json:"session,omitempty"`
+}
+
+type ReopenResult struct {
+	Session Session `json:"session"`
 }
 
 type SubscribeArgs struct {
@@ -391,6 +421,10 @@ const (
 	// after the first snapshot, then whenever the list or its problem
 	// changes. A subscription to one session gets none.
 	FrameOutside = "outside"
+	// FrameClosed lists the closed sessions reopen can carry on, the last
+	// closed first: once after the first snapshot, then whenever they
+	// change. A subscription to one session gets none.
+	FrameClosed = "closed"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
@@ -403,13 +437,14 @@ type Frame struct {
 	Event    *event.Event     `json:"event,omitempty"`    // event
 	Outside  []OutsideSession `json:"outside,omitempty"`  // outside
 	Problem  string           `json:"problem,omitempty"`  // outside: why the list may be old
+	Closed   []ClosedSession  `json:"closed,omitempty"`   // closed
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
-// the sessions of a snapshot and of an outside frame, even when there are
-// none.
+// the sessions of a snapshot, an outside frame and a closed frame, even when
+// there are none.
 func (f Frame) MarshalJSON() ([]byte, error) {
 	switch f.T {
 	case FrameSnapshot:
@@ -451,6 +486,15 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			Outside []OutsideSession `json:"outside"`
 			Problem string           `json:"problem,omitempty"`
 		}{f.T, o, f.Problem})
+	case FrameClosed:
+		c := f.Closed
+		if c == nil {
+			c = []ClosedSession{}
+		}
+		return json.Marshal(struct {
+			T      string          `json:"t"`
+			Closed []ClosedSession `json:"closed"`
+		}{f.T, c})
 	case FrameHeader:
 		h := f.Header
 		if h == nil {

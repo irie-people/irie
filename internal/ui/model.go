@@ -38,6 +38,10 @@ type Backend interface {
 	Tool(name string) (ipc.Session, error)
 	// Route says where a task would run, and why.
 	Route(task string) (route.Choice, error)
+	// Close closes a session; Reopen brings back a closed one, the one
+	// closed last when id is empty.
+	Close(id string) error
+	Reopen(id string) (ipc.Session, error)
 }
 
 // FrameMsg carries one frame of the core's subscription.
@@ -80,7 +84,7 @@ type (
 
 // commands are what the command bar takes after a colon (DESIGN §4.2,
 // §4.6, §6.4).
-const commands = ":rename NAME, :move [NAME], :setup, :models, :rate good|bad, :route TASK"
+const commands = ":rename NAME, :move [NAME], :close, :reopen, :setup, :models, :rate good|bad, :route TASK"
 
 type focusArea int
 
@@ -134,6 +138,9 @@ type Model struct {
 	moving         bool
 	confirming     string    // the outside session a first m asked to move
 	confirmedAt    time.Time // when it asked
+	closing        string    // the session a first x asked to close (close.go)
+	closingAt      time.Time // when it asked
+	reopening      bool
 
 	focus     focusArea
 	bar       textarea.Model
@@ -425,6 +432,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case movedMsg:
 		m.moved(msg)
+	case closedMsg:
+		m.closedDone(msg)
+	case reopenedMsg:
+		m.reopened(msg)
 	case completedMsg:
 		m.completed(msg)
 	case ratedMsg:
@@ -485,7 +496,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft {
 			break
 		}
-		m.confirming = ""
+		m.confirming, m.closing = "", ""
 		if row := msg.Y - m.listTop(); row >= 0 && row < m.listHeight() {
 			if i := m.offset + row; i < m.rowCount() {
 				m.sel = i
@@ -510,6 +521,9 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.setStatus("", false)
 	if msg.String() != "m" {
 		m.confirming = "" // any other key cancels a move
+	}
+	if msg.String() != "x" {
+		m.closing = "" // and a close
 	}
 	switch msg.String() {
 	case "up", "k":
@@ -541,6 +555,9 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.bar.SetValue(":rename " + m.sessions[m.sel].Name)
 		m.clamp()
 		m.setStatus("Enter renames it, Esc keeps its name", false)
+	case "x":
+		cmd := m.closeSelected()
+		return m, cmd
 	case "+":
 		return m, m.rateCmd(ipc.Good)
 	case "-":
@@ -652,6 +669,12 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return done(m.rateCmd(arg))
+	case name == "close" && arg == "":
+		m.setFocus(focusList)
+		return done(m.closeNamed())
+	case name == "reopen" && arg == "":
+		m.setFocus(focusList)
+		return done(m.reopenCmd())
 	case name == "route" && arg != "":
 		return m, func() tea.Msg { ch, err := b.Route(arg); return routedMsg{choice: ch, err: err} }
 	}

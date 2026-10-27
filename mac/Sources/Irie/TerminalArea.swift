@@ -5,19 +5,37 @@ import SwiftUI
 /// that agent, and showing another session swaps it in place.
 struct TerminalArea: View {
     @EnvironmentObject private var store: Store
+    /// The palette's name: a change draws the ground and the frame again.
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
+
+    private var online: Bool {
+        if case .online = store.link { return true }
+        return false
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
             // restart, so a flap gets a banner, not a reattach.
             if let a = store.attach {
+                // The terminal stays attached under the conversation, so
+                // ⌥⌘T flips between them at once.
                 terminal(a)
-            } else if case let .offline(why) = store.link {
-                Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
-            } else {
-                ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(store.showTerminal ? 1 : 0)
+                    .allowsHitTesting(store.showTerminal)
+                    .accessibilityHidden(!store.showTerminal)
+            }
+            // The conversation needs only the core, not the terminal.
+            if !store.showTerminal && (store.attach != nil || online) {
+                ConversationView()
+            } else if store.attach == nil {
+                if case let .offline(why) = store.link {
+                    Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
+                } else {
+                    ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             if store.attach != nil, let note = linkNote {
                 Text(note)
@@ -57,8 +75,8 @@ struct TerminalArea: View {
                 // A click on the frame types to the terminal too.
                 frame.fill(Color(nsColor: Theme.terminalBackground))
                     .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
-                    .overlay(frame.strokeBorder(edge.opacity(store.terminalHasKeys ? 1 : 0.45),
-                                                lineWidth: store.terminalHasKeys ? 2 : 1))
+                    .overlay(frame.strokeBorder(edge.opacity(store.terminalHasKeys ? 0.6 : 0.35),
+                                                lineWidth: 1))
                     .onTapGesture { store.focusTerminal += 1 }
             }
             .padding(12)
@@ -72,7 +90,7 @@ struct TerminalArea: View {
     }
 
     /// The frame's colour: the shown session's, or sun while it is quiet. It
-    /// brightens while the terminal has the keyboard.
+    /// deepens a little while the terminal has the keyboard.
     private var edge: Color { selected.flatMap { Look($0).color } ?? Theme.sunEdge }
 
     /// What the banner says while the core is away.
@@ -85,15 +103,8 @@ struct TerminalArea: View {
     }
 
     private func subtitle(_ s: Session) -> String {
-        var parts: [String] = []
-        switch Look(s) {
-        case .needs: parts.append(s.detail ?? "Needs you")
-        case .working: parts.append("Working")
-        case .starting: parts.append("Starting")
-        case .done: parts.append("Done")
-        case .idle: parts.append("Idle")
-        case .ended: parts.append(s.state == "exited" ? "Exited" : s.state.capitalized)
-        }
+        let look = Look(s)
+        var parts = [look.loud ? s.detail ?? look.label : look.label]
         if let p = s.profile, !p.isEmpty { parts.append(p) }
         if let b = s.branch, !b.isEmpty { parts.append(b) }
         if let t = s.tokens { parts.append("\(Tokens.short(t.total)) tokens") }

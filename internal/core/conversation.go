@@ -35,8 +35,11 @@ type conversation struct {
 	ver   uint64           // the newest version
 	reset uint64           // the version at which it last started over
 	needs *ipc.Item        // what the session waits on you for
-	meta  uint64           // the version that last changed needs or transcript
+	meta  uint64           // the version that last changed needs, pending or the transcript
 	path  string           // the newest transcript
+	// pending are messages sent to the agent that the transcript does not
+	// have yet (send.go).
+	pending []ipc.Item
 }
 
 type transcriptFeed struct {
@@ -97,6 +100,7 @@ func (cv *conversation) update(paths []string, active bool) bool {
 		}
 		cv.clear() // a transcript was replaced: read them all again
 	}
+	cv.expire(time.Now())
 	if !active {
 		for i, it := range cv.items {
 			if it.State == ipc.ItemRunning {
@@ -158,7 +162,7 @@ func sameItem(a, b ipc.Item) bool {
 
 // all is the whole conversation, or its newest limit items.
 func (cv *conversation) all(limit int) ipc.Conversation {
-	out := ipc.Conversation{Transcript: cv.path, Reset: true, Needs: cv.needs, Items: cv.items}
+	out := ipc.Conversation{Transcript: cv.path, Reset: true, Needs: cv.needs, Items: cv.items, Pending: slices.Clone(cv.pending)}
 	if limit > 0 && len(out.Items) > limit {
 		out.Items, out.More = out.Items[len(out.Items)-limit:], true
 	}
@@ -172,7 +176,7 @@ func (cv *conversation) since(seen uint64) (ipc.Conversation, bool) {
 	if seen < cv.reset {
 		return cv.all(resetLimit), true
 	}
-	out := ipc.Conversation{Transcript: cv.path, Needs: cv.needs}
+	out := ipc.Conversation{Transcript: cv.path, Needs: cv.needs, Pending: slices.Clone(cv.pending)}
 	for i, v := range cv.vers {
 		if v > seen {
 			out.Items = append(out.Items, cv.items[i])
@@ -321,6 +325,7 @@ func (cv *conversation) said(id string, at time.Time, text string, queued bool) 
 	}
 	if text != "" {
 		cv.add(ipc.Item{ID: "u:" + id, Kind: ipc.ItemUser, Time: at, Text: capText(text, maxItemText), Queued: queued})
+		cv.taken(at)
 	}
 }
 
@@ -353,7 +358,7 @@ func (cv *conversation) toolUse(id, name string, input json.RawMessage, at time.
 	c := &call{done: w.done(), failed: w.failed()}
 	switch name {
 	case "Agent", "Task":
-		it.Kind, it.AgentType = ipc.ItemAgent, or(in.str("subagent_type"), "general-purpose")
+		it.Kind, it.AgentType, it.Text = ipc.ItemAgent, or(in.str("subagent_type"), "general-purpose"), in.str("description")
 	case "Edit", "MultiEdit", "Write", "NotebookEdit":
 		c.added, c.removed = editLines(name, in)
 	case "AskUserQuestion":
@@ -646,11 +651,7 @@ func (c *Core) followConversation(x *session) {
 		return
 	}
 	if _, changed := c.conversationOf(x); changed {
-		for s := range c.subs {
-			if s.conversation && s.session == x.id {
-				s.noteConversation()
-			}
-		}
+		c.tellConversation(x)
 	}
 }
 

@@ -25,6 +25,7 @@ type track struct {
 	viewed    bool                   // shown since the turn ended
 	tools     map[string]event.Event // running tools' tool.started, by tool_use_id
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
+	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
 
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads.
@@ -43,7 +44,8 @@ func (t *track) apply(e event.Event) {
 	}
 	switch e.Kind {
 	case event.SpawnRequested:
-		t.requested = e.Time()
+		// A reopened session starts over, but its tokens still count.
+		*t = track{requested: e.Time(), transcripts: t.transcripts}
 	case event.SpawnFailed:
 		t.failed = &e
 	case event.PaneExited:
@@ -51,6 +53,9 @@ func (t *track) apply(e event.Event) {
 	case event.SessionStarted:
 		t.started = true
 		t.addTranscript(e.Str("transcript"))
+		if e.Vendor != nil && e.Vendor.SessionID != "" {
+			t.vendorID = e.Vendor.SessionID
+		}
 		if e.Str("source") == "resume" && t.activity == "" {
 			// A resumed conversation, such as one moved into Irie, waits at
 			// its prompt: it is ready without one, and idle.
@@ -143,6 +148,10 @@ func toolUseID(e event.Event) string {
 // UserPromptSubmit arrived, or the agent is plainly at work.
 func (t *track) ready() bool { return t.started && t.prompted || t.activity != "" }
 
+// conversed reports whether the agent got as far as a conversation that can
+// be carried on: its prompt went in, or it showed life, as a resumed one does.
+func (t *track) conversed() bool { return t.prompted || t.activity != "" }
+
 // awaiting reports whether Irie saw this session spawned and still waits for
 // it to become ready.
 func (t *track) awaiting() bool {
@@ -185,9 +194,10 @@ func (t *track) subagents() []ipc.Subagent {
 	for agent, e := range t.subs {
 		sa := ipc.Subagent{Agent: agent, Type: e.Str("agent_type"), Started: e.Time()}
 		if n, ok := t.needs[agent]; ok {
-			sa.NeedsYou, sa.Detail = true, needDetail(n)
+			sa.NeedsYou = true
+			sa.Detail, sa.Command = needLine(n)
 		} else if tool, ok := t.latestToolOf(agent); ok {
-			sa.Detail = joinDetail(tool.Str("tool"), tool.Str("summary"))
+			sa.Detail, sa.Command = callLine(tool)
 		}
 		out = append(out, sa)
 	}
@@ -268,18 +278,44 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 			break
 		}
 		s.Reason = n.Str("reason")
-		s.Detail = needDetail(n)
+		s.Detail, s.Command = needLine(n)
 	case ipc.StateStalled:
 		s.Reason, s.Tail = event.ReasonStalled, lines(t.stalled.Str("tail"))
 		s.Detail = "stalled: no hooks within " + t.stalled.Str("wait") + lastLine(s.Tail)
 	case ipc.StateWorking:
 		if tool, ok := t.latestTool(); ok {
-			s.Detail = joinDetail(tool.Str("tool"), tool.Str("summary"))
+			s.Detail, s.Command = callLine(tool)
 		}
 	}
 	if s.State != ipc.StateExited && s.State != ipc.StateFailed {
 		s.Subagents = t.subagents()
 	}
+}
+
+// callLine is what a running tool call shows: its plain words for the row,
+// such as "Running the tests", and the call itself for the details, such as
+// "Bash · go test ./...". The core records the words on the event (Phrase);
+// an event from before it did has only the call, which is then the row's.
+func callLine(e event.Event) (detail, command string) {
+	call := joinDetail(e.Str("tool"), e.Str("summary"))
+	if p := e.Str("phrase"); p != "" {
+		return p, call
+	}
+	return call, ""
+}
+
+// needLine is what a need shows: its plain words, such as "Asks: may it run
+// rm -rf build?", and for a permission the call it asks about. An event from
+// before the core recorded words says it the older way.
+func needLine(n event.Event) (detail, command string) {
+	p := n.Str("phrase")
+	if p == "" {
+		return needDetail(n), ""
+	}
+	if n.Str("reason") == event.ReasonPermission && n.Str("tool") != "" {
+		command = joinDetail(n.Str("tool"), n.Str("summary"))
+	}
+	return p, command
 }
 
 func needDetail(n event.Event) string {

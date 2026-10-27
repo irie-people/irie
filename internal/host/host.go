@@ -146,6 +146,10 @@ func Run(specPath string) int {
 	go func() {
 		for s := range sigs {
 			syscall.Kill(-pid, s.(syscall.Signal))
+			// A stopped agent that catches the signal, as Claude Code does,
+			// keeps it pending until it runs again, so the group is continued:
+			// a frozen session closes too (DESIGN §4.3).
+			syscall.Kill(-pid, syscall.SIGCONT)
 		}
 	}()
 

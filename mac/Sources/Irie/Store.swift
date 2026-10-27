@@ -16,7 +16,10 @@ final class Store: ObservableObject {
     @Published private(set) var sessions: [Session] = []
     @Published private(set) var attach: AttachInfo?
     @Published var selection: String?
-    @Published var expanded: Set<String> = []
+    /// How the sidebar groups the sessions, and the groups folded away. Both
+    /// are kept when the user changes them (choose(_:), fold(_:)).
+    @Published var mode: SidebarMode = SidebarMode(rawValue: UserDefaults.standard.string(forKey: "sidebarMode") ?? "") ?? .repo
+    @Published var folded: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "foldedGroups") ?? [])
     @Published var notice: Notice?
     @Published var spawning = false
     /// The session whose name its card has open to edit, and the name as
@@ -35,13 +38,31 @@ final class Store: ObservableObject {
     weak var terminalView: NSView?
     /// Whether the terminal has the keyboard, which brightens its frame.
     @Published var terminalHasKeys = false
+    /// The right side shows the live terminal instead of the conversation
+    /// (View > Terminal, ⌥⌘T); remembered across launches.
+    @Published var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
+        didSet {
+            UserDefaults.standard.set(showTerminal, forKey: "showTerminal")
+            if showTerminal { focusTerminal += 1 } else { focusMessage += 1 }
+        }
+    }
+    /// Bumped when the conversation's message box should take the keyboard.
+    @Published var focusMessage = 0
+    /// Whether the message box has the keyboard.
+    var messageHasKeys = false
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     @Published var outside: [OutsideSession] = []
     @Published var outsideSelection: String?
     @Published var confirmingMove: OutsideSession?
     @Published var moving: String?
+    /// The closed sessions reopen can bring back, the last closed first
+    /// (Closing.swift).
+    @Published var closed: [ClosedSession] = []
     var outsideProblem = ""
+    /// The session the core is to show next, and whether a request is out.
+    private var wanted: (id: String, focus: Bool)?
+    private var showing = false
 
     static let defaultFontSize: CGFloat = 13
 
@@ -117,6 +138,9 @@ final class Store: ObservableObject {
         case "outside":
             applyOutside(f)
             return
+        case "closed":
+            closed = f.closed ?? []
+            return
         default:
             return
         }
@@ -141,24 +165,82 @@ final class Store: ObservableObject {
 
     // MARK: Keyboard
 
-    /// The rows in the order the sidebar draws them: the order they started,
-    /// which a state change never alters (DESIGN §4.1), without the rows the
-    /// filter hides.
-    var drawnOrder: [Session] {
+    /// The sidebar's groups, without the rows the filter hides. In the Repo
+    /// view, a group per repo in the order its first session started, then
+    /// the sessions in no repo; a state change moves nothing. In the State
+    /// view, the sessions that need you, those at work, and those done.
+    /// Within a group the sessions keep the order they started (DESIGN §4.1).
+    var drawnGroups: [SessionGroup] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        return f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
+        let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
+        switch mode {
+        case .state:
+            return Look.Group.allCases.compactMap { g in
+                let in_ = rows.filter { Look($0).group == g }
+                return in_.isEmpty ? nil : SessionGroup(id: "state:\(g)", title: g.title, path: nil, sessions: in_)
+            }
+        case .repo:
+            var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
+            for s in rows {
+                guard let r = s.repo, !r.isEmpty else {
+                    none.append(s)
+                    continue
+                }
+                if byRepo[r] == nil { order.append(r) }
+                byRepo[r, default: []].append(s)
+            }
+            let names = SessionGroup.names(order)
+            var out = order.map { SessionGroup(id: "repo:" + $0, title: names[$0] ?? $0, path: $0, sessions: byRepo[$0] ?? []) }
+            if !none.isEmpty {
+                out.append(SessionGroup(id: "repo:", title: "Not in a repo", path: nil, sessions: none))
+            }
+            return out
+        }
+    }
+
+    /// The cards in the order the sidebar draws them, without those in folded
+    /// groups or hidden by the filter. The keys that walk the sidebar follow
+    /// it.
+    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap(\.sessions) }
+
+    /// A group is open unless folded, and every group is open while the
+    /// filter has text, so what it finds shows.
+    func isOpen(_ g: SessionGroup) -> Bool {
+        !filter.trimmingCharacters(in: .whitespaces).isEmpty || !folded.contains(g.id)
+    }
+
+    func fold(_ g: SessionGroup) {
+        if folded.contains(g.id) { folded.remove(g.id) } else { folded.insert(g.id) }
+        UserDefaults.standard.set(Array(folded).sorted(), forKey: "foldedGroups")
+    }
+
+    func choose(_ m: SidebarMode) {
+        mode = m
+        UserDefaults.standard.set(m.rawValue, forKey: "sidebarMode")
     }
 
     /// Shows the next (+1) or previous (-1) row of the drawn order, wrapping
-    /// at the ends unless told not to. The keyboard stays where it is.
+    /// at the ends unless told not to. The keyboard stays where it is. From a
+    /// card the sidebar doesn't draw, such as the shown one in a folded group
+    /// or one the filter hides, it goes on from that card's place in the list.
     func step(_ delta: Int, wrap: Bool = true) {
-        let order = drawnOrder
-        guard !order.isEmpty else { return }
-        var next = delta > 0 ? 0 : order.count - 1
-        if let i = order.firstIndex(where: { $0.id == selection }) {
-            next = wrap ? ((i + delta) % order.count + order.count) % order.count : min(max(i + delta, 0), order.count - 1)
+        let all = drawnGroups.flatMap(\.sessions)
+        let drawn = Set(drawnOrder.map(\.id))
+        guard !drawn.isEmpty else { return }
+        var i = all.firstIndex { $0.id == selection } ?? (delta > 0 ? -1 : all.count)
+        for _ in 0..<all.count {
+            i += delta
+            if wrap {
+                i = (i + all.count) % all.count
+            } else if !all.indices.contains(i) {
+                return
+            }
+            let s = all[i]
+            if drawn.contains(s.id) {
+                if outsideSelection != nil || s.id != selection { show(s.id) }
+                return
+            }
         }
-        if order[next].id != selection { show(order[next].id) }
     }
 
     /// Shows the nth row (from 1) of the drawn order.
@@ -170,7 +252,9 @@ final class Store: ObservableObject {
 
     /// Moves the keyboard between the session list and the terminal.
     func toggleFocus() {
-        if let t = terminalView, t.window?.firstResponder === t {
+        if !showTerminal {
+            if messageHasKeys { focusSidebar += 1 } else { focusMessage += 1 }
+        } else if let t = terminalView, t.window?.firstResponder === t {
             focusSidebar += 1
         } else {
             focusTerminal += 1
@@ -189,22 +273,34 @@ final class Store: ObservableObject {
 
     // MARK: Requests
 
-    /// Swaps the session into the slot, which the terminal shows.
+    /// Swaps the session into the slot, which the terminal shows. Requests
+    /// that come faster than the core answers, such as a key held down or
+    /// pressed twice, collapse into the last one: the core would take them
+    /// in no set order and leave the terminal on a session the list doesn't
+    /// highlight.
     func show(_ id: String, focus: Bool = false) {
         // Going to another session renames the one open to edit, as clicking
         // elsewhere does in Finder.
         if renaming != nil && renaming != id { endRename(commit: true) }
         selection = id
         outsideSelection = nil
+        wanted = (id, focus)
+        guard !showing else { return }
+        showing = true
         Task {
-            do {
-                _ = try await client.call("show", ShowArgs(session: id, focus: focus), as: Empty.self)
-                // A double click's first click shows the session; its name,
-                // open to edit, keeps the keyboard.
-                if focus && renaming != id { focusTerminal += 1 }
-            } catch {
-                say("Couldn’t show it: \(error.localizedDescription)", error: true)
+            while let next = wanted {
+                wanted = nil
+                do {
+                    _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus), as: Empty.self)
+                    // The conversation's message box, or the terminal when it
+                    // shows; a name open to edit, after a double click's first
+                    // click, keeps the keyboard.
+                    if next.focus, wanted == nil, renaming != next.id { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
+                } catch where wanted == nil {
+                    say("Couldn’t show it: \(error.localizedDescription)", error: true)
+                } catch {}
             }
+            showing = false
         }
     }
 
@@ -312,5 +408,36 @@ final class Store: ObservableObject {
         } catch {
             say("Couldn’t open Ghostty: \(error.localizedDescription)", error: true)
         }
+    }
+}
+
+/// How the sidebar groups the sessions: by repo, or by what they need.
+enum SidebarMode: String, CaseIterable {
+    case state, repo
+
+    var title: String { self == .state ? "State" : "Repo" }
+}
+
+/// One group of the sidebar: a repo, the sessions in no repo, or a state.
+struct SessionGroup: Identifiable, Equatable {
+    let id: String
+    let title: String
+    /// The repo's main checkout, for a repo's group.
+    let path: String?
+    let sessions: [Session]
+
+    /// A name per repo: its folder's name, with the folder above it when two
+    /// repos share a name.
+    static func names(_ paths: [String]) -> [String: String] {
+        let base = { (p: String) in (p as NSString).lastPathComponent }
+        var count: [String: Int] = [:]
+        for p in paths { count[base(p), default: 0] += 1 }
+        var out: [String: String] = [:]
+        for p in paths {
+            let b = base(p)
+            let parent = ((p as NSString).deletingLastPathComponent as NSString).lastPathComponent
+            out[p] = count[b, default: 0] > 1 && !parent.isEmpty ? "\(b) · \(parent)" : b
+        }
+        return out
     }
 }

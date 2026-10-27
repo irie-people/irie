@@ -13,13 +13,24 @@ enum Snapshot {
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-            // The default size in both modes, then the narrowest window and a
-            // wide one.
-            let shots: [(String, CGFloat, Bool)] = [
-                ("window-light", 1100, false), ("window-dark", 1100, true),
-                ("window-narrow", 820, false), ("window-wide", 1500, false),
-            ]
-            for (base, width, dark) in shots {
+            // Each palette in both modes at the default size, then the default
+            // palette in the narrowest window and a wide one. The palette is
+            // set in a volatile domain, so the app's saved choice is untouched.
+            var shots: [(String, String, CGFloat, Bool, SidebarMode)] = []
+            for p in Palette.all {
+                shots.append(("\(p.id)-light", p.id, 1100, false, .repo))
+                shots.append(("\(p.id)-dark", p.id, 1100, true, .repo))
+            }
+            shots.append(("state-light", Palette.standard.id, 1100, false, .state))
+            shots.append(("state-dark", Palette.standard.id, 1100, true, .state))
+            shots.append(("window-narrow", Palette.standard.id, 820, false, .repo))
+            shots.append(("window-wide", Palette.standard.id, 1500, false, .repo))
+            for (base, palette, width, dark, mode) in shots {
+                // Set directly, so the app's saved view and folds are untouched.
+                store.mode = mode
+                store.folded = []
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette], forName: UserDefaults.argumentDomain)
+                Theme.use(palette)
                 let (rep, titlebar) = window(store, dark: dark, width: width)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
@@ -95,19 +106,19 @@ enum Fixture {
         let irie = "/home/alice/code/irie", bigup = "/home/alice/code/bigup"
         return [
             Session(id: "s01syncagent", name: "sync-agents", state: "needs_you", reason: "permission",
-                    detail: "needs permission: Bash · rm -rf build", created: ago(30), cwd: irie + "-sync-agents",
+                    detail: "Asks: may it run rm -rf build?", command: "Bash · rm -rf build", created: ago(30), cwd: irie + "-sync-agents",
                     repo: irie, branch: "irie/sync-agents", profile: "claude",
                     tokens: Tokens(input: 1200, output: 3400, cacheRead: 40000, cacheWrite: 3600)),
-            Session(id: selected, name: "docs-guide", state: "working", detail: "Bash · go test ./...",
+            Session(id: selected, name: "docs-guide", state: "working", detail: "Running the tests", command: "Bash · go test ./...",
                     created: ago(26), cwd: irie + "-docs-guide", repo: irie, branch: "irie/docs-guide", profile: "claude",
-                    subagents: [Subagent(agent: "sub:a1", type: "Explore", started: ago(3), detail: "Read · docs/DESIGN.md"),
+                    subagents: [Subagent(agent: "sub:a1", type: "Explore", started: ago(3), detail: "Reading DESIGN.md", command: "Read · docs/DESIGN.md"),
                                 Subagent(agent: "sub:a2", type: "Plan", started: ago(2))],
                     tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800)),
-            Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Edit · mac/Sources/Irie/ChatView.swift",
+            Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "irie/conversation-view", profile: "claude"),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
                     repo: irie, branch: "irie/warm-look", profile: "claude"),
-            Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Edit · src/main.rs",
+            Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude"),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "idle", created: ago(9),
                     cwd: "/home/alice/.local/share/irie/scratch/summarise-the-notes", profile: "claude"),

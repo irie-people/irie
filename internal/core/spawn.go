@@ -285,6 +285,7 @@ type job struct {
 	task    string         // the task; empty when the job resumes
 	resume  string         // the vendor id of the conversation to carry on
 	data    map[string]any // more data for spawn.requested
+	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
 }
 
 // launch writes the session's files, creates its window and records the
@@ -293,9 +294,12 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := c.refresh(); err != nil {
 		return nil, err
 	}
-	id := newID(time.Now())
+	id, created := newID(time.Now()), time.Now().UTC().Truncate(time.Millisecond)
 	for c.sessions[id] != nil {
 		id = newID(time.Now())
+	}
+	if j.reopen != nil {
+		id, created = j.reopen.ID, j.reopen.Created
 	}
 	// A resumed conversation keeps its id; a new one gets its id from Irie.
 	vendorID := j.resume
@@ -304,7 +308,7 @@ func (c *Core) launch(j job) (*session, error) {
 	}
 	pl, h, profile := j.place, j.h, j.run
 	x := &session{
-		id: id, name: pl.name, agent: "main", created: time.Now().UTC().Truncate(time.Millisecond),
+		id: id, name: pl.name, agent: "main", created: created,
 		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
 		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
 		vendorID: vendorID, warnings: append(slices.Clone(pl.warnings), j.probe.Warnings...),

@@ -251,13 +251,52 @@ func TestWorkingShowsTheRunningTool(t *testing.T) {
 	tr.apply(s.hook(event.ToolStarted, "tool", "Bash", "summary", "go test ./...", "tool_use_id", "t1"))
 	var row ipc.Session
 	tr.describe(&row, false, 0)
-	if row.Detail != "Bash · go test ./..." {
-		t.Errorf("detail %q", row.Detail)
+	// An event from before the core recorded plain words shows the call.
+	if row.Detail != "Bash · go test ./..." || row.Command != "" {
+		t.Errorf("detail %q, command %q", row.Detail, row.Command)
 	}
 	tr.apply(s.hook(event.ToolFinished, "tool", "Bash", "tool_use_id", "t1"))
 	row = ipc.Session{}
 	tr.describe(&row, false, 0)
 	if row.Detail != "" {
 		t.Errorf("detail %q after the tool finished", row.Detail)
+	}
+}
+
+func TestRowsSayPlainWordsAndKeepTheCall(t *testing.T) {
+	s := newScript()
+	var tr track
+	describe := func() ipc.Session {
+		var row ipc.Session
+		tr.describe(&row, false, 0)
+		return row
+	}
+	tr.apply(s.hook(event.PromptSubmitted))
+	tr.apply(s.hook(event.ToolStarted, "tool", "Bash", "summary", "go test ./...", "phrase", "Running the tests", "tool_use_id", "t1"))
+	if row := describe(); row.Detail != "Running the tests" || row.Command != "Bash · go test ./..." {
+		t.Errorf("working: detail %q, command %q", row.Detail, row.Command)
+	}
+	tr.apply(s.hook(event.InputNeeded, "reason", event.ReasonPermission, "tool", "Bash", "summary", "rm -rf build",
+		"phrase", "Asks: may it run rm -rf build?"))
+	if row := describe(); row.Detail != "Asks: may it run rm -rf build?" || row.Command != "Bash · rm -rf build" {
+		t.Errorf("permission: detail %q, command %q", row.Detail, row.Command)
+	}
+
+	// A question asks in its own words and names no call.
+	tr = track{}
+	tr.apply(s.hook(event.PromptSubmitted))
+	tr.apply(s.hook(event.InputNeeded, "reason", event.ReasonQuestion, "question", "Which colour?", "tool", "AskUserQuestion",
+		"phrase", "Asks: which colour?"))
+	if row := describe(); row.Detail != "Asks: which colour?" || row.Command != "" {
+		t.Errorf("question: detail %q, command %q", row.Detail, row.Command)
+	}
+
+	// A helper says what it does the same way.
+	tr = track{}
+	tr.apply(s.hook(event.PromptSubmitted))
+	tr.apply(s.sub(event.SubagentStarted, "agent_type", "Explore"))
+	tr.apply(s.sub(event.ToolStarted, "tool", "Read", "summary", "docs/DESIGN.md", "phrase", "Reading DESIGN.md", "tool_use_id", "t2"))
+	if subs := describe().Subagents; len(subs) != 1 || subs[0].Detail != "Reading DESIGN.md" || subs[0].Command != "Read · docs/DESIGN.md" {
+		t.Errorf("helper: %+v", subs)
 	}
 }
