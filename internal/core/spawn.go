@@ -119,7 +119,7 @@ func unique(name string, taken map[string]bool) string {
 func (c *Core) workdir(requested, base string) (string, error) {
 	dir := requested
 	if dir == "" {
-		dir = c.cfg.Spawn.DefaultCwd
+		dir = c.cfg().Spawn.DefaultCwd
 	}
 	if dir == "" {
 		if err := os.MkdirAll(c.paths.Scratch(), 0o700); err != nil {
@@ -167,11 +167,11 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	}
 	profileName := a.Profile
 	if profileName == "" {
-		profileName = c.cfg.Spawn.DefaultProfile
+		profileName = c.cfg().Spawn.DefaultProfile
 	}
 	// A task's class teaches the router whichever profile runs it; a task
 	// carried on keeps the class of the one it continues.
-	class, why := route.Classify(a.Task, c.cfg.Route.Words)
+	class, why := route.Classify(a.Task, c.cfg().Route.Words)
 	if a.Continues != "" {
 		c.mu.Lock()
 		if o := c.outcomes[a.Continues]; o != nil && o.class != "" {
@@ -195,13 +195,13 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	}
 	profile, ok := c.profile(profileName)
 	if !ok {
-		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, +%s to route by cost per success, and +%s<model> for a local model", profileName, strings.Join(slices.Sorted(maps.Keys(c.cfg.Profiles)), ", "), config.Auto, localPrefix)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, +%s to route by cost per success, and +%s<model> for a local model", profileName, strings.Join(slices.Sorted(maps.Keys(c.cfg().Profiles)), ", "), config.Auto, localPrefix)
 	}
 	switch {
 	case a.PermissionMode != "":
 		profile.PermissionMode = a.PermissionMode
 	case a.Delegate:
-		profile.PermissionMode = c.cfg.Route.DelegateMode
+		profile.PermissionMode = c.cfg().Route.DelegateMode
 	}
 	if a.Model != "" {
 		if profile.Harness != "claude-code" || profile.Local != nil {
@@ -337,8 +337,8 @@ func (c *Core) launch(j job) (*session, error) {
 	os.Remove(c.paths.FreezeFile(id))
 	s := harness.Spawn{
 		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
-		Bin: c.bin, HoldMax: c.cfg.Hold.Max, Probe: j.probe,
-		StatusLine: c.cfg.Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
+		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
+		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
 	}
 	// Only the user's name goes to the agent: Claude Code titles a session
 	// it gets no name for, and the row follows the title (title.go).
@@ -369,7 +369,7 @@ func (c *Core) launch(j job) (*session, error) {
 	}
 	env["IRIE_SESSION"], env["IRIE_SOCKET"], env["IRIE_BIN"] = id, c.paths.Socket(), c.bin
 	var unset []string
-	if c.cfg.Spawn.HideTmux {
+	if c.cfg().Spawn.HideTmux {
 		unset = []string{"TMUX", "TMUX_PANE"}
 	}
 	spec := c.paths.SpecFile(id)

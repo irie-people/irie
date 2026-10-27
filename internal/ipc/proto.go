@@ -61,6 +61,10 @@ const (
 	// OpDog lists the jots that are not through: what each left that has
 	// not landed, by the jot dog's last look (DESIGN §4.8).
 	OpDog = "dog"
+	// OpConfig reads the config in effect, or edits the config file in
+	// place and runs on the result at once: the Mac app's Settings window
+	// (DESIGN §5.5).
+	OpConfig = "config"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -539,6 +543,30 @@ type StatusReply struct {
 // ThemeArgs name the Mac app's palette, one of config.Themes.
 type ThemeArgs struct {
 	Theme string `json:"theme"`
+}
+
+// ConfigArgs are changes to make to the config file, in order. With none,
+// config only reads.
+type ConfigArgs struct {
+	Set []ConfigSet `json:"set,omitempty"`
+}
+
+// ConfigSet gives a dotted key, such as spawn.default_profile, a value of
+// the type the key takes; a duration is a string such as "30s". A null or
+// missing value takes the key out of the file, so its default applies.
+type ConfigSet struct {
+	Key   string          `json:"key"`
+	Value json.RawMessage `json:"value,omitempty"`
+}
+
+// ConfigResult is the config in effect, by the file's keys.
+type ConfigResult struct {
+	Path   string         `json:"path"`   // the config file
+	Config map[string]any `json:"config"` // every key, defaults too; durations as strings such as "30s"
+	// Problem says why the file would not load as it stands, when it would
+	// not, as after a hand edit gone wrong; the core runs on the config it
+	// loaded last.
+	Problem string `json:"problem,omitempty"`
 }
 
 type ShowArgs struct {

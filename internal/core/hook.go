@@ -59,7 +59,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			reply.Unfinished = unfinished
 		}
 		input := call.Input
-		if c.cfg.Journal.ToolInput == "none" {
+		if c.cfg().Journal.ToolInput == "none" {
 			for _, k := range toolInputKeys {
 				delete(e.Data, k)
 			}
@@ -77,7 +77,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		switch {
 		case e.Kind == event.SessionStarted:
 			reply.Context = c.delegateHint(x)
-		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg.Route.Failover:
+		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg().Route.Failover:
 			failover = true
 		}
 	}
@@ -85,7 +85,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		reply.Context = strings.TrimSpace(reply.Context + "\n\n" + n)
 	}
 	c.followConversation(x)
-	if turnEnded && c.cfg.Spawn.CloseWhenDone {
+	if turnEnded && c.cfg().Spawn.CloseWhenDone {
 		c.closeWhenDone(x)
 	}
 	frames := c.changes()
@@ -159,9 +159,9 @@ func (c *Core) observe(now time.Time) {
 					"reason": failedReason, "exit": exit.Data["code"], "tail": strings.Join(c.tail(x.pane), "\n"),
 				}})
 			}
-		case !x.dead && t.awaiting() && t.stalled == nil && now.Sub(t.requested) >= c.cfg.Spawn.ReadyTimeout:
+		case !x.dead && t.awaiting() && t.stalled == nil && now.Sub(t.requested) >= c.cfg().Spawn.ReadyTimeout:
 			c.record(x, event.Event{Source: event.SourceIrie, Kind: event.InputNeeded, Data: map[string]any{
-				"reason": event.ReasonStalled, "wait": c.cfg.Spawn.ReadyTimeout.String(), "tail": strings.Join(c.tail(x.pane), "\n"),
+				"reason": event.ReasonStalled, "wait": c.cfg().Spawn.ReadyTimeout.String(), "tail": strings.Join(c.tail(x.pane), "\n"),
 			}})
 		}
 	}

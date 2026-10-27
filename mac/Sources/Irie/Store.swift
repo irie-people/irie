@@ -26,6 +26,8 @@ final class Store: ObservableObject {
     @Published private(set) var agents: [Agent] = []
     /// Whether the core takes a model for one task.
     @Published private(set) var canPickModel = false
+    /// Whether the core reads and edits its config for the Settings window.
+    @Published private(set) var canConfigure = false
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     @Published private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
@@ -33,8 +35,8 @@ final class Store: ObservableObject {
     /// it for the marks; this draws the views again when it changes.
     @Published private(set) var redOnDone = false
     /// spawn.close_when_done, from the core: a finished session closes
-    /// itself, so the sidebar keeps no Done group and the title bar no Done
-    /// count. What closed is in history (`irie ctl history`, ⇧⌘T).
+    /// itself, so the sidebar keeps no To verify group and the title bar no
+    /// To verify count. What closed is in history (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
@@ -95,10 +97,14 @@ final class Store: ObservableObject {
     }
 
     let client: CoreClient
+    /// The core's config, as the Settings window shows and edits it.
+    let settings: SettingsModel
     private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
+        settings = SettingsModel(client: client)
+        settings.changed = { [weak self] in self?.loadChoices() }
     }
 
     var socketPath: String { client.socketPath }
@@ -125,6 +131,7 @@ final class Store: ObservableObject {
                 attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
                 link = .online(version: hello.version)
                 canPickModel = hello.features.contains("spawn-model")
+                canConfigure = hello.features.contains("config")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
                 // The store lives as long as the app.
@@ -238,6 +245,7 @@ final class Store: ObservableObject {
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
+        canConfigure = true
         taskRepo = "irie"
     }
 
