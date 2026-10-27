@@ -77,7 +77,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | `swift build` with the Swift 5.9.0 Command Line Tools on macOS 14.1 | SwiftPM stops at `xcrun --show-sdk-platform-path`: why `mac/build.sh` calls `swiftc` |
 | 2026-10-27 | `go help version` and `go help build` (Go 1.27) | `go version -m` prints the `vcs.revision` that `-buildvcs` stamps into a build: how `tools/live.sh` tells which commit is installed |
 | 2026-10-27 | `git merge-base -h` and `git update-ref -h` | `--is-ancestor` refuses an install that would drop the live build, and `update-ref` moves the `live` branch: `tools/live.sh` |
-| 2026-10-27 | macOS manual pages `lsappinfo(1)`, `open(1)`, `pgrep(1)`, `ditto(1)` | Whether Irie.app is in front, relaunching it in front or behind (`open -g`), finding it by process name (`pgrep -x`) and copying the bundle: `tools/live.sh` |
+| 2026-10-27 | macOS manual pages `lsappinfo(1)`, `open(1)`, `pgrep(1)`, `ditto(1)`, `ps(1)` | Whether Irie.app is in front, relaunching it in front or behind (`open -g`), finding it by process name (`pgrep -x`), copying the bundle, and the path a running core was started from (`ps -o command=`): `tools/live.sh` |
 
 ## Third-party code
 
