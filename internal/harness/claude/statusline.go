@@ -59,12 +59,18 @@ func UserStatusLine(cwd, repo, home string, environ []string) (StatusLine, bool)
 // statusLine is Irie's status line for a session (DESIGN §6.3): `irie
 // statusline`, which gives the core the session's cost, context and plan
 // use, then runs the user's own status line, keeping its padding and
-// refresh, or prints a short line of its own.
+// refresh, or prints a short line of its own, every ownRefresh seconds too.
 func statusLine(bin string, user StatusLine, ok bool) StatusLine {
-	l := StatusLine{Type: "command", Command: shellQuote(bin) + " statusline"}
+	l := StatusLine{Type: "command", Command: shellQuote(bin) + " statusline", RefreshInterval: ownRefresh}
 	if ok {
 		l.Command += " --then " + shellQuote(user.Command)
 		l.Padding, l.RefreshInterval, l.HideVimModeIndicator = user.Padding, user.RefreshInterval, user.HideVimModeIndicator
 	}
 	return l
 }
+
+// ownRefresh is how often, in seconds, Claude Code re-runs Irie's own
+// status line. Its updates stop while the session is idle, and so would the
+// line's state while the session waits on helpers or its turn has just
+// ended.
+const ownRefresh = 2
