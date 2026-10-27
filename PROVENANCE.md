@@ -86,6 +86,13 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | https://docs.ollama.com/integrations/claude-code | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN = "ollama"` and an empty `ANTHROPIC_API_KEY` for Claude Code on Ollama: the `local` profile example (docs) |
 | 2026-10-26 | git 2.43.0 manual pages (local `man git-worktree`, `man git-branch`), checked on a scratch repo | `git worktree remove` refuses a worktree with modified or untracked files unless `--force`, while ignored files don't stop it; `git branch -d` refuses an unmerged branch or one a worktree has checked out: cleaning up after a task (docs) |
 | 2026-10-26 | https://developer.mozilla.org/en-US/docs/Web/API/Document/elementsFromPoint | What is painted behind each picture's text, so the browser check measures its contrast against the shape behind it, with the Chrome DevTools Protocol entry above (docs) |
+| 2026-10-26 | https://www.contributor-covenant.org/version/3/0/code_of_conduct/code_of_conduct.md (Contributor Covenant 3.0, stewarded by the Organization for Ethical Source; CC BY-SA 4.0) | The text of `CODE_OF_CONDUCT.md`, adapted: the means of reporting filled in, and the template's note on enforcement left out (community) |
+| 2026-10-26 | https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms ; https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema | The issue forms in `.github/ISSUE_TEMPLATE/`: `name`, `description` and `body`, `labels`, and the `markdown`, `textarea`, `input`, `dropdown` and `checkboxes` elements with unique ids and `required` (community) |
+| 2026-10-26 | https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository | `config.yml`: `blank_issues_enabled`, and `contact_links` with `name`, `url` and `about` (community) |
+| 2026-10-26 | https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/creating-a-pull-request-template-for-your-repository | `.github/pull_request_template.md` as the place for a single template (community) |
+| 2026-10-26 | https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/configuring-private-vulnerability-reporting-for-a-repository ; https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability | Private vulnerability reporting: the owner switches it on, reporters use "Report a vulnerability" on the Security tab, and without it they ask in an issue for a contact: `SECURITY.md` (community) |
+| 2026-10-26 | https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/adding-support-resources-to-your-project | `SUPPORT.md` at the root, linked when someone opens an issue (community) |
+| 2026-10-26 | https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam ; https://docs.github.com/en/communities/moderating-comments-and-conversations/managing-how-contributors-report-abuse-in-your-organizations-repository | "Report content", "Report to repository admins" and "Report abuse to GitHub Support", and the owner's "Reported content" setting: the means of reporting in `CODE_OF_CONDUCT.md` (community) |
 
 ## Third-party code
 
@@ -124,3 +131,11 @@ The website in `site/` has no third-party code: no scripts, fonts or stylesheets
 | actions/configure-pages | v6 | MIT | Pages workflow: read the Pages settings |
 | actions/upload-pages-artifact | v5 | MIT | Pages workflow: package `site/` |
 | actions/deploy-pages | v5 | MIT | Pages workflow: publish it |
+
+## Third-party text
+
+One file holds text written elsewhere. It keeps its own license and says so at its end.
+
+| File | Source | Version | License |
+|---|---|---|---|
+| `CODE_OF_CONDUCT.md` | Contributor Covenant, stewarded by the Organization for Ethical Source, https://www.contributor-covenant.org/version/3/0/ | 3.0, adapted | CC BY-SA 4.0 |

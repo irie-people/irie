@@ -38,6 +38,10 @@ The website has the docs, from installing Irie to a merged change. Its pages are
 
 **Get the value you'd pay for, free, today.** If Irie ever makes money (donations, sponsorships, grants), it all goes back to the people who build it, after running costs, in proportion to the value of what they contributed. The founder started with zero Steak and earns it the same way as everyone else. The record is public: [irie-hq/stake](https://github.com/irie-hq/stake). It runs on [Steak](https://github.com/steak-hq/steak) v0.1.0.
 
+## Help
+
+[SUPPORT.md](SUPPORT.md) says where to ask, and [SECURITY.md](SECURITY.md) how to report a vulnerability privately. Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
 [Apache-2.0](LICENSE). Built from public documentation; every source is listed in [PROVENANCE.md](PROVENANCE.md).

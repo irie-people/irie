@@ -6,3 +6,5 @@ Thanks for helping. Irie is free to use. If Irie ever makes money, it all goes b
 2. Sign off your commits (`git commit -s`). That certifies the [Developer Certificate of Origin](https://developercertificate.org/): you have the right to submit the work under the project's license.
 3. Say in the pull request if an agent wrote part of the change. You answer for every line. Drive-by generated changes are closed.
 4. A maintainer sizes merged work in Steak (`steak:N`). Steak starts once a maintainer vouches for you, usually after your first merged change.
+
+Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md). For help, see [SUPPORT.md](SUPPORT.md); for a security problem, [SECURITY.md](SECURITY.md).
