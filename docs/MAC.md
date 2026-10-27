@@ -16,7 +16,8 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 - **The shown agent's live terminal** on the right, in a rounded frame edged in that session's colour, or sun while it is quiet. The edge brightens while the terminal has the keyboard. Selecting a row swaps that agent in, and Return (or **Type to it**) moves the keyboard there.
 - **A task bar** at the foot of the sidebar, always three lines tall; longer text scrolls inside it. It takes the same `@repo`, `@repo!` and `+profile` words as the terminal sidebar (DESIGN §4.2). It keeps the keyboard while a task starts; once the task has started, the app shows the new agent and gives its terminal the keyboard. Notices float above it rather than pushing the list.
 - **Warm, solid colours:** sand in light mode and cocoa in dark mode, with the terminal sidebar's sun, sea and state colours (`Theme.swift`). Nothing behind the window shows through.
-- **Right-click on a row:** show and type to it, open it in Ghostty, show the folder in Finder, copy the folder path, branch name or session ID.
+- **Right-click on a row,** or its ⋯ button: show and type to it, open it in Ghostty, show the folder in Finder, copy the folder path, branch name or session ID, and close it.
+- **Sessions close like tabs.** Close Session (⌘W, or Close in a row's menu) closes it at once, without asking, and the next session in the list takes its place. The core swaps its pane out, ends its agent gently and removes its row; its worktree and folder stay (DESIGN §4.5). Reopen Closed Session (⇧⌘T) is the undo: the session comes back in its place in the list, carrying its conversation on.
 - **Outside Irie.** Claude Code sessions that run in other terminals or in the background follow the cards, under a header with their count (DESIGN §4.6). Each is one line, in the order it started, with the mark of the state it matches, so a state change never moves or resizes it. A click or the arrow keys select one, and the details panel shows what it is doing, where it runs and its folder, with **Move into Irie** and **Copy Session ID**. While the session is busy or waits for you, the button is off and the panel says why. A move asks first, because the session's copy outside Irie ends, and anything it runs in the background stops. Then the conversation carries on in an Irie pane, and its terminal takes the keyboard. Right-click a row for the same, and to show or copy its folder. The keys that show a session skip these rows, since Irie can't show them.
 
 ## 2. How the terminal gets into the window
@@ -44,7 +45,7 @@ The app finds the core the way `irie` does (`internal/paths`). `--socket PATH`, 
 
 ## 4. Keys
 
-The **Go**, **View** and **Edit** menus list them all.
+The **File**, **Go**, **View** and **Edit** menus list them all.
 
 | Keys | What they do |
 |---|---|
@@ -54,6 +55,9 @@ The **Go**, **View** and **Edit** menus list them all.
 | ⌘F | Find a session. Esc clears the search and goes back to the list |
 | ⌃⌘S | Hide or show the sidebar |
 | ⌘N | New task |
+| ⌘W | Close the selected session, even while the terminal has the keyboard. The app catches it first |
+| ⇧⌘T | Reopen the session closed last |
+| ⇧⌘W | Close the window. Agents keep running, and the app quits with it |
 | ↑ and ↓, then Return | Pick a session in the list, then type to it. The arrows go on into Outside Irie, where they only select a row, and Return says that it runs outside Irie |
 | ⌘C, ⌘V, ⌘A | Copy, paste and select all in the terminal. A mouse drag selects in tmux, which puts the text on the pasteboard when you let go (tmux's `set-clipboard external` and OSC 52, which SwiftTerm writes to the pasteboard). ⌘C copies a selection made with Shift-drag, which bypasses tmux |
 | ⌘=, ⌘-, ⌘0 | Make the terminal's text bigger, smaller or the default size |
@@ -62,7 +66,7 @@ The **Go**, **View** and **Edit** menus list them all.
 
 These come with the core features they need, or after:
 
-- pause, freeze, rename, park, close, undo and priority controls (M4 to M7);
+- pause, freeze, rename, park and priority controls, and undo beyond reopening a closed session (M4 to M7);
 - buttons that answer a question or approve a command;
 - choosing a local model for small jobs;
 - an icon, and a signed, notarized app.
