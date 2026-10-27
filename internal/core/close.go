@@ -2,8 +2,8 @@ package core
 
 // Closing and reopening sessions (DESIGN §4.5, M4). Close swaps the session's
 // pane out of the slot and marks it closing, so its row goes at once, then
-// ends the agent gently: SIGTERM through its host, which also continues a
-// stopped agent, and SIGKILL after closeWait. The worktree and the session's
+// ends the agent gently: SIGCONT to all it runs, in case it is frozen, then
+// SIGTERM through its host, and SIGKILL after closeWait. The worktree and the session's
 // files stay. Reopen, close's undo, brings the session back in the same row:
 // it carries the conversation on, or starts the task again when the agent
 // never got that far. Which sessions are closed is derived from the journal's
@@ -195,10 +195,11 @@ func (c *Core) reap() {
 	}
 }
 
-// end ends what a closing pane runs, unless that is under way: SIGTERM to
-// its host, which passes it on to the agent's process group and continues
-// the group in case it is stopped, then SIGKILL after closeWait. Then the
-// pane's window goes. The caller holds c.mu.
+// end ends what a closing pane runs, unless that is under way. A frozen
+// session is stopped, its host too, so everything the host runs is
+// continued first, the host last; then SIGTERM goes to the host, which
+// passes it on to the agent's process group. Whatever still runs after
+// closeWait is killed. Then the pane's window goes. The caller holds c.mu.
 func (c *Core) end(p tmux.Pane) {
 	if c.closes.ending == nil {
 		c.closes.ending = map[string]*ending{}
@@ -209,20 +210,19 @@ func (c *Core) end(p tmux.Pane) {
 	e := &ending{session: p.IrieSession, done: make(chan struct{})}
 	c.closes.ending[p.ID] = e
 	running := !p.Dead && p.PID > 1
-	if running {
-		if err := syscall.Kill(p.PID, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
-			c.log.Warn("close: SIGTERM", "pane", p.ID, "pid", p.PID, "err", err)
-		}
-	}
 	go func() {
 		defer close(e.done)
 		if running {
+			signalAll(p.PID, syscall.SIGCONT)
+			if err := syscall.Kill(p.PID, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+				c.log.Warn("close: SIGTERM", "pane", p.ID, "pid", p.PID, "err", err)
+			}
 			for deadline := time.Now().Add(closeWait); alive(p.PID) && time.Now().Before(deadline); {
 				time.Sleep(50 * time.Millisecond)
 			}
 			if alive(p.PID) {
 				c.log.Warn("close: the agent did not exit after SIGTERM, so it is killed", "session", p.IrieSession, "pid", p.PID, "wait", closeWait)
-				forceEnd(p.PID)
+				signalAll(p.PID, syscall.SIGKILL)
 				for i := 0; i < 40 && alive(p.PID); i++ {
 					time.Sleep(50 * time.Millisecond)
 				}
@@ -237,9 +237,9 @@ func (c *Core) end(p tmux.Pane) {
 	}()
 }
 
-// forceEnd kills with SIGKILL what a host runs: the agent's process group,
-// every process under the host, then the host.
-func forceEnd(hostPID int) {
+// signalAll sends sig to what a host runs, the host last: the agent's
+// process group, then every process under the host, from one ps listing.
+func signalAll(hostPID int, sig syscall.Signal) {
 	out, err := exec.Command("ps", "-A", "-o", "pid=", "-o", "ppid=", "-o", "pgid=").Output()
 	if err == nil {
 		kids, group := map[int][]int{}, map[int]int{}
@@ -259,7 +259,7 @@ func forceEnd(hostPID int) {
 		// The host starts the agent as the leader of a group of its own.
 		for _, agent := range kids[hostPID] {
 			if agent > 1 && group[agent] == agent {
-				syscall.Kill(-agent, syscall.SIGKILL)
+				syscall.Kill(-agent, sig)
 			}
 		}
 		seen := map[int]bool{hostPID: true}
@@ -270,11 +270,11 @@ func forceEnd(hostPID int) {
 				continue
 			}
 			seen[pid] = true
-			syscall.Kill(pid, syscall.SIGKILL)
+			syscall.Kill(pid, sig)
 			todo = append(todo, kids[pid]...)
 		}
 	}
-	syscall.Kill(hostPID, syscall.SIGKILL)
+	syscall.Kill(hostPID, sig)
 }
 
 // endings returns what to wait for before session id runs again: the ends of

@@ -291,10 +291,10 @@ exec %[1]q "$@"
 	}
 }
 
-func TestClosingAStoppedSessionEndsIt(t *testing.T) {
-	// The agent's group is stopped, and its host too, so that nothing passes
-	// SIGTERM on or continues it: it ends within closeWait and a tick all the
-	// same (DESIGN M6).
+func TestClosingAFrozenSessionEndsItGently(t *testing.T) {
+	// Frozen the way the core freezes a session, host first, then the
+	// agent's group: close continues them, so the agent still gets its
+	// SIGTERM, and well within the 6 s of DESIGN M6.
 	c := setup(t)
 	a := c.spawn("prompt")
 	c.waitState(a.ID, ipc.StateWorking)
@@ -312,8 +312,11 @@ func TestClosingAStoppedSessionEndsIt(t *testing.T) {
 	start := time.Now()
 	c.closeSession(a.ID)
 	c.waitGone(a.Pane, closeWait+5*time.Second)
-	if d := time.Since(start); d > closeWait+time.Second {
-		t.Errorf("it took %v to end", d)
+	if d := time.Since(start); d >= closeWait {
+		t.Errorf("it took %v to end, so it was killed", d)
 	}
 	testutil.Eventually(t, 2*time.Second, "the agent still runs", func() bool { return !alive(pid) })
+	if sig := c.signals(a.ID); !slices.Equal(sig, []string{"terminated"}) {
+		t.Errorf("the agent got %q, want SIGTERM", sig)
+	}
 }

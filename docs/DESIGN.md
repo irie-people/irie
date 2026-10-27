@@ -477,7 +477,7 @@ type Harness interface {
 - **Stops the host did not cause.** The host continues them within 100 ms, for example the agent's own Ctrl+Z handling, so an agent never wedges. tmux would do the same for its direct child, which is why the agent runs under a host and not as the pane's first process.
 - **Input.** While a session is frozen the core turns off its pane's input (`select-pane -d`), so keystrokes don't pile up, and turns it back on at thaw.
 - **Long freezes.** After `freeze.warn_after` the row warns that network streams may have dropped.
-- **Close while frozen.** SIGTERM, then SIGCONT, then SIGKILL after 5 s. The host continues the agent's group whenever it passes a signal on, because a stopped process that catches SIGTERM, as Claude Code does, only handles it once it runs again.
+- **Close while frozen.** SIGCONT to everything the host runs, the host last, then SIGTERM through the host, then SIGKILL after 5 s. A stopped process that catches SIGTERM, as Claude Code does, only handles it once it runs again, so the host also continues the agent's group whenever it passes a signal on.
 
 **Priority.**
 - **Level.** 0 or 1, with an optional reason. The field is an integer, so more levels can come later.
@@ -553,7 +553,7 @@ type Harness interface {
 - Not undoable: the agents' own edits (use the agent's own rewind) and worktree contents.
 
 **Close and reopen.**
-- **Close.** In one command list the pane swaps out of the slot, if it is shown, and its `@irie_role` becomes `closing`, so the row goes at once and a restarted core still finishes the job. Then SIGTERM goes to the host, which passes it on and continues the group (§4.3). A pane still alive 5 s later gets SIGKILL: the agent's process group, every process under the host, then the host. Then its window goes. The worktree, the folder and `sessions/<id>/` stay.
+- **Close.** In one command list the pane swaps out of the slot, if it is shown, and its `@irie_role` becomes `closing`, so the row goes at once and a restarted core still finishes the job. Then everything the host runs gets SIGCONT, in case the session is frozen, the host last, and SIGTERM goes to the host, which passes it on (§4.3). A pane still alive 5 s later gets SIGKILL: the agent's process group, every process under the host, then the host. Then its window goes. The worktree, the folder and `sessions/<id>/` stay.
 - **What is closed** is derived from the journal: a session whose last `ui.closed` came after its last `ui.reopened`, and that has no pane, the newest 100. `ui.closed` carries what reopening needs that `spec.json` does not hold: the name, the creation time, the conversation's id and whether to resume it.
 - **Reopen.** It waits until the closed session's old agent has exited, so two never share a conversation. The session comes back with the same id, name and creation time, so its row returns to its place, in the same folder on the same profile, with Irie's settings written afresh. When its agent got as far as a conversation, meaning its prompt went in or it showed life, reopen runs `claude --resume <id>`, with the id the last SessionStart named, which `/clear` changes. Otherwise its `task.md` starts again under a new id. A session moved in from outside Irie has no task, so it always resumes, and a harness that cannot resume always starts again.
 
