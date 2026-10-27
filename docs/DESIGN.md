@@ -600,9 +600,9 @@ One JSON object per journal line and per `event` frame:
 | `spawn.failed` | `reason`, `exit`, `tail` | irie, host | error |
 | `session.started` | `transcript`, `model`, `permission_mode` | SessionStart | `session/new` |
 | `prompt.submitted` | `chars` | UserPromptSubmit | user message / working |
-| `tool.started` | `tool`, `summary` | PreToolUse | `tool_call` pending / working |
+| `tool.started` | `tool`, `summary`, `phrase` (the call in plain words: "Running the tests") | PreToolUse | `tool_call` pending / working |
 | `tool.finished`, `tool.failed` | `tool`, `ms` | PostToolUse, PostToolUseFailure | `tool_call_update` completed / failed |
-| `input.needed` | `reason`: `permission`, `question`, `plan`, `elicitation`, `stalled` | PermissionRequest, Notification, PreToolUse(AskUserQuestion, ExitPlanMode), Elicitation, readiness timer | `request_permission` / blocked |
+| `input.needed` | `reason`: `permission`, `question`, `plan`, `elicitation`, `stalled`; `phrase` for a permission, a question or a plan ("Asks: may it run rm -rf build?") | PermissionRequest, Notification, PreToolUse(AskUserQuestion, ExitPlanMode), Elicitation, readiness timer | `request_permission` / blocked |
 | `turn.ended` | none | Stop | stop reason `end_turn` / done |
 | `turn.failed` | `error` | StopFailure | error |
 | `subagent.started`, `subagent.finished` | `agent_type`, `transcript` | SubagentStart, SubagentStop | none (an ACP RFD covers subagents) |
