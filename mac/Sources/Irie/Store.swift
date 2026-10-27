@@ -447,13 +447,13 @@ final class Store: ObservableObject {
     /// Shows a notice above the task bar and has VoiceOver read it. A
     /// confirmation goes after 3 s; an error stays until the next notice, or
     /// until the user edits or submits (WCAG 2.2.1).
-    func say(_ text: String, error: Bool) {
+    func say(_ text: String, error: Bool, seconds: UInt64 = 3) {
         notice = Notice(text: text, isError: error)
         AccessibilityNotification.Announcement(text).post()
         guard !error else { return }
         let id = notice?.id
         Task {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if notice?.id == id { notice = nil }
         }
     }

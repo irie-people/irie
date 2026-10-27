@@ -104,6 +104,7 @@ type session struct {
 	exitCode int
 	shown    bool
 	track    track
+	quiet    int        // counts the session's events and messages; a close-when-done timer fires only if it has not moved
 	tally    tokenTally // read from the transcripts track names
 	tokens   *ipc.Tokens
 	model    string           // the model the agent runs, as its profile said
