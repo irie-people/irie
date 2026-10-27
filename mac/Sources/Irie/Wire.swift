@@ -28,9 +28,17 @@ struct Session: Codable, Identifiable, Equatable {
     var shown: Bool?
     var subagents: [Subagent]?
     var tokens: Tokens?
+    /// Its place in the list, which the user sets; when it was frozen, and
+    /// whether its agent still runs on to its next tool call; 1 while it is
+    /// promoted (Controls.swift).
+    var order: Int?
+    var frozen: Date?
+    var freezing: Bool?
+    var priority: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, tokens
+        case order, frozen, freezing, priority
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -94,6 +102,22 @@ struct Frame: Decodable {
     var problem: String?
     /// A closed frame: the sessions reopen can bring back, the last closed first.
     var closed: [ClosedSession]?
+    /// A snapshot's or a header frame's header.
+    var header: Header?
+}
+
+/// What a snapshot says besides its rows.
+struct Header: Decodable {
+    /// ui.red_on_done: a done session is drawn red, not green.
+    var redOnDone: Bool?
+    /// spawn.close_when_done: finished sessions close themselves, so there
+    /// is no Done group or count.
+    var closeWhenDone: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case redOnDone = "red_on_done"
+        case closeWhenDone = "close_when_done"
+    }
 }
 
 struct HelloArgs: Encodable {
@@ -122,11 +146,25 @@ struct SpawnArgs: Encodable {
     var repo: String?
     var inPlace: Bool?
     var profile: String?
+    /// A model for this task instead of its profile's; only a core whose
+    /// hello lists spawn-model takes it.
+    var model: String?
 
     enum CodingKeys: String, CodingKey {
-        case task, repo, profile
+        case task, repo, profile, model
         case inPlace = "in_place"
     }
+}
+
+/// An @ or + word to complete: "@" lists the repos, "+" the agents.
+struct CompleteArgs: Encodable {
+    var text: String
+}
+
+struct CompleteResult: Decodable {
+    var items: [String]
+    /// What each item runs and costs, for the + words.
+    var notes: [String]?
 }
 
 struct SpawnResult: Decodable {
@@ -136,6 +174,17 @@ struct SpawnResult: Decodable {
 struct ShowArgs: Encodable {
     var session: String
     var focus: Bool
+}
+
+struct RenameArgs: Encodable {
+    var session: String
+    var name: String
+}
+
+/// The session with the name the core gave it, numbered when another
+/// session has it.
+struct RenameResult: Decodable {
+    var session: Session
 }
 
 struct Empty: Codable {}

@@ -15,6 +15,8 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -165,6 +167,8 @@ func (c *Core) closeLocked(id string) error {
 	}})
 	c.addClosed(r)
 	delete(c.sessions, id)
+	// A frozen agent's held tool calls go through, so it ends gently.
+	os.Remove(c.paths.FreezeFile(id))
 	c.end(*p)
 	c.log.Info("closed", "session", x.id, "name", x.name, "resume", r.Resume)
 	return c.refresh()
@@ -185,6 +189,59 @@ func (c *Core) reopenable(x *session) closedRecord {
 	_, taskErr := os.Stat(c.paths.TaskFile(x.id))
 	r.Resume = err == nil && resumes && r.VendorID != "" && (taskErr != nil || x.track.conversed())
 	return r
+}
+
+// closeWhenDone closes x once close_delay passes with nothing more from it:
+// no event, no message typed to it, nothing it needs from you, no
+// subagent running and no freeze. A session that gets one more prompt is
+// not done, one the user paused stays, and one whose answer is for you to
+// read, such as a status report or a question, is not closed at all
+// (awaitsLook). The close is the user's own, so it can be undone with
+// reopen. The caller holds c.mu.
+func (c *Core) closeWhenDone(x *session) {
+	if c.awaitsLook(x) {
+		return
+	}
+	id, quiet := x.id, x.quiet
+	time.AfterFunc(c.cfg.Spawn.CloseDelay, func() {
+		c.mu.Lock()
+		x := c.sessions[id]
+		if x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || len(x.track.subs) > 0 || x.track.frozen != nil {
+			c.mu.Unlock()
+			return
+		}
+		err := c.closeLocked(id)
+		frames := c.changes()
+		c.mu.Unlock()
+		c.publish(frames)
+		if err != nil {
+			c.log.Warn("close when done", "session", id, "err", err)
+			return
+		}
+		c.publishClosed()
+	})
+}
+
+// lookTask matches a task that asks for something to read: a status, a
+// report, a summary, a review, an explanation, a lookup or a question. The
+// session's answer is the point, so it waits for the user.
+var lookTask = regexp.MustCompile(`(?i)\b(status|report|summar(y|ize|ise)|recap|review|explain|investigate|audit|compare|research|what|where|which|why|how|who|when|list|show|tell|check|find|look (at|into)|walk me through)\b`)
+
+// awaitsLook reports whether x is waiting for the user to read its answer,
+// so it must not close by itself: its task asks for a status, report or
+// other answer (lookTask), or its last message asks the user something.
+// The caller holds c.mu.
+func (c *Core) awaitsLook(x *session) bool {
+	if msg, err := os.ReadFile(filepath.Join(c.paths.Session(x.id), resultFile)); err == nil &&
+		strings.HasSuffix(strings.TrimSpace(string(msg)), "?") {
+		return true
+	}
+	task, err := os.ReadFile(c.paths.TaskFile(x.id))
+	if err != nil {
+		return false
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(task)), "\n")
+	return lookTask.MatchString(first)
 }
 
 // reap gives every closing pane an ending, such as those a restarted core

@@ -31,11 +31,19 @@ enum Snapshot {
                 store.folded = []
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: palette], forName: UserDefaults.argumentDomain)
                 Theme.use(palette)
-                let (rep, titlebar) = window(store, dark: dark, width: width)
+                let (rep, titlebar) = window(ContentView().environmentObject(store), dark: dark, width: width, height: 720)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 let top = firstCardTop(rep, below: titlebar)
                 print("\(name): title bar \(fmt(titlebar)) pt, first card at \(top.map(fmt) ?? "?") pt")
+            }
+            // The new-task sheet, in the default palette.
+            Theme.use(Palette.standard.id)
+            for dark in [false, true] {
+                let (rep, _) = window(NewTaskSheet().environmentObject(store), dark: dark, width: 560, height: 470)
+                let name = "sheet-\(dark ? "dark" : "light").png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
             }
         } catch {
             FileHandle.standardError.write(Data("snapshot: \(error.localizedDescription)\n".utf8))
@@ -46,13 +54,13 @@ enum Snapshot {
 
     /// The window as the app draws it, at 2x, and its title bar's height in
     /// points. It is ordered in far off any screen, so it never shows.
-    private static func window(_ store: Store, dark: Bool, width: CGFloat) -> (NSBitmapImageRep, CGFloat) {
-        let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: 720),
+    private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat) -> (NSBitmapImageRep, CGFloat) {
+        let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: height),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         w.toolbarStyle = IrieApp.toolbarStyle
-        let host = NSHostingView(rootView: ContentView().environmentObject(store))
+        let host = NSHostingView(rootView: root)
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
         w.orderFrontRegardless()

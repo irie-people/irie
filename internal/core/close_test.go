@@ -5,9 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -70,7 +68,7 @@ func (c *coreEnv) waitGone(pane string, d time.Duration) {
 }
 
 func TestCloseSwapsThePaneOutAndEndsTheAgentGently(t *testing.T) {
-	c := setup(t)
+	c := setupWith(t, agentConfig{terminal: true})
 	a, b := c.spawn("prompt"), c.spawn("prompt")
 	c.waitState(a.ID, ipc.StateWorking)
 	c.waitState(b.ID, ipc.StateWorking)
@@ -292,22 +290,16 @@ exec %[1]q "$@"
 }
 
 func TestClosingAFrozenSessionEndsItGently(t *testing.T) {
-	// Frozen the way the core freezes a session, host first, then the
-	// agent's group: close continues them, so the agent still gets its
-	// SIGTERM, and well within the 6 s of DESIGN M6.
+	// Frozen by the core's own freeze (freeze.go), its agent and all it runs
+	// stopped while the host leaves them so: close continues them, so the
+	// agent still gets its SIGTERM, and well within the 6 s of DESIGN M6.
 	c := setup(t)
-	a := c.spawn("prompt")
+	a := c.spawn("prompt,kids")
 	c.waitState(a.ID, ipc.StateWorking)
-	pid := int(c.agentLog(a.ID)[0]["pid"].(float64))
-	hostPID, err := strconv.Atoi(c.Tmux(t, "display-message", "-p", "-t", a.Pane, "#{pane_pid}"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The host first, or it would continue the agent at once.
-	for _, p := range []int{hostPID, -pid} {
-		if err := syscall.Kill(p, syscall.SIGSTOP); err != nil {
-			t.Fatalf("SIGSTOP %d: %v", p, err)
-		}
+	pid := c.kids(a)
+	c.freeze(a.ID, true)
+	if _, running := stoppedOf(tree(t, c.hostPID(a))); len(running) > 0 {
+		t.Fatalf("frozen, these still run: %v", running)
 	}
 	start := time.Now()
 	c.closeSession(a.ID)

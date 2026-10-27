@@ -1,11 +1,16 @@
 package tmux
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ConfOptions are the config values the generated tmux.conf uses.
 type ConfOptions struct {
 	FocusKey     string // ui.focus_key
 	SidebarWidth int    // ui.sidebar_width
+	FlipKey      string // ui.flip_key; "" binds none
+	Bin          string // the irie binary the flip key runs
 }
 
 // Conf returns the generated tmux.conf (DESIGN §2.3). The server reads only
@@ -52,5 +57,20 @@ set -gw window-size latest
 # Keep the sidebar's width when a client resizes the window. Resizing a pane
 # would end the Mac app's zoom, so a zoomed window is left alone.
 set-hook -g window-resized "if -F '#{!=:#{window_zoomed_flag},1}' 'resize-pane -t %[3]s -x %[4]d'"
-`, o.FocusKey, Slot, Sidebar, o.SidebarWidth)
+`, o.FocusKey, Slot, Sidebar, o.SidebarWidth) + flipBinding(o)
+}
+
+// flipBinding binds ui.flip_key to `irie ctl flip`, which turns the slot
+// between the shown session's conversation and its raw terminal (DESIGN
+// §4.7). While the Mac app zooms the slot, the app has its own flip, so the
+// key goes to the agent. A binary path that quoting cannot carry binds
+// nothing.
+func flipBinding(o ConfOptions) string {
+	if o.FlipKey == "" || o.Bin == "" || strings.ContainsAny(o.Bin, "'\"\\$`\n{}") {
+		return ""
+	}
+	return fmt.Sprintf(`
+# Flip the slot between the shown session's conversation and its terminal.
+bind -n '%[1]s' if -F '#{window_zoomed_flag}' { send-keys '%[1]s' } { run-shell -b '"%[2]s" ctl flip' }
+`, o.FlipKey, o.Bin)
 }
