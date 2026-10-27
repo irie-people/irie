@@ -10,6 +10,17 @@ enum TaskParser {
         var errorDescription: String?
     }
 
+    /// The repo or path of the first @ word on the first line, without its
+    /// @ and !, for the task bar's menu to show.
+    static func target(_ input: String) -> String? {
+        let first = input.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        guard let w = first.split(whereSeparator: { $0 == " " || $0 == "\t" }).first(where: { $0.hasPrefix("@") && $0.count > 1 }) else {
+            return nil
+        }
+        let v = w.dropFirst()
+        return String(v.hasSuffix("!") ? v.dropLast() : v)
+    }
+
     static func parse(_ input: String, home: String) throws -> SpawnArgs {
         var a = SpawnArgs()
         let parts = input.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)

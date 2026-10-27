@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/irie-hq/irie/internal/event"
+	"github.com/irie-hq/irie/internal/host"
 	"github.com/irie-hq/irie/internal/ipc"
 	"github.com/irie-hq/irie/internal/testutil"
 	"github.com/irie-hq/irie/internal/tmux"
@@ -374,5 +375,24 @@ func TestTheCommandBarCompletesAndPastes(t *testing.T) {
 	}
 	if b, err := os.ReadFile(c.paths.TaskFile(s.ID)); err != nil || string(b) != body {
 		t.Errorf("task.md holds %d bytes (%v), want the %d-byte paste", len(b), err, len(body))
+	}
+}
+
+func TestATaskRunsOnTheModelItAsksFor(t *testing.T) {
+	c := setupWith(t, agentConfig{extra: "[profiles.shell]\nharness = \"generic\"\ncommand = \"/bin/sh\"\nargs = [\"-c\", \"sleep 60\"]\n"})
+	s := c.spawnArgs(ipc.SpawnArgs{Task: "say hello", Model: "sonnet"})
+	spec, err := host.ReadSpec(c.paths.SpecFile(s.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(spec.Argv, "--model"); i < 0 || i+1 >= len(spec.Argv) || spec.Argv[i+1] != "sonnet" {
+		t.Errorf("argv = %q, want --model sonnet", spec.Argv)
+	}
+
+	// A generic agent picks its model in its own args, so it takes none.
+	var r ipc.SpawnResult
+	err = c.call("spawn", ipc.SpawnArgs{Task: "say hello", Profile: "shell", Model: "sonnet"}, &r)
+	if err == nil || !strings.Contains(err.Error(), "takes no model") {
+		t.Errorf("a model for a generic profile: %v", err)
 	}
 }
