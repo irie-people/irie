@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# cue runs the presenter's keys for the demo tapes (docs/demo/README.md).
+# The presenter's tmux runs it for Ctrl+G and a letter, so a tape can move
+# its captions on, paste the big log or close Irie's window, and Irie never
+# sees a key. Each cue is logged with its time, which gives the chapters.
+#
+#   cue next    show the next caption from captions.tsv
+#   cue paste   paste paste.txt as a terminal would: one bracketed paste
+#   cue detach  detach Irie's client, as closing the window would
+#   cue end     mark the end of the recording
+set -u
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=/dev/null
+source "$root/env.sh"
+presenter() { tmux -S "$root/run/presenter" "$@"; }
+
+# log appends a line to cues.log: the time, then its fields, tab-separated.
+log() {
+	local IFS=$'\t'
+	printf '%s\t%s\n' "$(perl -MTime::HiRes=time -e 'printf "%.3f", time')" "$*" >>"$root/cues.log"
+}
+
+case ${1:-} in
+next)
+	n=$(($(cat "$root/cue.n" 2>/dev/null || echo 0) + 1))
+	echo "$n" >"$root/cue.n"
+	line=$(sed -n "${n}p" "$root/captions.tsv")
+	if [ -z "$line" ]; then
+		log caption "$n" "" "(the tape has no caption $n)"
+		exit 0
+	fi
+	chapter=${line%%$'\t'*}
+	caption=${line#*$'\t'}
+	# A # in a status format starts a format; ## is a plain one.
+	presenter set -g @caption " ${caption//#/##} " \; refresh-client -S
+	log caption "$n" "$chapter" "$caption"
+	;;
+paste)
+	presenter load-buffer -b demo "$root/paste.txt" \; paste-buffer -p -d -b demo -t demo:
+	log "paste"
+	;;
+detach)
+	tmux -L "$DEMO_SOCKET" detach-client -s irie
+	log "detach"
+	;;
+end)
+	log "end"
+	;;
+*)
+	echo "usage: cue next|paste|detach|end" >&2
+	exit 2
+	;;
+esac

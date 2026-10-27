@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# claude, as Irie's demo sandbox knows it (docs/demo/README.md): the repo's
+# fakeagent, which fires Claude Code's hooks on cue with no model, no tokens
+# and no network. The fakeagent reads its task as a step script, so this
+# looks up the script for the task's words in cues.txt, and its terminal
+# shows the task as it was typed, with the sandbox's home as ~.
+set -uo pipefail
+
+bin=$(cd "$(dirname "$0")" && pwd)
+fake=$bin/fakeagent
+
+# Irie probes the CLI with --version and --help; those, and anything else
+# without a task, go straight through.
+if [ $# -eq 0 ] || [[ ${!#} == -* ]]; then exec "$fake" "$@"; fi
+
+task=${!#}
+shown=${task%%$'\n'*}
+words=$shown
+# A task over 100 KiB arrives as a pointer to its file (DESIGN §3.3). Its
+# script is picked by the words the user typed, which open that file.
+pointer='^Your full task is in (.+/task\.md)\. '
+if [[ $shown =~ $pointer ]]; then
+	IFS= read -r words <"${BASH_REMATCH[1]}" || true
+fi
+
+# The first entry whose words the task contains, or "*", gives the script.
+script=$(WORDS=$words awk '
+	function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+	BEGIN { w = tolower(ENVIRON["WORDS"]) }
+	/^[ \t]*(#|$)/ { next }
+	/^[ \t]/ { if (hit) script = (script == "" ? "" : script " ") trim($0); next }
+	{
+		if (hit) exit
+		i = index($0, "|")
+		if (!i) next
+		words = trim(substr($0, 1, i - 1))
+		script = trim(substr($0, i + 1))
+		hit = words == "*" || index(w, tolower(words)) > 0
+	}
+	END { if (hit) print script }
+' "$bin/../cues.txt")
+
+# (steps) * N repeats the steps N times.
+group='\(([^()]*)\)[[:space:]]*\*[[:space:]]*([0-9]+)'
+while [[ $script =~ $group ]]; do
+	steps=
+	for ((i = 0; i < BASH_REMATCH[2]; i++)); do steps+=${steps:+, }${BASH_REMATCH[1]}; done
+	script=${script/"${BASH_REMATCH[0]}"/$steps}
+done
+
+# The banner keeps the session id's first block, which fits a narrow slot.
+"$fake" "${@:1:$#-1}" "$script" | SCRIPT=$script SHOWN=$shown awk '
+	BEGIN { from = "› " ENVIRON["SCRIPT"]; to = "› " ENVIRON["SHOWN"]; home = ENVIRON["HOME"] }
+	NR == 1 && match($0, / · session [0-9a-f]+/) { $0 = substr($0, 1, RSTART + RLENGTH - 1) }
+	!shown && $0 == from { $0 = to; shown = 1 }
+	{
+		while (home != "" && (i = index($0, home)) > 0)
+			$0 = substr($0, 1, i - 1) "~" substr($0, i + length(home))
+		print
+		fflush()
+	}'
+exit "${PIPESTATUS[0]}"
