@@ -72,7 +72,7 @@ type (
 
 // commands are what the command bar takes after a colon (DESIGN §4.2,
 // §4.6, §6.4).
-const commands = ":move [NAME], :setup, :models, :rate good|bad, :route TASK"
+const commands = ":move [NAME], :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON]"
 
 type focusArea int
 
@@ -120,6 +120,7 @@ type Model struct {
 	sel      int // selected row, -1 when the list is empty
 	offset   int // first visible row
 	pending  string
+	drag     *drag // the row the mouse holds (control.go)
 
 	outside        []ipc.OutsideSession // the Outside Irie group, after the sessions (outside.go)
 	outsideProblem string
@@ -341,6 +342,7 @@ func (m *Model) apply(f ipc.Frame) {
 			selected = ""
 		}
 	}
+	m.sortByOrder()
 	if selected != "" {
 		m.sel = m.index(selected)
 	}
@@ -472,6 +474,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.confirming = ""
+		if i, ok := m.listRow(msg.Y); ok {
+			m.press(i)
+			return m, nil
+		}
 		if row := msg.Y - m.listTop(); row >= 0 && row < m.listHeight() {
 			if i := m.offset + row; i < m.rowCount() {
 				m.sel = i
@@ -483,6 +489,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Y >= m.height-m.barHeight() {
 			m.setFocus(focusBar)
 		}
+	case tea.MouseMotionMsg:
+		if msg.Button == tea.MouseLeft {
+			m.dragTo(msg.Y)
+		}
+	case tea.MouseReleaseMsg:
+		return m.release()
+	case controlledMsg:
+		m.controlled(msg)
 	case tea.KeyPressMsg:
 		if m.focus == focusBar {
 			return m.barKey(msg)
@@ -516,6 +530,10 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "m":
 		cmd := m.moveSelected()
 		return m, cmd
+	case "f", "F":
+		return m.freezeKey(msg.String() == "F")
+	case "!":
+		return m.promoteKey("")
 	case "+":
 		return m, m.rateCmd(ipc.Good)
 	case "-":
@@ -595,6 +613,9 @@ func (m Model) command(line string) (tea.Model, tea.Cmd) {
 		m.bar.Reset()
 		m.chips = nil
 		return m, cmd
+	}
+	if model, cmd, ok := m.controlCommand(name, arg); ok {
+		return model, cmd
 	}
 	switch {
 	case name == "move":

@@ -165,6 +165,8 @@ func (c *Core) closeLocked(id string) error {
 	}})
 	c.addClosed(r)
 	delete(c.sessions, id)
+	// A frozen agent's held tool calls go through, so it ends gently.
+	os.Remove(c.paths.FreezeFile(id))
 	c.end(*p)
 	c.log.Info("closed", "session", x.id, "name", x.name, "resume", r.Resume)
 	return c.refresh()

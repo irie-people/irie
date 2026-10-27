@@ -28,7 +28,8 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | "Context aware" | v1 reading: whatever Irie does to an agent (hold, freeze, priority, a note from you) reaches it as a context note at its next tool boundary or prompt, including how long it was held. Awareness of sibling agents and context-window gauges come after v1 | §4.3, M5–M7 |
 | Reliable headless spawning | Every spawn either becomes a live agent holding its full task, or fails loudly with the reason. Works with no window open (`irie ctl spawn`) | §4.2, M1–M3 |
 | Undo/redo | An action log with inverses. The header shows what undo and redo will do | §4.5, M4–M7 |
-| Priority for tasks that become urgent on the fly | Badge, move to the top, steering note | §4.3, M7 |
+| Priority for tasks that become urgent on the fly | Badge, move to the top, its process tree gets the machine first, steering note | §4.3, M7 |
+| Put a session where you want it in the list | Drag it, in either sidebar. The core keeps one order, which survives restarts | §4.1 |
 | Default agent: Opus 5.5 on max effort in auto mode | `+claude`: `claude-opus-5-5`, `--effort max`, `--permission-mode auto`. It was the default profile until M10; since then the default is `auto`, which sends hard work and orchestration to `+claude` (§6.4). Every value can be changed in config | §5.5, M1, M10 |
 | Sessions waiting on you in red; rename; jump | States derived from hooks; keys `r`, `/` and `1`–`9` | §4.1, M2, M4 |
 | A live read-only pane for each running subagent | One mirror pane per subagent, listed under its parent | §4.4, M8 |
@@ -70,7 +71,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
 4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
-6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
+6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze, promote or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
 
 ### 2.2 Processes
 
@@ -108,7 +109,7 @@ flowchart LR
   ctl -->|"socket API"| core
   core -->|"new-window, swap-pane, capture-pane"| srv
   core -.->|"polling now, control mode in M11"| srv
-  core -->|"SIGUSR1 freeze, SIGUSR2 thaw"| host
+  core -->|"freeze: SIGSTOP, thaw: SIGCONT"| agent
   core --> files
   core -->|"tail"| tr
   mirror -->|"tail"| tr
@@ -122,7 +123,7 @@ flowchart LR
 | `irie attach` | any terminal | `exec tmux -L irie attach -t irie`. Inside another tmux it refuses unless given `--nested`. Inside Irie's own server it runs `switch-client` | tmux |
 | `irie core --supervise` | `irie-agents:core` | Holds `core.lock` (flock). Owns the registry, state derivation, gates, notes, undo log, journal, worktrees, spawning, the swap-in and observation. The supervisor restarts it with backoff (1, 2, 4 … 30 s) | socket (server), tmux, hosts (signals), transcripts |
 | `irie ui --supervise` | `irie:0.0` | The sidebar, a pure client of the socket. It never calls tmux | socket |
-| `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; freezes and thaws it; records the exit status | the agent (fork/exec), socket (best effort) |
+| `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; continues stops it did not cause, but leaves a frozen agent stopped; says who it is in `host.json`; records the exit status | the agent (fork/exec), socket (best effort) |
 | `irie hook` | started by the agent for each hook event | Forwards the event, waits while held, prints the harness's reply | socket, gate file |
 | `irie statusline` | started by Claude Code for each status line update (§6.3) | Forwards the session's cost, context and plan use, then runs the user's own status line | socket |
 | `irie runtime -- ollama serve` | `irie-agents:irie-ollama`, started on first need (§6.3) | Irie's own Ollama server, in a process group of its own, so its model runners stop with it | the agents (HTTP on 127.0.0.1) |
@@ -206,8 +207,9 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `close`, `reopen` | `session`; for `reopen` it may be left out, which reopens the session closed last | none; `reopen`: `session` | M4 (§4.5) |
 | `undo`, `redo` | none | `label` | M4 |
 | `pause`, `resume` | `session` or `all`; `scope`: `main`, `sub:<id>` or `tree` | none | M5 |
-| `freeze`, `thaw` | `session` or `all` | none | M6 |
-| `priority` | `session`, `level` (0 or 1), `reason?` | none | M7 |
+| `freeze`, `thaw` | `session` or `all` | `sessions[]`, those it froze or thawed | M6 |
+| `priority` | `session`, `level` (0 or 1), `reason?` | none. Level 1 also puts the session at the top of the list | M7 |
+| `reorder` | `session`, `before?` | none. Puts the session just before `before`, or last. Not `move`, which brings a session in from outside Irie | §4.1 |
 | `note` | `session`, `agent?`, `text` | `note` | M7 |
 | `preflight` | `profile`, `model?`, `remember?`, `force?` | `ok`, `problems[]`, `warnings[]`, the context and memory the model got | M10 |
 | `attach-info` | none | tmux binary, server socket and the session that holds the slot, for a terminal outside Irie | Mac app ([MAC.md](MAC.md)); per-session targets after v1 |
@@ -369,7 +371,7 @@ type Harness interface {
 - **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail.
 - **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
 
-**Rows.** Each row reads `[!][glyph] name … age`, with subagents indented under their parent (M8). Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder the list, and only you scroll it: frames from the core and a growing command bar leave the rows on screen where they are, and only a task you just started scrolls into view. The Parked group comes after them. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
+**Rows.** Each row reads `[glyph][↑] name … age`, the `↑` in sun for a promoted session, with subagents indented under their parent (M8). The core keeps one order, which both sidebars draw and each row carries as `order`: a new session goes last, promoting one puts it first, and dragging one with the mouse puts it where it is dropped (`reorder`). The order lives in the `@irie_order` option of the `irie-agents` session, so a restarted core keeps it, and a closed session keeps its place for its reopen. State changes never reorder the list, and only you scroll it: frames from the core and a growing command bar leave the rows on screen where they are, and only a task you just started scrolls into view. The Parked group comes after them. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
 
 | Key (list focus) | Action |
 |---|---|
@@ -387,6 +389,7 @@ type Harness interface {
 | `p`, `P` | Pause or resume this agent, or the whole tree (M5) |
 | `f`, `F` | Freeze or thaw this session, or all (M6) |
 | `!`, `n` | Toggle priority; write a note (M7) |
+| Drag a row (mouse) | Put the session where it is dropped. A click opens a row when the button comes up on it |
 | `m` `m` | Move the selected session under Outside Irie into Irie (§4.6). The first press says what the move ends; any other key cancels |
 | `+`, `-` | Rate the session's work good or bad, which teaches the router (M10, §6.4) |
 
@@ -461,7 +464,7 @@ type Harness interface {
 |---|---|---|---|
 | Scope | One agent (`main` or one subagent), one tree, or all | A session's whole process tree, or all sessions | One session |
 | Takes effect | At the next tool boundary | At once | Badge and order at once; the note at the next tool boundary or prompt |
-| Mechanism | The hook shim waits | `irie host` sends SIGSTOP, later SIGCONT | Ordering plus the notes channel |
+| Mechanism | The hook shim waits | The core sends SIGSTOP, later SIGCONT; the host leaves the stops alone | Ordering; the other sessions' trees in the background; first turn in Irie's queues; the notes channel |
 | What the agent is told | On release: "held for X" | After thaw, at its next tool boundary, and only if it was working: "frozen for X" | A steering note |
 | Keys | `p` (row), `P` (tree), `:pause all` | `f`, `F` (all) | `!`, `:prio <reason>` |
 
@@ -473,16 +476,22 @@ type Harness interface {
 - **Core down.** The shim polls `gate.json` every 500 ms: while gated it keeps holding; with no gate it returns at once.
 
 **Freeze.**
-- **Stop.** The core sends SIGUSR1 to the host (`pane_pid`). The host sends SIGSTOP to the agent's process group. It then walks the agent's descendants (darwin: `sysctl kern.proc.all` via `golang.org/x/sys/unix`; linux: `/proc`) and stops every process outside that group. It repeats the walk until no new process appears, at most 3 passes, and records what it stopped.
-- **Thaw.** SIGUSR2 makes the host send SIGCONT to the recorded processes, descendants first, then to the group.
-- **Stops the host did not cause.** The host continues them within 100 ms, for example the agent's own Ctrl+Z handling, so an agent never wedges. tmux would do the same for its direct child, which is why the agent runs under a host and not as the pane's first process.
+- **Who signals.** The core, never the host. It never sends SIGUSR1 or SIGUSR2 to a host: a host from before freeze handles only SIGHUP, SIGTERM and SIGINT, so either signal would end it and its agent with it. The host is never stopped either: tmux continues a stopped pane process at once (checked on a private server), and the host would then continue its agent.
+- **Stop.** The core writes `sessions/<id>/freeze.json`, then reads the process table (darwin: `sysctl kern.proc.all` via `golang.org/x/sys/unix`; linux: `/proc`). It stops the agent's process group with one SIGSTOP, then every process under the host outside that group, parents before children, so that no running parent sees a child of its stop. It reads the table again until a pass finds nothing new, at most 5 passes. `freeze.on` records the pids, and the newest start time in the table, so that what starts later can be told apart.
+- **Hosts from before freeze.** A host says in `host.json` that it leaves its agent stopped while `freeze.json` exists. A host without one, such as those of agents that ran before the install, would continue its agent at once. So there the agent runs on and everything under it stops, and the hook shim holds the agent at its next tool call: at PreToolUse, PostToolUse and PostToolUseFailure it waits while `freeze.json` exists, with the core down too. The row says "freezing" until the agent reaches one. Each tick stops what started in a frozen tree after the freeze, such as the shim itself, and never continues anything.
+- **Thaw.** The core continues every stopped process under the host, children before parents, then removes `freeze.json`. A host that reads a stale stop report only sends a harmless SIGCONT.
+- **Restarts.** Frozen comes from the journal's `freeze.on` and `freeze.off`, so a frozen session stays frozen through a core restart, and the core never continues it on its own. A reopened session starts unfrozen.
+- **Stops the host did not cause.** The host continues them within 100 ms, for example the agent's own Ctrl+Z handling, so an agent never wedges; while the session is frozen it leaves them. tmux does the same for its direct child, which is why the agent runs under a host and not as the pane's first process.
 - **Input.** While a session is frozen the core turns off its pane's input (`select-pane -d`), so keystrokes don't pile up, and turns it back on at thaw.
 - **Long freezes.** After `freeze.warn_after` the row warns that network streams may have dropped.
 - **Close while frozen.** SIGCONT to everything the host runs, the host last, then SIGTERM through the host, then SIGKILL after 5 s. A stopped process that catches SIGTERM, as Claude Code does, only handles it once it runs again, so the host also continues the agent's group whenever it passes a signal on.
 
 **Priority.**
-- **Level.** 0 or 1, with an optional reason. The field is an integer, so more levels can come later.
-- **Order.** Prioritised sessions sit at the top, latest first. Prioritising a parked session unparks it.
+- **Level.** 0 or 1, with an optional reason. The field is an integer, so more levels can come later. The UIs call level 1 "promoted".
+- **Order.** Promoting a session puts it at the top of the list's one order, so promoted sessions sit at the top, latest first. Putting it back leaves it where it is. Prioritising a parked session unparks it.
+- **The machine first.** Without root no process can be raised above normal priority, and a nice value, once raised, can only be lowered again by root (setpriority(2), renice(8)). So while any session is promoted, the core puts every other session's process tree in macOS's background state, `setpriority(PRIO_DARWIN_PROCESS, pid, PRIO_DARWIN_BG)` as `taskpolicy -b -p` does: the lowest CPU priority, throttled disk I/O, and throttled network I/O on sockets opened from then on. The promoted trees stay as they are. Each tick puts what those trees start in the background too, which it also inherits. Putting the session back takes every process of the other trees out of the background, and a process that left a tree, such as a daemon, comes out as soon as it leaves. It takes effect before the op returns. Linux has no such state that a user can undo, so there priority orders the list and Irie's queues only.
+- **Irie's queues.** What Irie hands out one at a time serves a promoted session first, then the rest in the order they asked: spawns with their worktrees (a session's own, as `parent`, when it delegates), and messages typed to agents (`send`). A local model's server queues its own requests, which Irie cannot reorder.
+- **Memory.** macOS gives a user's process no way to set memory aside for another, so promote reserves none. The apps say so. The background processes are the ones macOS slows first.
 - **Notes.** Raising priority queues `notes.priority`. Clearing it sends `notes.priority_cleared`, but only if the first note was delivered.
 - **Paused or frozen sessions.** Priority does not resume them; the status strip says "paused, p to resume".
 
@@ -696,7 +705,7 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_STATE_HOME/irie/tmux.conf` | Generated tmux config | core |
 | `$XDG_STATE_HOME/irie/state.json` | Snapshot (atomic rename): per session the id, name, cwd, worktree, branch, profile, vendor ids, parked, priority and order; plus the undo and redo stacks | core |
 | `$XDG_STATE_HOME/irie/journal/YYYY-MM-DD.ndjson` | Event envelopes, kept `journal.keep_days` days | core |
-| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json`, `note-<n>.md`, `status.json` (the last status line update, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
+| `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json` (the host's pid, its agent's, and that it knows freeze), `freeze.json` (while the session is frozen), `note-<n>.md`, `status.json` (the last status line update, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
 | `$XDG_STATE_HOME/irie/local.json` | The model `irie setup local` chose for `+local`, and what models took in memory once loaded (§6.3) | core |
 | `$XDG_STATE_HOME/irie/{core,ui}.log` | Logs | core, ui |
 | `$XDG_STATE_HOME/irie/ghostty.json` | Id of the Irie window's Ghostty terminal | `irie` (M9) |
@@ -1184,11 +1193,14 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 **Goal:** `f` stops a session's whole process tree at once, and `F` stops all sessions. Thawing resumes the tree and tells the agent.
 
 **Build:**
-- **Host.** SIGUSR1 and SIGUSR2 handling; the tree walk (`x/sys/unix` on darwin, `/proc` on linux); stop and continue order; continuing stops it did not cause; frozen status in `host.json`.
-- **Core.** Ops `freeze` and `thaw` (a session or `all`); pane input off and on; the frozen state and its warning; the frozen note; close while frozen; undo inverses.
+- **Host.** `host.json`; leaving its agent stopped while `freeze.json` exists; continuing other stops it did not cause.
+- **Core.** Ops `freeze` and `thaw` (a session or `all`); the tree walk (`internal/proc`: `x/sys/unix` on darwin, `/proc` on linux); stop and continue order; agents of hosts from before freeze; pane input off and on; the frozen state and its warning; the frozen note; close while frozen; undo inverses.
+- **Shim.** Tool calls wait while `freeze.json` exists.
 
 **Tests:**
-- **Freeze and thaw.** For a tree of host → `sh` → (`sh`, plus a child in its own process group), every process is `T` within 100 ms of freeze, and none is after thaw.
+- **Freeze and thaw.** For a tree of host → agent → (a child, plus a shell in its own process group with a child of its own), every process is `T` within 100 ms of freeze, still after 1.5 s, and none is after thaw.
+- **A host from before freeze.** Under `testutil/oldhost`, which continues every stop, everything but the agent is `T` and stays so, the agent's next tool call waits until the thaw, and nothing is stopped after it.
+- **Restart.** A frozen session is still frozen, and its processes still `T`, after a core restart.
 - **Foreign stops.** SIGTSTP to an agent that is not frozen → it runs again within 100 ms.
 - **Input.** A frozen pane has `pane_input_off` set to 1.
 - **Close.** Closing a frozen session exits within 6 s.
@@ -1203,7 +1215,8 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 **Build:** priority ordering; the note templates; the `note` op; paste delivery for generic harnesses; undo (cancel an undelivered note, otherwise send the cleared note).
 
 **Tests:**
-- **Ordering.** Three prioritised sessions are ordered latest first. Prioritising a parked session unparks it.
+- **Ordering.** Three prioritised sessions are ordered latest first. Prioritising a parked session unparks it. `reorder` puts a session before another or last, and the order survives a core restart.
+- **The machine first.** While one session is promoted, every process of the others' trees, and of a session started meanwhile, is in the background (`ps` shows priority 4), and none of the promoted tree is. Putting it back takes them all out. A promoted session's request gets the next turn.
 - **Delivery.** A note is delivered exactly once, at the next tool hook. An idle agent gets it with its next prompt. Generic delivery uses bracketed paste and keeps newlines.
 - **Undo.** Before delivery, the note is never delivered. After delivery, the cleared note is sent.
 

@@ -425,6 +425,10 @@ func TestEnterShowsWithFocusAndSpaceWithout(t *testing.T) {
 func TestClickShowsTheRow(t *testing.T) {
 	m, b := newModel(t, 34, 24, 3)
 	m = send(m, tea.MouseClickMsg{X: 3, Y: m.listTop() + 2, Button: tea.MouseLeft})
+	if len(b.shows) != 0 {
+		t.Errorf("shown before the button came up: %+v", b.shows)
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 3, Y: m.listTop() + 2, Button: tea.MouseLeft})
 	if want := []showCall{{"s000000000002", true}}; !reflect.DeepEqual(b.shows, want) {
 		t.Errorf("shows = %+v, want %+v", b.shows, want)
 	}

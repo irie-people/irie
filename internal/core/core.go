@@ -14,7 +14,6 @@ import (
 	"os/signal"
 	"reflect"
 	"regexp"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -50,8 +49,8 @@ type Core struct {
 	version string
 	log     *slog.Logger
 
-	spawnMu  sync.Mutex   // one spawn at a time, taken before mu
-	sendMu   sync.Mutex   // one message typed to an agent at a time, taken before mu
+	spawnMu  turns        // one spawn at a time, a promoted session's first; taken before mu
+	sendMu   turns        // one message typed to an agent at a time, likewise
 	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
 	http     *http.Client // for local servers
 	sampling atomic.Bool  // a memory sample is running
@@ -76,6 +75,8 @@ type Core struct {
 	plan       ipc.Plan                 // the plan's use, from the newest status update
 	planAt     time.Time
 	outcomes   map[string]*outcome // every session's route and outcome, those gone included
+	order      []string            // the list's order from the top, which the user sets (order.go)
+	bg         map[int]bgProc      // the processes Irie put in the background, by pid (priority.go)
 	closes     closes              // closed sessions, and agents still ending (close.go)
 }
 
@@ -112,6 +113,8 @@ type session struct {
 	memory   int64            // what its processes take, last measured
 	out      *outcome         // its route and how it went, shared with Core.outcomes
 	conv     *conversation    // its conversation, read while clients follow it (conversation.go)
+	note     string           // what its agent is told at its next tool call, once (freeze.go)
+	demoted  bool             // its process tree runs in the background, for a promoted session (priority.go)
 	convSubs int              // the subscriptions that follow its conversation
 }
 
@@ -183,6 +186,7 @@ func Run(o Options) error {
 	c.loadRecent()
 	c.loadLocal()
 	c.loadOutcomes()
+	c.loadOrder()
 	c.loadClosed()
 
 	// The layout, the registry and the rows' states are in place before the
@@ -231,6 +235,8 @@ func (c *Core) tick() {
 	}
 	c.reap()
 	c.observe(time.Now())
+	c.keepFrozen()
+	c.background()
 	c.countTokens()
 	c.followConversations()
 	frames := c.changes()
@@ -370,18 +376,14 @@ func (c *Core) record(x *session, e event.Event) {
 	}
 }
 
-// list returns the rows in creation order. The caller holds c.mu.
+// list returns the rows in the list's order (order.go). The caller holds
+// c.mu.
 func (c *Core) list() []ipc.Session {
 	out := make([]ipc.Session, 0, len(c.sessions))
 	for _, x := range c.sessions {
 		out = append(out, x.wire())
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].Created.Equal(out[j].Created) {
-			return out[i].Created.Before(out[j].Created)
-		}
-		return out[i].ID < out[j].ID
-	})
+	c.sortRows(out)
 	return out
 }
 
@@ -417,7 +419,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
-			ipc.OpClose, ipc.OpReopen,
+			ipc.OpClose, ipc.OpReopen, ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -541,6 +543,9 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return ipc.SpawnResult{Session: s}, nil
+	}
+	if r, ok, err := c.control(op, raw); ok {
+		return r, err
 	}
 	return nil, ipc.Errorf(ipc.CodeUnknownOp, "unknown op %q", op)
 }

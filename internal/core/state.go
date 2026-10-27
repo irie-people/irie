@@ -27,6 +27,11 @@ type track struct {
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
 	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
 
+	// What the user did to the session as a whole (freeze.go, priority.go).
+	frozen   *event.Event // freeze.on, until freeze.off
+	held     bool         // a frozen session's running agent came to a tool call, where the shim holds it
+	priority int          // the level of the last priority.set
+
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads.
 	transcripts []string
@@ -65,12 +70,14 @@ func (t *track) apply(e event.Event) {
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
 	case event.ToolStarted:
 		t.busy(e)
+		t.held = t.held || t.frozen != nil
 		if t.tools == nil {
 			t.tools = map[string]event.Event{}
 		}
 		t.tools[toolUseID(e)] = e
 	case event.ToolFinished, event.ToolFailed:
 		t.busy(e)
+		t.held = t.held || t.frozen != nil
 		delete(t.tools, toolUseID(e))
 	case event.InputNeeded:
 		if e.Str("reason") == event.ReasonStalled {
@@ -107,6 +114,12 @@ func (t *track) apply(e event.Event) {
 		t.subs = nil
 	case event.UIShown:
 		t.viewed = true
+	case event.FreezeOn:
+		t.frozen, t.held = &e, false
+	case event.FreezeOff:
+		t.frozen, t.held = nil, false
+	case event.PrioritySet:
+		t.priority, _ = e.Int("level")
 	}
 }
 
@@ -218,6 +231,16 @@ func (t *track) state(dead bool) string {
 		return ipc.StateFailed
 	case t.exited != nil || dead || t.ended != nil:
 		return ipc.StateExited
+	case t.frozen != nil:
+		return ipc.StateFrozen
+	}
+	return t.live()
+}
+
+// live is the state of a session that has not ended, as if it were not
+// frozen: what a frozen row still says it was doing.
+func (t *track) live() string {
+	switch {
 	case len(t.needs) > 0:
 		return ipc.StateNeedsYou
 	case t.stalled != nil:
@@ -236,16 +259,26 @@ func (t *track) state(dead bool) string {
 	return ipc.StateWorking
 }
 
-// describe fills a row's state, reason, detail, tail and exit code.
+// describe fills a row's state, reason, detail, tail and exit code, and
+// what the user did to it. A frozen row keeps the reason and detail of what
+// it was doing.
 func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	s.State = t.state(dead)
+	s.Priority = t.priority
 	code := func(e *event.Event, key string) *int {
 		if n, ok := e.Int(key); ok {
 			return &n
 		}
 		return nil
 	}
-	switch s.State {
+	shown := s.State
+	if s.State == ipc.StateFrozen {
+		shown = t.live()
+		at := t.frozen.Time()
+		whole, _ := t.frozen.Data["whole"].(bool)
+		s.Frozen, s.Freezing = &at, !whole && !t.held && t.activity == working
+	}
+	switch shown {
 	case ipc.StateFailed:
 		s.Reason, s.ExitCode, s.Tail = t.failed.Str("reason"), code(t.failed, "exit"), lines(t.failed.Str("tail"))
 		s.Detail = "failed"

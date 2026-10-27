@@ -68,6 +68,9 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			failover = true
 		}
 	}
+	if n := c.takeNote(x, evs); n != "" {
+		reply.Context = strings.TrimSpace(reply.Context + "\n\n" + n)
+	}
 	c.followConversation(x)
 	frames := c.changes()
 	c.mu.Unlock()

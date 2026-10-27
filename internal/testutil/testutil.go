@@ -99,6 +99,13 @@ func BuildFakeOllama(t testing.TB) string {
 	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/fakeollama", "fakeollama")
 }
 
+// BuildOldHost builds the stand-in for `irie host` as it was before freeze
+// once per test binary and returns its path.
+func BuildOldHost(t testing.TB) string {
+	t.Helper()
+	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/oldhost", "oldhost")
+}
+
 // FreePort returns a TCP port on 127.0.0.1 that nothing listens on now.
 func FreePort(t testing.TB) int {
 	t.Helper()

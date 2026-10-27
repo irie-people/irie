@@ -22,6 +22,10 @@
 //	                  Claude-shaped JSON, as the status line docs describe:
 //	                  that cost in dollars, 12% of the context, and 33% of
 //	                  the plan's five hours
+//	kids              start two children that run for an hour: one in the
+//	                  agent's process group, and a shell in a group of its
+//	                  own with a child of its own, as a tool's background
+//	                  job may be; the log records their pids
 //
 // Any other task runs the script "prompt". After the script the agent idles:
 // each line typed is a prompt and a turn, and EOF or a hangup ends the
@@ -509,8 +513,27 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		return s.n, true
 	case "status":
 		a.status(s.arg)
+	case "kids":
+		a.kids()
 	}
 	return 0, false
+}
+
+// kids starts the children of the kids step.
+func (a *agent) kids() {
+	same := exec.Command("sleep", "3600")
+	own := exec.Command("/bin/sh", "-c", "sleep 3601 & wait")
+	own.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var pids []int
+	for _, c := range []*exec.Cmd{same, own} {
+		if err := c.Start(); err != nil {
+			a.record(map[string]any{"t": "kids", "err": err.Error()})
+			return
+		}
+		pids = append(pids, c.Process.Pid)
+		go c.Wait()
+	}
+	a.record(map[string]any{"t": "kids", "pids": pids})
 }
 
 // status runs the settings' status line command once, as Claude Code does
