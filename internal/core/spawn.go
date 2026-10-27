@@ -199,6 +199,12 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	case a.Delegate:
 		profile.PermissionMode = c.cfg.Route.DelegateMode
 	}
+	if a.Model != "" {
+		if profile.Harness != "claude-code" || profile.Local != nil {
+			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "+%s takes no model for one task: pick a Claude Code profile, or +%s<model> for a local model", profileName, localPrefix)
+		}
+		profile.Model = a.Model
+	}
 	// A local profile's model is checked, and may be loaded, before
 	// anything else; like probing, it happens before taking the lock.
 	var warnings []string
