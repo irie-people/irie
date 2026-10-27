@@ -26,7 +26,7 @@ func (c *Core) send(a ipc.SendArgs) error {
 	if strings.TrimSpace(text) == "" {
 		return ipc.Errorf(ipc.CodeBadArgs, "there is nothing to send")
 	}
-	c.sendMu.Lock()
+	c.sendMu.LockAt(c.levelOf(a.Session))
 	defer c.sendMu.Unlock()
 	c.mu.Lock()
 	x := c.sessions[a.Session]
@@ -83,6 +83,8 @@ func sendable(x *session, text string) error {
 		return ipc.Errorf(ipc.CodeBusy, "%s hasn’t started yet", x.name)
 	case ipc.StateExited, ipc.StateFailed:
 		return ipc.Errorf(ipc.CodeBusy, "%s has ended", x.name)
+	case ipc.StateFrozen:
+		return ipc.Errorf(ipc.CodeBusy, "%s is paused: resume it first", x.name)
 	}
 	if x.dead {
 		return ipc.Errorf(ipc.CodeBusy, "%s has ended", x.name)

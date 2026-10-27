@@ -121,16 +121,18 @@ struct TerminalArea: View {
     }
 }
 
+/// A quiet page, laid out as ConversationNote is: the two take turns in the
+/// same place.
 private struct Placeholder: View {
     let title: String
     let text: String
     var action: (String, () -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 14) {
-            SunMark().frame(width: 64, height: 64)
+        VStack(spacing: 12) {
+            SunMark().frame(width: 48, height: 48)
             Text(title).font(.system(size: 17, weight: .semibold, design: .rounded)).multilineTextAlignment(.center)
-            Text(text).font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
+            Text(text).font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
             if let action {
                 Button(action.0, action: action.1)
                     .buttonStyle(.borderedProminent)

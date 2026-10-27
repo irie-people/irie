@@ -254,8 +254,7 @@ private struct OutsideRow: View {
             .frame(width: 44, alignment: .trailing)
         }
         .padding(.vertical, 5)
-        .padding(.leading, 10)
-        .padding(.trailing, 6)
+        .padding(.horizontal, Theme.inset)
         .background(shape.fill(fill))
         .overlay(shape.strokeBorder(edge, lineWidth: selected ? 1.5 : 1))
         .contentShape(shape)

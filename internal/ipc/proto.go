@@ -124,6 +124,12 @@ type Session struct {
 	Routed bool   `json:"routed,omitempty"` // auto chose its profile
 	Parent string `json:"parent,omitempty"` // the session that delegated it
 	Rated  string `json:"rated,omitempty"`  // good or bad, as the user said
+
+	// Where the user put it and what they did to it (control.go).
+	Order    int        `json:"order"`              // its place in the list, from 0 at the top
+	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
+	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
+	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
 }
 
 // Tokens counts a session's model usage: each reply once, from the usage
@@ -152,9 +158,12 @@ type Header struct {
 	Version string `json:"version,omitempty"`
 	// RedOnDone is ui.red_on_done: a done session is drawn red, not green
 	// (DESIGN §5.3), in every sidebar.
-	RedOnDone bool    `json:"red_on_done,omitempty"`
-	Plan      *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
-	Memory    *Memory `json:"memory,omitempty"` // the machine's memory
+	RedOnDone bool `json:"red_on_done,omitempty"`
+	// CloseWhenDone is spawn.close_when_done: a finished session closes
+	// itself, so no sidebar keeps a Done group; closed ones are in history.
+	CloseWhenDone bool    `json:"close_when_done,omitempty"`
+	Plan          *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
+	Memory        *Memory `json:"memory,omitempty"` // the machine's memory
 }
 
 // Window is one window of a plan's use, such as the five hours.
