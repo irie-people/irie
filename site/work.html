@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Irie at work · Irie</title>
+<meta name="description" content="Irie at a company: what it costs, keeps and sends, how it works with your company's Claude Code settings, AI provider and proxy, your team's own agents, and what isn't there yet.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="what-irie-is.html">What Irie is</a></li>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html" aria-current="true">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>Irie at work</h1>
+
+  <figure class="picture narrow">
+    <svg viewBox="0 0 400 256" role="img" aria-labelledby="work-title" aria-describedby="work-desc">
+      <title id="work-title">At a company, each person runs Irie on their own computer, and their agents use the company’s AI accounts. There is no Irie server.</title>
+      <desc id="work-desc">At the top, a cloud labelled your company’s AI accounts. Below it, three laptops each show Irie: its list on the left and an agent on the right. An arrow runs from each laptop up to the cloud. Under the laptops: no Irie server, each person runs their own.</desc>
+
+      <!-- The company's AI accounts -->
+      <path d="M176 72h48a13 13 0 0 0 1-26a18 18 0 0 0-34-7a13 13 0 0 0-15 33z" class="s-card s-line" stroke-width="1.5"/>
+      <text x="246" y="44" font-size="15" font-weight="700" class="s-ink">Your company’s</text>
+      <text x="246" y="64" font-size="15" font-weight="700" class="s-ink">AI accounts</text>
+
+      <!-- Each laptop's agents go straight there -->
+      <g class="s-stroke-ink" stroke-width="2">
+        <path d="M70 146L175.1 84.1"/>
+        <path d="M200 146V92"/>
+        <path d="M330 146L224.9 84.1"/>
+      </g>
+      <g class="s-ink">
+        <path d="M-6 10L0 0L6 10z" transform="translate(182 80) rotate(59.5)"/>
+        <path d="M-6 10L0 0L6 10z" transform="translate(200 82)"/>
+        <path d="M-6 10L0 0L6 10z" transform="translate(218 80) rotate(-59.5)"/>
+      </g>
+
+      <!-- Three laptops, each with its own Irie -->
+      <g stroke-width="1.5">
+        <rect x="20.75" y="150.75" width="98.5" height="62.5" rx="6" class="s-card s-line"/>
+        <rect x="150.75" y="150.75" width="98.5" height="62.5" rx="6" class="s-card s-line"/>
+        <rect x="280.75" y="150.75" width="98.5" height="62.5" rx="6" class="s-card s-line"/>
+        <path d="M10.75 214.75h118.5l-6 8.5h-106.5z" class="s-card s-line"/>
+        <path d="M140.75 214.75h118.5l-6 8.5h-106.5z" class="s-card s-line"/>
+        <path d="M270.75 214.75h118.5l-6 8.5h-106.5z" class="s-card s-line"/>
+      </g>
+      <g>
+        <rect x="27" y="157" width="26" height="50" rx="3" class="s-green"/>
+        <rect x="57" y="157" width="56" height="50" rx="3" class="t-bg"/>
+        <rect x="157" y="157" width="26" height="50" rx="3" class="s-green"/>
+        <rect x="187" y="157" width="56" height="50" rx="3" class="t-bg"/>
+        <rect x="287" y="157" width="26" height="50" rx="3" class="s-green"/>
+        <rect x="317" y="157" width="56" height="50" rx="3" class="t-bg"/>
+      </g>
+      <g class="s-sun">
+        <circle cx="40" cy="170" r="4"/>
+        <circle cx="170" cy="170" r="4"/>
+        <circle cx="300" cy="170" r="4"/>
+      </g>
+
+      <text x="200" y="248" text-anchor="middle" font-size="14" class="s-soft">No Irie server: each person runs their own.</text>
+    </svg>
+    <figcaption>Each person runs Irie on their own computer, and their agents use your company’s AI accounts and rules. Nothing of Irie runs anywhere else.</figcaption>
+  </figure>
+
+  <p>Irie works the same at a company as anywhere: on each person’s own computer, with the agents and AI accounts they already use. This page is for whoever decides whether a team may use it, and for whoever sets it up.</p>
+
+  <h2 id="answers">Short answers</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Question</th><th scope="col">Answer</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">What does it cost?</th><td>Nothing, and there’s no paid version. The Apache 2.0 license lets your company use it, change it and share it, with no warranty, as is usual for open source. Your agents cost what they would without Irie.</td></tr>
+        <tr><th scope="row">Is there a server, an account or a sign-up?</th><td>No. Each person runs Irie on their own computer, and nothing of Irie runs anywhere else.</td></tr>
+        <tr><th scope="row">What does it send over the internet?</th><td>Nothing of its own. Each agent talks to its AI company, or your company’s provider, as it would without Irie. <a href="what-irie-is.html#network">The details</a></td></tr>
+        <tr><th scope="row">What does it keep?</th><td>Each person’s sessions, and a log of their agents’ steps for 30 days, on their own computer, in folders only they can open. <a href="what-irie-is.html#files">The details</a></td></tr>
+        <tr><th scope="row">Does it see our credentials?</th><td>No. Agents sign in as they would without Irie, and Irie never reads their logins or sends them anywhere.</td></tr>
+        <tr><th scope="row">Does it change our Claude Code setup?</th><td>No. It adds its hooks to each session it starts, and your company’s managed settings still win. <a href="#managed">Below</a></td></tr>
+        <tr><th scope="row">What runs on our computers?</th><td>One program, <code>irie</code>, which needs tmux and git, and the agents you choose. The Mac app is optional. <a href="what-irie-is.html#parts">The details</a></td></tr>
+        <tr><th scope="row">Is it ready?</th><td>It’s early. There are no releases yet, so each person builds it from its source code.</td></tr>
+        <tr><th scope="row">Who supports it?</th><td>Its community, in public on GitHub. Security problems go to the maintainers privately. There are no support contracts or promised response times.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="managed">Your company’s Claude Code settings</h2>
+  <p>Many companies set Claude Code up for everyone with <dfn>managed settings</dfn>: rules an administrator deploys, which nobody’s own settings can override. Irie works inside them.</p>
+  <p>Irie gives each Claude Code session it starts a settings file of its own, with its <dfn>hooks</dfn>, the small commands Claude Code runs at each step, and its status line. Managed settings rank above that file, so wherever the two differ, your company’s rules win.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">If your company sets</th><th scope="col">Then in Irie</th></tr></thead>
+      <tbody>
+        <tr><td><code>allowManagedHooksOnly</code></td><td>Claude Code runs only the hooks and status line your company deploys, so Irie’s don’t run. Agents still work, but Irie can’t tell how they’re doing: each row turns stalled after 30 seconds, and shows no cost.</td></tr>
+        <tr><td><code>disableAllHooks</code>, in managed settings</td><td>Every hook and custom status line is off, Irie’s too, with the same result.</td></tr>
+        <tr><td><code>disableAutoMode</code></td><td>Sessions Irie starts in auto mode start in default mode instead. Agents then ask before more of their steps, so their rows turn red more often.</td></tr>
+        <tr><td>Allow, ask and deny rules</td><td>They apply to every agent Irie starts. Irie never approves a step for an agent.</td></tr>
+        <tr><td><code>availableModels</code></td><td>Claude Code takes only the models on the list, whatever a profile asks for. Give each profile a model from the list.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>To see which managed settings apply to you, run <code>/status</code> in Claude Code: its Setting sources line names them.</p>
+
+  <h2 id="provider">Your company’s AI provider</h2>
+  <p>If your company set Claude Code up for its provider, such as Amazon Bedrock or a gateway of its own, in Claude Code’s settings or in managed settings, Irie’s agents use it too. There’s nothing to change in Irie.</p>
+  <p>If your provider wants its own names for the models, give them to Irie’s built-in profiles. On Bedrock, for one:</p>
+<pre><code>[profiles.claude]
+model = "us.anthropic.claude-opus-5-5"</code></pre>
+  <p>To pick a provider for one profile instead, put its settings in the profile’s <code>env</code>. This profile runs Claude Code on Amazon Bedrock, with the settings from <a href="https://code.claude.com/docs/en/amazon-bedrock">Claude Code’s Bedrock page</a>:</p>
+<pre><code>[profiles.bedrock]
+model = "us.anthropic.claude-opus-5-5"
+env = { CLAUDE_CODE_USE_BEDROCK = "1", AWS_REGION = "us-east-1" }</code></pre>
+  <ul class="rules">
+    <li>Claude Code signs in to AWS in the usual ways, such as your AWS profile or single sign-on. Irie never sees the credentials.</li>
+    <li>For a gateway, set <code>ANTHROPIC_BASE_URL</code> to its address instead, as Claude Code’s page on <a href="https://code.claude.com/docs/en/llm-gateway">LLM gateways</a> says. <a href="https://code.claude.com/docs/en/google-vertex-ai">Google Cloud</a> and <a href="https://code.claude.com/docs/en/microsoft-foundry">Microsoft Foundry</a> have pages of their own.</li>
+    <li>A new profile like this one leaves the permission mode to Claude Code. Add <code>permission_mode</code> to choose one.</li>
+    <li><code>+bedrock</code> runs one task there. To run every task there, set <code>spawn.default_profile = "bedrock"</code> in place of <code>auto</code>, which chooses among Irie’s built-in profiles.</li>
+  </ul>
+  <p>The cost Irie shows for a session is Claude Code’s own estimate, at list price. Your company’s bill comes from its provider.</p>
+
+  <h3 id="proxy">Proxies and certificates</h3>
+  <p>Behind a company proxy, Claude Code reads <code>HTTPS_PROXY</code> and <code>NO_PROXY</code>, and <code>NODE_EXTRA_CA_CERTS</code> for your company’s certificates, as <a href="https://code.claude.com/docs/en/network-config">its network page</a> says.</p>
+  <p>Put them in Claude Code’s own settings or in a profile’s <code>env</code>, not only in a terminal. Irie’s agents start with the environment of the terminal that first started Irie, so a variable you set in another terminal later doesn’t reach them.</p>
+
+  <h3 id="launcher">A company launcher</h3>
+  <p>If your company starts Claude Code through a <dfn>launcher</dfn>, a program of its own that sets Claude Code up first, make the launcher a profile’s <code>command</code>. <a href="agents.html#launcher">A launcher that starts Claude Code</a> says what it has to do.</p>
+
+  <h2 id="own-agents">Your team’s own agents</h2>
+  <p>An agent your company built runs in Irie too, whatever it’s built on. <a href="agents.html#your-own">Other agents</a> says how, and what Irie can see of it.</p>
+
+  <h2 id="team">Setting it up for a team</h2>
+  <ul class="rules">
+    <li><strong>Each person runs their own.</strong> Everyone builds Irie and runs it on their own computer, as <a href="install.html">Install</a> shows. There’s nothing to run for the whole team.</li>
+    <li><strong>Share one settings file.</strong> A team can hand out a <code>config.toml</code> with its profiles, project folders and choices. A setting Irie doesn’t know stops it with an error that names it, so a mistake shows at once.</li>
+    <li><strong>Choose the permission mode.</strong> Irie’s built-in cloud profiles start Claude Code in auto mode, where Claude Code decides which steps are safe to take without asking. Set <code>permission_mode</code> to your team’s choice.</li>
+    <li><strong>Keep tasks off local models,</strong> if you’d rather: leave <code>local</code> out of <code>route.profiles</code>.</li>
+    <li><strong>Turn off what you don’t want.</strong> <code>route.delegate = false</code> stops Irie telling sessions they may hand subtasks to cheaper models, subtasks that edit files without asking. <code>journal.tool_input = "none"</code> keeps the agents’ steps out of Irie’s log.</li>
+  </ul>
+  <p>A team’s file that does all of that could read:</p>
+<pre><code>[profiles.claude]
+permission_mode = "default"
+
+[profiles.sonnet]
+permission_mode = "default"
+
+[profiles.haiku]
+permission_mode = "default"
+
+[route]
+profiles = ["haiku", "sonnet", "claude"]
+delegate = false
+
+[journal]
+tool_input = "none"</code></pre>
+  <p>Each person puts it at <code>~/.config/irie/config.toml</code>, checks it with <code>irie config print</code>, and restarts Irie’s core, as <a href="profiles.html#apply">Profiles and models</a> shows.</p>
+
+  <h2 id="not-there">What isn’t there</h2>
+  <ul class="rules">
+    <li>No releases yet. Each person builds Irie from its source code, and updates it with <code>git pull</code> and a new build.</li>
+    <li>No central console, policies or audit trail across a team. Each person’s Irie keeps its own records, on their own computer.</li>
+    <li>No accounts, single sign-on or roles, because Irie has no accounts at all.</li>
+    <li>No Windows: Macs and Linux only.</li>
+    <li>No support contracts, promised response times or certifications. Help happens in public on <a href="https://github.com/irie-hq/irie/issues">GitHub</a>, and <a href="https://github.com/irie-hq/irie/blob/main/SECURITY.md">SECURITY.md</a> says how to report a security problem privately.</li>
+  </ul>
+
+  <h2 id="check">Check it yourself</h2>
+  <p><a href="what-irie-is.html">What Irie is</a> lists every part of Irie, every file it keeps, every connection it makes and every word it says to an agent, with commands to check them on your own computer.</p>
+  <p>Irie’s code, its <a href="https://github.com/irie-hq/irie/blob/main/docs/DESIGN.md">design</a> and <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">every source it was built from</a> are public.</p>
+
+  <nav class="docs-nav" aria-label="Docs">
+    <p class="next">Next: <a href="troubleshooting.html">Troubleshooting</a></p>
+    <ol>
+      <li><a href="install.html">Install</a></li>
+      <li><a href="first-session.html">Your first session</a></li>
+      <li><a href="tasks.html">Tasks, repos and worktrees</a></li>
+      <li><a href="profiles.html">Profiles and models</a></li>
+      <li><a href="agents.html">Other agents</a></li>
+      <li><a href="keys.html">Keys and commands</a></li>
+      <li><a href="recipes.html">Recipes</a></li>
+      <li><a href="work.html" aria-current="page">Irie at work</a></li>
+      <li><a href="troubleshooting.html">Troubleshooting</a></li>
+    </ol>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

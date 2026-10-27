@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>What Irie is · Irie</title>
+<meta name="description" content="Everything Irie is, does, keeps and sends: every part, every file, every connection and every word it says to your agents, what isn't built yet, and how to check each claim yourself.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="what-irie-is.html" aria-current="page">What Irie is</a></li>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="docs.html">Docs</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+  <h1>What Irie is</h1>
+
+  <figure class="picture small">
+    <svg viewBox="0 0 360 480" role="img" aria-labelledby="what-title" aria-describedby="what-desc">
+      <title id="what-title">Everything Irie is runs on your computer. Only your agents talk to the internet, each to its own AI company.</title>
+      <desc id="what-desc">A large box is your computer. At the top of it is Irie: the irie program and its Mac app. An arrow labelled starts runs down from Irie to a dashed box, Irie’s own tmux, which holds three agents, and an arrow labelled hooks runs back up. At the bottom are Irie’s files, which only you can read, and Ollama, for local models, on 127.0.0.1 only. One arrow leaves the computer: from the agents up to a cloud, your agents’ AI companies.</desc>
+
+      <!-- The agents' AI companies -->
+      <path d="M296 56h44a12 12 0 0 0 1-24a17 17 0 0 0-32-6a12 12 0 0 0-13 30z" class="s-card s-line" stroke-width="1.5"/>
+      <text x="272" y="34" text-anchor="end" font-size="15" font-weight="700" class="s-ink">Your agents’ AI companies</text>
+      <text x="272" y="54" text-anchor="end" font-size="14" class="s-soft">in the cloud</text>
+
+      <!-- The only way out: from the agents -->
+      <path d="M318 252V74" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M312 76l6-10l6 10z" class="s-ink"/>
+
+      <!-- Your computer -->
+      <rect x="8.75" y="92.75" width="342.5" height="378.5" rx="18" fill="none" class="s-line" stroke-width="1.5"/>
+      <text x="24" y="118" font-size="16" font-weight="700" class="s-ink">Your computer</text>
+
+      <!-- Irie -->
+      <rect x="20" y="132" width="276" height="70" rx="14" class="s-green s-line" stroke-width="1.5"/>
+      <g class="s-sun">
+        <circle cx="50" cy="160" r="7.5"/>
+        <path d="M50 146.5v3.5M50 170v3.5M36.5 160h3.5M60 160h3.5M40.5 150.5l2.5 2.5M57 167l2.5 2.5M40.5 169.5l2.5-2.5M57 153l2.5-2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </g>
+      <text x="72" y="164" font-size="22" font-weight="700" class="s-on-green">Irie</text>
+      <text x="72" y="189" font-size="14" class="s-on-green">irie, and the Mac app</text>
+
+      <!-- starts down, hooks up -->
+      <path d="M110 207V240" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M104 238l6 10l6-10z" class="s-ink"/>
+      <text x="118" y="231" font-size="15" class="s-soft">starts</text>
+      <path d="M220 247V214" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M214 216l6-10l6 10z" class="s-ink"/>
+      <text x="212" y="231" text-anchor="end" font-size="15" class="s-soft">hooks</text>
+
+      <!-- Irie's own tmux, with the agents -->
+      <rect x="20.75" y="252.75" width="318.5" height="112.5" rx="14" fill="none" class="s-line" stroke-width="1.5" stroke-dasharray="7 5"/>
+      <text x="34" y="277" font-size="15" font-weight="700" class="s-ink">Irie’s own tmux</text>
+      <text x="170" y="277" font-size="14" class="s-soft">keeps them running</text>
+      <g font-size="14" text-anchor="middle">
+        <rect x="32" y="292" width="92" height="58" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+        <text x="78" y="326" class="t-ink">agent</text>
+        <rect x="134" y="292" width="92" height="58" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+        <text x="180" y="326" class="t-ink">agent</text>
+        <rect x="236" y="292" width="92" height="58" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+        <text x="282" y="326" class="t-ink">agent</text>
+      </g>
+
+      <!-- Irie's files -->
+      <path d="M20 392a6 6 0 0 1 6-6h34l6 6h98a6 6 0 0 1 6 6v54a6 6 0 0 1-6 6h-138a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5"/>
+      <text x="95" y="421" text-anchor="middle" font-size="15" font-weight="700" class="s-ink">Irie’s files</text>
+      <text x="95" y="442" text-anchor="middle" font-size="12.5" class="s-soft">only you can read them</text>
+
+      <!-- Ollama, for local models -->
+      <rect x="182.75" y="386.75" width="156.5" height="70.5" rx="12" class="s-card s-line" stroke-width="1.5"/>
+      <text x="261" y="411" text-anchor="middle" font-size="15" font-weight="700" class="s-ink">Ollama</text>
+      <text x="261" y="430" text-anchor="middle" font-size="13" class="s-soft">for local models</text>
+      <text x="261" y="448" text-anchor="middle" font-size="13" class="mono s-soft">127.0.0.1 only</text>
+    </svg>
+    <figcaption>Irie runs on your computer and sends nothing over the internet of its own. Your agents talk to their AI companies, just as they would without Irie.</figcaption>
+  </figure>
+
+  <p class="note">This page says everything Irie is, does, keeps and sends, as its code stood on 27 October 2026. Where you can check a claim on your own computer, <a href="#check">Check it yourself</a> says how.</p>
+
+  <h2 id="short">In short</h2>
+  <p>Irie is a free program that starts <dfn>coding agents</dfn>, AI programs that work on code, on your own computer. It keeps them running side by side and shows how each one is doing.</p>
+  <p>Irie isn’t an AI, and it has no server, account or sign-up. Each agent works for you as it would without Irie, on your own account with its AI company.</p>
+
+  <h2 id="does">What it does</h2>
+  <ul class="rules">
+    <li>Starts an agent for each task you type, in a folder of its own: a <dfn>worktree</dfn>, a second working copy of your project, or a new empty folder.</li>
+    <li>Keeps every agent running in a <dfn>tmux</dfn> of its own, a free program that runs others in the background, so closing the window stops none of them.</li>
+    <li>Shows how each agent is doing: working, needs you, done and more. Only Claude Code reports this today; other agents show whether they’re still running.</li>
+    <li>Shows an agent’s live screen, or for Claude Code, its conversation in plain words.</li>
+    <li>Picks a <dfn>profile</dfn>, the recipe for which agent and AI <dfn>model</dfn> to start, when a task names none. It takes the lowest cost per success among the profiles accurate enough for the task.</li>
+    <li>Runs small tasks on a model on your own computer, through Ollama, once you set that up.</li>
+    <li>Freezes an agent and everything it started at once, puts one session ahead of the rest, and renames, closes and reopens sessions.</li>
+    <li>Lists the Claude Code sessions running outside Irie, and moves one in when you ask.</li>
+    <li>Lets scripts do most of this with <code>irie ctl</code>.</li>
+  </ul>
+
+  <h2 id="never">What it never does</h2>
+  <ul class="rules">
+    <li>It sends nothing over the internet of its own. <a href="#network">What it sends, and where</a> has the one exception, which you start yourself.</li>
+    <li>It has no telemetry, analytics, crash reports or update checks.</li>
+    <li>It never reads your logins or sends them anywhere. Each agent signs in its own way, as it would without Irie.</li>
+    <li>It never edits your agents’ settings files, your tmux settings or your shell’s.</li>
+    <li>It never answers a permission prompt for an agent, so the agent’s own permission rules stand.</li>
+    <li>It never deletes a worktree, a branch or a folder an agent worked in. The only files it deletes are its own records, such as event logs past 30 days.</li>
+    <li>It listens on no network port. The Ollama server it runs for local models listens on 127.0.0.1, which only programs on your computer can reach.</li>
+  </ul>
+
+  <h2 id="parts">What it’s made of</h2>
+
+  <h3 id="program">The irie program</h3>
+  <p>Irie is one program, <code>irie</code>, written in Go. Each of its parts is that program, started as <code>irie</code> and the part’s name.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Part</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>irie core</code></td><td>Starts agents, keeps track of them and keeps Irie’s records. It’s the only part that drives tmux, and every other part asks it, through a socket file only you can open.</td></tr>
+        <tr><td><code>irie ui</code></td><td>The list on the left of the terminal window.</td></tr>
+        <tr><td><code>irie host</code></td><td>The first program in each agent’s pane. It starts the agent, freezes and thaws it, and notes how it ended.</td></tr>
+        <tr><td><code>irie hook</code></td><td>What Claude Code runs at each step, to tell the core. When Irie is down, it lets the agent carry on, unless you froze it.</td></tr>
+        <tr><td><code>irie statusline</code></td><td>Claude Code’s status line. It passes the session’s cost to the core, then runs your own status line.</td></tr>
+        <tr><td><code>irie runtime</code></td><td>Runs Irie’s own Ollama server for local models, once a task needs one.</td></tr>
+        <tr><td><code>irie placeholder</code></td><td>What the right-hand side shows when no agent is on show.</td></tr>
+        <tr><td><code>irie</code>, <code>up</code>, <code>attach</code>, <code>ctl</code>, <code>setup local</code>, <code>config</code>, <code>version</code></td><td>The commands you run. <code>irie help</code> lists them.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="mac">Irie for Mac</h3>
+  <p>An app for the Mac, in its first build, shows the same sessions as cards, beside an agent’s conversation or its terminal. It asks the same core, so you start Irie with <code>irie</code> or <code>irie up</code> first.</p>
+  <p>It shows an agent’s terminal by running tmux, and opens Ghostty only when you ask it to. It keeps your view choices, the task you haven’t sent and your last 50 tasks in its macOS preferences.</p>
+
+  <h3 id="tmux">Its own tmux</h3>
+  <p>Irie runs a tmux of its own, named <code>irie</code>, apart from any you use, with settings it writes. The window you see is its <code>irie</code> session; its <code>irie-agents</code> session holds the core, one window per agent, and Irie’s Ollama server when one runs.</p>
+
+  <h3 id="runs">Programs it runs</h3>
+  <p>Irie includes none of these. It runs the copies on your computer.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Program</th><th scope="col">When, and why</th></tr></thead>
+      <tbody>
+        <tr><td>tmux</td><td>Always: it holds every agent.</td></tr>
+        <tr><td>git</td><td>To find your projects and make worktrees.</td></tr>
+        <tr><td>Your agents</td><td>The program each profile names, such as <code>claude</code>.</td></tr>
+        <tr><td><code>claude --version</code>, <code>--help</code></td><td>Once for each build of Claude Code, to learn which flags it takes.</td></tr>
+        <tr><td><code>claude agents --json</code></td><td>Every 3 seconds while you look at Irie, to list the Claude Code sessions running outside it. <code>claude stop</code> when you move one of them in.</td></tr>
+        <tr><td><code>ps</code></td><td>About every 5 seconds, to measure each session’s memory, and when it closes a session or matches the sessions outside Irie.</td></tr>
+        <tr><td>Your status line</td><td>If you made one for Claude Code, Irie’s status line runs it.</td></tr>
+        <tr><td>Ollama</td><td>Only for local models, if you installed it. Irie bundles neither Ollama nor any model.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="others-code">Code from others</h3>
+  <p>Irie’s Go code uses Bubble Tea, Bubbles and Lip Gloss to draw the list, BurntSushi’s TOML to read the settings file, and Go’s x/sys to read the process table, with the modules those need. All are under the MIT or BSD licenses.</p>
+  <p>The Mac app draws terminals with SwiftTerm, under the MIT license.</p>
+  <p>Nobody else’s code is copied into Irie. <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md#third-party-code">PROVENANCE.md</a> lists each module with its version and license.</p>
+
+  <h2 id="files">What it keeps on your computer</h2>
+  <p>Irie makes its folders so only you can open them. With <code>XDG_CONFIG_HOME</code>, <code>XDG_STATE_HOME</code> or <code>XDG_DATA_HOME</code> set, they live there instead.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Where</th><th scope="col">What</th><th scope="col">For how long</th></tr></thead>
+      <tbody>
+        <tr><td><code>~/.config/irie/config.toml</code></td><td>Your settings, if you made the file.</td><td>Yours to keep</td></tr>
+        <tr><td><code>~/.local/state/irie/journal/</code></td><td>A file a day of events: each task’s start, each step an agent took, with a line such as the command it ran, and what you did.</td><td>30 days</td></tr>
+        <tr><td><code>~/.local/state/irie/sessions/&lt;id&gt;/</code></td><td>For each session: its task, <code>task.md</code>; exactly how it was started, <code>spec.json</code>; Irie’s hooks for it, <code>claude-settings.json</code>; its host’s process ids, <code>host.json</code>; its last reply, <code>result.md</code>; its last status line, <code>status.json</code>; and how it ended, <code>exit.json</code>.</td><td>Until you remove them</td></tr>
+        <tr><td><code>~/.local/state/irie/core.log</code>, <code>ui.log</code></td><td>What the core and the list did, with their errors.</td><td>Until you remove them</td></tr>
+        <tr><td><code>~/.local/state/irie/local.json</code></td><td>The local model <code>irie setup local</code> chose, and how much memory models took.</td><td>Until you remove it</td></tr>
+        <tr><td><code>~/.local/state/irie/tmux.conf</code></td><td>Irie’s tmux settings.</td><td>Written again as needed</td></tr>
+        <tr><td><code>~/.local/share/irie/worktrees/</code>, <code>scratch/</code></td><td>The folders agents work in.</td><td>Until you remove them</td></tr>
+        <tr><td><code>$XDG_RUNTIME_DIR/irie/</code>, or <code>$TMPDIR/irie-&lt;uid&gt;/</code> without it, as on a Mac</td><td>The core’s socket and locks.</td><td>While Irie runs</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><code>journal.tool_input = "none"</code> keeps the steps’ lines out of the journal. A setting you put in a profile’s <code>env</code> is also written to <code>spec.json</code>, so keep secrets out of profiles.</p>
+
+  <h2 id="network">What it sends, and where</h2>
+  <ul class="rules">
+    <li><strong>Irie itself</strong> talks only to the server behind your local models: its own Ollama on 127.0.0.1, port 11435, or the one you name in <code>local.url</code>. It never goes through a proxy.</li>
+    <li><strong>The one exception</strong> is <code>irie setup local</code>, which you run yourself. After you say yes, it installs Ollama the official way, with Homebrew on a Mac that has it or Ollama’s install script on Linux, and asks Ollama to download a model.</li>
+    <li><strong>Your agents</strong> talk to their AI companies, or your company’s, just as they would without Irie. What each sends is up to that agent.</li>
+    <li><strong>Its parts</strong> talk to each other through a socket file, never over the network.</li>
+    <li><strong>Building Irie</strong> downloads the modules above, checked against the fingerprints in its code.</li>
+  </ul>
+
+  <h2 id="agents">What it does to your agents</h2>
+
+  <h3 id="start">How it starts them</h3>
+  <ul class="rules">
+    <li>Each agent starts with its profile’s program, flags and settings. Its session’s <code>spec.json</code> records exactly what ran.</li>
+    <li>Irie’s built-in profiles for Claude’s cloud models, <code>claude</code>, <code>sonnet</code> and <code>haiku</code>, start Claude Code in auto mode, where Claude Code decides which steps it may take without asking you. A profile’s <code>permission_mode</code> picks another.</li>
+    <li>Subtasks that a session hands on with <code>irie ctl delegate</code> run in <code>acceptEdits</code> mode, so they edit files without asking, and commands still need you. <code>route.delegate_mode</code> changes it.</li>
+    <li>For Claude Code, Irie adds a settings file for that one session, with its <dfn>hooks</dfn>, the small commands Claude Code runs at each step, and its status line. Claude Code adds the hooks to your own, and your settings files stay as they are.</li>
+    <li>It adds <code>IRIE_SESSION</code>, <code>IRIE_SOCKET</code> and <code>IRIE_BIN</code> to the agent’s environment, so the hooks can find Irie. It removes <code>TMUX</code> and <code>TMUX_PANE</code>, so the agent’s own tmux commands can’t reach Irie’s, and the marks another Claude Code session or terminal left behind.</li>
+    <li>A local profile adds the settings that point Claude Code at the local model, with a placeholder key, so its requests for the model go there and not to Anthropic.</li>
+  </ul>
+
+  <h3 id="says">What it says to them</h3>
+  <p>Irie gives an agent your task word for word.</p>
+  <p>A task over 100 KiB goes in <code>task.md</code>, and the agent is told: “Your full task is in &lt;path&gt;/task.md. Read all of it before doing anything else.”</p>
+  <p>Beyond that, Irie says three things to agents, and nothing else. Each begins with <code>[Irie]</code>:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">When</th><th scope="col">What it says</th></tr></thead>
+      <tbody>
+        <tr><td>A Claude Code session starts, and cheaper profiles could take its subtasks. <code>route.delegate = false</code> turns it off.</td><td>[Irie] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run <code>"$IRIE_BIN" ctl delegate "&lt;subtask&gt;"</code> with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (+local, +haiku, +sonnet), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.</td></tr>
+        <tr><td>A task carries on after its first session stopped at a usage limit. <code>route.failover = false</code> turns it off.</td><td>[Irie] This task ran on +claude, which stopped at its usage limit. What it did so far is in this directory: check it, then finish the task.</td></tr>
+        <tr><td>You thaw an agent that was working when you froze it.</td><td>[Irie] The user froze this session for 4m10s (14:02:11–14:06:21 UTC). Network calls or child processes may have failed meanwhile; re-check before you continue.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The profiles, times and length in each change to fit.</p>
+
+  <h3 id="types">What it types to them</h3>
+  <p>Irie types into an agent’s terminal only when you send it a message, and to give a task to an agent that takes one at its prompt. It won’t send a message while Claude Code waits on you, so a message can’t answer its question by accident.</p>
+
+  <h3 id="processes">What it does to their processes</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">When you</th><th scope="col">Irie</th></tr></thead>
+      <tbody>
+        <tr><td>Freeze a session</td><td>Stops the agent and every process it started (SIGSTOP), and carries them on when you thaw it (SIGCONT).</td></tr>
+        <tr><td>Close a session</td><td>Asks the agent to end (SIGTERM), and ends it (SIGKILL) if it hasn’t after 5 seconds.</td></tr>
+        <tr><td>Promote a session, on a Mac</td><td>Puts the other sessions’ processes in macOS’s background state: the lowest priority for the processor, and slower disk and network.</td></tr>
+        <tr><td>Move a session into Irie</td><td>Ends the copy outside Irie, gently: <code>claude stop</code> for a background session, SIGTERM for one in a terminal.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Restarting or updating Irie never stops or signals an agent, or anything an agent started.</p>
+
+  <h2 id="not-yet">What isn’t built yet</h2>
+  <ul class="rules">
+    <li>Pausing an agent at its next step. The Mac app’s Pause button freezes the session instead. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></li>
+    <li>Sending an agent a note it reads at its next step. <a class="tag" href="roadmap.html#m7" data-m="7">Planned</a></li>
+    <li>Parking sessions, and undo and redo in the list. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></li>
+    <li>A live view of each helper an agent starts. Today a helper is one line under its session. <a class="tag" href="roadmap.html#m8" data-m="8">Planned</a></li>
+    <li>Opening Irie from the Mac app or Spotlight. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></li>
+    <li>tmux telling Irie of changes at once. Today Irie asks it once a second. <a class="tag" href="roadmap.html#m11" data-m="11">Planned</a></li>
+    <li>Working, needs you and done for agents other than Claude Code, Codex CLI first. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
+    <li>A release to download. You build Irie from its source code: see <a href="install.html">Install</a>.</li>
+  </ul>
+
+  <h2 id="who">Who makes it</h2>
+  <p>Coding agents write most of Irie’s code. Every commit an agent helped write names it in a <code>Co-Authored-By:</code> line, so <code>git log</code> shows which.</p>
+  <p>Irie is built only from public documentation and from code whose license allows it. <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a> lists every source, with its date and what it shaped.</p>
+  <p>Anyone can help build it, and <a href="contribute.html">Contribute</a> says how their work is counted.</p>
+
+  <h2 id="check">Check it yourself</h2>
+  <p>Every setting in effect, defaults included:</p>
+<pre><code>irie config print</code></pre>
+  <p>Every pane Irie runs, and the program in each. Claude Code shows up as its version number, such as <code>2.1.310</code>:</p>
+<pre><code>tmux -L irie list-panes -a -F '#{session_name}:#{window_name} #{pane_current_command}'</code></pre>
+  <p>Exactly how one session’s agent was started, and the hooks it got:</p>
+<pre><code>ls ~/.local/state/irie/sessions/
+cat ~/.local/state/irie/sessions/&lt;id&gt;/spec.json
+cat ~/.local/state/irie/sessions/&lt;id&gt;/claude-settings.json</code></pre>
+  <p>Every network connection Irie’s parts hold open. Nothing, or only connections to 127.0.0.1:11435 for local models, is what you should see:</p>
+<pre><code>lsof -nP -a -i -c irie</code></pre>
+  <p>And the code itself, with the <a href="https://github.com/irie-hq/irie/blob/main/docs/DESIGN.md">design</a> that explains every part: <a href="https://github.com/irie-hq/irie">github.com/irie-hq/irie</a>.</p>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>
