@@ -364,19 +364,28 @@ type Harness interface {
 
 ### 4.1 Session list
 
-**Layout, from top to bottom:**
-- **Header** (pinned, 1–2 lines): `Irie`, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). When the core is unreachable the header says `core offline` and the UI retries every second.
-- **List:** scrolls.
-- **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail.
-- **Command bar** (pinned): grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
+The sidebar is a terminal program that reads like a web page, and like the Mac app: rounded cards with padding, a tree of repos, plain words, and a mouse that lights up what it points at. It paints every cell in the palette of `ui.theme` (§5.3, §5.5).
 
-**Rows.** Each row reads `[!][glyph] name … age`, with subagents indented under their parent (M8). Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder the list, and only you scroll it: frames from the core and a growing command bar leave the rows on screen where they are, and only a task you just started scrolls into view. The Parked group comes after them. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
+**Layout, from top to bottom:**
+- **Header** (pinned, 1–2 lines): a title bar on the palette's ground, a shade deeper than the sidebar: `Irie` and its tagline while there is room, then counts (`◐3 working  ●1 needs you  ✓2 done  ‖1 paused  ◆0 frozen`, cut down to glyph and number when narrow), then the undo and redo labels from M4 (`↶ rename "api-fix"  ↷ –`). Needs you counts every red row (needs you, stalled and failed), paused counts pausing too, and a zero count is faint. When the core is unreachable the header says `core offline` and the UI retries every second.
+- **Tabs** (1 line, from 10 rows): `State │ Repo`, the view in use on the selection fill. A click on a tab, or `v`, switches. The sidebar opens in Repo.
+- **List:** scrolls. Groups of sessions, each under a header that folds it.
+- **Status strip** (1 line): the selected row's detail in plain words ("Running the tests", "Asks: may it run rm -rf build?"), with the call it is about ("Bash · go test ./..."), what it costs and its name, and its folder on the right while that leaves the rest a third of the line; or the last error. A row's `detail` is the plain words the core records on each tool event (`phrase`), and its `command` is the call; a journal line from before the phrases gives the call as the detail. From 24 rows it is a **details card**: a rounded card with the selected session's name in its border, then its state with what it costs and how it was routed, its detail, its exact call, and its branch and folder. An error or a message takes the card's four lines.
+- **Command bar** (pinned): from 10 rows a rounded box, edged in the accent while it has the keyboard, with the placeholder "What should we work on?". It grows from 1 to 8 lines with the input, then scrolls inside itself. The terminal's own cursor marks the place, so a screen magnifier or reader can follow the typing.
+
+**Groups.** The Repo view has a group per repo (a session's `repo`, its main checkout), named by the repo's folder, with parent folders added when two repos share a name (`code/irie`, `forks/irie`), in the order their first session started, then "Not in a repo". The State view has "Needs you" (failed, needs you, stalled), "Working" (working, starting, pausing, paused, frozen) and "Done" (done, idle, exited), each only while it has a session. A header reads `▾ irie  4`; Enter, Space or a click folds it to `▸ irie  4 · 1 needs you`, which counts in red what inside needs you. Within a group sessions keep their order, so in the Repo view a state change never moves a card.
+
+**Cards.** Each session is a rounded card a column in from each side of the pane, with a column of padding: the state's glyph, the name and the age on its first line, its detail in plain words on the second (red when it needs you, and the state in words when it has none), then up to three of its running helpers, `↳ Explore  Reading DESIGN.md`, and `and N more`. A card that needs you is tinted and edged in red. The selected card takes the selection fill, edged in the accent while the list has the keyboard; the card under the pointer takes the hover fill. Where the list has fewer than 8 rows, or the pane fewer than 24 columns, each session is a one-line row instead, `[!][glyph] name … age`, in the same palette, the selected one with an accent edge. Sessions outside Irie are always one-line rows.
+
+**Order.** Prioritised sessions come first, latest first; the rest stay in creation order. State changes never reorder a group, and only you scroll the list: frames from the core and a growing command bar leave what is on screen where it is, and only a task you just started scrolls into view, its group unfolding. The Parked group comes after the groups. Its header reads `▸ Parked 4 · 1 needs you` and turns red when any parked session needs you; expanded, it shows its rows. The Outside Irie group (§4.6) comes last, and folds like the others. Red marks only the rows that need you (§5.3); each state also has its own glyph, so red is never the only cue.
 
 | Key (list focus) | Action |
 |---|---|
-| `↑` `↓`, `j` `k`, wheel, PgUp/PgDn, Home/End | Move the selection or scroll. The wheel scrolls the view without moving the selection |
-| Enter, click | Show the session in the slot and focus it |
-| Space | Show it, keep focus in the sidebar |
+| `↑` `↓`, `j` `k`, wheel, PgUp/PgDn, Home/End | Move the selection over the cards and headers that show, or scroll. The wheel scrolls the view without moving the selection |
+| Enter, click | Show the session in the slot and focus it; on a header, fold or unfold its group |
+| Space | Show it, keep focus in the sidebar; on a header, fold or unfold its group |
+| `v`, a click on a tab | Switch between the State and Repo views; the selected session stays selected |
+| The pointer | Lights the card, header or tab under it; the light goes out at the margins and when the pane loses focus |
 | `Ctrl+]` (tmux binding) | Toggle focus between sidebar and slot |
 | Tab, `:` | Focus the command bar (`:` pre-fills a colon) |
 | `/` | Fuzzy jump: the list filters as you type, Enter shows the match (M4) |
@@ -394,8 +403,11 @@ type Harness interface {
 | Edge case | Behaviour |
 |---|---|
 | Pane shorter than 6 rows | Header 1 line, command bar 1 line, at least 1 list row; the status strip is hidden |
+| Pane shorter than 10 rows | No tabs, and the command bar has no box |
+| A list shorter than 8 rows, or a pane narrower than 24 columns | One-line rows instead of cards. Typing never turns cards into rows: the rule counts a one-line command bar |
 | 200 or more sessions | Only visible rows are rendered |
-| Name wider than the sidebar | Cut with an ellipsis; the full name is in the status strip |
+| Name wider than the sidebar | Cut with an ellipsis; the status strip, or the details card's border, shows as much of it as fits |
+| Folding a group while one of its sessions is selected | The selection moves to the group's header |
 | Two clients of different sizes | `window-size latest`; the slot follows, and agent windows are resized to match |
 | The shown session exits | Its pane stays in the slot with its exit status; the row shows exited |
 | The selected session disappears | The selection moves to the next row |
@@ -407,7 +419,7 @@ type Harness interface {
 | Core crashes | Header says `core offline` | The supervisor restarts the core, which rebuilds from tmux options, `state.json` and gate files |
 | Slot pane killed by hand | Layout invariant broken | The core recreates the placeholder within a tick |
 
-**Tests:** model tests in M1 and M4 (pinned header and command bar at three heights, scrolling, park counts, jump ranking), plus tmux integration tests for the swap-in.
+**Tests:** model tests in M1 and M4 (pinned header and command bar at three heights, scrolling, park counts, jump ranking), the grouping in both views, folding, hover, clicks on tabs, headers and cards, the fallback to rows, and every cell on the palette, plus tmux integration tests for the swap-in.
 
 ### 4.2 Command bar and spawning
 
@@ -587,7 +599,7 @@ If the outside copy stopped but Irie could not start the session, the error says
 
 **Clients.**
 - **`irie ctl`.** `list` shows the sessions under `OUTSIDE IRIE`, and `move [--wait] [+PROFILE] <session-id|name>` moves one in.
-- **The sidebar.** The group comes last, after Parked, under a header with its count. Each row is one line, with the glyph and colour of the Irie state it matches (§5.3): busy as working, idle as idle, waiting for the user as needs you, and a dim `·` for anything else. Selecting a row puts what it is doing, its folder and how it runs in the status strip. `m` `m` moves it in, as `x` `x` closes: the first press says that its copy outside Irie ends, with anything it runs in the background, and any other key cancels. `:move [name]` moves it at once. Enter or Space says that it runs outside Irie instead of failing.
+- **The sidebar.** The group comes last, after Parked, under a header with its count that folds it like any group's (§4.1). Each row is one line, even among cards, with the glyph and colour of the Irie state it matches (§5.3): busy as working, idle as idle, waiting for the user as needs you, and a dim `·` for anything else. Selecting a row puts what it is doing, its folder and how it runs in the status strip. `m` `m` moves it in, as `x` `x` closes: the first press says that its copy outside Irie ends, with anything it runs in the background, and any other key cancels. `:move [name]` moves it at once. Enter or Space says that it runs outside Irie instead of failing.
 - **The Mac app.** An "Outside Irie" section after the cards, with the same one-line rows. The details panel has Move into Irie, off with the reason while the session can't move, and Copy Session ID, and a move asks first ([MAC.md](MAC.md)).
 
 **Agents keep their own identity.** An agent inherits the tmux server's environment, which came from whatever first ran `irie up`. When that was a Claude Code session in a terminal pane, every agent would carry that session's markers. These are the variables Claude Code's environment reference documents: `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID`, `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_REMOTE_SESSION_ID`, and `CLAUDE_EFFORT`, the other session's effort. Agents would also carry the terminal pane's ids and its control capability: names ending in `_PANEL_ID`, `_SURFACE_ID` or `_SOCKET_CAPABILITY`, that terminal's other `*_ID` and `*_SOCKET*` variables, and `WINDOWID`. Claude Code would take each agent for a nested session, leave it out of `claude agents` and `--resume`, and hand it the other session's inbox. It ignores the inherited marker when it sees tmux, but Irie hides `TMUX`. So the pane host drops these variables before it starts an agent, unless the profile sets them, and the core drops them from its own runs of the CLI. A core restarted on a running server therefore fixes every agent it spawns from then on. Starting the server from a clean login environment was the other option. It would reach a running server only when the server restarts, it needs the login-shell capture of §7.2, and `env -i` also drops variables that launchd rather than a shell profile sets, such as `SSH_AUTH_SOCK` on macOS.
@@ -688,6 +700,8 @@ Each row shows the first state in this table that applies; the table is in prece
 | done | `✓` | green | `turn.ended`, not yet viewed. Turns into idle when you show the session. `ui.red_on_done = true` shows it red instead |
 | idle | `○` | dim | done and viewed |
 
+The sidebar draws these colours from its palette (§5.5, `ui.theme`): red is the palette's needs colour, green its done, yellow its paused and cyan its frozen; default is ink and dim is muted, so a dim red or dim yellow row has a red or yellow glyph and a muted name. In every palette, light and dark, each text colour reads at 4.5:1 and the accent at 3:1 on every surface (WCAG 2.2, 1.4.3 and 1.4.11). The sidebar paints every cell's background itself, so this holds whatever the terminal's theme is. It asks the terminal for its background (OSC 11, which tmux answers with the attached client's) and draws the dark set until an answer comes. Each state has its own glyph, so colour is never the only cue (1.4.1): only failed and an exit with an error code share `✕`, and only paused and pausing share `‖`. The core derives frozen, paused and pausing from M5 and M6; the sidebar already draws them.
+
 ### 5.4 Files
 
 Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.local/share`, `~/.cache`), so paths match Linux. Directories are 0700 and files 0600.
@@ -719,6 +733,7 @@ focus_key = "C-]"             # tmux key that toggles sidebar <-> slot
 max_sub_rows = 6
 red_on_done = false
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
+theme = "rosewater"           # rosewater | terracotta | lilac | evergreen, the Mac app's palettes; light or dark follows the terminal (§5.3)
 
 [spawn]
 default_profile = "auto"      # auto = the lowest cost per success among profiles accurate enough (§6.4)

@@ -72,7 +72,9 @@ const (
 	CodeNeedsStronger = "needs_stronger"
 )
 
-// Session states (DESIGN §5.3), derived from the session's events.
+// Session states (DESIGN §5.3), derived from the session's events. The core
+// derives frozen, paused and pausing once it can freeze and pause (M5, M6);
+// the sidebar already draws them.
 const (
 	StateFailed   = "failed"
 	StateExited   = "exited"
@@ -82,6 +84,9 @@ const (
 	StateStarting = "starting"
 	StateDone     = "done"
 	StateIdle     = "idle"
+	StateFrozen   = "frozen"
+	StatePaused   = "paused"
+	StatePausing  = "pausing"
 )
 
 // Session is one row of the session list.

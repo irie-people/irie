@@ -88,7 +88,12 @@ type UI struct {
 	MaxSubRows   int    `toml:"max_sub_rows"`
 	RedOnDone    bool   `toml:"red_on_done"`
 	Ghostty      string `toml:"ghostty"` // auto | off
+	Theme        string `toml:"theme"`   // the sidebar's palette, one of Themes
 }
+
+// Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's. Each has a
+// light and a dark set; the terminal's background picks one.
+var Themes = []string{"rosewater", "terracotta", "lilac", "evergreen"}
 
 type Spawn struct {
 	DefaultProfile string        `toml:"default_profile"`
@@ -195,7 +200,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", Theme: "rosewater"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -462,6 +467,9 @@ func (c Config) Validate() error {
 	}
 	if c.UI.Ghostty != "auto" && c.UI.Ghostty != "off" {
 		bad("ui.ghostty = %q: must be auto or off", c.UI.Ghostty)
+	}
+	if !slices.Contains(Themes, c.UI.Theme) {
+		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))
 	}
 	if _, ok := c.Profiles[c.Spawn.DefaultProfile]; !ok && c.Spawn.DefaultProfile != Auto {
 		bad("spawn.default_profile = %q: no such profile, and not auto", c.Spawn.DefaultProfile)

@@ -14,6 +14,18 @@ func Placeholder(focusKey string) error {
 	return err
 }
 
+// The placeholder draws on the terminal's own colours, with the warm sun and
+// the sea of Irie's icon (DESIGN §7.2).
+var (
+	sun     = lipgloss.Color("#F2B544")
+	sea     = lipgloss.Color("#2E9E77")
+	deepSea = lipgloss.Color("#1D7357")
+
+	styleTitle = lipgloss.NewStyle().Foreground(sun).Bold(true)
+	styleBold  = lipgloss.NewStyle().Bold(true)
+	styleDim   = lipgloss.NewStyle().Faint(true)
+)
+
 // keyLabel turns a tmux key name such as C-] into Ctrl+].
 func keyLabel(k string) string {
 	for _, m := range [][2]string{{"C-", "Ctrl+"}, {"M-", "Alt+"}, {"S-", "Shift+"}} {
