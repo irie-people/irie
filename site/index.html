@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Irie · your coding agents, side by side</title>
+<meta name="description" content="Irie runs your AI coding agents side by side, in one calm view, and shows you which one needs you.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<!-- Marks used by the pictures: the sidebar's glyphs, drawn as shapes so
+     they look the same in every font. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <circle id="g-dot" r="5.2"/>
+    <circle id="g-ring" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path id="g-check" d="M-4.8 0.2 L-1.6 3.6 L4.8 -4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="g-bars" d="M-3.4 -5.6h2.2v11.2h-2.2z M1.2 -5.6h2.2v11.2h-2.2z"/>
+    <path id="g-diamond" d="M0 -5.8 L5.8 0 L0 5.8 L-5.8 0z"/>
+    <g id="g-sun"><circle r="3.2"/><path d="M0-6.4v1.7M0 4.7v1.7M-6.4 0h1.7M4.7 0h1.7M-4.5-4.5l1.2 1.2M3.3 3.3l1.2 1.2M-4.5 4.5l1.2-1.2M3.3-3.3l1.2-1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <h1>Irie runs your AI coding agents side by side, in one calm view.</h1>
+
+    <figure class="picture">
+      <div class="window">
+        <svg viewBox="0 0 940 356" preserveAspectRatio="xMinYMin slice" role="img" aria-labelledby="window-title" aria-describedby="window-desc">
+          <title id="window-title">The Irie window: a list of five coding agents on the left, and the picked agent’s live screen on the right.</title>
+          <desc id="window-desc">On the left is Irie’s sidebar. Its header reads Irie, then counts: 2 working, 1 needs you, 1 done, none paused or frozen. Below are five rows, one per agent, each with a mark, a name and an age: update-the-dependencies, idle, 1 hour; write-the-release-notes, done with a green tick, 25 minutes; redesign-the-pricing-page, in red because it needs you, 12 minutes; add-dark-mode-to-settings, working, 8 minutes; and fix-the-flaky-checkout-test, working and picked, 3 minutes. Under the list, a status line names the command the picked agent is running, and the bottom line is the box for a new task. On the right, drawn simply, is the picked agent’s own screen: it runs the checkout tests, finds that one fails because it reads the real clock, edits the test, and is running the tests again.</desc>
+
+          <!-- Window frame and title bar. tmux titles the window "Irie". -->
+          <rect x="10.75" y="10.75" width="918.5" height="334.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+          <path d="M10.75 40V22.75a12 12 0 0 1 12-12h894.5a12 12 0 0 1 12 12V40z" class="t-bar"/>
+          <circle cx="30" cy="25.5" r="4.5" class="t-dot"/>
+          <circle cx="46" cy="25.5" r="4.5" class="t-dot"/>
+          <circle cx="62" cy="25.5" r="4.5" class="t-dot"/>
+          <text x="470" y="30" text-anchor="middle" font-size="13" class="t-title">Irie</text>
+
+          <!-- The sidebar: 34 columns of 10 units, lines 22 units apart,
+               as internal/ui/view.go lays it out. -->
+          <g font-size="16" class="mono">
+            <!-- Header: the title, then the counts, cut to glyphs and numbers at this width -->
+            <use href="#g-sun" x="35" y="61" class="t-sun"/>
+            <text x="50" y="66" font-weight="700" class="t-sun">Irie</text>
+            <use href="#g-dot" x="215" y="61" class="t-ink"/><text x="220" y="66" class="t-ink">2</text>
+            <use href="#g-dot" x="245" y="61" class="t-red"/><text x="250" y="66" class="t-red">1</text>
+            <use href="#g-check" x="275" y="61" class="t-green"/><text x="280" y="66" class="t-green">1</text>
+            <use href="#g-bars" x="305" y="61" class="t-faint"/><text x="310" y="66" class="t-faint">0</text>
+            <use href="#g-diamond" x="335" y="61" class="t-faint"/><text x="340" y="66" class="t-faint">0</text>
+            <path d="M30 83.5H350" class="t-rule"/>
+
+            <!-- Rows, in the order the tasks were started -->
+            <use href="#g-ring" x="35" y="105" class="t-faint"/>
+            <text x="50" y="110" class="t-faint">update-the-dependencies</text>
+            <text x="350" y="110" text-anchor="end" class="t-faint">1h</text>
+
+            <use href="#g-check" x="35" y="127" class="t-green"/>
+            <text x="50" y="132" class="t-ink">write-the-release-notes</text>
+            <text x="350" y="132" text-anchor="end" class="t-faint">25m</text>
+
+            <use href="#g-dot" x="35" y="149" class="t-red"/>
+            <text x="50" y="154" class="t-red">redesign-the-pricing-page</text>
+            <text x="350" y="154" text-anchor="end" class="t-faint">12m</text>
+
+            <use href="#g-dot" x="35" y="171" class="t-ink"/>
+            <text x="50" y="176" class="t-ink">add-dark-mode-to-settings</text>
+            <text x="350" y="176" text-anchor="end" class="t-faint">8m</text>
+
+            <!-- The picked row: a deep-green bar with a sun-coloured edge -->
+            <rect x="20" y="182" width="340" height="22" class="t-deep-green"/>
+            <rect x="20" y="182" width="5" height="22" class="t-sun"/>
+            <use href="#g-dot" x="35" y="193" class="t-on-green"/>
+            <text x="50" y="198" class="t-on-green">fix-the-flaky-checkout-test</text>
+            <text x="350" y="198" text-anchor="end" class="t-age-on-green">3m</text>
+
+            <path d="M30 281.5H350" class="t-rule"/>
+            <!-- Status strip: what the picked row is doing, cut to fit -->
+            <text x="30" y="308" class="t-faint">Bash · go test ./checkout/... ·…</text>
+            <!-- Command bar, quiet while the list has focus -->
+            <text x="30" y="330" class="t-faint">›</text>
+            <text x="50" y="330" class="t-faint">new task (Enter starts it)</text>
+          </g>
+
+          <!-- tmux's border between the sidebar and the slot -->
+          <path d="M365.5 40V345" class="t-rule"/>
+
+          <!-- The slot: the picked agent's own screen, live -->
+          <g font-size="16" class="mono">
+            <text x="380" y="88" class="t-faint">&gt;</text>
+            <text x="400" y="88" class="t-ink">fix the flaky checkout test</text>
+
+            <text x="380" y="132" class="t-faint">→</text>
+            <text x="400" y="132" font-weight="700" class="t-ink">Read</text>
+            <text x="470" y="132" class="t-ink">checkout/cart_test.go</text>
+            <text x="380" y="154" class="t-faint">→</text>
+            <text x="400" y="154" font-weight="700" class="t-ink">Bash</text>
+            <text x="470" y="154" class="t-ink">go test ./checkout/...</text>
+            <text x="380" y="176" class="t-faint">←</text>
+            <text x="400" y="176" font-weight="700" class="t-red">FAIL</text>
+            <text x="470" y="176" class="t-faint">TestTotal: got 2 items, want 3</text>
+
+            <text x="400" y="220" class="t-ink">The test reads the real clock, so it fails</text>
+            <text x="400" y="242" class="t-ink">just after midnight. I’ll give it a fixed clock.</text>
+
+            <text x="380" y="286" class="t-faint">→</text>
+            <text x="400" y="286" font-weight="700" class="t-ink">Edit</text>
+            <text x="470" y="286" class="t-ink">checkout/cart_test.go</text>
+            <text x="380" y="308" class="t-faint">→</text>
+            <text x="400" y="308" font-weight="700" class="t-ink">Bash</text>
+            <text x="470" y="308" class="t-ink">go test ./checkout/...</text>
+            <rect x="400" y="319" width="10" height="16" class="t-faint"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Each row is an agent. Red means it needs you, and the one you pick runs live on the right.</figcaption>
+    </figure>
+
+    <p class="lead">A <dfn>coding agent</dfn> is an AI program that reads, writes and tests code for you.</p>
+    <p class="lead">Irie lets you run several at once, and shows you which one needs you.</p>
+    <div class="actions">
+      <a class="button" href="how-it-works.html">See how it works</a>
+      <a class="button quiet" href="get-started.html">Get started</a>
+    </div>
+    <p class="note">Irie is early and unreleased, so there is nothing to install yet. The <a href="roadmap.html">roadmap</a> shows what is built so far.</p>
+  </section>
+
+  <section aria-labelledby="why">
+    <h2 id="why">Why Irie</h2>
+    <ul class="reasons">
+      <li>
+        <h3>Take back your time.</h3>
+        <p>Hand the grind to a crew of agents working side by side. Spend your hours on the parts only you can do.</p>
+        <p class="status"><span class="tag built">Built</span>several Claude Code agents at once</p>
+      </li>
+      <li>
+        <h3>Power to the people.</h3>
+        <p>Your workflow shouldn’t belong to one AI company. Irie is made to work with agents from any company, so if one raises its prices or goes away, you swap it out.</p>
+        <p class="status"><a class="tag" href="roadmap.html#m3" data-m="3">Planned</a>other agents: milestone&nbsp;3</p>
+      </li>
+      <li>
+        <h3>Local when you can.</h3>
+        <p>A <dfn>model</dfn>, the AI behind an agent, can run on your own computer for free, with your code staying at home. Let it take the small stuff.</p>
+        <p class="status"><a class="tag" href="roadmap.html#m10" data-m="10">Planned</a>milestones&nbsp;3 and&nbsp;10</p>
+      </li>
+      <li>
+        <h3>Many models, one love.</h3>
+        <p>A fast local model for the small jobs, and a strong one on an AI company’s servers for the hard ones. Then a second opinion from another company’s model before anything reaches you.</p>
+        <p class="status"><a class="tag" href="roadmap.html#after" data-m="after">Planned</a>after version 1</p>
+      </li>
+    </ul>
+  </section>
+
+  <figure class="demo">
+    <div class="demo-box" role="img" aria-labelledby="rec-first-look" data-recording="first-look"></div>
+    <figcaption id="rec-first-look">Recording to come: opening Irie, typing a task and watching its row.</figcaption>
+  </figure>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If it ever makes money, it goes back to the people who build it, after running costs: <a href="contribute.html">see how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

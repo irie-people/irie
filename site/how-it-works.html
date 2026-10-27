@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>How it works · Irie</title>
+<meta name="description" content="How Irie works: you type a task, Irie starts an agent in tmux, and the colours tell you which one needs you.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<!-- Marks used by the pictures: the sidebar's glyphs, drawn as shapes so
+     they look the same in every font. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <circle id="g-dot" r="5.2"/>
+    <circle id="g-ring" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <circle id="g-dash" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="1.9 2"/>
+    <path id="g-check" d="M-4.8 0.2 L-1.6 3.6 L4.8 -4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="g-cross" d="M-4.2 -4.2 L4.2 4.2 M4.2 -4.2 L-4.2 4.2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+    <path id="g-bars" d="M-3.4 -5.6h2.2v11.2h-2.2z M1.2 -5.6h2.2v11.2h-2.2z"/>
+    <path id="g-diamond" d="M0 -5.8 L5.8 0 L0 5.8 L-5.8 0z"/>
+    <circle id="g-point" r="2"/>
+    <g id="g-bang"><rect x="-1.25" y="-6.2" width="2.5" height="7.6" rx="0.8"/><circle cy="4.6" r="1.5"/></g>
+    <g id="g-sun"><circle r="3.2"/><path d="M0-6.4v1.7M0 4.7v1.7M-6.4 0h1.7M4.7 0h1.7M-4.5-4.5l1.2 1.2M3.3 3.3l1.2 1.2M-4.5 4.5l1.2-1.2M3.3-3.3l1.2-1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html" aria-current="page">How it works</a></li>
+      <li><a href="get-started.html">Get started</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+  <h1>How it works</h1>
+
+  <figure class="picture small">
+    <svg viewBox="0 0 360 500" role="img" aria-labelledby="how-title" aria-describedby="how-desc">
+      <title id="how-title">How Irie works: you give Irie tasks, Irie starts an agent for each inside tmux, and the agents report back through hooks.</title>
+      <desc id="how-desc">At the top is you. An arrow labelled tasks runs down to Irie, and one labelled who needs you runs back up. Below Irie, an arrow labelled starts runs down into a dashed box labelled tmux, which keeps them running, and one labelled hooks runs back up. Inside tmux are three Claude Code agents: one working, one that needs you, and one done. Under each agent is a folder labelled worktree, marked as planned for milestone 3.</desc>
+
+      <!-- You -->
+      <rect x="110" y="12" width="140" height="46" rx="23" class="s-card s-line" stroke-width="1.5"/>
+      <circle cx="141" cy="29" r="6" class="s-ink"/>
+      <path d="M130 48a11 9 0 0 1 22 0z" class="s-ink"/>
+      <text x="162" y="42" font-size="20" font-weight="700" class="s-ink">You</text>
+
+      <!-- tasks down, who needs you up -->
+      <path d="M158 63V106" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M152 104l6 10l6-10z" class="s-ink"/>
+      <text x="150" y="93" text-anchor="end" font-size="15" class="s-soft">tasks</text>
+      <path d="M202 111V68" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M196 70l6-10l6 10z" class="s-ink"/>
+      <text x="210" y="93" font-size="15" class="s-soft">who needs you</text>
+
+      <!-- Irie -->
+      <rect x="20" y="118" width="320" height="78" rx="16" class="s-green s-line" stroke-width="1.5"/>
+      <g class="s-sun">
+        <circle cx="52" cy="146" r="7.5"/>
+        <path d="M52 132.5v3.5M52 156v3.5M38.5 146h3.5M62 146h3.5M42.5 136.5l2.5 2.5M59 153l2.5 2.5M42.5 155.5l2.5-2.5M59 139l2.5-2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </g>
+      <text x="74" y="153" font-size="22" font-weight="700" class="s-on-green">Irie</text>
+      <text x="74" y="180" font-size="15" class="s-on-green">starts each agent and tracks it</text>
+
+      <!-- starts down, hooks up -->
+      <path d="M120 201V234" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M114 232l6 10l6-10z" class="s-ink"/>
+      <text x="128" y="226" font-size="15" class="s-soft">starts</text>
+      <path d="M240 241V208" class="s-stroke-ink" stroke-width="2"/>
+      <path d="M234 210l6-10l6 10z" class="s-ink"/>
+      <text x="232" y="226" text-anchor="end" font-size="15" class="s-soft">hooks</text>
+
+      <!-- tmux -->
+      <rect x="8" y="246" width="344" height="244" rx="18" fill="none" class="s-line" stroke-width="1.5" stroke-dasharray="7 5"/>
+      <text x="24" y="274" font-size="17" font-weight="700" class="s-ink">tmux</text>
+      <text x="70" y="274" font-size="15" class="s-soft">keeps them running</text>
+
+      <!-- Three agents -->
+      <g font-size="14">
+        <rect x="22" y="290" width="100" height="66" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+        <text x="32" y="315" class="t-ink">Claude Code</text>
+        <use href="#g-dot" x="38" y="337" class="t-ink"/>
+        <text x="50" y="342" class="t-ink">working</text>
+
+        <rect x="130" y="290" width="100" height="66" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+        <text x="140" y="315" class="t-ink">Claude Code</text>
+        <use href="#g-dot" x="146" y="337" class="t-red"/>
+        <text x="158" y="342" class="t-red">needs you</text>
+
+        <rect x="238" y="290" width="100" height="66" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+        <text x="248" y="315" class="t-ink">Claude Code</text>
+        <use href="#g-check" x="254" y="337" class="t-green"/>
+        <text x="266" y="342" class="t-green">done</text>
+      </g>
+
+      <!-- A worktree each: planned -->
+      <g class="s-line" stroke-width="1.5" stroke-dasharray="4 4">
+        <path d="M72 356V384M180 356V384M288 356V384"/>
+      </g>
+      <g font-size="14" text-anchor="middle">
+        <path d="M28 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="72" y="416" class="s-ink">worktree</text>
+        <path d="M136 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="180" y="416" class="s-ink">worktree</text>
+        <path d="M244 390a6 6 0 0 1 6-6h24l6 6h50a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-80a6 6 0 0 1-6-6z" class="s-card s-line" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="288" y="416" class="s-ink">worktree</text>
+        <text x="180" y="466" class="s-soft">worktrees: planned, milestone 3</text>
+      </g>
+    </svg>
+    <figcaption>You talk to Irie. Irie starts your agents, keeps them running and listens for news from them.</figcaption>
+  </figure>
+
+  <h2>You type a task</h2>
+  <p>At the bottom of Irie’s list is a box for tasks. Press Tab to get there, type what you want done in plain words, and press Enter.</p>
+  <p>Irie starts a <dfn>coding agent</dfn>, an AI program that works on code, on the task. A row appears in the list, named after the task’s first few words.</p>
+  <p>Unless you name one of your folders with <code>@</code>, each task gets a new, empty folder to work in.</p>
+
+  <h2>Each agent runs in tmux</h2>
+  <p>Irie starts every agent inside <dfn>tmux</dfn>, a free program that keeps programs running in the background. Close the window and your agents keep working.</p>
+  <p>Irie keeps a tmux of its own, apart from any you already use.</p>
+
+  <h2>You look in when you want</h2>
+  <p>Pick a row with the arrow keys and press Enter. That agent’s live screen moves into the big space on the right, where you can read it and type to it.</p>
+  <p>Space shows it but keeps you in the list, and <kbd>Ctrl</kbd>+<kbd>]</kbd> hops between the list and the agent.</p>
+  <figure class="demo">
+    <div class="demo-box" role="img" aria-labelledby="rec-swap-in" data-recording="swap-in"></div>
+    <figcaption id="rec-swap-in">Recording to come: pressing Enter on a row, and that agent’s screen moving into view.</figcaption>
+  </figure>
+
+  <h2>Agents tell Irie how they’re doing</h2>
+  <p>Agents report through <dfn>hooks</dfn>: small commands an agent runs at set moments, such as just before it runs a command or edits a file. From them, Irie knows who’s busy, who’s done and who’s waiting for you.</p>
+  <p>Irie adds its hooks each time it starts an agent, and never edits the agent’s settings files.</p>
+
+  <h2 id="colours">What the colours mean</h2>
+  <div class="states-layout">
+    <figure class="picture">
+      <svg viewBox="0 0 300 446" role="img" aria-labelledby="states-title" aria-describedby="states-desc">
+        <title id="states-title">The states an agent can be in, with their marks and colours, as Irie’s list shows them.</title>
+        <desc id="states-desc">Working, a plain dot. Needs you, a red dot and red name. Stalled, a red exclamation mark. Failed, a red cross. Done, a green tick. Idle, a dim ring. Starting, a dim dotted ring. Exited, a dim small dot. Paused, two yellow bars, planned. Frozen, a cyan diamond, planned.</desc>
+        <rect x="0.75" y="0.75" width="298.5" height="444.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
+        <g class="mono" font-size="17">
+          <use href="#g-sun" x="24" y="28" class="t-sun"/>
+          <text x="38" y="34" font-weight="700" class="t-sun">Irie</text>
+          <path d="M16 50.5H284" class="t-rule"/>
+
+          <use href="#g-dot" x="26" y="78" class="t-ink"/><text x="44" y="84" class="t-ink">working</text>
+          <use href="#g-dot" x="26" y="116" class="t-red"/><text x="44" y="122" class="t-red">needs you</text>
+          <use href="#g-bang" x="26" y="154" class="t-red"/><text x="44" y="160" class="t-red">stalled</text>
+          <use href="#g-cross" x="26" y="192" class="t-red"/><text x="44" y="198" class="t-red">failed</text>
+          <path d="M16 211.5H284" class="t-rule"/>
+          <use href="#g-check" x="26" y="230" class="t-green"/><text x="44" y="236" class="t-ink">done</text>
+          <use href="#g-ring" x="26" y="268" class="t-faint"/><text x="44" y="274" class="t-faint">idle</text>
+          <use href="#g-dash" x="26" y="306" class="t-faint"/><text x="44" y="312" class="t-faint">starting</text>
+          <use href="#g-point" x="26" y="344" class="t-faint"/><text x="44" y="350" class="t-faint">exited</text>
+          <path d="M16 363.5H284" class="t-rule"/>
+          <use href="#g-bars" x="26" y="382" class="t-yellow"/><text x="44" y="388" class="t-ink">paused</text>
+          <text x="284" y="388" text-anchor="end" font-size="14" class="t-faint">planned</text>
+          <use href="#g-diamond" x="26" y="420" class="t-cyan"/><text x="44" y="426" class="t-ink">frozen</text>
+          <text x="284" y="426" text-anchor="end" font-size="14" class="t-faint">planned</text>
+        </g>
+      </svg>
+      <figcaption>Red means it needs you. Green means it’s done.</figcaption>
+    </figure>
+
+    <ul class="states">
+      <li><span class="glyph ink" aria-hidden="true">●</span><span><strong>Working:</strong> busy, so leave it be.</span></li>
+      <li><span class="glyph red" aria-hidden="true">●</span><span><strong>Needs you:</strong> it asked you a question, wants your go-ahead, or hit a problem such as a usage limit.</span></li>
+      <li><span class="glyph red" aria-hidden="true">!</span><span><strong>Stalled:</strong> it didn’t get going in time, usually because it’s waiting for you to sign in or to trust a folder.</span></li>
+      <li><span class="glyph red" aria-hidden="true">✕</span><span><strong>Failed:</strong> it couldn’t start, and the line under the list says why.</span></li>
+      <li><span class="glyph green" aria-hidden="true">✓</span><span><strong>Done:</strong> it finished, and you haven’t looked yet.</span></li>
+      <li><span class="glyph faint" aria-hidden="true">○</span><span><strong>Idle:</strong> it finished, and you’ve seen it.</span></li>
+      <li><span class="glyph faint" aria-hidden="true">◌</span><span><strong>Starting:</strong> just launched.</span></li>
+      <li><span class="glyph faint" aria-hidden="true">·</span><span><strong>Exited:</strong> its program has ended. The mark turns red if it ended with an error.</span></li>
+      <li><span class="glyph yellow" aria-hidden="true">‖</span><span><strong>Paused:</strong> held at its next step until you let it go. On its way there, the mark is dim. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></span></li>
+      <li><span class="glyph cyan" aria-hidden="true">◆</span><span><strong>Frozen:</strong> stopped at once, with everything it started. <a class="tag" href="roadmap.html#m6" data-m="6">Planned</a></span></li>
+    </ul>
+  </div>
+  <p>Most states have a mark of their own as well. Working and needs you share a dot, and red tells them apart.</p>
+  <p>In your <dfn>terminal</dfn>, the window where you type commands, the state colours are its own red, green, yellow and cyan, so they suit your theme.</p>
+
+  <h2>Each agent gets its own worktree <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></h2>
+  <p><dfn>git</dfn> keeps the history of a project’s code.</p>
+  <p>A <dfn>worktree</dfn> is a second working copy of a project. It shares the project’s history, but has its own files and its own <dfn>branch</dfn>, or line of changes.</p>
+  <p>Start a task with <code>@</code> and a project’s name, and its agent gets a fresh worktree, so agents keep out of each other’s way. You tell Irie once, in its settings, where your projects live.</p>
+  <p>Irie copies in the files git leaves out, such as a project’s private settings.</p>
+  <p>Version 1 never deletes a worktree or a branch.</p>
+
+  <h2>Profiles: which agent, which model</h2>
+  <p>A <dfn>profile</dfn> is a named recipe for starting an agent: which program, which <dfn>model</dfn> (the AI itself) and which settings. Every task starts from your default profile: out of the box, Claude Code with Opus 5.5 at max effort in auto mode.</p>
+  <p>You can change the default in Irie’s settings. Picking a profile per task, with <code>+</code> and its name, is planned. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></p>
+  <p>The program is the agent’s <dfn>harness</dfn>: it turns a model into a coding agent.</p>
+  <p>Today Irie runs one harness, Claude Code. From milestone&nbsp;3 it can start any agent that runs in a terminal. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></p>
+
+  <h2>What stays on your computer</h2>
+  <p>Irie runs on your computer and sends nothing over the internet of its own. Each agent talks to its own AI company, just as it would without Irie.</p>
+  <p>Irie keeps a log of what each agent did, such as the commands it ran and the files it read or changed, on your computer for 30 days.</p>
+  <p>Irie never reads or passes on your logins. It starts each agent under your own account.</p>
+
+  <h2>Coming next</h2>
+  <p>Tidy the list with park, rename and undo. Then pause an agent at its next step, freeze one at once, mark a task as urgent, and watch the helpers an agent starts.</p>
+  <p>The <a href="roadmap.html">roadmap</a> has them in order.</p>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If it ever makes money, it goes back to the people who build it, after running costs: <a href="contribute.html">see how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

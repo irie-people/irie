@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Get started · Irie</title>
+<meta name="description" content="There is nothing to install yet. Here is what using Irie will look like.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <span>Irie</span>
+  </a>
+  <nav aria-label="Site">
+    <ul>
+      <li><a href="how-it-works.html">How it works</a></li>
+      <li><a href="get-started.html" aria-current="page">Get started</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
+      <li><a href="faq.html">FAQ</a></li>
+      <li><a href="contribute.html">Contribute</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+  <h1>Get started</h1>
+
+  <figure class="picture narrow">
+    <svg viewBox="0 0 480 130" role="img" aria-labelledby="spawn-title" aria-describedby="spawn-desc">
+      <title id="spawn-title">A spawn line read in three parts: @shop says where, +local says who, and the rest says what. Naming a project and a profile like this is planned.</title>
+      <desc id="spawn-desc">Irie’s command bar holds the line: @shop +local fix the flaky checkout test. A bracket under @shop reads where. A bracket under +local reads who. A bracket under fix the flaky checkout test reads what. Under where and who, a note reads planned.</desc>
+      <rect x="0.75" y="0.75" width="478.5" height="52.5" rx="10" class="t-bg t-frame" stroke-width="1.5"/>
+      <g class="mono" font-size="17">
+        <text x="16" y="33" class="t-sun">›</text>
+        <text x="36" y="33" class="t-ink">@shop</text>
+        <text x="97" y="33" class="t-ink">+local</text>
+        <text x="168" y="33" class="t-ink">fix the flaky checkout test</text>
+      </g>
+      <g fill="none" class="s-stroke-mark" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M36 63v7h51v-7M61.5 70v8"/>
+        <path d="M97 63v7h61v-7M127.5 70v8"/>
+        <path d="M168 63v7h275v-7M305.5 70v8"/>
+      </g>
+      <g font-size="18" font-weight="700" text-anchor="middle" class="s-ink">
+        <text x="61.5" y="100">where</text>
+        <text x="127.5" y="100">who</text>
+        <text x="305.5" y="100">what</text>
+      </g>
+      <g font-size="15" text-anchor="middle" class="s-soft">
+        <text x="61.5" y="122">planned</text>
+        <text x="127.5" y="122">planned</text>
+      </g>
+    </svg>
+    <figcaption>A <dfn>spawn line</dfn> is what you type to start an agent: where, who and what. Today the task and a folder work, and <code>@shop</code> and <code>+local</code> are planned.</figcaption>
+  </figure>
+
+  <p class="note">There is nothing to install yet. Irie is early, so this page shows what using it will look like.</p>
+
+  <h2>What you’ll need</h2>
+  <p>Once Irie is ready to install, you’ll need:</p>
+  <ul class="needs">
+    <li>A Mac or a Linux computer. Windows isn’t planned for version 1.</li>
+    <li>Two free programs: <dfn>tmux</dfn>, which keeps agents running in the background, and <dfn>git</dfn>, which keeps the history of your code.</li>
+    <li>A <dfn>coding agent</dfn>, an AI program that works on code. Today that means Claude Code, signed in to your own account.</li>
+    <li>By default Irie asks Claude Code for Opus 5.5 at max effort in auto mode, so your account must allow them. Each can be changed in Irie’s settings.</li>
+    <li>A <dfn>terminal</dfn>, the window where you type commands. Any will do.</li>
+  </ul>
+
+  <h2>Four steps</h2>
+  <ol class="steps">
+    <li>
+      <h3>Open Irie</h3>
+      <p>Type <code>irie</code> in a terminal and press Enter. A list appears on the left, with room on the right for the agent you pick.</p>
+      <p>On a Mac, you’ll also open it from <dfn>Spotlight</dfn>, the Mac’s search, in a window of its own. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></p>
+    </li>
+    <li>
+      <h3>Type a task</h3>
+      <p>Press Tab to reach the task box, type what you want done in plain words, and press Enter. An agent starts on it, and a row appears in the list.</p>
+      <p>To have the agent work in one of your folders, start the line with <code>@</code> and its path, such as <code>@~/code/shop</code>, where <code>~</code> is your home folder. Otherwise each task gets a new, empty folder of its own.</p>
+    </li>
+    <li>
+      <h3>Watch the colours</h3>
+      <p>Leave the agents to it. A row turns red when its agent needs you, and shows a green tick when it’s done.</p>
+      <p><a href="how-it-works.html#colours">What each colour means</a></p>
+    </li>
+    <li>
+      <h3>Look in</h3>
+      <p>Pick a row with the arrow keys and press Enter to see that agent’s screen, live, and answer it there. Press <kbd>Ctrl</kbd>+<kbd>]</kbd> to go back to the list.</p>
+    </li>
+  </ol>
+
+  <div class="demos">
+    <figure class="demo">
+      <div class="demo-box" role="img" aria-labelledby="rec-first-task" data-recording="first-task"></div>
+      <figcaption id="rec-first-task">Recording to come: typing a first task and watching it start.</figcaption>
+    </figure>
+    <figure class="demo">
+      <div class="demo-box" role="img" aria-labelledby="rec-needs-you" data-recording="needs-you"></div>
+      <figcaption id="rec-needs-you">Recording to come: a row turns red, and you answer its agent.</figcaption>
+    </figure>
+  </div>
+
+  <h2>Reading a spawn line</h2>
+  <dl class="spawn-parts">
+    <dt><code>@shop</code> where</dt>
+    <dd>A fresh <dfn>worktree</dfn> of your project called shop: a second working copy of it, on its own <dfn>branch</dfn>, or line of changes. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></dd>
+    <dd>Today <code>@</code> takes a folder instead, such as <code>@~/code/shop</code>, and the agent works right there, on your own files.</dd>
+    <dt><code>@shop!</code> where, in place</dt>
+    <dd>The project’s own folder, without a worktree. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></dd>
+    <dt><code>+local</code> who</dt>
+    <dd>Use your <dfn>profile</dfn> called local: a recipe you name for which agent and which <dfn>model</dfn>, the AI itself. <a class="tag" href="roadmap.html#m3" data-m="3">Planned</a></dd>
+    <dt>The rest: what</dt>
+    <dd>Everything else is the task, kept word for word.</dd>
+  </dl>
+
+  <h2>When can I try it?</h2>
+  <p>When Irie has its first release, this page will say how to install it. The <a href="roadmap.html">roadmap</a> shows how far along it is.</p>
+  <p>Want to help get it there? See <a href="contribute.html">Contribute</a>.</p>
+</main>
+
+<footer class="site-footer">
+  <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-hq/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
+  <p>If it ever makes money, it goes back to the people who build it, after running costs: <a href="contribute.html">see how</a>.</p>
+  <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-hq/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+</footer>
+</body>
+</html>

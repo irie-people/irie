@@ -66,6 +66,19 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-26 | tmux 3.7b manual page (local `man tmux`), checked on a private test server | `load-buffer`, `paste-buffer -p -d` (bracketed only when the program asked for it, LF sent as CR, control characters other than tabs shown as `^X` unless `-S`), `send-keys Enter`, and the `pane_current_command` and `bracket_paste_flag` formats: pasting a generic agent's task once it runs (M3) |
 | 2026-10-26 | Source of Bubbles v2.2.1 (textarea, internal/runeutil), Bubble Tea v2.1.0 and ultraviolet (Go module cache; MIT) | API only, no code copied: the textarea's `InsertString`, `Line`, `Column`, `MoveToBegin` and `SetCursorColumn` for Tab completion; its sanitizer, which turns tabs into spaces and CR into newlines, and `PasteMsg`, which carries a paste as sent: why a paste over 8 KiB becomes a chip outside the textarea (M3) |
 | 2026-10-26 | https://en.wikipedia.org/wiki/Levenshtein_distance | Edit distance for the closest repo names when an @name fits none (M3) |
+| 2026-10-26 | https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages | A Pages deploy job needs `pages: write` and `id-token: write`, deploys to the `github-pages` environment and reports `page_url`; the artifact is one gzipped tar under 10 GB with no symbolic or hard links: `.github/workflows/pages.yml` (site) |
+| 2026-10-26 | https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site | Settings > Pages > Build and deployment > Source: GitHub Actions, set once by the owner; `.nojekyll` matters only when publishing from a branch: the setup note in pages.yml and the site proposal (site) |
+| 2026-10-26 | https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax | `on.push` with both `branches` and `paths` runs only when both match; listing `permissions` sets the rest to none; `concurrency` and `cancel-in-progress`: the triggers, permissions and concurrency of pages.yml (site) |
+| 2026-10-26 | https://github.com/actions/starter-workflows (pages/static.yml; MIT) | The shape of a static Pages workflow: push and manual triggers, the three permissions, one `pages` concurrency group that never cancels a running deployment, then checkout, configure, upload and deploy. Keys only; the comments are Irie's own (site) |
+| 2026-10-26 | https://github.com/actions/checkout (action.yml, releases v7.0.0 and v7.0.1; MIT) ; https://github.com/actions/configure-pages (README, action.yml, release v6.0.0; MIT) | Current majors v7 and v6; `persist-credentials: false`, since the job never pushes; `enablement` needs a token other than `GITHUB_TOKEN`, so the owner switches Pages on by hand: pages.yml (site) |
+| 2026-10-26 | https://github.com/actions/upload-pages-artifact (README, action.yml, releases v4.0.0 and v5.0.0; MIT) ; https://github.com/actions/deploy-pages (README, releases v5.0.0 and v5.0.1; MIT) | Current majors v5 and v5; the `path` input; dotfiles left out from v4 (`include-hidden-files` from v5), so `site/` holds none; the `page_url` output and the permissions a deploy needs: pages.yml (site) |
+| 2026-10-26 | https://api.github.com/repos/actions/checkout/releases and the same for configure-pages, upload-pages-artifact and deploy-pages, with each repo's `/license` | The latest releases on this date (checkout v7.0.1, configure-pages v6.0.0, upload-pages-artifact v5.0.0, deploy-pages v5.0.1) and their MIT licenses: the versions in pages.yml (site) |
+| 2026-10-26 | https://go.dev/ ; https://go.dev/learn/ | Cues only, no code, layout or wording: one plain line at the top, a primary and a secondary button, short points, and a getting-started path that opens with one action (site) |
+| 2026-10-26 | https://www.w3.org/TR/WCAG22/ | Relative luminance and contrast ratio; 4.5:1 for text and 3:1 for large text and graphics (1.4.3, 1.4.11); reflow at 320 CSS px (1.4.10); text alternatives (1.1.1): the palette, and the browser check with its 320 px width (site) |
+| 2026-10-26 | https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/img_role | `role="img"` with `aria-labelledby` on inline SVG, whose children then count as presentational: the alt text of every picture and of the empty recording boxes (site) |
+| 2026-10-26 | https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme ; https://developer.mozilla.org/en-US/docs/Web/CSS/color-scheme | Light and dark themes from the system setting, with no switch and no script; `color-scheme: light dark` and its meta tag for the browser's own controls (site) |
+| 2026-10-26 | https://developer.mozilla.org/en-US/docs/Web/CSS/aspect-ratio ; https://developer.mozilla.org/en-US/docs/Web/SVG/Reference/Attribute/preserveAspectRatio | Boxes sized before their recordings exist; `xMinYMin slice` inside a box that narrows on small screens, so the window picture crops to the sidebar (site) |
+| 2026-10-26 | Chrome DevTools Protocol, https://github.com/ChromeDevTools/devtools-protocol (pdl/domains/Emulation.pdl) | `Emulation.setDeviceMetricsOverride` and `Emulation.setEmulatedMedia` with `prefers-color-scheme`: the browser check of every page at three widths in both themes. The check script is not part of the repository (site) |
 
 ## Third-party code
 
@@ -95,3 +108,12 @@ No third-party code is copied into the repository. These Go modules are compiled
 | golang.org/x/sys | v0.47.0 | BSD-3-Clause | Indirect; Irie's own code imports it from M6 |
 
 `go.sum` also lists modules that only those dependencies' own tests use (github.com/MakeNowJust/heredoc, github.com/aymanbagabas/go-udiff, github.com/charmbracelet/x/exp/golden, golang.org/x/exp and others). They are not compiled into `irie`.
+
+The website in `site/` has no third-party code: no scripts, fonts or stylesheets from elsewhere, and its pictures are drawn for it. The Pages workflow, `.github/workflows/pages.yml`, runs GitHub's own actions on GitHub's runners. Nothing from them is copied into the repository.
+
+| Action | Version | License | Why |
+|---|---|---|---|
+| actions/checkout | v7 | MIT | Pages workflow: fetch the repository |
+| actions/configure-pages | v6 | MIT | Pages workflow: read the Pages settings |
+| actions/upload-pages-artifact | v5 | MIT | Pages workflow: package `site/` |
+| actions/deploy-pages | v5 | MIT | Pages workflow: publish it |
