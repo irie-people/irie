@@ -207,6 +207,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-27 | https://developer.apple.com/documentation/swiftui/view/defaultscrollanchor(_:) ; https://developer.apple.com/documentation/swiftui/scrollviewreader ; https://developer.apple.com/documentation/swiftui/grid ; https://developer.apple.com/documentation/swift/withtaskcancellationhandler(operation:oncancel:isolation:) | A conversation that opens at its newest turn and keeps to it while you are at the bottom; tables in a grid; a subscription read on a detached task that stops when the view follows another session: the conversation view |
 | 2026-10-27 | https://www.conventionalcommits.org/en/v1.0.0/ (CC BY 3.0) | The commit subject rule in AGENTS.md, which `.github/conventional-commit.sh` checks |
 | 2026-10-27 | https://github.com/googleapis/release-please (docs/manifest-releaser.md, docs/customizing.md, schemas/config.json) ; https://github.com/googleapis/release-please-action (README) | `release-please-config.json` (the `go` release type, `initial-version`, tags without a component) and the `x-release-please-version` annotation release-please needs before it can update `Base`; the manifest at 0.0.0, so the first release is 0.1.0 |
+| 2026-10-27 | https://developer.mozilla.org/en-US/docs/Web/CSS/font-family | `ui-rounded`, the system's rounded interface font, is a generic family: unquoted, and followed by fallbacks: the rounded type of the planned themes in `site/themes.html`'s pictures (site) |
 
 ## Third-party code
 

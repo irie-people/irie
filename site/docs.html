@@ -33,34 +33,39 @@
   <h1>Docs</h1>
 
   <figure class="picture small">
-    <svg viewBox="0 0 340 390" role="img" aria-labelledby="docs-title" aria-describedby="docs-desc">
-      <title id="docs-title">The docs as seven stones on a path, from installing Irie to fixing what goes wrong.</title>
-      <desc id="docs-desc">Seven numbered stones run down a line, above two calm waves: 1, Install. 2, Your first session. 3, Tasks, repos and worktrees. 4, Profiles and models. 5, Keys and commands. 6, Recipes. 7, Troubleshooting.</desc>
-      <path d="M26 26V314" class="s-line" stroke-width="2"/>
+    <svg viewBox="0 0 340 438" role="img" aria-labelledby="docs-title" aria-describedby="docs-desc">
+      <title id="docs-title">The docs as eight stones on a path, from installing Irie to fixing what goes wrong.</title>
+      <desc id="docs-desc">Eight numbered stones run down a line, above two calm waves: 1, Install. 2, Your first session. 3, Tasks, repos and worktrees. 4, Profiles and models. 5, Themes, an empty stone because they are planned. 6, Keys and commands. 7, Recipes. 8, Troubleshooting.</desc>
+      <path d="M26 26V362" class="s-line" stroke-width="2"/>
       <g class="s-done">
         <circle cx="26" cy="26" r="16"/><circle cx="26" cy="74" r="16"/><circle cx="26" cy="122" r="16"/>
-        <circle cx="26" cy="170" r="16"/><circle cx="26" cy="218" r="16"/><circle cx="26" cy="266" r="16"/>
-        <circle cx="26" cy="314" r="16"/>
+        <circle cx="26" cy="170" r="16"/><circle cx="26" cy="266" r="16"/><circle cx="26" cy="314" r="16"/>
+        <circle cx="26" cy="362" r="16"/>
       </g>
+      <!-- Themes are planned: an empty stone, as on the roadmap -->
+      <circle cx="26" cy="218" r="15" class="s-bg s-stroke-soft" stroke-width="2"/>
       <g font-size="15" font-weight="750" text-anchor="middle" class="s-done-ink">
         <text x="26" y="31">1</text><text x="26" y="79">2</text><text x="26" y="127">3</text>
-        <text x="26" y="175">4</text><text x="26" y="223">5</text><text x="26" y="271">6</text>
-        <text x="26" y="319">7</text>
+        <text x="26" y="175">4</text><text x="26" y="271">6</text><text x="26" y="319">7</text>
+        <text x="26" y="367">8</text>
       </g>
+      <text x="26" y="223" font-size="15" font-weight="750" text-anchor="middle" class="s-soft">5</text>
       <g font-size="17" font-weight="650" class="s-ink">
         <text x="56" y="32">Install</text>
         <text x="56" y="80">Your first session</text>
         <text x="56" y="128">Tasks, repos and worktrees</text>
         <text x="56" y="176">Profiles and models</text>
-        <text x="56" y="224">Keys and commands</text>
-        <text x="56" y="272">Recipes</text>
-        <text x="56" y="320">Troubleshooting</text>
+        <text x="56" y="224">Themes</text>
+        <text x="56" y="272">Keys and commands</text>
+        <text x="56" y="320">Recipes</text>
+        <text x="56" y="368">Troubleshooting</text>
       </g>
+      <text x="130" y="224" font-size="14" class="s-soft">planned</text>
       <!-- Two calm waves -->
-      <path d="M0 358q17-7.5 34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0" fill="none" class="s-stroke-sea" stroke-width="3" stroke-linecap="round"/>
-      <path d="M-17 374q17-7.5 34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0" fill="none" class="s-stroke-deep-sea" stroke-width="3" stroke-linecap="round"/>
+      <path d="M0 406q17-7.5 34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0" fill="none" class="s-stroke-sea" stroke-width="3" stroke-linecap="round"/>
+      <path d="M-17 422q17-7.5 34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0t34 0" fill="none" class="s-stroke-deep-sea" stroke-width="3" stroke-linecap="round"/>
     </svg>
-    <figcaption>Seven pages, from installing Irie to a merged change. Read them in order, or go straight to the one you need.</figcaption>
+    <figcaption>Eight pages, from installing Irie to a merged change. Read them in order, or go straight to the one you need.</figcaption>
   </figure>
 
   <p>These pages describe Irie as its code is today: milestones 1 to 3 on the <a href="roadmap.html">roadmap</a>. Anything still to come is marked <a class="tag" href="roadmap.html">Planned</a>, and the mark links to its milestone.</p>
@@ -82,6 +87,10 @@
     <li>
       <h2><a href="profiles.html">Profiles and models</a></h2>
       <p>Irie’s settings file, every setting and its default, and <dfn>profiles</dfn>: the recipes that pick an agent and its AI model, on your own computer too.</p>
+    </li>
+    <li class="planned">
+      <h2><a href="themes.html">Themes</a> <span class="tag" data-m="themes">Planned</span></h2>
+      <p>Irie’s three planned colour themes, Rosewater, Terracotta and Lilac, each in light and dark.</p>
     </li>
     <li>
       <h2><a href="keys.html">Keys and commands</a></h2>
