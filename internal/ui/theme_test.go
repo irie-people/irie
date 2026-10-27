@@ -220,7 +220,9 @@ func asksForBackground(cmd tea.Cmd) bool {
 
 // groundOf is the background of the first character of the line under the
 // header: the sidebar's own ground.
-func groundOf(m Model) string { return cells(strings.Split(m.View().Content, "\n")[1])[0].bg }
+func groundOf(m Model) string {
+	return cells(strings.Split(m.View().Content, "\n")[m.headerLines()])[0].bg
+}
 
 func TestTheThemeComesFromTheConfig(t *testing.T) {
 	if got, want := slices.Sorted(maps.Keys(themes)), slices.Sorted(slices.Values(config.Themes)); !reflect.DeepEqual(got, want) {
