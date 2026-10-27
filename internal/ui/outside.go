@@ -274,25 +274,6 @@ func (m *Model) moved(msg movedMsg) {
 	}
 }
 
-// barCommand runs the bar's input when it is a command this version knows,
-// `:move [name]`, and reports whether it was.
-func (m *Model) barCommand() (tea.Cmd, bool) {
-	line := strings.TrimSpace(m.bar.Value())
-	cmd, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
-	if !strings.HasPrefix(line, ":") || cmd != "move" || strings.Contains(line, "\n") {
-		return nil, false
-	}
-	o, err := m.pickOutside(strings.TrimSpace(arg))
-	if err != nil {
-		m.setStatus(err.Error(), true)
-		return nil, true
-	}
-	m.bar.Reset()
-	m.chips = nil
-	m.setFocus(focusList)
-	return m.moveCmd(o), true
-}
-
 // pickOutside finds the outside session that :move names: by its id, short
 // id or name, or the selected one when it names none.
 func (m Model) pickOutside(what string) (ipc.OutsideSession, error) {

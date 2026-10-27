@@ -82,7 +82,13 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, []byt
 	if s.Bin == "" {
 		return nil, nil, nil, errors.New("claude: no irie binary for the hooks")
 	}
-	settings, err := Settings(s.Bin, s.HoldMax, AtLeast(s.Probe.Version, MinVersion))
+	var status *StatusLine
+	if s.StatusLine {
+		user, ok := UserStatusLine(s.Cwd, s.Repo, s.Home, s.Environ)
+		l := statusLine(s.Bin, user, ok)
+		status = &l
+	}
+	settings, err := Settings(s.Bin, s.HoldMax, AtLeast(s.Probe.Version, MinVersion), status)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -143,12 +149,14 @@ type matcherGroup struct {
 }
 
 // Settings returns the settings file that sends every hook of the table to
-// `<bin> hook`. onFailure goes only to a Claude Code that knows it.
-func Settings(bin string, holdMax time.Duration, onFailure bool) ([]byte, error) {
+// `<bin> hook`, and makes status the session's status line when it is set.
+// onFailure goes only to a Claude Code that knows it.
+func Settings(bin string, holdMax time.Duration, onFailure bool, status *StatusLine) ([]byte, error) {
 	command := shellQuote(bin) + " hook"
 	file := struct {
-		Hooks map[string][]matcherGroup `json:"hooks"`
-	}{Hooks: map[string][]matcherGroup{}}
+		Hooks      map[string][]matcherGroup `json:"hooks"`
+		StatusLine *StatusLine               `json:"statusLine,omitempty"`
+	}{Hooks: map[string][]matcherGroup{}, StatusLine: status}
 	for _, h := range hooks {
 		timeout := h.timeout
 		if timeout == 0 {

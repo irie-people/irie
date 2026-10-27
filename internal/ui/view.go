@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-hq/irie/internal/localmodel"
 )
 
 // Irie's colours are the deep green and warm sun of its icon (DESIGN §7.2).
@@ -112,7 +113,35 @@ func (m Model) header() string {
 	case offline:
 		right = styleRed.Render("core offline")
 	case online:
-		right = m.counts(m.width - lipgloss.Width(title) - 2)
+		// Low memory comes first, then the plan's use, then the counts,
+		// each kept only while it fits.
+		w := m.width - lipgloss.Width(title) - 2
+		var extra []string
+		if mem := m.head.Memory; mem != nil && mem.Low {
+			extra = append(extra, styleRed.Render("mem low"))
+		}
+		if p := m.head.Plan; p != nil && p.FiveHour != nil {
+			st := styleDim
+			switch {
+			case p.FiveHour.Used >= 90:
+				st = styleRed
+			case p.FiveHour.Used >= 70:
+				st = lipgloss.NewStyle().Foreground(lipgloss.Yellow)
+			}
+			extra = append(extra, st.Render(fmt.Sprintf("5h%.0f%%", p.FiveHour.Used)))
+		}
+		for len(extra) >= 0 {
+			lead := strings.Join(extra, " ")
+			room := w - lipgloss.Width(lead)
+			if lead != "" {
+				room--
+			}
+			if counts := m.counts(room); counts != "" || len(extra) == 0 {
+				right = strings.TrimSpace(lead + " " + counts)
+				break
+			}
+			extra = extra[:len(extra)-1]
+		}
 	}
 	return title + spaces(m.width-lipgloss.Width(title)-lipgloss.Width(right)-1) + right
 }
@@ -232,8 +261,8 @@ func (m Model) statusLine() string {
 		return m.outsideStatus()
 	}
 	// What the selected row is doing or needs, in plain words, with the call
-	// it is about; else what Irie cannot do for it; then its full name and
-	// directory.
+	// it is about; else what Irie cannot do for it; then what it costs; then
+	// its full name and directory.
 	s := m.sessions[m.sel]
 	var parts []string
 	switch {
@@ -244,6 +273,12 @@ func (m Model) statusLine() string {
 	case len(s.Warnings) > 0:
 		parts = append(parts, s.Warnings[0])
 	}
+	if c := cost(s); c != "" {
+		parts = append(parts, c)
+	}
+	if r := routed(s); r != "" {
+		parts = append(parts, r)
+	}
 	parts = append(parts, s.Name)
 	if s.Cwd != "" {
 		parts = append(parts, m.home2tilde(s.Cwd))
@@ -253,6 +288,42 @@ func (m Model) statusLine() string {
 		st = lipgloss.NewStyle().Foreground(c)
 	}
 	return " " + st.Render(cut(strings.Join(parts, " · "), m.width-2))
+}
+
+// cost is what a session costs: dollars at list price for a cloud model,
+// "local" for a local one, then how full its context is and what its
+// processes take in memory, such as "$1.23 ctx 41% 640 MB".
+func cost(s ipc.Session) string {
+	var parts []string
+	switch {
+	case s.Local:
+		parts = append(parts, "local")
+	case s.CostUSD != nil:
+		parts = append(parts, fmt.Sprintf("$%.2f", *s.CostUSD))
+	}
+	if s.Context != nil {
+		parts = append(parts, fmt.Sprintf("ctx %.0f%%", *s.Context))
+	}
+	if s.Memory > 0 {
+		parts = append(parts, localmodel.Bytes(s.Memory))
+	}
+	return strings.Join(parts, " ")
+}
+
+// routed says how a session was routed and rated (DESIGN §6.4): "small→local",
+// "↳ delegated", "rated good".
+func routed(s ipc.Session) string {
+	var parts []string
+	if s.Routed && s.Class != "" {
+		parts = append(parts, s.Class+"→"+s.Profile)
+	}
+	if s.Parent != "" {
+		parts = append(parts, "↳ delegated")
+	}
+	if s.Rated != "" {
+		parts = append(parts, "rated "+s.Rated)
+	}
+	return strings.Join(parts, " ")
 }
 
 func (m Model) View() tea.View {

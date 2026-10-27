@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -446,9 +447,14 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 	if fi, err := os.Stat(settings); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("settings file: %v", err)
 	}
-	// M2 has nothing to say back, so every reply is empty.
+	// Irie says nothing back, but for the delegation note when the session
+	// starts (DESIGN §6.4).
 	for _, r := range log {
-		if r["t"] == "hook" && (r["exit"] != 0.0 || r["stdout"] != "") {
+		if r["t"] != "hook" {
+			continue
+		}
+		hint := r["event"] == "SessionStart" && strings.Contains(fmt.Sprint(r["stdout"]), "ctl delegate")
+		if r["exit"] != 0.0 || r["stdout"] != "" && !hint {
 			t.Errorf("hook reply %v", r)
 		}
 	}

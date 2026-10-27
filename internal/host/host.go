@@ -34,6 +34,8 @@ type Spec struct {
 	Branch   string            `json:"branch,omitempty"`
 	Copied   []string          `json:"copied,omitempty"` // local files copied into the worktree
 	Paste    bool              `json:"paste,omitempty"`  // the core pastes the task into the terminal once the agent runs
+	Model    string            `json:"model,omitempty"`  // the model the agent runs
+	Local    bool              `json:"local,omitempty"`  // a model of a local runtime
 }
 
 // Exit is exit.json, written when the agent exits.
