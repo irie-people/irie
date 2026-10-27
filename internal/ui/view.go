@@ -114,20 +114,27 @@ func needsYou(s ipc.Session) bool {
 
 func spaces(n int) string { return strings.Repeat(" ", max(0, n)) }
 
+// tagline is the catch phrase in the title bar.
+const tagline = "you've got this 🌴"
+
+// header is the title bar: a band of the palette's ground, a shade deeper
+// than the sidebar's, with the name, the tagline when it fits, and the
+// state counts on the right.
 func (m Model) header() string {
 	p := m.pal
-	title := blank(p.sidebar, 1) + m.text(p.sun).Render("☀") + m.text(p.accentInk).Bold(true).Render(" Irie")
+	band := func(fg color.Color) lipgloss.Style { return on(p.ground, fg) }
+	title := blank(p.ground, 1) + band(p.sun).Render("☀") + band(p.accentInk).Bold(true).Render(" Irie")
 	right := ""
 	switch m.conn {
 	case offline:
-		right = m.text(p.needs).Render("core offline")
+		right = band(p.needs).Render("core offline")
 	case online:
 		// Low memory comes first, then the plan's use, then the counts,
 		// each kept only while it fits.
 		w := m.width - lipgloss.Width(title) - 2
 		var extra []string
 		if mem := m.head.Memory; mem != nil && mem.Low {
-			extra = append(extra, m.text(p.needs).Render("mem low"))
+			extra = append(extra, band(p.needs).Render("mem low"))
 		}
 		if pl := m.head.Plan; pl != nil && pl.FiveHour != nil {
 			c := p.muted
@@ -137,10 +144,10 @@ func (m Model) header() string {
 			case pl.FiveHour.Used >= 70:
 				c = p.paused
 			}
-			extra = append(extra, m.text(c).Render(fmt.Sprintf("5h%.0f%%", pl.FiveHour.Used)))
+			extra = append(extra, band(c).Render(fmt.Sprintf("5h%.0f%%", pl.FiveHour.Used)))
 		}
 		for {
-			lead := strings.Join(extra, blank(p.sidebar, 1))
+			lead := strings.Join(extra, blank(p.ground, 1))
 			room := w - lipgloss.Width(lead)
 			if lead != "" {
 				room--
@@ -148,7 +155,7 @@ func (m Model) header() string {
 			if counts := m.counts(room); counts != "" || len(extra) == 0 {
 				right = lead
 				if lead != "" && counts != "" {
-					right += blank(p.sidebar, 1)
+					right += blank(p.ground, 1)
 				}
 				right += counts
 				break
@@ -156,7 +163,11 @@ func (m Model) header() string {
 			extra = extra[:len(extra)-1]
 		}
 	}
-	return title + blank(p.sidebar, m.width-lipgloss.Width(title)-lipgloss.Width(right)-1) + right
+	left := title
+	if phrase := "   " + tagline; lipgloss.Width(title)+lipgloss.Width(phrase)+lipgloss.Width(right)+2 <= m.width {
+		left += band(p.muted).Render(phrase)
+	}
+	return left + blank(p.ground, m.width-lipgloss.Width(left)-lipgloss.Width(right)-1) + right + blank(p.ground, 1)
 }
 
 // counts renders the state counts in at most w columns, in DESIGN §4.1's
@@ -203,11 +214,11 @@ func (m Model) counts(w int) string {
 			if x.n == 0 {
 				c = p.muted
 			}
-			parts = append(parts, m.text(c).Render(text))
+			parts = append(parts, on(p.ground, c).Render(text))
 		}
-		sep := blank(p.sidebar, 1)
+		sep := blank(p.ground, 1)
 		if long {
-			sep = blank(p.sidebar, 2)
+			sep = blank(p.ground, 2)
 		}
 		if line := strings.Join(parts, sep); lipgloss.Width(line) <= w {
 			return line
@@ -243,7 +254,7 @@ func (m Model) statusLine() string {
 	}
 	// What the selected row is doing or needs, in plain words, with the call
 	// it is about; else what Irie cannot do for it; then what it costs; then
-	// its full name and directory.
+	// its full name on the left and its directory right-aligned.
 	s := m.sessions[it.s]
 	var parts []string
 	switch {
@@ -261,14 +272,23 @@ func (m Model) statusLine() string {
 		parts = append(parts, r)
 	}
 	parts = append(parts, s.Name)
-	if s.Cwd != "" {
-		parts = append(parts, m.home2tilde(s.Cwd))
-	}
 	c := p.muted
 	if l := m.look(s); l.loud {
 		c = l.name
 	}
-	return blank(p.sidebar, 1) + m.text(c).Render(cut(strings.Join(parts, " · "), m.width-2))
+	w := m.width - 2
+	left := strings.Join(parts, " · ")
+	dir := ""
+	if s.Cwd != "" {
+		dir = m.home2tilde(s.Cwd)
+	}
+	// The directory is dropped when it would leave the left column under a
+	// third of the line.
+	if dir == "" || w-lipgloss.Width(dir)-2 < w/3 {
+		return blank(p.sidebar, 1) + m.text(c).Render(cut(left, w))
+	}
+	left = cut(left, w-lipgloss.Width(dir)-2)
+	return blank(p.sidebar, 1) + m.text(c).Render(left) + blank(p.sidebar, w-lipgloss.Width(left)-lipgloss.Width(dir)) + m.text(p.muted).Render(dir)
 }
 
 // cost is what a session costs: dollars at list price for a cloud model,

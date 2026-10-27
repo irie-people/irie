@@ -36,14 +36,24 @@ type fakeBackend struct {
 	moves     []string            // the vendor ids Move was given
 	moveErr   error
 	rates     []string // id verdict
+	renames   []string // id name
 	tools     []string
 	routes    []string
 	choice    route.Choice // what Route returns
+	closes    []string     // the ids Close was given
+	reopens   []string     // the ids Reopen was given
+	reopenErr error
 }
 
 func (f *fakeBackend) Rate(id, verdict string) error {
 	f.rates = append(f.rates, id+" "+verdict)
 	return nil
+}
+
+// Rename numbers the name, as the core does when another row has it.
+func (f *fakeBackend) Rename(id, name string) (ipc.Session, error) {
+	f.renames = append(f.renames, id+" "+name)
+	return ipc.Session{ID: id, Name: name + "-2"}, nil
 }
 
 func (f *fakeBackend) Tool(name string) (ipc.Session, error) {
@@ -1532,6 +1542,45 @@ func TestPlusAndMinusRateTheSelectedRow(t *testing.T) {
 	}
 	if !strings.Contains(m.status, "the router learns from it") {
 		t.Errorf("status = %q", m.status)
+	}
+}
+
+// r puts the selected row's name in the command bar, to edit: Enter renames
+// that row, Esc leaves it as it was.
+func TestRRenamesTheSelectedRow(t *testing.T) {
+	m, b := newModel(t, 60, 24, 3)
+	m = send(m, keyMsg("esc"))
+	m = selectNamed(t, m, "task-001")
+	m = send(m, keyMsg("r"))
+	if m.focus != focusBar || m.bar.Value() != ":rename task-001" {
+		t.Fatalf("after r: focus %v, bar %q", m.focus, m.bar.Value())
+	}
+	m = send(m, keyMsg("esc"))
+	if len(b.renames) != 0 || m.focus != focusList || m.bar.Value() != "" {
+		t.Errorf("Esc: renames %v, focus %v, bar %q", b.renames, m.focus, m.bar.Value())
+	}
+	m = send(m, keyMsg("r"))
+	for range len("task-001") {
+		m = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	m = typeText(m, "Fix the login")
+	m = send(m, keyMsg("enter"))
+	if want := []string{m.sessions[1].ID + " Fix the login"}; !reflect.DeepEqual(b.renames, want) {
+		t.Errorf("renames = %v, want %v", b.renames, want)
+	}
+	if m.focus != focusList || m.bar.Value() != "" || m.status != "renamed task-001 to Fix the login-2" {
+		t.Errorf("after Enter: focus %v, bar %q, status %q", m.focus, m.bar.Value(), m.status)
+	}
+	if len(b.spawns) != 0 {
+		t.Errorf("a rename spawned a task: %+v", b.spawns)
+	}
+
+	// Outside Irie's rows keep the name Claude Code gives them.
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameOutside, Outside: outsideSessions(1)}})
+	m.sel = m.rowCount() - 1
+	m = send(m, keyMsg("r"))
+	if m.focus != focusList || !m.statusErr {
+		t.Errorf("r on an outside row: focus %v, status %q", m.focus, m.status)
 	}
 }
 

@@ -77,7 +77,7 @@ func TestPalettesMeetWCAG(t *testing.T) {
 			surfaces := []struct {
 				name string
 				c    color.Color
-			}{{"sidebar", p.sidebar}, {"card", p.card}, {"panel", p.panel}, {"field", p.field}, {"hover", p.hover}, {"selection", p.selection}, {"needsTint", p.needsTint}}
+			}{{"sidebar", p.sidebar}, {"card", p.card}, {"panel", p.panel}, {"field", p.field}, {"hover", p.hover}, {"selection", p.selection}, {"needsTint", p.needsTint}, {"ground", p.ground}}
 			texts := []struct {
 				name string
 				c    color.Color
@@ -90,8 +90,8 @@ func TestPalettesMeetWCAG(t *testing.T) {
 			}
 		}
 	}
-	if len(table) != len(config.Themes)*2*7*8 {
-		t.Fatalf("%d pairs, want %d", len(table), len(config.Themes)*2*7*8)
+	if len(table) != len(config.Themes)*2*8*8 {
+		t.Fatalf("%d pairs, want %d", len(table), len(config.Themes)*2*8*8)
 	}
 	for _, c := range table {
 		if got := contrast(c.fg, c.bg); got < c.min {
@@ -218,8 +218,9 @@ func asksForBackground(cmd tea.Cmd) bool {
 	return false
 }
 
-// groundOf is the background of the first character on screen.
-func groundOf(m Model) string { return cells(strings.Split(m.View().Content, "\n")[0])[0].bg }
+// groundOf is the background of the first character of the line under the
+// header: the sidebar's own ground.
+func groundOf(m Model) string { return cells(strings.Split(m.View().Content, "\n")[1])[0].bg }
 
 func TestTheThemeComesFromTheConfig(t *testing.T) {
 	if got, want := slices.Sorted(maps.Keys(themes)), slices.Sorted(slices.Values(config.Themes)); !reflect.DeepEqual(got, want) {
@@ -293,7 +294,7 @@ func painted(t *testing.T, name string, m Model) {
 	t.Helper()
 	p := m.pal
 	surfaces := map[string]bool{}
-	for _, c := range []color.Color{p.sidebar, p.card, p.panel, p.field, p.hover, p.selection, p.needsTint} {
+	for _, c := range []color.Color{p.sidebar, p.card, p.panel, p.field, p.hover, p.selection, p.needsTint, p.ground} {
 		surfaces[rgb(c)] = true
 	}
 	lines := strings.Split(m.View().Content, "\n")

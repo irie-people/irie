@@ -199,6 +199,12 @@ func (c *Core) spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	case a.Delegate:
 		profile.PermissionMode = c.cfg.Route.DelegateMode
 	}
+	if a.Model != "" {
+		if profile.Harness != "claude-code" || profile.Local != nil {
+			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "+%s takes no model for one task: pick a Claude Code profile, or +%s<model> for a local model", profileName, localPrefix)
+		}
+		profile.Model = a.Model
+	}
 	// A local profile's model is checked, and may be loaded, before
 	// anything else; like probing, it happens before taking the lock.
 	var warnings []string
@@ -285,6 +291,7 @@ type job struct {
 	task    string         // the task; empty when the job resumes
 	resume  string         // the vendor id of the conversation to carry on
 	data    map[string]any // more data for spawn.requested
+	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
 }
 
 // launch writes the session's files, creates its window and records the
@@ -293,9 +300,12 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := c.refresh(); err != nil {
 		return nil, err
 	}
-	id := newID(time.Now())
+	id, created := newID(time.Now()), time.Now().UTC().Truncate(time.Millisecond)
 	for c.sessions[id] != nil {
 		id = newID(time.Now())
+	}
+	if j.reopen != nil {
+		id, created = j.reopen.ID, j.reopen.Created
 	}
 	// A resumed conversation keeps its id; a new one gets its id from Irie.
 	vendorID := j.resume
@@ -304,7 +314,7 @@ func (c *Core) launch(j job) (*session, error) {
 	}
 	pl, h, profile := j.place, j.h, j.run
 	x := &session{
-		id: id, name: pl.name, agent: "main", created: time.Now().UTC().Truncate(time.Millisecond),
+		id: id, name: pl.name, agent: "main", created: created,
 		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
 		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
 		vendorID: vendorID, warnings: append(slices.Clone(pl.warnings), j.probe.Warnings...),
@@ -376,7 +386,9 @@ func (c *Core) launch(j job) (*session, error) {
 		opt(tmux.OptCreated, x.created.Format(time.RFC3339Nano)),
 		opt(tmux.OptVendorID, x.vendorID),
 		append([]string{"resize-window", "-t", target}, size...),
-		{"rename-window", "-t", target, x.name},
+		// A name given by rename or carried in by move is any text, which
+		// tmux would expand as a format.
+		{"rename-window", "-t", target, "--", tmux.Literal(x.name)},
 	})
 	if err != nil {
 		c.tmux.Run("kill-window", "-t", target)

@@ -11,6 +11,10 @@ enum Launch {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { Snapshot.run(into: dir) }
         }
+        if let i = args.firstIndex(of: "--render-conversation") {
+            let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
+            MainActor.assumeIsolated { ConversationSnapshot.run(into: dir) }
+        }
         IrieApp.main()
     }
 }
@@ -18,6 +22,7 @@ enum Launch {
 struct IrieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     /// The compact title bar: one short row for the traffic lights, the
     /// sidebar's counts and the shown session's name. The scene's
@@ -36,8 +41,22 @@ struct IrieApp: App {
         .commands {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
-                Button("New Task") { NotificationCenter.default.post(name: .irieNewTask, object: nil) }
+                Button("New Task…") { store.newTaskSheet = true }
                     .keyboardShortcut("n")
+                Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
+                    .keyboardShortcut("n", modifiers: [.command, .option])
+                Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
+                    .disabled(store.selection == nil || store.outsideSelection != nil)
+            }
+            // Sessions close like tabs (Closing.swift). KeyRouter catches ⌘W
+            // first; the window's own Close moves to ⇧⌘W.
+            CommandGroup(after: .newItem) {
+                Button("Close Session") { if let s = store.closable { store.close(s) } }
+                    .keyboardShortcut("w")
+                    .disabled(store.closable == nil)
+                Button("Reopen Closed Session") { store.reopenLast() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                    .disabled(store.closed.isEmpty)
             }
             // KeyRouter catches Ctrl+Tab and Ctrl+] first; the menu shows them.
             CommandMenu("Go") {
@@ -57,12 +76,20 @@ struct IrieApp: App {
                     .keyboardShortcut("f")
             }
             CommandGroup(after: .toolbar) {
+                Picker("Theme", selection: $theme) {
+                    ForEach(Palette.all) { p in Text(p.name).tag(p.id) }
+                }
+                Divider()
                 Button("Bigger Text") { store.setFontSize(store.fontSize + 1) }
                     .keyboardShortcut("=")
                 Button("Smaller Text") { store.setFontSize(store.fontSize - 1) }
                     .keyboardShortcut("-")
                 Button("Actual Size") { store.setFontSize(Store.defaultFontSize) }
                     .keyboardShortcut("0")
+                Divider()
+                // The conversation, or the live terminal on the right.
+                Toggle("Terminal", isOn: $store.showTerminal)
+                    .keyboardShortcut("t", modifiers: [.command, .option])
             }
         }
     }
@@ -80,12 +107,29 @@ final class KeyRouter {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak store] event in
             guard let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            if event.keyCode == 48, mods == .control || mods == [.control, .shift] { // Tab
+            if event.keyCode == 48, mods == .control || mods == [.control, .shift], // Tab
+               event.window === NSApp.mainWindow {
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
             }
             if mods == .control, event.charactersIgnoringModifiers == "]" {
                 MainActor.assumeIsolated { store.toggleFocus() }
+                return nil
+            }
+            // In Irie's window ⌘W closes the selected session and ⇧⌘W the
+            // window, even while the terminal has the keyboard. Other
+            // windows, such as About, keep ⌘W.
+            if event.charactersIgnoringModifiers?.lowercased() == "w", mods == .command || mods == [.command, .shift],
+               let window = event.window, window === NSApp.mainWindow {
+                MainActor.assumeIsolated {
+                    if mods.contains(.shift) {
+                        window.performClose(nil)
+                    } else if let s = store.closable {
+                        store.close(s)
+                    } else {
+                        NSSound.beep()
+                    }
+                }
                 return nil
             }
             return event
@@ -94,27 +138,36 @@ final class KeyRouter {
 }
 
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
-/// it quits with its window.
+/// it quits with its window. `--background`, which `tools/live.sh` passes when
+/// it relaunches the app, leaves the focus where it is.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        if !CommandLine.arguments.contains("--background") {
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }
 }
 
 extension Notification.Name {
-    static let irieNewTask = Notification.Name("irieNewTask")
+    /// Gives the task bar the keyboard.
+    static let irieQuickTask = Notification.Name("irieQuickTask")
 }
 
 struct ContentView: View {
     @EnvironmentObject private var store: Store
     @State private var keys = KeyRouter()
+    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     var body: some View {
         NavigationSplitView {
+            // A new palette draws the sidebar afresh. The terminal area
+            // follows the palette itself, so its terminal stays attached.
+            let _ = Theme.use(theme)
             SidebarView()
+                .id(theme)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
@@ -126,7 +179,13 @@ struct ContentView: View {
                     }
                 }
         }
-        .tint(Theme.deepGreen)
-        .onAppear { keys.install(store) }
+        .tint(Theme.accent)
+        .sheet(isPresented: $store.newTaskSheet) {
+            NewTaskSheet().environmentObject(store)
+        }
+        .onAppear {
+            keys.install(store)
+            WindowCloseItem.install()
+        }
     }
 }
