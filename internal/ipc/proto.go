@@ -48,6 +48,9 @@ const (
 	OpReopen = "reopen"
 )
 
+// FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
+const FeatureSpawnModel = "spawn-model"
+
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
 const ViewApp = "app"
@@ -252,6 +255,11 @@ type SpawnArgs struct {
 	Delegate       bool   `json:"delegate,omitempty"`
 	Parent         string `json:"parent,omitempty"`
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// Model runs this task on a model other than its profile's: an alias
+	// such as opus or sonnet, or a model's full name. Only a Claude Code
+	// profile takes it; a local model has its own +ollama: profile. The
+	// Mac app's new-task sheet sends it (docs/MAC.md).
+	Model string `json:"model,omitempty"`
 	// Continues is the session a failover carries the task on from.
 	Continues string `json:"continues,omitempty"`
 }

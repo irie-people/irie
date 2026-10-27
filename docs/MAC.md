@@ -19,7 +19,7 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 - **Tokens per session.** Each card shows the session's token count, and the panel splits it into input, output, cache read and cache write. The core reads each row's `tokens` from the session's transcript and its finished subagents' transcripts. It counts each reply once, because a reply spans several lines that all repeat its usage.
 - **Accessibility.** VoiceOver reads each card as one element: name, state, what it needs or does, when it started ("started 3 minutes ago") and its tokens. The card's actions offer what the hover buttons and the right-click menu do. Notices are announced, and errors stay until the next notice or until you edit or submit. Text colours keep 4.5:1 contrast, with stronger ones for Increase Contrast. The selected card shows a full fill and sun edge while the list has the keyboard, and a faint one otherwise.
 - **The shown agent's live terminal** on the right, in a rounded frame edged in that session's colour, or sun while it is quiet. The edge brightens while the terminal has the keyboard. Selecting a row swaps that agent in, and Return (or **Type to it**) moves the keyboard there.
-- **A task bar** at the foot of the sidebar, always three lines tall; longer text scrolls inside it. It takes the same `@repo`, `@repo!` and `+profile` words as the terminal sidebar (DESIGN §4.2). It keeps the keyboard while a task starts; once the task has started, the app shows the new agent and gives its terminal the keyboard. Notices float above it rather than pushing the list.
+- **A task bar** at the foot of the sidebar, always three lines tall; longer text scrolls inside it. Beside the text, a menu picks where a task runs: a repo the `@` words know (a new worktree of it), a folder chosen with **Choose a Folder…**, or **Not in a repo** (a new scratch folder). The app keeps the choice. The bar takes the same `@repo`, `@repo!` and `+profile` words as the terminal sidebar (DESIGN §4.2), and an `@repo` in the text wins over the menu, which then shows it. It keeps the keyboard while a task starts; once the task has started, the app shows the new agent and gives its terminal the keyboard. Notices float above it rather than pushing the list.
 - **Three palettes**, in View > Theme (`Theme.swift`):
   - **Rosewater**, the default: blush and cream, rose accents, plum ink.
   - **Terracotta**: oat and peach, terracotta accents, cocoa-plum ink.
@@ -64,7 +64,8 @@ The **File**, **Go**, **View** and **Edit** menus list them all.
 | ⌘1 to ⌘9 | Show the first to ninth session in the sidebar's order |
 | ⌘F | Find a session. Esc clears the search and goes back to the list |
 | ⌃⌘S | Hide or show the sidebar |
-| ⌘N | New task |
+| ⌘N | New task: a sheet with the repo, whether the task gets its own worktree, the agent (every `+` profile, auto routing and the local models, each with what it runs and costs), the model, and the text. A model applies to a Claude Code profile: its own, or the latest Fable, Opus or Sonnet. The `@repo` and `+agent` words in the text win over the menus. ⌘Return starts it, and the repo chosen becomes the task bar's |
+| ⌥⌘N | Type a task in the task bar |
 | ⌘W | Close the selected session, even while the terminal has the keyboard. The app catches it first |
 | ⇧⌘T | Reopen the session closed last |
 | ⇧⌘W | Close the window. Agents keep running, and the app quits with it |
