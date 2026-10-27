@@ -136,11 +136,14 @@ private struct SessionCard: View {
                 if renaming {
                     RenameField(session: session)
                 } else {
-                    Text(session.name)
-                        .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
-                        .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 4) {
+                        Text(session.name)
+                            .font(Theme.font(13.5, look.quiet ? .semibold : .bold))
+                            .foregroundStyle(look.quiet ? Theme.muted : Theme.ink)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if session.isPromoted { PromotedBadge() }
+                    }
                 }
                 Text(status)
                     .font(Theme.font(12, look.loud ? .semibold : .regular))
@@ -173,6 +176,7 @@ private struct SessionCard: View {
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
         // A double click opens the name to edit; its first click showed it.
         .simultaneousGesture(TapGesture(count: 2).onEnded { store.beginRename(session.id) })
+        .modifier(Reorderable(session: session))
         .contextMenu { Actions(session: session) }
         .help([session.name, session.detail, session.command].compactMap { $0 }.joined(separator: "\n"))
         // While the name is open to edit, VoiceOver reaches the field.
@@ -181,6 +185,10 @@ private struct SessionCard: View {
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { store.show(session.id, focus: true) }
         .accessibilityActions {
+            Button(session.isFrozen ? "Resume" : "Pause") { store.setFrozen(session, !session.isFrozen) }
+            Button(session.isPromoted ? "Stop promoting" : "Promote to the top") { store.setPromoted(session, !session.isPromoted) }
+            if store.canMove(session, by: -1) { Button("Move up") { store.move(session, by: -1) } }
+            if store.canMove(session, by: 1) { Button("Move down") { store.move(session, by: 1) } }
             Button("Rename") { store.beginRename(session.id) }
             if let cwd = session.cwd {
                 Button("Show the folder in Finder") { store.reveal(cwd) }
@@ -202,6 +210,7 @@ private struct SessionCard: View {
     private var status: String {
         switch look {
         case .starting: return "Starting…"
+        case .frozen where session.freezing == true: return "Freezing…"
         case .done, .idle, .frozen, .paused, .pausing: return look.label
         default: return session.detail ?? look.label
         }
@@ -389,11 +398,9 @@ private struct QuickActions: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Button { store.show(session.id, focus: true) } label: { Image(systemName: "keyboard").frame(width: 20, height: 18) }
-                .help("Type to it")
-            Button { if let cwd = session.cwd { store.reveal(cwd) } } label: { Image(systemName: "folder").frame(width: 20, height: 18) }
-                .help("Show the folder in Finder")
-                .disabled(session.cwd == nil)
+            // A click on the card types to it; the folder is in the menu.
+            PauseButton(session: session)
+            PromoteButton(session: session)
             Menu {
                 Actions(session: session)
             } label: {
@@ -470,6 +477,7 @@ private struct DetailsPanel: View {
             }
             .controlSize(.small)
             line(s.detail, color: look.loud ? Theme.needs : Theme.ink)
+            ControlLines(session: s)
             line(s.command, mono: true)
             line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true)
             line(s.cwd.map(Age.tilde), mono: true)
@@ -516,6 +524,8 @@ private struct Actions: View {
             store.openInGhostty()
         }
         Button("Rename…") { store.beginRename(session.id) }
+        Divider()
+        ControlItems(session: session)
         Divider()
         if let cwd = session.cwd {
             Button("Show Folder in Finder") { store.reveal(cwd) }
