@@ -89,7 +89,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, []byt
 		l := statusLine(s.Bin, user, ok)
 		status = &l
 	}
-	settings, err := Settings(s.Bin, s.HoldMax, AtLeast(s.Probe.Version, MinVersion), status)
+	settings, err := Settings(s.Bin, s.HoldMax, AtLeast(s.Probe.Version, MinVersion), status, s.Teams)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -151,13 +151,19 @@ type matcherGroup struct {
 
 // Settings returns the settings file that sends every hook of the table to
 // `<bin> hook`, and makes status the session's status line when it is set.
-// onFailure goes only to a Claude Code that knows it.
-func Settings(bin string, holdMax time.Duration, onFailure bool, status *StatusLine) ([]byte, error) {
+// onFailure goes only to a Claude Code that knows it. With teams, agent
+// teams open their teammates in tmux panes, which the shim on the agent's
+// PATH takes to Irie's team server.
+func Settings(bin string, holdMax time.Duration, onFailure bool, status *StatusLine, teams bool) ([]byte, error) {
 	command := shellQuote(bin) + " hook"
 	file := struct {
-		Hooks      map[string][]matcherGroup `json:"hooks"`
-		StatusLine *StatusLine               `json:"statusLine,omitempty"`
+		Hooks        map[string][]matcherGroup `json:"hooks"`
+		StatusLine   *StatusLine               `json:"statusLine,omitempty"`
+		TeammateMode string                    `json:"teammateMode,omitempty"`
 	}{Hooks: map[string][]matcherGroup{}, StatusLine: status}
+	if teams {
+		file.TeammateMode = "tmux"
+	}
 	for _, h := range hooks {
 		timeout := h.timeout
 		if timeout == 0 {

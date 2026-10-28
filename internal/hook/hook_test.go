@@ -215,6 +215,52 @@ func TestAFrozenSessionsToolCallWaitsForTheThaw(t *testing.T) {
 	}
 }
 
+func TestATeammateWaitsWhileItsSessionIsFrozen(t *testing.T) {
+	// A teammate runs Irie's hooks with no session of its own: it tells the
+	// core nothing, and its tool calls wait while the session it works for
+	// is frozen.
+	defer func(d time.Duration) { holdPoll = d }(holdPoll)
+	holdPoll = 10 * time.Millisecond
+	state := t.TempDir()
+	dir := filepath.Join(state, "irie", "sessions", session)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	freeze := filepath.Join(dir, "freeze.json")
+	if err := os.WriteFile(freeze, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := &core{got: make(chan ipc.HookArgs, 4), reply: ipc.HookResult{Context: "[Irie] noted"}}
+	vars := env(map[string]string{"IRIE_SOCKET": serve(t, c), "IRIE_TEAM_OF": session, "HOME": "/home/alice", "XDG_STATE_HOME": state})
+	var out bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		Run(strings.NewReader(preToolUse), &out, vars)
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatal("the teammate's call went through while its session is frozen")
+	case <-time.After(200 * time.Millisecond):
+	}
+	os.Remove(freeze)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the teammate's call still waits after the thaw")
+	}
+	if out.Len() != 0 || len(c.got) != 0 {
+		t.Errorf("a teammate's hook printed %q and called the core %d times", out.String(), len(c.got))
+	}
+	// A name that is not a session's waits for nothing.
+	bad := env(map[string]string{"IRIE_TEAM_OF": "../../etc", "HOME": "/home/alice", "XDG_STATE_HOME": state})
+	start := time.Now()
+	Run(strings.NewReader(preToolUse), &bytes.Buffer{}, bad)
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("a bad IRIE_TEAM_OF waited %v", d)
+	}
+}
+
 func TestFailsOpen(t *testing.T) {
 	defer func(d time.Duration) { replyTimeout = d }(replyTimeout)
 	replyTimeout = 300 * time.Millisecond

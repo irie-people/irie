@@ -90,8 +90,12 @@ final class Store: ObservableObject {
         didSet {
             UserDefaults.standard.set(showTerminal, forKey: "showTerminal")
             if showTerminal { focusTerminal += 1 } else { focusMessage += 1 }
+            keepSplit()
         }
     }
+    /// The session the core shows beside its teammates, as last asked
+    /// (TeamSplit.swift); nil while the slot shows the picked session.
+    @Published private(set) var splitShown: String?
     /// Bumped when the conversation's message box should take the keyboard.
     @Published var focusMessage = 0
     /// Whether the message box has the keyboard.
@@ -154,6 +158,8 @@ final class Store: ObservableObject {
                 }
                 attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
                 link = .online(version: hello.version)
+                // A core that restarted asks again.
+                splitShown = nil
                 canPickModel = hello.features.contains("spawn-model")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
@@ -230,6 +236,28 @@ final class Store: ObservableObject {
         }
         if let sel = selection, !sessions.contains(where: { $0.id == sel }) {
             selection = nil
+        }
+        keepSplit()
+    }
+
+    /// The picked session while it shows beside its teammates: the terminal
+    /// shows, and it has teammates the app can reach.
+    var splitSession: Session? {
+        guard showTerminal, outsideSelection == nil, let id = selection, attach?.teams != nil || isFixture,
+              let s = sessions.first(where: { $0.id == id }), !(s.team ?? []).isEmpty else { return nil }
+        return s
+    }
+
+    /// Asks the core again for the picked session when it starts or stops
+    /// showing beside its teammates.
+    private func keepSplit() {
+        guard !isFixture else { return }
+        let want = splitSession?.id
+        guard want != splitShown else { return }
+        if let id = selection, outsideSelection == nil {
+            show(id)
+        } else {
+            splitShown = nil
         }
     }
 
@@ -446,6 +474,12 @@ final class Store: ObservableObject {
         if showTerminal { showTerminal = false }
     }
 
+    /// Shows a session's terminal beside its teammates'.
+    func showTeam(_ session: String) {
+        if !showTerminal { showTerminal = true }
+        show(session, focus: true)
+    }
+
     /// Puts a session's conversation back on its own.
     func closeHelper(in session: String) {
         if let a = openHelpers[session] { lastHelpers[session] = a }
@@ -502,7 +536,9 @@ final class Store: ObservableObject {
             while let next = wanted {
                 wanted = nil
                 do {
-                    _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus), as: Empty.self)
+                    let split = splitSession?.id == next.id
+                    splitShown = split ? next.id : nil
+                    _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus, split: split), as: Empty.self)
                     // The conversation's message box, or the terminal when it
                     // shows; a name open to edit, after a double click's first
                     // click, keeps the keyboard.

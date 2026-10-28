@@ -13,6 +13,10 @@ type Want struct {
 	SidebarWidth int
 	Version      string // recorded on the sidebar and placeholder panes Plan starts
 	Zoom         bool   // the slot fills irie:0, for the Mac app (docs/MAC.md)
+	// Split is the agent pane the Mac app shows beside its teammates, or
+	// "". Its window is linked into the view session, where it follows
+	// the size of the app's client, and the slot shows something else.
+	Split string
 }
 
 func (w Want) ui() []string          { return []string{w.Bin, "ui", "--supervise"} }
@@ -33,7 +37,10 @@ func isAgentPane(p Pane) bool { return p.Role == RoleAgent || p.Role == RoleMirr
 //   - every agent pane is either in the slot or alone in its own window;
 //   - the slot is zoomed exactly when Zoom is set;
 //   - the sidebar is SidebarWidth wide, unless the slot is zoomed;
-//   - every agent window has the slot's size.
+//   - with a Split, the view session holds its window and no other agent's,
+//     and that window follows the view's size; with none, there is no view
+//     session;
+//   - every agent window but the Split's has the slot's size.
 //
 // Plan never kills an agent pane.
 func Plan(s Snapshot, w Want) [][]string {
@@ -155,18 +162,22 @@ func Plan(s Snapshot, w Want) [][]string {
 		return [][]string{{"resize-pane", "-Z", "-t", Slot}}
 	}
 
+	split, cmds := planView(s, w, slot)
+	if cmds != nil {
+		return cmds
+	}
+
 	// Sizes. A zoomed slot is the window's size, so the sidebar keeps its
 	// width for when the zoom ends.
 	if !slot.Zoomed && ui.Width != w.SidebarWidth && ui.WindowWidth > w.SidebarWidth+2 {
 		return [][]string{{"resize-pane", "-t", ui.ID, "-x", strconv.Itoa(w.SidebarWidth)}}
 	}
-	var cmds [][]string
 	seen := map[string]bool{}
 	for _, p := range s.Panes {
 		if slot.Width < 1 || slot.Height < 1 {
 			break
 		}
-		if p.Session != AgentsSession || (!isAgentPane(p) && p.Role != RolePlaceholder) || seen[p.WindowID] {
+		if p.Session != AgentsSession || (!isAgentPane(p) && p.Role != RolePlaceholder) || seen[p.WindowID] || p.WindowID == split {
 			continue
 		}
 		seen[p.WindowID] = true
@@ -175,6 +186,61 @@ func Plan(s Snapshot, w Want) [][]string {
 		}
 	}
 	return cmds
+}
+
+// planView keeps the view session for w.Split and returns the split
+// pane's window, or the first commands that repair it. The split pane
+// leaves the slot, and the view session links its window from irie-agents
+// alone, as its current window, sized by the view's client. The view
+// session's own first window is a dead pane, so the session outlives the
+// windows it links. With no split, the view session goes; that only
+// unlinks the window it held.
+func planView(s Snapshot, w Want, slot Pane) (string, [][]string) {
+	var lead *Pane
+	if p := s.Pane(w.Split); w.Split != "" && p != nil && p.Role == RoleAgent {
+		lead = p
+	}
+	if lead == nil {
+		if len(s.View) > 0 {
+			return "", [][]string{{"kill-session", "-t", "=" + ViewSession}}
+		}
+		return "", nil
+	}
+	if lead.ID == slot.ID {
+		home, err := goHome(s, &slot)
+		if err != nil {
+			return "", nil
+		}
+		return "", [][]string{home}
+	}
+	if lead.Session != AgentsSession {
+		return "", nil
+	}
+	if len(s.View) == 0 {
+		return "", [][]string{{"new-session", "-d", "-s", ViewSession, "-x", strconv.Itoa(lead.WindowWidth), "-y", strconv.Itoa(lead.WindowHeight), "--", "true"}}
+	}
+	linked := map[string]bool{}
+	for _, p := range s.Panes {
+		linked[p.WindowID] = true
+	}
+	shown, current := false, false
+	for _, v := range s.View {
+		switch {
+		case v.WindowID == lead.WindowID:
+			shown, current = true, v.WindowActive
+		case linked[v.WindowID]:
+			return "", [][]string{{"unlink-window", "-t", "=" + ViewSession + ":" + v.WindowID}}
+		}
+	}
+	switch {
+	case !shown:
+		return "", [][]string{{"link-window", "-d", "-s", lead.WindowID, "-t", "=" + ViewSession + ":"}}
+	case !current:
+		return "", [][]string{{"select-window", "-t", "=" + ViewSession + ":" + lead.WindowID}}
+	case lead.WindowSize != "latest":
+		return "", [][]string{{"set-option", "-w", "-t", lead.WindowID, "window-size", "latest"}}
+	}
+	return lead.WindowID, nil
 }
 
 // SwapIn returns the commands that show pane in the slot. While an agent is

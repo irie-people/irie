@@ -63,6 +63,7 @@ func New(getenv func(string) string, uid int) (Paths, error) {
 
 func (p Paths) ConfigFile() string            { return filepath.Join(p.Config, "config.toml") }
 func (p Paths) TmuxConf() string              { return filepath.Join(p.State, "tmux.conf") }
+func (p Paths) TeamConf() string              { return filepath.Join(p.State, "tmux-teams.conf") }
 func (p Paths) Sessions() string              { return filepath.Join(p.State, "sessions") }
 func (p Paths) Journal() string               { return filepath.Join(p.State, "journal") }
 func (p Paths) Session(id string) string      { return filepath.Join(p.Sessions(), id) }

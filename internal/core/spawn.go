@@ -345,6 +345,17 @@ func (c *Core) launch(j job) (*session, error) {
 	if x.named {
 		s.Name = x.name
 	}
+	// Agent teams need the session's anchor on the team server first; a
+	// session whose anchor cannot be made starts without them.
+	var anchor teamAnchor
+	if c.teams(h.ID()) {
+		a, err := c.anchor(id)
+		if err != nil {
+			c.log.Warn("teams", "session", id, "err", err)
+		} else {
+			anchor, s.Teams = a, true
+		}
+	}
 	launch := h.Launch
 	if j.resume != "" {
 		r, ok := h.(harness.Resumer)
@@ -372,9 +383,18 @@ func (c *Core) launch(j job) (*session, error) {
 	if c.cfg().Spawn.HideTmux {
 		unset = []string{"TMUX", "TMUX_PANE"}
 	}
+	// With teams, TMUX names the team server instead.
+	var path []string
+	if s.Teams {
+		bin, err := c.armTeam(id, dir, anchor, profile, env)
+		if err != nil {
+			return nil, err
+		}
+		path = []string{bin}
+	}
 	spec := c.paths.SpecFile(id)
 	if err := host.WriteSpec(spec, host.Spec{
-		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Cwd: x.cwd, Warnings: x.warnings,
+		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Path: path, Cwd: x.cwd, Warnings: x.warnings,
 		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
 		Model: x.model, Local: x.local,
 	}); err != nil {

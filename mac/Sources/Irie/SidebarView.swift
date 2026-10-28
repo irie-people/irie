@@ -448,9 +448,10 @@ private struct HelperRows: View {
 
     var body: some View {
         let helpers = session.subagents ?? []
+        let team = session.team ?? []
         // In their orchestrator's colour while it works, so they read as its.
         let own = Look.agentInk(session)
-        if !helpers.isEmpty {
+        if !helpers.isEmpty || !team.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(helpers.prefix(3)) { h in
                     let loud = h.needsYou == true
@@ -477,6 +478,28 @@ private struct HelperRows: View {
                 }
                 if helpers.count > 3 {
                     Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                }
+                // Its teammates, whose terminals stand beside its own.
+                ForEach(team.prefix(3)) { m in
+                    Button { store.showTeam(session.id) } label: {
+                        HStack(spacing: 5) {
+                            Text("⊞").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                            Text(m.name).font(Theme.font(12, .bold)).foregroundStyle(own ?? Theme.ink)
+                            Text(m.dead == true ? (m.exitCode ?? 0) == 0 ? "Done" : "Failed" : m.working == true ? m.title ?? "Working" : "Waiting")
+                                .font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                        }
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help([m.name, m.type, m.title].compactMap { $0 }.joined(separator: "\n"))
+                    .accessibilityHint("Shows the session's terminal beside its teammates'")
+                }
+                if team.count > 3 {
+                    Text("and \(team.count - 3) more teammates").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
                 }
             }
             // Under the card's name: its inset, its mark and the gap, less

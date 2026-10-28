@@ -28,7 +28,7 @@ func sound() Snapshot {
 }
 
 func edit(s Snapshot, id string, f func(*Pane)) Snapshot {
-	out := Snapshot{Panes: slices.Clone(s.Panes)}
+	out := Snapshot{Panes: slices.Clone(s.Panes), View: slices.Clone(s.View)}
 	for i := range out.Panes {
 		if out.Panes[i].ID == id {
 			f(&out.Panes[i])
@@ -38,7 +38,7 @@ func edit(s Snapshot, id string, f func(*Pane)) Snapshot {
 }
 
 func drop(s Snapshot, id string) Snapshot {
-	out := Snapshot{}
+	out := Snapshot{View: slices.Clone(s.View)}
 	for _, p := range s.Panes {
 		if p.ID != id {
 			out.Panes = append(out.Panes, p)
@@ -587,4 +587,165 @@ func TestSnapshotCountsAttachedClients(t *testing.T) {
 		s, err := r.Snapshot()
 		return err == nil && s.Attached(AgentsSession) == 1 && s.Attached(MainSession) == 0
 	})
+}
+
+// split is shown() with the agent %3 home again and the view session made:
+// its dead first pane, and %3's window linked and current there.
+func split() Snapshot {
+	s := sound()
+	s.View = []Pane{
+		{Session: ViewSession, WindowID: "@9", WindowIndex: 0, WindowPanes: 1, ID: "%9", Dead: true, Width: 45, Height: 24, WindowWidth: 45, WindowHeight: 24},
+		{Session: ViewSession, WindowID: "@3", WindowIndex: 1, WindowPanes: 1, ID: "%3", Width: 45, Height: 24, WindowWidth: 45, WindowHeight: 24, Role: RoleAgent, IrieSession: "s1", WindowActive: true, WindowSize: "latest"},
+	}
+	return edit(s, "%3", func(p *Pane) { p.WindowSize = "latest" })
+}
+
+func TestPlanKeepsTheSplit(t *testing.T) {
+	w := want
+	w.Split = "%3"
+	if cmds := Plan(split(), w); cmds != nil {
+		t.Errorf("a sound split needs %q", cmds)
+	}
+	// The lead follows the view's client: its own size is left alone.
+	wide := edit(split(), "%3", func(p *Pane) { p.Width, p.Height, p.WindowWidth, p.WindowHeight = 120, 40, 120, 40 })
+	if cmds := Plan(wide, w); cmds != nil {
+		t.Errorf("a lead at the view's size needs %q", cmds)
+	}
+	unlinked := split()
+	unlinked.View = unlinked.View[:1]
+	notCurrent := split()
+	notCurrent.View[1].WindowActive = false
+	other := split()
+	other.Panes = append(other.Panes, Pane{Session: AgentsSession, WindowID: "@7", WindowIndex: 3, WindowPanes: 1, ID: "%7", Width: 45, Height: 24, WindowWidth: 45, WindowHeight: 24, Role: RoleAgent, IrieSession: "s7"})
+	other.View = append(other.View, Pane{Session: ViewSession, WindowID: "@7", WindowIndex: 2, WindowPanes: 1, ID: "%7", Role: RoleAgent})
+	manual := edit(split(), "%3", func(p *Pane) { p.WindowSize = "manual" })
+
+	for _, c := range []struct {
+		name string
+		snap Snapshot
+		want string
+	}{
+		{"the lead is in the slot", edit(shown(), "%3", func(p *Pane) {}), "swap-pane -d -s irie:0.1 -t %2"},
+		{"no view session", sound(), "new-session -d -s irie-view -x 45 -y 24 -- true"},
+		{"the lead's window is not linked", unlinked, "link-window -d -s @3 -t =irie-view:"},
+		{"another window is current", notCurrent, "select-window -t =irie-view:@3"},
+		{"another agent's window is linked", other, "unlink-window -t =irie-view:@7"},
+		{"the lead's window has a fixed size", manual, "set-option -w -t @3 window-size latest"},
+	} {
+		if got := first(Plan(c.snap, w)); got != c.want {
+			t.Errorf("%s: plan starts %q, want %q", c.name, got, c.want)
+		}
+	}
+
+	// With no split the view session goes, and the lead takes the slot's
+	// size again.
+	if got := first(Plan(split(), want)); got != "kill-session -t =irie-view" {
+		t.Errorf("no split: plan starts %q", got)
+	}
+	gone := wide
+	gone.View = nil
+	if got := first(Plan(gone, want)); got != "resize-window -t @3 -x 45 -y 24" {
+		t.Errorf("after the split: plan starts %q", got)
+	}
+	// A split of a pane that is not an agent's is no split.
+	w.Split = "%2"
+	if got := first(Plan(split(), w)); got != "kill-session -t =irie-view" {
+		t.Errorf("split of the placeholder: plan starts %q", got)
+	}
+}
+
+func TestSnapshotKeepsTheViewApart(t *testing.T) {
+	r, w := startServer(t)
+	settle(t, r, w)
+	a := agentWindow(t, r, w, "sa")
+	w.Split = a
+	s := settle(t, r, w)
+	n := 0
+	for _, p := range s.Panes {
+		if p.ID == a {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("the lead is listed %d times in Panes", n)
+	}
+	if len(s.View) != 2 {
+		t.Fatalf("view = %+v", s.View)
+	}
+	if got := paneByID(s, a); got.Session != AgentsSession || got.WindowSize != "latest" {
+		t.Errorf("lead = %+v", got)
+	}
+}
+
+// viewClient attaches a control-mode client of the given size to the view
+// session, as the Mac app's split does with a terminal.
+func viewClient(t *testing.T, r *Runner, cols, rows int) {
+	t.Helper()
+	cmd := exec.Command(r.Bin, "-L", r.Socket, "-C", "attach-session", "-t", "="+ViewSession)
+	cmd.Env = WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE")
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { in.Close(); cmd.Process.Kill(); cmd.Wait() })
+	fmt.Fprintf(in, "refresh-client -C %dx%d\n", cols, rows)
+}
+
+func TestSplitSizesOnlyTheLead(t *testing.T) {
+	r, w := startServer(t)
+	w.Zoom = true
+	settle(t, r, w)
+	a := agentWindow(t, r, w, "sa")
+	b := agentWindow(t, r, w, "sb")
+	s := settle(t, r, w)
+	slot := s.SlotPane()
+	sizeB := [2]int{paneByID(s, b).Width, paneByID(s, b).Height}
+
+	w.Split = a
+	settle(t, r, w)
+	viewClient(t, r, 61, 21)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s = settle(t, r, w)
+		if pa := paneByID(s, a); pa.Width == 61 && pa.Height == 21 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the lead is %+v, want 61x21", paneByID(s, a))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := [2]int{paneByID(s, b).Width, paneByID(s, b).Height}; got != sizeB {
+		t.Errorf("the split resized another agent from %v to %v", sizeB, got)
+	}
+	if got := s.SlotPane(); got == nil || got.Role != RolePlaceholder || !got.Zoomed || got.Width != slot.Width {
+		t.Errorf("during the split the slot is %+v", got)
+	}
+
+	w.Split = ""
+	s = settle(t, r, w)
+	if len(s.View) != 0 {
+		t.Errorf("the view session outlives the split: %+v", s.View)
+	}
+	if pa := paneByID(s, a); pa.Session != AgentsSession || pa.Width != slot.Width || pa.Height != slot.Height {
+		t.Errorf("after the split the lead is %+v, want the slot's %dx%d", pa, slot.Width, slot.Height)
+	}
+}
+
+// The window-resized hook keeps the sidebar's width. It fires for an agent's
+// window too, as the core sizes one, and must leave the Mac app's zoom be.
+func TestResizingAnAgentWindowKeepsTheZoom(t *testing.T) {
+	r, w := startServer(t)
+	w.Zoom = true
+	settle(t, r, w)
+	a := agentWindow(t, r, w, "sa")
+	settle(t, r, w)
+	run(t, r, "resize-window", "-t", a, "-x", "50", "-y", "20")
+	time.Sleep(200 * time.Millisecond)
+	if got := run(t, r, "display-message", "-p", "-t", MainSession+":0", "#{window_zoomed_flag}"); got != "1" {
+		t.Errorf("after an agent window's resize irie:0 is zoomed %q", got)
+	}
 }

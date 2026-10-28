@@ -27,6 +27,9 @@ struct Session: Codable, Identifiable, Equatable {
     var pane: String?
     var shown: Bool?
     var subagents: [Subagent]?
+    /// Its agent-team teammates, each a terminal of its own on the team
+    /// server, in the order they started (TeamSplit.swift).
+    var team: [Teammate]?
     var tokens: Tokens?
     /// Its place in the list, which the user sets; whether it is parked;
     /// when it was frozen, and whether its agent still runs on to its next
@@ -41,7 +44,7 @@ struct Session: Codable, Identifiable, Equatable {
     var loose: Loose?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, tokens
+        case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
         case order, parked, frozen, freezing, priority, loose
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
@@ -101,6 +104,27 @@ struct Subagent: Codable, Equatable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case agent, type, started, detail, command
         case needsYou = "needs_you"
+    }
+}
+
+/// One of a session's agent-team teammates: a Claude Code session of its
+/// own, in a terminal on the team server, where its tmux session is
+/// `session`.
+struct Teammate: Codable, Equatable, Identifiable {
+    var session: String
+    var name: String
+    var color: String?
+    var type: String?
+    var title: String?
+    var working: Bool?
+    var dead: Bool?
+    var exitCode: Int?
+
+    var id: String { session }
+
+    enum CodingKeys: String, CodingKey {
+        case session, name, color, type, title, working, dead
+        case exitCode = "exit_code"
     }
 }
 
@@ -166,6 +190,10 @@ struct AttachInfo: Decodable, Equatable {
     var tmux: String
     var socket: String
     var target: String
+    /// The session of the same server that shows the session the app
+    /// splits, and the team server's socket; nil from a core before teams.
+    var view: String?
+    var teams: String?
 }
 
 struct SpawnArgs: Encodable {
@@ -201,6 +229,8 @@ struct SpawnResult: Decodable {
 struct ShowArgs: Encodable {
     var session: String
     var focus: Bool
+    /// Beside its teammates (TeamSplit.swift).
+    var split = false
 }
 
 struct RenameArgs: Encodable {

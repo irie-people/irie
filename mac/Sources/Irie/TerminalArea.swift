@@ -69,14 +69,21 @@ struct TerminalArea: View {
             // restart, so a flap gets a banner, not a reattach.
             if let a = store.attach {
                 // The terminal stays attached under the conversation, so
-                // ⌥⌘T flips between them at once.
-                terminal(a)
-                    .opacity(store.showTerminal ? 1 : 0)
-                    .allowsHitTesting(store.showTerminal)
-                    .accessibilityHidden(!store.showTerminal)
+                // ⌥⌘T flips between them at once, and under the split.
+                let shows = store.showTerminal && split == nil
+                terminal(a, active: shows)
+                    .opacity(shows ? 1 : 0)
+                    .allowsHitTesting(shows)
+                    .accessibilityHidden(!shows)
+                if let s = split { framed(TeamSplit(session: s, team: s.team ?? []), padded: false) }
             } else if store.isFixture, store.showTerminal {
-                // `--snapshot` attaches no terminal: the frame round an empty one.
-                framed(Color.clear)
+                // `--snapshot` attaches no terminal: the frame round an empty
+                // one, or the split's panes.
+                if let s = split {
+                    framed(TeamSplit(session: s, team: s.team ?? []), padded: false)
+                } else {
+                    framed(Color.clear)
+                }
             }
             // The conversation needs only the core, not the terminal.
             if !store.showTerminal && (store.attach != nil || online) {
@@ -101,9 +108,12 @@ struct TerminalArea: View {
         }
     }
 
-    @ViewBuilder private func terminal(_ a: AttachInfo) -> some View {
+    /// The picked session while it shows beside its teammates.
+    private var split: Session? { store.splitSession }
+
+    @ViewBuilder private func terminal(_ a: AttachInfo, active: Bool) -> some View {
         #if canImport(SwiftTerm)
-        framed(TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store))
+        framed(TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store, active: active), anchors: active)
         #else
         Placeholder(
             title: "The terminal opens in Ghostty for now",
@@ -115,13 +125,15 @@ struct TerminalArea: View {
 
     /// The terminal in its rounded frame, edged in the shown session's colour,
     /// where the lines from its card end while it shows (TabLink.swift).
-    private func framed(_ terminal: some View) -> some View {
+    /// The split lays out its own panes inside the frame, so it is not
+    /// padded; anchors is false for the terminal the split stands in for.
+    private func framed(_ terminal: some View, padded: Bool = true, anchors: Bool = true) -> some View {
         let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
         let ground = Color(nsColor: Theme.terminalBackground)
-        let shows = store.showTerminal
+        let shows = store.showTerminal && anchors
         return terminal
-            .padding(.vertical, 10)
-            .padding(.horizontal, 18)
+            .padding(.vertical, padded ? 10 : 4)
+            .padding(.horizontal, padded ? 18 : 6)
             .background {
                 // A click on the frame types to the terminal too.
                 frame.fill(ground)

@@ -13,10 +13,16 @@ import (
 // app is open the slot shows the raw terminal, since the app draws the
 // conversation itself.
 
+// The Mac app can also split: show the picked session beside its
+// teammates (team.go). Its window then goes into the view session, which a
+// terminal of the app's own shows at its own size, and the slot shows the
+// session's conversation behind the app's split.
+
 // Server options that keep the view for a core that restarts.
 const (
 	optSelected = "@irie_selected"
 	optRaw      = "@irie_raw"
+	optSplit    = "@irie_split"
 )
 
 // rawView reports whether the slot shows the picked session's raw
@@ -27,11 +33,15 @@ func (c *Core) rawView() bool { return c.raw || c.appViews > 0 }
 // configured one. The caller holds c.mu.
 func (c *Core) loadView() {
 	c.raw = c.cfg().UI.View == "terminal"
-	out, err := c.tmux.Run("display-message", "-p", "#{"+optSelected+"} #{"+optRaw+"}")
+	out, err := c.tmux.Run("display-message", "-p", "#{"+optSelected+"} #{"+optRaw+"} #{"+optSplit+"}")
 	if err != nil {
 		return
 	}
 	selected, raw, _ := strings.Cut(strings.TrimSpace(out), " ")
+	raw, split, _ := strings.Cut(raw, " ")
+	if sessionID.MatchString(split) {
+		c.split = split
+	}
 	if sessionID.MatchString(selected) {
 		c.selected = selected
 	} else if snap, err := c.tmux.Snapshot(); err == nil {
@@ -55,7 +65,17 @@ func (c *Core) loadView() {
 // that restarts. The caller holds c.mu.
 func (c *Core) viewCmds(x *session, focus bool) ([][]string, error) {
 	var cmds [][]string
-	if c.rawView() {
+	if c.split == x.id && c.appViews > 0 {
+		// Split: the slot gives up its agent, and the next layout repair
+		// puts x's window in the view session.
+		if slot := c.snap.SlotPane(); slot != nil && slot.Role != tmux.RolePlaceholder {
+			out, err := tmux.SwapOut(c.snap, slot.ID)
+			if err != nil {
+				return nil, err
+			}
+			cmds = append(cmds, out...)
+		}
+	} else if c.rawView() {
 		swap, err := tmux.SwapIn(c.snap, x.pane, focus)
 		if err != nil {
 			return nil, err
@@ -82,7 +102,7 @@ func (c *Core) keepCmds() [][]string {
 	if c.raw {
 		raw = "1"
 	}
-	return [][]string{{"set-option", "-g", optSelected, c.selected}, {"set-option", "-g", optRaw, raw}}
+	return [][]string{{"set-option", "-g", optSelected, c.selected}, {"set-option", "-g", optRaw, raw}, {"set-option", "-g", optSplit, c.split}}
 }
 
 // keepView keeps the slot on the view: an agent shown while the view is
@@ -98,8 +118,13 @@ func (c *Core) keepView() {
 	if c.selected != "" && x == nil {
 		c.selected = ""
 	}
+	if c.split != "" && c.sessions[c.split] == nil {
+		c.split = ""
+	}
 	var cmds [][]string
 	switch {
+	case c.split != "" && c.split == c.selected && c.appViews > 0:
+		// The split shows it, not the slot.
 	case c.rawView() && x != nil && slot.Role == tmux.RolePlaceholder:
 		cmds, _ = tmux.SwapIn(c.snap, x.pane, false)
 	case !c.rawView() && slot.Role != tmux.RolePlaceholder:

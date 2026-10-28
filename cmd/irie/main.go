@@ -18,6 +18,7 @@ import (
 	"github.com/irie-hq/irie/internal/localmodel"
 	"github.com/irie-hq/irie/internal/paths"
 	"github.com/irie-hq/irie/internal/statusline"
+	"github.com/irie-hq/irie/internal/team"
 	"github.com/irie-hq/irie/internal/ui"
 	"github.com/irie-hq/irie/internal/version"
 )
@@ -46,6 +47,9 @@ Used by Irie itself:
   irie runtime -- COMMAND   Irie's own Ollama server, whose model runners stop
                             with it
   irie placeholder          what the slot shows when no session is shown
+  irie team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS
+                            the tmux an agent with teams runs, which takes
+                            Claude Code's teammates to Irie's team server
 `
 
 func main() { os.Exit(run(os.Args[1:])) }
@@ -81,6 +85,8 @@ func run(args []string) int {
 		err = ui.Slot(p.Socket(), ui.SlotOptions{FocusKey: cfg.UI.FocusKey, FlipKey: cfg.UI.FlipKey, Theme: cfg.UI.Theme})
 	case "hook":
 		return hook.Run(os.Stdin, os.Stdout, os.Getenv)
+	case "team-tmux":
+		return teamTmux(args)
 	case "statusline":
 		return statusline.Run(args, os.Stdin, os.Stdout, os.Stderr, os.Getenv)
 	case "runtime":
@@ -247,4 +253,20 @@ func configCmd(args []string) error {
 		return cfg.Write(os.Stdout)
 	}
 	return errors.New("usage: irie config path|print")
+}
+
+// teamTmux is `irie team-tmux`, the tmux shim of a session with teams
+// (internal/team). Its own flags come before --, tmux's after.
+func teamTmux(args []string) int {
+	fs := flag.NewFlagSet("team-tmux", flag.ContinueOnError)
+	var s team.Shim
+	fs.StringVar(&s.Tmux, "tmux", "", "the real tmux")
+	fs.StringVar(&s.Socket, "socket", "", "the team server's socket path")
+	fs.StringVar(&s.Session, "session", "", "the Irie session")
+	fs.StringVar(&s.EnvFile, "env-file", "", "the environment of its teammates")
+	if fs.Parse(args) != nil || s.Tmux == "" || s.Socket == "" || s.Session == "" {
+		fmt.Fprintln(os.Stderr, "usage: irie team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS")
+		return 2
+	}
+	return s.Run(fs.Args())
 }

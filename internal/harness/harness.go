@@ -80,6 +80,10 @@ type Spawn struct {
 	StatusLine bool
 	Home       string
 	Environ    []string
+
+	// Teams lets the agent start agent teams, each teammate in a tmux pane
+	// on Irie's team server (spawn.teammates).
+	Teams bool
 }
 
 // Probe is what a harness learned about its CLI before a launch.

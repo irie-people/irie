@@ -28,6 +28,7 @@ type Spec struct {
 	Argv     []string          `json:"argv"`
 	Env      map[string]string `json:"env,omitempty"`   // added to the pane's environment
 	Unset    []string          `json:"unset,omitempty"` // removed from it, such as TMUX
+	Path     []string          `json:"path,omitempty"`  // put first on its PATH, such as the team shim's directory
 	Cwd      string            `json:"cwd"`
 	Warnings []string          `json:"warnings,omitempty"` // what Irie cannot do for this session
 	Repo     string            `json:"repo,omitempty"`     // the main checkout of the task's repo
@@ -149,7 +150,7 @@ func Run(specPath string) int {
 		return x.Code
 	}
 
-	env := environ(os.Environ(), spec.Env, spec.Unset, spec.Cwd)
+	env := prependPath(environ(os.Environ(), spec.Env, spec.Unset, spec.Cwd), spec.Path)
 	path, err := LookPath(spec.Argv[0], env)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "irie: %s: command not found\n", spec.Argv[0])
@@ -382,4 +383,22 @@ func LookPath(name string, env []string) (string, error) {
 func isExecutable(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0
+}
+
+// prependPath puts dirs first on env's PATH.
+func prependPath(env []string, dirs []string) []string {
+	if len(dirs) == 0 {
+		return env
+	}
+	first := strings.Join(dirs, string(os.PathListSeparator))
+	for i, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			if v != "" {
+				first += string(os.PathListSeparator) + v
+			}
+			env[i] = "PATH=" + first
+			return env
+		}
+	}
+	return append(env, "PATH="+first)
 }

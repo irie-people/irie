@@ -111,7 +111,14 @@ type Spawn struct {
 	HideTmux       bool          `toml:"hide_tmux"`
 	CloseWhenDone  bool          `toml:"close_when_done"` // close a session once its turn ends and it stays quiet for close_delay
 	CloseDelay     time.Duration `toml:"close_delay"`     // how long a finished session waits before it closes
+	// Teammates is what Claude Code sessions do with agent teams: run each
+	// teammate in a terminal pane of its own, which the Mac app shows beside
+	// its session (panes), or start no teams (off).
+	Teammates string `toml:"teammates"`
 }
+
+// TeammateModes are the values of spawn.teammates.
+var TeammateModes = []string{"panes", "off"}
 
 // Profile is a named launch recipe.
 type Profile struct {
@@ -228,6 +235,7 @@ func Default() Config {
 			ReadyTimeout:   30 * time.Second,
 			HideTmux:       true,
 			CloseDelay:     30 * time.Second,
+			Teammates:      "off",
 		},
 		Profiles: map[string]Profile{
 			"claude": {
@@ -507,6 +515,9 @@ func (c Config) Validate() error {
 	}
 	if c.UI.Ghostty != "auto" && c.UI.Ghostty != "off" {
 		bad("ui.ghostty = %q: must be auto or off", c.UI.Ghostty)
+	}
+	if !slices.Contains(TeammateModes, c.Spawn.Teammates) {
+		bad("spawn.teammates = %q: must be panes or off", c.Spawn.Teammates)
 	}
 	if !slices.Contains(HelperStyles, c.UI.HelperStyle) {
 		bad("ui.helper_style = %q: must be browser or terminal", c.UI.HelperStyle)

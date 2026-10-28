@@ -191,6 +191,7 @@ task = "paste"</code></pre>
         <tr><td><code>close_when_done</code></td><td><code>false</code></td><td>Close a session once its turn ends and it stays quiet for <code>close_delay</code>. A new prompt, or anything it needs from you, cancels the close. A session whose answer is for you to read, such as a status request or a reply that ends in a question, never closes by itself. Reopen brings it back.</td></tr>
         <tr><td><code>close_delay</code></td><td><code>"30s"</code></td><td>How long a finished session waits before it closes.</td></tr>
         <tr><td><code>hide_tmux</code></td><td><code>true</code></td><td>Hide Irie’s tmux from agents, so their own tmux commands can’t reach it.</td></tr>
+        <tr><td><code>teammates</code></td><td><code>"off"</code></td><td><code>"panes"</code> lets Claude Code sessions start agent teams. Each teammate is a Claude Code session of its own in a terminal, which the Mac app’s terminal view shows beside its session, in a column on the right. Teammates cost tokens as any session does. Sessions started after a change follow it.</td></tr>
       </tbody>
     </table>
   </div>

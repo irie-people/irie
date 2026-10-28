@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sync"
@@ -28,6 +29,7 @@ import (
 	"github.com/irie-hq/irie/internal/localmodel"
 	"github.com/irie-hq/irie/internal/paths"
 	"github.com/irie-hq/irie/internal/statusline"
+	"github.com/irie-hq/irie/internal/team"
 	"github.com/irie-hq/irie/internal/tmux"
 )
 
@@ -85,6 +87,9 @@ type Core struct {
 	steps      stateFile           // state.json: the undo and redo stacks (undo.go)
 	selected   string              // the session you picked, whose conversation or terminal the slot shows (view.go)
 	raw        bool                // the slot shows the picked session's raw terminal, not its conversation
+	split      string              // the session the Mac app shows beside its teammates, in the view session (view.go)
+	team       *tmux.Runner        // the team server, where sessions' teammates run (team.go)
+	teamSocket string              // its socket path, once known
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -127,6 +132,7 @@ type session struct {
 	convSubs int                    // the subscriptions that follow its conversation
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
+	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
 }
 
 func (x *session) wire() ipc.Session {
@@ -134,7 +140,7 @@ func (x *session) wire() ipc.Session {
 		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
-		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory,
+		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory, Team: wireTeam(x.team),
 	}
 	if s.Model == "" {
 		s.Model = x.usage.Model
@@ -174,6 +180,7 @@ func (c *Core) countTokens() {
 func newCore(o Options, r *tmux.Runner) *Core {
 	c := &Core{
 		paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
+		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
 		history: map[string][]event.Event{}, outcomes: map[string]*outcome{},
 	}
@@ -260,7 +267,11 @@ func Run(o Options) error {
 
 // want is the layout to keep. The caller holds c.mu.
 func (c *Core) want() tmux.Want {
-	return tmux.Want{Bin: c.bin, SidebarWidth: c.cfg().UI.SidebarWidth, Version: c.version, Zoom: c.appViews > 0}
+	w := tmux.Want{Bin: c.bin, SidebarWidth: c.cfg().UI.SidebarWidth, Version: c.version, Zoom: c.appViews > 0}
+	if x := c.sessions[c.split]; x != nil && c.appViews > 0 {
+		w.Split = x.pane
+	}
+	return w
 }
 
 // tick polls tmux, repairs the layout, records what tmux and the clock say
@@ -271,6 +282,7 @@ func (c *Core) tick() {
 		c.log.Warn("poll", "err", err)
 	}
 	c.keepView()
+	c.followTeams()
 	c.reap()
 	c.observe(time.Now())
 	c.keepFrozen()
@@ -332,7 +344,8 @@ func (c *Core) sync(s tmux.Snapshot) {
 		x.pane, x.dead, x.exitCode, x.command, x.bracket = p.ID, p.Dead, p.DeadStatus, p.Command, p.BracketPaste
 		// Shown: its pane is in the slot, or its conversation is, which
 		// the placeholder draws.
-		x.shown = slot != nil && (slot.ID == p.ID || slot.Role == tmux.RolePlaceholder && !c.rawView() && c.selected == x.id)
+		x.shown = slot != nil && (slot.ID == p.ID || slot.Role == tmux.RolePlaceholder && !c.rawView() && c.selected == x.id) ||
+			c.split == x.id && c.appViews > 0
 	}
 	for id := range c.sessions {
 		if !seen[id] {
@@ -652,7 +665,12 @@ func (c *Core) attachInfo() (ipc.AttachInfoResult, error) {
 	if err != nil {
 		return ipc.AttachInfoResult{}, err
 	}
-	return ipc.AttachInfoResult{Tmux: c.tmux.Bin, Socket: sock, Target: tmux.MainSession}, nil
+	r := ipc.AttachInfoResult{Tmux: c.tmux.Bin, Socket: sock, Target: tmux.MainSession, View: tmux.ViewSession}
+	if c.teamSocket == "" {
+		c.teamSocket = filepath.Join(filepath.Dir(sock), c.team.Socket)
+	}
+	r.Teams = c.teamSocket
+	return r, nil
 }
 
 func decode(raw json.RawMessage, v any) error {
@@ -671,6 +689,10 @@ func (c *Core) show(a ipc.ShowArgs) error {
 		return ipc.Errorf(ipc.CodeNotFound, "session %s has no agent %q", a.Session, a.Agent)
 	}
 	c.mu.Lock()
+	c.split = ""
+	if a.Split {
+		c.split = a.Session
+	}
 	err := c.swapIn(a.Session, a.Focus)
 	frames := c.changes()
 	c.mu.Unlock()

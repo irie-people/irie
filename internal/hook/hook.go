@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -53,6 +54,19 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	}()
 	session := getenv("IRIE_SESSION")
 	if session == "" {
+		// An agent team's teammate (DESIGN §2.3) speaks for no session,
+		// but waits at its tool calls while the session it works for is
+		// frozen.
+		if lead := getenv("IRIE_TEAM_OF"); teamOf.MatchString(lead) {
+			if raw, err := io.ReadAll(io.LimitReader(stdin, maxPayload)); err == nil {
+				var p struct {
+					Event string `json:"hook_event_name"`
+				}
+				if json.Unmarshal(raw, &p) == nil {
+					hold(getenv, lead, p.Event)
+				}
+			}
+		}
 		return 0
 	}
 	socket := getenv("IRIE_SOCKET")
@@ -78,15 +92,7 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 		wait = stopReplyTimeout
 	}
 	r, ok := ask(socket, ipc.HookArgs{Harness: h.ID(), Session: session, Payload: payload}, wait)
-	// A frozen session's agent waits at its tool calls, while the core is
-	// down too (DESIGN §4.3). It stops waiting if the agent, its parent, is
-	// gone.
-	if p, err := paths.New(getenv, os.Getuid()); err == nil && holds[hookEvent] {
-		dir := p.Session(session)
-		for parent := os.Getppid(); host.Frozen(dir) && os.Getppid() == parent; {
-			time.Sleep(holdPoll)
-		}
-	}
+	hold(getenv, session, hookEvent)
 	if !ok {
 		return 0
 	}
@@ -94,6 +100,23 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	e := event.Event{Vendor: &event.Vendor{HookEvent: hookEvent}}
 	stdout.Write(h.Respond(e, harness.HookReply{Context: r.Context, Deny: r.Deny, Unfinished: r.Unfinished}))
 	return 0
+}
+
+// teamOf is a session id, as IRIE_TEAM_OF names one.
+var teamOf = regexp.MustCompile(`^s[0-9a-z]{12}$`)
+
+// hold makes a frozen session's agent wait at its tool calls, while the
+// core is down too (DESIGN §4.3). It stops waiting if the agent, its
+// parent, is gone.
+func hold(getenv func(string) string, session, hookEvent string) {
+	p, err := paths.New(getenv, os.Getuid())
+	if err != nil || !holds[hookEvent] {
+		return
+	}
+	dir := p.Session(session)
+	for parent := os.Getppid(); host.Frozen(dir) && os.Getppid() == parent; {
+		time.Sleep(holdPoll)
+	}
 }
 
 // ask forwards a hook event to the core and returns its reply, waiting at

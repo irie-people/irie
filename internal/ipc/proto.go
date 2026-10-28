@@ -129,6 +129,9 @@ type Session struct {
 	Shown    bool      `json:"shown,omitempty"`
 	// Subagents are the session's running subagents, oldest first.
 	Subagents []Subagent `json:"subagents,omitempty"`
+	// Team is the session's teammates, each in a terminal pane of its own
+	// on the team server, in the order they started (DESIGN §2.3).
+	Team []Teammate `json:"team,omitempty"`
 	// Tokens is what the session's model calls have used, from its
 	// transcripts; nil until Irie has read any usage.
 	Tokens *Tokens `json:"tokens,omitempty"`
@@ -230,6 +233,19 @@ type Subagent struct {
 	Detail   string    `json:"detail,omitempty"`  // what it needs, or else what its newest running tool does, in plain words
 	Command  string    `json:"command,omitempty"` // the tool call the detail is about
 	NeedsYou bool      `json:"needs_you,omitempty"`
+}
+
+// Teammate is one of a session's agent-team teammates: a Claude Code
+// session of its own, in a terminal pane on the team server.
+type Teammate struct {
+	Session  string `json:"session"`         // its tmux session on the team server, which a view attaches to
+	Name     string `json:"name"`            // the name its team knows it by
+	Color    string `json:"color,omitempty"` // the colour Claude Code gave it, such as blue
+	Type     string `json:"type,omitempty"`  // the agent definition it runs
+	Title    string `json:"title,omitempty"` // its terminal's title
+	Working  bool   `json:"working,omitempty"`
+	Dead     bool   `json:"dead,omitempty"`
+	ExitCode *int   `json:"exit_code,omitempty"` // once it is dead
 }
 
 // Header is what the sidebar shows that is not a row.
@@ -384,6 +400,13 @@ type AttachInfoResult struct {
 	Tmux   string `json:"tmux"`   // the tmux binary Irie runs
 	Socket string `json:"socket"` // the server's socket path
 	Target string `json:"target"` // the session to attach to
+	// View is the session of the same server that shows the session the
+	// app splits, beside its teammates: tmux -S Socket attach-session -t
+	// View. Teams is the team server's socket path, where each teammate is
+	// a session of its own (Teammate.Session); "" before any session has
+	// teams.
+	View  string `json:"view,omitempty"`
+	Teams string `json:"teams,omitempty"`
 }
 
 // SpawnArgs start a task. Cwd runs it in place in a directory. Repo is the
@@ -583,6 +606,10 @@ type ShowArgs struct {
 	Session string `json:"session"`
 	Agent   string `json:"agent,omitempty"`
 	Focus   bool   `json:"focus"`
+	// Split shows the session beside its teammates, for the Mac app: its
+	// window goes into AttachInfoResult.View, at that client's size, and
+	// the slot shows its conversation.
+	Split bool `json:"split,omitempty"`
 }
 
 // RenameArgs give a session a new name. The core makes its whitespace and

@@ -17,7 +17,9 @@ Date: 2026-10-27. Status: option C is being built (see "Built so far" below); de
 - the Mac app: the helper pane beside the conversation, or in its place in a narrow window, with the strip, the clickable lines under a card, View > Show Helpers (⇧⌘H) and Go > Next and Previous Helper (⌘] and ⌘[) ([MAC.md](../MAC.md));
 - two looks, which Settings > Appearance > Helpers picks: `browser`, cards and plain words as in §6.2, and `terminal`, a terminal's lines on its dark ground, still drawn by the app, so no agent is resized.
 
-Not built yet: the subagent status line feed (§6.1), finished helpers kept on the card itself, delegated sessions under their parent (§6.4), the terminal sidebar's split (§6.3), `teammateMode` (§6.5), and pause and notes per helper (§6.6).
+**Then the terminal split** (2026-10-27, at the owner's request after the terminal look "did not work": "copy cmux with this functionality"). The terminal view never split, because a helper has no terminal. An agent team's teammates do have terminals, so §6.5 went the other way from what it proposed: with `spawn.teammates = "panes"` Claude Code runs with `teammateMode: "tmux"`, and its teammates open as terminals beside their session in the Mac app's terminal view, as cmux shows them (DESIGN §2.3, [MAC.md](../MAC.md)). The tmux calls Claude Code makes were read off Claude Code 2.1.310 with a logging `tmux` in a throwaway server, so the shim follows what it does rather than any docs: `split-window -d -t <pane> -h -l 70% -P -F '#{pane_id}' -- cat` for the first teammate, `-v` from the first for the rest with `select-layout main-vertical` and `resize-pane -x 30%` on the lead, then pane options, `select-pane -T`, `respawn-pane -k` with the teammate's own `claude` command line, and `kill-pane` for each as the lead exits. They go to a team server of Irie's, where each teammate gets a tmux session of its own, and the session's own terminal shows through a view of its window, so no other agent is resized. Off by default: teammates are Claude Code sessions of their own and cost tokens like one.
+
+Not built yet: the subagent status line feed (§6.1), finished helpers kept on the card itself, delegated sessions under their parent (§6.4), the terminal sidebar's split (§6.3), in-process teammates as helpers (§6.5), and pause and notes per helper (§6.6).
 
 ---
 
@@ -158,6 +160,8 @@ A delegated session already has everything the split needs: its conversation com
 Teams are experimental and off by default, and their default display mode is in-process: every teammate runs inside the lead, where the hooks see it. A user may have set `teammateMode` to `auto`, `tmux` or `iterm2`. `auto` uses split panes "when you're already running inside a tmux session". An Irie agent does run inside tmux, but Irie hides `TMUX` from it. The docs do not say how Claude Code tells, so whether `auto` falls back to in-process inside Irie is for the smoke test. `tmux` asks for panes outright. By public issue reports, a lead outside tmux then starts a tmux server of its own, which no Irie view shows. The docs also list Ghostty, the other terminal Irie supports, as one where split panes don't work.
 
 So Irie's settings file sets `"teammateMode": "in-process"`, unless the profile's own arguments pass `--teammate-mode`. A `--settings` payload applies over the user's own settings. In-process teammates then show as helpers. The other way would show teammates in panes Irie draws itself, as cmux does by turning Claude Code's tmux calls into native splits. That rests on which tmux commands Claude Code runs, which it does not document, so it is left out.
+
+*Since built the other way* (see "Built so far"): the commands were read off Claude Code itself, and Irie's settings file sets `"teammateMode": "tmux"` when `spawn.teammates` is `panes`.
 
 ### 6.6 Acting on a helper
 

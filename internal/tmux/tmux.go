@@ -22,6 +22,11 @@ const (
 	CoreWindow    = "core"
 	Sidebar       = "irie:0.0"
 	Slot          = "irie:0.1"
+	// ViewSession holds the window of the session the Mac app shows beside
+	// its teammates, linked from irie-agents, so a client of its own shows
+	// that agent at the split's size while every other agent keeps the
+	// slot's (DESIGN §2.3). It exists only while the app splits.
+	ViewSession = "irie-view"
 )
 
 // Pane roles, kept in the @irie_role pane option.
@@ -84,6 +89,9 @@ func isExec(p string) bool {
 type Runner struct {
 	Bin    string // tmux binary
 	Socket string // -L socket name
+	// Env is the environment of its tmux calls, which a server that one of
+	// them starts keeps for every pane; nil is the caller's own.
+	Env []string
 }
 
 // command builds a tmux command. Only start may start the server: every
@@ -98,8 +106,12 @@ func (r *Runner) command(start bool, args ...string) *exec.Cmd {
 		flags = append(flags, "-N")
 	}
 	cmd := exec.Command(r.Bin, append(flags, args...)...)
+	env := r.Env
+	if env == nil {
+		env = os.Environ()
+	}
 	// TMUX would make tmux guess targets from the caller's own pane.
-	cmd.Env = WithoutEnv(os.Environ(), "TMUX", "TMUX_PANE")
+	cmd.Env = WithoutEnv(env, "TMUX", "TMUX_PANE")
 	return cmd
 }
 
@@ -162,6 +174,12 @@ func (r *Runner) StartServer(conf string, cmd []string) error {
 	return err
 }
 
+// StartWith runs one command that may start the server, which then reads
+// conf, as the team server's first anchor does.
+func (r *Runner) StartWith(conf string, args ...string) (string, error) {
+	return r.run(true, append([]string{"-f", conf}, args...)...)
+}
+
 // SocketPath returns the running server's socket path.
 func (r *Runner) SocketPath() (string, error) {
 	out, err := r.Run("list-sessions", "-F", "#{socket_path}")
@@ -207,6 +225,8 @@ type Pane struct {
 	Zoomed       bool   // the pane's window is zoomed
 	Active       bool   // the pane is its window's active pane; in a zoomed window, the zoomed one
 	Attached     int    // how many clients are attached to the pane's session
+	WindowActive bool   // the pane's window is its session's current window
+	WindowSize   string // the window's window-size option: latest, manual and so on
 
 	// Irie's pane options.
 	Role        string
@@ -224,11 +244,15 @@ var paneFormat = []string{
 	"pane_id", "pane_index", "pane_pid", "pane_dead", "pane_dead_status", "pane_width", "pane_height",
 	OptRole, OptSession, OptAgent, OptName, OptNamed, OptCreated, OptVersion, OptVendorID,
 	"pane_current_command", "bracket_paste_flag", "window_zoomed_flag", "pane_active", "session_attached",
+	"window_active", "window-size",
 }
 
 // Snapshot is every pane of the server at one moment.
 type Snapshot struct {
 	Panes []Pane
+	// View is the view session's panes. The windows it links from
+	// irie-agents are left out of Panes, which lists each pane once.
+	View []Pane
 }
 
 // Snapshot lists every pane. It returns ErrNoServer when the server is down.
@@ -244,12 +268,18 @@ func (r *Runner) Snapshot() (Snapshot, error) {
 			continue
 		}
 		n := func(i int) int { v, _ := strconv.Atoi(f[i]); return v }
-		s.Panes = append(s.Panes, Pane{
+		p := Pane{
 			Session: f[0], WindowID: f[1], WindowIndex: n(2), WindowPanes: n(3), WindowWidth: n(4), WindowHeight: n(5),
 			ID: f[6], Index: n(7), PID: n(8), Dead: f[9] == "1", DeadStatus: n(10), Width: n(11), Height: n(12),
 			Role: f[13], IrieSession: f[14], Agent: f[15], Name: f[16], Named: f[17], Created: f[18], Version: f[19], VendorID: f[20],
 			Command: f[21], BracketPaste: f[22] == "1", Zoomed: f[23] == "1", Active: f[24] == "1", Attached: n(25),
-		})
+			WindowActive: f[26] == "1", WindowSize: f[27],
+		}
+		if p.Session == ViewSession {
+			s.View = append(s.View, p)
+		} else {
+			s.Panes = append(s.Panes, p)
+		}
 	}
 	return s, nil
 }

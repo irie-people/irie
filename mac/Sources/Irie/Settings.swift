@@ -88,8 +88,19 @@ struct CoreConfig: Decodable, Equatable {
         var defaultProfile: String
         var closeWhenDone: Bool
         var closeDelay: String
+        /// Agent teams' teammates: panes beside their session, or off.
+        var teammates: String
         enum CodingKeys: String, CodingKey {
-            case defaultProfile = "default_profile", closeWhenDone = "close_when_done", closeDelay = "close_delay"
+            case defaultProfile = "default_profile", closeWhenDone = "close_when_done", closeDelay = "close_delay", teammates
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            defaultProfile = try c.decode(String.self, forKey: .defaultProfile)
+            closeWhenDone = try c.decode(Bool.self, forKey: .closeWhenDone)
+            closeDelay = try c.decode(String.self, forKey: .closeDelay)
+            // A core from before agent teams starts none.
+            teammates = try c.decodeIfPresent(String.self, forKey: .teammates) ?? "off"
         }
     }
 
@@ -456,6 +467,15 @@ private struct GeneralSettings: View {
                     Text("Sessions")
                 } footer: {
                     footnote("Sessions that report back or ask you something stay open, and ⇧⌘T reopens the last one closed.")
+                }
+                Section {
+                    let teams = model.bind(c, \.spawn.teammates, "spawn.teammates")
+                    Toggle("Let Claude Code start agent teams", isOn: Binding(get: { teams.wrappedValue == "panes" },
+                                                                             set: { teams.wrappedValue = $0 ? "panes" : "off" }))
+                } header: {
+                    Text("Agent teams")
+                } footer: {
+                    footnote("Each teammate runs in a terminal of its own, which the terminal view shows beside its session. Teammates are Claude Code sessions too, so a team uses more tokens. Sessions started from now on follow this.")
                 }
                 Section {
                     Toggle("Watch each jot until its work lands", isOn: model.bind(c, \.dog.watch, "dog.watch"))

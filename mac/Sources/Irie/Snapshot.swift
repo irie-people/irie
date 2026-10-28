@@ -54,6 +54,24 @@ enum Snapshot {
                 let top = firstCardTop(rep, below: titlebar)
                 print("\(name): title bar \(fmt(titlebar)) pt, first card at \(top.map(fmt) ?? "?") pt")
             }
+            // The selected session beside its teammates, as the terminal shows
+            // an agent team, in a wide window and a narrow one.
+            store.mode = .repo
+            store.loadFixture(Fixture.sessions.map { s in
+                var s = s
+                if s.id == Fixture.selected { s.team = Fixture.team }
+                return s
+            }, selection: Fixture.selected)
+            Theme.use(Palette.standard.id)
+            for (base, width, dark) in [("team-split", 1100.0, false), ("team-split-dark", 1100.0, true), ("team-split-wide", 1500.0, false), ("team-split-narrow", 820.0, false)] {
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environmentObject(store), dark: dark, width: CGFloat(width), height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.loadFixture(Fixture.sessions, selection: Fixture.selected)
+
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
             for dark in [false, true] {
@@ -138,6 +156,13 @@ enum Snapshot {
 enum Fixture {
     static let selected = "s02docsguide"
 
+    /// The selected session's teammates, for the split.
+    static let team = [
+        Teammate(session: selected + "-k1", name: "security", color: "blue", type: "Explore", title: "Review the session code", working: true),
+        Teammate(session: selected + "-k2", name: "performance", color: "green", title: "Measure the login path"),
+        Teammate(session: selected + "-k3", name: "tests", color: "yellow", type: "general-purpose", working: true),
+    ]
+
     /// The config op's answer for a file with a profile, repos and the jot
     /// dog of its own, as the core writes it (config.Tree).
     static let config = #"""
@@ -153,7 +178,7 @@ enum Fixture {
         },
         "repos": {"aliases": {"irie": "~/code/irie", "notes": "~/notes"}, "roots": ["~/code"]},
         "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
-        "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "hide_tmux": true, "ready_timeout": "30s"},
+        "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "hide_tmux": true, "ready_timeout": "30s", "teammates": "panes"},
         "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
         "usage": {"status_line": true},
         "worktree": {"base": "HEAD", "branch_prefix": "irie/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
