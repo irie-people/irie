@@ -24,10 +24,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/harness"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // maxHistory is how many steps the history keeps, undo and redo together.

@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/paths"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // settingsCore is a core with no tmux behind it whose config file is

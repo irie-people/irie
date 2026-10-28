@@ -11,16 +11,16 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/core"
-	"github.com/irie-hq/irie/internal/hook"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/localmodel"
-	"github.com/irie-hq/irie/internal/paths"
-	"github.com/irie-hq/irie/internal/statusline"
-	"github.com/irie-hq/irie/internal/team"
-	"github.com/irie-hq/irie/internal/ui"
-	"github.com/irie-hq/irie/internal/version"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/core"
+	"github.com/irie-people/irie/internal/hook"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/statusline"
+	"github.com/irie-people/irie/internal/team"
+	"github.com/irie-people/irie/internal/ui"
+	"github.com/irie-people/irie/internal/version"
 )
 
 const usage = `usage: irie [command]

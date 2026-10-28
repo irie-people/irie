@@ -10,9 +10,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // toolInputKeys are the data a hook event takes from a tool's input, which

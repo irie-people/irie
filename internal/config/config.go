@@ -20,7 +20,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/irie-hq/irie/internal/route"
+	"github.com/irie-people/irie/internal/route"
 )
 
 type Config struct {

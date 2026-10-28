@@ -3,8 +3,8 @@ package core
 import (
 	"strings"
 
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // The slot's two views of the session you picked (DESIGN §4.7): its

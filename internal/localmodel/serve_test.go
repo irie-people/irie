@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 func TestMain(m *testing.M) { testutil.Main(m) }

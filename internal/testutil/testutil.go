@@ -82,28 +82,28 @@ func buildOnce(t testing.TB, pkg, name string) string {
 // BuildIrie builds ./cmd/irie once per test binary and returns its path.
 func BuildIrie(t testing.TB) string {
 	t.Helper()
-	return buildOnce(t, "github.com/irie-hq/irie/cmd/irie", "irie")
+	return buildOnce(t, "github.com/irie-people/irie/cmd/irie", "irie")
 }
 
 // BuildFakeAgent builds the fake agent, Claude Code's stand-in, once per test
 // binary and returns its path.
 func BuildFakeAgent(t testing.TB) string {
 	t.Helper()
-	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/fakeagent", "fakeagent")
+	return buildOnce(t, "github.com/irie-people/irie/internal/testutil/fakeagent", "fakeagent")
 }
 
 // BuildFakeOllama builds the fake Ollama server, `ollama serve`'s stand-in,
 // once per test binary and returns its path.
 func BuildFakeOllama(t testing.TB) string {
 	t.Helper()
-	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/fakeollama", "fakeollama")
+	return buildOnce(t, "github.com/irie-people/irie/internal/testutil/fakeollama", "fakeollama")
 }
 
 // BuildOldHost builds the stand-in for `irie host` as it was before freeze
 // once per test binary and returns its path.
 func BuildOldHost(t testing.TB) string {
 	t.Helper()
-	return buildOnce(t, "github.com/irie-hq/irie/internal/testutil/oldhost", "oldhost")
+	return buildOnce(t, "github.com/irie-people/irie/internal/testutil/oldhost", "oldhost")
 }
 
 // FreePort returns a TCP port on 127.0.0.1 that nothing listens on now.

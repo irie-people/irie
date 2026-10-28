@@ -15,9 +15,9 @@ package core
 // for another, and the background processes are the ones it slows first.
 
 import (
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/proc"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/proc"
 )
 
 // bgProc is a process Irie put in the background.

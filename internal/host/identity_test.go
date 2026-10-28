@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 // inherited is what an agent pane holds when another Claude Code session,

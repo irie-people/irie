@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // A session's helpers are its subagents (DESIGN §4.4). A helper has no

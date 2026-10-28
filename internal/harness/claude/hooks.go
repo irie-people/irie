@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/harness"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness"
 )
 
 // object is a JSON object such as a hook's input, read leniently: a field of

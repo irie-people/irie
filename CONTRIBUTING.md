@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. Irie is free to use. If Irie ever makes money, it all goes back to the people who build it, after running costs. The record is at [irie-hq/stake](https://github.com/irie-hq/stake).
+Thanks for helping. Irie is free to use. If Irie ever makes money, it all goes back to the people who build it, after running costs. The record is at [irie-people/stake](https://github.com/irie-people/stake).
 
 1. For anything bigger than a small fix, open an issue and agree the approach first.
 2. Sign off your commits (`git commit -s`). That certifies the [Developer Certificate of Origin](https://developercertificate.org/): you have the right to submit the work under the project's license.

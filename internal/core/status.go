@@ -8,10 +8,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/statusline"
-	"github.com/irie-hq/irie/internal/ui"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/statusline"
+	"github.com/irie-people/irie/internal/ui"
 )
 
 // status takes one status line update of a Claude Code session (DESIGN

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 const wait = 10 * time.Second

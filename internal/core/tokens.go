@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // tokenTally counts a session's model usage from its Claude Code

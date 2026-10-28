@@ -33,10 +33,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/proc"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/proc"
 )
 
 // freezePasses bounds the walks of the process table that one freeze makes.

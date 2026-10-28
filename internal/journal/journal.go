@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
+	"github.com/irie-people/irie/internal/event"
 )
 
 // Options configure a journal.

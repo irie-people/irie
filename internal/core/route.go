@@ -20,14 +20,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/harness"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/journal"
-	"github.com/irie-hq/irie/internal/localmodel"
-	"github.com/irie-hq/irie/internal/route"
-	"github.com/irie-hq/irie/internal/statusline"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/journal"
+	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/route"
+	"github.com/irie-people/irie/internal/statusline"
 )
 
 // settle is how long after its first turn ended a session counts as a

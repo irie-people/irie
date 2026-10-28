@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // track folds a session's events into its state (DESIGN §5.3). Nothing in

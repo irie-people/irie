@@ -19,9 +19,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // optOrder holds the order: session ids, space-separated, from the top.

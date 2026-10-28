@@ -14,7 +14,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // listView is how the list groups Irie's sessions.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/harness"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/harness"
 )
 
 // InlineMax and TaskFile are the task-size rule every adapter shares.

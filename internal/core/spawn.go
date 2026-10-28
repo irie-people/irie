@@ -14,16 +14,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/harness"
-	"github.com/irie-hq/irie/internal/harness/claude"
-	"github.com/irie-hq/irie/internal/harness/generic"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/localmodel"
-	"github.com/irie-hq/irie/internal/route"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/harness/claude"
+	"github.com/irie-people/irie/internal/harness/generic"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/route"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 func harnessFor(id string) (harness.Harness, error) {

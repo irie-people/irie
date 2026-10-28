@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 func TestMatchClosedNeedsEveryWord(t *testing.T) {

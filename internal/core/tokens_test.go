@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 func reply(id string, in, out, cacheRead, cacheWrite int) string {

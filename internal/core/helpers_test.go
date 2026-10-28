@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 // sidechain marks transcript lines as a helper's, as Claude Code writes

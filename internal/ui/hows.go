@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // howsRe is a status question typed in the command bar: "hows X", "how's X",

@@ -1495,5 +1495,5 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 | 4 | Where subagent panes appear (M8) | a. As child rows; a mirror is swapped into the one slot like any session. b. Selecting an orchestrator splits the slot: the orchestrator on top, its running subagents' mirrors stacked below. c. Both, with a toggle | **a** for v1, because it reuses the swap-in with no new layout states. Add **b** after v1 |
 
 **Decided 2026-10-26:**
-- **Decision 1:** option a. The module path is `github.com/irie-hq/irie` and the bundle id is `io.github.irie-hq.irie`. The organisation is created before publishing; if the name is lost first, rename it in one commit.
+- **Decision 1:** option a. The module path is `github.com/irie-people/irie` and the bundle id is `io.github.irie-people.irie`. The organisation is created before publishing; if the name is lost first, rename it in one commit.
 - **Decisions 2, 3 and 4:** option a.

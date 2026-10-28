@@ -5,9 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Ideas are welcome. Check the [roadmap](https://irie-hq.github.io/irie/roadmap.html) first, since yours may already be planned.
+        Ideas are welcome. Check the [roadmap](https://irie-people.github.io/irie/roadmap.html) first, since yours may already be planned.
 
-        For anything bigger than a small fix, agree the approach here before you build it, as [CONTRIBUTING.md](https://github.com/irie-hq/irie/blob/main/CONTRIBUTING.md) asks.
+        For anything bigger than a small fix, agree the approach here before you build it, as [CONTRIBUTING.md](https://github.com/irie-people/irie/blob/main/CONTRIBUTING.md) asks.
   - type: textarea
     id: problem
     attributes:

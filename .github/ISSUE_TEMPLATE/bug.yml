@@ -5,9 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. Search the [issues](https://github.com/irie-hq/irie/issues) first, and see [Troubleshooting](https://irie-hq.github.io/irie/troubleshooting.html), which lists each stall, failure and message.
+        Thanks for reporting. Search the [issues](https://github.com/irie-people/irie/issues) first, and see [Troubleshooting](https://irie-people.github.io/irie/troubleshooting.html), which lists each stall, failure and message.
 
-        For a security problem, don't open an issue: see [SECURITY.md](https://github.com/irie-hq/irie/blob/main/SECURITY.md).
+        For a security problem, don't open an issue: see [SECURITY.md](https://github.com/irie-people/irie/blob/main/SECURITY.md).
 
         Leave out anything that identifies a person: use `alice`, `/home/alice` and `example.com` in paths, names and logs.
   - type: textarea

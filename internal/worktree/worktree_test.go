@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 const readme = "# website\n"

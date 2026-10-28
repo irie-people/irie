@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 var want = Want{Bin: "/opt/irie/bin/irie", SidebarWidth: 34, Version: "v1"}

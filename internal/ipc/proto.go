@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
+	"github.com/irie-people/irie/internal/event"
 )
 
 // API is the protocol version. Additions keep backwards compatibility.

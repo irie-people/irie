@@ -9,8 +9,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/repo"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/repo"
 )
 
 // ctlDog is the jot dog's report (DESIGN §4.8): the jots whose turn is over

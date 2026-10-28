@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/proc"
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/proc"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 // withOldHosts makes the core run its agents under the host of before

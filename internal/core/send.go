@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // enterDelay is how long send waits between pasting a message and pressing

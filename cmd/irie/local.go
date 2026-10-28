@@ -15,8 +15,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 )
 
 // preflightTimeout bounds a check, which may load a model's weights.

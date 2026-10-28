@@ -1,4 +1,4 @@
-module github.com/irie-hq/irie
+module github.com/irie-people/irie
 
 go 1.26.0
 

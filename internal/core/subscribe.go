@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // frameGap spaces frames of rows to a client: at most 10 a second (DESIGN

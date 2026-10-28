@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // transcriptLine is one line of a Claude Code transcript, shaped as Claude

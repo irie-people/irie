@@ -23,12 +23,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/harness"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/journal"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/journal"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // closeWait is how long a closed session's agent has to exit after SIGTERM

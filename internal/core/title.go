@@ -18,7 +18,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // maxTitle caps a title made from a task, in characters.

@@ -22,11 +22,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/repo"
-	"github.com/irie-hq/irie/internal/worktree"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/repo"
+	"github.com/irie-people/irie/internal/worktree"
 )
 
 // dogEvery is how often, in the core's ticks of a second, the dog looks

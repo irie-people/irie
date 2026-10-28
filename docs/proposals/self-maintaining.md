@@ -230,7 +230,7 @@ The flow also stops, with the same label, when a run is refused or fails, when t
 - Require status checks: a CI workflow that runs `go vet` and `go test` on every pull request. The repository has none yet; it is needed before switching on.
 - Block force pushes and restrict deletions. The bypass list stays empty.
 
-**CODEOWNERS** in `.github/` names the maintainers team, for example `* @irie-hq/maintainers`. Code owners must have write access, and a team must be visible. Draft pull requests do not ask code owners for review; marking one ready does.
+**CODEOWNERS** in `.github/` names the maintainers team, for example `* @irie-people/maintainers`. Code owners must have write access, and a team must be visible. Draft pull requests do not ask code owners for review; marking one ready does.
 
 **Auto-merge, only after a person approves.** The repository allows auto-merge. When the swarm marks a pull request ready, `decide` reads main's active rules and arms auto-merge, tied to the reviewed commit with `--match-head-commit`, only if a pull request rule requires at least one approval, a code owner's review, stale-approval dismissal and approval of the latest push. GitHub then merges only after the required reviews and checks pass: after a maintainer's approval. A missing or weakened ruleset means nothing is armed, and a maintainer merges by hand. A push by someone without write permission turns auto-merge off. If the owner prefers, the approving maintainer arms auto-merge instead (decision 6).
 

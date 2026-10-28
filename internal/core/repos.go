@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/journal"
-	"github.com/irie-hq/irie/internal/repo"
-	"github.com/irie-hq/irie/internal/worktree"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/journal"
+	"github.com/irie-people/irie/internal/repo"
+	"github.com/irie-people/irie/internal/worktree"
 )
 
 // maxRecent is how many recently used repos the core keeps.

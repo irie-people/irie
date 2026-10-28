@@ -10,9 +10,9 @@ package core
 // Irie's own.
 
 import (
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // maxName caps a name, in bytes, as move caps the name it carries in.

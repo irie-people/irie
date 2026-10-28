@@ -92,7 +92,7 @@ Recordings come later. Each one has an empty box now, sized 16:10, whose caption
 | One-time setup | The owner sets Settings → Pages → Build and deployment → Source to "GitHub Actions". The workflow cannot do this with the default token |
 | Permissions | `contents: read`, `pages: write`, `id-token: write`; nothing else |
 | Concurrency | One deployment at a time; a running one is never cancelled |
-| URL | `https://irie-hq.github.io/irie/` until a domain is chosen (open decision 1). Links between pages are relative, so the site works at any path and from disk |
+| URL | `https://irie-people.github.io/irie/` until a domain is chosen (open decision 1). Links between pages are relative, so the site works at any path and from disk |
 | Artifact | `site/` alone, without dotfiles. A workflow deploy serves what it uploads; `.nojekyll` only matters when publishing from a branch |
 
 ## Checks before each change
@@ -108,13 +108,13 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 - **What Irie is stays complete.** A change that adds or removes a part, a file Irie keeps, a connection, a program it runs, or a word it says to an agent updates `what-irie-is.html` in the same pull request. The page quotes every `[Irie]` note word for word, so `grep -rn '\[Irie\]' internal` finds what to compare.
 - **When the themes are built.** The marks with `data-m="themes"` go, Themes' stone on the docs page fills, and the other pictures move to the default theme, Rosewater.
 - **When the first release ships.** Install gains the download, and the "no download yet" lines on Home, Get started, the FAQ and the README go.
-- **Links out.** The site links to `github.com/irie-hq/irie`, `irie-hq/stake` and `steak-hq/steak`. None of them was public on 2026-10-26, so those links fail until they are.
+- **Links out.** The site links to `github.com/irie-people/irie`, `irie-people/stake` and `steak-hq/steak`. None of them was public on 2026-10-26, so those links fail until they are.
 
 ## Open decisions
 
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
-| 1 | The site's address | a. `irie-hq.github.io/irie`. b. A project domain, set in the Pages settings | **a** until the first release; choose a domain before announcing it |
+| 1 | The site's address | a. `irie-people.github.io/irie`. b. A project domain, set in the Pages settings | **a** until the first release; choose a domain before announcing it |
 | 2 | What Get started says at the first release | a. One install command, then the four steps already there. b. A page per platform | **a**: one command for macOS and Linux, and a line on what to do if tmux is missing |
 | 3 | Recordings | a. Short MP4 or WebM files in `site/`, played with `<video>`, no autoplay. b. Animated GIF. c. Terminal recordings as text | **a**, made with a fresh `alice` account and the `shop` example, with captions |
 | 4 | Order of merges | a. Merge M3 first, then this branch with M3 marked done. b. Rebase this branch onto main without M3 | **a**: this branch already sits on M3 |

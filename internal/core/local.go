@@ -23,11 +23,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/harness/claude"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/localmodel"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/harness/claude"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // localPrefix names a local model as a profile: +ollama:qwen3.5:9b is the

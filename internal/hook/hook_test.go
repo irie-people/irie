@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 func TestMain(m *testing.M) { testutil.Main(m) }

@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/harness"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/harness"
 )
 
 func resume(t *testing.T, p config.Profile, s harness.Spawn) ([]string, map[string]string, map[string][]byte) {

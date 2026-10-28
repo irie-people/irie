@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 )
 
 // Memory is a cost too (DESIGN §6.3): every agent takes the machine's

@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/irie-hq/irie/internal/testutil/ollamafake"
+	"github.com/irie-people/irie/internal/testutil/ollamafake"
 )
 
 func main() {

@@ -15,12 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/journal"
-	"github.com/irie-hq/irie/internal/paths"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/journal"
+	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 func steps(ids ...string) []action {

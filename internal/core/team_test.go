@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/testutil"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // teamAgent stands in for Claude Code with agent teams: it starts one

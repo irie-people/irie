@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/route"
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/route"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 // routing makes the fake agent two route profiles: cheap, accurate enough

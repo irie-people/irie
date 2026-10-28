@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/irie-hq/irie/internal/config"
+	"github.com/irie-people/irie/internal/config"
 )
 
 // macMarks are the marks of the six slots on each palette's dark working

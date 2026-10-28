@@ -12,9 +12,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/paths"
-	"github.com/irie-hq/irie/internal/ui"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/ui"
 )
 
 const ctlUsage = `usage: irie ctl <command>

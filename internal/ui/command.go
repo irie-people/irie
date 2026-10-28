@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // ParseTask turns command bar input into spawn args (DESIGN §4.2). Only the

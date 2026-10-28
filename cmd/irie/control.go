@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // controlUsage is the part of ctlUsage for what the user does to a session

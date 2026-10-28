@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/event"
-	"github.com/irie-hq/irie/internal/harness"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness"
 )
 
 const sessionDir = "/home/alice/.local/state/irie/sessions/s0k3j9x2m4a7q"

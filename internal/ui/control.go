@@ -15,7 +15,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // Controls is what the sidebar asks of the core for these. A Backend

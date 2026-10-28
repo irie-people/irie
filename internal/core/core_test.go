@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/paths"
-	"github.com/irie-hq/irie/internal/testutil"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 func TestMain(m *testing.M) { testutil.Main(m) }
@@ -258,7 +258,7 @@ func TestUpReplacesACoreAndSidebarOfAnotherVersion(t *testing.T) {
 
 	// The same source linked without symbols: another binary, so another version.
 	other := filepath.Join(t.TempDir(), "irie")
-	if out, err := exec.Command("go", "build", "-ldflags=-s", "-o", other, "github.com/irie-hq/irie/cmd/irie").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-ldflags=-s", "-o", other, "github.com/irie-people/irie/cmd/irie").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	v, err := exec.Command(other, "version").Output()

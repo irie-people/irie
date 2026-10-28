@@ -26,10 +26,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 // outsideEvery is how often the core lists the sessions outside Irie while

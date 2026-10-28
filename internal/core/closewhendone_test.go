@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/testutil"
 )
 
 func TestCloseWhenDoneClosesAFinishedSession(t *testing.T) {

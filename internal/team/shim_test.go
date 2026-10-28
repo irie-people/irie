@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/testutil"
-	"github.com/irie-hq/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/tmux"
 )
 
 const sock = "/tmp/tmux-501/irie-teams"

@@ -4,7 +4,7 @@
 
 Report it privately, with GitHub's private vulnerability reporting. Don't open an issue, a pull request or a discussion about it.
 
-1. Open the [Security tab](https://github.com/irie-hq/irie/security) of irie-hq/irie.
+1. Open the [Security tab](https://github.com/irie-people/irie/security) of irie-people/irie.
 2. Choose **Report a vulnerability**.
 3. Say what you found, how to reproduce it, and what it lets someone do.
 

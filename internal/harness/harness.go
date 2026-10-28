@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/event"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/event"
 )
 
 // Levels are what Irie can do with a harness (DESIGN §3.1).

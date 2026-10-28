@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/harness"
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // moveWait is how long a move waits for the outside copy to exit. Claude

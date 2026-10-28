@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/irie-hq/irie/internal/config"
-	"github.com/irie-hq/irie/internal/harness"
-	"github.com/irie-hq/irie/internal/host"
+	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/host"
 )
 
 // MinVersion is the first Claude Code with a hook's onFailure, which lets

@@ -3,7 +3,7 @@ package core
 import (
 	"encoding/json"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // controlOps are the ops of what the user does to a session as a whole and

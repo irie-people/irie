@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/host"
-	"github.com/irie-hq/irie/internal/ipc"
-	"github.com/irie-hq/irie/internal/testutil"
-	"github.com/irie-hq/irie/internal/testutil/ollamafake"
-	"github.com/irie-hq/irie/internal/ui"
+	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/testutil/ollamafake"
+	"github.com/irie-people/irie/internal/ui"
 )
 
 // models are a model a coding agent can run, and one that cannot call

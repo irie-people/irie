@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/irie-hq/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // Park and unpark find their session as close does, and their usage says

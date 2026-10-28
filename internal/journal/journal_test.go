@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irie-hq/irie/internal/event"
+	"github.com/irie-people/irie/internal/event"
 )
 
 const session = "s0k3j9x2m4a7q"
