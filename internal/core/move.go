@@ -185,6 +185,51 @@ func alive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
+// errNoList is why stopCopies cannot tell what runs: Claude Code's CLI did
+// not list its sessions.
+var errNoList = errors.New("Claude Code did not list its sessions")
+
+// stopCopies ends the sessions in Claude Code's background that carry
+// conversation vendorID on outside Irie, as a move ends an outside copy:
+// `claude stop <id>` with profile p's command, so that the supervisor does
+// not start them again, then a wait of up to wait for each process to
+// exit. A copy in a terminal is left alone, as the user's to end. It
+// returns the short ids it stopped. It runs the CLI, so the caller does not
+// hold c.mu.
+func (c *Core) stopCopies(p config.Profile, vendorID string, wait time.Duration) ([]string, error) {
+	if vendorID == "" {
+		return nil, nil
+	}
+	env := c.agentEnv(p)
+	list, err := listOutside(p.Command, env)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errNoList, err)
+	}
+	var stopped []string
+	for _, o := range list {
+		// Without a short id there is nothing to stop it with; that matters
+		// only while its process runs.
+		if o.Kind != ipc.KindBackground || o.VendorID != vendorID || o.ID == "" && o.PID <= 1 {
+			continue
+		}
+		if err := stopBackground(p.Command, env, o.ID); err != nil {
+			if o.PID > 1 && alive(o.PID) {
+				return stopped, fmt.Errorf("claude stop %s: %v", o.Key(), err)
+			}
+			// Nothing runs it now, so nothing shares the conversation.
+			c.log.Warn("claude stop", "id", o.Key(), "resume", vendorID, "err", err)
+			continue
+		}
+		stopped = append(stopped, o.ID)
+		for deadline := time.Now().Add(wait); o.PID > 1 && alive(o.PID); time.Sleep(50 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				return stopped, fmt.Errorf("its copy in Claude Code's background (pid %d) did not exit within %v of claude stop %s", o.PID, wait, o.ID)
+			}
+		}
+	}
+	return stopped, nil
+}
+
 // stopBackground runs `<command> stop <id>` for a background session.
 func stopBackground(command string, env []string, id string) error {
 	if id == "" || strings.HasPrefix(id, "-") {

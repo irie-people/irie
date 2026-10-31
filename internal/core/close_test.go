@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -310,5 +311,88 @@ func TestClosingAFrozenSessionEndsItGently(t *testing.T) {
 	testutil.Eventually(t, 2*time.Second, "the agent still runs", func() bool { return !alive(pid) })
 	if sig := c.signals(a.ID); !slices.Equal(sig, []string{"terminated"}) {
 		t.Errorf("the agent got %q, want SIGTERM", sig)
+	}
+}
+
+// handOff says to the core, as Claude Code does through the session's hooks,
+// that a copy under the id fork carries the conversation of session id on
+// in Claude Code's background.
+func (c *coreEnv) handOff(id, fork string) {
+	c.t.Helper()
+	payload, _ := json.Marshal(map[string]any{"hook_event_name": "SessionStart", "session_id": fork, "source": "fork"})
+	if err := c.call(ipc.OpHook, ipc.HookArgs{Harness: "claude-code", Session: id, Payload: payload}, nil); err != nil {
+		c.t.Fatalf("SessionStart of the copy: %v", err)
+	}
+}
+
+func TestCloseEndsTheConversationItsAgentHandedToClaudeCodesBackground(t *testing.T) {
+	const fork = "44444444-5555-4666-8777-888888888888"
+	f := newFakeClaude(t)
+	c := setupWith(t, agentConfig{command: f.script})
+	a := c.spawn("prompt,stop,exit:0")
+	c.waitState(a.ID, ipc.StateExited)
+
+	// Its agent exits, and Claude Code carries the conversation on in its
+	// background as a copy under a new id, which the supervisor keeps
+	// going. The row says so.
+	c.handOff(a.ID, fork)
+	if row, _ := c.row(a.ID); row.State != ipc.StateExited || row.Detail != "exited 0 · moved to Claude Code's background" {
+		t.Errorf("row = %s %q", row.State, row.Detail)
+	}
+	first := f.add(ipc.KindBackground, ipc.StatusBusy, fork, "outside-task", a.Cwd)
+
+	// You close the row: it is done, so the copy ends too, as a move ends
+	// one, and the supervisor does not start it again.
+	c.closeSession(a.ID)
+	testutil.Eventually(t, 10*time.Second, "claude stop was not run", func() bool { return slices.Equal(f.stops(), []string{fork[:8]}) })
+	if !exits(first) {
+		t.Fatal("the copy still runs")
+	}
+	if r := c.listAll(); len(r.Closed) != 1 || r.Closed[0].ID != a.ID || r.Closed[0].Auto {
+		t.Errorf("closed = %+v", r.Closed)
+	}
+
+	// Stopped, it is listed no more, until something wakes it in Claude
+	// Code's background again. Reopening the row ends that copy first and
+	// carries the conversation on in Irie, so two agents never share it.
+	f.list = nil
+	second := f.add(ipc.KindBackground, ipc.StatusIdle, fork, "outside-task", a.Cwd)
+	s, err := c.reopen(a.ID)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := f.stops(); !slices.Equal(got, []string{fork[:8], fork[:8]}) {
+		t.Errorf("claude stop got %q", got)
+	}
+	if !exits(second) {
+		t.Fatal("the copy still runs after the reopen")
+	}
+	spec, err := host.ReadSpec(c.paths.SpecFile(s.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(spec.Argv); s.ID != a.ID || n < 2 || spec.Argv[n-2] != "--resume" || spec.Argv[n-1] != fork {
+		t.Errorf("reopened %s with %q, want --resume %s", s.ID, spec.Argv, fork)
+	}
+	c.waitState(a.ID, ipc.StateIdle)
+
+	// Closed again, and its conversation moved into Irie from Claude
+	// Code's background as a session of its own: the old row cannot reopen
+	// on the same conversation.
+	c.closeSession(a.ID)
+	f.list = nil
+	f.add(ipc.KindBackground, ipc.StatusIdle, fork, "outside-task", a.Cwd)
+	c.waitOutside("the copy was not listed", func(o []ipc.OutsideSession) bool { return len(o) == 1 && o[0].Movable })
+	moved, err := c.move(fork)
+	if err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	f.list = nil
+	f.write()
+	if _, err := c.reopen(a.ID); code(err) != ipc.CodeBusy || !strings.Contains(err.Error(), moved.Name) {
+		t.Errorf("reopen while %s runs the conversation: %v", moved.Name, err)
+	}
+	if got := f.stops(); len(got) != 3 {
+		t.Errorf("claude stop got %q, want the move's third and no more", got)
 	}
 }

@@ -4,9 +4,10 @@ import SwiftUI
 // closes itself, so its card leaves the sidebar, and what is ready for you
 // would otherwise vanish. The dock sits above the mode switch and lists
 // the sessions that closed on their own, newest first: the work you asked
-// for, ready to look at. A fresh one gets the done colour and a dot until
-// you open it or it is a quarter of an hour old. A click reopens the session
-// and shows it; × drops the row (it stays in history, ⇧⌘T).
+// for, ready to look at. One you closed yourself is done, so it is never
+// here. A fresh one gets the done colour and a dot until you open it or it
+// is a quarter of an hour old. A click reopens the session and shows it;
+// × drops the row (it stays in history, ⇧⌘T).
 
 extension Store {
     /// Reopens one closed session and shows it, as ⇧⌘T does for the last.
@@ -45,7 +46,7 @@ struct ReviewDock: View {
         if store.closeWhenDone {
             TimelineView(.periodic(from: .now, by: 30)) { ctx in
                 let rows = store.closed
-                    .filter { ctx.date.timeIntervalSince($0.closed) < Self.keep && !seen.contains($0.id) }
+                    .filter { $0.auto == true && ctx.date.timeIntervalSince($0.closed) < Self.keep && !seen.contains($0.id) }
                     .prefix(Self.rowLimit)
                 if !rows.isEmpty {
                     dock(Array(rows), now: ctx.date)

@@ -10,8 +10,9 @@ package core
 // something, or the dog has sent it back dog.nudges times since the user's
 // last prompt. A jot whose turn ends with work left says so in its row, and
 // the dog looks again every dogEvery seconds, so the row clears once the
-// work lands, however it lands. The dog only reads: it never commits,
-// merges or removes anything.
+// work lands, however it lands. A jot you close is done: the dog never sends
+// it back, lists it or brings it back, whatever it left. The dog only reads:
+// it never commits, merges or removes anything.
 
 import (
 	"fmt"
@@ -50,7 +51,8 @@ const dogStopBudget = 5 * time.Second
 // before the dog looks for them again.
 const placesFor = 2 * time.Minute
 
-// dogClosedFor is how far back irie ctl dog looks among closed jots.
+// dogClosedFor is how far back irie ctl dog looks among the jots that
+// closed on their own.
 const dogClosedFor = 24 * time.Hour
 
 // dogState is what the dog knows of a jot (session.dog). c.mu guards it.
@@ -365,8 +367,9 @@ func (c *Core) dogSweep() {
 }
 
 // dogList is the dog's report (irie ctl dog): the jots that are not through,
-// looked at afresh. The open ones come in the list's order, then those
-// closed in the last day, the last closed first.
+// looked at afresh. The open ones come in the list's order, then those that
+// closed on their own (spawn.close_when_done) in the last day, the last
+// closed first. A jot you closed is done, so it is never on the report.
 func (c *Core) dogList() (ipc.DogResult, error) {
 	type closedLook struct {
 		jotLook
@@ -381,7 +384,7 @@ func (c *Core) dogList() (ipc.DogResult, error) {
 	}
 	var closed []closedLook
 	for _, r := range c.closes.list {
-		if c.sessions[r.ID] == nil && time.Since(r.Closed) < dogClosedFor && c.cfg().Dog.Watch {
+		if r.Auto && c.sessions[r.ID] == nil && time.Since(r.Closed) < dogClosedFor && c.cfg().Dog.Watch {
 			if l, ok := c.closedJot(r); ok {
 				closed = append(closed, closedLook{l, r})
 			}

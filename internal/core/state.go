@@ -27,6 +27,11 @@ type track struct {
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
 	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
 	resumed   bool                   // spawn.requested carried a conversation on, as a reopen or a move does
+	// away is the conversation its agent handed to Claude Code's
+	// background (←, /background, or an exit with work still running):
+	// a copy under a new id, which the supervisor keeps going and whose
+	// hooks still report here. Close ends it too (close.go).
+	away string
 
 	// How its last turn ended, for the jot dog (dog.go): how often the dog
 	// sent it back since the user's last prompt, and the work of its own
@@ -55,6 +60,9 @@ const (
 )
 
 func (t *track) apply(e event.Event) {
+	// Its agent is gone: its pane died, or its session ended other than
+	// by /clear or /resume, after which the same process goes on.
+	gone := t.exited != nil || t.ended != nil && t.ended.Str("reason") != "clear" && t.ended.Str("reason") != "resume"
 	if e.Source == event.SourceHook && e.Kind != event.SessionEnded {
 		// After /clear, Claude Code ends one session and starts the next.
 		t.ended = nil
@@ -75,6 +83,11 @@ func (t *track) apply(e event.Event) {
 		}
 		if e.Vendor != nil && e.Vendor.SessionID != "" {
 			t.vendorID = e.Vendor.SessionID
+			// A fork that starts once the agent is gone is the
+			// conversation carried on in Claude Code's background.
+			if gone && e.Str("source") == "fork" {
+				t.away = e.Vendor.SessionID
+			}
 		}
 		if e.Str("source") == "resume" && t.activity == "" {
 			// A resumed conversation, such as one moved into Irie, waits at
@@ -331,6 +344,9 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 			if s.Reason != "" {
 				s.Detail += " · " + s.Reason
 			}
+		}
+		if t.away != "" {
+			s.Detail += " · moved to Claude Code's background"
 		}
 	case ipc.StateNeedsYou:
 		n := t.latestNeed()

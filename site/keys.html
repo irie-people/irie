@@ -192,11 +192,10 @@ irie: tidy-the-readme failed: failed: exit 127 · irie: aider: command not found
   <p>Each event has a <code>kind</code> and its <code>data</code>. The kinds today are <code>spawn.requested</code>, <code>spawn.failed</code>, <code>session.started</code>, <code>prompt.submitted</code>, <code>tool.started</code>, <code>tool.finished</code>, <code>tool.failed</code>, <code>input.needed</code>, <code>turn.ended</code>, <code>turn.failed</code>, <code>subagent.started</code>, <code>subagent.finished</code>, <code>session.ended</code>, <code>pane.exited</code> and <code>ui.shown</code>.</p>
   <p>Irie keeps the same events in <code>~/.local/state/irie/journal/</code>, one file per day, for 30 days.</p>
   <h3 id="ctl-dog">irie ctl dog [--json]</h3>
-  <p>Lists the tasks that aren’t through: their turn is over, but their work isn’t committed, or isn’t yet in the branch their repo lands in (<a href="profiles.html#dog"><code>[dog]</code></a>). Tasks closed in the last day are listed too, so <code>irie ctl reopen</code> can bring one back to finish.</p>
+  <p>Lists the tasks that aren’t through: their turn is over, but their work isn’t committed, or isn’t yet in the branch their repo lands in (<a href="profiles.html#dog"><code>[dog]</code></a>). A task you close is done, so it’s never listed and the dog never brings it back. A task that closed on its own (<a href="profiles.html#spawn"><code>close_when_done</code></a>) in the last day is listed when work has come into it since, so <code>irie ctl reopen</code> can bring it back to finish.</p>
 <pre><code><span class="prompt">$ </span>irie ctl dog
 SESSION        STATE   NAME            LEFT                   WHERE
-s38bvad9qgve0  done    fix-cart-total  2 commits not in main  ~/.local/share/irie/worktrees/shop/fix-cart-total (irie/fix-cart-total)
-s38bvacmnq8rx  closed  tidy-readme     1 file not committed   ~/.local/share/irie/worktrees/shop/tidy-readme (irie/tidy-readme)</code></pre>
+s38bvad9qgve0  done    fix-cart-total  2 commits not in main  ~/.local/share/irie/worktrees/shop/fix-cart-total (irie/fix-cart-total)</code></pre>
 
   <p>More <code>irie ctl</code> commands arrive with the actions they control, such as pausing. Milestone 10 adds <code>irie ctl preflight</code> and <code>spawn --force</code> for local models. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></p>
 
