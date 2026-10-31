@@ -31,6 +31,12 @@ var models = []ollamafake.Model{
 // server writes its environment to.
 func ownServer(t *testing.T, a *agentConfig) (log string, port int) {
 	t.Helper()
+	return ownServerWith(t, a, models)
+}
+
+// ownServerWith is ownServer with the given models.
+func ownServerWith(t *testing.T, a *agentConfig, models []ollamafake.Model) (log string, port int) {
+	t.Helper()
 	dir := t.TempDir()
 	list := filepath.Join(dir, "models.json")
 	b, _ := json.Marshal(models)
@@ -183,6 +189,64 @@ func TestALocalSpawnRunsOnIriesOwnServer(t *testing.T) {
 	}
 	if servers != 1 {
 		t.Errorf("%d servers after a restart, want 1", servers)
+	}
+}
+
+func TestALocalProfileRunsTheBestModelHere(t *testing.T) {
+	a := agentConfig{extra: localProfile(t)}
+	ownServerWith(t, &a, []ollamafake.Model{
+		{Name: "other:7b", Size: 90 << 20, Tools: true},
+		{Name: "bonsai-2:9b", Size: 100 << 20, Tools: true},
+		{Name: "coder:latest", Size: 80 << 20, Tools: true},
+	})
+	c := setupWith(t, a)
+
+	// No model was chosen and the server has three an agent can run; one
+	// of them is a model Irie suggests, so +local runs that one rather than
+	// asking which.
+	var lr ipc.LocalResult
+	if err := c.call("local", ipc.LocalArgs{Start: true}, &lr); err != nil {
+		t.Fatal(err)
+	}
+	if lr.Pick != "bonsai-2:9b" || lr.Chosen != "" || lr.Disk <= 0 {
+		t.Errorf("local = %+v", lr)
+	}
+	for _, m := range lr.Models {
+		if about := m.About; (m.Name == "bonsai-2:9b") != (about != "") || about != "" && !strings.Contains(about, "ternary") {
+			t.Errorf("%s is about %q", m.Name, about)
+		}
+	}
+	// The + list says so, and what each model is.
+	var cr ipc.CompleteResult
+	if err := c.call("complete", ipc.CompleteArgs{Text: "+"}, &cr); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"+local": "bonsai-2:9b", "+ollama:bonsai-2:9b": "Qwen3.5-9B, ternary"}
+	for i, item := range cr.Items {
+		if part, ok := want[item]; ok {
+			if !strings.Contains(cr.Notes[i], part) {
+				t.Errorf("%s: %q, want %q in it", item, cr.Notes[i], part)
+			}
+			delete(want, item)
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("the + list lacks %v: %q", want, cr.Items)
+	}
+	var r ipc.SpawnResult
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "local"}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if row := c.waitState(r.Session.ID, ipc.StateWorking); row.Model != "bonsai-2:9b" {
+		t.Errorf("+local runs %q", row.Model)
+	}
+
+	// A model named without its tag is the server's :latest, as in Ollama.
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "ollama:coder"}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if row := c.waitState(r.Session.ID, ipc.StateWorking); row.Model != "coder:latest" {
+		t.Errorf("+ollama:coder runs %q", row.Model)
 	}
 }
 

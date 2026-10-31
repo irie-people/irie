@@ -55,7 +55,7 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 	}
 	var m *Model
 	for i := range models {
-		if models[i].Name == model {
+		if SameModel(models[i].Name, model) {
 			m = &models[i]
 		}
 	}
@@ -63,6 +63,9 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 		problem("Ollama at %s has no model %s; `irie setup local --model %s` pulls it", o.URL, model, model)
 		return c
 	}
+	// The server's own name for it, which /api/ps uses too: qwen3.8 is
+	// qwen3.8:latest.
+	model, c.Model = m.Name, m.Name
 	info, err := o.Show(ctx, model)
 	if err != nil {
 		problem("Ollama cannot describe %s: %v", model, err)
@@ -88,7 +91,7 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 	}
 	var freed int64 // what loading this model unloads from Irie's own server first
 	for _, l := range loaded {
-		if l.Name == model && l.Context >= w.MinContext {
+		if SameModel(l.Name, model) && l.Context >= w.MinContext {
 			c.Loaded = true
 		} else if w.Own {
 			freed += l.Size
@@ -127,7 +130,7 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 		}
 	}
 	for _, l := range loaded {
-		if l.Name != model {
+		if !SameModel(l.Name, model) {
 			continue
 		}
 		c.Context, c.Need, c.VRAM, c.Loaded = l.Context, l.Size, l.VRAM, true

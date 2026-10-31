@@ -996,7 +996,7 @@ Before spawning on a local profile, v1 runs a preflight (M10):
 | llama-server (after M10) | `GET /props` (`n_ctx`) and `GET /slots` (context per slot) | `-c <n>`, which is the total and is divided across `-np` slots |
 
 **Preflight rules.**
-- **Model.** The profile's own, else the one `irie setup local` chose, else the only one the server has that an agent can run and the machine can hold. With several, the refusal lists them, cheapest in memory first; with none, it points to `irie setup local`.
+- **Model.** The profile's own, else the one `irie setup local` chose, else the best of the models Irie suggests (§6.3) that the server has, an agent can run and the machine can hold, else the only such model there. With several others, the refusal lists them, cheapest in memory first; with none, it points to `irie setup local`. A name is the server's own, as in Ollama: `+ollama:qwen3.8` runs `qwen3.8:latest`, in any case.
 - **Tools.** A model whose capabilities (`/api/show`) lack `tools` is refused.
 - **Threshold.** Refuse below `min_context` (default 65536, Ollama's guidance for coding agents). A model trained for less is refused before it is loaded. A refusal names the runtime, the measured context and the fix.
 - **Memory.** Refused when what the model takes (§6.3) is above the budget, or above what is free now less the reserve. The load happens only after this check.
@@ -1058,11 +1058,13 @@ The status strip shows a session's cost (`$1.23 ctx 41% 640 MB`, or `local` for 
 **`irie setup local`.**
 1. **Install.** Installs Ollama by its official route when it is missing, only after a yes. On macOS that is Homebrew's `ollama` formula when `brew` is there, else the app from ollama.com; on Linux, Ollama's install script.
 2. **Start and weigh.** Starts the server, then shows the machine's memory and each model weighed against it.
-3. **Pick.** The largest Qwen3.5 that fits the budget, when the server has it (Qwen3.5 is the local model of Ollama's Claude Code guide). Else the largest model there that fits. Else that Qwen3.5, to pull.
-4. **Pull.** Pulls the model, after a yes.
+3. **Pick.** The best suggested model that fits the budget, which the server has or the disk can take while keeping 10 GiB free. Else the largest model there that fits.
+4. **Pull.** Pulls the model, after a yes. A pull that would leave the disk less than 10 GiB is refused.
 5. **Check.** Checks it as a spawn would, and makes it `+local`'s.
 
-`irie ctl local` prints the same table, and `irie ctl preflight` runs the check alone.
+`irie ctl local` prints the same table, with the disk space free for models and the model `+local` runs, and `irie ctl preflight` runs the check alone.
+
+**Suggestions.** The models Irie suggests, best first: Bonsai 2 27B, Qwen3.8 27B, Qwen3.5 27B, Bonsai 2 9B, Qwen3.5 9B, Bonsai 2 4B, Qwen3.5 4B. Quantization sets much of the order. Bonsai 2 (PrismML, 2026) stores a Qwen model's weights as ternary values, −1, 0 or +1, at about two bits a weight: its 27B takes 8.3 GB where Qwen's own 4-bit 27B takes 17.7 GB, and keeps 98% of Qwen3.8-27B's benchmark average. A ternary model comes before a 4-bit one of the same base, which takes twice the memory and decodes at about half the speed for about a point; a larger base comes before a smaller one; below 4B a model is too weak for an agent's tool loop. So an 18 GiB Mac runs a 27B model at a 64k context (about 11 GB), and an 8 GiB laptop a 9B one (about 4.9 GB). Ollama's library serves Bonsai 2 in its `Q2_0` packing; the smaller `PTQ1_0` and `PQ2_0` packings need PrismML's own llama.cpp.
 
 **Not done, and why.**
 - **Bundling Ollama.** Its macOS app is about 650 MB and has its own security updates, and the user's own install is one command away.

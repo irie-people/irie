@@ -494,11 +494,13 @@ type LocalResult struct {
 	Running bool         `json:"running"` // it answers
 	Version string       `json:"version,omitempty"`
 	Error   string       `json:"error,omitempty"`  // why it cannot be used
-	Chosen  string       `json:"chosen,omitempty"` // the model local profiles with no model of their own run
+	Chosen  string       `json:"chosen,omitempty"` // the model `irie setup local` chose for local profiles with no model of their own
+	Pick    string       `json:"pick,omitempty"`   // the model those profiles run: Chosen, else the best one here that fits
 	Context int          `json:"context"`          // the context it loads models with, when Irie runs it
 	KVCache string       `json:"kv_cache"`
 	Memory  Memory       `json:"memory"`
-	Models  []LocalModel `json:"models"` // the cheapest in memory first
+	Disk    int64        `json:"disk,omitempty"` // the disk space free where the server keeps its models; 0 = unknown
+	Models  []LocalModel `json:"models"`         // the cheapest in memory first
 }
 
 // LocalModel is one model of the local server.
@@ -511,6 +513,7 @@ type LocalModel struct {
 	Fits     bool   `json:"fits"`             // Need is within the budget
 	Why      string `json:"why,omitempty"`    // why a coding agent cannot run on it, such as no tools
 	Remote   bool   `json:"remote,omitempty"` // a cloud model
+	About    string `json:"about,omitempty"`  // what it is, for a model Irie suggests, such as "Qwen3.8-27B, ternary"
 }
 
 // RateArgs rate a session's work, which teaches the router (DESIGN §6.4).

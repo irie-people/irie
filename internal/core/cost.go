@@ -96,7 +96,11 @@ func (c *Core) completeProfiles(text string) ([]string, []string) {
 			c.mu.Lock()
 			mem := c.memoryNow()
 			c.mu.Unlock()
-			notes = append(notes, strings.Join([]string{"local, $0", memoryNote(m, mem)}, " · "))
+			note := []string{"local, $0", memoryNote(m, mem)}
+			if m.About != "" {
+				note = append(note, m.About)
+			}
+			notes = append(notes, strings.Join(note, " · "))
 		}
 	}
 	return items, notes
@@ -121,6 +125,9 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 		if model == "" {
 			model = chosen
 		}
+		if model == "" {
+			model = bestModel(models)
+		}
 		cost := "local, $0"
 		if p.Cost != "" {
 			cost = p.Cost
@@ -132,7 +139,7 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 		}
 		add(model)
 		add(cost)
-		if i := slices.IndexFunc(models, func(m ipc.LocalModel) bool { return m.Name == model }); i >= 0 {
+		if i := slices.IndexFunc(models, func(m ipc.LocalModel) bool { return localmodel.SameModel(m.Name, model) }); i >= 0 {
 			add(memoryNote(models[i], mem))
 		} else if server == serverStarting {
 			add("starting Irie's Ollama server")
