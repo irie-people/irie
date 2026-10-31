@@ -196,19 +196,39 @@ struct AttachInfo: Decodable, Equatable {
     var teams: String?
 }
 
-struct SpawnArgs: Encodable {
-    var task = ""
+/// What was typed in the task bar, for the core to read (DESIGN §4.2,
+/// docs/CORE.md): the text as typed, the session selected for a : command
+/// to act on, and where and on what a task runs when its words don't say.
+/// The app keeps no rules of its own for the words.
+struct InputArgs: Encodable {
+    var text: String
+    var session: String?
+    /// The selected session outside Irie, which :move brings in.
+    var outside: String?
     var repo: String?
     var inPlace: Bool?
     var profile: String?
-    /// A model for this task instead of its profile's; only a core whose
-    /// hello lists spawn-model takes it.
+    /// A model for a task instead of its profile's; only a core whose hello
+    /// lists spawn-model takes it.
     var model: String?
 
     enum CodingKeys: String, CodingKey {
-        case task, repo, profile, model
+        case text, session, outside, repo, profile, model
         case inPlace = "in_place"
     }
+}
+
+/// What the core made of it: spawned, answered, ran or asked, and what to
+/// say, as it is.
+struct InputResult: Decodable {
+    var did: String
+    var op: String?
+    var text: String
+    var session: Session?
+    /// Show the session with the keyboard: a tool session waits on its user.
+    var show: Bool?
+    /// The question to answer when did is asked, through op (undo or redo).
+    var choice: UndoChoice?
 }
 
 /// An @ or + word to complete: "@" lists the repos, "+" the agents.
@@ -220,10 +240,6 @@ struct CompleteResult: Decodable {
     var items: [String]
     /// What each item runs and costs, for the + words.
     var notes: [String]?
-}
-
-struct SpawnResult: Decodable {
-    var session: Session
 }
 
 struct ShowArgs: Encodable {
