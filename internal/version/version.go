@@ -10,7 +10,7 @@ import (
 )
 
 // Base is the release version.
-const Base = "0.1.0-dev" // x-release-please-version
+const Base = "0.1.0" // x-release-please-version
 
 // String is Base plus a hash of the running executable, so two different
 // builds never report the same version. `irie up` compares it to replace a

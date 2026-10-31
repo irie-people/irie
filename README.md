@@ -26,7 +26,7 @@ It has no server, account or telemetry, and sends nothing over the network of it
 
 ## Status
 
-Early and unreleased. There's no release to download yet, but you can build Irie from source: see [Install](https://irie-people.github.io/irie/install.html).
+Early. The first release, 0.1.0, has no download yet, but you can build Irie from source: see [Install](https://irie-people.github.io/irie/install.html).
 
 ## Docs
 
@@ -45,7 +45,7 @@ The website has the docs, from installing Irie to a merged change. Its pages are
 
 ## Free, and paid back
 
-**Get the value you'd pay for, free, today.** If Irie ever makes money (donations, sponsorships, grants), it all goes back to the people who build it, after running costs, in proportion to the value of what they contributed. The founder started with zero Steak and earns it the same way as everyone else. The record is public: [irie-people/stake](https://github.com/irie-people/stake). It runs on [Steak](https://github.com/steak-hq/steak) v0.2.0.
+**Get the value you'd pay for, free, today.** If Irie ever makes money (donations, sponsorships, grants), it all goes back to the people who build it, after running costs, in proportion to the value of what they contributed. The founder started with zero Steak and earns it the same way as everyone else. The record is public: [irie-people/stake](https://github.com/irie-people/stake). It runs on [Steak](https://github.com/irie-people/steak) v0.2.0.
 
 ## Help
 

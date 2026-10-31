@@ -107,12 +107,17 @@ func writeJSON(path string, v any) error {
 func (c *Core) profile(name string) (config.Profile, bool) {
 	p, ok := c.cfg().Profiles[name]
 	if !ok {
-		model, isLocal := strings.CutPrefix(name, localPrefix)
-		if !isLocal || model == "" {
+		base, model := "local", ""
+		if m, isLocal := strings.CutPrefix(name, localPrefix); isLocal {
+			model = m
+		} else if m, isLlama := strings.CutPrefix(name, llamaPrefix); isLlama {
+			base, model = "big", m
+		}
+		if model == "" {
 			return config.Profile{}, false
 		}
-		if p, ok = c.cfg().Profiles["local"]; !ok || p.Local == nil {
-			p = config.Default().Profiles["local"]
+		if p, ok = c.cfg().Profiles[base]; !ok || p.Local == nil || isLlama(p) != (base == "big") {
+			p = config.Default().Profiles[base]
 		}
 		p.Model = model
 	}
@@ -413,7 +418,7 @@ func (c *Core) localModel(ctx context.Context, o localmodel.Ollama, own bool, na
 	if err != nil {
 		return "", ipc.Errorf(ipc.CodeBadArgs, "+%s: Ollama at %s: %v", name, o.URL, err)
 	}
-	if best := bestModel(ms); best != "" {
+	if best := bestBy(ms, localmodel.Rank); best != "" {
 		return best, nil
 	}
 	var ok []string
@@ -432,13 +437,13 @@ func (c *Core) localModel(ctx context.Context, o localmodel.Ollama, own bool, na
 	return "", ipc.Errorf(ipc.CodeAmbiguous, "+%s has no model yet; pick one of %s, or run `irie setup local` to choose one for it", name, strings.Join(ok, ", "))
 }
 
-// bestModel is the best suggested model of ms that an agent can run on and
-// the machine can hold, or "".
-func bestModel(ms []ipc.LocalModel) string {
-	best, rank := "", len(localmodel.Suggestions)
+// bestBy is the model of ms that an agent can run on and the machine can
+// hold that ranks best, by a rank of the models Irie suggests, or "".
+func bestBy(ms []ipc.LocalModel, rank func(string) int) string {
+	best, at := "", -1
 	for _, m := range ms {
-		if r := localmodel.Rank(m.Name); r >= 0 && r < rank && runnable(m) {
-			best, rank = m.Name, r
+		if r := rank(m.Name); r >= 0 && (at < 0 || r < at) && runnable(m) {
+			best, at = m.Name, r
 		}
 	}
 	return best
@@ -498,6 +503,9 @@ func (c *Core) evictions(model string) []string {
 // env. A failed check refuses the spawn, unless force or the profile's
 // enforce = false lets it go ahead with warnings.
 func (c *Core) prepareLocal(name string, p *config.Profile, force bool) ([]string, error) {
+	if isLlama(*p) {
+		return c.prepareLlama(name, p, force)
+	}
 	o, own, err := c.ollama(true)
 	if err != nil {
 		return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s: %v", name, err)
@@ -512,7 +520,21 @@ func (c *Core) prepareLocal(name string, p *config.Profile, force bool) ([]strin
 	var warnings []string
 	if !chk.OK() {
 		if !force && p.Local.Enforce {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s on %s: %s", name, model, strings.Join(chk.Problems, "; "))
+			msg := strings.Join(chk.Problems, "; ")
+			if chk.Short {
+				if ms, err := c.localModels(ctx, o, own); err == nil {
+					var freed int64
+					if own {
+						c.mu.Lock()
+						freed = c.localMem
+						c.mu.Unlock()
+					}
+					if alt := fitsNow(ms, model, c.readMachine(), freed, localmodel.Rank); alt != "" {
+						msg += fmt.Sprintf("; %s fits now (+%s%s)", alt, localPrefix, alt)
+					}
+				}
+			}
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s on %s: %s", name, model, msg)
 		}
 		warnings = append(warnings, chk.Problems...)
 	}
@@ -542,15 +564,26 @@ func (c *Core) preflight(a ipc.PreflightArgs) (ipc.PreflightResult, error) {
 	if p.Local == nil {
 		return ipc.PreflightResult{}, ipc.Errorf(ipc.CodeBadArgs, "+%s does not run on a local model", name)
 	}
+	if a.Model != "" {
+		p.Model = a.Model
+	}
+	if isLlama(p) {
+		bin, b, m, err := c.llamaTarget(name, p)
+		if err != nil {
+			return ipc.PreflightResult{URL: c.llamaURL(), Problems: []string{err.Error()}}, nil
+		}
+		chk := c.checkLlama(bin, b, m, p, a.Force)
+		return ipc.PreflightResult{
+			OK: chk.OK(), URL: chk.URL, Model: chk.Model, Context: chk.Context, Need: chk.Need,
+			Problems: chk.Problems, Warnings: chk.Warnings,
+		}, nil
+	}
 	o, own, err := c.ollama(true)
 	if err != nil {
 		return ipc.PreflightResult{URL: o.URL, Problems: []string{err.Error()}}, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 	defer cancel()
-	if a.Model != "" {
-		p.Model = a.Model
-	}
 	model, err := c.localModel(ctx, o, own, name, p)
 	if err != nil {
 		return ipc.PreflightResult{URL: o.URL, Problems: []string{err.Error()}}, nil
@@ -579,6 +612,9 @@ func (c *Core) localStatus(a ipc.LocalArgs) (ipc.LocalResult, error) {
 	c.mu.Lock()
 	r := ipc.LocalResult{URL: o.URL, Own: own, Chosen: c.local.Model, Context: c.serverContext(own), KVCache: c.serverKV(own), Memory: c.memoryNow(), Models: []ipc.LocalModel{}}
 	c.mu.Unlock()
+	if a.Llama {
+		r.Llama = c.llamaStatus()
+	}
 	if err != nil {
 		r.Error = err.Error()
 		return r, nil

@@ -63,6 +63,11 @@ type Core struct {
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
 
+	llamaMu sync.Mutex // one start of Irie's llama-server at a time, taken before modelMu and mu
+	ggufMu  sync.Mutex // guards ggufs and builds; taken last
+	ggufs   map[string]ggufEntry
+	builds  map[string]buildEntry
+
 	mu         sync.Mutex // guards everything below, and serialises tmux calls
 	sessions   map[string]*session
 	snap       tmux.Snapshot
@@ -78,6 +83,7 @@ type Core struct {
 	local      localState               // local.json
 	machine    localmodel.Machine       // the machine's memory, last read
 	localMem   int64                    // what the models of Irie's own server take
+	llamaMem   int64                    // what Irie's own llama-server takes
 	plan       ipc.Plan                 // the plan's use, from the newest status update
 	planAt     time.Time
 	outcomes   map[string]*outcome // every session's route and outcome, those gone included

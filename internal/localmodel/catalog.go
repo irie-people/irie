@@ -33,6 +33,41 @@ var Suggestions = []Suggestion{
 	{"qwen3.5:4b", 3_324_173_757, qwen35(32, 4), "Qwen3.5-4B, 4-bit"},
 }
 
+// FileSuggestions are GGUF files that Irie's llama-server runs and Ollama
+// does not: Bonsai 2's smaller packings, which only PrismML's llama.cpp
+// runs, from PrismML's Hugging Face repositories (2026-10-31). They are the
+// same ternary weights as Ollama's bonsai-2, which is their Q2_0 packing,
+// in fewer bits: the 27B takes 5.95 GB in PTQ1_0 where Q2_0 takes 7.63 GB.
+// A file in local.models goes by its name without .gguf.
+var FileSuggestions = []Suggestion{
+	{"Ternary-Bonsai-2-27B-PTQ1_0", 5_946_648_928, qwen35(64, 4), "Qwen3.8-27B, ternary, 1.75 bits a weight"},
+	{"Ternary-Bonsai-2-27B-PQ2_0", 7_206_168_928, qwen35(64, 4), "Qwen3.8-27B, ternary, 2.13 bits a weight"},
+	{"Ternary-Bonsai-2-27B-Q2_0", 7_626_008_928, qwen35(64, 4), "Qwen3.8-27B, ternary"},
+	{"Ternary-Bonsai-2-9B-PTQ1_0", 1_997_486_976, qwen35(32, 4), "Qwen3.5-9B, ternary, 1.75 bits a weight"},
+	{"Ternary-Bonsai-2-9B-PQ2_0", 2_416_851_840, qwen35(32, 4), "Qwen3.5-9B, ternary, 2.13 bits a weight"},
+	{"Ternary-Bonsai-2-9B-Q2_0", 2_556_640_128, qwen35(32, 4), "Qwen3.5-9B, ternary"},
+}
+
+// llamaOrder ranks what Irie's llama-server may run, the best first: as
+// Suggestions, with each model's smaller packings before its larger ones.
+var llamaOrder = []string{
+	"Ternary-Bonsai-2-27B-PTQ1_0", "Ternary-Bonsai-2-27B-PQ2_0", "bonsai-2:27b", "Ternary-Bonsai-2-27B-Q2_0",
+	"qwen3.8:27b", "qwen3.5:27b",
+	"Ternary-Bonsai-2-9B-PTQ1_0", "Ternary-Bonsai-2-9B-PQ2_0", "bonsai-2:9b", "Ternary-Bonsai-2-9B-Q2_0",
+	"qwen3.5:9b", "bonsai-2:4b", "qwen3.5:4b",
+}
+
+// LlamaRank is a model's place among what Irie's llama-server may run, 0
+// for the best, and -1 for a model Irie does not suggest.
+func LlamaRank(name string) int {
+	for i, n := range llamaOrder {
+		if SameModel(n, name) {
+			return i
+		}
+	}
+	return -1
+}
+
 // qwen35 is the cache shape of a Qwen3.5-family model with layers layers,
 // of which every fourth keeps a cache of kvHeads 256-wide heads; the
 // others are linear attention, whose state does not grow with the context.
@@ -78,10 +113,16 @@ func Rank(name string) int {
 	return -1
 }
 
-// Suggested returns the suggestion that is model.
+// Suggested returns the suggestion that is model, among Ollama's and the
+// files.
 func Suggested(name string) (Suggestion, bool) {
 	if i := Rank(name); i >= 0 {
 		return Suggestions[i], true
+	}
+	for _, s := range FileSuggestions {
+		if SameModel(s.Name, name) {
+			return s, true
+		}
 	}
 	return Suggestion{}, false
 }

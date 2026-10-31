@@ -29,6 +29,7 @@ type Check struct {
 	Loaded   bool     `json:"loaded,omitempty"`   // it is in memory now
 	Problems []string `json:"problems,omitempty"` // why the spawn is refused; none means it may go ahead
 	Warnings []string `json:"warnings,omitempty"` // what to know anyway
+	Short    bool     `json:"short,omitempty"`    // the machine has too little memory free for it now
 }
 
 // OK reports whether the spawn may go ahead.
@@ -114,6 +115,7 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 			if w.Force {
 				warn("%s; loading it anyway", msg)
 			} else {
+				c.Short = true
 				problem("%s; close something first, pick a smaller model, or spawn with --force", msg)
 			}
 		}

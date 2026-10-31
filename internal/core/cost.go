@@ -103,6 +103,26 @@ func (c *Core) completeProfiles(text string) ([]string, []string) {
 			notes = append(notes, strings.Join(note, " · "))
 		}
 	}
+	// The models of Irie's llama-server, once the prefix asks for them: they
+	// are often Ollama's own again.
+	if prefix != "" && (strings.HasPrefix(llamaPrefix, prefix) || strings.HasPrefix(prefix, llamaPrefix)) {
+		if _, b, err := c.llamaBuild(); err == nil {
+			_, list := c.llamaList(b)
+			c.mu.Lock()
+			mem := c.memoryNow()
+			c.mu.Unlock()
+			for _, m := range list {
+				if name := llamaPrefix + m.Name; runnable(m) && strings.HasPrefix(name, prefix) && c.cfg().Profiles[name].Harness == "" {
+					items = append(items, "+"+name)
+					note := []string{"local, $0", memoryNote(m, mem)}
+					if m.About != "" {
+						note = append(note, m.About)
+					}
+					notes = append(notes, strings.Join(note, " · "))
+				}
+			}
+		}
+	}
 	return items, notes
 }
 
@@ -125,8 +145,11 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 		if model == "" {
 			model = chosen
 		}
+		if isLlama(p) {
+			return c.llamaNote(name, p)
+		}
 		if model == "" {
-			model = bestModel(models)
+			model = bestBy(models, localmodel.Rank)
 		}
 		cost := "local, $0"
 		if p.Cost != "" {

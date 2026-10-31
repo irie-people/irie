@@ -896,6 +896,12 @@ command = "claude"
 model = ""                    # "" = the one `irie setup local` chose; +ollama:<model> names any other
 local = { runtime = "ollama", min_context = 65536, enforce = true }
 
+[profiles.big]                # built in: Claude Code on Irie's own llama-server (§6.5), for big models in little memory
+harness = "claude-code"
+command = "claude"
+model = ""                    # "" = the best model it can run here; a GGUF file's name, or an Ollama model's
+local = { runtime = "llama-server", min_context = 65536, enforce = true }
+
 # [profiles.aider]            # example: generic harness
 # harness = "generic"
 # command = "aider"
@@ -911,6 +917,10 @@ context = 65536               # its OLLAMA_CONTEXT_LENGTH
 kv_cache = "q8_0"             # f16 | q8_0 | q4_0; q8_0 takes about half the memory of f16
 memory_gib = 0                # the most local models may take; 0 = two thirds of the machine's
 env = {}                      # more settings for its server, such as OLLAMA_MODELS
+llama_server = ""             # Irie's own llama-server (§6.5): any llama.cpp build, such as PrismML's; "" = PATH, then Homebrew's
+llama_port = 11436            # it listens on 127.0.0.1; it takes context and kv_cache above too
+llama_args = []               # more arguments for it, such as a build's own
+models = ""                   # GGUF files it may run besides Ollama's models; "" = $XDG_DATA_HOME/irie/models
 
 [route]                       # how auto picks a profile (§6.4)
 profiles = ["local", "haiku", "sonnet", "claude"]
@@ -1002,13 +1012,13 @@ Before spawning on a local profile, v1 runs a preflight (M10):
 |---|---|---|
 | Ollama | Send a 1-token `POST /v1/messages` so the model loads exactly as the agent will load it, then read `context_length` from `GET /api/ps` | On Irie's own server: raise `local.context`. On the user's: set `OLLAMA_CONTEXT_LENGTH` (for the macOS app: its context length setting, or `launchctl setenv`, then restart Ollama), or leave `local.url` empty so Irie runs its own. The OpenAI and Anthropic shims cannot set the context per request |
 | LM Studio (after M10) | `GET /api/v1/models`, field `loaded_instances[].config.context_length` | `lms load <model> --context-length <n>` |
-| llama-server (after M10) | `GET /props` (`n_ctx`) and `GET /slots` (context per slot) | `-c <n>`, which is the total and is divided across `-np` slots |
+| llama-server (Irie's own, §6.5) | `GET /props` (`default_generation_settings.n_ctx`), once `GET /health` answers 200 | On Irie's own server: raise `local.context`, which is its `-c` for its one slot |
 
 **Preflight rules.**
 - **Model.** The profile's own, else the one `irie setup local` chose, else the best of the models Irie suggests (§6.3) that the server has, an agent can run and the machine can hold, else the only such model there. With several others, the refusal lists them, cheapest in memory first; with none, it points to `irie setup local`. A name is the server's own, as in Ollama: `+ollama:qwen3.8` runs `qwen3.8:latest`, in any case.
 - **Tools.** A model whose capabilities (`/api/show`) lack `tools` is refused.
 - **Threshold.** Refuse below `min_context` (default 65536, Ollama's guidance for coding agents). A model trained for less is refused before it is loaded. A refusal names the runtime, the measured context and the fix.
-- **Memory.** Refused when what the model takes (§6.3) is above the budget, or above what is free now less the reserve. The load happens only after this check.
+- **Memory.** Refused when what the model takes (§6.3) is above the budget, or above what is free now less the reserve. The load happens only after this check. A refusal for want of free memory names the best model that fits now, such as `bonsai-2:9b fits now (+ollama:bonsai-2:9b)`.
 - **Unreachable runtime.** Refused: "not reachable at <url>".
 - **Bypass.** `enforce = false` in the profile, or `irie ctl spawn --force`, spawns anyway, with the problems as the row's warnings.
 - **Expectations.** Local sessions carry a `local` tag, shown in the status strip. Anthropic does not support Claude Code on non-Claude models, so tool-use quality is the model's own. Ollama's shims ignore `tool_choice`.
@@ -1073,7 +1083,7 @@ The status strip shows a session's cost (`$1.23 ctx 41% 640 MB`, or `local` for 
 
 `irie ctl local` prints the same table, with the disk space free for models and the model `+local` runs, and `irie ctl preflight` runs the check alone.
 
-**Suggestions.** The models Irie suggests, best first: Bonsai 2 27B, Qwen3.8 27B, Qwen3.5 27B, Bonsai 2 9B, Qwen3.5 9B, Bonsai 2 4B, Qwen3.5 4B. Quantization sets much of the order. Bonsai 2 (PrismML, 2026) stores a Qwen model's weights as ternary values, −1, 0 or +1, at about two bits a weight: its 27B takes 8.3 GB where Qwen's own 4-bit 27B takes 17.7 GB, and keeps 98% of Qwen3.8-27B's benchmark average. A ternary model comes before a 4-bit one of the same base, which takes twice the memory and decodes at about half the speed for about a point; a larger base comes before a smaller one; below 4B a model is too weak for an agent's tool loop. So an 18 GiB Mac runs a 27B model at a 64k context (about 11 GB), and an 8 GiB laptop a 9B one (about 4.9 GB). Ollama's library serves Bonsai 2 in its `Q2_0` packing; the smaller `PTQ1_0` and `PQ2_0` packings need PrismML's own llama.cpp.
+**Suggestions.** The models Irie suggests, best first: Bonsai 2 27B, Qwen3.8 27B, Qwen3.5 27B, Bonsai 2 9B, Qwen3.5 9B, Bonsai 2 4B, Qwen3.5 4B. Quantization sets much of the order. Bonsai 2 (PrismML, 2026) stores a Qwen model's weights as ternary values, −1, 0 or +1, at about two bits a weight: its 27B takes 8.3 GB where Qwen's own 4-bit 27B takes 17.7 GB, and keeps 98% of Qwen3.8-27B's benchmark average. A ternary model comes before a 4-bit one of the same base, which takes twice the memory and decodes at about half the speed for about a point; a larger base comes before a smaller one; below 4B a model is too weak for an agent's tool loop. So an 18 GiB Mac runs a 27B model at a 64k context (about 11 GB), and an 8 GiB laptop a 9B one (about 4.9 GB). Ollama's library serves Bonsai 2 in its `Q2_0` packing; the smaller `PTQ1_0` and `PQ2_0` packings need PrismML's own llama.cpp, which Irie runs as its llama-server (§6.5). NVIDIA's Nemotron models are left out, as of 2026-10-31. Nemotron 3.5 Lightning, a 30B mixture of experts with 3B active, takes at least 18.8 GB at any quantization, more than Qwen3.8 27B at 4 bits, and scored 24 on Artificial Analysis's index at its launch, where Qwen3.6 35B-A3B scored 32. NVIDIA's 4B models, Nemotron 3 Nano 4B and 3.5 Bolt E4B, are made for voice assistants and game characters, and in NVIDIA's own table trail Qwen3.5 4B on τ²-bench, 29 and 55 to 75.
 
 **Not done, and why.**
 - **Bundling Ollama.** Its macOS app is about 650 MB and has its own security updates, and the user's own install is one command away.
@@ -1082,7 +1092,8 @@ The status strip shows a session's cost (`$1.23 ctx 41% 640 MB`, or `local` for 
   - Gemini CLI's free Google sign-in moved to Antigravity CLI for unpaid users on 2026-06-18.
   - Qwen Code's free OAuth tier was reported closed in April 2026.
   - OpenRouter's free models allow 50 requests a day (1,000 after $10 of credits), and an agent's task spends dozens.
-  - Ollama's cloud gives starter credits and one request at a time.
+  - Ollama's cloud lists no free use on its pricing page (2026-10-31): a free account pays per token, three requests at a time, and prompts are never logged or trained on. Nemotron 3 Super costs $0.015 a million tokens in and $0.60 out.
+  - NVIDIA's API catalog, build.nvidia.com, serves its Nemotron models and others, Kimi K2.6 and GLM-5.3 Flash among them, free at about 40 requests a minute (2026-10-31). It speaks only OpenAI's API, so Claude Code would need a translating proxy. OpenRouter's free Nemotron models (3 Ultra, 3.5 Super VL, 3.5 Lightning) are NVIDIA's own endpoints under the same trial terms. Those allow testing and evaluation only, never production (§1.2, §1.4), forbid confidential data (§2.6), let NVIDIA use prompts and outputs to improve its models (§3.3), and forbid distributing what the model writes (§4.2), such as code pushed to a public repository.
 
 ### 6.4 Routing by cost per success
 
@@ -1123,6 +1134,31 @@ With a weight of 10, a profile's own record outweighs the guess after about ten 
 - **Once.** A session fails over once.
 
 **In the sidebar.** `:setup` runs `irie setup local` as a tool session, shown in the slot with the focus to answer its questions; `:models` runs `irie ctl local`. A tool session takes no task and is at work from its start. The status strip shows a routed session's class and profile (`small→local`), `↳ delegated`, and its rating.
+
+### 6.5 Big models in little memory: llama-server, quantization and streaming
+
+A coding agent wants the largest model it can get, and a laptop's memory is the limit: about two thirds of it, less whatever else is open. Two ways around the limit came to laptops in 2026 (research of 2026-10-31):
+
+- **Quantization below four bits.** Bonsai 2 (PrismML) stores Qwen3.8-27B's weights as ternary values in 5.95 GB (`PTQ1_0`, 1.75 bits a weight), 7.21 GB (`PQ2_0`) or 7.63 GB (`Q2_0`), and keeps 98% of the model's benchmark average, where Qwen's own 4-bit build takes 17.6 GB. Ollama's library has only the `Q2_0` packing (`bonsai-2`, which §6.3 suggests first); the two smaller ones need PrismML's build of llama.cpp. At a 64k `q8_0` context a 27B in `PTQ1_0` takes about 8.8 GB, where Ollama's `bonsai-2:27b` takes about 11.4 GB with its vision projector.
+- **Streaming weights from disk.** A mixture-of-experts model uses a few of its experts for each token, so an engine can keep the experts on the SSD and read the ones a token needs, with the hot ones cached in memory: flash-moe runs a 397B on a 48 GB Mac at 4–6 tokens a second, slipstream (a llama.cpp fork) 35B–480B coding models on 16–36 GB, slotstream a 125B on 16 GB. Each is its own build, each needs a model of its own layout, and every token waits on the SSD. Stock llama.cpp and Ollama do not stream: on Apple silicon a model larger than the GPU's working set fails. Measured on an 18 GiB M3 Pro with Homebrew's llama.cpp build 10180: a 16.8 GB 27B with 24 of its 64 layers on the GPU and the rest memory-mapped loaded past Metal's recommended working set and failed every request with a compute error.
+
+So Irie runs whichever llama.cpp build the user names, beside its Ollama server, with the same checks: PrismML's for the smallest packings, a streaming fork for models larger than memory, or Homebrew's.
+
+**Irie's own llama-server.** Profiles with `local = { runtime = "llama-server" }`, such as the built-in `+big`, run on it.
+- **Start.** The first spawn on such a profile starts `irie runtime -- <llama_server> -m <model> --alias <name> --host 127.0.0.1 --port <llama_port> -c <context> -ctk <kv_cache> -ctv <kv_cache> -fa on -np 1`, then `local.llama_args`, in window `irie-llama` of `irie-agents`, and waits until `GET /health` answers 200 (up to three minutes, as a model loads from disk). Its pane keeps the model's name, so a restarted core finds it.
+- **One model at a time.** Another model takes the server's place: llama-server answers every request with its one model, so a session on the old model would get the new one's answers. A switch while a live session runs on the old model is refused without `--force`.
+- **Models.** The GGUF files in `local.models` (`$XDG_DATA_HOME/irie/models`), by their names without `.gguf`, then Ollama's models, read from Ollama's store (`manifests/…`, `blobs/sha256-…`) as they are: no copy, and without a vision projector, which an agent does not need. Vision projectors and the later parts of split files are no models.
+- **Weighing.** Irie reads each file's GGUF header, never its weights: the architecture, the context it was trained for, the K/V heads of each layer, the chat template (a model whose template takes no tools cannot call tools), and each tensor's size, from where its data starts to where the next one's does. The estimate is §6.3's, from the weights alone.
+- **Builds.** `llama-server --version` gives the build. A model whose tensors use a type only PrismML's build has (`PTQ1_0`, `PQ2_0`) needs PrismML's build; one with Bonsai's Hadamard rotation (`prism.hadamard.*`) needs PrismML's or upstream build 11556 or later, since older builds load it without an error and write nonsense. Irie knows PrismML's build by "prism" in its version or its path.
+- **Pick.** `+big` runs its own `model`, else the best model Irie suggests that the build runs and the machine can hold, with smaller packings first (`Ternary-Bonsai-2-27B-PTQ1_0`, `…-PQ2_0`, Ollama's `bonsai-2:27b`, then §6.3's order), else the only such model. `+llama:<model>` runs one model for one task, as `+ollama:<model>` does on Ollama; Tab after `+llama:` lists the models the build runs.
+- **Check.** As §6.1's preflight: the build, tools, the trained context, the budget and the free memory (less the reserve, with what the server's model gives back), then the load and the context `GET /props` reports.
+- **Measured.** Every five ticks the server's process tree counts with local models' memory in the header.
+
+`irie ctl local` lists the server's build, its folder, the model it runs and what `+big` runs, then its models weighed like Ollama's.
+
+**Not done, and why.**
+- **Streaming with stock llama.cpp** (`--cpu-moe` and memory-mapped layers): it fails on Apple silicon as measured above, and untested settings would only fail later. A streaming fork goes in `local.llama_server`, with its own flags in `local.llama_args`; Irie's memory check counts its whole model, so such a profile sets `enforce = false`.
+- **Fetching PrismML's build or a model file.** Irie runs a llama.cpp the user installed, as it runs their Ollama.
 
 ---
 
@@ -1203,7 +1239,7 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
   - Take ideas only, never code, from GPL, AGPL, FSL or rider-licensed projects (for example claude-squad, crush, ntm).
   - Do not copy agent-deck's status detector: its header credits an AGPL source.
 - **Commits.** `TZ=UTC git commit`.
-- **Releases.** Irie stays below 1.0.0 until version 1 is done: M1–M11, and M12 (skills), which [the skills proposal](proposals/skills.md) puts before the first release. Until then a breaking change bumps the minor version, not the major (`bump-minor-pre-major` in `release-please-config.json`). When the last of them is on main, an empty commit with a `Release-As: 1.0.0` footer makes release-please's next release 1.0.0: `TZ=UTC git commit -s --allow-empty -m "chore: release 1.0.0" -m "Release-As: 1.0.0"`.
+- **Releases.** Irie stays below 1.0.0 until version 1 is done: M1–M11, and M12 (skills). The first release, 0.1.0 on 2026-10-31, came before M12, so [skills decision 8](proposals/skills.md) now puts M12 before 1.0.0. Until then a breaking change bumps the minor version, not the major (`bump-minor-pre-major` in `release-please-config.json`). When the last of them is on main, an empty commit with a `Release-As: 1.0.0` footer makes release-please's next release 1.0.0: `TZ=UTC git commit -s --allow-empty -m "chore: release 1.0.0" -m "Release-As: 1.0.0"`.
 
 ### M1. Launch and look (the first usable build)
 
@@ -1415,7 +1451,7 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 - **Routing.** Package `route` (classes, the beta accuracy, the choice); `+auto` as the default; the built-in `+haiku`; outcomes folded from the journal; ops `route`, `rate`, `result` and `tool`.
 - **Delegation and failover.** `irie ctl delegate`, `ctl route` and `ctl rate`; the delegation note at session start; failover on `rate_limit`.
 - **Sidebar commands.** `:setup`, `:models`, `:rate`, `:route`, and `+`/`-` on a row.
-- **Not yet.** The LM Studio and llama-server probes come after M10.
+- **Not yet.** The LM Studio probe comes after M10; Irie's own llama-server came with §6.5.
 
 **Tests:**
 - **Preflight.** Against an `httptest` fake:
