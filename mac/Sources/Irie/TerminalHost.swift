@@ -26,6 +26,7 @@ struct TerminalHost: NSViewRepresentable {
         view.nativeForegroundColor = Theme.terminalForeground
         store.terminalView = view
         view.takesKeysOnStart = store.showTerminal
+        view.shows = active
         context.coordinator.view = view
         context.coordinator.focusToken = focusToken
         context.coordinator.attach()
@@ -34,6 +35,7 @@ struct TerminalHost: NSViewRepresentable {
 
     func updateNSView(_ view: IrieTerminalView, context: Context) {
         context.coordinator.info = info // used by the next attach
+        view.shows = active
         if view.font.pointSize != fontSize {
             view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
@@ -83,13 +85,26 @@ final class IrieTerminalView: LocalProcessTerminalView {
     /// Whether it takes the keyboard once it is in a window; not while the
     /// conversation shows over it.
     var takesKeysOnStart = true
+    /// Whether it shows. One that is covered lets go of the keyboard, as
+    /// GhosttyTerminalView does; SwiftTerm's own first-responder methods
+    /// cannot be overridden here, so Irie only never hands it the keyboard
+    /// while it is covered.
+    var shows = true {
+        didSet {
+            guard !shows, oldValue else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.shows, let w = self.window, w.firstResponder === self else { return }
+                w.makeFirstResponder(nil)
+            }
+        }
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window, !triedMetal else { return }
         triedMetal = true
         try? setUseMetal(true)
-        if takesKeysOnStart {
+        if takesKeysOnStart && shows {
             window.makeFirstResponder(self) // type to the agent straight away
         }
     }

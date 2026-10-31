@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 
@@ -127,12 +128,34 @@ final class Store: ObservableObject {
     let client: CoreClient
     /// The core's config, as the Settings window shows and edits it.
     let settings: SettingsModel
+    /// What the menu bar shows, which changes far less often than the
+    /// store does (MenuBar.swift).
+    let menu = MenuState()
     private var started = false
+    private var menuWatch: AnyCancellable?
+    private var menuDue = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
         settings.changed = { [weak self] in self?.loadChoices() }
+        // objectWillChange comes before the change: the facts are read once
+        // it is in, once for every change made in one turn of the run loop.
+        menuWatch = objectWillChange.sink { [weak self] _ in
+            MainActor.assumeIsolated { self?.noteMenu() }
+        }
+    }
+
+    private func noteMenu() {
+        guard !menuDue else { return }
+        menuDue = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.menuDue = false
+                self.menu.set(self.menuFacts)
+            }
+        }
     }
 
     var socketPath: String { client.socketPath }
@@ -191,6 +214,10 @@ final class Store: ObservableObject {
         return error.localizedDescription
     }
 
+    /// Takes in one frame. Only what changes is set: every change to the
+    /// store draws the window's views again, and most frames carry rows
+    /// whose only news is what the app does not read, as an agent's memory
+    /// and cost, which the core measures every few seconds.
     private func apply(_ f: Frame) {
         if let h = f.header, (h.redOnDone ?? false) != Look.redOnDone {
             Look.redOnDone = h.redOnDone ?? false
@@ -204,10 +231,13 @@ final class Store: ObservableObject {
         }
         switch f.t {
         case "snapshot":
-            sessions = (f.sessions ?? []).sorted(by: Self.before)
+            let rows = (f.sessions ?? []).sorted(by: Self.before)
+            guard rows != sessions else { return }
+            sessions = rows
         case "upsert":
             guard let s = f.session else { return }
             if let i = sessions.firstIndex(where: { $0.id == s.id }) {
+                guard sessions[i] != s else { return }
                 let moved = sessions[i].order != s.order
                 sessions[i] = s
                 if moved { sessions.sort(by: Self.before) }
@@ -216,17 +246,21 @@ final class Store: ObservableObject {
                 sessions.sort(by: Self.before)
             }
         case "remove":
-            sessions.removeAll { $0.id == f.id }
-            if let id = f.id { lingering[id] = nil }
+            guard let id = f.id else { return }
+            if lingering[id] != nil { lingering[id] = nil }
+            guard sessions.contains(where: { $0.id == id }) else { return }
+            sessions.removeAll { $0.id == id }
         case "outside":
             applyOutside(f)
             return
         case "closed":
-            closed = f.closed ?? []
+            let c = f.closed ?? []
+            if c != closed { closed = c }
             return
         case "history":
-            undoLabel = f.undo.flatMap { $0.isEmpty ? nil : $0 }
-            redoLabel = f.redo.flatMap { $0.isEmpty ? nil : $0 }
+            let u = f.undo.flatMap { $0.isEmpty ? nil : $0 }, r = f.redo.flatMap { $0.isEmpty ? nil : $0 }
+            if u != undoLabel { undoLabel = u }
+            if r != redoLabel { redoLabel = r }
             return
         default:
             return

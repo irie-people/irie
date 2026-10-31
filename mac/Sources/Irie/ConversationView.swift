@@ -827,12 +827,14 @@ struct Composer: View {
             Text(prompt).font(.body).foregroundStyle(Theme.muted).padding(.vertical, 3)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
+            // It takes the keyboard while the agent starts, too, so ⌃] and a
+            // click on the session always have somewhere to put it; send()
+            // waits for the agent.
             TextField(prompt, text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .lineLimit(1...8)
                 .focused($focused)
-                .disabled(early)
                 .onSubmit(send)
                 .onChange(of: text) { if problem != nil { problem = nil } }
                 .padding(.vertical, 3)
@@ -841,6 +843,11 @@ struct Composer: View {
         }
     }
 
+    /// Stands where the message box would, and takes the keyboard as it
+    /// does, from ⌃] and a click on the session; Return or Space then opens
+    /// the terminal. Only while it has the keyboard: a Return shortcut on
+    /// its button was the window's, and took Return from the task bar, the
+    /// find field and the session list whenever a session waited.
     private func banner(_ text: String, button: String) -> some View {
         HStack(spacing: 10) {
             Text(text)
@@ -849,18 +856,36 @@ struct Composer: View {
             Spacer(minLength: 8)
             Button(button) { store.showTerminal = true }
                 .buttonStyle(SoftButton(prominent: waits))
-                .keyboardShortcut(.return, modifiers: [])
+                .help("Return opens it while this has the keyboard")
         }
         .padding(.horizontal, Theme.inset)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(waits ? Theme.needsTint : Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
-            .strokeBorder(waits ? Theme.needs.opacity(0.45) : Theme.edge, lineWidth: 1))
+            .strokeBorder(focused ? Theme.sunEdge : waits ? Theme.needs.opacity(0.45) : Theme.edge, lineWidth: focused ? 1.5 : 1))
+        .focusable()
+        .focusEffectDisabled()
+        .focused($focused)
+        .onKeyPress(.return) {
+            store.showTerminal = true
+            return .handled
+        }
+        .onKeyPress(.space) {
+            store.showTerminal = true
+            return .handled
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { store.showTerminal = true }
     }
 
     private func send() {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty, !model.sending, !early else { return }
+        if early, !message.isEmpty {
+            problem = "\(session.name) is still starting. Send it once it’s ready."
+            return
+        }
+        guard !message.isEmpty, !model.sending else { return }
         problem = nil
         Task {
             if let why = await model.send(message) {
