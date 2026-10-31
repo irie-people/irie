@@ -126,6 +126,13 @@ func (t *track) apply(e event.Event) {
 		if e.Agent == event.Main {
 			t.waiting, _ = e.Int("waiting")
 			t.waitingOn = e.Str("waiting_on")
+			// Only a helper in the background outlives its session's
+			// turn, so when the Stop lists none, every helper still listed
+			// here has stopped: its SubagentStop never came, as while the
+			// core was away or when the turn was cut short.
+			if n, ok := e.Int("subagents"); ok && n == 0 {
+				t.dropSubs()
+			}
 		}
 	case event.DogNudged:
 		// The turn goes on: the dog sent the agent back to finish.
@@ -136,7 +143,11 @@ func (t *track) apply(e event.Event) {
 		t.stopTools(event.Main)
 		t.need(e)
 	case event.SubagentStarted:
-		t.activity = working
+		// A helper that starts once the turn is over, as an in-process
+		// teammate's does for each message, leaves it over.
+		if t.activity != done {
+			t.activity = working
+		}
 		if t.subs == nil {
 			t.subs = map[string]event.Event{}
 		}
@@ -170,11 +181,30 @@ func (t *track) addTranscript(path string) {
 	}
 }
 
-// busy notes that an agent is at work, which answers whatever it needed.
+// busy notes that an agent is at work, which answers whatever it needed. A
+// helper at work in the background once its session's own turn is over
+// leaves that turn over: the session waits on its helpers, it does not work
+// itself (DESIGN §5.3).
 func (t *track) busy(e event.Event) {
-	t.activity, t.stalled = working, nil
+	if !isHelper(e.Agent) || t.activity != done {
+		t.activity = working
+	}
+	t.stalled = nil
 	delete(t.needs, e.Agent)
 }
+
+// dropSubs forgets every running helper, with its tool calls and needs.
+func (t *track) dropSubs() {
+	for agent := range t.subs {
+		delete(t.needs, agent)
+		t.stopTools(agent)
+	}
+	t.subs = nil
+}
+
+// atWork reports whether its agent works, or a helper of its does once its
+// turn is over: something in it runs on to its next tool call.
+func (t *track) atWork() bool { return t.activity == working || len(t.subs) > 0 }
 
 func (t *track) need(e event.Event) {
 	if t.needs == nil {
@@ -318,7 +348,7 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 		shown = t.live()
 		at := t.frozen.Time()
 		whole, _ := t.frozen.Data["whole"].(bool)
-		s.Frozen, s.Freezing = &at, !whole && !t.held && t.activity == working
+		s.Frozen, s.Freezing = &at, !whole && !t.held && t.atWork()
 	}
 	switch shown {
 	case ipc.StateFailed:

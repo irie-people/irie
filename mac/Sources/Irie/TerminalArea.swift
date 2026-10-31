@@ -172,9 +172,10 @@ struct TerminalArea: View {
         }
     }
 
+    /// Its state, or what it needs from you or waits on, then the rest.
     private func subtitle(_ s: Session) -> String {
         let look = Look(s)
-        var parts = [look.loud ? s.detail ?? look.label : Look.label(s)]
+        var parts = [look.loud || look == .waiting ? s.detail ?? look.label : Look.label(s)]
         if let p = s.profile, !p.isEmpty { parts.append(p) }
         if let b = s.branch, !b.isEmpty { parts.append(b) }
         if let t = s.tokens { parts.append("\(Tokens.short(t.total)) tokens") }

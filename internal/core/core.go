@@ -161,9 +161,17 @@ func (x *session) wire() ipc.Session {
 		s.Class, s.Routed, s.Parent, s.Rated = o.class, o.routed, o.parent, o.rated
 	}
 	x.track.describe(&s, x.dead, x.exitCode)
+	// Its own turn is over while its helpers or teammates still work: it
+	// waits on them, and its work is not over yet (DESIGN §5.3).
+	if s.State == ipc.StateDone || s.State == ipc.StateIdle {
+		if subs, ok := x.subsAtWork(); ok {
+			s.Subs = &subs
+			s.Detail = "Waiting on " + subs.Words()
+		}
+	}
 	// Once its turn is over, a jot's row says what it left that has not
 	// landed (DESIGN §4.8).
-	if l := wireLoose(x.dog.loose, x.track.nudged); l != nil && dogShows(s.State) {
+	if l := wireLoose(x.dog.loose, x.track.nudged); l != nil && dogShows(s.State) && s.Subs == nil {
 		s.Loose = l
 		if s.State == ipc.StateExited {
 			s.Detail += " · not through: " + l.Words()
@@ -172,6 +180,19 @@ func (x *session) wire() ipc.Session {
 		}
 	}
 	return s
+}
+
+// subsAtWork counts its running helpers and its teammates at work, and
+// reports whether there are any. A teammate waiting for a message is not
+// at work, nor is one whose pane has died.
+func (x *session) subsAtWork() (ipc.Subs, bool) {
+	subs := ipc.Subs{Helpers: len(x.track.subs)}
+	for _, m := range x.team {
+		if m.Working && !m.Dead {
+			subs.Teammates++
+		}
+	}
+	return subs, subs.Helpers+subs.Teammates > 0
 }
 
 // countTokens catches each session's tally up with its transcripts. The

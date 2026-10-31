@@ -30,6 +30,9 @@ struct Session: Codable, Identifiable, Equatable {
     /// Its agent-team teammates, each a terminal of its own on the team
     /// server, in the order they started (TeamSplit.swift).
     var team: [Teammate]?
+    /// While its own turn is over (done or idle) and its helpers or
+    /// teammates still work: how many of each it waits on (Look.waiting).
+    var subs: Subs?
     var tokens: Tokens?
     /// Its place in the list, which the user sets; whether it is parked;
     /// when it was frozen, and whether its agent still runs on to its next
@@ -44,11 +47,19 @@ struct Session: Codable, Identifiable, Equatable {
     var loose: Loose?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
+        case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
         case order, parked, frozen, freezing, priority, loose
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
+}
+
+/// What a session whose own turn is over still waits on: its running
+/// helpers and its teammates at work. The core says it in words in the
+/// session's detail too, as "Waiting on 3 teammates".
+struct Subs: Codable, Equatable {
+    var helpers: Int?
+    var teammates: Int?
 }
 
 /// What a jot left that has not landed: files not committed, and its own

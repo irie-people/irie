@@ -166,9 +166,13 @@ struct SidebarView: View {
 /// the pointer brings up the actions. The card is soft and rounded, and lies
 /// flat in the list, with no edge or shadow, like a window's other tabs:
 /// washed in its agent's colour while it works, tinted and edged in red
-/// while it needs you. The selected card stands up from the others, on a
-/// gentle shadow, filled with the selection and edged in its session's
-/// colour, which two lines carry on to the terminal's frame (TabLink.swift).
+/// while it needs you. Once its own turn is over while its helpers or
+/// teammates still work, it waits on them: its mark is a ring round a dot,
+/// and its mark, its words and its helpers keep its colour, without the
+/// wash, since it is not at work itself. The selected card stands up from
+/// the others, on a gentle shadow, filled with the selection and edged in
+/// its session's colour, which two lines carry on to the terminal's frame
+/// (TabLink.swift).
 /// A selected working card is a gradient, from the selection by its mark to
 /// the colour round its terminal at the trailing end.
 private struct SessionCard: View {
@@ -208,7 +212,7 @@ private struct SessionCard: View {
                 }
                 Text(status)
                     .font(Theme.font(12, look.loud ? .semibold : .regular))
-                    .foregroundStyle(look.loud ? Theme.needs : session.loose != nil ? Theme.accentInk : Theme.muted)
+                    .foregroundStyle(statusInk)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -277,15 +281,24 @@ private struct SessionCard: View {
     }
 
     /// The second line. A finished jot whose work has not landed, or that
-    /// waits on work of its own in the background, says so (DESIGN §4.8).
+    /// waits on work of its own in the background, says so (DESIGN §4.8),
+    /// as one whose helpers or teammates still work says it waits on them.
     private var status: String {
         switch look {
         case .starting: return "Starting…"
         case .frozen where session.freezing == true: return "Freezing…"
-        case .done, .idle: return session.detail.flatMap { $0.isEmpty ? nil : $0 } ?? Look.label(session)
+        case .done, .idle, .waiting: return session.detail.flatMap { $0.isEmpty ? nil : $0 } ?? Look.label(session)
         case .frozen, .paused, .pausing: return look.label
         default: return session.detail ?? look.label
         }
+    }
+
+    /// Red while it needs you; what it waits on in its agent's colour, the
+    /// colour of the helpers under it; what a jot left in the accent.
+    private var statusInk: Color {
+        if look.loud { return Theme.needs }
+        if look == .waiting { return Look.agentInk(session) ?? Theme.ink }
+        return session.loose != nil ? Theme.accentInk : Theme.muted
     }
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }
@@ -449,7 +462,8 @@ private struct HelperRows: View {
     var body: some View {
         let helpers = session.subagents ?? []
         let team = session.team ?? []
-        // In their orchestrator's colour while it works, so they read as its.
+        // In their orchestrator's colour while work goes on in it, its own
+        // or theirs once its turn is over, so they read as its.
         let own = Look.agentInk(session)
         if !helpers.isEmpty || !team.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
@@ -906,7 +920,9 @@ private struct Counts: View {
             switch store.link {
             case .online:
                 count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
-                count([.working], mark: .working, color: Theme.ink, label: "working")
+                // Working counts the finished turns whose helpers still
+                // work: they are not to verify yet.
+                count([.working, .waiting], mark: .working, color: Theme.ink, label: "working")
                 if !store.closeWhenDone {
                     count([.done], mark: .done, color: Look.doneColor, label: "to verify, not yet seen", parked: false)
                 }

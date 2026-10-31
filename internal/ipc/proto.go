@@ -132,6 +132,10 @@ type Session struct {
 	// Team is the session's teammates, each in a terminal pane of its own
 	// on the team server, in the order they started (DESIGN §2.3).
 	Team []Teammate `json:"team,omitempty"`
+	// Subs is set while its own turn is over (done or idle) and its helpers
+	// or teammates still work: it waits on them, which its row says in
+	// place of to verify (DESIGN §5.3).
+	Subs *Subs `json:"subs,omitempty"`
 	// Tokens is what the session's model calls have used, from its
 	// transcripts; nil until Irie has read any usage.
 	Tokens *Tokens `json:"tokens,omitempty"`
@@ -234,6 +238,25 @@ type Subagent struct {
 	Detail   string    `json:"detail,omitempty"`  // what it needs, or else what its newest running tool does, in plain words
 	Command  string    `json:"command,omitempty"` // the tool call the detail is about
 	NeedsYou bool      `json:"needs_you,omitempty"`
+}
+
+// Subs counts what a session whose own turn is over still waits on: its
+// running helpers and its teammates at work.
+type Subs struct {
+	Helpers   int `json:"helpers,omitempty"`
+	Teammates int `json:"teammates,omitempty"`
+}
+
+// Words says it in plain words, such as "2 helpers and 1 teammate".
+func (s Subs) Words() string {
+	var parts []string
+	if s.Helpers > 0 {
+		parts = append(parts, counted(s.Helpers, "helper"))
+	}
+	if s.Teammates > 0 {
+		parts = append(parts, counted(s.Teammates, "teammate"))
+	}
+	return strings.Join(parts, " and ")
 }
 
 // Teammate is one of a session's agent-team teammates: a Claude Code
@@ -587,8 +610,11 @@ type StatusArgs struct {
 type StatusReply struct {
 	State     string     `json:"state"`
 	Subagents []Subagent `json:"subagents,omitempty"`
-	// Color is the session's own colour while it works, as "#rrggbb": its
-	// card's mark in the Mac app's dark mode, which reads on its terminal.
+	// Subs is what its turn that is over waits on, as on its row.
+	Subs *Subs `json:"subs,omitempty"`
+	// Color is the session's own colour while it works, or waits on its
+	// helpers, as "#rrggbb": its card's mark in the Mac app's dark mode,
+	// which reads on its terminal.
 	Color string `json:"color,omitempty"`
 	// Parked is whether the session is in the Parked group, out of the
 	// way: a turn of it that is over is not to verify.

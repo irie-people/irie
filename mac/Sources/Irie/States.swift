@@ -6,9 +6,17 @@ import SwiftUI
 /// Every state has a glyph of its own, so colour never carries the meaning
 /// alone.
 enum Look: Equatable {
-    case failed, exited, exitedWithError, frozen, paused, needs, stalled, pausing, working, starting, done, idle
+    case failed, exited, exitedWithError, frozen, paused, needs, stalled, pausing, working, waiting, starting, done, idle
 
-    init(_ s: Session) { self.init(state: s.state, exitCode: s.exitCode) }
+    /// A finished turn whose helpers or teammates still work waits on them
+    /// (the row's subs): it is not to verify yet.
+    init(_ s: Session) {
+        if s.subs != nil, s.state == "done" || s.state == "idle" {
+            self = .waiting
+        } else {
+            self.init(state: s.state, exitCode: s.exitCode)
+        }
+    }
 
     init(state: String, exitCode: Int? = nil) {
         switch state {
@@ -39,6 +47,7 @@ enum Look: Equatable {
         case .stalled: return "Stalled"
         case .pausing: return "Pausing"
         case .working: return "Working"
+        case .waiting: return "Waiting"
         case .starting: return "Starting"
         case .done: return "To verify"
         case .idle: return "Idle"
@@ -65,7 +74,7 @@ enum Look: Equatable {
         case .failed, .needs, .stalled, .exitedWithError: return Theme.needs
         case .frozen: return Theme.frozen
         case .paused, .pausing: return Theme.paused
-        case .working: return Theme.ink
+        case .working, .waiting: return Theme.ink
         case .done: return Look.doneColor
         case .exited, .starting, .idle: return Theme.muted
         }
@@ -95,9 +104,14 @@ extension Look {
         return look == .done && s.isParked ? "Parked" : look.label
     }
 
-    /// The agent's colour for this session, while it is working; none otherwise.
+    /// Whether work goes on in it: its agent's, or its helpers' or
+    /// teammates' once its own turn is over. Its colour shows while it does.
+    var busy: Bool { self == .working || self == .waiting }
+
+    /// The agent's colour for this session, while work goes on in it; none
+    /// otherwise.
     static func agentTint(_ s: Session) -> Color? {
-        Look(s) == .working ? Theme.agent(slot: Theme.agentSlot(s.id)) : nil
+        Look(s).busy ? Theme.agent(slot: Theme.agentSlot(s.id)) : nil
     }
 
     /// Its card's ground in the agent's colour, while it is working; none
@@ -114,34 +128,36 @@ extension Look {
 
     /// The colour that edges the selected card and the terminal's frame, and
     /// draws the line between them: red while it needs you, green once it is
-    /// done, the agent's own colour while it works, and sun otherwise.
+    /// done, the agent's own colour while work goes on in it, and sun
+    /// otherwise.
     static func edge(_ s: Session) -> Color {
         Look(s).color ?? agentTint(s) ?? Theme.sunEdge
     }
 
     /// The agent's colour as text, for its state, its details and its
-    /// helpers away from its card, while it is working; none otherwise.
+    /// helpers away from its card, while work goes on in it; none otherwise.
     static func agentInk(_ s: Session) -> Color? {
-        Look(s) == .working ? Theme.agentInk(slot: Theme.agentSlot(s.id)) : nil
+        Look(s).busy ? Theme.agentInk(slot: Theme.agentSlot(s.id)) : nil
     }
 }
 
 /// A state's glyph from DESIGN §5.3, drawn: ✕ failed, · exited (✕ with an
 /// error code), ◆ frozen, ‖ paused, ● needs you, ! stalled, ‖ pausing,
-/// ◐ working, ◌ starting, ✓ done and ○ idle. The marks hold still: an
-/// endless animation in a list makes the whole window lay out again on
-/// every frame.
+/// ◐ working, ◉ waiting on its helpers, ◌ starting, ✓ done and ○ idle.
+/// The marks hold still: an endless animation in a list makes the whole
+/// window lay out again on every frame.
 struct StateMark: View {
     let look: Look
     var size: CGFloat = 14
-    /// The agent's own colour, which a working mark takes in place of ink.
+    /// The agent's own colour, which a working or waiting mark takes in
+    /// place of ink.
     var tint: Color? = nil
 
     var body: some View {
         Canvas { ctx, box in
             let k = min(box.width, box.height) / 16
             ctx.scaleBy(x: k, y: k)
-            let ink = GraphicsContext.Shading.color(look == .working ? tint ?? look.mark : look.mark)
+            let ink = GraphicsContext.Shading.color(look.busy ? tint ?? look.mark : look.mark)
             func line(_ points: [(CGFloat, CGFloat)]...) -> Path {
                 var p = Path()
                 for run in points {
@@ -176,6 +192,10 @@ struct StateMark: View {
                 var half = ctx
                 half.clip(to: circle(5.6))
                 half.fill(Path(CGRect(x: 0, y: 0, width: 8, height: 16)), with: ink)
+            case .waiting:
+                // Its own turn over, a ring; its helpers at work in it.
+                stroke(circle(5.6))
+                ctx.fill(circle(2.6), with: ink)
             case .starting:
                 stroke(circle(5.6), dash: [1.7, 2.3])
             case .done:

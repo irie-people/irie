@@ -71,6 +71,10 @@ type look struct {
 
 func (m Model) look(s ipc.Session) look {
 	p := m.pal
+	if waiting(s) {
+		// Its turn is over, and its helpers or teammates still work.
+		return look{"◉", p.ink, p.ink, false}
+	}
 	switch s.State {
 	case ipc.StateFailed:
 		return look{"✕", p.needs, p.needs, true}
@@ -108,6 +112,12 @@ func (m Model) look(s ipc.Session) look {
 		return look{"○", p.muted, p.muted, false}
 	}
 	return look{"◐", p.ink, p.ink, false}
+}
+
+// waiting reports whether a session's own turn is over while its helpers or
+// teammates still work: it waits on them, so it is not to verify yet.
+func waiting(s ipc.Session) bool {
+	return s.Subs != nil && (s.State == ipc.StateDone || s.State == ipc.StateIdle)
 }
 
 // needsYou reports whether a session waits on you: it needs you, stalled or
@@ -180,17 +190,18 @@ func (m Model) header() string {
 
 // counts renders the state counts in at most w columns, in DESIGN §4.1's
 // order: with labels when they fit, else glyphs and numbers. Needs you
-// counts every red row: needs you, stalled and failed; to verify leaves out
-// the parked ones, which are out of the way; paused counts pausing too. A
-// zero count is faint, so colour only ever means that something is there,
-// and each count keeps its glyph.
+// counts every red row: needs you, stalled and failed; working counts the
+// sessions that wait on their helpers too, and to verify leaves them out,
+// with the parked ones, which are out of the way; paused counts pausing
+// too. A zero count is faint, so colour only ever means that something is
+// there, and each count keeps its glyph.
 func (m Model) counts(w int) string {
 	working, needs, done, paused, frozen := 0, 0, 0, 0, 0
 	for _, s := range m.sessions {
 		switch {
 		case needsYou(s):
 			needs++
-		case s.State == ipc.StateWorking:
+		case s.State == ipc.StateWorking, waiting(s):
 			working++
 		case s.State == ipc.StateDone && !s.Parked:
 			done++

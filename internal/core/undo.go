@@ -621,6 +621,17 @@ func checkClose(c *Core, a action) []problem {
 			options: []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: "Close it now",
 				Detail: "Stops its agent mid-task. Its folder and conversation stay, so it can be reopened and carry on."}},
 			recommend: ipc.ChoiceCancel})
+	} else if subs, ok := x.subsAtWork(); ok && (state == ipc.StateDone || state == ipc.StateIdle) {
+		// Its turn is over, but closing it ends the helpers and teammates
+		// it waits on too.
+		what := "waits on " + subs.Words() + " still at work"
+		if frozen {
+			what = "is frozen while it waits on " + subs.Words()
+		}
+		ps = append(ps, problem{code: "busy", question: fmt.Sprintf("%q %s.", x.name, what),
+			options: []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: "Close it now",
+				Detail: "Stops them mid-task. Its folder and conversation stay, so it can be reopened."}},
+			recommend: ipc.ChoiceCancel})
 	}
 	return ps
 }

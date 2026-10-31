@@ -139,7 +139,7 @@ func (c *Core) freezeLocked(x *session) error {
 		pids = append(pids, s.PID)
 	}
 	c.record(x, event.Event{TS: event.Stamp(now), Source: event.SourceUser, Kind: event.FreezeOn, Data: map[string]any{
-		"whole": whole, "pids": pids, "mark": t.Newest(), "working": x.track.live() == ipc.StateWorking,
+		"whole": whole, "pids": pids, "mark": t.Newest(), "working": x.track.live() == ipc.StateWorking || len(x.track.subs) > 0,
 	}})
 	x.note = ""
 	// Keys typed meanwhile would reach the agent all at once at the thaw.

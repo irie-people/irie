@@ -109,11 +109,21 @@ func TestNormalize(t *testing.T) {
 	check(t, "Stop without a message", payload("Stop", `"stop_hook_active":false`),
 		want{event.TurnEnded, "main", map[string]any{}})
 	check(t, "Stop that a stop hook sent on", payload("Stop", `"stop_hook_active":true`, `"last_assistant_message":"Done."`, `"background_tasks":[]`, `"session_crons":[]`),
-		want{event.TurnEnded, "main", map[string]any{"message": "Done.", "stop_hook_active": true}})
+		want{event.TurnEnded, "main", map[string]any{"message": "Done.", "stop_hook_active": true, "subagents": 0}})
 	check(t, "Stop with work in the background", payload("Stop", `"stop_hook_active":false`, `"last_assistant_message":"Waiting on the install."`,
 		`"background_tasks":[{"id":"task-001","type":"shell","status":"running","description":"Install the build\n  when the lock frees","command":"tools/live.sh"}]`,
 		`"session_crons":[{"id":"cron-001","schedule":"*/5 * * * *","recurring":true,"prompt":"check the build"}]`),
-		want{event.TurnEnded, "main", map[string]any{"message": "Waiting on the install.", "waiting": 2, "waiting_on": "Install the build when the lock frees"}})
+		want{event.TurnEnded, "main", map[string]any{"message": "Waiting on the install.", "subagents": 0, "waiting": 2, "waiting_on": "Install the build when the lock frees"}})
+	// Its helpers and teammates in the background: the subagents are
+	// counted, so the core knows which helpers can still be at work.
+	check(t, "Stop with helpers in the background", payload("Stop", `"stop_hook_active":false`, `"last_assistant_message":"Three helpers are on it."`,
+		`"background_tasks":[{"id":"a1b2c3","type":"subagent","status":"running","description":"Find the seed patents","agent_type":"Explore"},`+
+			`{"id":"a4d5e6","type":"subagent","status":"running","description":"Read the claims","agent_type":"general-purpose"},`+
+			`{"id":"t-1","type":"teammate","status":"running","description":"Expand the citations"}]`,
+		`"session_crons":[]`),
+		want{event.TurnEnded, "main", map[string]any{"message": "Three helpers are on it.", "subagents": 2, "waiting": 3, "waiting_on": "Find the seed patents"}})
+	check(t, "Stop whose task registry was out of reach", payload("Stop", `"stop_hook_active":false`, `"background_tasks":null`),
+		want{event.TurnEnded, "main", map[string]any{}})
 	check(t, "StopFailure", payload("StopFailure", `"error":"rate_limit"`, `"error_details":"429 Too Many Requests"`),
 		want{event.TurnFailed, "main", map[string]any{"error": "rate_limit"}})
 	check(t, "SubagentStart", payload("SubagentStart", inSub),
