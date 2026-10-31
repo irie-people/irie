@@ -26,7 +26,7 @@ It has no server, account or telemetry, and sends nothing over the network of it
 
 ## Status
 
-Early and unreleased. There's no release to download yet, but you can build Irie from source: see [Install](https://irie-people.github.io/irie/install.html).
+Early. The first release, 0.1.0, has no download yet, but you can build Irie from source: see [Install](https://irie-people.github.io/irie/install.html).
 
 ## Docs
 
