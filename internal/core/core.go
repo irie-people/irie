@@ -60,6 +60,12 @@ type Core struct {
 	sampling atomic.Bool  // a memory sample is running
 	sweeping atomic.Bool  // the jot dog looks at the finished jots (dog.go)
 
+	// What the watchdog that keeps Irie's own processes running knows
+	// (steady.go): the tmux server's pid, which only it reads and writes,
+	// and the sidebar's process group, which each tick sets.
+	server       int
+	sidebarGroup atomic.Int64
+
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
 
@@ -84,8 +90,8 @@ type Core struct {
 	machine    localmodel.Machine       // the machine's memory, last read
 	localMem   int64                    // what the models of Irie's own server take
 	llamaMem   int64                    // what Irie's own llama-server takes
-	plan       ipc.Plan                 // the plan's use, from the newest status update
-	planAt     time.Time
+	plan       ipc.Plan                 // the plan's use, the newest of its sessions' readings (mergePlan)
+
 	outcomes   map[string]*outcome // every session's route and outcome, those gone included
 	order      []string            // the list's order from the top, which the user sets (order.go)
 	bg         map[int]bgProc      // the processes Irie put in the background, by pid (priority.go)
@@ -236,6 +242,12 @@ func Run(o Options) error {
 	c.loadClosed()
 	c.loadState()
 
+	// The watchdog runs first: the first tick waits for tmux, and a
+	// stopped server would hold it until the watchdog continues it.
+	steadyStop := make(chan struct{})
+	defer close(steadyStop)
+	go c.keepSteady(steadyStop)
+
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
 	c.mu.Lock()
@@ -291,6 +303,7 @@ func (c *Core) tick() {
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.noteSidebar()
 	c.keepView()
 	c.followTeams()
 	c.reap()

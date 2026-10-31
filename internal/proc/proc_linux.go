@@ -37,6 +37,33 @@ func read() ([]Proc, error) {
 	return out, nil
 }
 
+// readGroup reads the whole table: Linux lists no process group alone.
+func readGroup(pgid int) ([]Proc, error) {
+	all, err := read()
+	if err != nil {
+		return nil, err
+	}
+	var out []Proc
+	for _, p := range all {
+		if p.PGID == pgid {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func readOne(pid int) (Proc, error) {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return Proc{}, err
+	}
+	p, ok := parseStat(pid, string(b))
+	if !ok {
+		return Proc{}, fmt.Errorf("/proc/%d/stat: unreadable", pid)
+	}
+	return p, nil
+}
+
 // parseStat reads /proc/<pid>/stat (proc(5)): pid (comm) state ppid pgrp
 // session tty_nr tpgid flags … with starttime the 22nd field. The command
 // may hold spaces and parentheses, so it ends at the last ')'.

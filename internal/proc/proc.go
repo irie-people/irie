@@ -41,6 +41,13 @@ type Load struct {
 // ReadLoad reads how busy the machine is. Like Read, it starts no process.
 func ReadLoad() (Load, error) { return readLoad() }
 
+// Group returns the processes of one process group, as a terminal's job
+// control sees it: a pane's first process and what it started.
+func Group(pgid int) ([]Proc, error) { return readGroup(pgid) }
+
+// One returns one process.
+func One(pid int) (Proc, error) { return readOne(pid) }
+
 // Read returns the process table.
 func Read() (Table, error) {
 	ps, err := read()

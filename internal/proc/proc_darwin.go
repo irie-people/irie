@@ -22,22 +22,43 @@ const (
 // process can put another of its user's processes in, and take it out of.
 const CanBackground = true
 
-func read() ([]Proc, error) {
-	kps, err := unix.SysctlKinfoProcSlice("kern.proc.all")
+func read() ([]Proc, error) { return readKinfo("kern.proc.all") }
+
+// readGroup reads one process group with a single sysctl (kern.proc.pgrp).
+func readGroup(pgid int) ([]Proc, error) { return readKinfo("kern.proc.pgrp", pgid) }
+
+func readOne(pid int) (Proc, error) {
+	k, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
+	if err != nil {
+		return Proc{}, err
+	}
+	if k.Proc.P_pid != int32(pid) {
+		// The system answers a pid that names no process with an empty
+		// record.
+		return Proc{}, unix.ESRCH
+	}
+	return fromKinfo(k), nil
+}
+
+func readKinfo(name string, args ...int) ([]Proc, error) {
+	kps, err := unix.SysctlKinfoProcSlice(name, args...)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Proc, 0, len(kps))
 	for i := range kps {
-		k := &kps[i]
-		out = append(out, Proc{
-			PID: int(k.Proc.P_pid), PPID: int(k.Eproc.Ppid), PGID: int(k.Eproc.Pgid),
-			Start:   k.Proc.P_starttime.Sec*1_000_000 + int64(k.Proc.P_starttime.Usec),
-			Stopped: k.Proc.P_stat == sstop, Zombie: k.Proc.P_stat == szomb,
-			Name: unix.ByteSliceToString(k.Proc.P_comm[:]),
-		})
+		out = append(out, fromKinfo(&kps[i]))
 	}
 	return out, nil
+}
+
+func fromKinfo(k *unix.KinfoProc) Proc {
+	return Proc{
+		PID: int(k.Proc.P_pid), PPID: int(k.Eproc.Ppid), PGID: int(k.Eproc.Pgid),
+		Start:   k.Proc.P_starttime.Sec*1_000_000 + int64(k.Proc.P_starttime.Usec),
+		Stopped: k.Proc.P_stat == sstop, Zombie: k.Proc.P_stat == szomb,
+		Name: unix.ByteSliceToString(k.Proc.P_comm[:]),
+	}
 }
 
 // SetBackground puts a process in macOS's background state, or takes it

@@ -154,11 +154,14 @@ final class ConversationModel: ObservableObject {
             return
         }
         follow = Task { [weak self] in
+            // A working agent's conversation changes many times a second;
+            // its updates go in a batch at a time (Pace.swift).
+            let batcher = Batcher<ConversationUpdate> { updates in
+                for u in updates { self?.apply(u, for: id, agent: agent) }
+            }
             while !Task.isCancelled {
                 do {
-                    try await client.followConversation(id, agent: agent) { update in
-                        Task { @MainActor in self?.apply(update, for: id, agent: agent) }
-                    }
+                    try await client.followConversation(id, agent: agent) { update in batcher.add(update) }
                 } catch is CancellationError {
                     return
                 } catch {
@@ -170,17 +173,19 @@ final class ConversationModel: ObservableObject {
         }
     }
 
+    /// Takes in one update. Only what changes is set: every set draws the
+    /// conversation again, the same value too.
     func apply(_ u: ConversationUpdate, for id: String, agent: String? = nil) {
         guard id == session, agent == self.agent else { return }
         let new = u.items ?? []
         if u.reset == true {
-            items = new
+            if items != new { items = new }
             index = Dictionary(new.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { _, last in last })
-            more = u.more ?? false
+            if more != (u.more ?? false) { more = u.more ?? false }
         } else {
             for it in new {
                 if let i = index[it.id] {
-                    items[i] = it
+                    if items[i] != it { items[i] = it }
                 } else {
                     index[it.id] = items.count
                     items.append(it)
@@ -190,9 +195,9 @@ final class ConversationModel: ObservableObject {
         if needs != u.needs { needs = u.needs }
         let p = u.pending ?? []
         if pending != p { pending = p }
-        transcript = u.transcript
-        loaded = true
-        problem = nil
+        if transcript != u.transcript { transcript = u.transcript }
+        if !loaded { loaded = true }
+        if problem != nil { problem = nil }
     }
 
     /// Types a message to the agent, as a person would. Returns why it

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
@@ -37,9 +38,7 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 			c.log.Warn("status.json", "session", x.id, "err", err)
 		}
 	}
-	if u.FiveHour != nil || u.SevenDay != nil {
-		c.plan = ipc.Plan{FiveHour: u.FiveHour, SevenDay: u.SevenDay}
-	}
+	c.plan = mergePlan(c.plan, ipc.Plan{FiveHour: u.FiveHour, SevenDay: u.SevenDay})
 	row := x.wire()
 	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents, Parked: row.Parked}
 	if row.State == ipc.StateWorking {
@@ -64,18 +63,46 @@ func (c *Core) theme(a ipc.ThemeArgs) error {
 	return nil
 }
 
-// loadStatus reads a session's last status update, and takes its plan use
-// when it is the newest the core has seen. The caller holds c.mu.
+// loadStatus reads a session's last status update, and takes in its plan
+// use as a new one would (mergePlan). The caller holds c.mu.
 func (c *Core) loadStatus(x *session) {
-	path := c.paths.StatusFile(x.id)
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(c.paths.StatusFile(x.id))
 	if err != nil {
 		return
 	}
 	if json.Unmarshal(b, &x.usage) != nil {
 		return
 	}
-	if fi, err := os.Stat(path); err == nil && (x.usage.FiveHour != nil || x.usage.SevenDay != nil) && fi.ModTime().After(c.planAt) {
-		c.plan, c.planAt = ipc.Plan{FiveHour: x.usage.FiveHour, SevenDay: x.usage.SevenDay}, fi.ModTime()
+	c.plan = mergePlan(c.plan, ipc.Plan{FiveHour: x.usage.FiveHour, SevenDay: x.usage.SevenDay})
+}
+
+// sameWindow is how far apart two readings of one window's reset may be:
+// Claude Code rounds the time, and two sessions may round it apart.
+const sameWindow = 10 * time.Minute
+
+// mergePlan is the plan's use from what the core had and one session's
+// reading, window by window (mergeWindow).
+func mergePlan(have, got ipc.Plan) ipc.Plan {
+	return ipc.Plan{FiveHour: mergeWindow(have.FiveHour, got.FiveHour), SevenDay: mergeWindow(have.SevenDay, got.SevenDay)}
+}
+
+// mergeWindow is one window of the plan's use from what the core had and
+// one session's reading. The use is the account's, but each session reads
+// it when one of its own requests comes back, so a session that has been
+// quiet reports an older, smaller figure; with many sessions the newest
+// reading would flip between them every few updates, and every client
+// would draw the header again each time. Within one window the use only
+// grows, so the larger figure is the newer. A reading of a later window
+// replaces the one the core had, and a reading of an earlier one is old
+// news.
+func mergeWindow(have, got *ipc.Window) *ipc.Window {
+	switch {
+	case got == nil:
+		return have
+	case have == nil, got.ResetsAt.After(have.ResetsAt.Add(sameWindow)):
+		return got
+	case got.ResetsAt.Before(have.ResetsAt.Add(-sameWindow)), got.Used <= have.Used:
+		return have
 	}
+	return got
 }
