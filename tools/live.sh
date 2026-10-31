@@ -15,6 +15,11 @@
 # app, installs it in ~/Applications and relaunches it if it was running. It
 # never starts Irie or the app.
 #
+# With `git config irie.push <remote>` set, a finished install also moves
+# that remote's main to the live build: a fast-forward or nothing, never a
+# force, and only after the repository's own pre-push hook passes. A push that
+# fails leaves the install in place and says why.
+#
 #   tools/live.sh             install this checkout
 #   tools/live.sh --rollback  swap the previous irie back in
 set -eu
@@ -216,4 +221,32 @@ if [ -n "$pids" ]; then
 	say "Irie.app is rebuilt and relaunched"
 elif [ -n "$newapp" ]; then
 	say "Irie.app is rebuilt in $app"
+fi
+
+# The push comes last, so that a slow or refused one never holds back the
+# install. Every commit going out must carry a GitHub noreply address, as the
+# commit hooks require (AGENTS.md, "No personal data"): a merge, or a commit
+# made where the hooks did not run, never passed them. GIT_TERMINAL_PROMPT=0
+# makes a missing login fail instead of wait.
+remote=$(git config --get irie.push || true)
+if [ -n "$remote" ]; then
+	strangers=$(git log --format='%h %ae %ce' "$head" --not --remotes="$remote" |
+		awk '{ for (i = 2; i <= 3; i++) if ($i !~ /@users\.noreply\.github\.com$/ && $i != "noreply@github.com") { print $1 " " $i; next } }')
+	if [ -n "$strangers" ]; then
+		say "not pushed: these commits carry an address that is not a GitHub noreply one:"
+		printf '%s\n' "$strangers" | sed 's/^/live:   /' >&2
+	elif out=$(GIT_TERMINAL_PROMPT=0 git push "$remote" "$head:refs/heads/main" 2>&1); then
+		case $out in
+		*"Everything up-to-date"*) say "$remote's main already has it" ;;
+		*) say "$remote's main is the live build now" ;;
+		esac
+	else
+		say "not pushed, so $remote's main stays where it was:"
+		printf '%s\n' "$out" | grep -v -E '^(To |hint:)' | sed 's/^/live:   /' >&2
+		case $out in
+		*"fetch first"* | *non-fast-forward*)
+			say "it has commits the live build lacks: git fetch $remote, merge $remote/main, then install again"
+			;;
+		esac
+	fi
 fi
