@@ -60,6 +60,7 @@ type (
 	PreflightResult  = ipc.PreflightResult
 	LocalArgs        = ipc.LocalArgs
 	LocalResult      = ipc.LocalResult
+	LlamaStatus      = ipc.LlamaStatus
 	LocalModel       = ipc.LocalModel
 	RateArgs         = ipc.RateArgs
 	RouteArgs        = ipc.RouteArgs
