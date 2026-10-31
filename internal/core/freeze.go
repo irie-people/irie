@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
@@ -312,5 +313,5 @@ func writeMark(path string, at time.Time) error {
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(path, append(b, '\n'))
+	return filetx.WriteFile(path, append(b, '\n'), 0o600)
 }

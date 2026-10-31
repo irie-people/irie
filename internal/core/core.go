@@ -22,6 +22,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -209,7 +210,7 @@ func Run(o Options) error {
 	if err := o.Paths.EnsureState(); err != nil {
 		return err
 	}
-	lock, err := lockFile(o.Paths.CoreLock(), 3*time.Second)
+	lock, err := filetx.Lock(o.Paths.CoreLock(), 3*time.Second)
 	if err != nil {
 		return fmt.Errorf("core.lock: %w", err)
 	}
