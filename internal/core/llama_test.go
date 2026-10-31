@@ -11,6 +11,7 @@ import (
 
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
@@ -187,10 +188,47 @@ func TestBigRunsAModelOnIriesOwnLlamaServer(t *testing.T) {
 		t.Errorf("%d llama-servers, want 1", servers)
 	}
 
+	// +llama:<model> runs one model for one task, and the + list offers the
+	// ones this build runs.
+	if err := c.call("complete", ipc.CompleteArgs{Text: "+llama:"}, &cr); err != nil || !slices.Equal(cr.Items, []string{"+llama:coder", "+llama:bonsai-2:9b"}) {
+		t.Errorf("complete +llama: = %q, %v", cr.Items, err)
+	}
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "llama:coder"}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if row := c.waitState(r.Session.ID, ipc.StateWorking); row.Model != "coder" || row.Profile != "llama:coder" {
+		t.Errorf("+llama:coder = %+v", row)
+	}
+
 	// A model only PrismML's build runs is refused on this one, saying so.
 	var pr ipc.PreflightResult
 	if err := c.call("preflight", ipc.PreflightArgs{Profile: "big", Model: "Ternary-Bonsai-2-27B-PTQ1_0"}, &pr); err != nil || pr.OK || !strings.Contains(strings.Join(pr.Problems, " "), "PrismML") {
 		t.Errorf("preflight = %+v, %v", pr, err)
+	}
+}
+
+func TestFitsNow(t *testing.T) {
+	m := localmodel.Machine{Total: 18 * localmodel.GiB, Available: 9 * localmodel.GiB}
+	list := []ipc.LocalModel{
+		{Name: "bonsai-2:27b", Need: 11_400_000_000, Fits: true},
+		{Name: "other:7b", Need: 5_000_000_000, Fits: true},
+		{Name: "bonsai-2:9b", Need: 4_100_000_000, Fits: true},
+		{Name: "chat:1b", Need: 1_000_000_000, Fits: true, Why: "cannot call tools"},
+	}
+	// 9 GiB free less the 2 GiB reserve: the best suggested model that fits.
+	if got := fitsNow(list, "bonsai-2:27b", m, 0, localmodel.Rank); got != "bonsai-2:9b" {
+		t.Errorf("fits now = %q", got)
+	}
+	// No suggested model fits: the largest that does.
+	if got := fitsNow(list[:2], "bonsai-2:27b", m, 0, localmodel.Rank); got != "other:7b" {
+		t.Errorf("fits now without suggestions = %q", got)
+	}
+	// What the server's model gives back counts, and nothing else fits.
+	if got := fitsNow(list[:1], "x", m, 5*localmodel.GiB, localmodel.Rank); got != "bonsai-2:27b" {
+		t.Errorf("fits now with memory given back = %q", got)
+	}
+	if got := fitsNow(list, "bonsai-2:27b", localmodel.Machine{Total: 18 * localmodel.GiB, Available: localmodel.GiB}, 0, localmodel.Rank); got != "" {
+		t.Errorf("fits now on a full machine = %q", got)
 	}
 }
 

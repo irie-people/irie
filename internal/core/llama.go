@@ -38,6 +38,10 @@ const llamaRuntime = "llama-server"
 // llamaWindow names the window of Irie's own llama-server.
 const llamaWindow = "irie-llama"
 
+// llamaPrefix names a model of Irie's llama-server as a profile:
+// +llama:Ternary-Bonsai-2-27B-PTQ1_0 is +big on that model.
+const llamaPrefix = "llama:"
+
 // isLlama reports whether profile p runs on Irie's llama-server.
 func isLlama(p config.Profile) bool { return p.Local != nil && p.Local.Runtime == llamaRuntime }
 
@@ -414,6 +418,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 			if force {
 				warn("%s; loading it anyway", msg)
 			} else {
+				chk.Short = true
 				problem("%s; close something first, pick a smaller model, or spawn with --force", msg)
 			}
 		}
@@ -474,7 +479,17 @@ func (c *Core) prepareLlama(name string, p *config.Profile, force bool) ([]strin
 	var warnings []string
 	if !chk.OK() {
 		if !force && p.Local.Enforce {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s on %s: %s", name, m.name, strings.Join(chk.Problems, "; "))
+			msg := strings.Join(chk.Problems, "; ")
+			if chk.Short {
+				_, list := c.llamaList(b)
+				c.mu.Lock()
+				freed := c.llamaMem
+				c.mu.Unlock()
+				if alt := fitsNow(list, m.name, c.readMachine(), freed, localmodel.LlamaRank); alt != "" {
+					msg += fmt.Sprintf("; %s fits now (+%s%s)", alt, llamaPrefix, alt)
+				}
+			}
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s on %s: %s", name, m.name, msg)
 		}
 		warnings = append(warnings, chk.Problems...)
 	}
@@ -563,4 +578,27 @@ func (c *Core) llamaNote(name string, p config.Profile) string {
 		parts = append(parts, m.About)
 	}
 	return strings.Join(parts, " · ")
+}
+
+// fitsNow is the best model of list, other than model, that an agent can
+// run on and the machine can hold now, with freed given back: the best one
+// Irie suggests, else the largest. "" when there is none.
+func fitsNow(list []ipc.LocalModel, model string, m localmodel.Machine, freed int64, rank func(string) int) string {
+	free := m.Available + freed - localmodel.Reserve(m)
+	var ok []ipc.LocalModel
+	for _, x := range list {
+		if x.Name != model && runnable(x) && (x.Need <= free || x.Loaded) {
+			ok = append(ok, x)
+		}
+	}
+	if best := bestBy(ok, rank); best != "" {
+		return best
+	}
+	best, need := "", int64(0)
+	for _, x := range ok {
+		if x.Need > need {
+			best, need = x.Name, x.Need
+		}
+	}
+	return best
 }

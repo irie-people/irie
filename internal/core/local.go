@@ -107,12 +107,17 @@ func writeJSON(path string, v any) error {
 func (c *Core) profile(name string) (config.Profile, bool) {
 	p, ok := c.cfg().Profiles[name]
 	if !ok {
-		model, isLocal := strings.CutPrefix(name, localPrefix)
-		if !isLocal || model == "" {
+		base, model := "local", ""
+		if m, isLocal := strings.CutPrefix(name, localPrefix); isLocal {
+			model = m
+		} else if m, isLlama := strings.CutPrefix(name, llamaPrefix); isLlama {
+			base, model = "big", m
+		}
+		if model == "" {
 			return config.Profile{}, false
 		}
-		if p, ok = c.cfg().Profiles["local"]; !ok || p.Local == nil {
-			p = config.Default().Profiles["local"]
+		if p, ok = c.cfg().Profiles[base]; !ok || p.Local == nil || isLlama(p) != (base == "big") {
+			p = config.Default().Profiles[base]
 		}
 		p.Model = model
 	}
@@ -515,7 +520,21 @@ func (c *Core) prepareLocal(name string, p *config.Profile, force bool) ([]strin
 	var warnings []string
 	if !chk.OK() {
 		if !force && p.Local.Enforce {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s on %s: %s", name, model, strings.Join(chk.Problems, "; "))
+			msg := strings.Join(chk.Problems, "; ")
+			if chk.Short {
+				if ms, err := c.localModels(ctx, o, own); err == nil {
+					var freed int64
+					if own {
+						c.mu.Lock()
+						freed = c.localMem
+						c.mu.Unlock()
+					}
+					if alt := fitsNow(ms, model, c.readMachine(), freed, localmodel.Rank); alt != "" {
+						msg += fmt.Sprintf("; %s fits now (+%s%s)", alt, localPrefix, alt)
+					}
+				}
+			}
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "+%s on %s: %s", name, model, msg)
 		}
 		warnings = append(warnings, chk.Problems...)
 	}

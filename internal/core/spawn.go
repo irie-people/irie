@@ -195,7 +195,7 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	}
 	profile, ok := c.profile(profileName)
 	if !ok {
-		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, +%s to route by cost per success, and +%s<model> for a local model", profileName, strings.Join(slices.Sorted(maps.Keys(c.cfg().Profiles)), ", "), config.Auto, localPrefix)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no profile +%s; the profiles are %s, +%s to route by cost per success, and +%s<model> or +%s<model> for a local model", profileName, strings.Join(slices.Sorted(maps.Keys(c.cfg().Profiles)), ", "), config.Auto, localPrefix, llamaPrefix)
 	}
 	switch {
 	case a.PermissionMode != "":
@@ -205,7 +205,7 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	}
 	if a.Model != "" {
 		if profile.Harness != "claude-code" || profile.Local != nil {
-			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "+%s takes no model for one task: pick a Claude Code profile, or +%s<model> for a local model", profileName, localPrefix)
+			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "+%s takes no model for one task: pick a Claude Code profile, or +%s<model> or +%s<model> for a local model", profileName, localPrefix, llamaPrefix)
 		}
 		profile.Model = a.Model
 	}
