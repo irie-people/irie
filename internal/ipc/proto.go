@@ -495,6 +495,7 @@ type PreflightResult struct {
 // not running.
 type LocalArgs struct {
 	Start bool `json:"start,omitempty"`
+	Llama bool `json:"llama,omitempty"` // also say what Irie's llama-server runs and may run
 }
 
 // LocalResult is the local server and the models it can run, weighed
@@ -512,6 +513,20 @@ type LocalResult struct {
 	Memory  Memory       `json:"memory"`
 	Disk    int64        `json:"disk,omitempty"` // the disk space free where the server keeps its models; 0 = unknown
 	Models  []LocalModel `json:"models"`         // the cheapest in memory first
+	Llama   *LlamaStatus `json:"llama,omitempty"`
+}
+
+// LlamaStatus is Irie's own llama-server, for profiles with runtime =
+// "llama-server" (DESIGN §6.5).
+type LlamaStatus struct {
+	URL     string       `json:"url"`
+	Bin     string       `json:"bin,omitempty"`     // the llama-server binary
+	Build   string       `json:"build,omitempty"`   // which build it is, such as "build 10180"
+	Error   string       `json:"error,omitempty"`   // why it cannot run, such as none being installed
+	Running string       `json:"running,omitempty"` // the model it runs now
+	Pick    string       `json:"pick,omitempty"`    // the model +big runs
+	Dir     string       `json:"dir"`               // the folder of GGUF files it may run besides Ollama's
+	Models  []LocalModel `json:"models"`            // the cheapest in memory first
 }
 
 // LocalModel is one model of the local server.

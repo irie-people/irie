@@ -32,8 +32,8 @@ type agentConfig struct {
 	spawn        string            // more of the [spawn] section, such as close_when_done
 	env          map[string]string // profiles.fake.env
 	extra        string            // more TOML, such as [repos] or more profiles
-	// The [local] section's body. By default it names an ollama that is not
-	// there, so no test starts the machine's own.
+	// The [local] section's body. By default it names an ollama and a
+	// llama-server that are not there, so no test starts the machine's own.
 	local string
 	// usage.status_line, off unless a test is about it: it reads the user's
 	// Claude Code settings.
@@ -77,7 +77,7 @@ func (a agentConfig) toml(fake string) string {
 	}
 	local := a.local
 	if local == "" {
-		local = "ollama = \"/nonexistent/ollama\"\n"
+		local = "ollama = \"/nonexistent/ollama\"\nllama_server = \"/nonexistent/llama-server\"\n"
 	}
 	fmt.Fprintf(&b, "\n[local]\n%s\n[usage]\nstatus_line = %v\n", local, a.statusLine)
 	priority := a.priority
