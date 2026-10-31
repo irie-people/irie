@@ -77,4 +77,4 @@ Used in: `README.md` and `site/contribute.html`.
 
 > The record is public: irie-people/stake. It runs on Steak v0.2.0.
 
-Used in: `README.md` and `site/contribute.html`, with "irie-people/stake" linked to <https://github.com/irie-people/stake> and "Steak" to <https://github.com/steak-hq/steak>.
+Used in: `README.md` and `site/contribute.html`, with "irie-people/stake" linked to <https://github.com/irie-people/stake> and "Steak" to <https://github.com/irie-people/steak>.

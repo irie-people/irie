@@ -325,7 +325,7 @@ The website in `site/` has no third-party code: no scripts, fonts or stylesheets
 | actions/upload-pages-artifact | v5 | MIT | Pages workflow: package `site/` |
 | actions/deploy-pages | v5 | MIT | Pages workflow: publish it |
 
-`.github/conventional-commit.sh`, `.github/workflows/commits.yml` and `.github/workflows/release-please.yml` are copied from the templates of the [Steak framework](https://github.com/steak-hq/steak) (`templates/project`, MIT). The two workflows run these actions on GitHub's runners; nothing from them is copied into the repository.
+`.github/conventional-commit.sh`, `.github/workflows/commits.yml` and `.github/workflows/release-please.yml` are copied from the templates of the [Steak framework](https://github.com/irie-people/steak) (`templates/project`, MIT). The two workflows run these actions on GitHub's runners; nothing from them is copied into the repository.
 
 | Action | Version | License | Why |
 |---|---|---|---|

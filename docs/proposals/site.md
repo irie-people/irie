@@ -108,7 +108,7 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 - **What Irie is stays complete.** A change that adds or removes a part, a file Irie keeps, a connection, a program it runs, or a word it says to an agent updates `what-irie-is.html` in the same pull request. The page quotes every `[Irie]` note word for word, so `grep -rn '\[Irie\]' internal` finds what to compare.
 - **When the themes are built.** The marks with `data-m="themes"` go, Themes' stone on the docs page fills, and the other pictures move to the default theme, Rosewater.
 - **When the first release ships.** Install gains the download, and the "no download yet" lines on Home, Get started, the FAQ and the README go.
-- **Links out.** The site links to `github.com/irie-people/irie`, `irie-people/stake` and `steak-hq/steak`. None of them was public on 2026-10-26, so those links fail until they are.
+- **Links out.** The site links to `github.com/irie-people/irie`, `irie-people/stake` and `irie-people/steak`. None of them was public on 2026-10-26, so those links fail until they are.
 
 ## Open decisions
 
