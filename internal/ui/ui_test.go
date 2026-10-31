@@ -1675,4 +1675,12 @@ func TestHeaderShowsPlanUseAndLowMemory(t *testing.T) {
 	if strings.Contains(header(), "mem low") {
 		t.Errorf("header %q after memory recovered", header())
 	}
+	// A busy machine, where the session on show comes first, says so after
+	// low memory.
+	m = send(m, tea.WindowSizeMsg{Width: 90, Height: 24})
+	h = ipc.Header{Plan: &ipc.Plan{FiveHour: &ipc.Window{Used: 62}}, Memory: &ipc.Memory{Total: 18 << 30, Available: 1 << 30, Low: true}, Busy: "memory"}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &h}})
+	if !strings.Contains(header(), "mem low busy 5h62%") {
+		t.Errorf("busy header %q", header())
+	}
 }

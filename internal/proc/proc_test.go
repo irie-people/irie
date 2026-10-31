@@ -136,3 +136,22 @@ func TestSetBackgroundTakesAProcessInAndOut(t *testing.T) {
 		t.Errorf("out of the background the priority is %s, want %s again", got, before)
 	}
 }
+
+func TestReadLoadSaysHowBusyTheMachineIs(t *testing.T) {
+	l, err := ReadLoad()
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		if err == nil {
+			t.Error("ReadLoad works on a system it does not know")
+		}
+		t.Skip("no load here")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.CPUs < 1 || l.Avg < 0 || l.Avg > float64(l.CPUs)*1000 {
+		t.Errorf("load = %+v", l)
+	}
+	if runtime.GOOS == "darwin" && l.Memory != 1 && l.Memory != 2 && l.Memory != 4 {
+		t.Errorf("memory pressure = %d, want 1, 2 or 4", l.Memory)
+	}
+}

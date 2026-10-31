@@ -26,6 +26,21 @@ type Table struct {
 	kids  map[int][]int // by parent, in pid order
 }
 
+// Load is how busy the machine is at one moment.
+type Load struct {
+	// Avg is the work waiting to run, averaged over the last minute: how
+	// many CPUs it would keep busy.
+	Avg float64
+	// CPUs is how many logical CPUs run it.
+	CPUs int
+	// Memory is the kernel's memory pressure: 1 when normal, 2 at its
+	// warning and 4 when critical; 0 where the system does not say.
+	Memory int
+}
+
+// ReadLoad reads how busy the machine is. Like Read, it starts no process.
+func ReadLoad() (Load, error) { return readLoad() }
+
 // Read returns the process table.
 func Read() (Table, error) {
 	ps, err := read()

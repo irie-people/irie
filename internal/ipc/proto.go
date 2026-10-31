@@ -155,6 +155,10 @@ type Session struct {
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
+	// Background is whether its process tree runs in macOS's background
+	// state: another session is promoted, or the machine is busy and the
+	// session is not on show (DESIGN §4.3).
+	Background bool `json:"background,omitempty"`
 
 	// Loose is what its jot left that has not landed, by the jot dog's
 	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
@@ -263,6 +267,9 @@ type Header struct {
 	HelperStyle string  `json:"helper_style,omitempty"`
 	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
 	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
+	// Busy is why the machine counts as busy, "memory" or "cpu", while every
+	// session but the one on show runs in the background (DESIGN §4.3).
+	Busy string `json:"busy,omitempty"`
 }
 
 // Window is one window of a plan's use, such as the five hours.

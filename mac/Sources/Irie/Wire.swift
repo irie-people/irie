@@ -39,13 +39,16 @@ struct Session: Codable, Identifiable, Equatable {
     var frozen: Date?
     var freezing: Bool?
     var priority: Int?
+    /// Its process tree runs in macOS's background state: another session
+    /// is promoted, or the machine is busy and it is not on show.
+    var background: Bool?
     /// What its jot left that has not landed, by the jot dog's last look,
     /// while its turn is over (DESIGN §4.8); nil when it is through.
     var loose: Loose?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
-        case order, parked, frozen, freezing, priority, loose
+        case order, parked, frozen, freezing, priority, background, loose
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -157,11 +160,15 @@ struct Header: Decodable {
     /// ui.helper_style: a helper beside its session is drawn as cards
     /// ("browser") or as a terminal ("terminal").
     var helperStyle: String?
+    /// Why the machine is busy, "memory" or "cpu", while every session but
+    /// the one on show runs in the background; nil while it is not.
+    var busy: String?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
+        case busy
     }
 }
 

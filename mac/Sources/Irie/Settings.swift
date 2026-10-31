@@ -69,6 +69,8 @@ struct CoreConfig: Decodable, Equatable {
     var worktree: Worktree
     var usage: Usage
     var dog: Dog
+    /// nil from a core from before focus priority.
+    var priority: Priority?
 
     struct UI: Decodable, Equatable {
         var redOnDone: Bool
@@ -169,6 +171,10 @@ struct CoreConfig: Decodable, Equatable {
     struct Dog: Decodable, Equatable {
         var watch: Bool
         var nudges: Int
+    }
+
+    struct Priority: Decodable, Equatable {
+        var focus: Bool
     }
 
     /// The profiles by name, the default's first among equals: auto's own
@@ -496,6 +502,16 @@ private struct GeneralSettings: View {
                     Text("Usage")
                 } footer: {
                     footnote("Irie becomes the status line of the sessions it starts from now on, and runs yours inside it.")
+                }
+                if let p = c.priority {
+                    Section {
+                        Toggle("The session on show comes first while this Mac is busy",
+                               isOn: model.binding(p.focus, "priority.focus") { $0.priority?.focus = $1 })
+                    } header: {
+                        Text("Busy Mac")
+                    } footer: {
+                        footnote("While memory or CPU runs short, every other session runs in macOS’s background state, slower but still running, so the session you look at, the core and this window keep their room. macOS can’t set memory aside for one program, so the others step back instead.")
+                    }
                 }
                 ConfigFileSection(path: model.path)
             }

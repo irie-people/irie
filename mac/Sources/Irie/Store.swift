@@ -61,6 +61,9 @@ final class Store: ObservableObject {
     /// itself, so the title bar keeps no To verify count, and the review dock
     /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
+    /// Why the core counts the machine busy, "memory" or "cpu", while every
+    /// session but the one on show runs in the background (DESIGN §4.3).
+    @Published private(set) var busy: String?
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
@@ -228,6 +231,9 @@ final class Store: ObservableObject {
         }
         if let s = f.header?.helperStyle, s != helperStyle {
             helperStyle = s
+        }
+        if let h = f.header, h.busy != busy {
+            busy = h.busy
         }
         switch f.t {
         case "snapshot":

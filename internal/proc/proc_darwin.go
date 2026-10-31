@@ -1,6 +1,10 @@
 package proc
 
 import (
+	"encoding/binary"
+	"fmt"
+	"runtime"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -48,4 +52,26 @@ func SetBackground(pid int, on bool) error {
 		prio = prioDarwinBG
 	}
 	return unix.Setpriority(prioDarwinProcess, pid, prio)
+}
+
+// readLoad reads the run queue's averages (vm.loadavg, a struct loadavg:
+// three fixed-point numbers, then their scale as a long) and the kernel's
+// memory pressure.
+func readLoad() (Load, error) {
+	b, err := unix.SysctlRaw("vm.loadavg")
+	if err != nil {
+		return Load{}, err
+	}
+	if len(b) < 24 {
+		return Load{}, fmt.Errorf("vm.loadavg: %d bytes, want 24", len(b))
+	}
+	scale := binary.LittleEndian.Uint64(b[16:24])
+	if scale == 0 {
+		return Load{}, fmt.Errorf("vm.loadavg: no scale")
+	}
+	l := Load{Avg: float64(binary.LittleEndian.Uint32(b[0:4])) / float64(scale), CPUs: runtime.NumCPU()}
+	if n, err := unix.SysctlUint32("kern.memorystatus_vm_pressure_level"); err == nil {
+		l.Memory = int(n)
+	}
+	return l, nil
 }

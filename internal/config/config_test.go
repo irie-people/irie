@@ -110,6 +110,9 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Dog{Watch: true, Nudges: 2, Land: map[string]string{}}); !reflect.DeepEqual(c.Dog, want) {
 		t.Errorf("dog = %+v, want %+v", c.Dog, want)
 	}
+	if want := (Priority{Focus: true, HeadroomCPUs: 1, HeadroomGiB: 1}); c.Priority != want {
+		t.Errorf("priority = %+v, want %+v", c.Priority, want)
+	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("defaults do not validate: %v", err)
 	}
@@ -207,6 +210,11 @@ status_line = false
 watch = false
 nudges = 5
 land = { web = "live", "~/code/api" = "main" }
+
+[priority]
+focus = false
+headroom_cpus = 2
+headroom_gib = 3
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -277,6 +285,9 @@ land = { web = "live", "~/code/api" = "main" }
 	}
 	if want := (Dog{Watch: false, Nudges: 5, Land: map[string]string{"web": "live", "~/code/api": "main"}}); !reflect.DeepEqual(c.Dog, want) {
 		t.Errorf("dog = %+v, want %+v", c.Dog, want)
+	}
+	if want := (Priority{Focus: false, HeadroomCPUs: 2, HeadroomGiB: 3}); c.Priority != want {
+		t.Errorf("priority = %+v, want %+v", c.Priority, want)
 	}
 	// The defaults themselves are untouched.
 	if d := Default(); d.Profiles["claude"].Model != "claude-opus-5-5" || len(d.Worktree.Copy) != 2 || len(d.Repos.Aliases) != 0 {
@@ -465,6 +476,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[dog]\nland = { irie = \"a..b\" }\n", "dog.land.irie"},
 		{"[dog]\nland = { irie = \"live now\" }\n", "dog.land.irie"},
 		{"[dog]\nland = { \" \" = \"live\" }\n", "dog.land"},
+		{"[priority]\nheadroom_cpus = -1\n", "priority.headroom_cpus"},
+		{"[priority]\nheadroom_gib = -1\n", "priority.headroom_gib"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
