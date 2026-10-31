@@ -15,7 +15,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"slices"
 	"sort"
@@ -343,6 +345,9 @@ func (c *Core) localModels(ctx context.Context, o localmodel.Ollama, own bool) (
 			effective = info.Context
 		}
 		lm := ipc.LocalModel{Name: md.Name, Size: md.Size, Remote: md.Remote}
+		if sg, ok := localmodel.Suggested(md.Name); ok {
+			lm.About = sg.About
+		}
 		lm.Need = localmodel.Estimate(md.Size, info, serverCtx, kv, c.parallel()).Total
 		if n, ok := measured[measureKey(md.Name, effective, kv)]; ok {
 			lm.Need, lm.Measured = n, true
@@ -385,22 +390,31 @@ func (c *Core) forgetModels() {
 func runnable(m ipc.LocalModel) bool { return m.Why == "" && m.Fits && !m.Remote }
 
 // localModel picks the model a local profile runs: the profile's own, else
-// the one `irie setup local` chose, else the only one the server has that
-// an agent can run on and the machine can hold. Several are listed, the
-// cheapest in memory first, rather than guessed between.
+// the one `irie setup local` chose, else the best of the models Irie
+// suggests (localmodel.Suggestions) that the server has, an agent can run
+// on and the machine can hold, else the only such model the server has.
+// Several others are listed, the cheapest in memory first, rather than
+// guessed between. A name is the server's own, so qwen3.8 runs
+// qwen3.8:latest.
 func (c *Core) localModel(ctx context.Context, o localmodel.Ollama, own bool, name string, p config.Profile) (string, error) {
-	if p.Model != "" {
-		return p.Model, nil
-	}
 	c.mu.Lock()
 	chosen := c.local.Model
 	c.mu.Unlock()
-	if chosen != "" {
-		return chosen, nil
-	}
 	ms, err := c.localModels(ctx, o, own)
+	for _, want := range []string{p.Model, chosen} {
+		if want == "" {
+			continue
+		}
+		if i := slices.IndexFunc(ms, func(m ipc.LocalModel) bool { return localmodel.SameModel(m.Name, want) }); i >= 0 {
+			return ms[i].Name, nil
+		}
+		return want, nil // the check says it is not there
+	}
 	if err != nil {
 		return "", ipc.Errorf(ipc.CodeBadArgs, "+%s: Ollama at %s: %v", name, o.URL, err)
+	}
+	if best := bestModel(ms); best != "" {
+		return best, nil
 	}
 	var ok []string
 	for _, m := range ms {
@@ -416,6 +430,18 @@ func (c *Core) localModel(ctx context.Context, o localmodel.Ollama, own bool, na
 		return model, nil
 	}
 	return "", ipc.Errorf(ipc.CodeAmbiguous, "+%s has no model yet; pick one of %s, or run `irie setup local` to choose one for it", name, strings.Join(ok, ", "))
+}
+
+// bestModel is the best suggested model of ms that an agent can run on and
+// the machine can hold, or "".
+func bestModel(ms []ipc.LocalModel) string {
+	best, rank := "", len(localmodel.Suggestions)
+	for _, m := range ms {
+		if r := localmodel.Rank(m.Name); r >= 0 && r < rank && runnable(m) {
+			best, rank = m.Name, r
+		}
+	}
+	return best
 }
 
 // check checks model for profile p (DESIGN §6.1) and keeps what a loaded
@@ -568,8 +594,30 @@ func (c *Core) localStatus(a ipc.LocalArgs) (ipc.LocalResult, error) {
 		r.Error = err.Error()
 	} else {
 		r.Models = ms
+		if p, ok := c.profile("local"); ok && p.Local != nil {
+			r.Pick, _ = c.localModel(ctx, o, own, "local", p)
+		}
+	}
+	if own || isLoopback(o.URL) {
+		r.Disk, _ = localmodel.FreeDisk(localmodel.ModelsDir(c.cfg().Local.Env))
 	}
 	return r, nil
+}
+
+// isLoopback reports whether url is a server on this machine, whose models
+// are on this machine's disk.
+func isLoopback(url string) bool {
+	u, err := neturl.Parse(url)
+	if err != nil {
+		return false
+	}
+	switch h := u.Hostname(); h {
+	case "localhost":
+		return true
+	default:
+		ip := net.ParseIP(h)
+		return ip != nil && ip.IsLoopback()
+	}
 }
 
 // httpClient is for local servers; every call carries a context.

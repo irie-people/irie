@@ -8,44 +8,6 @@ import (
 	"runtime"
 )
 
-// Suggestion is a model `irie setup local` offers to pull.
-type Suggestion struct {
-	Name string
-	Size int64 // its weights, in bytes
-	Info Info  // its context cache's shape
-}
-
-// Suggestions are the models setup offers, largest first: Qwen3.5, the
-// local model of Ollama's Claude Code guide, at the sizes Ollama's registry
-// gave and the shapes the models' published configs give (2026-10-26). The
-// smaller ones are too weak for an agent's tool loop and are left out.
-var Suggestions = []Suggestion{
-	{"qwen3.5:27b", 17_478_556_413, qwen35(64, 4)},
-	{"qwen3.5:9b", 6_550_825_373, qwen35(32, 4)},
-	{"qwen3.5:4b", 3_324_173_757, qwen35(32, 4)},
-}
-
-// qwen35 is the cache shape of a Qwen3.5 model with layers layers, of which
-// every fourth keeps a cache of kvHeads 256-wide heads.
-func qwen35(layers, kvHeads int) Info {
-	info := Info{Capabilities: []string{"completion", "tools"}, Context: 262144, KeyLen: 256, ValueLen: 256}
-	for range layers / 4 {
-		info.KVHeads = append(info.KVHeads, kvHeads)
-	}
-	return info
-}
-
-// Suggest returns the largest suggested model whose memory at context fits
-// the budget.
-func Suggest(budget int64, context int, kv string, parallel int) (Suggestion, Need, bool) {
-	for _, s := range Suggestions {
-		if n := Estimate(s.Size, s.Info, context, kv, parallel); n.Total <= budget {
-			return s, n, true
-		}
-	}
-	return Suggestion{}, Need{}, false
-}
-
 // installDirs are where Ollama's installers put the binary: Homebrew on
 // Apple silicon and on Intel Macs, the link the macOS app offers, the Linux
 // script, and the macOS app itself.

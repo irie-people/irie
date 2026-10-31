@@ -77,8 +77,14 @@ func printLocal(w io.Writer, r ipc.LocalResult) {
 		fmt.Fprintf(w, "memory   %s (%.0f GiB), %s free; local models may take %s; agents take %s, local models %s\n",
 			localmodel.Bytes(m.Total), float64(m.Total)/localmodel.GiB, localmodel.Bytes(m.Available), localmodel.Bytes(m.Budget), localmodel.Bytes(m.Agents), localmodel.Bytes(m.Local))
 	}
-	if r.Chosen != "" {
+	if r.Disk > 0 {
+		fmt.Fprintf(w, "disk     %s free for models\n", localmodel.Bytes(r.Disk))
+	}
+	switch {
+	case r.Chosen != "":
 		fmt.Fprintf(w, "+local   %s\n", r.Chosen)
+	case r.Pick != "":
+		fmt.Fprintf(w, "+local   %s, the best model here that fits; `irie setup local` chooses one for good\n", r.Pick)
 	}
 	if len(r.Models) == 0 {
 		return
@@ -103,8 +109,11 @@ func printLocal(w io.Writer, r ipc.LocalResult) {
 		if m.Loaded {
 			note = append(note, "in memory")
 		}
-		if m.Name == r.Chosen {
+		if m.Name == r.Pick || m.Name == r.Chosen {
 			note = append(note, "+local runs it")
+		}
+		if m.About != "" {
+			note = append(note, m.About)
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", m.Name, localmodel.Bytes(m.Size), need, strings.Join(note, ", "))
 	}
@@ -246,6 +255,11 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 		if choice == "" {
 			return fmt.Errorf("no suggested model fits the %s local models may take here; set local.memory_gib, or name a model with --model", localmodel.Bytes(st.Memory.Budget))
 		}
+		if s, ok := localmodel.Suggested(choice); ok {
+			n := localmodel.Estimate(s.Size, s.Info, st.Context, st.KVCache, 1)
+			fmt.Fprintf(stdout, "The best model for this machine: %s (%s), %s of weights, about %s in memory at a %s context.\n",
+				choice, s.About, localmodel.Bytes(s.Size), localmodel.Bytes(n.Total), localmodel.Tokens(st.Context))
+		}
 		if isTerminal(stdin) && !*yes {
 			fmt.Fprintf(stdout, "Model for +local [%s]: ", choice)
 			if line, _ := in.ReadString('\n'); strings.TrimSpace(line) != "" {
@@ -253,11 +267,14 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 			}
 		}
 	}
-	if !slices.ContainsFunc(st.Models, func(m ipc.LocalModel) bool { return m.Name == choice }) {
+	if i := slices.IndexFunc(st.Models, func(m ipc.LocalModel) bool { return localmodel.SameModel(m.Name, choice) }); i >= 0 {
+		choice = st.Models[i].Name
+	} else {
 		size := ""
-		for _, s := range localmodel.Suggestions {
-			if s.Name == choice {
-				size = fmt.Sprintf(" (about %s to download)", localmodel.Bytes(s.Size))
+		if s, ok := localmodel.Suggested(choice); ok {
+			size = fmt.Sprintf(" (about %s to download)", localmodel.Bytes(s.Size))
+			if !pullFits(st, s.Size) {
+				return fmt.Errorf("%s takes %s and the disk has %s free; Irie leaves %s free, so free some space or name a smaller model with --model", choice, localmodel.Bytes(s.Size), localmodel.Bytes(st.Disk), localmodel.Bytes(localmodel.PullReserve))
 			}
 		}
 		if !ask(fmt.Sprintf("Pull %s%s?", choice, size)) {
@@ -281,17 +298,15 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }
 
-// pickModel is the model setup offers: the largest suggestion that fits,
-// when the server has it; else the largest model there that an agent can
-// run and the machine can hold; else the largest suggestion that fits, to
-// pull.
+// pickModel is the model setup offers: the best suggestion that fits the
+// machine, which the server has or the disk can take; else the largest
+// model there that an agent can run and the machine can hold.
 func pickModel(st ipc.LocalResult) string {
-	suggestion, _, ok := localmodel.Suggest(st.Memory.Budget, st.Context, st.KVCache, 1)
-	have := func(name string) bool {
-		return slices.ContainsFunc(st.Models, func(m ipc.LocalModel) bool { return m.Name == name })
-	}
-	if ok && have(suggestion.Name) {
-		return suggestion.Name
+	fitting, _ := localmodel.Fitting(st.Memory.Budget, st.Context, st.KVCache, 1)
+	for _, s := range fitting {
+		if slices.ContainsFunc(st.Models, func(m ipc.LocalModel) bool { return localmodel.SameModel(m.Name, s.Name) }) || pullFits(st, s.Size) {
+			return s.Name
+		}
 	}
 	best := ""
 	var need int64
@@ -300,13 +315,13 @@ func pickModel(st ipc.LocalResult) string {
 			best, need = m.Name, m.Need
 		}
 	}
-	if best != "" {
-		return best
-	}
-	if ok {
-		return suggestion.Name
-	}
-	return ""
+	return best
+}
+
+// pullFits reports whether the disk can take a pull of size bytes and keep
+// localmodel.PullReserve free. An unknown free space lets it.
+func pullFits(st ipc.LocalResult, size int64) bool {
+	return st.Disk == 0 || st.Disk-size >= localmodel.PullReserve
 }
 
 // pull pulls model through the server at url, printing its progress.

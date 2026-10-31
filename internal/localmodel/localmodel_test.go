@@ -309,15 +309,77 @@ func TestSuggestFitsTheBudget(t *testing.T) {
 		budget int64
 		want   string
 	}{
-		{12 * GiB, "qwen3.5:9b"}, // an 18 GiB Mac
-		{32 * GiB, "qwen3.5:27b"},
-		{6 * GiB, "qwen3.5:4b"},
+		// Two thirds of an 18 GiB Mac: Qwen3.8-27B in ternary weights,
+		// where its 4-bit build would not fit.
+		{12 * GiB, "bonsai-2:27b"},
+		{32 * GiB, "bonsai-2:27b"},
+		{Budget(0, Machine{Total: 8 * GiB}), "bonsai-2:9b"}, // an 8 GiB laptop
+		{4 * GiB, "bonsai-2:4b"},
 		{2 * GiB, ""},
 	} {
 		s, n, ok := Suggest(c.budget, 65536, "q8_0", 1)
 		if s.Name != c.want || ok != (c.want != "") || ok && n.Total > c.budget {
 			t.Errorf("budget %s: %s (%s), %v; want %s", Bytes(c.budget), s.Name, Bytes(n.Total), ok, c.want)
 		}
+	}
+	// Every suggestion that fits, the best first.
+	ss, needs := Fitting(12*GiB, 65536, "q8_0", 1)
+	var names []string
+	for i, s := range ss {
+		names = append(names, s.Name)
+		if needs[i].Total > 12*GiB {
+			t.Errorf("%s needs %s", s.Name, Bytes(needs[i].Total))
+		}
+	}
+	if want := []string{"bonsai-2:27b", "bonsai-2:9b", "qwen3.5:9b", "bonsai-2:4b", "qwen3.5:4b"}; !reflect.DeepEqual(names, want) {
+		t.Errorf("fitting 12 GiB = %q, want %q", names, want)
+	}
+}
+
+func TestModelNames(t *testing.T) {
+	for _, c := range []struct{ a, b string }{
+		{"qwen3.8", "qwen3.8:latest"},
+		{"Bonsai-2:27B", "bonsai-2:27b"},
+		{"registry.ollama.ai/library/qwen3.5:9b", "qwen3.5:9b"},
+		{"library/qwen3.5:9b", "qwen3.5:9b"},
+		{"hf.co/prism-ml/bonsai", "hf.co/prism-ml/bonsai:latest"},
+	} {
+		if !SameModel(c.a, c.b) {
+			t.Errorf("%s and %s are not one model: %s, %s", c.a, c.b, Canonical(c.a), Canonical(c.b))
+		}
+	}
+	// A registry's port is not a tag.
+	if got := Canonical("example.com:5000/alice/coder"); got != "example.com:5000/alice/coder:latest" {
+		t.Errorf("canonical = %s", got)
+	}
+	if SameModel("qwen3.5:9b", "qwen3.5:4b") || SameModel("qwen3.5", "qwen3.5:9b") {
+		t.Error("different models are one")
+	}
+	if Rank("bonsai-2:27b") != 0 || Rank("BONSAI-2:27b") != 0 || Rank("chat:1b") != -1 {
+		t.Errorf("ranks = %d, %d, %d", Rank("bonsai-2:27b"), Rank("BONSAI-2:27b"), Rank("chat:1b"))
+	}
+	if s, ok := Suggested("bonsai-2:9b"); !ok || !strings.Contains(s.About, "ternary") {
+		t.Errorf("suggested = %+v, %v", s, ok)
+	}
+}
+
+func TestFreeDisk(t *testing.T) {
+	dir := t.TempDir()
+	free, err := FreeDisk(dir)
+	if err != nil || free <= 0 {
+		t.Fatalf("free = %d, %v", free, err)
+	}
+	// A folder that is not there yet is on its parent's volume.
+	if got, err := FreeDisk(dir + "/models/blobs"); err != nil || got <= 0 {
+		t.Errorf("free below a missing folder = %d, %v", got, err)
+	}
+	if got := ModelsDir(map[string]string{"OLLAMA_MODELS": "/srv/models"}); got != "/srv/models" {
+		t.Errorf("models dir = %s", got)
+	}
+	t.Setenv("OLLAMA_MODELS", "")
+	t.Setenv("HOME", "/home/alice")
+	if got := ModelsDir(nil); got != "/home/alice/.ollama/models" {
+		t.Errorf("default models dir = %s", got)
 	}
 }
 
@@ -354,6 +416,15 @@ func TestPreflight(t *testing.T) {
 	t.Run("unreachable", func(t *testing.T) {
 		c := Preflight(ctx, Ollama{URL: "http://127.0.0.1:1"}, "qwen3.5:9b", want(65536))
 		if c.OK() || !has(c.Problems, "not reachable at http://127.0.0.1:1") {
+			t.Errorf("check = %+v", c)
+		}
+	})
+	t.Run("a name without its tag", func(t *testing.T) {
+		// Ollama takes qwen3.5 as qwen3.5:latest.
+		f := newServer()
+		f.models = append(f.models, fakeModel{name: "coder:latest", size: gb, caps: []string{"completion", "tools"}, info: qwenInfo()})
+		c := Preflight(ctx, serve(t, f), "coder", want(65536))
+		if !c.OK() || c.Model != "coder:latest" || !c.Loaded {
 			t.Errorf("check = %+v", c)
 		}
 	})
