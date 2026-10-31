@@ -418,6 +418,17 @@ func demoted(t *testing.T) bool {
 	return proc.CanBackground && pri(t, os.Getpid()) == "4"
 }
 
+// skipIfDemoted skips a test that looks for processes out of the
+// background once the test itself went there, as when the machine got busy
+// meanwhile and the running Irie put the test's session in the background:
+// what it starts from then on starts there too.
+func skipIfDemoted(t *testing.T) {
+	t.Helper()
+	if demoted(t) {
+		t.Skip("the test went into the background, as a session's processes do while another is promoted or on show")
+	}
+}
+
 func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	c := setup(t)
 	var all []ipc.Session
@@ -462,6 +473,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 			t.Errorf("%s: %v not in the background", s.Name, out)
 		}
 	}
+	skipIfDemoted(t)
 	if in, _ := inBackground(gamma); len(in) > 0 {
 		t.Errorf("the promoted session's %v are in the background", in)
 	}
@@ -476,6 +488,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 0}, nil); err != nil {
 		t.Fatal(err)
 	}
+	skipIfDemoted(t)
 	for _, s := range append(all, delta) {
 		if in, _ := inBackground(s); len(in) > 0 {
 			t.Errorf("%s: %v still in the background", s.Name, in)
@@ -529,6 +542,7 @@ func TestABusyMachinePutsTheSessionsNotOnShowInTheBackground(t *testing.T) {
 		_, out := inBackground(beta)
 		return len(out) == 0
 	})
+	skipIfDemoted(t)
 	if in, _ := inBackground(alpha); len(in) > 0 {
 		t.Errorf("alpha is on show, but its %v are in the background", in)
 	}
@@ -537,6 +551,7 @@ func TestABusyMachinePutsTheSessionsNotOnShowInTheBackground(t *testing.T) {
 	}
 	// At once: show returns once the two have swapped.
 	c.show(beta.ID, true)
+	skipIfDemoted(t)
 	if in, _ := inBackground(beta); len(in) > 0 {
 		t.Errorf("beta is on show now, but its %v are still in the background", in)
 	}
@@ -547,6 +562,7 @@ func TestABusyMachinePutsTheSessionsNotOnShowInTheBackground(t *testing.T) {
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: alpha.ID, Level: 1}, nil); err != nil {
 		t.Fatal(err)
 	}
+	skipIfDemoted(t)
 	if in, _ := inBackground(alpha); len(in) > 0 {
 		t.Errorf("alpha is promoted, but its %v are in the background", in)
 	}

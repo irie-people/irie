@@ -117,6 +117,13 @@ func TestSetBackgroundTakesAProcessInAndOut(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	// While a session is promoted, or the machine is busy and the session
+	// is not on show, the running Irie keeps the session's tree in the
+	// background and puts this child back there each second, so nothing
+	// here could show a difference.
+	if self, _ := exec.Command("ps", "-o", "pri=", "-p", strconv.Itoa(os.Getpid())).Output(); strings.TrimSpace(string(self)) == "4" {
+		t.Skip("the test runs in the background, as a session's processes do while another is promoted or on show")
+	}
 	// Out of the background first: while a session is promoted, the others'
 	// processes, a test one of them runs too, start their children there.
 	if err := SetBackground(pid, false); err != nil {
