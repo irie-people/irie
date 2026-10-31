@@ -313,3 +313,53 @@ func TestTheHeaderCarriesRedOnDone(t *testing.T) {
 		t.Error("the header lacks ui.red_on_done")
 	}
 }
+
+func TestAConversationHandedToClaudeCodesBackgroundIsAway(t *testing.T) {
+	s := newScript()
+	start := func(id, source string) event.Event {
+		e := s.hook(event.SessionStarted, "source", source)
+		e.Vendor = &event.Vendor{SessionID: id}
+		return e
+	}
+	const own, fork = "3d8fd163-84de-4a49-99b9-de88a647634a", "9c84ee4a-3c0a-4280-a640-fa4de0b0efae"
+
+	// Its agent exits with work still running, and Claude Code carries the
+	// conversation on in its background under a new id, whose hooks still
+	// report to the session.
+	var tr track
+	for _, e := range []event.Event{
+		s.irie(event.SpawnRequested), start(own, "startup"), s.hook(event.PromptSubmitted), s.hook(event.TurnEnded),
+		s.hook(event.SessionEnded, "reason", "prompt_input_exit"), s.ev(event.PaneExited, "", event.SourceHost, "code", 0),
+		start(fork, "fork"),
+	} {
+		tr.apply(e)
+	}
+	var row ipc.Session
+	tr.describe(&row, true, 0)
+	if tr.away != fork || tr.vendorID != fork || row.State != ipc.StateExited || row.Detail != "exited 0 · moved to Claude Code's background" {
+		t.Errorf("away %q, vendor %q, row %s %q", tr.away, tr.vendorID, row.State, row.Detail)
+	}
+	// A reopen starts over.
+	tr.apply(s.irie(event.SpawnRequested, "resume", fork))
+	if tr.away != "" {
+		t.Errorf("away after a reopen = %q", tr.away)
+	}
+
+	// /clear and /branch go on in the same process, and a /fork copy
+	// leaves the agent where it is: none of these is away.
+	for name, evs := range map[string][]event.Event{
+		"clear":  {s.hook(event.SessionEnded, "reason", "clear"), start(fork, "clear")},
+		"resume": {s.hook(event.SessionEnded, "reason", "resume"), start(fork, "resume")},
+		"fork":   {start(fork, "fork")},
+	} {
+		var tr track
+		tr.apply(s.irie(event.SpawnRequested))
+		tr.apply(start(own, "startup"))
+		for _, e := range evs {
+			tr.apply(e)
+		}
+		if tr.away != "" || tr.vendorID != fork {
+			t.Errorf("%s: away %q, vendor %q", name, tr.away, tr.vendorID)
+		}
+	}
+}

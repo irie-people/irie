@@ -5,11 +5,13 @@ import Foundation
 // once, without asking, because ⇧⌘T, reopen, is its undo; the next session
 // in the list takes its place. ⇧⌘W still closes the window.
 
-/// A closed session that reopen can bring back.
+/// A closed session that reopen can bring back. `auto` says it closed on
+/// its own, by close_when_done; one you closed is done.
 struct ClosedSession: Decodable, Equatable, Identifiable {
     var id: String
     var name: String
     var closed: Date
+    var auto: Bool?
 }
 
 struct CloseArgs: Encodable {

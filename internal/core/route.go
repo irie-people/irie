@@ -419,6 +419,13 @@ func (c *Core) failover(id string) {
 		c.mu.Unlock()
 		c.publish(frames)
 	}
+	// A session you closed meanwhile is done: nothing carries it on.
+	c.mu.Lock()
+	closed := c.sessions[id] == nil
+	c.mu.Unlock()
+	if closed {
+		return
+	}
 	// The task carries on under its name, which is the user's only when it
 	// was theirs; else Claude Code may title the new session (title.go).
 	s, err := c.spawn(ipc.SpawnArgs{Task: failoverNote(profile) + string(task), Cwd: cwd, Profile: config.Auto, Name: name, Continues: id}, named)
