@@ -5,9 +5,11 @@
 # installed, SwiftPM 5.9 stops at "unable to lookup item 'PlatformPath'". The
 # terminal view is SwiftTerm (MIT), fetched at the pinned release and checked
 # against its SHA-256, then compiled once into a static library in the user's
-# cache, which every checkout and worktree shares. The icon is drawn in Go.
+# cache, which every checkout and worktree shares. Ghostty's own engine,
+# GhosttyKit, draws the terminals when it builds (ghostty.sh, cached the same
+# way); without it the app uses SwiftTerm alone. The icon is drawn in Go.
 # IRIE_MAC_NO_SWIFTTERM=1 builds with Apple's frameworks only; the terminal
-# then opens in Ghostty.
+# then opens in Ghostty. IRIE_MAC_NO_GHOSTTY=1 leaves GhosttyKit out.
 set -eu
 cd "$(dirname "$0")"
 
@@ -50,14 +52,37 @@ if [ "$term" = 1 ]; then
 	fi
 fi
 
+# GhosttyKit, when it builds: a Ghostty that will not build, as without Xcode
+# or a network on the first build, leaves the app on SwiftTerm.
+ghostty=
+if [ "$term" = 1 ] && [ "${IRIE_MAC_NO_GHOSTTY:-}" != 1 ]; then
+	if ! ghostty=$(./ghostty.sh); then
+		ghostty=
+		echo "build.sh: GhosttyKit did not build, so the app's terminals use SwiftTerm" >&2
+	fi
+fi
+
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 if [ "$term" = 1 ]; then
+	set --
+	if [ -n "$ghostty" ]; then
+		# The module map makes `canImport(GhosttyKit)` true, which compiles
+		# the Ghostty terminal in (GhosttyTerminal.swift).
+		set -- -I "$ghostty/include" -L "$ghostty/lib" -lghostty -lc++ \
+			-framework Carbon -framework CoreText -framework CoreVideo -framework IOSurface \
+			-framework Metal -framework OpenGL -framework QuartzCore -Xlinker -dead_strip
+	fi
 	swiftc -O -parse-as-library -target "$target" -sdk "$sdk" \
-		-I "$deps" -L "$deps" -lSwiftTerm \
+		-I "$deps" -L "$deps" -lSwiftTerm "$@" \
 		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
 	# SwiftTerm's Metal renderer compiles these shaders at run time.
 	cp "$deps/SwiftTerm-$v/Sources/SwiftTerm/Apple/Metal/Shaders.metal" "$app/Contents/Resources/"
+	# Ghostty finds terminfo and its shell integration beside its
+	# resources, as in Ghostty's own app.
+	if [ -n "$ghostty" ]; then
+		cp -R "$ghostty/share/ghostty" "$ghostty/share/terminfo" "$app/Contents/Resources/"
+	fi
 else
 	swiftc -O -parse-as-library -target "$target" -sdk "$sdk" \
 		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift

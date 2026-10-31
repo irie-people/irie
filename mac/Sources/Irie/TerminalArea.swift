@@ -7,6 +7,8 @@ struct TerminalArea: View {
     @EnvironmentObject private var store: Store
     /// The palette's name: a change draws the ground and the frame again.
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
+    /// What draws the terminals (GhosttyTerminal.swift).
+    @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
 
     private var selected: Session? { store.sessions.first { $0.id == store.selection } }
 
@@ -112,7 +114,16 @@ struct TerminalArea: View {
     private var split: Session? { store.splitSession }
 
     @ViewBuilder private func terminal(_ a: AttachInfo, active: Bool) -> some View {
-        #if canImport(SwiftTerm)
+        #if canImport(GhosttyKit)
+        if TerminalEngine.named(engine) == .ghostty {
+            framed(GhosttyTerminal(attach: .init(tmux: a.tmux, socket: a.socket, target: a.target), fontSize: store.fontSize,
+                                   focusToken: store.focusTerminal, followsFocus: true, takesKeysOnStart: store.showTerminal,
+                                   shows: active, onView: { store.terminalView = $0 }),
+                   anchors: active)
+        } else {
+            framed(TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store, active: active), anchors: active)
+        }
+        #elseif canImport(SwiftTerm)
         framed(TerminalHost(info: a, focusToken: store.focusTerminal, fontSize: store.fontSize, store: store, active: active), anchors: active)
         #else
         Placeholder(

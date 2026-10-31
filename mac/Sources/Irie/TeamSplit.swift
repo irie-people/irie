@@ -18,28 +18,81 @@ struct TeamSplit: View {
     /// The lead's share of the width, where the divider was left.
     @AppStorage("teamSplitLead") private var leadShare = 0.5
     @State private var dragStart: Double?
+    /// The pane a Ghostty split key zoomed to fill the split, by id.
+    @State private var zoomed: String?
+    @StateObject private var panes = PaneViews()
 
     /// Below this width the column goes under the lead.
     static let stackBelow: CGFloat = 640
+    /// The lead's id among the panes; a teammate's is its tmux session.
+    static let leadID = "lead"
+
+    /// The panes in order: the lead, then the teammates down the column.
+    private var order: [String] { [Self.leadID] + team.map(\.session) }
 
     var body: some View {
         GeometryReader { geo in
-            let wide = geo.size.width >= Self.stackBelow
-            let share = min(max(leadShare, 0.3), 0.75)
-            if wide {
-                HStack(spacing: 0) {
-                    lead.frame(width: geo.size.width * share)
-                    divider(vertical: true, length: geo.size.width)
-                    column
-                }
-            } else {
-                VStack(spacing: 0) {
-                    lead.frame(height: geo.size.height * share)
-                    divider(vertical: false, length: geo.size.height)
-                    column
+            let l = layout(geo.size)
+            // Every pane keeps its place in the view tree, and a zoomed one
+            // only grows over the others, so no terminal ends for a zoom.
+            ZStack(alignment: .topLeading) {
+                place(lead, l.panes[Self.leadID], id: Self.leadID)
+                ForEach(team) { mate in place(teammate(mate), l.panes[mate.session], id: mate.session) }
+                if zoomed == nil {
+                    ForEach(Array(l.rules.enumerated()), id: \.offset) { _, r in
+                        Rectangle().fill(TeamInk.rule).frame(width: r.width, height: r.height).offset(x: r.minX, y: r.minY)
+                    }
+                    divider(l.divider, wide: l.wide, length: l.wide ? geo.size.width : geo.size.height)
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .irieSplitMove)) { handle($0) }
+        .onChange(of: team.map(\.session)) { _, ids in
+            if let z = zoomed, z != Self.leadID, !ids.contains(z) { zoomed = nil }
+        }
+    }
+
+    /// A pane at its frame; under a zoomed one it neither shows nor takes
+    /// clicks.
+    @ViewBuilder private func place(_ pane: some View, _ rect: CGRect?, id: String) -> some View {
+        let r = rect ?? .zero
+        let hidden = zoomed != nil && zoomed != id
+        pane.frame(width: r.width, height: r.height)
+            .offset(x: r.minX, y: r.minY)
+            .opacity(hidden ? 0 : 1)
+            .allowsHitTesting(!hidden)
+            .zIndex(zoomed == id ? 1 : 0)
+    }
+
+    /// Each pane's frame by id, the bar between the lead and the column,
+    /// and the rules between teammates, for a size. A zoomed pane fills it.
+    private func layout(_ size: CGSize) -> (panes: [String: CGRect], divider: CGRect, rules: [CGRect], wide: Bool) {
+        let wide = size.width >= Self.stackBelow
+        let share = min(max(leadShare, 0.3), 0.75)
+        let bar: CGFloat = 7 // the divider's line and the room to grab it
+        let lead, column, divider: CGRect
+        if wide {
+            let w = ((size.width - bar) * share).rounded()
+            lead = CGRect(x: 0, y: 0, width: w, height: size.height)
+            divider = CGRect(x: w, y: 0, width: bar, height: size.height)
+            column = CGRect(x: w + bar, y: 0, width: size.width - w - bar, height: size.height)
+        } else {
+            let h = ((size.height - bar) * share).rounded()
+            lead = CGRect(x: 0, y: 0, width: size.width, height: h)
+            divider = CGRect(x: 0, y: h, width: size.width, height: bar)
+            column = CGRect(x: 0, y: h + bar, width: size.width, height: size.height - h - bar)
+        }
+        var panes = [Self.leadID: lead]
+        var rules: [CGRect] = []
+        let n = CGFloat(max(team.count, 1))
+        let each = ((column.height - (n - 1)) / n).rounded(.down)
+        for (i, mate) in team.enumerated() {
+            let y = column.minY + CGFloat(i) * (each + 1)
+            panes[mate.session] = CGRect(x: column.minX, y: y, width: column.width, height: i == team.count - 1 ? column.maxY - y : each)
+            if i > 0 { rules.append(CGRect(x: column.minX, y: y - 1, width: column.width, height: 1)) }
+        }
+        if let z = zoomed, panes[z] != nil { panes[z] = CGRect(origin: .zero, size: size) }
+        return (panes, divider, rules, wide)
     }
 
     private var lead: some View {
@@ -48,7 +101,9 @@ struct TeamSplit: View {
                 // It takes the keyboard from the terminal it stands in for.
                 SplitTerminalView(tmux: a.tmux, socket: a.socket, target: "=" + view, fontSize: store.fontSize,
                                   focusToken: store.focusTerminal, followsFocus: true,
-                                  takesKeysOnStart: store.terminalView.map { $0.window?.firstResponder === $0 } ?? true)
+                                  takesKeysOnStart: store.terminalView.map { $0.window?.firstResponder === $0 } ?? true,
+                                  shows: zoomed == nil || zoomed == Self.leadID,
+                                  onView: { panes.set(Self.leadID, $0) })
             } else {
                 FixtureScreen(lines: ["❯ spawn three teammates to review the auth module", "", "⏺ Spawned probe, second and third.",
                                       "  They report back on their own."])
@@ -56,21 +111,68 @@ struct TeamSplit: View {
         }
     }
 
-    private var column: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(team.enumerated()), id: \.element.id) { i, mate in
-                VStack(spacing: 0) {
-                    if i > 0 { Rectangle().fill(TeamInk.rule).frame(height: 1) }
-                    Pane(title: mate.name, detail: detail(mate), ink: TeamInk.color(mate.color), working: mate.working == true) {
-                        if let a = store.attach, let socket = a.teams {
-                            SplitTerminalView(tmux: a.tmux, socket: socket, target: "=" + mate.session, fontSize: store.fontSize)
-                        } else {
-                            FixtureScreen(lines: ["⏺ Reading internal/auth/session.go", "  ⎿  Read 214 lines", "", "✻ Thinking…"])
-                        }
-                    }
-                }
+    private func teammate(_ mate: Teammate) -> some View {
+        Pane(title: mate.name, detail: detail(mate), ink: TeamInk.color(mate.color), working: mate.working == true) {
+            if let a = store.attach, let socket = a.teams {
+                SplitTerminalView(tmux: a.tmux, socket: socket, target: "=" + mate.session, fontSize: store.fontSize,
+                                  shows: zoomed == nil || zoomed == mate.session,
+                                  onView: { panes.set(mate.session, $0) })
+            } else {
+                FixtureScreen(lines: ["⏺ Reading internal/auth/session.go", "  ⎿  Read 214 lines", "", "✻ Thinking…"])
             }
         }
+    }
+
+    /// A Ghostty split key from one of the panes: move the keyboard to
+    /// another pane, move the bar, put it back in the middle, or zoom.
+    private func handle(_ note: Notification) {
+        guard let view = note.object as? NSView, let from = panes.id(of: view),
+              let move = note.userInfo?["move"] as? SplitMove else { return }
+        let ids = order
+        guard let i = ids.firstIndex(of: from) else { return }
+        let lead = panes.view(Self.leadID).map { $0.convert($0.bounds, to: nil) }
+        let mate = team.first.flatMap { panes.view($0.session) }.map { $0.convert($0.bounds, to: nil) }
+        let wide = lead.flatMap { l in mate.map { $0.minX >= l.maxX - 1 } } ?? true
+        switch move {
+        case let .focus(next):
+            focus(ids[(i + (next ? 1 : ids.count - 1)) % ids.count])
+        case let .focusToward(edge):
+            if let target = neighbour(of: view, toward: edge) { target.window?.makeFirstResponder(target) }
+        case let .resize(edge):
+            let grow: Double
+            switch edge {
+            case .maxX: grow = wide ? 0.05 : 0
+            case .minX: grow = wide ? -0.05 : 0
+            case .minY: grow = wide ? 0 : 0.05
+            default: grow = wide ? 0 : -0.05
+            }
+            leadShare = min(max(leadShare + grow, 0.3), 0.75)
+        case .equalize:
+            leadShare = 0.5
+        case .zoom:
+            zoomed = zoomed == nil ? from : nil
+            focus(from)
+        }
+    }
+
+    private func focus(_ id: String) {
+        if let v = panes.view(id) { v.window?.makeFirstResponder(v) }
+    }
+
+    /// The nearest other pane in the direction of edge, by where the panes
+    /// stand in the window (whose y goes up).
+    private func neighbour(of from: NSView, toward edge: NSRectEdge) -> NSView? {
+        let a = from.convert(from.bounds, to: nil)
+        let candidates = order.compactMap { panes.view($0) }.filter { $0 !== from && $0.window != nil }.compactMap { v -> (NSView, CGRect)? in
+            let b = v.convert(v.bounds, to: nil)
+            switch edge {
+            case .minX: return b.midX < a.minX ? (v, b) : nil
+            case .maxX: return b.midX > a.maxX ? (v, b) : nil
+            case .minY: return b.midY < a.minY ? (v, b) : nil
+            default: return b.midY > a.maxY ? (v, b) : nil
+            }
+        }
+        return candidates.min { hypot($0.1.midX - a.midX, $0.1.midY - a.midY) < hypot($1.1.midX - a.midX, $1.1.midY - a.midY) }?.0
     }
 
     /// What a teammate's header says after its name.
@@ -88,23 +190,38 @@ struct TeamSplit: View {
     }
 
     /// The bar between the lead and the column, which drags.
-    private func divider(vertical: Bool, length: CGFloat) -> some View {
+    private func divider(_ rect: CGRect, wide: Bool, length: CGFloat) -> some View {
         Rectangle()
             .fill(TeamInk.rule)
-            .frame(width: vertical ? 1 : nil, height: vertical ? nil : 1)
-            .padding(vertical ? .horizontal : .vertical, 3)
+            .frame(width: wide ? 1 : nil, height: wide ? nil : 1)
+            .frame(width: rect.width, height: rect.height)
             .contentShape(Rectangle())
             .onHover { inside in
-                if inside { (vertical ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push() } else { NSCursor.pop() }
+                if inside { (wide ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push() } else { NSCursor.pop() }
             }
             .gesture(DragGesture(minimumDistance: 1).onChanged { g in
                 let start = dragStart ?? leadShare
                 if dragStart == nil { dragStart = start }
-                let moved = (vertical ? g.translation.width : g.translation.height) / max(length, 1)
+                let moved = (wide ? g.translation.width : g.translation.height) / max(length, 1)
                 leadShare = min(max(start + moved, 0.3), 0.75)
             }.onEnded { _ in dragStart = nil })
+            .offset(x: rect.minX, y: rect.minY)
             .accessibilityLabel("Divider between the session and its teammates")
     }
+}
+
+/// The split's terminal views by pane, which the Ghostty split keys move
+/// the keyboard between.
+final class PaneViews: ObservableObject {
+    private struct Weak {
+        weak var view: NSView?
+    }
+
+    private var views: [String: Weak] = [:]
+
+    func set(_ id: String, _ view: NSView) { views[id] = Weak(view: view) }
+    func view(_ id: String) -> NSView? { views[id]?.view }
+    func id(of view: NSView) -> String? { views.first { $0.value.view === view }?.key }
 }
 
 /// One terminal of the split under its header: a dot and the name in its
@@ -186,8 +303,26 @@ struct SplitTerminalView: View {
     var focusToken = 0
     var followsFocus = false
     var takesKeysOnStart = false
+    /// It shows, not under a zoomed pane.
+    var shows = true
+    /// Hands the view over, for the split keys.
+    var onView: ((NSView) -> Void)? = nil
+    @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
 
     var body: some View {
+        #if canImport(GhosttyKit)
+        if TerminalEngine.named(engine) == .ghostty {
+            GhosttyTerminal(attach: .init(tmux: tmux, socket: socket, target: target), fontSize: fontSize, focusToken: focusToken,
+                            followsFocus: followsFocus, takesKeysOnStart: takesKeysOnStart, shows: shows, onView: onView)
+        } else {
+            swiftTerm
+        }
+        #else
+        swiftTerm
+        #endif
+    }
+
+    @ViewBuilder private var swiftTerm: some View {
         #if canImport(SwiftTerm)
         SplitTerminal(tmux: tmux, socket: socket, target: target, fontSize: fontSize, focusToken: focusToken,
                       followsFocus: followsFocus, takesKeysOnStart: takesKeysOnStart)
