@@ -69,6 +69,11 @@ if ! mkdir "$lock" 2>/dev/null; then
 	pid=$(cat "$lock/pid" 2>/dev/null || true)
 	if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
 		say "the install that took the lock, pid $pid, is gone; rm -r $lock, then run this again"
+	elif [ -n "$pid" ] && ps -o stat= -p "$pid" 2>/dev/null | grep -q '^T'; then
+		# A stopped install, as when Irie freezes the session that ran it,
+		# holds the lock until it is let go on.
+		say "the install that holds the lock, pid $pid, is stopped, as when its session is frozen;"
+		say "it goes on when that session is thawed, and no other install can run until it ends"
 	else
 		say "another install is running${pid:+, pid $pid}; wait for it to finish, then run this again"
 	fi
