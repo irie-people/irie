@@ -168,6 +168,12 @@ final class Store: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        // Behind another app, the window takes in the core's news less
+        // often (Pace.swift).
+        Pace.shared.set(active: NSApplication.shared.isActive)
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: true) }
+        nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: false) }
         Task { await run() }
     }
 
@@ -192,10 +198,10 @@ final class Store: ObservableObject {
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
-                // The store lives as long as the app.
-                try await client.subscribe { frame in
-                    Task { @MainActor in self.take(frame) }
-                }
+                // The store lives as long as the app. The frames go in a
+                // batch at a time (Pace.swift).
+                let batcher = Batcher<Frame> { [weak self] frames in self?.take(frames) }
+                try await client.subscribe { frame in batcher.add(frame) }
                 link = .offline("The core went away.")
             } catch {
                 link = .offline(Self.describe(error))
@@ -221,16 +227,18 @@ final class Store: ObservableObject {
     /// in order (take(_:)).
     private var held: [Frame] = []
 
-    /// Takes in one frame, or holds it while the main run loop tracks: an
-    /// open menu (the menu bar's, a card's ⋯ or right-click menu, the task
-    /// bar's repo menu), a drag or a live resize. A change to the store then
-    /// would draw the views again under the pointer, and SwiftUI would
-    /// rebuild the open menu, which loses the item under the pointer or
-    /// closes. The held frames go in as soon as the tracking ends.
-    private func take(_ f: Frame) {
+    /// Takes in a batch of frames (Pace.swift), or holds it while the main
+    /// run loop tracks: an open menu (the menu bar's, a card's ⋯ or
+    /// right-click menu, the task bar's repo menu), a drag or a live resize.
+    /// A change to the store then would draw the views again under the
+    /// pointer, and SwiftUI would rebuild the open menu, which loses the
+    /// item under the pointer or closes. The held frames go in as soon as
+    /// the tracking ends.
+    private func take(_ frames: [Frame]) {
         if RunLoop.current.currentMode == .eventTracking {
-            held.append(f)
-            if held.count == 1 {
+            let first = held.isEmpty
+            held.append(contentsOf: frames)
+            if first {
                 RunLoop.main.perform(inModes: [.default]) { [weak self] in
                     MainActor.assumeIsolated { self?.release() }
                 }
@@ -238,14 +246,24 @@ final class Store: ObservableObject {
             return
         }
         release()
-        apply(f)
+        Self.current(frames).forEach(apply)
+    }
+
+    /// The frames of a batch that still say something: a snapshot carries
+    /// every row, so the upserts and snapshots before the last one would be
+    /// drawn over at once.
+    static func current(_ frames: [Frame]) -> [Frame] {
+        guard let last = frames.lastIndex(where: { $0.t == "snapshot" }), last > 0 else { return frames }
+        return frames.indices.compactMap { i in
+            i < last && (frames[i].t == "snapshot" || frames[i].t == "upsert") ? nil : frames[i]
+        }
     }
 
     private func release() {
         guard !held.isEmpty else { return }
         let frames = held
         held = []
-        frames.forEach(apply)
+        Self.current(frames).forEach(apply)
     }
 
     /// Takes in one frame. Only what changes is set: every change to the
@@ -265,6 +283,7 @@ final class Store: ObservableObject {
         }
         if let h = f.header, h.busy != busy {
             busy = h.busy
+            Pace.shared.set(busy: h.busy != nil)
         }
         switch f.t {
         case "snapshot":

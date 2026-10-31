@@ -162,3 +162,44 @@ func TestReadLoadSaysHowBusyTheMachineIs(t *testing.T) {
 		t.Errorf("memory pressure = %d, want 1, 2 or 4", l.Memory)
 	}
 }
+
+func TestGroupAndOneSeeAStoppedChild(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("no process table here")
+	}
+	cmd := exec.Command("sleep", "30")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+
+	g, err := Group(pid)
+	if err != nil || len(g) != 1 || g[0].PID != pid || g[0].PGID != pid || g[0].Name != "sleep" {
+		t.Fatalf("Group(%d) = %+v, %v; want the child alone", pid, g, err)
+	}
+	syscall.Kill(pid, syscall.SIGSTOP)
+	stopped := func() bool {
+		p, err := One(pid)
+		return err == nil && p.Stopped
+	}
+	for deadline := time.Now().Add(5 * time.Second); !stopped() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !stopped() {
+		t.Fatal("One never saw the child stopped")
+	}
+	syscall.Kill(pid, syscall.SIGCONT)
+	for deadline := time.Now().Add(5 * time.Second); stopped() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if p, err := One(pid); err != nil || p.Stopped || p.PPID != os.Getpid() {
+		t.Errorf("after SIGCONT: %+v, %v", p, err)
+	}
+	cmd.Process.Kill()
+	cmd.Wait()
+	if p, err := One(pid); err == nil {
+		t.Errorf("One of a reaped child = %+v, want an error", p)
+	}
+}

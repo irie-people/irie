@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -294,6 +296,34 @@ func TestOnlyStartServerStartsTheServer(t *testing.T) {
 	}
 	if s, err := r.Snapshot(); err != nil || !s.HasSession(AgentsSession) {
 		t.Errorf("after StartServer: %v, %+v", err, s)
+	}
+}
+
+// A stopped server, as a chaos monkey or a swapped-out machine leaves it,
+// holds every client that talks to it. Each command gives up at its
+// deadline, and the server answers again once it runs.
+func TestACommandToAStoppedServerGivesUpAtItsDeadline(t *testing.T) {
+	r, _ := startServer(t)
+	pid, err := strconv.Atoi(run(t, r, "display-message", "-p", "#{pid}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { syscall.Kill(pid, syscall.SIGCONT) })
+	short := *r
+	short.Timeout = 300 * time.Millisecond
+	start := time.Now()
+	_, err = short.Run("list-sessions")
+	if took := time.Since(start); !errors.Is(err, ErrTimeout) || took > 5*time.Second {
+		t.Fatalf("list-sessions on a stopped server: %v after %s, want ErrTimeout at once", err, took)
+	}
+	if err := syscall.Kill(pid, syscall.SIGCONT); err != nil {
+		t.Fatal(err)
+	}
+	if out := run(t, r, "list-sessions", "-F", "#{session_name}"); !strings.Contains(out, AgentsSession) {
+		t.Errorf("after the server runs again: %q", out)
 	}
 }
 
