@@ -102,3 +102,15 @@ func TestTheHeaderCarriesCloseWhenDone(t *testing.T) {
 		t.Error("the header does not carry close_when_done")
 	}
 }
+
+func TestCloseWhenDoneLeavesWorkInTheBackground(t *testing.T) {
+	c := setupWith(t, agentConfig{spawn: "close_when_done = true\nclose_delay = \"1s\"\n"})
+	// Its turn ended on an install it runs in the background, which will
+	// wake it: closing it would end the install.
+	a := c.spawn("prompt,stop:bg")
+	c.waitState(a.ID, ipc.StateDone)
+	time.Sleep(2 * time.Second)
+	if row, ok := c.row(a.ID); !ok || row.Detail != "Waiting on its work in the background · Install the build" {
+		t.Fatalf("the session waiting on its own work: %+v, open %v", row, ok)
+	}
+}

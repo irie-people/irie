@@ -38,11 +38,14 @@ const ctlUsage = `usage: irie ctl <command>
   irie ctl dog [--json]                  the jots that are not through: those whose
                                          turn is over but whose work is not committed,
                                          or not yet in their repo's land branch
-                                         (dog.land), with those closed in the last day
+                                         (dog.land), with those that closed on their
+                                         own in the last day. A jot you close is
+                                         done, so it is never listed
   irie ctl close [SESSION]               close a session, by id or name, or with
                                          none the one this runs in: an agent
                                          closes its own once you approve its
-                                         work. history lists it and reopen
+                                         work. It is done: the jot dog lets it
+                                         be. history lists it and reopen
                                          brings it back
   irie ctl reopen [SESSION]              bring a closed session back, by id or name
                                          (the one closed last with none), carrying

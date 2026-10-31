@@ -200,7 +200,8 @@ type LoosePlace struct {
 }
 
 // DogResult lists the jots that are not through: the open ones in the
-// list's order, then those closed in the last day, the last closed first.
+// list's order, then those that closed on their own in the last day, the
+// last closed first. A jot you closed is done and never listed.
 type DogResult struct {
 	Jots []Jot `json:"jots"`
 }
@@ -308,11 +309,14 @@ type ListResult struct {
 	Closed []ClosedSession `json:"closed"`
 }
 
-// ClosedSession is a closed session that reopen can carry on.
+// ClosedSession is a closed session that reopen can carry on. Auto says
+// that it closed on its own, by spawn.close_when_done; one closed by you,
+// or by an agent at your word, is done (DESIGN §4.5).
 type ClosedSession struct {
 	ID     string    `json:"id"`
 	Name   string    `json:"name"`
 	Closed time.Time `json:"closed"`
+	Auto   bool      `json:"auto,omitempty"`
 }
 
 // CloseArgs name the session to close.

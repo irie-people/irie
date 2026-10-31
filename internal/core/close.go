@@ -3,10 +3,13 @@ package core
 // Closing and reopening sessions (DESIGN §4.5, M4). Close swaps the session's
 // pane out of the slot and marks it closing, so its row goes at once, then
 // ends the agent gently: SIGCONT to all it runs, in case it is frozen, then
-// SIGTERM through its host, and SIGKILL after closeWait. The worktree and the session's
-// files stay. Reopen, close's undo, brings the session back in the same row:
-// it carries the conversation on, or starts the task again when the agent
-// never got that far. Which sessions are closed is derived from the journal's
+// SIGTERM through its host, and SIGKILL after closeWait. A conversation its
+// agent handed to Claude Code's background ends too. The worktree and the
+// session's files stay. A session you close is done: nothing brings it back
+// but you, and the jot dog lets it be. Reopen, close's undo, brings the
+// session back in the same row: it carries the conversation on, or starts
+// the task again when the agent never got that far. Which sessions are
+// closed, and which closed on their own, is derived from the journal's
 // ui.closed and ui.reopened events, so it survives a restart.
 
 import (
@@ -55,6 +58,10 @@ type closedRecord struct {
 	Closed   time.Time
 	VendorID string // the conversation reopen carries on
 	Resume   bool   // the agent got as far as a conversation; else its task starts again
+	// Auto: it closed on its own, by spawn.close_when_done, as a ui.closed
+	// from irie says. Else you closed it, or an agent did at your word, and
+	// it is done.
+	Auto bool
 }
 
 // ending is a closing pane's agent on its way out.
@@ -81,7 +88,7 @@ func (c *Core) loadClosed() {
 }
 
 func closedFrom(e event.Event) closedRecord {
-	r := closedRecord{ID: e.Session, Name: e.Str("name"), Closed: e.Time(), VendorID: e.Str("vendor_id")}
+	r := closedRecord{ID: e.Session, Name: e.Str("name"), Closed: e.Time(), VendorID: e.Str("vendor_id"), Auto: e.Source == event.SourceIrie}
 	r.Created, _ = time.Parse(time.RFC3339Nano, e.Str("created"))
 	r.Resume, _ = e.Data["resume"].(bool)
 	named, ok := e.Data["named"].(bool)
@@ -109,7 +116,7 @@ func (c *Core) closedList() []ipc.ClosedSession {
 	out := []ipc.ClosedSession{}
 	for _, r := range c.closes.list {
 		if c.sessions[r.ID] == nil {
-			out = append(out, ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed})
+			out = append(out, ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed, Auto: r.Auto})
 		}
 	}
 	return out
@@ -126,11 +133,12 @@ func (c *Core) publishClosed() {
 	}
 }
 
-// close closes a session (DESIGN §4.5): its row goes at once, its pane leaves
-// the slot before anything ends it, and its agent ends in the background.
+// close closes a session at your word (DESIGN §4.5), which makes it done:
+// its row goes at once, its pane leaves the slot before anything ends it,
+// and its agent ends in the background.
 func (c *Core) close(a ipc.CloseArgs) error {
 	c.mu.Lock()
-	err := c.closeLocked(a.Session)
+	err := c.closeLocked(a.Session, false)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -142,7 +150,9 @@ func (c *Core) close(a ipc.CloseArgs) error {
 	return nil
 }
 
-func (c *Core) closeLocked(id string) error {
+// closeLocked closes session id: at your word, or on its own (auto) when
+// spawn.close_when_done closes it. The caller holds c.mu.
+func (c *Core) closeLocked(id string, auto bool) error {
 	if err := c.refresh(); err != nil {
 		return err
 	}
@@ -165,8 +175,13 @@ func (c *Core) closeLocked(id string) error {
 		return err
 	}
 	r := c.reopenable(x)
-	r.Closed = time.Now().UTC().Truncate(time.Millisecond)
-	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: event.SourceUser, Kind: event.UIClosed, Data: map[string]any{
+	r.Closed, r.Auto = time.Now().UTC().Truncate(time.Millisecond), auto
+	// Who closed it is the event's source: you, or Irie on its own.
+	source := event.SourceUser
+	if auto {
+		source = event.SourceIrie
+	}
+	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: map[string]any{
 		"name": x.name, "named": r.Named, "created": x.created.Format(time.RFC3339Nano), "vendor_id": r.VendorID, "resume": r.Resume,
 	}})
 	c.addClosed(r)
@@ -174,8 +189,32 @@ func (c *Core) closeLocked(id string) error {
 	// A frozen agent's held tool calls go through, so it ends gently.
 	os.Remove(c.paths.FreezeFile(id))
 	c.end(*p)
-	c.log.Info("closed", "session", x.id, "name", x.name, "resume", r.Resume)
+	// Its agent may have handed the conversation to Claude Code's
+	// background, whose supervisor keeps it going: that copy ends too.
+	if away := x.track.away; away != "" {
+		go c.endCopy(x.id, x.profile, away)
+	}
+	c.log.Info("closed", "session", x.id, "name", x.name, "resume", r.Resume, "auto", auto)
 	return c.refresh()
+}
+
+// endCopy ends the copy of closed session id's conversation that runs in
+// Claude Code's background (stopCopies), and logs what it did. It runs
+// Claude Code's CLI, so the caller does not hold c.mu.
+func (c *Core) endCopy(id, profile, vendorID string) {
+	p, ok := c.profile(profile)
+	if !ok || p.Harness != "claude-code" {
+		if _, p, ok = c.claudeProfile(); !ok {
+			return
+		}
+	}
+	stopped, err := c.stopCopies(p, vendorID, moveWait)
+	switch {
+	case err != nil:
+		c.log.Warn("close: its copy in Claude Code's background", "session", id, "resume", vendorID, "err", err)
+	case len(stopped) > 0:
+		c.log.Info("close: stopped its copy in Claude Code's background", "session", id, "resume", vendorID, "ids", stopped)
+	}
 }
 
 // reopenable says how reopen will bring x back: by carrying its conversation
@@ -200,22 +239,24 @@ func (c *Core) reopenable(x *session) closedRecord {
 // subagent running and no freeze. A session that gets one more prompt is
 // not done, one the user paused stays, and one whose answer is for you to
 // read, such as a status report or a question, is not closed at all
-// (awaitsLook). Turning close_when_done off in the settings stops the
-// closes still waiting. The close is the user's own, so it can be undone
-// with reopen. The caller holds c.mu.
+// (awaitsLook); nor is one whose work is not over (finished). Turning
+// close_when_done off in the settings stops the closes still waiting. The
+// close is Irie's, so the session is not done the way one you close is:
+// the review dock and the jot dog still show it, and reopen brings it
+// back. The caller holds c.mu.
 func (c *Core) closeWhenDone(x *session) {
-	if c.awaitsLook(x) {
+	if c.awaitsLook(x) || !finished(x) {
 		return
 	}
 	id, quiet := x.id, x.quiet
 	time.AfterFunc(c.cfg().Spawn.CloseDelay, func() {
 		c.mu.Lock()
 		x := c.sessions[id]
-		if !c.cfg().Spawn.CloseWhenDone || x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || len(x.track.subs) > 0 || x.track.frozen != nil {
+		if !c.cfg().Spawn.CloseWhenDone || x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || len(x.track.subs) > 0 || x.track.frozen != nil || !finished(x) {
 			c.mu.Unlock()
 			return
 		}
-		err := c.closeLocked(id)
+		err := c.closeLocked(id, true)
 		frames := c.changes()
 		c.mu.Unlock()
 		c.publish(frames)
@@ -225,6 +266,15 @@ func (c *Core) closeWhenDone(x *session) {
 		}
 		c.publishClosed()
 	})
+}
+
+// finished reports whether x's work is over as far as Irie can tell: its
+// last turn left nothing of its own in the background, or a wakeup, that
+// will wake it, and the jot dog found nothing of a jot's work left to land
+// (DESIGN §4.8). Closing it sooner would end that work, or hide what is
+// left from its row. The caller holds c.mu.
+func finished(x *session) bool {
+	return x.track.waiting == 0 && len(x.dog.loose) == 0
 }
 
 // lookTask matches a task that asks for something to read: a status, a
@@ -390,6 +440,9 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	}
 
 	j, err := c.reopenJob(r)
+	if err == nil && j.resume != "" {
+		err = c.freeConversation(r, j)
+	}
 	if err != nil {
 		c.log.Warn("reopen", "session", r.ID, "err", err)
 		return ipc.Session{}, err
@@ -416,6 +469,41 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	c.publishClosed()
 	c.log.Info("reopened", "session", x.id, "name", x.name, "resume", j.resume)
 	return x.wire(), nil
+}
+
+// freeConversation makes sure that nothing else runs the conversation j
+// carries on, so two agents never share it. An Irie session that runs it,
+// as one moved in from Claude Code's background does, makes reopen refuse.
+// A copy in Claude Code's background ends first, as a move ends one; if
+// it does not, reopen refuses. When Claude Code cannot list its sessions,
+// reopen goes ahead, as before it looked.
+func (c *Core) freeConversation(r closedRecord, j job) error {
+	c.mu.Lock()
+	for _, id := range slices.Sorted(maps.Keys(c.sessions)) {
+		x := c.sessions[id]
+		current := x.track.vendorID
+		if current == "" {
+			current = x.vendorID
+		}
+		if !x.dead && current == j.resume {
+			c.mu.Unlock()
+			return ipc.Errorf(ipc.CodeBusy, "%s carries on in %q now, so it cannot reopen as well", r.Name, x.name)
+		}
+	}
+	c.mu.Unlock()
+	if j.h.ID() != "claude-code" {
+		return nil
+	}
+	stopped, err := c.stopCopies(j.run, j.resume, moveWait)
+	switch {
+	case errors.Is(err, errNoList):
+		c.log.Warn("reopen: cannot tell whether its conversation runs in Claude Code's background", "session", r.ID, "err", err)
+	case err != nil:
+		return ipc.Errorf(ipc.CodeBusy, "%s still runs in Claude Code's background, so it cannot reopen: %v", r.Name, err)
+	case len(stopped) > 0:
+		c.log.Info("reopen: stopped its copy in Claude Code's background", "session", r.ID, "resume", j.resume, "ids", stopped)
+	}
+	return nil
 }
 
 // findClosed returns the closed session id names, or the one closed last.

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
@@ -175,11 +176,63 @@ func TestTheDogFindsAScratchJotsOwnWorktree(t *testing.T) {
 		t.Errorf("row = %q", row.Detail)
 	}
 
-	// Closed, it is still on the dog's list for a day.
+	// Closed by you, it is done: off the dog's list, whatever it left.
 	c.closeSession(s.ID)
-	jots = c.dog()
-	if len(jots) != 1 || jots[0].ID != s.ID || jots[0].State != "closed" || jots[0].Closed == nil || jots[0].Loose.Dirty != 1 {
-		t.Errorf("dog after close = %+v", jots)
+	if jots := c.dog(); len(jots) != 0 {
+		t.Errorf("dog after you closed it = %+v", jots)
+	}
+}
+
+func TestAJotYouCloseIsDoneAndOneThatClosedOnItsOwnIsWatched(t *testing.T) {
+	testutil.IsolateGit(t)
+	repo := website(t, filepath.Join(t.TempDir(), "website"))
+	testutil.Git(t, repo, "branch", "live")
+	c := setupWith(t, agentConfig{
+		spawn: "close_when_done = true\nclose_delay = \"1s\"\n",
+		extra: "[dog]\nnudges = 0\nland = { website = \"live\" }\n",
+	})
+
+	// A jot whose work is not through stays open under close_when_done,
+	// so its row says what is left.
+	left := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,write:notes.md,stop", Repo: repo, Name: "left"})
+	c.waitState(left.ID, ipc.StateDone)
+	// A jot that is through closes on its own.
+	clean := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Repo: repo, Name: "clean"})
+	testutil.Eventually(t, 10*time.Second, "the jot that is through did not close", func() bool { _, ok := c.row(clean.ID); return !ok })
+	time.Sleep(time.Second)
+	if row, ok := c.row(left.ID); !ok || row.Detail != "Not through: 1 file not committed" {
+		t.Fatalf("the jot that is not through: %+v, open %v", row, ok)
+	}
+
+	// You close the one that is not through: it is done, and the dog lets
+	// it be. The one that closed on its own is watched for a day: work in
+	// it since, or a land branch moved back, puts it on the dog's list.
+	c.closeSession(left.ID)
+	testutil.WriteFiles(t, clean.Worktree, map[string]string{"late.md": "since\n"})
+	jots := c.dog()
+	if len(jots) != 1 || jots[0].ID != clean.ID || jots[0].State != "closed" || jots[0].Closed == nil || jots[0].Loose.Dirty != 1 {
+		t.Errorf("dog = %+v, want only the jot that closed on its own", jots)
+	}
+	auto := map[string]bool{}
+	for _, r := range c.listAll().Closed {
+		auto[r.ID] = r.Auto
+	}
+	if len(auto) != 2 || !auto[clean.ID] || auto[left.ID] {
+		t.Errorf("closed on their own = %v, want %s only", auto, clean.ID)
+	}
+	// The journal says who closed each: Irie, or you.
+	for id, want := range map[string]string{clean.ID: event.SourceIrie, left.ID: event.SourceUser} {
+		for _, e := range c.events(id) {
+			if e.Kind == event.UIClosed && e.Source != want {
+				t.Errorf("%s: ui.closed from %s, want %s", id, e.Source, want)
+			}
+		}
+	}
+
+	// A restarted core still knows which closed on their own.
+	c.restartCore()
+	if jots := c.dog(); len(jots) != 1 || jots[0].ID != clean.ID {
+		t.Errorf("dog after a restart = %+v", jots)
 	}
 }
 

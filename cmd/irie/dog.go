@@ -14,8 +14,9 @@ import (
 )
 
 // ctlDog is the jot dog's report (DESIGN §4.8): the jots whose turn is over
-// but whose work has not landed, open ones first, then those closed in the
-// last day. The core looks at each afresh.
+// but whose work has not landed, open ones first, then those that closed on
+// their own in the last day. A jot you closed is done and never listed. The
+// core looks at each afresh.
 func ctlDog(args []string) error {
 	fs := flag.NewFlagSet("ctl dog", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the jots as JSON")
