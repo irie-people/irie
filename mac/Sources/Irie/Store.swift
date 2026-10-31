@@ -194,7 +194,7 @@ final class Store: ObservableObject {
                 loadChoices()
                 // The store lives as long as the app.
                 try await client.subscribe { frame in
-                    Task { @MainActor in self.apply(frame) }
+                    Task { @MainActor in self.take(frame) }
                 }
                 link = .offline("The core went away.")
             } catch {
@@ -215,6 +215,37 @@ final class Store: ObservableObject {
             return "Irie isn’t running."
         }
         return error.localizedDescription
+    }
+
+    /// Frames that came while the main run loop tracked a menu or a drag,
+    /// in order (take(_:)).
+    private var held: [Frame] = []
+
+    /// Takes in one frame, or holds it while the main run loop tracks: an
+    /// open menu (the menu bar's, a card's ⋯ or right-click menu, the task
+    /// bar's repo menu), a drag or a live resize. A change to the store then
+    /// would draw the views again under the pointer, and SwiftUI would
+    /// rebuild the open menu, which loses the item under the pointer or
+    /// closes. The held frames go in as soon as the tracking ends.
+    private func take(_ f: Frame) {
+        if RunLoop.current.currentMode == .eventTracking {
+            held.append(f)
+            if held.count == 1 {
+                RunLoop.main.perform(inModes: [.default]) { [weak self] in
+                    MainActor.assumeIsolated { self?.release() }
+                }
+            }
+            return
+        }
+        release()
+        apply(f)
+    }
+
+    private func release() {
+        guard !held.isEmpty else { return }
+        let frames = held
+        held = []
+        frames.forEach(apply)
     }
 
     /// Takes in one frame. Only what changes is set: every change to the
