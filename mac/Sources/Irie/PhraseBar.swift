@@ -30,8 +30,7 @@ struct PhraseBar: View {
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Text(Self.phrases[index])
-            .id(index)
+        line
             .font(Theme.font(12))
             .foregroundStyle(Theme.muted)
             .lineLimit(1)
@@ -53,7 +52,27 @@ struct PhraseBar: View {
             }
             .transition(.opacity)
             .animation(.easeInOut(duration: 0.8), value: index)
+            .animation(.easeInOut(duration: 0.8), value: store.busy)
             .onReceive(tick) { _ in index = (index + 1) % Self.phrases.count }
-            .accessibilityHidden(true)
+    }
+
+    /// The phrase; while the Mac is busy, who comes first instead.
+    @ViewBuilder private var line: some View {
+        if let busy = store.busy {
+            let name = store.sessions.first { $0.id == store.selection && store.outsideSelection == nil }?.name
+            let short = busy == "memory" ? "Memory is short" : "This Mac is busy"
+            let text = name.map { "\(short): \($0) comes first, the other sessions run slower." }
+                ?? "\(short): the sessions run slower meanwhile."
+            Text(text)
+                .id("busy")
+                .help("Until the Mac has room again, every session but the one on show runs in macOS’s background state: "
+                    + "the CPU and the disk last, slower but still running. Show another session and it comes first instead. "
+                    + "Settings, or priority.focus in the config, turns this off.")
+                .accessibilityLabel(text)
+        } else {
+            Text(Self.phrases[index])
+                .id(index)
+                .accessibilityHidden(true)
+        }
     }
 }

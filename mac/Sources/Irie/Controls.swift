@@ -351,6 +351,9 @@ struct ControlLines: View {
             let more = "Promoted: it gets the CPU and disk first, and the other sessions run in the background. macOS gives no way to set memory aside for one process; the background ones are the first it slows."
             lineText("Promoted: CPU and disk first", more: more)
             lineText("macOS can’t set memory aside", more: more, color: Theme.muted)
+        } else if session.background == true {
+            lineText("In the background: others come first",
+                     more: "Another session is promoted, or this Mac is busy and the session on show comes first. Meanwhile this one runs in macOS’s background state: the CPU and the disk last, slower but still running.")
         }
     }
 

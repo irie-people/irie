@@ -12,3 +12,5 @@ func read() ([]Proc, error) { return nil, errors.ErrUnsupported }
 
 // SetBackground is not available here; see CanBackground.
 func SetBackground(pid int, on bool) error { return errors.ErrUnsupported }
+
+func readLoad() (Load, error) { return Load{}, errors.ErrUnsupported }

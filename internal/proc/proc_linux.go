@@ -2,7 +2,9 @@ package proc
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -62,3 +64,25 @@ func parseStat(pid int, s string) (Proc, bool) {
 
 // SetBackground is not available on Linux; see CanBackground.
 func SetBackground(pid int, on bool) error { return errors.ErrUnsupported }
+
+// readLoad reads /proc/loadavg, whose first field is the one-minute
+// average (proc(5)). Linux gives no single memory pressure level.
+func readLoad() (Load, error) {
+	b, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return Load{}, err
+	}
+	return parseLoadavg(string(b))
+}
+
+func parseLoadavg(s string) (Load, error) {
+	f := strings.Fields(s)
+	if len(f) == 0 {
+		return Load{}, fmt.Errorf("/proc/loadavg: empty")
+	}
+	avg, err := strconv.ParseFloat(f[0], 64)
+	if err != nil {
+		return Load{}, fmt.Errorf("/proc/loadavg: %w", err)
+	}
+	return Load{Avg: avg, CPUs: runtime.NumCPU()}, nil
+}

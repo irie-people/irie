@@ -134,7 +134,8 @@ func (c *Core) memoryNow() ipc.Memory {
 
 // headerNow is the header subscribers see. The caller holds c.mu.
 func (c *Core) headerNow() ipc.Header {
-	h := ipc.Header{Version: c.version, RedOnDone: c.cfg().UI.RedOnDone, CloseWhenDone: c.cfg().Spawn.CloseWhenDone, HelperStyle: c.cfg().UI.HelperStyle}
+	h := ipc.Header{Version: c.version, RedOnDone: c.cfg().UI.RedOnDone, CloseWhenDone: c.cfg().Spawn.CloseWhenDone, HelperStyle: c.cfg().UI.HelperStyle,
+		Busy: c.pressure.why}
 	if c.plan.FiveHour != nil || c.plan.SevenDay != nil {
 		p := c.plan
 		h.Plan = &p

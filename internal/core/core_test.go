@@ -41,6 +41,10 @@ type agentConfig struct {
 	// ui.view = "terminal": the slot shows a shown session's raw terminal,
 	// for the tests of swapping panes in.
 	terminal bool
+	// The [priority] section's body. Focus is off unless a test is about
+	// it: on a busy machine it would put a test's sessions in the
+	// background, which slows them.
+	priority string
 }
 
 func (a agentConfig) toml(fake string) string {
@@ -76,6 +80,11 @@ func (a agentConfig) toml(fake string) string {
 		local = "ollama = \"/nonexistent/ollama\"\nllama_server = \"/nonexistent/llama-server\"\n"
 	}
 	fmt.Fprintf(&b, "\n[local]\n%s\n[usage]\nstatus_line = %v\n", local, a.statusLine)
+	priority := a.priority
+	if priority == "" {
+		priority = "focus = false\n"
+	}
+	fmt.Fprintf(&b, "\n[priority]\n%s", priority)
 	return b.String()
 }
 

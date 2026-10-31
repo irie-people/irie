@@ -137,12 +137,16 @@ func (m Model) header() string {
 	case offline:
 		right = band(p.needs).Render("core offline")
 	case online:
-		// Low memory comes first, then the plan's use, then the counts,
-		// each kept only while it fits.
+		// Low memory comes first, then a busy machine, which the session on
+		// show gets first, then the plan's use, then the counts, each kept
+		// only while it fits.
 		w := m.width - lipgloss.Width(title) - 2
 		var extra []string
 		if mem := m.head.Memory; mem != nil && mem.Low {
 			extra = append(extra, band(p.needs).Render("mem low"))
+		}
+		if m.head.Busy != "" {
+			extra = append(extra, band(p.paused).Render("busy"))
 		}
 		if pl := m.head.Plan; pl != nil && pl.FiveHour != nil {
 			c := p.muted

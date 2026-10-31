@@ -418,6 +418,17 @@ func demoted(t *testing.T) bool {
 	return proc.CanBackground && pri(t, os.Getpid()) == "4"
 }
 
+// skipIfDemoted skips a test that looks for processes out of the
+// background once the test itself went there, as when the machine got busy
+// meanwhile and the running Irie put the test's session in the background:
+// what it starts from then on starts there too.
+func skipIfDemoted(t *testing.T) {
+	t.Helper()
+	if demoted(t) {
+		t.Skip("the test went into the background, as a session's processes do while another is promoted or on show")
+	}
+}
+
 func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	c := setup(t)
 	var all []ipc.Session
@@ -462,6 +473,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 			t.Errorf("%s: %v not in the background", s.Name, out)
 		}
 	}
+	skipIfDemoted(t)
 	if in, _ := inBackground(gamma); len(in) > 0 {
 		t.Errorf("the promoted session's %v are in the background", in)
 	}
@@ -476,6 +488,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 0}, nil); err != nil {
 		t.Fatal(err)
 	}
+	skipIfDemoted(t)
 	for _, s := range append(all, delta) {
 		if in, _ := inBackground(s); len(in) > 0 {
 			t.Errorf("%s: %v still in the background", s.Name, in)
@@ -486,6 +499,72 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	}
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 2}, nil); err == nil {
 		t.Error("level 2 went through")
+	}
+}
+
+func TestABusyMachinePutsTheSessionsNotOnShowInTheBackground(t *testing.T) {
+	if !proc.CanBackground {
+		t.Skip("no background state here")
+	}
+	// A headroom of a thousand CPUs keeps any machine busy.
+	c := setupWith(t, agentConfig{priority: "headroom_cpus = 1000\n"})
+	if demoted(t) {
+		t.Skip("the test runs in the background, as a session's processes do while another is promoted or on show")
+	}
+	var all []ipc.Session
+	for _, n := range []string{"alpha", "beta"} {
+		s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,kids", Name: n})
+		c.kids(s)
+		all = append(all, s)
+	}
+	alpha, beta := all[0], all[1]
+	inBackground := func(s ipc.Session) (in, out []string) {
+		for _, p := range tree(t, c.hostPID(s)) {
+			if pri(t, p.PID) == "4" {
+				in = append(in, p.Name)
+			} else {
+				out = append(out, p.Name)
+			}
+		}
+		return in, out
+	}
+	row := func(s ipc.Session) ipc.Session {
+		for _, r := range c.list() {
+			if r.ID == s.ID {
+				return r
+			}
+		}
+		t.Fatalf("no row for %s", s.Name)
+		return ipc.Session{}
+	}
+	c.show(alpha.ID, false)
+	testutil.Eventually(t, 3*time.Second, "beta, not on show, is not in the background", func() bool {
+		_, out := inBackground(beta)
+		return len(out) == 0
+	})
+	skipIfDemoted(t)
+	if in, _ := inBackground(alpha); len(in) > 0 {
+		t.Errorf("alpha is on show, but its %v are in the background", in)
+	}
+	if !row(beta).Background || row(alpha).Background {
+		t.Errorf("rows say background alpha %v, beta %v; want only beta", row(alpha).Background, row(beta).Background)
+	}
+	// At once: show returns once the two have swapped.
+	c.show(beta.ID, true)
+	skipIfDemoted(t)
+	if in, _ := inBackground(beta); len(in) > 0 {
+		t.Errorf("beta is on show now, but its %v are still in the background", in)
+	}
+	if _, out := inBackground(alpha); len(out) > 0 {
+		t.Errorf("alpha left the show, but its %v are not in the background", out)
+	}
+	// A promoted session keeps the machine, on show or not.
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: alpha.ID, Level: 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	skipIfDemoted(t)
+	if in, _ := inBackground(alpha); len(in) > 0 {
+		t.Errorf("alpha is promoted, but its %v are in the background", in)
 	}
 }
 

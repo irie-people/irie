@@ -168,6 +168,7 @@ enum Fixture {
     static let config = #"""
     {"path": "/home/alice/.config/irie/config.toml", "config": {
         "dog": {"land": {"irie": "live"}, "nudges": 2, "watch": true},
+        "priority": {"focus": true, "headroom_cpus": 1, "headroom_gib": 1},
         "local": {"context": 65536, "env": {}, "kv_cache": "q8_0", "memory_gib": 0, "ollama": "", "port": 11435, "url": ""},
         "profiles": {
             "claude": {"command": "claude", "effort": "max", "harness": "claude-code", "model": "claude-opus-5-5", "permission_mode": "auto"},

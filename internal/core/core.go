@@ -89,6 +89,8 @@ type Core struct {
 	outcomes   map[string]*outcome // every session's route and outcome, those gone included
 	order      []string            // the list's order from the top, which the user sets (order.go)
 	bg         map[int]bgProc      // the processes Irie put in the background, by pid (priority.go)
+	pressure   pressure            // whether the machine is busy, so the sessions not on show yield (pressure.go)
+	loadFailed bool                // the last reading of the machine's load failed, which is logged once
 	closes     closes              // closed sessions, and agents still ending (close.go)
 	steps      stateFile           // state.json: the undo and redo stacks (undo.go)
 	selected   string              // the session you picked, whose conversation or terminal the slot shows (view.go)
@@ -134,7 +136,8 @@ type session struct {
 	out      *outcome               // its route and how it went, shared with Core.outcomes
 	conv     *conversation          // its conversation, read while clients follow it (conversation.go)
 	note     string                 // what its agent is told at its next tool call, once (freeze.go)
-	demoted  bool                   // its process tree runs in the background, for a promoted session (priority.go)
+	demoted  bool                   // its process tree runs in the background, for a promoted session or one on show (priority.go)
+	leftover bool                   // the core before this one may have left its tree in the background (priority.go)
 	convSubs int                    // the subscriptions that follow its conversation
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
@@ -156,6 +159,7 @@ func (x *session) wire() ipc.Session {
 	if !x.local {
 		s.CostUSD = x.usage.CostUSD
 	}
+	s.Background = x.demoted
 	if o := x.out; o != nil {
 		s.Class, s.Routed, s.Parent, s.Rated = o.class, o.routed, o.parent, o.rated
 	}
@@ -290,8 +294,10 @@ func (c *Core) tick() {
 	c.keepView()
 	c.followTeams()
 	c.reap()
-	c.observe(time.Now())
+	now := time.Now()
+	c.observe(now)
 	c.keepFrozen()
+	busyChanged := c.watchPressure(now)
 	c.background()
 	c.countTokens()
 	c.followTitles()
@@ -299,6 +305,9 @@ func (c *Core) tick() {
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
+	if busyChanged {
+		c.publishHeader()
+	}
 }
 
 // refresh takes a snapshot, repairs the layout until it is sound and
@@ -369,7 +378,10 @@ func (c *Core) sync(s tmux.Snapshot) {
 // does for every session, and replays the session's journal into its state.
 func (c *Core) adopt(p tmux.Pane) *session {
 	created, _ := time.Parse(time.RFC3339Nano, p.Created)
-	x := &session{id: p.IrieSession, name: p.Name, named: p.Named == "1", agent: p.Agent, created: created, vendorID: p.VendorID, out: c.outcome(p.IrieSession)}
+	// Only the core that put a tree in the background knows it is there,
+	// so the next pass takes this one out unless it is wanted there.
+	x := &session{id: p.IrieSession, name: p.Name, named: p.Named == "1", agent: p.Agent, created: created, vendorID: p.VendorID,
+		out: c.outcome(p.IrieSession), leftover: true}
 	if x.name == "" {
 		x.name = x.id
 	}
@@ -700,6 +712,9 @@ func (c *Core) show(a ipc.ShowArgs) error {
 		c.split = a.Session
 	}
 	err := c.swapIn(a.Session, a.Focus)
+	// While the machine is busy, the session now on show comes out of the
+	// background at once, and the one before goes in (pressure.go).
+	c.background()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

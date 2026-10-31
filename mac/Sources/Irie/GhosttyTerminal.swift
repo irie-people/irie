@@ -247,9 +247,13 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
     /// Whether it takes the keyboard once it is in a window.
     var takesKeysOnStart = true
     /// Whether it shows: a terminal under the conversation or under the
-    /// split need not draw.
+    /// split need not draw, and never has the keyboard.
     var shows = true {
-        didSet { if let surface, shows != oldValue { ghostty_surface_set_occlusion(surface, shows) } }
+        didSet {
+            guard shows != oldValue else { return }
+            if let surface { ghostty_surface_set_occlusion(surface, shows) }
+            if !shows { giveUpKeys() }
+        }
     }
 
     private let box = GhosttySurfaceBox()
@@ -274,13 +278,26 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
         if let s = box.surface { ghostty_surface_free(s) }
     }
 
-    override var acceptsFirstResponder: Bool { true }
+    /// Only while it shows: typing into a terminal that is covered, by the
+    /// conversation or by a zoomed pane, would go to an agent nobody sees,
+    /// and no key the user can see would bring it back.
+    override var acceptsFirstResponder: Bool { shows }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window else { return }
         start()
-        if takesKeysOnStart { window.makeFirstResponder(self) }
+        if takesKeysOnStart && shows { window.makeFirstResponder(self) }
+    }
+
+    /// Lets go of the keyboard once it no longer shows, unless what covers
+    /// it took it meanwhile, as the message box does when the conversation
+    /// comes up. The window keeps it then, which types to nobody.
+    private func giveUpKeys() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.shows, let w = self.window, w.firstResponder === self else { return }
+            w.makeFirstResponder(nil)
+        }
     }
 
     override func setFrameSize(_ newSize: NSSize) {

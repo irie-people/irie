@@ -228,7 +228,26 @@ enum Theme {
     /// every palette and mode, and Increase Contrast pushes it further.
     static func agent(slot: Int) -> Color {
         let p = palette
-        return computed { agentHex(slot: slot, palette: p, dark: $0, high: $1) }
+        return cached("mark", slot) { computed { agentHex(slot: slot, palette: p, dark: $0, high: $1) } }
+    }
+
+    /// The agent colours made for the palette in use, by kind and slot. A
+    /// colour made afresh at every drawing is a new colour to SwiftUI, which
+    /// then draws every working card again whenever anything changes, and
+    /// works its contrast out again each time.
+    private static var agentColors: [String: Color] = [:]
+    private static var agentColorsPalette = ""
+
+    private static func cached(_ kind: String, _ slot: Int, _ make: () -> Color) -> Color {
+        if agentColorsPalette != palette.id {
+            agentColors = [:]
+            agentColorsPalette = palette.id
+        }
+        let key = "\(kind) \(slot)"
+        if let c = agentColors[key] { return c }
+        let c = make()
+        agentColors[key] = c
+        return c
     }
 
     /// A working card's ground: the card washed with its agent's colour, as
@@ -237,7 +256,7 @@ enum Theme {
     /// Contrast it is clear, so the plain fill shows.
     static func agentWash(slot: Int) -> Color {
         let p = palette
-        return computed(alpha: { $0 ? 0 : 1 }) { agentWashHex(slot: slot, palette: p, dark: $0, high: $1) }
+        return cached("wash", slot) { computed(alpha: { $0 ? 0 : 1 }) { agentWashHex(slot: slot, palette: p, dark: $0, high: $1) } }
     }
 
     /// A selected working card's trailing end: its wash taken toward its
@@ -246,7 +265,7 @@ enum Theme {
     /// Contrast it is clear, as the wash is.
     static func agentDeep(slot: Int) -> Color {
         let p = palette
-        return computed(alpha: { $0 ? 0 : 1 }) { agentDeepHex(slot: slot, palette: p, dark: $0, high: $1) }
+        return cached("deep", slot) { computed(alpha: { $0 ? 0 : 1 }) { agentDeepHex(slot: slot, palette: p, dark: $0, high: $1) } }
     }
 
     /// An agent's own colour as text, for the lines about it away from its
@@ -254,7 +273,7 @@ enum Theme {
     /// ground such a line sits on, and 7:1 under Increase Contrast.
     static func agentInk(slot: Int) -> Color {
         let p = palette
-        return computed { agentInkHex(slot: slot, palette: p, dark: $0, high: $1) }
+        return cached("ink", slot) { computed { agentInkHex(slot: slot, palette: p, dark: $0, high: $1) } }
     }
 
     /// The slot for a session: the same one every time, from its id.

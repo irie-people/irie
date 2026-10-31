@@ -13,6 +13,8 @@ package core
 // and messages typed to agents, serves a promoted session first (turns.go).
 // Memory cannot be set aside: macOS gives a process no way to reserve it
 // for another, and the background processes are the ones it slows first.
+// The same background state serves focus (pressure.go): while the machine
+// is busy, every session but the one on show steps back.
 
 import (
 	"github.com/irie-people/irie/internal/event"
@@ -59,19 +61,22 @@ func (c *Core) setPriority(a ipc.PriorityArgs) error {
 }
 
 // background puts each session's process tree in the background, or takes
-// it out, as the promotions want: while a live session is promoted, the
-// others' trees are in the background. A process Irie put there that left
-// every tree, such as a daemon, comes out. The caller holds c.mu.
+// it out, as the promotions and the machine want: while a live session is
+// promoted, the others' trees are in the background, and while the machine
+// is busy, every tree but those of the sessions on show and the promoted
+// ones (pressure.go). A process Irie put there that left every tree, such
+// as a daemon, comes out. The caller holds c.mu.
 func (c *Core) background() {
 	if !proc.CanBackground {
 		return
 	}
+	yielding := c.pressure.why != ""
 	promoted, demoted := false, len(c.bg) > 0
 	for _, x := range c.sessions {
 		promoted = promoted || x.track.priority > 0 && !x.dead
-		demoted = demoted || x.demoted
+		demoted = demoted || x.demoted || x.leftover
 	}
-	if !promoted && !demoted {
+	if !promoted && !demoted && !yielding {
 		return
 	}
 	t, err := proc.Read()
@@ -86,9 +91,12 @@ func (c *Core) background() {
 	for _, x := range c.sessions {
 		p := c.snap.Pane(x.pane)
 		if p == nil || p.Dead || p.PID <= 1 {
+			// No process to move: what Irie put in the background from its
+			// tree is let go below once it ends or leaves.
+			x.demoted, x.leftover = false, false
 			continue
 		}
-		want := promoted && x.track.priority == 0
+		want := x.track.priority == 0 && (promoted || yielding && !c.onShow(x))
 		for _, q := range t.Tree(p.PID) {
 			inTree[q.PID] = true
 			b, ok := c.bg[q.PID]
@@ -98,14 +106,14 @@ func (c *Core) background() {
 				if err := proc.SetBackground(q.PID, true); err == nil {
 					c.bg[q.PID] = bgProc{start: q.Start, session: x.id}
 				}
-			case !want && (ok || x.demoted):
+			case !want && (ok || x.demoted || x.leftover):
 				// What it started while in the background inherited that,
 				// so every process of a tree that was there comes out.
 				proc.SetBackground(q.PID, false)
 				delete(c.bg, q.PID)
 			}
 		}
-		x.demoted = want
+		x.demoted, x.leftover = want, false
 	}
 	for pid, b := range c.bg {
 		switch {

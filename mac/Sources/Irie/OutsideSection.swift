@@ -108,7 +108,9 @@ extension Store {
 
     /// Takes an outside frame. A problem listing them shows once, when new.
     func applyOutside(_ f: Frame) {
-        outside = f.outside ?? []
+        // Set only when it changed: every change draws the window again.
+        let rows = f.outside ?? []
+        if rows != outside { outside = rows }
         if let k = outsideSelection, !outside.contains(where: { $0.id == k }) {
             outsideSelection = nil
         }

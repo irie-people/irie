@@ -78,7 +78,7 @@ The **File**, **Go**, **View** and **Edit** menus list them all.
 | Keys | What they do |
 |---|---|
 | Ctrl+Tab, Ctrl+Shift+Tab | Show the next or the previous session in the sidebar's order: group by group, without the cards in folded groups or those the filter hides, wrapping at the ends. From a card in a folded group it goes on from that card's place. Presses faster than the core answers collapse into the last one, so the terminal always ends on the highlighted session. The keyboard stays where it was. The app catches these keys before the terminal or AppKit's key-view loop sees them |
-| Ctrl+] | Move the keyboard between the session list and the message box, or the terminal while it shows |
+| Ctrl+] | Move the keyboard between the session list and the message box, or the terminal while it shows. While a session waits for you or has ended, the note that stands where the message box would takes the keyboard instead, and Return or Space there opens the terminal |
 | ⌥⌘T | Show the live terminal instead of the conversation, and back (View > Terminal) |
 | Return, ⌥Return | In the message box: send it, or start a new line |
 | ⌘1 to ⌘9 | Show the first to ninth session in the sidebar's order |
@@ -96,6 +96,15 @@ The **File**, **Go**, **View** and **Edit** menus list them all.
 | ⌘=, ⌘-, ⌘0 | Make the terminal's text bigger, smaller or the default size |
 | ⌥⌘ arrows, ⌃⌘ arrows, ⌃⌘=, ⇧⌘↩ | With Ghostty drawing the terminals, beside a session's teammates (Ghostty's own split keys, or yours from your Ghostty config): move the keyboard to the pane in that direction; move the bar between the session and its teammates; put the bar back in the middle; zoom the pane to fill the split, and back. ⌘[ and ⌘] stay Previous and Next Helper |
 | ⌘, | Settings: every preference in one window (above) |
+
+**Where the keyboard goes.** One place holds it at a time, and it never sits where nothing shows. An audit on 2026-10-31 walked every place that takes it (the session list, the find field, a name being edited, the task bar, the message box, the main terminal, the split's panes, the new-task sheet and Settings) and fixed what trapped it:
+
+- **A covered terminal never has the keyboard.** The terminal stays attached under the conversation and under a zoomed pane, so ⌥⌘T flips at once, but typing into it there would go to an agent nobody sees. A Ghostty terminal that does not show refuses the keyboard, and either engine lets go of it once covered, unless what covers it took it first, as the message box does. Moving the keyboard between the split's panes while one is zoomed unzooms first.
+- **A plain key never acts on the whole window.** The banner of a session that waits for you had Return as its button's shortcut, and SwiftUI looks for a window's shortcuts before the field with the keyboard sees the key: whenever such a session showed, Return in the session list opened its terminal instead, and Return in the task bar, the find field or a name being edited could too. Return opens the terminal only while the banner has the keyboard. Every other shortcut has ⌘ or Ctrl in it.
+- **Ctrl+] always has somewhere to go.** It found nothing while the session on show waited, had ended, or was starting, since the message box was gone or disabled, so the keyboard stayed put. The banner takes it now, and the message box takes it while the agent starts and says to wait if you send.
+- **The menus stay put.** The menu bar's commands read the store, which changes several times a second while agents work, so SwiftUI rebuilt every menu that often: an open menu flickered, lost the item under the pointer or closed. The menus now read their own small set of facts (MenuBar.swift), which changes only when an item's title or state does. The window draws again only on a frame that changes something it shows; most frames carried only an agent's memory or cost, which the app does not read. While any menu is open (the menu bar's, a card's ⋯ or right-click menu, the task bar's repo menu), or a drag or a resize is under way, frames wait and go in once it ends, so nothing is rebuilt under the pointer.
+
+The terminal itself keeps every key it is given, Tab and Esc included, since the agent needs them: Ctrl+], ⌘ keys, Ctrl+Tab and a click are the ways out, and the Go menu lists them.
 
 ## 5. States and colours
 

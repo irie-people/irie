@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 
@@ -60,6 +61,9 @@ final class Store: ObservableObject {
     /// itself, so the title bar keeps no To verify count, and the review dock
     /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
+    /// Why the core counts the machine busy, "memory" or "cpu", while every
+    /// session but the one on show runs in the background (DESIGN §4.3).
+    @Published private(set) var busy: String?
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
@@ -127,12 +131,34 @@ final class Store: ObservableObject {
     let client: CoreClient
     /// The core's config, as the Settings window shows and edits it.
     let settings: SettingsModel
+    /// What the menu bar shows, which changes far less often than the
+    /// store does (MenuBar.swift).
+    let menu = MenuState()
     private var started = false
+    private var menuWatch: AnyCancellable?
+    private var menuDue = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
         settings.changed = { [weak self] in self?.loadChoices() }
+        // objectWillChange comes before the change: the facts are read once
+        // it is in, once for every change made in one turn of the run loop.
+        menuWatch = objectWillChange.sink { [weak self] _ in
+            MainActor.assumeIsolated { self?.noteMenu() }
+        }
+    }
+
+    private func noteMenu() {
+        guard !menuDue else { return }
+        menuDue = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.menuDue = false
+                self.menu.set(self.menuFacts)
+            }
+        }
     }
 
     var socketPath: String { client.socketPath }
@@ -168,7 +194,7 @@ final class Store: ObservableObject {
                 loadChoices()
                 // The store lives as long as the app.
                 try await client.subscribe { frame in
-                    Task { @MainActor in self.apply(frame) }
+                    Task { @MainActor in self.take(frame) }
                 }
                 link = .offline("The core went away.")
             } catch {
@@ -191,6 +217,41 @@ final class Store: ObservableObject {
         return error.localizedDescription
     }
 
+    /// Frames that came while the main run loop tracked a menu or a drag,
+    /// in order (take(_:)).
+    private var held: [Frame] = []
+
+    /// Takes in one frame, or holds it while the main run loop tracks: an
+    /// open menu (the menu bar's, a card's ⋯ or right-click menu, the task
+    /// bar's repo menu), a drag or a live resize. A change to the store then
+    /// would draw the views again under the pointer, and SwiftUI would
+    /// rebuild the open menu, which loses the item under the pointer or
+    /// closes. The held frames go in as soon as the tracking ends.
+    private func take(_ f: Frame) {
+        if RunLoop.current.currentMode == .eventTracking {
+            held.append(f)
+            if held.count == 1 {
+                RunLoop.main.perform(inModes: [.default]) { [weak self] in
+                    MainActor.assumeIsolated { self?.release() }
+                }
+            }
+            return
+        }
+        release()
+        apply(f)
+    }
+
+    private func release() {
+        guard !held.isEmpty else { return }
+        let frames = held
+        held = []
+        frames.forEach(apply)
+    }
+
+    /// Takes in one frame. Only what changes is set: every change to the
+    /// store draws the window's views again, and most frames carry rows
+    /// whose only news is what the app does not read, as an agent's memory
+    /// and cost, which the core measures every few seconds.
     private func apply(_ f: Frame) {
         if let h = f.header, (h.redOnDone ?? false) != Look.redOnDone {
             Look.redOnDone = h.redOnDone ?? false
@@ -202,12 +263,24 @@ final class Store: ObservableObject {
         if let s = f.header?.helperStyle, s != helperStyle {
             helperStyle = s
         }
+        if let h = f.header, h.busy != busy {
+            busy = h.busy
+        }
         switch f.t {
         case "snapshot":
-            sessions = (f.sessions ?? []).sorted(by: Self.before)
+            let rows = (f.sessions ?? []).sorted(by: Self.before)
+            guard rows != sessions else {
+                // Nothing to draw again, but a core that restarted, whose
+                // first snapshot is mostly the same rows, is asked again
+                // for the split beside its teammates.
+                keepSplit()
+                return
+            }
+            sessions = rows
         case "upsert":
             guard let s = f.session else { return }
             if let i = sessions.firstIndex(where: { $0.id == s.id }) {
+                guard sessions[i] != s else { return }
                 let moved = sessions[i].order != s.order
                 sessions[i] = s
                 if moved { sessions.sort(by: Self.before) }
@@ -216,17 +289,21 @@ final class Store: ObservableObject {
                 sessions.sort(by: Self.before)
             }
         case "remove":
-            sessions.removeAll { $0.id == f.id }
-            if let id = f.id { lingering[id] = nil }
+            guard let id = f.id else { return }
+            if lingering[id] != nil { lingering[id] = nil }
+            guard sessions.contains(where: { $0.id == id }) else { return }
+            sessions.removeAll { $0.id == id }
         case "outside":
             applyOutside(f)
             return
         case "closed":
-            closed = f.closed ?? []
+            let c = f.closed ?? []
+            if c != closed { closed = c }
             return
         case "history":
-            undoLabel = f.undo.flatMap { $0.isEmpty ? nil : $0 }
-            redoLabel = f.redo.flatMap { $0.isEmpty ? nil : $0 }
+            let u = f.undo.flatMap { $0.isEmpty ? nil : $0 }, r = f.redo.flatMap { $0.isEmpty ? nil : $0 }
+            if u != undoLabel { undoLabel = u }
+            if r != redoLabel { redoLabel = r }
             return
         default:
             return

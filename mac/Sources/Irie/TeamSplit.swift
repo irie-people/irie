@@ -137,7 +137,7 @@ struct TeamSplit: View {
         case let .focus(next):
             focus(ids[(i + (next ? 1 : ids.count - 1)) % ids.count])
         case let .focusToward(edge):
-            if let target = neighbour(of: view, toward: edge) { target.window?.makeFirstResponder(target) }
+            if let target = neighbour(of: view, toward: edge), let id = panes.id(of: target) { focus(id) }
         case let .resize(edge):
             let grow: Double
             switch edge {
@@ -155,8 +155,18 @@ struct TeamSplit: View {
         }
     }
 
+    /// Gives a pane the keyboard. Under a zoom, the split unzooms first, so
+    /// the keyboard never goes to a terminal the zoomed pane covers.
     private func focus(_ id: String) {
-        if let v = panes.view(id) { v.window?.makeFirstResponder(v) }
+        guard let v = panes.view(id) else { return }
+        if let z = zoomed, z != id {
+            zoomed = nil
+            #if canImport(GhosttyKit)
+            // It shows from the next update; it takes the keyboard now.
+            (v as? GhosttyTerminalView)?.shows = true
+            #endif
+        }
+        v.window?.makeFirstResponder(v)
     }
 
     /// The nearest other pane in the direction of edge, by where the panes

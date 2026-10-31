@@ -1,7 +1,7 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
 // the ui, spawn, profiles, local, route, repos, worktree, tmux, journal,
-// hold, usage and dog sections.
+// hold, usage, dog and priority sections.
 package config
 
 import (
@@ -36,6 +36,7 @@ type Config struct {
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
 	Dog      Dog                `toml:"dog"`
+	Priority Priority           `toml:"priority"`
 }
 
 // Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
@@ -190,6 +191,24 @@ type Dog struct {
 	Land   map[string]string `toml:"land"`   // by repo (alias, folder name or path), the branch its work must reach, such as live
 }
 
+// Priority is who gets the machine first while it is busy (DESIGN §4.3).
+// macOS lets a process slow another of its user's down, and undo it, but
+// never raise one, so the session you look at comes first by the others
+// stepping back.
+type Priority struct {
+	// Focus puts every other session's process tree in macOS's background
+	// state while the machine runs short of memory or CPU, so the session
+	// on show, the core and the windows that draw the sessions keep their
+	// share. They come back out once it has room again.
+	Focus bool `toml:"focus"`
+	// HeadroomCPUs is the CPUs kept for them: the machine is busy once the
+	// work waiting to run leaves fewer than this free.
+	HeadroomCPUs int `toml:"headroom_cpus"`
+	// HeadroomGiB is the memory kept for them, over the reserve a model load
+	// leaves (DESIGN §6.3): the machine is short once less is free.
+	HeadroomGiB int `toml:"headroom_gib"`
+}
+
 // Repos is where an @name finds its repo: aliases first, then the git repos
 // two levels under the roots.
 type Repos struct {
@@ -298,11 +317,12 @@ func Default() Config {
 			Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
 			Submodules:   true,
 		},
-		Tmux:    Tmux{Socket: "irie"},
-		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
-		Hold:    Hold{Max: 24 * time.Hour},
-		Usage:   Usage{StatusLine: true},
-		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
+		Tmux:     Tmux{Socket: "irie"},
+		Journal:  Journal{KeepDays: 30, ToolInput: "summary"},
+		Hold:     Hold{Max: 24 * time.Hour},
+		Usage:    Usage{StatusLine: true},
+		Dog:      Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
+		Priority: Priority{Focus: true, HeadroomCPUs: 1, HeadroomGiB: 1},
 	}
 }
 
@@ -400,7 +420,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
 		Dog      *Dog                      `toml:"dog"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog}
+		Priority *Priority                 `toml:"priority"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Priority: &c.Priority}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -713,6 +734,12 @@ func (c Config) Validate() error {
 	}
 	if c.Dog.Nudges < 0 {
 		bad("dog.nudges = %d: must not be negative", c.Dog.Nudges)
+	}
+	if c.Priority.HeadroomCPUs < 0 {
+		bad("priority.headroom_cpus = %d: must not be negative", c.Priority.HeadroomCPUs)
+	}
+	if c.Priority.HeadroomGiB < 0 {
+		bad("priority.headroom_gib = %d: must not be negative", c.Priority.HeadroomGiB)
 	}
 	for _, repo := range slices.Sorted(maps.Keys(c.Dog.Land)) {
 		branch := c.Dog.Land[repo]
