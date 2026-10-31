@@ -40,9 +40,15 @@ func (c *Core) sample() {
 	}
 	rt := c.runtimePane()
 	own := c.cfg().Local.URL == "" && rt != nil && !rt.Dead
+	// Irie's llama-server, by a key no session has.
+	const llamaKey = "\x00llama"
+	if _, lp := c.llamaRunning(); lp != nil && lp.PID > 0 {
+		roots[llamaKey] = lp.PID
+	}
 	c.mu.Unlock()
 
 	mem := treeMemory(roots)
+	llama := mem[llamaKey]
 	var local int64
 	if own {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -58,7 +64,7 @@ func (c *Core) sample() {
 	for id, x := range c.sessions {
 		x.memory = mem[id]
 	}
-	c.localMem = local
+	c.localMem, c.llamaMem = local, llama
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -117,7 +123,7 @@ func (c *Core) memoryNow() ipc.Memory {
 	m := c.machine
 	out := ipc.Memory{
 		Total: m.Total, Available: m.Available / availableStep * availableStep,
-		Local: c.localMem, Budget: localmodel.Budget(c.cfg().Local.MemoryGiB, m),
+		Local: c.localMem + c.llamaMem, Budget: localmodel.Budget(c.cfg().Local.MemoryGiB, m),
 		Low: m.Total > 0 && m.Available < localmodel.Reserve(m),
 	}
 	for _, x := range c.sessions {

@@ -22,10 +22,11 @@ import (
 // preflightTimeout bounds a check, which may load a model's weights.
 const preflightTimeout = 4 * time.Minute
 
-// localStatus asks the core about the local server, starting Irie's own.
-func localStatus(sock string) (ipc.LocalResult, error) {
+// localStatus asks the core about the local server, starting Irie's own,
+// and with llama about its llama-server too.
+func localStatus(sock string, llama bool) (ipc.LocalResult, error) {
 	var r ipc.LocalResult
-	err := ipc.Call(sock, 30*time.Second, ipc.OpLocal, ipc.LocalArgs{Start: true}, &r)
+	err := ipc.Call(sock, 30*time.Second, ipc.OpLocal, ipc.LocalArgs{Start: true, Llama: llama}, &r)
 	return r, err
 }
 
@@ -42,7 +43,7 @@ func ctlLocal(args []string) error {
 	if err != nil {
 		return err
 	}
-	r, err := localStatus(p.Socket())
+	r, err := localStatus(p.Socket(), true)
 	if err != nil {
 		return err
 	}
@@ -86,13 +87,38 @@ func printLocal(w io.Writer, r ipc.LocalResult) {
 	case r.Pick != "":
 		fmt.Fprintf(w, "+local   %s, the best model here that fits; `irie setup local` chooses one for good\n", r.Pick)
 	}
-	if len(r.Models) == 0 {
+	printModels(w, r.Models, "+local", r.Pick, r.Chosen)
+	if l := r.Llama; l != nil {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "llama    %s, Irie's own llama-server", l.URL)
+		if l.Bin != "" {
+			fmt.Fprintf(w, ", %s (%s)", l.Bin, l.Build)
+		}
+		fmt.Fprintln(w)
+		if l.Error != "" {
+			fmt.Fprintf(w, "         %s\n", l.Error)
+		}
+		fmt.Fprintf(w, "files    %s\n", l.Dir)
+		if l.Running != "" {
+			fmt.Fprintf(w, "running  %s\n", l.Running)
+		}
+		if l.Pick != "" {
+			fmt.Fprintf(w, "+big     %s\n", l.Pick)
+		}
+		printModels(w, l.Models, "+big", l.Pick, "")
+	}
+}
+
+// printModels prints a server's models, the cheapest in memory first, with
+// what each takes and a note.
+func printModels(w io.Writer, models []ipc.LocalModel, profile, pick, chosen string) {
+	if len(models) == 0 {
 		return
 	}
 	fmt.Fprintln(w)
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "MODEL\tWEIGHTS\tMEMORY\tNOTE")
-	for _, m := range r.Models {
+	for _, m := range models {
 		need := localmodel.Bytes(m.Need)
 		if !m.Measured {
 			need = "~" + need
@@ -109,8 +135,8 @@ func printLocal(w io.Writer, r ipc.LocalResult) {
 		if m.Loaded {
 			note = append(note, "in memory")
 		}
-		if m.Name == r.Pick || m.Name == r.Chosen {
-			note = append(note, "+local runs it")
+		if m.Name == pick || m.Name == chosen {
+			note = append(note, profile+" runs it")
 		}
 		if m.About != "" {
 			note = append(note, m.About)
@@ -239,7 +265,7 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 	if err := up(nil); err != nil {
 		return err
 	}
-	st, err := localStatus(p.Socket())
+	st, err := localStatus(p.Socket(), false)
 	if err != nil {
 		return err
 	}
