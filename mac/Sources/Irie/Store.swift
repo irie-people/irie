@@ -238,7 +238,13 @@ final class Store: ObservableObject {
         switch f.t {
         case "snapshot":
             let rows = (f.sessions ?? []).sorted(by: Self.before)
-            guard rows != sessions else { return }
+            guard rows != sessions else {
+                // Nothing to draw again, but a core that restarted, whose
+                // first snapshot is mostly the same rows, is asked again
+                // for the split beside its teammates.
+                keepSplit()
+                return
+            }
             sessions = rows
         case "upsert":
             guard let s = f.session else { return }

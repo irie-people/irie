@@ -91,6 +91,9 @@ func (c *Core) background() {
 	for _, x := range c.sessions {
 		p := c.snap.Pane(x.pane)
 		if p == nil || p.Dead || p.PID <= 1 {
+			// No process to move: what Irie put in the background from its
+			// tree is let go below once it ends or leaves.
+			x.demoted, x.leftover = false, false
 			continue
 		}
 		want := x.track.priority == 0 && (promoted || yielding && !c.onShow(x))
