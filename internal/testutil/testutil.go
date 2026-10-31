@@ -99,6 +99,13 @@ func BuildFakeOllama(t testing.TB) string {
 	return buildOnce(t, "github.com/irie-people/irie/internal/testutil/fakeollama", "fakeollama")
 }
 
+// BuildFakeLlama builds the stand-in for llama.cpp's llama-server once per
+// test binary and returns its path.
+func BuildFakeLlama(t testing.TB) string {
+	t.Helper()
+	return buildOnce(t, "github.com/irie-people/irie/internal/testutil/fakellama", "llama-server")
+}
+
 // BuildOldHost builds the stand-in for `irie host` as it was before freeze
 // once per test binary and returns its path.
 func BuildOldHost(t testing.TB) string {

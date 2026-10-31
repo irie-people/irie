@@ -65,8 +65,18 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if got := c.Profiles["haiku"]; !reflect.DeepEqual(got, wantHaiku) {
 		t.Errorf("profiles.haiku = %+v, want %+v", got, wantHaiku)
 	}
-	if len(c.Profiles) != 4 {
-		t.Errorf("default profiles = %v, want claude, sonnet, haiku and local", c.Profiles)
+	wantBig := Profile{
+		Harness: "claude-code",
+		Command: "claude",
+		Args:    []string{},
+		Env:     map[string]string{},
+		Local:   &LocalModel{Runtime: "llama-server", MinContext: 65536, Enforce: true},
+	}
+	if got := c.Profiles["big"]; !reflect.DeepEqual(got, wantBig) {
+		t.Errorf("profiles.big = %+v, want %+v", got, wantBig)
+	}
+	if len(c.Profiles) != 5 {
+		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local and big", c.Profiles)
 	}
 	r := c.Route
 	if !reflect.DeepEqual(r.Profiles, []string{"local", "haiku", "sonnet", "claude"}) || r.MinAccuracy != 0.85 || r.PriorWeight != 10 ||
@@ -79,7 +89,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if len(r.Words.Small) == 0 || len(r.Words.Hard) == 0 {
 		t.Errorf("route words = %+v", r.Words)
 	}
-	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}}); !reflect.DeepEqual(c.Local, want) {
+	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}}); !reflect.DeepEqual(c.Local, want) {
 		t.Errorf("local = %+v, want %+v", c.Local, want)
 	}
 	if want := (Usage{StatusLine: true}); c.Usage != want {
@@ -177,6 +187,10 @@ context = 131072
 kv_cache = "q4_0"
 memory_gib = 24
 env = { OLLAMA_MODELS = "/home/alice/models" }
+llama_server = "/home/alice/llama/llama-server"
+llama_port = 11600
+llama_args = ["--cpu-moe"]
+models = "~/gguf"
 
 [repos]
 roots = ["~/code", "/home/alice/src"]
@@ -253,7 +267,8 @@ land = { web = "live", "~/code/api" = "main" }
 	if got := c.Profiles["small"]; !reflect.DeepEqual(got, wantSmall) {
 		t.Errorf("profiles.small = %+v, want %+v", got, wantSmall)
 	}
-	wantLocal := Local{Ollama: "/home/alice/bin/ollama", Port: 11500, Context: 131072, KVCache: "q4_0", MemoryGiB: 24, Env: map[string]string{"OLLAMA_MODELS": "/home/alice/models"}}
+	wantLocal := Local{Ollama: "/home/alice/bin/ollama", Port: 11500, Context: 131072, KVCache: "q4_0", MemoryGiB: 24, Env: map[string]string{"OLLAMA_MODELS": "/home/alice/models"},
+		LlamaServer: "/home/alice/llama/llama-server", LlamaPort: 11600, LlamaArgs: []string{"--cpu-moe"}, Models: "~/gguf"}
 	if !reflect.DeepEqual(c.Local, wantLocal) {
 		t.Errorf("local = %+v, want %+v", c.Local, wantLocal)
 	}
@@ -448,6 +463,13 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[local]\nkv_cache = \"q2\"\n", "local.kv_cache"},
 		{"[local]\nmemory_gib = -1\n", "local.memory_gib"},
 		{"[local.env]\nOLLAMA_HOST = \"0.0.0.0:1\"\n", "OLLAMA_HOST"},
+		{"[local]\nllama_port = 11435\n", "local.llama_port"},
+		{"[local]\nllama_port = 0\n", "local.llama_port"},
+		{"[local]\nllama_server = \"llama-server\"\n", "local.llama_server"},
+		{"[local]\nmodels = \"gguf\"\n", "local.models"},
+		{"[local]\nllama_args = [\"--port\", \"1\"]\n", "--port is Irie's to set"},
+		{"[local]\nllama_args = [\"-c=4096\"]\n", "-c is Irie's to set"},
+		{"[profiles.big]\nlocal = { runtime = \"llama-server\", min_context = 200000 }\n", "above local.context"},
 		{"[profiles.auto]\nmodel = \"x\"\n", "auto is Irie's router"},
 		{"[route]\nprofiles = [\"nope\"]\n", "route.profiles: \"nope\" is not a profile"},
 		{"[profiles.mine]\nmodel = \"x\"\n\n[route]\nprofiles = [\"mine\"]\n", "needs route.accuracy.mine"},

@@ -125,8 +125,11 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 		if model == "" {
 			model = chosen
 		}
+		if isLlama(p) {
+			return c.llamaNote(name, p)
+		}
 		if model == "" {
-			model = bestModel(models)
+			model = bestBy(models, localmodel.Rank)
 		}
 		cost := "local, $0"
 		if p.Cost != "" {

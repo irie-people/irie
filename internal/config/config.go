@@ -137,13 +137,16 @@ type Profile struct {
 // LocalModel is how a profile runs on a local model (DESIGN §6.1). With no
 // model of its own, the profile runs the one `irie setup local` chose.
 type LocalModel struct {
-	Runtime    string `toml:"runtime"`     // ollama
+	Runtime    string `toml:"runtime"`     // ollama | llama-server
 	MinContext int    `toml:"min_context"` // a spawn is refused below this context, in tokens
 	Enforce    bool   `toml:"enforce"`     // false: spawn anyway, with a warning, when the context or memory is short
 }
 
 // DefaultMinContext is Ollama's guidance for coding agents: 64k tokens.
 const DefaultMinContext = 65536
+
+// Runtimes are the servers a local profile may run on (DESIGN §6.1, §6.5).
+var Runtimes = []string{"ollama", "llama-server"}
 
 // Local is the Ollama server local profiles run on (DESIGN §6.3): Irie's
 // own, which it runs in its tmux server with the settings below, or one the
@@ -156,6 +159,13 @@ type Local struct {
 	KVCache   string            `toml:"kv_cache"`   // its context cache type (OLLAMA_KV_CACHE_TYPE): f16, q8_0 or q4_0
 	MemoryGiB int               `toml:"memory_gib"` // the most memory local models may take; 0 = two thirds of the machine's
 	Env       map[string]string `toml:"env"`        // more settings for its server, such as OLLAMA_MODELS
+
+	// Irie's own llama-server, for profiles with runtime = "llama-server"
+	// (DESIGN §6.5). It takes local.context and local.kv_cache too.
+	LlamaServer string   `toml:"llama_server"` // the llama-server binary, any llama.cpp build; "" = PATH, then Homebrew's
+	LlamaPort   int      `toml:"llama_port"`   // it listens on 127.0.0.1 at this port
+	LlamaArgs   []string `toml:"llama_args"`   // more arguments for it, such as a build's own
+	Models      string   `toml:"models"`       // a folder of GGUF files it may run besides Ollama's models; "" = $XDG_DATA_HOME/irie/models
 }
 
 // KV cache types Ollama offers (DESIGN §6.3).
@@ -271,8 +281,15 @@ func Default() Config {
 				Env:     map[string]string{},
 				Local:   &LocalModel{Runtime: "ollama", MinContext: DefaultMinContext, Enforce: true},
 			},
+			"big": {
+				Harness: "claude-code",
+				Command: "claude",
+				Args:    []string{},
+				Env:     map[string]string{},
+				Local:   &LocalModel{Runtime: "llama-server", MinContext: DefaultMinContext, Enforce: true},
+			},
 		},
-		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}},
+		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}},
 		Route: DefaultRoute(),
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
@@ -591,13 +608,13 @@ func (c Config) Validate() error {
 		}
 		if l := p.Local; l != nil {
 			switch {
-			case l.Runtime != "ollama":
-				bad("profiles.%s.local.runtime = %q: must be ollama", name, l.Runtime)
+			case !slices.Contains(Runtimes, l.Runtime):
+				bad("profiles.%s.local.runtime = %q: must be one of %s", name, l.Runtime, strings.Join(Runtimes, ", "))
 			case p.Harness != "claude-code":
 				bad("profiles.%s.local: only the claude-code harness runs on a local model yet", name)
 			case l.MinContext < 1:
 				bad("profiles.%s.local.min_context = %d: must be positive", name, l.MinContext)
-			case c.Local.URL == "" && l.MinContext > c.Local.Context:
+			case (c.Local.URL == "" || l.Runtime == "llama-server") && l.MinContext > c.Local.Context:
 				bad("profiles.%s.local.min_context = %d is above local.context = %d, so Irie's own server could never run it", name, l.MinContext, c.Local.Context)
 			}
 		}
@@ -623,6 +640,22 @@ func (c Config) Validate() error {
 	}
 	if c.Local.Port < 1 || c.Local.Port > 65535 {
 		bad("local.port = %d: must be a TCP port", c.Local.Port)
+	}
+	if c.Local.LlamaPort < 1 || c.Local.LlamaPort > 65535 || c.Local.LlamaPort == c.Local.Port {
+		bad("local.llama_port = %d: must be a TCP port other than local.port", c.Local.LlamaPort)
+	}
+	if c.Local.LlamaServer != "" && !filepath.IsAbs(c.Local.LlamaServer) {
+		bad("local.llama_server = %q: must be an absolute path", c.Local.LlamaServer)
+	}
+	if c.Local.Models != "" && !pathLike(c.Local.Models) {
+		bad("local.models = %q: must be a path", c.Local.Models)
+	}
+	for _, a := range c.Local.LlamaArgs {
+		for _, own := range []string{"-m", "--model", "--host", "--port", "-c", "--ctx-size", "-np", "--parallel", "--alias", "-a"} {
+			if a == own || strings.HasPrefix(a, own+"=") {
+				bad("local.llama_args: %s is Irie's to set; use local.models, local.llama_port or local.context", own)
+			}
+		}
 	}
 	if c.Local.Context < 2048 {
 		bad("local.context = %d: must be at least 2048 tokens", c.Local.Context)

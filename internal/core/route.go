@@ -206,6 +206,9 @@ func onPlan(p config.Profile) bool {
 // Ollama server runs, the profile has a model, and the machine can hold it.
 // With probe, it starts the server when it must; else it says so.
 func (c *Core) localReady(name string, p config.Profile, probe bool) (need, budget int64, note string, ok bool) {
+	if isLlama(p) {
+		return c.llamaReady(name, p)
+	}
 	o, own, err := c.ollama(probe)
 	if err != nil {
 		if err == errLocalDown {
