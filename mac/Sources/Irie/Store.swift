@@ -71,8 +71,8 @@ final class Store: ObservableObject {
     /// Whether a task is starting. The task bar takes the next one
     /// meanwhile, so several may be on their way.
     @Published private(set) var spawning = false
-    private var starting = 0 {
-        didSet { spawning = starting > 0 }
+    private var tasksStarting = 0 {
+        didSet { spawning = tasksStarting > 0 }
     }
     /// The session whose name its card has open to edit, and the name as
     /// typed so far.
@@ -647,8 +647,8 @@ final class Store: ObservableObject {
     }
 
     private func send(_ args: InputArgs) async -> Bool {
-        starting += 1
-        defer { starting -= 1 }
+        tasksStarting += 1
+        defer { tasksStarting -= 1 }
         do {
             // A task in a repo may make a worktree and check out submodules
             // first; one added to a task still starting waits for it.
