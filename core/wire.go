@@ -158,6 +158,7 @@ const (
 	OpDog             = ipc.OpDog
 	OpConfig          = ipc.OpConfig
 	OpTrod            = ipc.OpTrod
+	OpReady           = ipc.OpReady
 	FeatureSpawnModel = ipc.FeatureSpawnModel
 	FeatureWatch      = ipc.FeatureWatch
 	ViewApp           = ipc.ViewApp
@@ -195,6 +196,7 @@ const (
 	Bad               = ipc.Bad
 	ToolSetup         = ipc.ToolSetup
 	ToolModels        = ipc.ToolModels
+	ToolReady         = ipc.ToolReady
 	FrameSnapshot     = ipc.FrameSnapshot
 	FrameUpsert       = ipc.FrameUpsert
 	FrameRemove       = ipc.FrameRemove

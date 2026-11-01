@@ -49,7 +49,9 @@
 // resume and idles at once.
 //
 // `fakeagent agents --json` lists no sessions, as `claude agents --json`
-// does on a machine with none outside Irie. The log's first line records
+// does on a machine with none outside Irie. `fakeagent auth status --json`
+// says it is signed in, as Claude Code does, unless IRIE_FAKE_SIGNED_OUT
+// is set. The log's first line records
 // the agent's argv, pid and the names, not the values, of its environment;
 // each SIGHUP, SIGTERM or SIGINT it gets is logged too.
 //
@@ -190,6 +192,14 @@ Options:
 `
 
 func run(args []string) int {
+	if len(args) > 1 && args[0] == "auth" && args[1] == "status" {
+		if os.Getenv("IRIE_FAKE_SIGNED_OUT") != "" {
+			fmt.Println(`{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}`)
+			return 1
+		}
+		fmt.Println(`{"loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty", "email": "alice@example.com"}`)
+		return 0
+	}
 	if len(args) > 0 && args[0] == "agents" {
 		if !slices.Contains(args[1:], "--json") {
 			fmt.Fprintln(os.Stderr, "fakeagent: agents needs --json")
