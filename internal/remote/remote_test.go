@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -513,5 +514,20 @@ func TestAForgottenPhonesStreamEnds(t *testing.T) {
 	case <-ended:
 	case <-time.After(3 * time.Second):
 		t.Error("a forgotten phone's stream went on")
+	}
+}
+
+func TestPairLinkCarriesWhatTheAppPins(t *testing.T) {
+	link := PairLink("https://studio.local:7387", "482913", strings.Repeat("AB", 32), "Alice's Mac")
+	u, err := url.Parse(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	if u.Scheme != "irie" || u.Host != "pair" || q.Get("u") != "https://studio.local:7387" || q.Get("c") != "482913" || len(q.Get("f")) != 64 || q.Get("n") != "Alice's Mac" {
+		t.Errorf("link %q parses as %v %v", link, u, q)
+	}
+	if _, err := QR(link); err != nil {
+		t.Errorf("the link doesn't fit a QR code: %v", err)
 	}
 }

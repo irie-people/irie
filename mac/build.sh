@@ -10,6 +10,7 @@
 # way); without it the app uses SwiftTerm alone. The icon is drawn in Go.
 # IRIE_MAC_NO_SWIFTTERM=1 builds with Apple's frameworks only; the terminal
 # then opens in Ghostty. IRIE_MAC_NO_GHOSTTY=1 leaves GhosttyKit out.
+# IRIE_SIGN_IDENTITY signs it with your own identity (below).
 set -eu
 cd "$(dirname "$0")"
 
@@ -93,5 +94,18 @@ rm -rf build/Irie.iconset
 go run ../tools/mkicon build/Irie.iconset
 iconutil -c icns -o "$app/Contents/Resources/Irie.icns" build/Irie.iconset
 rm -rf build/Irie.iconset
-codesign --force --sign - "$app" 2>/dev/null
+# Signed ad hoc, which runs on this Mac only, unless IRIE_SIGN_IDENTITY
+# names a code signing identity in the keychain: "Apple Development: …",
+# which Xcode makes once you sign in with your Apple ID, or "Developer ID
+# Application: …", the paid program's, for other Macs. A Developer ID build
+# takes the hardened runtime and a secure timestamp from Apple, as
+# notarization wants. A new identity is a new app to macOS's privacy
+# settings, which ask again for what they had allowed.
+# `git config irie.sign "<identity>"` keeps the choice for every install.
+identity=${IRIE_SIGN_IDENTITY:-$(git config --get irie.sign 2>/dev/null || echo -)}
+case "$identity" in
+-) codesign --force --sign - "$app" 2>/dev/null ;;
+"Developer ID"*) codesign --force --options runtime --timestamp --sign "$identity" "$app" ;;
+*) codesign --force --sign "$identity" "$app" ;;
+esac
 echo "built $(pwd)/$app"
