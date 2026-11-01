@@ -30,6 +30,11 @@ app's gateway: irie remote on, there.
                           the same, running irie remote pair --link on HOST
                           over ssh (PATH: ~/.local/share/irie/bin/irie)
   irie peer list          the machines this one is paired with, and how each is
+  irie peer fetch [SESSION]
+                          fetch the branch of another machine's session, or
+                          of each whose turn ended, into the repo of the same
+                          name here, as <machine>/<branch> (Irie does this by
+                          itself when a turn ends)
   irie peer remove NAME   unpair one
 `
 
@@ -109,7 +114,7 @@ func peerCmd(args []string) error {
 		if err != nil {
 			return fmt.Errorf("pairing with %s: %w", name, err)
 		}
-		if err := peer.Save(p.State, name, peer.Peer{URL: link.URL, Token: token, Fingerprint: link.Fingerprint, Machine: info.ID, Paired: time.Now().UTC()}); err != nil {
+		if err := peer.Save(p.State, name, peer.Peer{URL: link.URL, Token: token, Fingerprint: link.Fingerprint, Machine: info.ID, SSH: *ssh, Paired: time.Now().UTC()}); err != nil {
 			return err
 		}
 		fmt.Printf("Paired with %s (%s, %s, Irie %s).\n", name, link.URL, info.OS, info.Version)
@@ -152,6 +157,31 @@ func peerCmd(args []string) error {
 			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\t%s\n", i.Name, state, i.Sessions, load, mem, takes, i.URL)
 		}
 		return w.Flush()
+	case "fetch":
+		what := "all"
+		switch len(args) {
+		case 0:
+		case 1:
+			what = args[0]
+		default:
+			return errors.New("usage: irie peer fetch [SESSION]")
+		}
+		var res ipc.PeersResult
+		if err := ipc.Call(p.Socket(), 10*time.Minute, ipc.OpPeers, ipc.PeersArgs{Fetch: what}, &res); err != nil {
+			return err
+		}
+		if len(res.Fetched) == 0 {
+			fmt.Println("Nothing to fetch: no session of another machine's has ended with a branch.")
+			return nil
+		}
+		for _, f := range res.Fetched {
+			if f.Problem != "" {
+				fmt.Printf("%s: %s\n", f.Session, f.Problem)
+			} else {
+				fmt.Printf("%s: fetched as %s (%.12s)\n", f.Session, f.Ref, f.Head)
+			}
+		}
+		return nil
 	case "remove":
 		if len(args) != 1 {
 			return errors.New("usage: irie peer remove NAME")

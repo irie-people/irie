@@ -44,10 +44,13 @@ type peerState struct {
 	client  *peer.Client
 	rows    map[string]ipc.Session // by the peer's own id
 	header  *ipc.Header
-	placed  []time.Time // when the balancer last put tasks there (place.go)
-	up      bool        // its stream runs and sent its snapshot
-	since   time.Time   // when it came up or went down
-	problem string      // why it is down
+	placed  []time.Time        // when the balancer last put tasks there (place.go)
+	fetchq  chan ipc.Session   // rows whose work is to be fetched (fetch.go)
+	done    map[string]bool    // rows whose ended turn was queued, by the peer's id
+	fetched map[string]fetched // what was fetched of each row
+	up      bool               // its stream runs and sent its snapshot
+	since   time.Time          // when it came up or went down
+	problem string             // why it is down
 	stop    context.CancelFunc
 }
 
@@ -75,7 +78,8 @@ func (c *Core) loadPeers() error {
 			continue
 		}
 		pc := conf[name]
-		p := &peerState{name: name, conf: pc, rows: map[string]ipc.Session{}, since: time.Now(), problem: "not reached yet"}
+		p := &peerState{name: name, conf: pc, rows: map[string]ipc.Session{}, since: time.Now(), problem: "not reached yet",
+			fetchq: make(chan ipc.Session, 64), done: map[string]bool{}, fetched: map[string]fetched{}}
 		cl, err := peer.New(pc.URL, pc.Token, pc.Fingerprint)
 		if err != nil {
 			p.problem = err.Error()
@@ -89,6 +93,7 @@ func (c *Core) loadPeers() error {
 		c.peers[name] = p
 		start = append(start, p)
 		go c.followPeer(ctx, p)
+		go c.fetchLoop(p, ctx.Done())
 	}
 	frames := c.changes()
 	c.mu.Unlock()
@@ -145,7 +150,9 @@ func (c *Core) streamPeer(ctx context.Context, p *peerState) (bool, error) {
 			if f.T == ipc.FrameSnapshot {
 				ran = true
 			}
-			c.peerFrame(p, f)
+			if err := c.safePeerFrame(p, f); err != nil {
+				return ran, err
+			}
 		case <-quiet.C:
 			return ran, fmt.Errorf("no word from it for %v", peerQuiet)
 		case <-ctx.Done():
@@ -154,42 +161,82 @@ func (c *Core) streamPeer(ctx context.Context, p *peerState) (bool, error) {
 	}
 }
 
-// peerFrame takes in one frame of the peer's.
+// peerFrame takes in one frame of the peer's. A frame is another
+// machine's word, so none may stop this core: the lock is let go however
+// the frame is taken, and a frame that goes wrong ends the peer's stream
+// (streamPeer), which marks it down until it is followed again.
 func (c *Core) peerFrame(p *peerState, f ipc.Frame) {
-	c.mu.Lock()
-	if c.peers[p.name] != p {
-		c.mu.Unlock()
+	frames, header, ok := c.takePeerFrame(p, f)
+	if !ok {
 		return
+	}
+	c.publish(frames)
+	if header {
+		c.publishHeader()
+	}
+}
+
+// takePeerFrame changes what the core knows of p by f, and returns the
+// frames for this core's subscribers, and whether the header changed too.
+func (c *Core) takePeerFrame(p *peerState, f ipc.Frame) (frames []ipc.Frame, header, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.peers[p.name] != p {
+		return nil, false, false
 	}
 	switch f.T {
 	case ipc.FrameSnapshot:
 		p.rows = make(map[string]ipc.Session, len(f.Sessions))
 		for _, s := range f.Sessions {
+			if s.ID == "" {
+				continue
+			}
 			p.rows[s.ID] = s
+			c.queueFetch(p, s, nil)
 		}
-		p.header = f.Header
+		if f.Header != nil {
+			p.header = f.Header
+		} else if p.header == nil {
+			p.header = &ipc.Header{}
+		}
 		if !p.up {
 			p.up, p.since, p.problem = true, time.Now(), ""
 			c.log.Info("peer: up", "peer", p.name, "sessions", len(f.Sessions))
 		}
+		header = true
 	case ipc.FrameUpsert:
-		if f.Session != nil {
-			p.rows[f.Session.ID] = *f.Session
+		if f.Session == nil || f.Session.ID == "" {
+			return nil, false, false
 		}
+		var was *ipc.Session
+		if old, ok := p.rows[f.Session.ID]; ok {
+			was = &old
+		}
+		p.rows[f.Session.ID] = *f.Session
+		c.queueFetch(p, *f.Session, was)
 	case ipc.FrameRemove:
 		delete(p.rows, f.ID)
 	case ipc.FrameHeader:
-		p.header = f.Header
+		if f.Header == nil {
+			return nil, false, false
+		}
+		p.header, header = f.Header, true
 	default:
-		c.mu.Unlock()
-		return
+		return nil, false, false
 	}
-	frames := c.changes()
-	c.mu.Unlock()
-	c.publish(frames)
-	if f.T != ipc.FrameUpsert && f.T != ipc.FrameRemove {
-		c.publishHeader()
-	}
+	return c.changes(), header, true
+}
+
+// safePeerFrame is peerFrame, with a frame that goes wrong as an error.
+func (c *Core) safePeerFrame(p *peerState, f ipc.Frame) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.Error("peer: a frame went wrong", "peer", p.name, "frame", f.T, "panic", r)
+			err = fmt.Errorf("a frame of its went wrong here: %v", r)
+		}
+	}()
+	c.peerFrame(p, f)
+	return nil
 }
 
 // peerDown marks a peer gone, with why. Its rows stay, marked.
@@ -248,6 +295,9 @@ func (c *Core) peerRows(from int) []ipc.Session {
 				where = name + " isn't answering"
 			}
 			s.Detail = hostDetail(where, s)
+			if note := p.fetchNote(strings.TrimPrefix(s.ID, name+"/")); note != "" {
+				s.Detail += " · " + note
+			}
 			s.Pane = ""
 			s.Shown = drawn && c.selected == s.ID
 			s.Order = from + len(out)
@@ -281,7 +331,7 @@ func (c *Core) peersInfo() []ipc.PeerInfo {
 			i.Refuses = "it isn't answering"
 		default:
 			i.Refuses = c.hooksDiffer(p)
-			if m := p.header.Machine; i.Refuses == "" && m != nil && m.Claude != "ok" {
+			if i.Refuses == "" && p.header != nil && p.header.Machine != nil && p.header.Machine.Claude != "ok" {
 				i.Refuses = "Claude Code isn't signed in there (claude auth login, there)"
 			}
 		}
@@ -297,9 +347,13 @@ func (c *Core) peersOp(a ipc.PeersArgs) (ipc.PeersResult, error) {
 			return ipc.PeersResult{}, err
 		}
 	}
+	var got []ipc.PeerFetch
+	if a.Fetch != "" {
+		got = c.fetchNow(a.Fetch)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return ipc.PeersResult{Name: c.machineName(), Peers: c.peersInfo()}, nil
+	return ipc.PeersResult{Name: c.machineName(), Peers: c.peersInfo(), Fetched: got}, nil
 }
 
 // splitPeerID splits a peer's row id, name/id, when name is a peer's.

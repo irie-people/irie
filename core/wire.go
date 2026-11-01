@@ -30,6 +30,7 @@ type (
 	MoveResult       = ipc.MoveResult
 	PeersArgs        = ipc.PeersArgs
 	PeersResult      = ipc.PeersResult
+	PeerFetch        = ipc.PeerFetch
 	PeerInfo         = ipc.PeerInfo
 	Machine          = ipc.Machine
 	Session          = ipc.Session
