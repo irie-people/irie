@@ -39,10 +39,19 @@ type Config struct {
 	Journal  Journal            `toml:"journal"`
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
+	Skills   Skills             `toml:"skills"`
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
 	Remote   Remote             `toml:"remote"`
 	Env      Env                `toml:"env"`
+}
+
+// Skills are the skills that come with Irie (docs/proposals/skills.md):
+// Claude Code sessions get them as a plugin named irie, for that session
+// only, and run them as /irie:<name>.
+type Skills struct {
+	Enabled  bool     `toml:"enabled"`  // false = hand agents no skills
+	Disabled []string `toml:"disabled"` // skills to leave out, such as ["present"]
 }
 
 // Env is the environment of a server that the Mac app starts (DESIGN §7.2).
@@ -166,10 +175,14 @@ type Profile struct {
 	PermissionMode string            `toml:"permission_mode"`
 	Args           []string          `toml:"args"`
 	Env            map[string]string `toml:"env"`
-	Task           string            `toml:"task"`  // how a generic agent gets its task: arg | paste; "" = arg
-	Local          *LocalModel       `toml:"local"` // the agent runs on a model of a local runtime
-	Cost           string            `toml:"cost"`  // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
+	Task           string            `toml:"task"`   // how a generic agent gets its task: arg | paste; "" = arg
+	Local          *LocalModel       `toml:"local"`  // the agent runs on a model of a local runtime
+	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
+	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 }
+
+// TakesSkills reports whether the profile's sessions get Irie's skills.
+func (p Profile) TakesSkills() bool { return p.Skills == nil || *p.Skills }
 
 // LocalModel is how a profile runs on a local model (DESIGN §6.1). With no
 // model of its own, the profile runs the one `irie setup local` chose.
@@ -428,6 +441,7 @@ func Default() Config {
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
+		Skills:  Skills{Enabled: true, Disabled: []string{}},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
 		Env:     Env{Capture: "login-shell"},
 		Trod: Trod{
@@ -532,11 +546,12 @@ func Parse(data []byte, path string) (Config, error) {
 		Journal  *Journal                  `toml:"journal"`
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
+		Skills   *Skills                   `toml:"skills"`
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
 		Remote   *Remote                   `toml:"remote"`
 		Env      *Env                      `toml:"env"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Env: &c.Env}
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Env: &c.Env}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -583,6 +598,9 @@ func Parse(data []byte, path string) (Config, error) {
 	if c.Dog.Land == nil {
 		c.Dog.Land = map[string]string{}
 	}
+	if c.Skills.Disabled == nil {
+		c.Skills.Disabled = []string{}
+	}
 	if c.Trod.Rules == nil {
 		c.Trod.Rules = []string{}
 	}
@@ -608,6 +626,7 @@ var (
 	tmuxKey     = regexp.MustCompile(`^[!-~]+$`) // printable, no spaces
 	repoName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	branchChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+	skillName   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`) // the Agent Skills spec's names
 )
 
 // hasPrior reports whether a route profile has an accuracy for every class
@@ -858,6 +877,11 @@ func (c Config) Validate() error {
 	}
 	if c.Hold.Max <= 0 {
 		bad("hold.max = %v: must be positive", c.Hold.Max)
+	}
+	for _, n := range c.Skills.Disabled {
+		if !skillName.MatchString(n) || len(n) > 64 {
+			bad("skills.disabled: %q is not a skill's name: lowercase letters, digits and single hyphens, at most 64", n)
+		}
 	}
 	if c.Dog.Nudges < 0 {
 		bad("dog.nudges = %d: must not be negative", c.Dog.Nudges)
