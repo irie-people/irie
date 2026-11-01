@@ -61,9 +61,9 @@ func (c *Core) freezeOp(a ipc.FreezeArgs, on bool) (ipc.FreezeResult, error) {
 		x := c.sessions[id]
 		var err1 error
 		if on {
-			err1 = c.freezeLocked(x)
+			err1 = c.freezeLocked(x, "")
 		} else {
-			err1 = c.thawLocked(x)
+			err1 = c.thawLocked(x, "")
 		}
 		if err1 != nil {
 			c.log.Warn("freeze", "session", id, "on", on, "err", err1)
@@ -104,8 +104,10 @@ func (c *Core) freezeTargets(a ipc.FreezeArgs, on bool) ([]string, error) {
 }
 
 // freezeLocked stops session x's process tree. Freezing a frozen session
-// again stops what runs in it that started since. The caller holds c.mu.
-func (c *Core) freezeLocked(x *session) error {
+// again stops what runs in it that started since. why is "" for the
+// user's own freeze; the trod bot gives its reason (trod.go). The caller
+// holds c.mu.
+func (c *Core) freezeLocked(x *session, why string) error {
 	if st := x.track.state(x.dead); st == ipc.StateExited || st == ipc.StateFailed {
 		return ipc.Errorf(ipc.CodeBusy, "%s has ended, so there is nothing to freeze", x.name)
 	}
@@ -137,9 +139,13 @@ func (c *Core) freezeLocked(x *session) error {
 	for _, s := range stopped {
 		pids = append(pids, s.PID)
 	}
-	c.record(x, event.Event{TS: event.Stamp(now), Source: event.SourceUser, Kind: event.FreezeOn, Data: map[string]any{
+	on := event.Event{TS: event.Stamp(now), Source: event.SourceUser, Kind: event.FreezeOn, Data: map[string]any{
 		"whole": whole, "pids": pids, "mark": t.Newest(), "working": x.track.live() == ipc.StateWorking,
-	}})
+	}}
+	if why != "" {
+		on.Source, on.Data["by"], on.Data["reason"] = event.SourceIrie, trodBy, why
+	}
+	c.record(x, on)
 	x.note = ""
 	// Keys typed meanwhile would reach the agent all at once at the thaw.
 	if _, err := c.tmux.Run("select-pane", "-d", "-t", x.pane); err != nil {
@@ -150,8 +156,9 @@ func (c *Core) freezeLocked(x *session) error {
 }
 
 // thawLocked continues session x's process tree. Thawing a session that is
-// not frozen continues whatever in it is stopped. The caller holds c.mu.
-func (c *Core) thawLocked(x *session) error {
+// not frozen continues whatever in it is stopped. why is "" for the user's
+// own thaw, as for freezeLocked. The caller holds c.mu.
+func (c *Core) thawLocked(x *session, why string) error {
 	if p := c.snap.Pane(x.pane); p != nil && !p.Dead && p.PID > 1 {
 		if err := continueTree(p.PID); err != nil {
 			return err
@@ -169,9 +176,13 @@ func (c *Core) thawLocked(x *session) error {
 	}
 	now := time.Now().UTC()
 	from := f.Time()
-	c.record(x, event.Event{TS: event.Stamp(now), Source: event.SourceUser, Kind: event.FreezeOff, Data: map[string]any{
+	off := event.Event{TS: event.Stamp(now), Source: event.SourceUser, Kind: event.FreezeOff, Data: map[string]any{
 		"frozen_ms": now.Sub(from).Milliseconds(),
-	}})
+	}}
+	if why != "" {
+		off.Source, off.Data["by"], off.Data["reason"] = event.SourceIrie, trodBy, why
+	}
+	c.record(x, off)
 	if working, _ := f.Data["working"].(bool); working {
 		x.note = fmt.Sprintf(frozenNote, now.Sub(from).Round(time.Second), from.Format("15:04:05"), now.Format("15:04:05"))
 	}

@@ -60,6 +60,9 @@ final class Store: ObservableObject {
     /// itself, so the title bar keeps no To verify count, and the review dock
     /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
+    /// The trod bot, from the core, while it is within its hours; the title
+    /// bar shows it (Counts).
+    @Published private(set) var trod: TrodShift?
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
@@ -201,6 +204,11 @@ final class Store: ObservableObject {
         }
         if let s = f.header?.helperStyle, s != helperStyle {
             helperStyle = s
+        }
+        // Each header frame is the whole header: one without the bot is
+        // one out of its hours.
+        if let h = f.header, h.trod != trod {
+            trod = h.trod
         }
         switch f.t {
         case "snapshot":
