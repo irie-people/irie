@@ -10,7 +10,8 @@ Run them as `"$IRIE_BIN" dms …`. Every Irie session has `IRIE_BIN`. They keep 
 | `dms ping` | Checks in from this computer | You, to test; the user, any time |
 | `dms pause`, `dms resume` | Pauses both checks so nobody is emailed, or starts them again. A check-in also starts them again | The user decides; you may run it when they ask |
 | `dms calendar --out FILE [--first YYYY-MM-DD] [--at HH:MM] [--review YYYY-MM-DD]` | Writes the calendar file: a check-in reminder every period, and a yearly review | You |
-| `dms shortcut --out FILE` | Writes the iPhone shortcut that checks in to both checks (`phone.md`) | You |
+| `dms shortcut --out FILE` | Writes the iPhone shortcut that checks in to both checks, signed on this Mac (`phone.md`) | You |
+| `dms contact --out FILE` | Writes the "I'm OK" contact card for any phone, with a link that emails both checks (`phone.md`) | You |
 
 ## The order
 
