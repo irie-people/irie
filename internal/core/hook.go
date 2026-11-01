@@ -53,8 +53,12 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		trod = c.trodAtHook(a.Session, evs)
 	}
 	// And the arch agents' word to a session or subagent that starts
-	// (arch.go).
+	// (arch.go), and Gabriel's guard of the user's focus (gabriel.go).
 	word := c.archWord(a.Session, evs)
+	focusDeny := ""
+	if trod.how != trodAtAsk {
+		focusDeny = c.focusGuard(a.Session, call.Tool, call.Input, evs)
+	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
@@ -83,6 +87,10 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			reply.Unfinished = trod.note
 		case trod.how == trodAtAsk && e.Kind == event.ToolStarted && e.Str("tool") == "AskUserQuestion":
 			// The question is turned away, so its call never runs.
+			continue
+		case focusDeny != "" && e.Kind == event.ToolStarted:
+			// Gabriel turns the call away, so it never runs.
+			reply.Deny = focusDeny
 			continue
 		case trod.how == trodAtAsk && e.Kind == event.InputNeeded && e.Str("reason") == event.ReasonQuestion:
 			e = trodEvent(e, trodAtAsk)

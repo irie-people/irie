@@ -8,11 +8,13 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/focus"
 	"github.com/irie-people/irie/internal/ipc"
@@ -201,6 +203,8 @@ func (c *Core) gabrielSweep() {
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
+	// A new Irie.app that waits for the user to look away (appswap.go).
+	c.swapApp()
 }
 
 // sessionRoots are the pids of the sessions' panes, whose trees are the
@@ -512,4 +516,105 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 		r.Apps = append(r.Apps, ipc.GabrielApp{PID: pid, Name: filepath.Base(o.Path), CPU: o.CPU})
 	}
 	return r
+}
+
+// focusNote is what an agent is told when Gabriel turns away a call that
+// would take the user's focus.
+const focusNote = "[Irie] Gabriel turned this call away: it would bring an app, a window or a page to the front while your user works on something else, and take their focus. Do it without the front: open -g (and --background for Irie.app), a browser headless (--headless=new keeps the profile and its logins) or new pages in the background with no bringToFront, a Mac view checked with Irie.app's --snapshot. If your user must see it, say so in a line and let them open it."
+
+var (
+	// shellSplit cuts a shell command at the places a new one starts.
+	shellSplit = regexp.MustCompile("[;&|\\n]+|\\$\\(|`")
+	// appActivates is AppleScript that brings an app forward or types into
+	// one.
+	appActivates = regexp.MustCompile(`(?i)\b(activate|reopen|keystroke|key code|open location)\b`)
+)
+
+// stealsFocus reports whether a shell command would bring an app, a window
+// or a page to the front: open(1) without -g or -j, AppleScript that
+// activates an app or types into it, or an app's own executable started
+// straight, short of a headless browser, Irie.app's --snapshot and
+// --background, and the like. It reads the command roughly, as a person
+// would, and errs toward letting it run.
+func stealsFocus(cmd string) bool {
+	for _, seg := range shellSplit.Split(cmd, -1) {
+		words := strings.Fields(seg)
+		for len(words) > 0 && (strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") || slices.Contains([]string{"sudo", "env", "nohup", "exec", "command", "time", "("}, words[0])) {
+			words = words[1:]
+		}
+		if len(words) == 0 {
+			continue
+		}
+		prog := strings.Trim(words[0], `"'`)
+		switch {
+		case prog == "open" || prog == "/usr/bin/open":
+			if openInFront(words[1:]) {
+				return true
+			}
+		case filepath.Base(prog) == "osascript":
+			if appActivates.MatchString(seg) {
+				return true
+			}
+		case strings.Contains(seg, ".app/Contents/MacOS/"):
+			quiet := []string{"--headless", "--snapshot", "--render-conversation", "--background", "--version", "--help"}
+			if !slices.ContainsFunc(quiet, func(q string) bool { return strings.Contains(seg, q) }) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// openInFront reports whether open(1) with args opens something in front:
+// it has something to open, and neither -g (in the background) nor -j
+// (hidden).
+func openInFront(args []string) bool {
+	target := false
+	for i := 0; i < len(args); i++ {
+		a := strings.Trim(args[i], `"'`)
+		switch {
+		case a == "--args":
+			return target
+		case a == "-a" || a == "-b" || a == "-s" || a == "--env" || a == "--stdin" || a == "--stdout" || a == "--stderr":
+			i++ // its value
+			if a == "-a" || a == "-b" {
+				target = true
+			}
+		case strings.HasPrefix(a, "--"):
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			if strings.ContainsAny(a[1:], "gj") {
+				return false
+			}
+		default:
+			target = true
+		}
+	}
+	return target
+}
+
+// focusGuard says what to tell the agent when a Bash call it is about to
+// make would take the user's focus while they look at something else: not
+// at the session that makes it, with Irie in front. "" lets the call run.
+// It holds no lock when it is called.
+func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Event) string {
+	g := c.cfg().Arch.Gabriel
+	if tool != "Bash" || !g.On || !g.Guard || gabrielOff() || !slices.ContainsFunc(evs, func(e event.Event) bool { return e.Kind == event.ToolStarted }) {
+		return ""
+	}
+	var in struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(input, &in) != nil || !stealsFocus(in.Command) {
+		return ""
+	}
+	// The user watching this very session may want what it opens.
+	if a, ok, err := focus.Front(); err == nil && ok && (a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)) {
+		c.mu.Lock()
+		watching := c.selected == id
+		c.mu.Unlock()
+		if watching {
+			return ""
+		}
+	}
+	return focusNote
 }

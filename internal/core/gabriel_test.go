@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
@@ -189,5 +190,84 @@ func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
 	}
 	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil {
 		t.Errorf("stopped, still until %v", r.BoostUntil)
+	}
+}
+
+func TestStealsFocus(t *testing.T) {
+	for cmd, want := range map[string]bool{
+		"open mac/build/Irie.app":                                true,
+		"open https://example.com":                               true,
+		"open -a Safari":                                         true,
+		"cd /tmp && open report.pdf":                             true,
+		"open -R build/out.txt":                                  true,
+		"FOO=1 open file.html":                                   true,
+		`osascript -e 'tell application "Messages" to activate'`: true,
+		`osascript -e 'tell application "System Events" to keystroke "v"'`:                                                   true,
+		`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir=/tmp/p --remote-debugging-port=9334`: true,
+		"mac/build/Irie.app/Contents/MacOS/Irie":                                                                             true,
+		"open -g mac/build/Irie.app --args --background":                                                                     false,
+		"open -gj -a Safari": false,
+		"open -j report.pdf": false,
+		"open":               false,
+		`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --user-data-dir=/tmp/p`: false,
+		"mac/build/Irie.app/Contents/MacOS/Irie --snapshot /tmp/shots":                                         false,
+		`osascript -e 'display notification "done"'`:                                                           false,
+		"go test ./... && git commit -m 'open the door'":                                                       false,
+		"opencode run":   false,
+		"grep -r open .": false,
+	} {
+		if got := stealsFocus(cmd); got != want {
+			t.Errorf("stealsFocus(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}
+
+func TestAppSwapWaitsUntilTheUserLooksAway(t *testing.T) {
+	dir := t.TempDir()
+	app := filepath.Join(dir, "Irie.app")
+	stamp := filepath.Join(dir, "app.commit")
+	write := func(p, s string) {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(s), 0o644)
+	}
+	write(filepath.Join(app, "build"), "old")
+	write(filepath.Join(app+".next", "build"), "new")
+	write(stamp, "aaa")
+	write(stamp+".next", "bbb")
+	front, idle := irieBundleID, time.Second
+	var opened []bool
+	s := appSwap{
+		app: app, stamp: stamp,
+		front:    func() (string, bool) { return front, true },
+		idle:     func() (time.Duration, bool) { return idle, true },
+		stop:     func() bool { return true },
+		open:     func(_ string, inFront bool) error { opened = append(opened, inFront); return nil },
+		register: func(string) {},
+	}
+	read := func(p string) string { b, _ := os.ReadFile(p); return string(b) }
+	// In use: in front, input a second ago. It waits.
+	if err := s.run(); err != nil || read(filepath.Join(app, "build")) != "old" || len(opened) != 0 {
+		t.Fatalf("swapped while in use: %v, %q, %v", err, read(filepath.Join(app, "build")), opened)
+	}
+	// Another app in front: it swaps, and opens behind it.
+	front = "com.google.Chrome"
+	if err := s.run(); err != nil {
+		t.Fatal(err)
+	}
+	if read(filepath.Join(app, "build")) != "new" || read(stamp) != "bbb" || !slices.Equal(opened, []bool{false}) {
+		t.Errorf("after the swap: %q, stamp %q, opened %v", read(filepath.Join(app, "build")), read(stamp), opened)
+	}
+	if _, err := os.Stat(app + ".next"); !os.IsNotExist(err) {
+		t.Error("the next build is still there")
+	}
+	// In front but the user away: it swaps and comes back in front.
+	write(filepath.Join(app+".next", "build"), "newer")
+	front, idle = irieBundleID, 5*time.Minute
+	if err := s.run(); err != nil || read(filepath.Join(app, "build")) != "newer" || !slices.Equal(opened, []bool{false, true}) {
+		t.Errorf("user away: %v, %q, %v", err, read(filepath.Join(app, "build")), opened)
+	}
+	// Nothing waits: nothing happens.
+	if err := s.run(); err != nil || len(opened) != 2 {
+		t.Errorf("with nothing waiting: %v, %v", err, opened)
 	}
 }

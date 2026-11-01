@@ -132,7 +132,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	}
 	if want := (Arch{
 		Mikael:  Mikael{On: true, Door: true, Good: []string{}},
-		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour},
+		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
@@ -791,7 +791,7 @@ func TestArchGabrielFromTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Gabriel{On: true, Outside: false, Away: 2 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: []string{"Xcode"}, Boost: time.Hour}); !reflect.DeepEqual(c.Arch.Gabriel, want) {
+	if want := (Gabriel{On: true, Outside: false, Away: 2 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: []string{"Xcode"}, Boost: time.Hour, Guard: true}); !reflect.DeepEqual(c.Arch.Gabriel, want) {
 		t.Errorf("arch.gabriel = %+v, want %+v", c.Arch.Gabriel, want)
 	}
 	for body, want := range map[string]string{

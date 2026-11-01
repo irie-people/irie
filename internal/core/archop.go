@@ -50,6 +50,7 @@ var archTable = map[string]archEntry{
 			{Key: "arch.gabriel.outside", Kind: ipc.ArchBool, Label: "Slow your heavy apps outside Irie too"},
 			{Key: "arch.gabriel.away", Kind: ipc.ArchDuration, Label: "You’re away after", Help: "With no keyboard or mouse this long, nothing is held back."},
 			{Key: "arch.gabriel.word", Kind: ipc.ArchDuration, Label: "A session you message stays in your focus for"},
+			{Key: "arch.gabriel.guard", Kind: ipc.ArchBool, Label: "Keep agents from taking your focus", Help: "An agent's call that would bring an app or a page to the front while you look elsewhere is turned away, and it is told how to do it in the background."},
 			{Key: "arch.gabriel.boost", Kind: ipc.ArchDuration, Label: "A boost lasts", Help: "Your focus first at once, busy or not; it changes only what runs first, never a clock or a fan."},
 			{Key: "arch.gabriel.heavy", Kind: ipc.ArchNumber, Label: "An app outside Irie is heavy from (percent of a CPU)"},
 			{Key: "arch.gabriel.spare", Kind: ipc.ArchLines, Label: "Apps Gabriel never slows", Help: "Calls, music, video and recording; an app that plays sound or holds a call is spared too."},

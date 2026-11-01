@@ -181,7 +181,25 @@ if [ -n "$gonew" ]; then
 fi
 
 pids=
+# While you use Irie.app (in front, with keyboard or mouse input in the last
+# minute) an install never pulls the window from under you: the new app
+# waits beside the old one, and the core swaps it in once another app is in
+# front or you step away (Gabriel, DESIGN §4.11).
+inuse=
+if [ -n "$newapp" ] && pgrep -x Irie >/dev/null &&
+	lsappinfo list 2>/dev/null | grep -q '"Irie" ASN:[^ ]* (in front)'; then
+	idle=$(ioreg -c IOHIDSystem -d 4 -k HIDIdleTime 2>/dev/null | awk '/HIDIdleTime/ {print int($NF / 1000000000); exit}')
+	if [ "${idle:-999}" -lt 60 ]; then inuse=1; fi
+fi
+if [ -n "$inuse" ]; then
+	rm -rf "$app.next"
+	ditto "$newapp" "$app.next"
+	echo "$head" >"$appstamp.next"
+	say "you are using Irie.app, so the new one waits beside it and swaps in once you look away"
+	newapp=
+fi
 if [ -n "$newapp" ]; then
+	rm -rf "$app.next" "$appstamp.next"
 	# The app keeps no state of its own (docs/MAC.md), so it is stopped, not
 	# asked to quit. Launch Services would bring back an Irie that is still
 	# running instead of starting the new one, so it waits for the exit.

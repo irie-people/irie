@@ -134,6 +134,7 @@ type Gabriel struct {
 	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
 	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
 	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
+	Guard   bool          `toml:"guard"`   // turn away an agent's call that would bring an app or a page to the front while you look elsewhere
 }
 
 // MaxBoost is the longest a boost may last, so none is ever forgotten.
@@ -628,7 +629,7 @@ func Default() Config {
 		},
 		Arch: Arch{
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
-			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour},
+			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 		},
 		Remote: Remote{Port: DefaultRemotePort},
 		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
