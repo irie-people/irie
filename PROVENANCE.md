@@ -304,6 +304,8 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-31 | https://brew.sh ; `xcode-select --help` (macOS 14, run locally) | Homebrew's install command, and `xcode-select -p` and `--install` for Apple's Command Line Tools: the fixes `irie setup` offers on a Mac without Homebrew, and the git check that never runs macOS's stub `/usr/bin/git` (DESIGN §2.7) |
 | 2026-10-31 | zsh(1) and env(1) (macOS 14, run locally) | `-l -i -c` runs the startup files of a login and interactive shell, and `env -0` prints the environment NUL-separated: `irie up --login-env` (internal/loginenv, DESIGN §7.2) |
 | 2026-11-01 | Terminal.app's Info.plist (macOS 14, read locally with `plutil -p`) | Terminal declares the `.command` extension as `com.apple.terminal.shell-script`, so opening such a file runs it in Terminal: the Mac app's Set Up Irie button, which needs no permission to script Terminal (docs/MAC.md) |
+| 2026-11-01 | https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases | `/releases/latest/download/<asset>` finds an asset of the latest release: download names without a version, so the site's install.sh needs no API call (tools/release.sh, DESIGN §2.7) |
+| 2026-11-01 | https://github.com/googleapis/release-please-action (README) | The `release_created` and `tag_name` outputs, and `gh release upload` after them: the `downloads` job of the release workflow (DESIGN §2.7) |
 
 ## Third-party code
 
