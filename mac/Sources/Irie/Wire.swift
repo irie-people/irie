@@ -42,13 +42,24 @@ struct Session: Codable, Identifiable, Equatable {
     /// What its jot left that has not landed, by the jot dog's last look,
     /// while its turn is over (DESIGN §4.8); nil when it is through.
     var loose: Loose?
+    /// What the trod bot did for it in this night's shift or the last
+    /// (DESIGN §4.10); nil when it did nothing.
+    var trod: TrodRow?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
-        case order, parked, frozen, freezing, priority, loose
+        case order, parked, frozen, freezing, priority, loose, trod
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
+}
+
+/// How often the trod bot sent a session on in one shift, when it last
+/// did, and why: question, error, limit or loose.
+struct TrodRow: Codable, Equatable {
+    var sent: Int
+    var last: Date
+    var reason: String
 }
 
 /// What a jot left that has not landed: files not committed, and its own
@@ -157,12 +168,43 @@ struct Header: Decodable {
     /// ui.helper_style: a helper beside its session is drawn as cards
     /// ("browser") or as a terminal ("terminal").
     var helperStyle: String?
+    /// The trod bot, while it is within its hours (DESIGN §4.10).
+    var trod: TrodShift?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
+        case trod
     }
+}
+
+/// The trod bot within its hours: until when, whether you are away so it
+/// steps in, whether it keeps the Mac awake, and whether the plan's use
+/// stops it sending anything on.
+struct TrodShift: Decodable, Equatable {
+    var until: Date?
+    var away: Bool?
+    var awake: Bool?
+    var capped: Bool?
+    /// You started it by hand, so it works while you watch.
+    var hand: Bool?
+}
+
+/// Start a run of the trod bot by hand, or stop one.
+struct TrodArgs: Encodable {
+    var start: Bool?
+    var stop: Bool?
+}
+
+/// The trod bot's report, as far as the app reads it: the run you started
+/// by hand last.
+struct TrodResult: Decodable {
+    struct Hand: Decodable {
+        var on: Bool
+        var why: String?
+    }
+    var hand: Hand?
 }
 
 struct HelloArgs: Encodable {
@@ -196,19 +238,39 @@ struct AttachInfo: Decodable, Equatable {
     var teams: String?
 }
 
-struct SpawnArgs: Encodable {
-    var task = ""
+/// What was typed in the task bar, for the core to read (DESIGN §4.2,
+/// docs/CORE.md): the text as typed, the session selected for a : command
+/// to act on, and where and on what a task runs when its words don't say.
+/// The app keeps no rules of its own for the words.
+struct InputArgs: Encodable {
+    var text: String
+    var session: String?
+    /// The selected session outside Irie, which :move brings in.
+    var outside: String?
     var repo: String?
     var inPlace: Bool?
     var profile: String?
-    /// A model for this task instead of its profile's; only a core whose
-    /// hello lists spawn-model takes it.
+    /// A model for a task instead of its profile's; only a core whose hello
+    /// lists spawn-model takes it.
     var model: String?
 
     enum CodingKeys: String, CodingKey {
-        case task, repo, profile, model
+        case text, session, outside, repo, profile, model
         case inPlace = "in_place"
     }
+}
+
+/// What the core made of it: spawned, answered, ran or asked, and what to
+/// say, as it is.
+struct InputResult: Decodable {
+    var did: String
+    var op: String?
+    var text: String
+    var session: Session?
+    /// Show the session with the keyboard: a tool session waits on its user.
+    var show: Bool?
+    /// The question to answer when did is asked, through op (undo or redo).
+    var choice: UndoChoice?
 }
 
 /// An @ or + word to complete: "@" lists the repos, "+" the agents.
@@ -220,10 +282,6 @@ struct CompleteResult: Decodable {
     var items: [String]
     /// What each item runs and costs, for the + words.
     var notes: [String]?
-}
-
-struct SpawnResult: Decodable {
-    var session: Session
 }
 
 struct ShowArgs: Encodable {

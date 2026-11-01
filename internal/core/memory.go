@@ -143,6 +143,7 @@ func (c *Core) headerNow() ipc.Header {
 		m := c.memoryNow()
 		h.Memory = &m
 	}
+	h.Trod = c.trodHeader(c.awakeNow())
 	return h
 }
 

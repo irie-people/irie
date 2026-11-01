@@ -79,6 +79,12 @@ const (
 	// because the jot's work had not landed (DESIGN §4.8). It stands in for
 	// the turn.ended of that stop.
 	DogNudged = "dog.nudged"
+	// TrodSent records that the trod bot sent a session on while you
+	// were away (DESIGN §4.10): at the end of a turn, where it stands in
+	// for that stop's turn.ended; at a question it turned away, in place of
+	// the question's tool.started and input.needed; or by a message it
+	// typed, whose prompt.submitted follows.
+	TrodSent = "trod.sent"
 )
 
 var kinds = map[string]bool{}
@@ -89,7 +95,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged,
+		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent,
 	} {
 		kinds[k] = true
 	}

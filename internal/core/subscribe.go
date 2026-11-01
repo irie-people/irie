@@ -55,6 +55,9 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	if err := decode(raw, &a); err != nil {
 		return nil, nil, err
 	}
+	if a.View == ipc.ViewWatch {
+		return c.watchWindow(a) // the freeze dog's (freezedog.go)
+	}
 	if a.View != "" && a.View != ipc.ViewApp {
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "unknown view %q", a.View)
 	}

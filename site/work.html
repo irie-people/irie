@@ -97,7 +97,7 @@
         <tr><th scope="row">Does it see our credentials?</th><td>No. Agents sign in as they would without Irie, and Irie never reads their logins or sends them anywhere.</td></tr>
         <tr><th scope="row">Does it change our Claude Code setup?</th><td>No. It adds its hooks to each session it starts, and your company’s managed settings still win. <a href="#managed">Below</a></td></tr>
         <tr><th scope="row">What runs on our computers?</th><td>One program, <code>irie</code>, which needs tmux and git, and the agents you choose. The Mac app is optional. <a href="what-irie-is.html#parts">The details</a></td></tr>
-        <tr><th scope="row">Is it ready?</th><td>It’s early. There are no releases yet, so each person builds it from its source code.</td></tr>
+        <tr><th scope="row">Is it ready?</th><td>It’s early. The first release, 0.1.0, has no download yet, so each person builds it from its source code.</td></tr>
         <tr><th scope="row">Who supports it?</th><td>Its community, in public on GitHub. Security problems go to the maintainers privately. There are no support contracts or promised response times.</td></tr>
       </tbody>
     </table>
@@ -175,7 +175,7 @@ tool_input = "none"</code></pre>
 
   <h2 id="not-there">What isn’t there</h2>
   <ul class="rules">
-    <li>No releases yet. Each person builds Irie from its source code, and updates it with <code>git pull</code> and a new build.</li>
+    <li>No downloads yet. Each person builds Irie from its source code, and updates it with <code>git pull</code> and a new build.</li>
     <li>No central console, policies or audit trail across a team. Each person’s Irie keeps its own records, on their own computer.</li>
     <li>No accounts, single sign-on or roles, because Irie has no accounts at all.</li>
     <li>No Windows: Macs and Linux only.</li>
@@ -204,6 +204,12 @@ tool_input = "none"</code></pre>
 </main>
 
 <footer class="site-footer">
+  <nav class="family" aria-label="Irie People">
+    <a href="https://irie-people.github.io/"><strong>Irie People</strong></a>
+    <a href="https://irie-people.github.io/irie/"><span class="dot irie" aria-hidden="true"></span>Irie</a>
+    <a href="https://irie-people.github.io/riddim/"><span class="dot riddim" aria-hidden="true"></span>Riddim</a>
+    <a href="https://irie-people.github.io/steak/"><span class="dot steak" aria-hidden="true"></span>Steak</a>
+  </nav>
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>

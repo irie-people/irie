@@ -47,6 +47,7 @@ func ctlModel(t *testing.T, rows []ipc.Session) (Model, *ctlBackend) {
 func ctlAt(t *testing.T, rows []ipc.Session, w, h int) (Model, *ctlBackend) {
 	t.Helper()
 	b := &ctlBackend{fakeBackend: &fakeBackend{}}
+	b.controls = b
 	m := New(b, Options{Now: func() time.Time { return now }, Home: "/home/alice"})
 	m = send(m, tea.WindowSizeMsg{Width: w, Height: h})
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &ipc.Header{}}})
@@ -483,6 +484,10 @@ func TestZParksAndUnparks(t *testing.T) {
 	if last := b.calls[len(b.calls)-1]; last != "park s000000000002 true" {
 		t.Errorf(":park called %q", last)
 	}
+	// The core says it is parked, and the next :park reads that.
+	parked := m.sessions[m.index("s000000000002")]
+	parked.Parked = true
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &parked}})
 	m = typeText(send(m, keyMsg("tab")), ":park")
 	m = send(m, keyMsg("enter"))
 	if !m.statusErr || !strings.Contains(m.status, "must be not parked") {

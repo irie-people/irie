@@ -63,6 +63,11 @@ struct IrieApp: App {
                 // The sidebar's z key does it while the list has the keyboard.
                 Button(store.closable?.isParked == true ? "Unpark Session" : "Park Session") { store.toggleParked() }
                     .disabled(store.closable == nil || !store.canPark)
+                Divider()
+                // A run you start goes on while you watch, until no session
+                // has work left or the plan is as full as it may get.
+                Button(store.trod?.hand == true ? "Stop the Trod Bot" : "Start the Trod Bot Now") { store.setTrod(store.trod?.hand != true) }
+                    .disabled(!store.canTrod)
             }
             // Undo and Redo step through the core's history, a park or a
             // close, and name the step; a text field with typing to take
@@ -173,8 +178,9 @@ final class KeyRouter {
 }
 
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
-/// it quits with its window. `--background`, which `tools/live.sh` passes when
-/// it relaunches the app, leaves the focus where it is.
+/// it quits with its window. `--background`, which `tools/live.sh` and the
+/// freeze dog pass when they open the app again, leaves the focus where it
+/// is. The freeze dog watches the app from the moment it has launched.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -182,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !CommandLine.arguments.contains("--background") {
             NSApp.activate(ignoringOtherApps: true)
         }
+        FreezeDog.start(socketPath: CorePaths.socket())
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }

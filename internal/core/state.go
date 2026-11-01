@@ -40,6 +40,18 @@ type track struct {
 	waiting   int
 	waitingOn string
 
+	// For the trod bot (trod.go): when its last turn ended or failed,
+	// and whether its last message asked the user something; what the
+	// shift sent it, oldest first; when the shift last typed it a message
+	// that has not come in as a prompt yet; and whether the shift told its
+	// agent to decide a question itself and the agent has not worked since,
+	// so that a question asked again waits for the user.
+	stopped      time.Time
+	asked        bool
+	trod         []trodSend
+	trodTyped    time.Time
+	trodAnswered bool
+
 	// What the user did to the session as a whole (freeze.go, priority.go,
 	// order.go).
 	frozen   *event.Event // freeze.on, until freeze.off
@@ -95,10 +107,19 @@ func (t *track) apply(e event.Event) {
 			t.activity, t.viewed = done, true
 		}
 	case event.PromptSubmitted:
+		// A message the trod bot typed is not the user's prompt: what
+		// the dog and the shift did since the user's last one still counts.
+		shifts := !t.trodTyped.IsZero() && e.Time().Sub(t.trodTyped) < trodTypedFor
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
-		t.nudged, t.waiting, t.waitingOn = 0, 0, ""
+		t.waiting, t.waitingOn, t.asked, t.trodTyped = 0, "", false, time.Time{}
+		if !shifts {
+			t.nudged, t.trodAnswered = 0, false
+		}
 	case event.ToolStarted:
 		t.busy(e)
+		if e.Str("tool") != "AskUserQuestion" {
+			t.trodAnswered = false
+		}
 		t.held = t.held || t.frozen != nil
 		if t.tools == nil {
 			t.tools = map[string]event.Event{}
@@ -126,15 +147,30 @@ func (t *track) apply(e event.Event) {
 		if e.Agent == event.Main {
 			t.waiting, _ = e.Int("waiting")
 			t.waitingOn = e.Str("waiting_on")
+			t.stopped, t.asked = e.Time(), e.Data["asks"] == true
 		}
 	case event.DogNudged:
 		// The turn goes on: the dog sent the agent back to finish.
 		t.nudged++
 		t.busy(e)
+	case event.TrodSent:
+		t.trod = append(t.trod, trodSend{at: e.Time(), reason: e.Str("reason"), how: e.Str("how")})
+		if len(t.trod) > maxTrodSends {
+			t.trod = t.trod[len(t.trod)-maxTrodSends:]
+		}
+		t.trodAnswered = t.trodAnswered || e.Str("reason") == trodQuestion
+		if e.Str("how") == trodTyped {
+			// Its prompt.submitted follows.
+			t.trodTyped = e.Time()
+			break
+		}
+		// The turn goes on: at its end, or past a question turned away.
+		t.busy(e)
 	case event.TurnFailed:
 		t.activity, t.viewed = done, false
 		t.stopTools(event.Main)
 		t.need(e)
+		t.stopped, t.asked = e.Time(), false
 	case event.SubagentStarted:
 		t.activity = working
 		if t.subs == nil {
@@ -369,6 +405,9 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 		if t.waiting > 0 {
 			s.Detail = joinDetail("Waiting on its work in the background", t.waitingOn)
 		}
+	}
+	if s.State == ipc.StateFrozen && t.frozen.Str("by") == trodBy {
+		s.Detail = joinDetail("Frozen by the trod bot: "+t.frozen.Str("reason"), s.Detail)
 	}
 	if s.State != ipc.StateExited && s.State != ipc.StateFailed {
 		s.Subagents = t.subagents()

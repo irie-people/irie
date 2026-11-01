@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/jot"
 )
@@ -228,7 +229,7 @@ func (c *Core) saveFollowUps(x *session) {
 	}
 	b, err := json.Marshal(x.followUps)
 	if err == nil {
-		err = writeFileAtomic(file, b)
+		err = filetx.WriteFile(file, b, 0o600)
 	}
 	if err != nil {
 		c.log.Warn("jots", "session", x.id, "err", err)

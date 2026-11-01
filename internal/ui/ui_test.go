@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	irie "github.com/irie-people/irie/core"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/route"
 )
@@ -30,7 +31,6 @@ type fakeBackend struct {
 	shows     []showCall
 	spawnErr  error
 	spawned   *ipc.Session // what Spawn returns, when set
-	added     bool         // and whether a jot went to it, as more for the one before
 	completes []string
 	items     map[string][]string // Complete's answers
 	notes     map[string][]string // and its notes
@@ -46,7 +46,74 @@ type fakeBackend struct {
 	reopenErr error
 	undos     []string // dir choice_id choice, each Undo and Redo
 	undoReply func(dir string, a ipc.UndoArgs) (ipc.UndoResult, error)
+	inputs    []ipc.InputArgs // what the bar sent to Input
+
+	// The core's view: the sidebar's own, as of each command it runs (run),
+	// and the Controls that freeze, promote and park, when the test has them.
+	rows     []ipc.Session
+	outside  []ipc.OutsideSession
+	controls Controls
 }
+
+// Input reads the text as the core does, with the same language, against
+// the rows the sidebar shows, and runs what it comes to on this fake.
+func (f *fakeBackend) Input(a ipc.InputArgs) (ipc.InputResult, error) {
+	f.inputs = append(f.inputs, a)
+	st, err := irie.Read(a, irie.View{Sessions: f.rows, Outside: f.outside, Home: "/home/alice"})
+	if err != nil {
+		return ipc.InputResult{}, err
+	}
+	var res any
+	c := f.controls
+	if c == nil {
+		c = noControlsBackend{}
+	}
+	switch x := st.Args.(type) {
+	case ipc.SpawnArgs:
+		var s ipc.Session
+		s, err = f.Spawn(x)
+		res = ipc.SpawnResult{Session: s}
+	case ipc.RenameArgs:
+		var s ipc.Session
+		s, err = f.Rename(x.Session, x.Name)
+		res = ipc.RenameResult{Session: s}
+	case ipc.RateArgs:
+		err = f.Rate(x.Session, x.Verdict)
+	case ipc.CloseArgs:
+		err = f.Close(x.Session)
+	case ipc.ReopenArgs:
+		var s ipc.Session
+		s, err = f.Reopen(x.Session)
+		res = ipc.ReopenResult{Session: s}
+	case ipc.UndoArgs:
+		res, err = f.undo(st.Op, x)
+	case ipc.ToolArgs:
+		var s ipc.Session
+		s, err = f.Tool(x.Name)
+		res = ipc.SpawnResult{Session: s}
+	case ipc.RouteArgs:
+		res, err = f.Route(x.Task)
+	case ipc.MoveArgs:
+		var s ipc.Session
+		s, err = f.Move(x.VendorID, x.Profile)
+		res = ipc.MoveResult{Session: s}
+	case ipc.FreezeArgs:
+		err = c.Freeze(x.Session, st.Op == ipc.OpFreeze, x.All)
+	case ipc.PriorityArgs:
+		err = c.Priority(x.Session, x.Level, x.Reason)
+	case ipc.ParkArgs:
+		err = c.Park(x.Session, st.Op == ipc.OpPark)
+	}
+	return irie.Said(st, res, err)
+}
+
+// noControlsBackend is a core that cannot freeze, promote or park.
+type noControlsBackend struct{}
+
+func (noControlsBackend) Freeze(string, bool, bool) error    { return errors.New(noControls) }
+func (noControlsBackend) Priority(string, int, string) error { return errors.New(noControls) }
+func (noControlsBackend) Reorder(string, string) error       { return errors.New(noControls) }
+func (noControlsBackend) Park(string, bool) error            { return errors.New(noControls) }
 
 func (f *fakeBackend) Rate(id, verdict string) error {
 	f.rates = append(f.rates, id+" "+verdict)
@@ -69,15 +136,15 @@ func (f *fakeBackend) Route(task string) (route.Choice, error) {
 	return f.choice, nil
 }
 
-func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.SpawnResult, error) {
+func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
 	f.spawns = append(f.spawns, a)
 	if f.spawnErr != nil {
-		return ipc.SpawnResult{}, f.spawnErr
+		return ipc.Session{}, f.spawnErr
 	}
 	if f.spawned != nil {
-		return ipc.SpawnResult{Session: *f.spawned, Added: f.added}, nil
+		return *f.spawned, nil
 	}
-	return ipc.SpawnResult{Session: ipc.Session{ID: fmt.Sprintf("snew%08d", len(f.spawns)), Name: "new"}}, nil
+	return ipc.Session{ID: fmt.Sprintf("snew%08d", len(f.spawns)), Name: "new"}, nil
 }
 
 func (f *fakeBackend) Show(id string, focus bool) error {
@@ -115,6 +182,11 @@ func run(m Model, cmd tea.Cmd) Model {
 	if cmd == nil {
 		return m
 	}
+	// The fake core sees what the sidebar sees, as the real one would by
+	// the time a command reaches it.
+	if f := fakeOf(m.backend); f != nil {
+		f.rows, f.outside = m.sessions, m.outside
+	}
 	switch msg := cmd().(type) {
 	case nil:
 		return m
@@ -126,6 +198,17 @@ func run(m Model, cmd tea.Cmd) Model {
 	default:
 		return send(m, msg)
 	}
+}
+
+// fakeOf is the fakeBackend behind a test's backend.
+func fakeOf(b Backend) *fakeBackend {
+	switch b := b.(type) {
+	case *fakeBackend:
+		return b
+	case *ctlBackend:
+		return b.fakeBackend
+	}
+	return nil
 }
 
 func keyMsg(s string) tea.KeyPressMsg {
@@ -614,7 +697,7 @@ func TestSubmitSpawnsAndSelectsTheNewRow(t *testing.T) {
 	}
 	m = typeText(m, "@/home/alice/code/website describe this repo")
 	m = send(m, keyMsg("enter"))
-	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website", Jot: true}}
+	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website"}}
 	if !reflect.DeepEqual(b.spawns, want) {
 		t.Fatalf("spawns = %+v, want %+v", b.spawns, want)
 	}
@@ -804,74 +887,6 @@ func TestTheSelectionStandsOut(t *testing.T) {
 	}
 }
 
-func TestParseTask(t *testing.T) {
-	for _, c := range []struct {
-		in   string
-		want ipc.SpawnArgs
-		err  string
-	}{
-		{in: "fix the flaky test", want: ipc.SpawnArgs{Task: "fix the flaky test"}},
-		{in: "@/home/alice/code/x fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x"}},
-		{in: "fix it @~/code/x", want: ipc.SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x"}},
-		{in: "@~ list my files", want: ipc.SpawnArgs{Task: "list my files", Repo: "/home/alice"}},
-		{in: "fix @/abs   the bug", want: ipc.SpawnArgs{Task: "fix the bug", Repo: "/abs"}},
-		{in: "@/abs first line\nsecond @/not/a/token\n", want: ipc.SpawnArgs{Task: "first line\nsecond @/not/a/token\n", Repo: "/abs"}},
-		{in: "@/abs\nthe task is on line two", want: ipc.SpawnArgs{Task: "the task is on line two", Repo: "/abs"}},
-		{in: "mail alice@example.com about it", want: ipc.SpawnArgs{Task: "mail alice@example.com about it"}},
-		{in: "  keep   inner  spacing  ", want: ipc.SpawnArgs{Task: "keep   inner  spacing"}},
-		{in: "@website fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "website"}},
-		{in: "@clients/api fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "clients/api"}},
-		{in: "@website! fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "website", InPlace: true}},
-		{in: "@~/code/x! fix it", want: ipc.SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x", InPlace: true}},
-		{in: "+fast fix it", want: ipc.SpawnArgs{Task: "fix it", Profile: "fast"}},
-		{in: "fix it +aider @web!", want: ipc.SpawnArgs{Task: "fix it", Repo: "web", InPlace: true, Profile: "aider"}},
-		{in: "c++ is fine, and so is a+b", want: ipc.SpawnArgs{Task: "c++ is fine, and so is a+b"}},
-		{in: "@/a @/b fix it", err: "one @"},
-		{in: "+a +b fix it", err: "one +"},
-		{in: "@ fix it", err: "@"},
-		{in: "+ fix it", err: "+"},
-		{in: "@web!! fix it", err: "@web!!"},
-		{in: "@./src fix it", err: "@./src"},
-		{in: "@/abs", err: "empty"},
-		{in: "@web +fast", err: "empty"},
-		{in: " \n\t", err: "empty"},
-		{in: ":pause", err: ":pause"},
-	} {
-		got, err := ParseTask(c.in, "/home/alice")
-		if c.err != "" {
-			if err == nil || !strings.Contains(err.Error(), c.err) {
-				t.Errorf("%q: error %v, want one mentioning %q", c.in, err, c.err)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("%q: %v", c.in, err)
-			continue
-		}
-		if got != c.want {
-			t.Errorf("%q: got %+v, want %+v", c.in, got, c.want)
-		}
-	}
-}
-
-func TestSpawnTokensLeadTheWords(t *testing.T) {
-	var a ipc.SpawnArgs
-	rest, err := SpawnTokens(&a, []string{"@web!", "+fast", "fix", "@it", "+now"}, "/home/alice")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := (ipc.SpawnArgs{Repo: "web", InPlace: true, Profile: "fast"}); a != want {
-		t.Errorf("args = %+v, want %+v", a, want)
-	}
-	// Words after the first that is not a token belong to the task.
-	if want := []string{"fix", "@it", "+now"}; !reflect.DeepEqual(rest, want) {
-		t.Errorf("rest = %q, want %q", rest, want)
-	}
-	if _, err := SpawnTokens(&ipc.SpawnArgs{}, []string{"@a", "@b", "x"}, "/home/alice"); err == nil {
-		t.Error("two @ tokens accepted")
-	}
-}
-
 // big is a paste over the chip threshold: 9,000 bytes on 1,000 lines.
 var big = strings.Repeat("12345678\n", 1000)
 
@@ -1039,27 +1054,18 @@ func TestTheStatusStripSaysWhereATaskWent(t *testing.T) {
 	}
 	m = typeText(m, "@website fix it")
 	m = send(m, keyMsg("enter"))
-	for _, h := range []int{24, 20} { // the details card, then the strip
+	// The details card holds it all; the one-line strip, what went wrong.
+	for h, wants := range map[int][]string{
+		24: {"irie/fix-it", "Copied .env, CLAUDE.local.md", "2 uncommitted changes"},
+		20: {"irie/fix-it", "2 uncommitted changes"},
+	} {
 		m = send(m, tea.WindowSizeMsg{Width: 80, Height: h})
 		status := statusText(t, m)
-		for _, want := range []string{"irie/fix-it", "copied .env, CLAUDE.local.md", "2 uncommitted changes"} {
+		for _, want := range wants {
 			if !strings.Contains(status, want) {
 				t.Errorf("80×%d: status %q lacks %q", h, status, want)
 			}
 		}
-	}
-}
-
-func TestAJotThatWentToTheOneBeforeSaysSo(t *testing.T) {
-	m, b := newModel(t, 80, 24, 0)
-	b.spawned, b.added = &ipc.Session{ID: "s00000000fix1", Name: "Fix It"}, true
-	m = typeText(m, "also the footer")
-	m = send(m, keyMsg("enter"))
-	if len(b.spawns) != 1 || !b.spawns[0].Jot {
-		t.Fatalf("spawns = %+v, want one jot", b.spawns)
-	}
-	if !strings.Contains(m.status, "added to Fix It") || m.statusErr || m.bar.Value() != "" {
-		t.Errorf("status %q, bar %q", m.status, m.bar.Value())
 	}
 }
 
@@ -1579,7 +1585,7 @@ func TestColonCommands(t *testing.T) {
 	// A rating goes to the selected session.
 	m = selectNamed(t, m, "task-001")
 	enter(":rate bad")
-	if !reflect.DeepEqual(b.rates, []string{m.sessions[1].ID + " bad"}) || !strings.Contains(m.status, "rated task-001 bad") {
+	if !reflect.DeepEqual(b.rates, []string{m.sessions[1].ID + " bad"}) || !strings.Contains(m.status, "Rated task-001 bad") {
 		t.Errorf("rates %v, status %q", b.rates, m.status)
 	}
 	// A dry run of the router says where the task would go.
@@ -1631,7 +1637,7 @@ func TestRRenamesTheSelectedRow(t *testing.T) {
 	if want := []string{m.sessions[1].ID + " Fix the login"}; !reflect.DeepEqual(b.renames, want) {
 		t.Errorf("renames = %v, want %v", b.renames, want)
 	}
-	if m.focus != focusList || m.bar.Value() != "" || m.status != "renamed task-001 to Fix the login-2" {
+	if m.focus != focusList || m.bar.Value() != "" || m.status != "Renamed task-001 to Fix the login-2." {
 		t.Errorf("after Enter: focus %v, bar %q, status %q", m.focus, m.bar.Value(), m.status)
 	}
 	if len(b.spawns) != 0 {
@@ -1688,5 +1694,34 @@ func TestHeaderShowsPlanUseAndLowMemory(t *testing.T) {
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Header: &ipc.Header{}}})
 	if strings.Contains(header(), "mem low") {
 		t.Errorf("header %q after memory recovered", header())
+	}
+}
+
+// The bar sends what was typed to the core as it is, with the selected
+// session and any long paste, and shows what the core says.
+func TestTheBarSendsWhatWasTypedToTheCore(t *testing.T) {
+	m, b := newModel(t, 60, 24, 3)
+	m = send(m, keyMsg("esc"))
+	m = selectNamed(t, m, "task-001")
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "review ")
+	m = send(m, tea.PasteMsg{Content: big})
+	m = send(m, keyMsg("enter"))
+	label := "[paste 9.0 KB · 1,000 lines]"
+	want := ipc.InputArgs{Text: "review " + label, Pastes: []ipc.Paste{{Label: label, Text: big}}, Session: "s000000000001"}
+	if len(b.inputs) != 1 || !reflect.DeepEqual(b.inputs[0], want) {
+		t.Fatalf("inputs = %+v", b.inputs)
+	}
+	// A question's answer leaves the keyboard in the bar, ready for more.
+	m = send(m, keyMsg("tab"))
+	m = typeText(m, "hows task-002?")
+	m = send(m, keyMsg("enter"))
+	if m.status != "task-002: working" || m.statusErr || m.focus != focusBar || m.bar.Value() != "" {
+		t.Errorf("hows: status %q, focus %v, bar %q", m.status, m.focus, m.bar.Value())
+	}
+	m = typeText(m, "hows the weather")
+	m = send(m, keyMsg("enter"))
+	if !m.statusErr || m.status != "No agent matches “weather”." || m.bar.Value() != "hows the weather" {
+		t.Errorf("no match: status %q, bar %q", m.status, m.bar.Value())
 	}
 }

@@ -225,7 +225,7 @@ func TestColonMoveInTheBar(t *testing.T) {
 	m.bar.Reset()
 	m = typeText(m, ":pause")
 	m = send(m, keyMsg("enter"))
-	if !strings.Contains(m.status, "unknown command :pause") {
+	if !strings.Contains(m.status, "Irie has no :pause") {
 		t.Errorf("status = %q", m.status)
 	}
 }
@@ -362,7 +362,7 @@ func TestRatingLeavesOutsideRowsAlone(t *testing.T) {
 	m = send(m, keyMsg(":"))
 	m = typeText(m, "rate good")
 	m = send(m, keyMsg("enter"))
-	if len(b.rates) != 0 || !m.statusErr || !strings.Contains(m.status, "no session to rate") {
+	if len(b.rates) != 0 || !m.statusErr || !strings.Contains(m.status, ":rate acts on the selected session") {
 		t.Errorf(":rate on an outside row: rates %v, status %q", b.rates, m.status)
 	}
 	// Irie's own row still takes one.

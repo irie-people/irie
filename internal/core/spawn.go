@@ -16,6 +16,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/harness/generic"
@@ -371,7 +372,7 @@ func (c *Core) launch(j job) (*session, error) {
 		return nil, err
 	}
 	for f, b := range files {
-		if err := os.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
+		if err := filetx.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
 			return nil, err
 		}
 	}

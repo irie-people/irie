@@ -313,7 +313,7 @@ ECC is the MIT repository formerly called everything-claude-code.
 ## 7. Where it fits
 
 - **DESIGN §2.1.** Principle 4 reads: "Hooks, settings, env and skills go in per launch, through `--settings`, `--plugin-dir`, argv and env." "Editing the user's agent config files" stays on §1.2's list of what v1 doesn't do.
-- **DESIGN §8: a new milestone, M12. Skills.** It needs only what M1–M3 built: the spawn pipeline, profiles, and optional-flag detection from `claude --help`. It can be built any time after M3, and it must land before the first release, since that is when "the first time Irie runs" begins.
+- **DESIGN §8: a new milestone, M12. Skills.** It needs only what M1–M3 built: the spawn pipeline, profiles, and optional-flag detection from `claude --help`. It can be built any time after M3, and it must land before the first release, since that is when "the first time Irie runs" begins. Changed 2026-10-31: 0.1.0 shipped first, so M12 lands before 1.0.0 (decision 8).
   - **Build.** `internal/skills` (the list, fetch, verify, the store, plugin folders, the check for the user's own skills); `--plugin-dir` in the Claude adapter; the `[skills]` config and the profile key; `irie skills`; `tools/skillpin`.
   - **Tests.** List validation. Fetches from an `httptest` server, with a bad hash, a 404 and a timeout; no test touches the network. The plugin folder's layout and digest. Argv goldens with and without skills. The user's-own-skill rule against a synthetic `/home/alice`. The fake agent records `--plugin-dir`.
   - **Manual check.** On a fresh account, run `irie`, spawn a task and type `/irie:` in Claude Code: the five skills are offered. Run `irie skills off`, spawn again, and they are gone.
@@ -343,7 +343,7 @@ ECC is the MIT repository formerly called everything-claude-code.
 **Decided 2026-10-27:**
 - **Decision 1:** a larger set than §6.1's five. The default set is every licensed candidate: `frontend-design`, `webapp-testing` and `mcp-builder` (anthropics/skills); `handle-pr-comments` (storybookjs/storybook); `find-docs` (upstash/context7); `ponytail` (DietrichGebert/ponytail); and `codebase-onboarding`, `context-budget` and `agent-harness-construction` (ECC). `vercel-composition-patterns` joins once its repository has a license file. `verification-before-completion` is not in the set. M12 rewrites §6 to match, and keeps §6.2's cautions in the docs and in `irie skills`. `find-docs` runs `npx ctx7@latest` and sends questions to Context7, `ponytail` changes a whole session's working style, and `codebase-onboarding` writes a `CLAUDE.md`, so each can be switched off on its own.
 - **Decision 3:** option a. Fetch by default on first run, with the status-strip notice.
-- **Decision 8:** option a. M12 is queued after the Irie milestone in progress and before the first release.
+- **Decision 8:** option a. M12 is queued after the Irie milestone in progress and before the first release. Changed 2026-10-31: the owner released 0.1.0 before M12, so M12 now lands before 1.0.0.
 - **Decisions 2, 4, 5, 6, 7 and 10:** the recommendations stand. **Decision 9** waits until the project account exists.
 
 ## Checks for this proposal

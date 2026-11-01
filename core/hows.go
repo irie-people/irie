@@ -1,19 +1,17 @@
-package ui
+package core
 
 import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/irie-people/irie/internal/ipc"
 )
 
-// howsRe is a status question typed in the command bar: "hows X", "how's X",
-// "how is X going", "how are X doing", with an optional "?".
+// howsRe is a status question: "hows X", "how's X", "how is X going", "how
+// are X doing", with an optional "?".
 var howsRe = regexp.MustCompile(`(?i)^how(?:'s|’s|s| is| are)\s+(.+?)(?:\s+(?:going|doing|coming along|looking))?\s*\??$`)
 
 // ParseHows reports whether input asks how a session is doing, and about
-// which: "hows the parser?" gives "the parser". It starts nothing.
+// which: "hows the parser?" gives "parser". It starts nothing.
 func ParseHows(input string) (string, bool) {
 	m := howsRe.FindStringSubmatch(strings.TrimSpace(input))
 	if m == nil {
@@ -21,17 +19,19 @@ func ParseHows(input string) (string, bool) {
 	}
 	q := strings.TrimSpace(m[1])
 	for _, p := range []string{"the ", "my ", "that "} {
-		q = strings.TrimPrefix(q, p)
+		if len(q) > len(p) && strings.EqualFold(q[:len(p)], p) {
+			q = q[len(p):]
+		}
 	}
 	return q, q != ""
 }
 
 // FindSession picks the session a question is about: the best match of its
-// words in the session's name, branch and repo, or in a subagent's type.
-// Every word must match; a name match outranks a branch or repo match. It
-// returns nil when nothing matches, and the first of equals, which is the
-// oldest, as the sidebar orders them.
-func FindSession(sessions []ipc.Session, query string) *ipc.Session {
+// words in the session's name, branch, repo, agent and profile, or in a
+// subagent's type. Every word must match; a name match outranks the rest.
+// It returns nil when nothing matches, and the first of equals, which is
+// the first in the list's order.
+func FindSession(sessions []Session, query string) *Session {
 	words := strings.Fields(strings.ToLower(query))
 	if len(words) == 0 {
 		return nil
@@ -69,7 +69,7 @@ func FindSession(sessions []ipc.Session, query string) *ipc.Session {
 
 // Hows answers a status question in one line: the session's name, its
 // state, what it is doing or needs, and its subagents.
-func Hows(s ipc.Session) string {
+func Hows(s Session) string {
 	out := s.Name + ": " + strings.ReplaceAll(s.State, "_", " ")
 	switch {
 	case s.Reason != "":
