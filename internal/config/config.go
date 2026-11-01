@@ -1,7 +1,7 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
 // the ui, spawn, profiles, local, route, repos, worktree, tmux, journal,
-// hold, usage, dog and trod sections.
+// hold, usage, dog, trod, remote and skills sections.
 package config
 
 import (
@@ -49,6 +49,14 @@ type Config struct {
 	Peers    map[string]Peer    `toml:"peers"`
 	Env      Env                `toml:"env"`
 	Learn    Learn              `toml:"learn"`
+	VPN      VPN                `toml:"vpn"`
+}
+
+// VPN is Mullvad VPN control (docs/proposals/extensions.md §4): its state in
+// every client, and the :vpn words to change it.
+type VPN struct {
+	On      bool   `toml:"on"`      // show the VPN in Irie and take the :vpn words
+	Mullvad string `toml:"mullvad"` // the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
 }
 
 // Place is where a task typed here starts when its words do not say
@@ -696,7 +704,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Peers    map[string]Peer           `toml:"peers"`
 		Env      *Env                      `toml:"env"`
 		Learn    *Learn                    `toml:"learn"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, Learn: &c.Learn}
+		VPN      *VPN                      `toml:"vpn"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1137,6 +1146,9 @@ func (c Config) Validate() error {
 	}
 	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
 		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
+	}
+	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
+		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
 	}
 	return errors.Join(errs...)
 }

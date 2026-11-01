@@ -73,6 +73,12 @@ struct CoreConfig: Decodable, Equatable {
     var trod: Trod?
     /// The arch agents; nil from a core from before them.
     var arch: Arch?
+    /// Mullvad VPN control; nil from a core from before it.
+    var vpn: VPN?
+
+    struct VPN: Decodable, Equatable {
+        var on: Bool
+    }
     /// Nil from a core older than the learning settings.
     var learn: Learn?
 
@@ -609,6 +615,15 @@ private struct GeneralSettings: View {
                     Text("Usage")
                 } footer: {
                     footnote("Irie becomes the status line of the sessions it starts from now on, and runs yours inside it.")
+                }
+                if c.vpn != nil {
+                    Section {
+                        Toggle("Show Mullvad VPN in Irie", isOn: model.bind(c, \.vpn!.on, "vpn.on"))
+                    } header: {
+                        Text("Mullvad VPN")
+                    } footer: {
+                        footnote("A shield in the title bar shows the VPN, File > VPN changes it, and every task bar takes :vpn on, :vpn off, :vpn se got or :vpn lockdown on. It needs the Mullvad VPN app. Irie never reads the account number, and agents can't change the VPN through Irie.")
+                    }
                 }
                 ConfigFileSection(path: model.path)
             }

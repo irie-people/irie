@@ -177,13 +177,30 @@ struct Header: Decodable {
     var helperStyle: String?
     /// The trod bot, while it is within its hours (DESIGN §4.10).
     var trod: TrodShift?
+    /// Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
+    var vpn: VPNMark?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
-        case trod
+        case trod, vpn
     }
+}
+
+/// Mullvad VPN as the core sees it: its state, the relay's place and the
+/// state in one line. Never an address or the account's number.
+struct VPNMark: Decodable, Equatable {
+    var state: String?
+    var city: String?
+    var country: String?
+    var host: String?
+    var lockdown: Bool?
+    /// Off, and lockdown mode blocks the network.
+    var blocked: Bool?
+    var text: String
+    /// Why the core can't read the VPN, such as no mullvad CLI.
+    var problem: String?
 }
 
 /// The trod bot within its hours: until when, whether you are away so it

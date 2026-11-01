@@ -114,6 +114,7 @@ type Core struct {
 	trodReset  time.Time             // when the plan's usage limit last reset, as far as the trod bot saw
 	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
+	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -339,6 +340,7 @@ func (c *Core) tick() {
 	c.followTitles()
 	c.followConversations()
 	c.keepRemote()
+	c.keepVPN()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -531,6 +533,27 @@ func (c *Core) changes() []ipc.Frame {
 	return frames
 }
 
+// CallFrom answers one request from the process peer (ipc.PeerCaller): as
+// Call does, but the ops that change what is the person's alone, the VPN's,
+// whether asked for or typed, learn who asks.
+func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
+	switch op {
+	case ipc.OpInput:
+		var a ipc.InputArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.input(a, peer)
+	case ipc.OpVPN:
+		var a ipc.VPNArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.vpnOp(peer, a)
+	}
+	return c.Call(op, raw)
+}
+
 // Call answers one request (ipc.Handler). A call about one of the peers'
 // sessions goes on to its own core (peers.go).
 func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
@@ -558,7 +581,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpPeers,
+			ipc.OpVPN, ipc.OpPeers,
 			ipc.OpLearn, ipc.FeatureTutor,
 		}}, nil
 	case ipc.OpList:
@@ -682,7 +705,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return c.input(a)
+		return c.input(a, 0)
+	case ipc.OpVPN:
+		var a ipc.VPNArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.vpnOp(0, a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {

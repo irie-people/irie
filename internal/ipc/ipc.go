@@ -117,6 +117,14 @@ type Handler interface {
 	Subscribe(args json.RawMessage) (frames <-chan Frame, cancel func(), err error)
 }
 
+// A PeerCaller is a Handler that also learns who asks: the process id of the
+// client at the socket's other end, 0 when the system doesn't say. The core
+// uses it to refuse a change an agent asks for itself, such as the VPN's
+// (docs/proposals/extensions.md §4.4).
+type PeerCaller interface {
+	CallFrom(peer int, op string, args json.RawMessage) (any, error)
+}
+
 // A Hearer is a Handler that hears what a client sends on its stream after
 // subscribing: a watched window's pongs (DESIGN §2.4). Without one, the
 // stream drops what the client sends.
@@ -143,6 +151,8 @@ func Serve(l net.Listener, h Handler) error {
 
 func serveConn(c net.Conn, h Handler) {
 	defer c.Close()
+	peer := peerPID(c)
+	pc, _ := h.(PeerCaller)
 	r := bufio.NewReader(c)
 	w := &lineWriter{w: c}
 	for {
@@ -171,7 +181,12 @@ func serveConn(c net.Conn, h Handler) {
 			cancel()
 			return
 		}
-		res, err := h.Call(req.Op, req.Args)
+		var res any
+		if pc != nil {
+			res, err = pc.CallFrom(peer, req.Op, req.Args)
+		} else {
+			res, err = h.Call(req.Op, req.Args)
+		}
 		if err != nil {
 			w.write(Reply{ID: req.ID, Error: asError(err)})
 			continue
