@@ -1,7 +1,8 @@
 // Package testutil holds helpers shared by Irie's tests: once-per-package
 // builds of the irie binary and the fake agent, short directories for unix
 // sockets, isolated XDG environments, private tmux servers and temp git
-// repos kept away from the user's own git config.
+// repos kept away from the user's own git config. Nothing a test starts
+// outlives its run, even a run that is killed or times out (reap.go).
 package testutil
 
 import (
@@ -12,10 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -33,14 +32,30 @@ var (
 )
 
 // Main runs a package's tests, then removes the binaries BuildIrie and
-// BuildFakeAgent made. Packages that call them use it as their TestMain.
+// BuildFakeAgent made. Packages that call them, or NewEnv, use it as their
+// TestMain. It first cleans what earlier runs that died left (reap.go),
+// and it lets the binary run as its own reaper, so that a run killed now
+// leaves nothing behind either.
 func Main(m *testing.M) {
+	if code, ok := asReaper(); ok {
+		os.Exit(code)
+	}
+	mainRan = true
+	sweep(filepath.Join("/tmp", shortPrefix+"*"), filepath.Join(os.TempDir(), buildPrefix+"*"))
 	code := m.Run()
 	if buildDir != "" {
 		os.RemoveAll(buildDir)
+		release(buildDir)
 	}
 	os.Exit(code)
 }
+
+// The names of the dirs ShortDir and the builds make, before their random
+// part.
+const (
+	shortPrefix = "irie-t-"
+	buildPrefix = "irie-bin-"
+)
 
 // buildOnce builds the Go package pkg once per test binary, into a temp dir
 // shared by every build, and returns the binary's path.
@@ -61,7 +76,10 @@ func buildOnce(t testing.TB, pkg, name string) string {
 		}
 		buildMu.Lock()
 		if buildDir == "" {
-			buildDir, b.err = os.MkdirTemp("", "irie-bin-")
+			buildDir, b.err = os.MkdirTemp("", buildPrefix)
+			if b.err == nil {
+				own(buildDir)
+			}
 		}
 		dir := buildDir
 		buildMu.Unlock()
@@ -125,14 +143,20 @@ func FreePort(t testing.TB) int {
 }
 
 // ShortDir returns a new directory under /tmp. Its path stays short enough for
-// a unix socket inside it, which macOS caps at about 104 bytes.
+// a unix socket inside it, which macOS caps at about 104 bytes. At cleanup
+// any tmux server in it ends, with everything it runs, and it is removed;
+// when the run dies first, the reaper does that (reap.go).
 func ShortDir(t testing.TB) string {
 	t.Helper()
-	d, err := os.MkdirTemp("/tmp", "irie-t-")
+	d, err := os.MkdirTemp("/tmp", shortPrefix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(d) })
+	own(d)
+	t.Cleanup(func() {
+		cleanDir(d)
+		release(d)
+	})
 	return d
 }
 
@@ -155,7 +179,9 @@ func Random(n int) string {
 
 // Env keeps a test away from the user's own Irie and tmux. Every XDG dir, the
 // runtime dir and the tmux socket dir point at fresh temp dirs, TMUX is unset,
-// and Socket names a private tmux server that is killed at cleanup.
+// and Socket names a private tmux server. At cleanup every tmux server in
+// the socket dir ends, with what it runs, even when the run is killed
+// (reap.go).
 type Env struct {
 	ConfigHome, StateHome, DataHome, CacheHome string
 	RuntimeDir                                 string // XDG_RUNTIME_DIR, under ShortDir
@@ -163,9 +189,14 @@ type Env struct {
 	Socket                                     string // tmux -L name: irie-test-<random>
 }
 
-// NewEnv sets up an isolated environment for t with t.Setenv.
+// NewEnv sets up an isolated environment for t with t.Setenv. The
+// package's TestMain must be Main, whose reaper ends the env's tmux servers
+// when the run is killed before its cleanups.
 func NewEnv(t *testing.T) *Env {
 	t.Helper()
+	if !mainRan {
+		t.Fatal("testutil.NewEnv: make testutil.Main the package's TestMain, so that a killed run cannot leave its tmux servers behind")
+	}
 	root := t.TempDir()
 	short := ShortDir(t)
 	e := &Env{
@@ -193,27 +224,18 @@ func NewEnv(t *testing.T) *Env {
 		os.Unsetenv(k)
 	}
 	// Registered after the Setenv calls, so it runs before they are undone.
-	t.Cleanup(e.killServer)
+	t.Cleanup(e.killServers)
 	return e
 }
 
-// killServer kills the private tmux server and waits for its panes' first
-// processes to exit, so none of them writes into a temp dir, such as an
-// agent host's exit.json, while the temp dirs are being removed.
-func (e *Env) killServer() {
-	out, _ := e.tmuxCmd("list-panes", "-a", "-F", "#{pane_pid}").Output()
-	e.tmuxCmd("kill-server").Run()
-	deadline := time.Now().Add(5 * time.Second)
-	for _, f := range strings.Fields(string(out)) {
-		pid, err := strconv.Atoi(f)
-		if err != nil {
-			continue
-		}
-		for syscall.Kill(pid, 0) == nil && time.Now().Before(deadline) {
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-}
+// killServers ends every tmux server of the env, the team server (DESIGN
+// §2.3) and any other a test started besides the private one, and waits
+// for what they run to exit, so none of it writes into a temp dir, such as
+// an agent host's exit.json, while the temp dirs are being removed. What
+// has not exited after stopGrace is killed: a team server lives on without
+// sessions, and an agent can hang on a hook it runs in a session of its
+// own, which the end of its pane does not reach.
+func (e *Env) killServers() { stopServers(tmuxSockets(e.TmuxTmpDir)) }
 
 // WriteConfig writes config.toml with the test's tmux socket and extra TOML.
 func (e *Env) WriteConfig(t testing.TB, extra string) {

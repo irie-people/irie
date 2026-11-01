@@ -48,7 +48,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 
 | Typed | What the core does | `did` |
 |---|---|---|
-| A task, with `@repo`, `@repo!`, `@path`, `+profile` among its first line's words (DESIGN §4.2) | `spawn`. With no `@` word it runs where `repo` and `in_place` say, the client's menu; with no `+` word on `profile`; on `model` when the client sends one | `spawned`, with `session` |
+| A task, with `@repo`, `@repo!`, `@path`, `+profile` among its first line's words (DESIGN §4.2) | `spawn`. With no `@` word it runs where `repo` and `in_place` say, the client's menu; with no `+` word on `profile`; on `model` when the client sends one. It is a jot: one that reads as more for the task typed just before ("also …", "it's …", a link) goes to that task's agent instead (DESIGN §4.2, "More for the last jot"), and the same text sent with `apart` naming that session takes it back and starts it apart | `spawned`, with `session`; or `added`, with the `session` it went to and `until` |
 | `hows X?`, `how's X going`, `how is X doing` | Answers in one line, from the row whose name, branch, repo, agent, profile or helper best matches every word | `answered` |
 | `:rename NAME`, `:rate good\|bad`, `:close`, `:prio [REASON]`, `:park`, `:unpark`, `:freeze`, `:thaw` | The op of the same name on the selected session (`session`); `:prio` promotes it, or puts a promoted one back | `ran` |
 | `:freeze all`, `:thaw all` | Every session | `ran` |
@@ -63,12 +63,13 @@ The reply:
 
 | Field | Meaning |
 |---|---|
-| `did` | `spawned`, `answered`, `ran` or `asked` |
+| `did` | `spawned`, `added`, `answered`, `ran` or `asked` |
 | `op` | The op it ran, such as `spawn`, `park` or `undo`; none for a question it answered |
 | `text` | What to tell the person, as it is |
 | `session` | The session it started or acted on. A client selects it; after a `spawned`, the Mac app shows it only when nothing else is on show |
 | `show` | Show `session` and give it the keyboard |
 | `choice` | When `asked`: the core's question, with its options, the recommended one first. Answer through `op` (`undo` or `redo`) with `choice_id` and the option's `key` (DESIGN §4.5) |
+| `until` | When `added`: when the task is typed to the agent. Until then, the same input with `apart` set to `session` takes it back and starts it on its own; a client may offer that as a button |
 
 A long paste the client shows as a label goes in `pastes`, each `{label, text}`. The core reads the words around the labels first, then puts each paste back whole in its place, so a paste's own `@` and `+` words stay text.
 

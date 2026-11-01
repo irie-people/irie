@@ -107,6 +107,7 @@ type Core struct {
 	trodNow    trodNow             // the trod bot as its last sweep found it (trod.go)
 	trodReset  time.Time           // when the plan's usage limit last reset, as far as the trod bot saw
 	trodHand   trodHand            // the run of the trod bot you started by hand last (trod.go)
+	last       *lastJot            // the jot sent last from a task bar, which the next may add to (follow.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -151,6 +152,10 @@ type session struct {
 	dog      dogState               // what the jot dog found its jot left (dog.go)
 	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
 	hue      int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
+	// Jots added to its own, to type to its agent once it can take them,
+	// and whether that is under way (follow.go).
+	followUps []followUp
+	sending   bool
 }
 
 func (x *session) wire() ipc.Session {
@@ -312,6 +317,7 @@ func (c *Core) tick() {
 	c.followTeams()
 	c.reap()
 	c.observe(time.Now())
+	c.sendFollowUps(time.Now())
 	c.keepFrozen()
 	c.background()
 	c.countTokens()
@@ -412,6 +418,7 @@ func (c *Core) adopt(p tmux.Pane) *session {
 		x.track.apply(e)
 	}
 	delete(c.history, x.id)
+	c.loadFollowUps(x)
 	return x
 }
 
@@ -594,6 +601,14 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		var a ipc.SpawnArgs
 		if err := decode(raw, &a); err != nil {
 			return nil, err
+		}
+		// A jot may add to the one before it (follow.go).
+		if (a.Jot || a.Apart != "") && !a.Delegate {
+			r, err := c.jot(a)
+			if err != nil {
+				return nil, err
+			}
+			return r, nil
 		}
 		s, err := c.spawn(a, true)
 		if err != nil {

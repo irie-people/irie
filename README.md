@@ -32,7 +32,7 @@ On a Mac or Linux, paste this into a terminal:
 curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 ```
 
-It downloads the latest release for your computer, checks its SHA-256, and installs `irie`, and on a Mac with Apple silicon Irie.app too; a release with no download for your computer is built from source instead, which needs Go. Then `irie setup` checks what else Irie needs, tmux, Claude Code and a sign-in, and offers to install each part that is missing, asking first. Open Irie from Spotlight, or type `irie`: its welcome offers a first task to try. [Install](https://irie-people.github.io/irie/install.html) says what each step does, and how to build Irie from source.
+It downloads the latest release for your computer, checks its SHA-256, and installs `irie`, and on a Mac Irie.app too; a release with no download for your computer is built from source instead, which needs Go. Then `irie setup` checks what else Irie needs, tmux, Claude Code and a sign-in, and offers to install each part that is missing, asking first. Open Irie from Spotlight, or type `irie`: its welcome offers a first task to try. [Install](https://irie-people.github.io/irie/install.html) says what each step does, and how to build Irie from source.
 
 ## Status
 

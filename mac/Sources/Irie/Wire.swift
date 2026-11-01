@@ -246,7 +246,7 @@ struct AttachInfo: Decodable, Equatable {
 /// docs/CORE.md): the text as typed, the session selected for a : command
 /// to act on, and where and on what a task runs when its words don't say.
 /// The app keeps no rules of its own for the words.
-struct InputArgs: Encodable {
+struct InputArgs: Encodable, Equatable {
     var text: String
     var session: String?
     /// The selected session outside Irie, which :move brings in.
@@ -257,15 +257,18 @@ struct InputArgs: Encodable {
     /// A model for a task instead of its profile's; only a core whose hello
     /// lists spawn-model takes it.
     var model: String?
+    /// The session a task typed before was added to, as more for its jot:
+    /// the core takes it back and starts it on its own (DESIGN §4.2).
+    var apart: String?
 
     enum CodingKeys: String, CodingKey {
-        case text, session, outside, repo, profile, model
+        case text, session, outside, repo, profile, model, apart
         case inPlace = "in_place"
     }
 }
 
-/// What the core made of it: spawned, answered, ran or asked, and what to
-/// say, as it is.
+/// What the core made of it: spawned, added, answered, ran or asked, and
+/// what to say, as it is.
 struct InputResult: Decodable {
     var did: String
     var op: String?
@@ -275,6 +278,9 @@ struct InputResult: Decodable {
     var show: Bool?
     /// The question to answer when did is asked, through op (undo or redo).
     var choice: UndoChoice?
+    /// When did is added: when the task is typed to the agent; until then
+    /// the same text sent with apart takes it back.
+    var until: Date?
 }
 
 /// An @ or + word to complete: "@" lists the repos, "+" the agents.

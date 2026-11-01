@@ -3,7 +3,8 @@
 #
 #   irie-darwin-arm64.tar.gz  irie-darwin-amd64.tar.gz
 #   irie-linux-amd64.tar.gz   irie-linux-arm64.tar.gz
-#   Irie-macos-arm64.zip      Irie.app, with irie inside, for Apple silicon
+#   Irie-macos.zip            Irie.app, with irie inside, for Apple silicon
+#                             and Intel Macs
 #   SHA256SUMS                the SHA-256 of each
 #
 # The site's install.sh picks among them. Their names carry no version, so
@@ -45,15 +46,15 @@ for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
 done
 
 if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
-	say "Irie.app"
-	mac/build.sh
+	say "Irie.app, for Apple silicon and Intel"
+	IRIE_MAC_UNIVERSAL=1 mac/build.sh
 	app=$work/Irie.app
 	ditto mac/build/Irie.app "$app"
 	# irie inside the app, so the app alone can start Irie (docs/MAC.md).
 	# Contents/Helpers, not MacOS: on a disk that ignores case, irie and
 	# the app's own Irie would be one file.
 	mkdir -p "$app/Contents/Helpers"
-	cp "$work/irie-darwin-arm64/irie" "$app/Contents/Helpers/irie"
+	lipo -create "$work/irie-darwin-arm64/irie" "$work/irie-darwin-amd64/irie" -output "$app/Contents/Helpers/irie"
 	plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 	# Signed again from the inside out, so the app's signature covers its
 	# helper, with the identity mac/build.sh signs with: ad hoc unless
@@ -67,7 +68,7 @@ if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
 		esac
 	done
 	codesign --verify --strict "$app"
-	ditto -c -k --keepParent "$app" "$out/Irie-macos-arm64.zip"
+	ditto -c -k --keepParent "$app" "$out/Irie-macos.zip"
 else
 	say "not a Mac with Apple silicon: no Irie.app"
 fi
