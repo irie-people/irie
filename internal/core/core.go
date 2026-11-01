@@ -61,6 +61,7 @@ type Core struct {
 	http     *http.Client // for local servers
 	sampling atomic.Bool  // a memory sample is running
 	sweeping atomic.Bool  // the jot dog looks at the finished jots (dog.go)
+	fdog     *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
 
 	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
 	awakeMu      sync.Mutex  // guards awake; taken after mu
@@ -198,6 +199,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
 		history: map[string][]event.Event{}, outcomes: map[string]*outcome{},
+		fdog: newFreezeDog(),
 	}
 	c.useConfig(o.Config)
 	return c
@@ -260,6 +262,7 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
+	go c.watchFreezes()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
@@ -512,7 +515,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are

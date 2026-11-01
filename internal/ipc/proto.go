@@ -73,9 +73,20 @@ const (
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
 
+// FeatureWatch is in hello's features when subscribe takes ViewWatch: the
+// freeze dog watches the window that asks (DESIGN §2.4).
+const FeatureWatch = "watch"
+
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
 const ViewApp = "app"
+
+// ViewWatch is the SubscribeArgs.View of a window that asks the freeze dog
+// to watch it (DESIGN §2.4): the stream carries only pings, which the
+// window answers with a Pong from its main loop. A ping left unanswered
+// for ui.freeze_dog has its process force quit and, for the Mac app,
+// opened again.
+const ViewWatch = "watch"
 
 // Error codes.
 const (
@@ -479,9 +490,22 @@ type SubscribeArgs struct {
 	// sub:<id>. With Conversation, sub:<id> follows that helper's own
 	// conversation instead of the session's.
 	Agent string `json:"agent,omitempty"`
-	View  string `json:"view,omitempty"` // "" or ViewApp
+	View  string `json:"view,omitempty"` // "", ViewApp or ViewWatch
 	// Conversation adds the session's conversation frames; it needs Session.
 	Conversation bool `json:"conversation,omitempty"`
+	// With ViewWatch: the window's process, which the freeze dog force
+	// quits, and the Mac app it then opens again, if any.
+	PID    int    `json:"pid,omitempty"`
+	Bundle string `json:"bundle,omitempty"`
+}
+
+// Pong answers a FramePing on the same connection. A watched window sends
+// it from its main loop, so it says the window still answers its user, and
+// with how the window stands, so that one opened again stands the same way.
+type Pong struct {
+	Pong   uint64 `json:"pong"`
+	Front  bool   `json:"front,omitempty"`  // the window's app is the active one
+	Hidden bool   `json:"hidden,omitempty"` // its app is hidden
 }
 
 // AttachInfoResult is how to attach a tmux client to the session that holds
@@ -769,6 +793,10 @@ const (
 	// empty when nothing: once after the first snapshot, then whenever they
 	// change. A subscription to one session gets none.
 	FrameHistory = "history"
+	// FramePing is the freeze dog's ping to a window it watches, the only
+	// frame a ViewWatch subscription gets. The window answers it with a
+	// Pong.
+	FramePing = "ping"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
@@ -784,6 +812,7 @@ type Frame struct {
 	Closed   []ClosedSession  `json:"closed,omitempty"`   // closed
 	Undo     string           `json:"undo,omitempty"`     // history
 	Redo     string           `json:"redo,omitempty"`     // history
+	Ping     uint64           `json:"ping,omitempty"`     // ping
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 }
@@ -847,6 +876,11 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			Undo string `json:"undo"`
 			Redo string `json:"redo"`
 		}{f.T, f.Undo, f.Redo})
+	case FramePing:
+		return json.Marshal(struct {
+			T    string `json:"t"`
+			Ping uint64 `json:"ping"`
+		}{f.T, f.Ping})
 	case FrameHeader:
 		h := f.Header
 		if h == nil {

@@ -178,8 +178,9 @@ final class KeyRouter {
 }
 
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
-/// it quits with its window. `--background`, which `tools/live.sh` passes when
-/// it relaunches the app, leaves the focus where it is.
+/// it quits with its window. `--background`, which `tools/live.sh` and the
+/// freeze dog pass when they open the app again, leaves the focus where it
+/// is. The freeze dog watches the app from the moment it has launched.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -187,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !CommandLine.arguments.contains("--background") {
             NSApp.activate(ignoringOtherApps: true)
         }
+        FreezeDog.start(socketPath: CorePaths.socket())
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }

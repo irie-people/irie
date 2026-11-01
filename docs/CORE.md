@@ -23,6 +23,7 @@ The Go package holds no state and starts nothing: the core is what runs. Its wir
 5. **Send gestures to the ops they name.** A click on a card is `show`; a drag is `reorder`; the buttons and keys are `park`, `unpark`, `freeze`, `thaw`, `priority`, `close`, `reopen`, `undo`, `redo`, `rate` and `move`; an inline rename is `rename`; a message box is `send`; a conversation view is `conversation` (or `subscribe` with `conversation: true`); a settings window is `config` and `theme`. Keys and buttons are the client's own; what they do is the core's.
 6. **Show a terminal**, if the client has one: `attach-info` gives the tmux binary, the socket and the session to attach to, and `tmux -S <socket> attach-session -t <session>` shows the slot.
 7. **Show errors as they are.** A failed request replies `{"ok":false,"error":{"code":…,"msg":…}}`. The message is written for the person; the code (`bad_args`, `not_found`, `busy` and the rest) is for the client to act on.
+8. **Answer the freeze dog**, if the client is a window, when `hello` lists `watch`. On a connection of its own, `subscribe` with `view: "watch"`, the window's `pid` and, for an app, its `bundle`, and answer each `{"t":"ping","ping":N}` from the main loop with `{"pong":N,"front":…,"hidden":…}` on the same connection. A ping left unanswered for `ui.freeze_dog` has the core force quit the window and open the bundle again as it stood (DESIGN §2.4). The Mac app does it in `FreezeDog.swift`, on a thread of its own, so that only a stuck main thread holds an answer up.
 
 In Go:
 
