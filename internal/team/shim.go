@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/irie-people/irie/internal/filetx"
 )
 
 // The tmux shim is `irie team-tmux`, the tmux that an agent of a session
@@ -250,9 +252,10 @@ func readEnv(path string) ([]string, error) {
 	return env, nil
 }
 
-// WriteEnv writes env as an environment file for readEnv.
+// WriteEnv writes env as an environment file for readEnv, in one rename,
+// so a shim reading it meanwhile gets the old file whole.
 func WriteEnv(path string, env []string) error {
-	return os.WriteFile(path, []byte(strings.Join(env, "\x00")), 0o600)
+	return filetx.WriteFile(path, []byte(strings.Join(env, "\x00")), 0o600)
 }
 
 func lookup(env []string, name string) string {

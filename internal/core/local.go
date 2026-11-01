@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
@@ -90,16 +91,14 @@ func (c *Core) saveLocal() {
 	}
 }
 
+// writeJSON writes one of the core's JSON files, under its write lock and
+// in one rename (internal/filetx).
 func writeJSON(path string, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return filetx.WriteFile(path, append(b, '\n'), 0o600)
 }
 
 // profile returns the named profile, ready to change: one of the config's,

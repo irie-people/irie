@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/irie-people/irie/internal/filetx"
 )
 
 // Spec is spec.json: what the host runs. The core also keeps facts about
@@ -120,16 +122,14 @@ func ReadSpec(path string) (Spec, error) {
 	return s, nil
 }
 
+// writeJSON writes one of the session's JSON files, under its write lock
+// and in one rename (internal/filetx).
 func writeJSON(path string, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return filetx.WriteFile(path, append(b, '\n'), 0o600)
 }
 
 // Run runs the agent described by the spec at specPath and returns the
