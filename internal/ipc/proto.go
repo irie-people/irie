@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 // API is the protocol version. Additions keep backwards compatibility.
@@ -65,14 +66,51 @@ const (
 	// place and runs on the result at once: the Mac app's Settings window
 	// (DESIGN §5.5).
 	OpConfig = "config"
+	// OpTrod is the trod bot's report: whether it works now, the
+	// rules and guidelines it gives, and what it did (DESIGN §4.10).
+	OpTrod = "trod"
+	// OpGabriel is Gabriel's report: whether the user is at the computer
+	// and the machine busy, what is in their focus, and what he holds back
+	// (DESIGN §4.11). It answers a GabrielResult.
+	OpGabriel = "gabriel"
+	// OpArch lists Irie's arch agents for any client to draw (DESIGN
+	// §4.11): each one's name and work, whether he is on, what he does now,
+	// what a person can do with him, and his settings. It answers an
+	// ArchResult.
+	OpArch = "arch"
+	// OpReady checks that the computer has what Irie needs, as its agents
+	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
+	// a ready.Report, for the Mac app's welcome.
+	OpReady = "ready"
+	// OpVPN reads or changes Mullvad VPN through its CLI, while vpn.on
+	// (docs/proposals/extensions.md §4). A change from inside an agent is
+	// refused.
+	OpVPN = "vpn"
+	// OpLearn gives what the Help menu shows: the learning resources, the
+	// user's own links and the glossary (docs/proposals/learning.md).
+	OpLearn = "learn"
 )
+
+// FeatureTutor is in hello's features when spawn takes SpawnArgs.Tutor.
+const FeatureTutor = "spawn-tutor"
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
 
+// FeatureWatch is in hello's features when subscribe takes ViewWatch: the
+// freeze dog watches the window that asks (DESIGN §2.4).
+const FeatureWatch = "watch"
+
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
 const ViewApp = "app"
+
+// ViewWatch is the SubscribeArgs.View of a window that asks the freeze dog
+// to watch it (DESIGN §2.4): the stream carries only pings, which the
+// window answers with a Pong from its main loop. A ping left unanswered
+// for ui.freeze_dog has its process force quit and, for the Mac app,
+// opened again.
+const ViewWatch = "watch"
 
 // Error codes.
 const (
@@ -137,6 +175,7 @@ type Session struct {
 	Tokens *Tokens `json:"tokens,omitempty"`
 
 	// What the session runs on and costs (DESIGN §6.3).
+	Tutor   string   `json:"tutor,omitempty"`    // its tutor mode, explain or teach; empty when off (learn.tutor)
 	Model   string   `json:"model,omitempty"`    // the model the agent runs
 	Local   bool     `json:"local,omitempty"`    // a local model, which costs memory rather than tokens
 	CostUSD *float64 `json:"cost_usd,omitempty"` // what it has cost at list price, from its status line
@@ -156,10 +195,196 @@ type Session struct {
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
 
+	// Hue is which of the agents' colours it takes while it works, from 1
+	// to ui.AgentColors, the same for as long as it lives (internal/core,
+	// hue.go); 0 until the core gives it one.
+	Hue int `json:"hue,omitempty"`
+
+	// Host is the machine it runs on when that is another machine, a core
+	// this one is paired with (docs/proposals/multi-host.md §4.5). Its id
+	// is then the host's name, a slash and that core's own id, which a
+	// client sends back as it is: this core passes the call on.
+	Host string `json:"host,omitempty"`
+	// HostDown is since when its host has not answered, while it does not.
+	HostDown *time.Time `json:"host_down,omitempty"`
+
 	// Loose is what its jot left that has not landed, by the jot dog's
 	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
 	// through or the dog does not watch it.
 	Loose *Loose `json:"loose,omitempty"`
+	// Trod is what the trod bot did for it in this night's shift or
+	// the last (DESIGN §4.10); nil when it did nothing.
+	Trod *TrodRow `json:"trod,omitempty"`
+}
+
+// TrodRow is what the trod bot did for a session in one shift.
+type TrodRow struct {
+	Sent   int       `json:"sent"`   // how often it sent the session on
+	Last   time.Time `json:"last"`   // when it last did
+	Reason string    `json:"reason"` // why it last did: question, error, limit or loose
+}
+
+// TrodShift is the trod bot while it is in its hours, for the
+// sidebars' header (DESIGN §4.10).
+type TrodShift struct {
+	Until *time.Time `json:"until,omitempty"` // when its hours end; nil for a shift around the clock
+	Away  bool       `json:"away,omitempty"`  // you are away, so it steps in
+	Awake bool       `json:"awake,omitempty"` // it keeps the Mac awake
+	// Capped: the plan is past trod.max_plan_use, so it sends nothing on.
+	Capped bool `json:"capped,omitempty"`
+	// Hand: you started it by hand, so it works while you are at the Mac,
+	// until nothing is left or the plan is as full as it may get.
+	Hand bool `json:"hand,omitempty"`
+}
+
+// TrodArgs start a run of the trod bot by hand, which works at once, until
+// Until if given, until no session has work left, or until the plan is as
+// full as trod.max_plan_use; or stop one. With neither, the op only
+// reports.
+type TrodArgs struct {
+	Start bool       `json:"start,omitempty"`
+	Stop  bool       `json:"stop,omitempty"`
+	Until *time.Time `json:"until,omitempty"`
+}
+
+// TrodHand is the run of the trod bot you started by hand last.
+type TrodHand struct {
+	From  time.Time  `json:"from"`
+	Until *time.Time `json:"until,omitempty"`
+	On    bool       `json:"on"`              // it still works
+	Ended *time.Time `json:"ended,omitempty"` // when it ended
+	Why   string     `json:"why,omitempty"`   // why it ended: nothing was left, the plan, its time, or you
+}
+
+// TrodResult is the trod bot's report (DESIGN §4.10).
+// ArchResult is every arch agent, by rank (OpArch). A client draws each
+// one as it comes, so a new arch agent needs no change to any client.
+type ArchResult struct {
+	Agents []ArchAgent `json:"agents"`
+}
+
+// ArchAgent is one arch agent as a client shows him.
+type ArchAgent struct {
+	Name     string        `json:"name"`               // such as gabriel
+	Nickname string        `json:"nickname,omitempty"` // what people may call him for short, such as Raffi
+	Icon     string        `json:"icon,omitempty"`     // his mark, one or two emoji
+	Title    string        `json:"title"`              // his work in a few words
+	About    string        `json:"about"`              // his work in a sentence or two
+	On       bool          `json:"on"`                 // he works now
+	Status   string        `json:"status,omitempty"`   // what he does now, in a line
+	Actions  []ArchAction  `json:"actions,omitempty"`  // what a person can do with him now
+	Settings []ArchSetting `json:"settings,omitempty"` // his settings, in the order to show them
+}
+
+// ArchAction is something a person can do with an arch agent: a client
+// shows Label and, when it is used, calls Op with Args as they are.
+type ArchAction struct {
+	Label string          `json:"label"` // such as "Boost for 1 hour"
+	Op    string          `json:"op"`    // such as gabriel
+	Args  json.RawMessage `json:"args,omitempty"`
+	Done  string          `json:"done,omitempty"` // what the client says once it worked
+}
+
+// ArchSetting is one of an arch agent's settings: a config key (the config
+// op reads and writes it), how a client edits it, and what to call it.
+type ArchSetting struct {
+	Key   string `json:"key"`            // such as arch.gabriel.away
+	Kind  string `json:"kind"`           // ArchBool, ArchDuration, ArchNumber or ArchLines
+	Label string `json:"label"`          // such as "You're away after"
+	Help  string `json:"help,omitempty"` // a line on what it does
+	// Value is the setting's value now, as the config op has it: a
+	// duration as a string such as "5m".
+	Value json.RawMessage `json:"value,omitempty"`
+}
+
+// The kinds of ArchSetting.
+const (
+	ArchBool     = "bool"     // a switch
+	ArchDuration = "duration" // a duration such as "5m"
+	ArchNumber   = "number"   // a number
+	ArchLines    = "lines"    // a list of one-line texts
+)
+
+// GabrielArgs starts or stops a boost (OpGabriel): for its time, the user's
+// focus gets the machine first whether it is busy or not. No args asks for
+// the report alone.
+type GabrielArgs struct {
+	Boost bool   `json:"boost,omitempty"` // start a boost, or make the one on go on for For from now
+	Stop  bool   `json:"stop,omitempty"`  // end the boost
+	For   string `json:"for,omitempty"`   // how long, such as "30m"; "" = arch.gabriel.boost
+}
+
+// GabrielResult is Gabriel's report (OpGabriel).
+type GabrielResult struct {
+	On      bool   `json:"on"`      // he works in this core
+	Outside bool   `json:"outside"` // he slows apps outside Irie too
+	Present bool   `json:"present"` // the user is at the computer
+	Idle    string `json:"idle"`    // since their last keyboard or mouse input, such as "4s"
+	Busy    bool   `json:"busy"`    // the machine is busy
+	Holding bool   `json:"holding"` // he holds back what is out of the user's focus
+	// BoostUntil is when the boost ends, while one is on: the user's focus
+	// gets the machine first then whether it is busy or not.
+	BoostUntil *time.Time       `json:"boost_until,omitempty"`
+	LowPower   bool             `json:"low_power,omitempty"` // macOS's Low Power Mode is on, which slows the whole machine
+	Freed      []string         `json:"freed,omitempty"`     // the idle local models the boost unloaded
+	CPUs       int              `json:"cpus"`
+	RunQueue   float64          `json:"run_queue"`
+	Pressure   int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
+	Front      string           `json:"front,omitempty"` // the app in front, when he read it
+	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
+	Held       []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
+	Apps       []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
+}
+
+// GabrielSession is a session in Gabriel's report.
+type GabrielSession struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// GabrielApp is an app outside Irie that Gabriel slowed.
+type GabrielApp struct {
+	PID  int     `json:"pid"`
+	Name string  `json:"name"`
+	CPU  float64 `json:"cpu"` // its share of a CPU when he slowed it, in percent
+}
+
+type TrodResult struct {
+	On          bool          `json:"on"`                     // trod.on
+	In          bool          `json:"in"`                     // on, and in its hours now
+	Away        bool          `json:"away"`                   // you are away, by trod.away
+	Works       bool          `json:"works"`                  // in its hours and you are away: it steps in
+	Awake       bool          `json:"awake"`                  // it keeps the Mac awake
+	IdleSeconds *int64        `json:"idle_seconds,omitempty"` // how long the Mac has had no keyboard or mouse input, when Irie can tell
+	Start       string        `json:"start"`                  // trod.start and trod.end
+	End         string        `json:"end"`
+	From        time.Time     `json:"from"` // this night's shift, or the last
+	To          time.Time     `json:"to"`
+	MaxPlanUse  float64       `json:"max_plan_use"`         // trod.max_plan_use, in percent
+	FiveHours   *float64      `json:"five_hours,omitempty"` // how full the plan's five hours and week are, in percent, when the status line said
+	Week        *float64      `json:"week,omitempty"`
+	Capped      bool          `json:"capped,omitempty"` // past max_plan_use, so it sends nothing on
+	Hand        *TrodHand     `json:"hand,omitempty"`   // the run you started by hand last
+	Rules       []string      `json:"rules"`
+	Guidelines  []string      `json:"guidelines"`
+	Sessions    []TrodSession `json:"sessions"` // in the list's order
+}
+
+// TrodSession is what the trod bot did for one session in that shift,
+// and why it leaves the session for you, if it does.
+type TrodSession struct {
+	ID    string     `json:"id"`
+	Name  string     `json:"name"`
+	State string     `json:"state"`
+	Sent  []TrodSend `json:"sent,omitempty"`
+	Left  string     `json:"left,omitempty"`
+}
+
+// TrodSend is one time the trod bot sent a session on.
+type TrodSend struct {
+	At     time.Time `json:"at"`
+	Reason string    `json:"reason"` // question, error, limit or loose
+	How    string    `json:"how"`    // stop (it sent the turn on), ask (it turned a question away) or typed
 }
 
 // Loose is what a jot left that has not landed (DESIGN §4.8).
@@ -263,6 +488,30 @@ type Header struct {
 	HelperStyle string  `json:"helper_style,omitempty"`
 	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
 	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
+	Load        *Load   `json:"load,omitempty"`   // how busy the machine is
+	// Machine is what another core needs to know of this machine before
+	// it starts a task here.
+	Machine *Machine `json:"machine,omitempty"`
+	// Peers are the cores this one is paired with, and how each is.
+	Peers []PeerInfo `json:"peers,omitempty"`
+	// Trod is the trod bot while it is in its hours (DESIGN §4.10).
+	Trod *TrodShift `json:"trod,omitempty"`
+	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
+	VPN *VPN `json:"vpn,omitempty"`
+}
+
+// Load is how busy the machine is, which a core also advertises to the
+// cores it is paired with (docs/proposals/multi-host.md §4.2).
+type Load struct {
+	CPUs int `json:"cpus"`
+	// RunQueue is the work waiting to run, averaged over the last minute
+	// and rounded to a whole CPU: how many CPUs it would keep busy.
+	RunQueue float64 `json:"run_queue"`
+	// Pressure is the kernel's memory pressure: 1 normal, 2 a warning, 4
+	// critical; none where the system does not say.
+	Pressure int `json:"pressure,omitempty"`
+	PTYs     int `json:"ptys"`              // ptys in use, to 8: every pane takes one
+	PTYMax   int `json:"pty_max,omitempty"` // the most there can be
 }
 
 // Window is one window of a plan's use, such as the five hours.
@@ -393,9 +642,22 @@ type SubscribeArgs struct {
 	// sub:<id>. With Conversation, sub:<id> follows that helper's own
 	// conversation instead of the session's.
 	Agent string `json:"agent,omitempty"`
-	View  string `json:"view,omitempty"` // "" or ViewApp
+	View  string `json:"view,omitempty"` // "", ViewApp or ViewWatch
 	// Conversation adds the session's conversation frames; it needs Session.
 	Conversation bool `json:"conversation,omitempty"`
+	// With ViewWatch: the window's process, which the freeze dog force
+	// quits, and the Mac app it then opens again, if any.
+	PID    int    `json:"pid,omitempty"`
+	Bundle string `json:"bundle,omitempty"`
+}
+
+// Pong answers a FramePing on the same connection. A watched window sends
+// it from its main loop, so it says the window still answers its user, and
+// with how the window stands, so that one opened again stands the same way.
+type Pong struct {
+	Pong   uint64 `json:"pong"`
+	Front  bool   `json:"front,omitempty"`  // the window's app is the active one
+	Hidden bool   `json:"hidden,omitempty"` // its app is hidden
 }
 
 // AttachInfoResult is how to attach a tmux client to the session that holds
@@ -444,10 +706,32 @@ type SpawnArgs struct {
 	Model string `json:"model,omitempty"`
 	// Continues is the session a failover carries the task on from.
 	Continues string `json:"continues,omitempty"`
+	// Jot is a task the user typed in a task bar or the command bar. One
+	// that reads as more for the jot sent just before it, in the same place
+	// and for the same agent, within spawn.follow_up_window, goes to that
+	// jot's agent instead of starting a session (DESIGN §4.2), and the
+	// result says Added.
+	Jot bool `json:"jot,omitempty"`
+	// Apart takes a jot that was added to session Apart back, if its agent
+	// has not had it yet, and starts it as a task of its own.
+	Apart string `json:"apart,omitempty"`
+	// Tutor is how the agent works with the user (learn.tutor): off,
+	// explain or teach; "" takes learn.tutor. A delegated subtask runs off
+	// unless it says otherwise (docs/proposals/learning.md).
+	Tutor string `json:"tutor,omitempty"`
 }
 
 type SpawnResult struct {
 	Session Session `json:"session"`
+	// Added says the task went to Session's agent, as more for its jot,
+	// rather than starting Session. It is typed to the agent once the
+	// agent can take it, and not before Until, so that a spawn with Apart
+	// can still take it back.
+	Added bool      `json:"added,omitempty"`
+	Until time.Time `json:"until,omitzero"`
+	// Late says, for a spawn with Apart, that the agent of the session the
+	// task had been added to has it already.
+	Late bool `json:"late,omitempty"`
 }
 
 // CompleteArgs carry the command bar token to complete, such as "@web" or
@@ -563,8 +847,11 @@ type ResultResult struct {
 	Text string `json:"text"`
 }
 
-// ToolArgs start a tool session: setup (`irie setup local`) or models
-// (`irie ctl local`).
+// ToolArgs start a tool session: setup (`irie setup local`), models
+// (`irie ctl local`), ready (`irie setup`, which fixes what the ready op
+// finds missing) or switch, the dead man's switch guide: a Claude Code
+// session that runs one of Irie's own skills (docs/proposals/extensions.md
+// §2.2).
 type ToolArgs struct {
 	Name string `json:"name"`
 }
@@ -573,7 +860,45 @@ type ToolArgs struct {
 const (
 	ToolSetup  = "setup"
 	ToolModels = "models"
+	ToolReady  = "ready"
+	ToolSwitch = "switch"
 )
+
+// VPNArgs ask the vpn op for the VPN's state, or for a change.
+type VPNArgs struct {
+	Do   string   `json:"do,omitempty"`   // "" for the state; on, off, lockdown, place or time
+	Args []string `json:"args,omitempty"` // lockdown's on or off; place's country, city or server
+}
+
+// What the vpn op does.
+const (
+	VPNOn       = "on"
+	VPNOff      = "off"
+	VPNLockdown = "lockdown"
+	VPNPlace    = "place"
+	VPNTime     = "time"
+)
+
+// VPNResult is the vpn op's answer: what to tell the person, and the VPN as
+// it is now.
+type VPNResult struct {
+	Text string `json:"text"`
+	VPN  *VPN   `json:"vpn,omitempty"`
+}
+
+// VPN is Mullvad VPN as the header carries it, while vpn.on: never an
+// address, a place on the map or the account's number.
+type VPN struct {
+	State    string     `json:"state"`              // connected, connecting, disconnected, disconnecting or error; "" while unread
+	City     string     `json:"city,omitempty"`     // the relay's, while connected or connecting
+	Country  string     `json:"country,omitempty"`  // the relay's
+	Host     string     `json:"host,omitempty"`     // the relay, such as se-got-wg-001
+	Lockdown bool       `json:"lockdown,omitempty"` // lockdown mode is on: the network is blocked while the VPN is off
+	Blocked  bool       `json:"blocked,omitempty"`  // off, and lockdown blocks the network now
+	Expires  *time.Time `json:"expires,omitempty"`  // when the account's time runs out
+	Text     string     `json:"text"`               // the state in one line
+	Problem  string     `json:"problem,omitempty"`  // why Irie can't read the VPN, such as no mullvad
+}
 
 // StatusArgs carry one status line update of a Claude Code session: its
 // JSON, as Claude Code gave it (DESIGN §6.3).
@@ -622,6 +947,20 @@ type ConfigResult struct {
 	// not, as after a hand edit gone wrong; the core runs on the config it
 	// loaded last.
 	Problem string `json:"problem,omitempty"`
+}
+
+// LearnArgs ask what the Help menu shows; with Session, the tutorials of the
+// languages its project is written in come first.
+type LearnArgs struct {
+	Session string `json:"session,omitempty"`
+}
+
+// LearnResult is what the Help menu shows (docs/proposals/learning.md): the
+// user's own links (learn.links), then the learning resources, and the
+// glossary of the words Irie and its agents use.
+type LearnResult struct {
+	Resources []learn.Resource `json:"resources"`
+	Glossary  []learn.Term     `json:"glossary"`
 }
 
 type ShowArgs struct {
@@ -683,6 +1022,10 @@ const (
 	// empty when nothing: once after the first snapshot, then whenever they
 	// change. A subscription to one session gets none.
 	FrameHistory = "history"
+	// FramePing is the freeze dog's ping to a window it watches, the only
+	// frame a ViewWatch subscription gets. The window answers it with a
+	// Pong.
+	FramePing = "ping"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
@@ -698,6 +1041,7 @@ type Frame struct {
 	Closed   []ClosedSession  `json:"closed,omitempty"`   // closed
 	Undo     string           `json:"undo,omitempty"`     // history
 	Redo     string           `json:"redo,omitempty"`     // history
+	Ping     uint64           `json:"ping,omitempty"`     // ping
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 }
@@ -761,6 +1105,11 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			Undo string `json:"undo"`
 			Redo string `json:"redo"`
 		}{f.T, f.Undo, f.Redo})
+	case FramePing:
+		return json.Marshal(struct {
+			T    string `json:"t"`
+			Ping uint64 `json:"ping"`
+		}{f.T, f.Ping})
 	case FrameHeader:
 		h := f.Header
 		if h == nil {

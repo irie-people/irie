@@ -16,6 +16,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -230,6 +231,34 @@ func TestNameNeedsTheFlag(t *testing.T) {
 	}
 }
 
+func TestPluginDirGoesOnlyToACLIThatLoadsIt(t *testing.T) {
+	const skills = "/home/alice/.local/share/irie/skills/plugins/0123456789abcdef"
+	s := spawnOf("x")
+	s.PluginDir = skills
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--name": true, "--plugin-dir": true}}
+	argv, _, _ := launchSpawn(t, defaultProfile(), s)
+	i := slices.Index(argv, "--plugin-dir")
+	if i < 0 || argv[i+1] != skills || argv[i-2] != "--settings" {
+		t.Errorf("argv = %q, want --plugin-dir %s after the settings", argv, skills)
+	}
+	resumed, _, _, err := Harness{}.Resume(defaultProfile(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(resumed, skills) {
+		t.Errorf("resume argv = %q, want the same skills", resumed)
+	}
+	s.Probe = current // the flag is not in its probe
+	if argv, _, _ := launchSpawn(t, defaultProfile(), s); slices.Contains(argv, "--plugin-dir") {
+		t.Errorf("argv = %q: --plugin-dir to a CLI that did not load a plugin", argv)
+	}
+	s.Probe.Flags = map[string]bool{"--plugin-dir": true}
+	s.PluginDir = ""
+	if argv, _, _ := launchSpawn(t, defaultProfile(), s); slices.Contains(argv, "--plugin-dir") {
+		t.Errorf("argv = %q: --plugin-dir with no skills", argv)
+	}
+}
+
 func TestSettingsArePassedWithTheSessionsFile(t *testing.T) {
 	argv, _, files := launch(t, defaultProfile(), "x")
 	i := slices.Index(argv, "--settings")
@@ -361,5 +390,204 @@ func TestSessionIDFlagCarriesTheVendorID(t *testing.T) {
 func TestClaudeCodeHasEveryLevel(t *testing.T) {
 	if l := (Harness{}).Levels(); l != harness.Generic|harness.Observed|harness.Held|harness.Subagents {
 		t.Errorf("levels %v, want GOHS", l)
+	}
+}
+
+// TestTutorModeSetsTheStyleAndTipsGoUnderTheSpinner checks the settings file
+// of a session in a tutor mode, with Irie's tips (docs/proposals/learning.md).
+func TestTutorModeSetsTheStyleAndTipsGoUnderTheSpinner(t *testing.T) {
+	s := spawnOf("x")
+	s.Tutor = config.TutorTeach
+	s.Tips = []learn.Tip{{ID: "irie.park", Text: "Park a session you have checked"}, {ID: "irie.red", Text: "A red card needs you"}}
+	_, _, files := launchSpawn(t, defaultProfile(), s)
+	golden(t, "settings-tutor.golden", files[SettingsFile])
+
+	var got struct {
+		Style string `json:"outputStyle"`
+		Tips  *struct {
+			Label string `json:"label"`
+			Tips  []struct {
+				ID       string `json:"id"`
+				Text     string `json:"text"`
+				Cooldown int    `json:"cooldownSessions"`
+			} `json:"tips"`
+		} `json:"spinnerTipsOverride"`
+	}
+	if err := json.Unmarshal(files[SettingsFile], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Style != "Learning" {
+		t.Errorf("outputStyle = %q, want Learning", got.Style)
+	}
+	if got.Tips == nil || got.Tips.Label != "Irie tip" || len(got.Tips.Tips) != 2 || got.Tips.Tips[0].ID != "irie.park" || got.Tips.Tips[0].Cooldown < 1 {
+		t.Errorf("spinnerTipsOverride = %+v", got.Tips)
+	}
+
+	// A resume keeps the style: its settings file is written afresh.
+	s.Tutor = config.TutorExplain
+	_, _, files, err := Harness{}.Resume(defaultProfile(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(files[SettingsFile], []byte(`"outputStyle": "Explanatory"`)) {
+		t.Errorf("resume settings:\n%s", files[SettingsFile])
+	}
+}
+
+func TestOffLeavesTheUsersStyleAndOldVersionsGetNoTips(t *testing.T) {
+	s := spawnOf("x")
+	s.Tips = []learn.Tip{{ID: "irie.park", Text: "Park a session you have checked"}}
+	s.Probe.Version = "2.1.200 (Claude Code)"
+	_, _, files := launchSpawn(t, defaultProfile(), s)
+	for _, key := range []string{"outputStyle", "spinnerTipsOverride"} {
+		if bytes.Contains(files[SettingsFile], []byte(key)) {
+			t.Errorf("%s in the settings file:\n%s", key, files[SettingsFile])
+		}
+	}
+}
+
+// withMikael is a recent Claude Code's spawn with Mikael, as the core asks
+// for him by default (DESIGN §4.11).
+func withMikael() harness.Spawn {
+	s := spawnOf("x")
+	s.Probe = harness.Probe{Version: "2.1.310", Flags: map[string]bool{"--name": true, "--agents": true, "--agent": true}}
+	s.Arch = harness.Arch{With: []string{"mikael"}, Good: []string{"Give credit."}, Door: true}
+	return s
+}
+
+func TestMikaelIsOnCallAndKeepsTheDoor(t *testing.T) {
+	argv, _, files := launchSpawn(t, defaultProfile(), withMikael())
+	i := slices.Index(argv, "--agents")
+	if i < 0 || slices.Contains(argv, "--agent") || argv[len(argv)-1] != "x" {
+		t.Fatalf("argv = %q", argv)
+	}
+	var defs map[string]struct{ Description, Prompt string }
+	if err := json.Unmarshal([]byte(argv[i+1]), &defs); err != nil || !strings.HasSuffix(defs["mikael"].Prompt, "- Give credit.") {
+		t.Errorf("--agents %s: %v", argv[i+1], err)
+	}
+	var took harness.Arch
+	if err := json.Unmarshal(files[harness.ArchFile], &took); err != nil {
+		t.Fatal(err)
+	}
+	if want := (harness.Arch{With: []string{"mikael"}, Good: []string{"Give credit."}, OnCall: true, Door: true}); !reflect.DeepEqual(took, want) {
+		t.Errorf("arch file = %+v, want %+v", took, want)
+	}
+	var s struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Type            string `json:"type"`
+				Command         string `json:"command"`
+				If              string `json:"if"`
+				Prompt          string `json:"prompt"`
+				Timeout         int    `json:"timeout"`
+				OnFailure       string `json:"onFailure"`
+				StatusMessage   string `json:"statusMessage"`
+				ContinueOnBlock bool   `json:"continueOnBlock"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(files[SettingsFile]))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&s); err != nil {
+		t.Fatal(err)
+	}
+	groups := s.Hooks["PreToolUse"]
+	// Irie's own hook comes first and is as it was.
+	if len(groups) < 2 || groups[0].Matcher != "*" || len(groups[0].Hooks) != 1 || groups[0].Hooks[0].Type != "command" || groups[0].Hooks[0].OnFailure != "block" {
+		t.Fatalf("PreToolUse = %+v", groups)
+	}
+	byIf := map[string]string{}
+	for _, g := range groups[1:] {
+		for _, h := range g.Hooks {
+			if h.Type != "prompt" || h.Command != "" || h.OnFailure != "" || !h.ContinueOnBlock || h.Timeout != 20 || h.StatusMessage == "" || !strings.Contains(h.Prompt, "$ARGUMENTS") {
+				t.Errorf("door hook = %+v", h)
+			}
+			byIf[h.If] = g.Matcher
+		}
+	}
+	for rule, matcher := range map[string]string{"Bash(curl *)": "Bash", "WebFetch": "WebFetch", "Read(~/.ssh/**)": "Read", "Edit(~/.*)": "Edit|Write"} {
+		if byIf[rule] != matcher {
+			t.Errorf("%s is weighed under matcher %q, want %q", rule, byIf[rule], matcher)
+		}
+	}
+}
+
+// TestVisualAsksForDiagramsInTutorModeOnly checks the append flag that asks a
+// tutor-mode session for diagrams (learn.visual).
+func TestVisualAsksForDiagramsInTutorModeOnly(t *testing.T) {
+	appends := func(s harness.Spawn) bool {
+		argv, _, _ := launchSpawn(t, defaultProfile(), s)
+		i := slices.Index(argv, "--append-system-prompt")
+		return i >= 0 && i+1 < len(argv) && argv[i+1] == harness.VisualNote
+	}
+	s := spawnOf("x")
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--name": true, "--append-system-prompt": true}}
+	s.Visual = true
+	if appends(s) {
+		t.Error("no tutor mode, yet it asks for diagrams")
+	}
+	s.Tutor = config.TutorExplain
+	if !appends(s) {
+		t.Error("explain mode with visual on asks for no diagrams")
+	}
+	s.Visual = false
+	if appends(s) {
+		t.Error("visual off, yet it asks for diagrams")
+	}
+	s.Visual = true
+	s.Probe.Flags = map[string]bool{"--name": true}
+	if appends(s) {
+		t.Error("a CLI without the flag gets it")
+	}
+}
+
+func TestWhatOfMikaelASessionTakes(t *testing.T) {
+	// A Claude Code too old to hold a call has no if or continueOnBlock
+	// for a door to rely on.
+	s := withMikael()
+	s.Probe.Version = "2.1.200"
+	if a, err := TakeArch(defaultProfile(), s); err != nil || a.Door || !a.OnCall {
+		t.Errorf("old CLI: %+v, %v", a, err)
+	}
+	// One whose --help lacks --agents gets no agents, and a profile that
+	// passes its own keeps them.
+	s = withMikael()
+	delete(s.Probe.Flags, "--agents")
+	argv, _, _ := launchSpawn(t, defaultProfile(), s)
+	if slices.Contains(argv, "--agents") {
+		t.Errorf("no --agents in --help: argv = %q", argv)
+	}
+	own := defaultProfile()
+	own.Args = []string{"--agents={}"}
+	if argv, _, _ := launchSpawn(t, own, withMikael()); slices.Index(argv, "--agents") >= 0 {
+		t.Errorf("the profile's own --agents was doubled: %q", argv)
+	}
+	// A session that runs as Mikael gets him, or fails to start.
+	s = withMikael()
+	s.Arch.As = "mikael"
+	argv, _, _ = launchSpawn(t, defaultProfile(), s)
+	if i := slices.Index(argv, "--agent"); i < 0 || argv[i+1] != "mikael" {
+		t.Errorf("+mikael argv = %q", argv)
+	}
+	delete(s.Probe.Flags, "--agent")
+	if _, _, _, err := (Harness{}).Launch(defaultProfile(), s); err == nil || !strings.Contains(err.Error(), "mikael") {
+		t.Errorf("+mikael without --agent: %v", err)
+	}
+	// A session no arch agent goes with gets nothing, not even the file.
+	_, _, files := launchSpawn(t, defaultProfile(), spawnOf("x"))
+	if _, ok := files[harness.ArchFile]; ok {
+		t.Error("an arch file with no arch agent")
+	}
+}
+
+func TestResumeKeepsMikael(t *testing.T) {
+	s := withMikael()
+	argv, _, files, err := Harness{}.Resume(defaultProfile(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(argv, "--agents") || argv[len(argv)-2] != "--resume" || files[harness.ArchFile] == nil || !bytes.Contains(files[SettingsFile], []byte(`"type": "prompt"`)) {
+		t.Errorf("resume argv = %q, files %v", argv, slices.Sorted(maps.Keys(files)))
 	}
 }

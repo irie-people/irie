@@ -109,3 +109,31 @@ func TestGenericIsLaunchOnly(t *testing.T) {
 		t.Errorf("Respond = %q", out)
 	}
 }
+
+// TestATutorModeIsANoteBeforeTheTask checks that a harness with no output
+// styles gets tutor mode as words before its task, as an argument and in
+// the task file a paste reads (docs/proposals/learning.md).
+func TestATutorModeIsANoteBeforeTheTask(t *testing.T) {
+	for _, paste := range []bool{false, true} {
+		p := aider(config.TaskArg)
+		if paste {
+			p.Task = config.TaskPaste
+		}
+		s := spawnOf("fix the login test")
+		s.Tutor, s.Visual = config.TutorTeach, true
+		argv, _, files, err := Harness{}.Launch(p, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := harness.TutorNote(config.TutorTeach) + " " + harness.VisualNote + "\n\nfix the login test"
+		if string(files[harness.TaskFile]) != want {
+			t.Errorf("paste %v: task file = %q", paste, files[harness.TaskFile])
+		}
+		if !paste && argv[len(argv)-1] != want {
+			t.Errorf("task argument = %q", argv[len(argv)-1])
+		}
+	}
+	if harness.WithTutor(config.TutorOff, true, "x") != "x" || harness.WithTutor("", true, "x") != "x" {
+		t.Error("off adds nothing")
+	}
+}

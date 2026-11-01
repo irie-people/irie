@@ -8,15 +8,21 @@
 //
 //	prompt            UserPromptSubmit with the task
 //	tool:<name>       PreToolUse, then PostToolUse; AskUserQuestion and
-//	                  ExitPlanMode wait for a line of input in between
+//	                  ExitPlanMode wait for a line of input in between. A
+//	                  PreToolUse hook that denies the call stops it there,
+//	                  as in Claude Code: no input, no PostToolUse, and the
+//	                  log records the reason the agent was given
 //	ask               tool:AskUserQuestion
 //	permission        PreToolUse, PermissionRequest and a permission_prompt
-//	                  Notification for Bash, a line of input, then PostToolUse
+//	                  Notification for Bash, a numbered menu as Claude Code
+//	                  draws one, a line of input, then PostToolUse
 //	stop              Stop; when a Stop hook answers with additionalContext
 //	                  or a block, the turn goes on, as in Claude Code, and
 //	                  stops again with stop_hook_active, up to 8 times
 //	stop:bg           Stop with a shell task running in the background
 //	stop:ask          Stop whose last message asks the user a question
+//	stop:asks         the same, asking again each time a Stop hook sends
+//	                  the turn on
 //	write:<file>      write a file in the agent's folder, as an edit does
 //	commit            git add -A and git commit in the agent's folder
 //	stopfail:<error>  StopFailure
@@ -27,19 +33,30 @@
 //	status:<cost>     run the status line command of --settings with
 //	                  Claude-shaped JSON, as the status line docs describe:
 //	                  that cost in dollars, 12% of the context, and 33% of
-//	                  the plan's five hours
+//	                  the plan's five hours, with IRIE_FAKE_WEEK percent of
+//	                  its week when that is set
 //	kids              start two children that run for an hour: one in the
 //	                  agent's process group, and a shell in a group of its
 //	                  own with a child of its own, as a tool's background
 //	                  job may be; the log records their pids
 //
 // Any other task runs the script "prompt". After the script the agent idles:
-// each line typed is a prompt and a turn, and EOF or a hangup ends the
-// session with SessionEnd. With --resume and no task it starts from a
+// each line typed is a prompt and a turn, and EOF, Ctrl-D at the start of a
+// line or a hangup ends the session with SessionEnd. As Claude Code runs
+// its terminal raw, the agent turns the terminal's line editing off, so a
+// line of any length reaches it whole: a terminal that edits lines cuts one
+// longer than MAX_CANON, 1024 bytes on macOS. With --resume and no task it starts from a
 // resume and idles at once.
 //
+// --agents takes a JSON object of agents, each with a description and a
+// prompt, and --agent must name one of them: as from 2.1.243, Claude Code
+// exits at once on one that does not read. The log's first line has both
+// in the agent's argv.
+//
 // `fakeagent agents --json` lists no sessions, as `claude agents --json`
-// does on a machine with none outside Irie. The log's first line records
+// does on a machine with none outside Irie. `fakeagent auth status --json`
+// says it is signed in, as Claude Code does, unless IRIE_FAKE_SIGNED_OUT
+// is set. The log's first line records
 // the agent's argv, pid and the names, not the values, of its environment;
 // each SIGHUP, SIGTERM or SIGINT it gets is logged too.
 //
@@ -48,9 +65,16 @@
 //	IRIE_FAKE_VERSION      what --version reports (default 2.1.300); a version
 //	                       before 2.1.295 refuses settings that use onFailure
 //	IRIE_FAKE_NO_NAME      when set, --help lists no --name and --name is refused
+//	IRIE_FAKE_PLUGINS      when set, --help lists --plugin-dir and
+//	                       `plugin list --json` lists each --plugin-dir's
+//	                       plugin as <name>@inline, as Claude Code does, so
+//	                       the probe hands sessions Irie's skills; unset, the
+//	                       probe finds neither and sessions get none
 //	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
 //	                       agent that hangs
 //	IRIE_FAKE_PACE         a pause before each step, such as 300ms
+//	IRIE_FAKE_WEEK         how much of the plan's week the status line says
+//	                       is used, in percent, resetting in three days
 //	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
 //	                       the --settings file
 package main
@@ -82,8 +106,13 @@ func main() { os.Exit(run(os.Args[1:])) }
 
 type options struct {
 	model, effort, mode, settings, sessionID, name, resume string
+	agents, agent                                          string
+	appendPrompt                                           string // --append-system-prompt, taken and kept in argv
 	version, help                                          bool
 	task                                                   string
+	plugins                                                []string // --plugin-dir, repeatable
+	pluginList                                             bool     // plugin list: print them
+	json                                                   bool     // --json
 }
 
 var (
@@ -113,6 +142,9 @@ func parseArgs(args []string) (options, error) {
 		case "-h", "--help":
 			o.help = true
 			continue
+		case "--json":
+			o.json = true
+			continue
 		}
 		var dst *string
 		switch flag {
@@ -124,6 +156,8 @@ func parseArgs(args []string) (options, error) {
 			dst = &o.mode
 		case "--settings":
 			dst = &o.settings
+		case "--append-system-prompt":
+			dst = &o.appendPrompt
 		case "--session-id":
 			dst = &o.sessionID
 		case "-r", "--resume":
@@ -132,6 +166,13 @@ func parseArgs(args []string) (options, error) {
 			if os.Getenv("IRIE_FAKE_NO_NAME") == "" {
 				dst = &o.name
 			}
+		case "--plugin-dir":
+			o.plugins = append(o.plugins, "")
+			dst = &o.plugins[len(o.plugins)-1]
+		case "--agents":
+			dst = &o.agents
+		case "--agent":
+			dst = &o.agent
 		}
 		if dst == nil {
 			return o, fmt.Errorf("error: unknown option '%s'", flag)
@@ -144,6 +185,11 @@ func parseArgs(args []string) (options, error) {
 			value = args[i]
 		}
 		*dst = value
+	}
+	// `plugin list --json` lists the plugins, as Claude Code does.
+	if len(positional) == 2 && positional[0] == "plugin" && positional[1] == "list" {
+		o.pluginList = true
+		return o, nil
 	}
 	if len(positional) > 1 {
 		return o, fmt.Errorf("error: too many arguments: %q", positional)
@@ -160,17 +206,42 @@ func parseArgs(args []string) (options, error) {
 	if o.sessionID != "" && !uuid.MatchString(o.sessionID) {
 		return o, fmt.Errorf("error: --session-id must be a valid UUID")
 	}
+	var agents map[string]struct {
+		Description string   `json:"description"`
+		Prompt      string   `json:"prompt"`
+		Tools       []string `json:"tools"`
+		Color       string   `json:"color"`
+	}
+	if o.agents != "" {
+		dec := json.NewDecoder(strings.NewReader(o.agents))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&agents); err != nil {
+			return o, fmt.Errorf("Invalid --agents configuration: %v", err)
+		}
+		for name, a := range agents {
+			if a.Description == "" || a.Prompt == "" {
+				return o, fmt.Errorf("Invalid --agents configuration: agent %q needs a description and a prompt", name)
+			}
+		}
+	}
+	if _, ok := agents[o.agent]; o.agent != "" && !ok {
+		return o, fmt.Errorf("error: agent %q not found", o.agent)
+	}
 	return o, nil
 }
 
 const help = `Usage: claude [options] [prompt]
 
 Options:
+  --agent <agent>            Agent for the current session
+  --agents <json-or-file>    JSON object defining custom agents
+  --append-system-prompt <prompt>  Append a system prompt to the default system prompt
   --effort <level>           Effort level for the current session
   -h, --help                 Display help for command
   --model <model>            Model for the current session
   -n, --name <name>          Set a display name for this session
   --permission-mode <mode>   Permission mode to use for the session
+  --plugin-dir <path>        Load a plugin from a directory for this session only
   -r, --resume [value]       Resume a conversation by session ID
   --session-id <uuid>        Use a specific session ID for the conversation
   --settings <file-or-json>  Path to a settings JSON file or a JSON string
@@ -178,6 +249,14 @@ Options:
 `
 
 func run(args []string) int {
+	if len(args) > 1 && args[0] == "auth" && args[1] == "status" {
+		if os.Getenv("IRIE_FAKE_SIGNED_OUT") != "" {
+			fmt.Println(`{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}`)
+			return 1
+		}
+		fmt.Println(`{"loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty", "email": "alice@example.com"}`)
+		return 0
+	}
 	if len(args) > 0 && args[0] == "agents" {
 		if !slices.Contains(args[1:], "--json") {
 			fmt.Fprintln(os.Stderr, "fakeagent: agents needs --json")
@@ -204,8 +283,22 @@ func run(args []string) int {
 		if os.Getenv("IRIE_FAKE_NO_NAME") != "" {
 			h = strings.Replace(h, "  -n, --name <name>          Set a display name for this session\n", "", 1)
 		}
+		if os.Getenv("IRIE_FAKE_PLUGINS") == "" {
+			h = strings.Replace(h, "  --plugin-dir <path>        Load a plugin from a directory for this session only\n", "", 1)
+		}
 		fmt.Print(h)
 		return 0
+	}
+	if o.pluginList {
+		if os.Getenv("IRIE_FAKE_PLUGINS") == "" {
+			fmt.Fprintln(os.Stderr, "error: too many arguments: [\"plugin\" \"list\"]")
+			return 1
+		}
+		return listPlugins(o.plugins)
+	}
+	if err := findSkill(o.task, o.plugins); err != nil {
+		fmt.Fprintln(os.Stderr, "fakeagent:", err)
+		return 1
 	}
 	a, err := newAgent(o, version)
 	if err != nil {
@@ -215,13 +308,60 @@ func run(args []string) int {
 	return a.run()
 }
 
+// listPlugins prints `plugin list --json`: each plugin of a --plugin-dir,
+// loaded for this session only, as <name>@inline.
+func listPlugins(dirs []string) int {
+	type entry struct {
+		ID      string `json:"id"`
+		Enabled bool   `json:"enabled"`
+	}
+	list := []entry{}
+	for _, dir := range dirs {
+		var m struct{ Name string }
+		b, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
+		if err != nil || json.Unmarshal(b, &m) != nil || m.Name == "" {
+			continue
+		}
+		list = append(list, entry{ID: m.Name + "@inline", Enabled: true})
+	}
+	b, _ := json.Marshal(list)
+	fmt.Println(string(b))
+	return 0
+}
+
+// findSkill checks a task that runs a plugin's skill, /<plugin>:<skill>, as
+// Claude Code would: some --plugin-dir must hold a plugin of that name with
+// that skill.
+func findSkill(task string, plugins []string) error {
+	cmd, _, _ := strings.Cut(task, " ")
+	plugin, skill, ok := strings.Cut(strings.TrimPrefix(cmd, "/"), ":")
+	if !strings.HasPrefix(cmd, "/") || !ok {
+		return nil
+	}
+	for _, dir := range plugins {
+		var m struct{ Name string }
+		b, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
+		if err != nil || json.Unmarshal(b, &m) != nil || m.Name != plugin {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, "skills", skill, "SKILL.md")); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown skill %s", cmd)
+}
+
 // handler and group are the hook settings of Claude Code's hooks reference.
+// A prompt hook, which asks a model, is read and checked but never runs.
 type handler struct {
-	Type      string   `json:"type"`
-	Command   string   `json:"command"`
-	Args      []string `json:"args"`
-	Timeout   int      `json:"timeout"`
-	OnFailure string   `json:"onFailure"`
+	Type            string   `json:"type"`
+	Command         string   `json:"command"`
+	Args            []string `json:"args"`
+	Timeout         int      `json:"timeout"`
+	OnFailure       string   `json:"onFailure"`
+	If              string   `json:"if"`
+	Prompt          string   `json:"prompt"`
+	ContinueOnBlock bool     `json:"continueOnBlock"`
 }
 
 type group struct {
@@ -229,8 +369,9 @@ type group struct {
 	Hooks   []handler `json:"hooks"`
 }
 
-// handlerKeys are the command hook fields the hooks reference documents.
-var handlerKeys = []string{"type", "command", "args", "timeout", "onFailure", "async", "asyncRewake", "shell", "if", "statusMessage", "once"}
+// handlerKeys are the hook fields the hooks reference documents, for
+// command and prompt hooks.
+var handlerKeys = []string{"type", "command", "args", "timeout", "onFailure", "async", "asyncRewake", "shell", "if", "statusMessage", "once", "prompt", "model", "continueOnBlock"}
 
 // loadHooks reads the hooks of a --settings value, a path or inline JSON. It
 // is strict, as a CLI that validates its settings would be.
@@ -272,6 +413,16 @@ func loadHooks(value, version string) (map[string][]group, error) {
 				}
 				if h.OnFailure != "" && (h.OnFailure != "block" && h.OnFailure != "continue" || !atLeast(version, "2.1.295")) {
 					return nil, fmt.Errorf("settings: %s: onFailure %q is not supported", where, h.OnFailure)
+				}
+				switch {
+				case h.Type == "command" && (h.Command == "" || h.Prompt != "" || h.ContinueOnBlock):
+					return nil, fmt.Errorf("settings: %s: a command hook takes a command, and no prompt or continueOnBlock", where)
+				case h.Type == "prompt" && (h.Prompt == "" || h.Command != ""):
+					return nil, fmt.Errorf("settings: %s: a prompt hook takes a prompt, and no command", where)
+				case h.Type != "command" && h.Type != "prompt":
+					return nil, fmt.Errorf("settings: %s: hook type %q is not supported", where, h.Type)
+				case h.If != "" && ev != "PreToolUse" && ev != "PostToolUse" && ev != "PostToolUseFailure" && ev != "PermissionRequest" && ev != "PermissionDenied":
+					return nil, fmt.Errorf("settings: %s: if is only for tool events", where)
 				}
 				out[ev][gi].Hooks = append(out[ev][gi].Hooks, h)
 			}
@@ -403,6 +554,7 @@ func (a *agent) record(v map[string]any) {
 }
 
 func (a *agent) run() int {
+	rawLines()
 	env := map[string]string{}
 	for _, k := range []string{"IRIE_SESSION", "IRIE_SOCKET", "IRIE_BIN", "TMUX", "TMUX_PANE"} {
 		if v, ok := os.LookupEnv(k); ok {
@@ -454,8 +606,8 @@ func (a *agent) run() int {
 	}
 	fmt.Println("idle")
 	for {
-		line, err := a.in.ReadString('\n')
-		if err != nil {
+		line, ok := a.line()
+		if !ok {
 			a.end("other")
 			return 0
 		}
@@ -567,7 +719,7 @@ func (a *agent) status(cost string) {
 		"version":        a.version,
 		"cost":           map[string]any{"total_cost_usd": usd, "total_duration_ms": 1000, "total_api_duration_ms": 500},
 		"context_window": map[string]any{"total_input_tokens": 24000, "total_output_tokens": 800, "context_window_size": 200000, "used_percentage": 12, "remaining_percentage": 88},
-		"rate_limits":    map[string]any{"five_hour": map[string]any{"used_percentage": 33, "resets_at": time.Now().Add(2 * time.Hour).Unix()}},
+		"rate_limits":    a.rateLimits(),
 	})
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Stdin, cmd.Dir = bytes.NewReader(in), a.cwd
@@ -581,6 +733,16 @@ func (a *agent) status(cost string) {
 		}
 	}
 	a.record(map[string]any{"t": "status", "stdout": string(out), "exit": exit})
+}
+
+// rateLimits is the plan's use the status line reports: 33% of its five
+// hours, and IRIE_FAKE_WEEK percent of its week when that is set.
+func (a *agent) rateLimits() map[string]any {
+	limits := map[string]any{"five_hour": map[string]any{"used_percentage": 33, "resets_at": time.Now().Add(2 * time.Hour).Unix()}}
+	if week, err := strconv.ParseFloat(os.Getenv("IRIE_FAKE_WEEK"), 64); err == nil {
+		limits["seven_day"] = map[string]any{"used_percentage": week, "resets_at": time.Now().Add(72 * time.Hour).Unix()}
+	}
+	return limits
 }
 
 // loadStatusLine returns the status line command of a --settings value.
@@ -606,8 +768,9 @@ func loadStatusLine(value string) string {
 // with a block and its reason, sends the turn on, as Claude Code's hooks
 // reference describes: the agent goes on, then stops again with
 // stop_hook_active set, at most 8 times in a row. how is "bg" for a turn
-// that leaves a shell task running in the background, and "ask" for one
-// whose last message asks the user something.
+// that leaves a shell task running in the background, "ask" for one whose
+// last message asks the user something, and "turn" for a teach-mode request
+// that the user write a part at a TODO(human), which ends in a full stop.
 func (a *agent) stop(how string) {
 	fmt.Println("✓ done")
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
@@ -616,8 +779,10 @@ func (a *agent) stop(how string) {
 	case "bg":
 		msg = "The install runs in the background; I'll report when it lands."
 		tasks = []any{map[string]any{"id": "task-001", "type": "shell", "status": "running", "description": "Install the build", "command": "tools/live.sh"}}
-	case "ask":
+	case "ask", "asks":
 		msg = "It works. Shall I land it?"
+	case "turn":
+		msg = "Learn by doing\n\nThe notes file has its headings.\n\n**Your Task**: In notes.md, write the summary line under TODO(human).\n\nWeigh how short it can be and still be clear."
 	}
 	for i := range 8 {
 		out := a.fire("Stop", "", map[string]any{"stop_hook_active": i > 0, "last_assistant_message": msg, "background_tasks": tasks, "session_crons": []any{}})
@@ -627,8 +792,27 @@ func (a *agent) stop(how string) {
 		}
 		a.record(map[string]any{"t": "continued", "context": more})
 		fmt.Println("↻ " + strings.SplitN(more, "\n", 2)[0])
-		msg = "I stopped on purpose."
+		if how != "asks" {
+			msg = "I stopped on purpose."
+		}
 	}
+}
+
+// denied is the reason a PreToolUse hook gave for denying the call, or ""
+// when none denied it.
+func denied(outputs []string) string {
+	for _, o := range outputs {
+		var r struct {
+			Specific struct {
+				Decision string `json:"permissionDecision"`
+				Reason   string `json:"permissionDecisionReason"`
+			} `json:"hookSpecificOutput"`
+		}
+		if json.Unmarshal([]byte(o), &r) == nil && r.Specific.Decision == "deny" {
+			return r.Specific.Reason
+		}
+	}
+	return ""
 }
 
 // goesOn is why the hooks' answer to a Stop sends the turn on, or "".
@@ -689,14 +873,45 @@ func (a *agent) toolInput(name string) map[string]any {
 
 // readLine waits for a line typed into the agent's terminal.
 func (a *agent) readLine() string {
-	line, _ := a.in.ReadString('\n')
+	line, _ := a.line()
 	return strings.TrimSpace(line)
+}
+
+// line reads one line typed into the terminal, up to Enter; it is false
+// at EOF, or at Ctrl-D at the start of a line, which the terminal no
+// longer turns into EOF (rawLines).
+func (a *agent) line() (string, bool) {
+	var b []byte
+	for {
+		c, err := a.in.ReadByte()
+		switch {
+		case err != nil, c == 4 && len(b) == 0:
+			return string(b), false
+		case c == '\n':
+			return string(b), true
+		}
+		b = append(b, c)
+	}
+}
+
+// rawLines turns off the line editing of the terminal the agent reads,
+// keeping its echo, its signal keys and Enter's newline; it does nothing
+// when stdin is not a terminal.
+func rawLines() {
+	cmd := exec.Command("stty", "-icanon", "min", "1", "time", "0")
+	cmd.Stdin = os.Stdin
+	cmd.Run()
 }
 
 func (a *agent) tool(name string, sub *subagent) {
 	id, input := a.toolID(), a.toolInput(name)
 	fmt.Println("● " + name)
-	a.fire("PreToolUse", name, sub.fields(map[string]any{"tool_name": name, "tool_input": input, "tool_use_id": id}))
+	pre := a.fire("PreToolUse", name, sub.fields(map[string]any{"tool_name": name, "tool_input": input, "tool_use_id": id}))
+	if reason := denied(pre); reason != "" {
+		a.record(map[string]any{"t": "denied", "tool": name, "reason": reason})
+		fmt.Println("⊘ " + strings.SplitN(reason, "\n", 2)[0])
+		return
+	}
 	start := time.Now()
 	response := map[string]any{"stdout": "fake", "stderr": "", "interrupted": false, "isImage": false}
 	switch name {
@@ -724,7 +939,15 @@ func (a *agent) permission(sub *subagent) {
 	a.fire("Notification", "permission_prompt", sub.fields(map[string]any{
 		"message": "Claude needs your permission to use Bash", "title": "Permission needed", "notification_type": "permission_prompt",
 	}))
+	// The menu Claude Code draws for a permission, which the screen op
+	// reads; any line typed answers it.
 	fmt.Println("? allow Bash: rm -rf build (Enter)")
+	fmt.Println("╭────────────────────────────────────────────────╮")
+	fmt.Println("│ Do you want to proceed?                        │")
+	fmt.Println("│ ❯ 1. Yes                                       │")
+	fmt.Println("│   2. Yes, and don't ask again for rm commands  │")
+	fmt.Println("│   3. No, and tell Claude what to do differently │")
+	fmt.Println("╰────────────────────────────────────────────────╯")
 	a.readLine()
 	a.fire("PostToolUse", "Bash", sub.fields(map[string]any{
 		"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": time.Since(start).Milliseconds(),

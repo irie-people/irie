@@ -1,7 +1,7 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
 // the ui, spawn, profiles, local, route, repos, worktree, tmux, journal,
-// hold, usage and dog sections.
+// hold, usage, dog, trod, remote and skills sections.
 package config
 
 import (
@@ -10,16 +10,21 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/irie-people/irie/internal/arch"
 	"github.com/irie-people/irie/internal/route"
 )
 
@@ -35,8 +40,133 @@ type Config struct {
 	Journal  Journal            `toml:"journal"`
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
+	Skills   Skills             `toml:"skills"`
 	Dog      Dog                `toml:"dog"`
+	Trod     Trod               `toml:"trod"`
+	Arch     Arch               `toml:"arch"`
+	Remote   Remote             `toml:"remote"`
+	Place    Place              `toml:"place"`
+	Peers    map[string]Peer    `toml:"peers"`
+	Env      Env                `toml:"env"`
+	Learn    Learn              `toml:"learn"`
+	VPN      VPN                `toml:"vpn"`
 }
+
+// VPN is Mullvad VPN control (docs/proposals/extensions.md §4): its state in
+// every client, and the :vpn words to change it.
+type VPN struct {
+	On      bool   `toml:"on"`      // show the VPN in Irie and take the :vpn words
+	Mullvad string `toml:"mullvad"` // the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
+}
+
+// Place is where a task typed here starts when its words do not say
+// (docs/proposals/multi-host.md §4.3): ^name always picks the machine.
+type Place struct {
+	// Mode is local, for every task here, or auto: a task goes to a peer
+	// that can run it the same way while this machine is busy and the
+	// peer has clearly more room.
+	Mode string `toml:"mode"`
+	// HeadroomCPUs and HeadroomGiB are what this machine keeps free: it is
+	// busy once the work waiting to run leaves fewer CPUs, or less memory
+	// is free.
+	HeadroomCPUs int `toml:"headroom_cpus"`
+	HeadroomGiB  int `toml:"headroom_gib"`
+}
+
+// The place modes.
+const (
+	PlaceLocal = "local"
+	PlaceAuto  = "auto"
+)
+
+// Peer is what this machine says of one of its peers, by the name it pairs
+// with in `irie peer add`; peers.json keeps the pairing itself.
+type Peer struct {
+	// Repos are the @names a task placed there by auto may name; a task
+	// with no @ goes too. You keep these repos cloned there, under the
+	// same names in its [repos], with the hooks they need.
+	Repos []string `toml:"repos"`
+	// SSH is its ssh name, which fetches a finished task's branch back;
+	// "" is the one `irie peer add --ssh` paired over.
+	SSH string `toml:"ssh"`
+}
+
+// Skills are the skills that come with Irie (docs/proposals/skills.md):
+// Claude Code sessions get them as a plugin named irie, for that session
+// only, and run them as /irie:<name>.
+type Skills struct {
+	Enabled  bool     `toml:"enabled"`  // false = hand agents no skills
+	Disabled []string `toml:"disabled"` // skills to leave out, such as ["present"]
+}
+
+// Arch is Irie's arch agents (DESIGN §4.11): helpers that go with every
+// Claude Code session Irie starts. Their charges are part of Irie
+// (internal/arch); here you choose who goes with you.
+type Arch struct {
+	Mikael  Mikael  `toml:"mikael"`
+	Gabriel Gabriel `toml:"gabriel"`
+}
+
+// Mikael is the first arch agent: a helper who stands with you against evil
+// and for the good you want to see in the world. With every Claude Code session he puts his word in front
+// of the agent as it starts and is on call as the mikael agent; at the
+// door he weighs each call that could do harm that can't be taken back
+// before it runs, and stops one that would do evil.
+type Mikael struct {
+	On   bool     `toml:"on"`   // go with every Claude Code session Irie starts
+	Door bool     `toml:"door"` // weigh each call that could do harm that can't be taken back before it runs
+	Good []string `toml:"good"` // the good you want to see in the world, in your own words; every agent hears it
+}
+
+// Gabriel is the arch agent who carries your focus to the machine. While
+// you are at your computer and it is busy, what you are working on comes
+// first: the session you are looking at or messaged lately, and the app in
+// front. Every other session's processes, and your other heavy apps, step
+// back into macOS's background state until it is calm again or you walk
+// away. macOS lets a process slow another of its user's down and undo it,
+// but not raise one, and gives no way to set memory aside, so the others
+// step back instead.
+type Gabriel struct {
+	On      bool          `toml:"on"`      // give your focus the machine first while it is busy
+	Outside bool          `toml:"outside"` // slow your heavy apps outside Irie too, not only Irie's sessions
+	Away    time.Duration `toml:"away"`    // with no keyboard or mouse for this long you are away, and nothing is held back; 0 = always at the computer
+	Word    time.Duration `toml:"word"`    // a session you message or start stays in your focus this long
+	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
+	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
+	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
+	Guard   bool          `toml:"guard"`   // turn away an agent's call that would bring an app or a page to the front while you look elsewhere
+}
+
+// MaxBoost is the longest a boost may last, so none is ever forgotten.
+const MaxBoost = 12 * time.Hour
+
+// GabrielSpare are the apps Gabriel never slows until you write your own
+// list: calls, music, video and recording, which must not stutter.
+func GabrielSpare() []string {
+	return []string{"zoom.us", "FaceTime", "Microsoft Teams", "Webex", "Slack", "Discord", "Music", "Spotify", "QuickTime Player", "OBS", "Logic Pro", "GarageBand", "Final Cut Pro"}
+}
+
+// Env is the environment of a server that the Mac app starts (DESIGN §7.2).
+type Env struct {
+	// Capture is login-shell, to start it with the environment of the
+	// person's login shell, as a terminal has it; or none, for the app's
+	// own, which lacks the PATH of the shell's startup files.
+	Capture string `toml:"capture"`
+}
+
+// Remote is the phone app (docs/PHONE.md): this machine's Irie, served over
+// HTTPS on its local network to the phones paired with it. The core keeps
+// `irie remote serve` running while it is on.
+type Remote struct {
+	On     bool   `toml:"on"`     // serve the phone app
+	Port   int    `toml:"port"`   // its HTTPS port; the setup page is on the port below, over plain HTTP
+	Name   string `toml:"name"`   // what the phone calls this machine; "" = its host name
+	Listen string `toml:"listen"` // the address to listen on, such as 192.168.1.20; "" = every address of this machine
+}
+
+// DefaultRemotePort is the phone app's HTTPS port; the setup page is on the
+// port below it.
+const DefaultRemotePort = 7387
 
 // Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
 // on it runs on the profile with the lowest cost per success.
@@ -95,7 +225,15 @@ type UI struct {
 	// HelperStyle is how a view draws a helper beside its session: as
 	// cards and plain words (browser) or as a terminal (terminal).
 	HelperStyle string `toml:"helper_style"`
+	// FreezeDog is how long Irie's window may leave the freeze dog's ping
+	// unanswered before the dog force quits it and opens it again; 0 =
+	// never (DESIGN §2.4).
+	FreezeDog time.Duration `toml:"freeze_dog"`
 }
+
+// MinFreezeDog is the shortest ui.freeze_dog: a window busy for a moment,
+// as when the machine pages, is not frozen.
+const MinFreezeDog = 3 * time.Second
 
 // HelperStyles are the ways ui.helper_style draws a helper.
 var HelperStyles = []string{"browser", "terminal"}
@@ -115,6 +253,27 @@ type Spawn struct {
 	// teammate in a terminal pane of its own, which the Mac app shows beside
 	// its session (panes), or start no teams (off).
 	Teammates string `toml:"teammates"`
+	// FollowUpWindow is how long after a jot another jot that reads as
+	// more for it goes to its agent instead of starting one (DESIGN §4.2);
+	// 0 starts every jot as a task of its own. FollowUpDelay is how long
+	// such a jot waits before it is typed to the agent, so that it can
+	// still be taken back and started apart.
+	FollowUpWindow time.Duration `toml:"follow_up_window"`
+	FollowUpDelay  time.Duration `toml:"follow_up_delay"`
+	// Preferences are how you like agents to work, a line each, such as
+	// how short a text they send you should be. Every session is told them
+	// as it starts (DESIGN §4.2). Your own list replaces the built-in one,
+	// and an empty one tells nothing.
+	Preferences []string `toml:"preferences"`
+}
+
+// Preferences are what every session is told about how you like agents to
+// work, until you write your own: a text or notification it sends you reads
+// at a glance.
+func Preferences() []string {
+	return []string{
+		"Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.",
+	}
 }
 
 // TeammateModes are the values of spawn.teammates.
@@ -129,10 +288,15 @@ type Profile struct {
 	PermissionMode string            `toml:"permission_mode"`
 	Args           []string          `toml:"args"`
 	Env            map[string]string `toml:"env"`
-	Task           string            `toml:"task"`  // how a generic agent gets its task: arg | paste; "" = arg
-	Local          *LocalModel       `toml:"local"` // the agent runs on a model of a local runtime
-	Cost           string            `toml:"cost"`  // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
+	Task           string            `toml:"task"`   // how a generic agent gets its task: arg | paste; "" = arg
+	Local          *LocalModel       `toml:"local"`  // the agent runs on a model of a local runtime
+	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
+	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
+	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
 }
+
+// TakesSkills reports whether the profile's sessions get Irie's skills.
+func (p Profile) TakesSkills() bool { return p.Skills == nil || *p.Skills }
 
 // LocalModel is how a profile runs on a local model (DESIGN §6.1). With no
 // model of its own, the profile runs the one `irie setup local` chose.
@@ -190,6 +354,146 @@ type Dog struct {
 	Land   map[string]string `toml:"land"`   // by repo (alias, folder name or path), the branch its work must reach, such as live
 }
 
+// Trod is the trod bot (DESIGN §4.10): while you are away at night, it
+// keeps your sessions going until their tasks are through. An agent that
+// asks you something is told to decide itself; a turn an API error
+// stopped, a jot that is not through, and a usage limit that reset without
+// the session carrying on are sent on again; and the Mac stays awake while
+// any of them has work left. Every agent it sends on is told your rules
+// and guidelines. It keeps within the plan: past max_plan_use it sends
+// nothing on, and past it in the week's window it freezes what would
+// still spend the week's allotment.
+type Trod struct {
+	On         bool          `toml:"on"`           // work the shift every night, from start to end
+	Start      string        `toml:"start"`        // when it starts, in local time, such as "23:00"
+	End        string        `toml:"end"`          // when it ends; the same as start means around the clock
+	Away       time.Duration `toml:"away"`         // how long the Mac must have had no keyboard or mouse input before it steps in; 0 = at once
+	Questions  bool          `toml:"questions"`    // tell an agent that asks you something to decide itself
+	Nudges     int           `toml:"nudges"`       // how often it may send one session on in a night
+	Retry      time.Duration `toml:"retry"`        // how long a stopped session waits before it is sent on again
+	Within     time.Duration `toml:"within"`       // it sends on only sessions that stopped this recently; 0 = however long ago
+	MaxWorking int           `toml:"max_working"`  // it sends a session on only while fewer than this many work; 0 = no limit
+	MaxPlanUse float64       `toml:"max_plan_use"` // percent: past this in either of the plan's windows it sends nothing on, and past it in the week's it freezes what still spends
+	KeepAwake  bool          `toml:"keep_awake"`   // keep the Mac from sleeping while sessions have work left
+	Rules      []string      `toml:"rules"`        // what every agent it sends on must, or must not, do
+	Guidelines []string      `toml:"guidelines"`   // how those agents decide while you are away
+}
+
+// TrodRules are the trod bot's rules until you write your own: nothing
+// leaves the machine, nothing that was there is lost, and nothing costs
+// money.
+func TrodRules() []string {
+	return []string{
+		"Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages.",
+		"Don't delete or overwrite what you didn't make, and never rewrite git history.",
+		"Don't spend money, sign up for anything, or change accounts, plans, keys or settings outside your task; never buy usage credits or turn on extra usage.",
+	}
+}
+
+// TrodGuidelines are the trod bot's guidelines until you write your
+// own.
+func TrodGuidelines() []string {
+	return []string{
+		"When you have to choose, take the option you would recommend, and say in your last message which you took and why.",
+		"Finish the task you were given; note new ideas and extra work for the morning instead of starting them.",
+		"If a lock, an install or another session holds you up, wait a few minutes and try again before you stop.",
+		"Commit and land your work the way the repo's AGENTS.md or CLAUDE.md says.",
+	}
+}
+
+// Shift is the trod bot that t falls in, or else the last one before t:
+// when it started and when it ends, and whether t is in it. With the same
+// start and end, the shift goes around the clock, a day at a time from its
+// start. Times are t's location's, so a shift keeps its hours across a
+// change of clocks.
+func (n Trod) Shift(t time.Time) (from, to time.Time, in bool) {
+	sh, sm, _ := clockTime(n.Start)
+	eh, em, _ := clockTime(n.End)
+	at := func(day time.Time, h, m int) time.Time {
+		return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, t.Location())
+	}
+	from = at(t, sh, sm)
+	if from.After(t) {
+		from = at(t.AddDate(0, 0, -1), sh, sm)
+	}
+	to = at(from, eh, em)
+	if !to.After(from) {
+		to = at(from.AddDate(0, 0, 1), eh, em)
+	}
+	return from, to, t.Before(to)
+}
+
+// clockTime reads a time of day such as "23:00" or "7:30".
+func clockTime(s string) (h, m int, ok bool) {
+	g := clockPattern.FindStringSubmatch(s)
+	if g == nil {
+		return 0, 0, false
+	}
+	h, _ = strconv.Atoi(g[1])
+	m, _ = strconv.Atoi(g[2])
+	return h, m, true
+}
+
+var clockPattern = regexp.MustCompile(`^([01]?[0-9]|2[0-3]):([0-5][0-9])$`)
+
+// Most rules and guidelines the trod bot takes, which go into every
+// message it sends; most preferences, which go into what every session is
+// told as it starts and must leave room there for the delegation note and
+// a queued note within the 10,000 characters Claude Code passes on whole;
+// and the longest any of them may be.
+const (
+	maxTrodLines   = 20
+	maxPreferences = 15
+	maxLine        = 400
+)
+
+// The most lines of good arch.mikael.good takes: they go to every session
+// Mikael is with.
+const maxGoodLines = 20
+
+// checkLines checks a list of one-line settings, such as trod.rules: at
+// most `most` of them, each one line, not empty and at most maxLine long.
+func checkLines(bad func(string, ...any), key string, lines []string, most int, why string) {
+	if len(lines) > most {
+		bad("%s: at most %d, as each goes into %s", key, most, why)
+	}
+	for i, l := range lines {
+		switch {
+		case strings.TrimSpace(l) == "":
+			bad("%s[%d]: is empty", key, i)
+		case strings.ContainsAny(l, "\r\n"):
+			bad("%s[%d]: must be one line", key, i)
+		case utf8.RuneCountInString(l) > maxLine:
+			bad("%s[%d]: must be at most %d characters", key, i, maxLine)
+		}
+	}
+}
+
+// Learn is what helps the person at the keyboard learn while their agents
+// work (docs/proposals/learning.md).
+type Learn struct {
+	// Tutor is how Claude Code sessions work with you: off; explain, in
+	// Claude Code's Explanatory output style, which adds notes on why it
+	// made its choices; or teach, in its Learning style, which also leaves
+	// small parts for you to write. +explain and +teach set it for one task.
+	Tutor string `toml:"tutor"`
+	// Visual asks an agent in a tutor mode to draw a small diagram where a
+	// picture helps, which the Mac app's conversation view renders.
+	Visual    bool              `toml:"visual"`
+	AgentTips bool              `toml:"agent_tips"` // Irie's tips under Claude Code's spinner
+	Links     map[string]string `toml:"links"`      // your own learning resources, by title, first in the Help menu's list
+}
+
+// Tutor modes (learn.tutor), which are also the words +explain and +teach.
+const (
+	TutorOff     = "off"
+	TutorExplain = "explain"
+	TutorTeach   = "teach"
+)
+
+// TutorModes are the values of learn.tutor.
+var TutorModes = []string{TutorOff, TutorExplain, TutorTeach}
+
 // Repos is where an @name finds its repo: aliases first, then the git repos
 // two levels under the roots.
 type Repos struct {
@@ -239,13 +543,16 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
 			HideTmux:       true,
 			CloseDelay:     30 * time.Second,
 			Teammates:      "off",
+			FollowUpWindow: 2 * time.Minute,
+			FollowUpDelay:  8 * time.Second,
+			Preferences:    Preferences(),
 		},
 		Profiles: map[string]Profile{
 			"claude": {
@@ -288,6 +595,16 @@ func Default() Config {
 				Env:     map[string]string{},
 				Local:   &LocalModel{Runtime: "llama-server", MinContext: DefaultMinContext, Enforce: true},
 			},
+			"mikael": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-opus-5-5",
+				Effort:         "high",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+				Arch:           "mikael",
+			},
 		},
 		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}},
 		Route: DefaultRoute(),
@@ -302,7 +619,21 @@ func Default() Config {
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
+		Skills:  Skills{Enabled: true, Disabled: []string{}},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
+		Env:     Env{Capture: "login-shell"},
+		Trod: Trod{
+			Start: "23:00", End: "07:00", Away: 15 * time.Minute, Questions: true, Nudges: 8,
+			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
+			Rules: TrodRules(), Guidelines: TrodGuidelines(),
+		},
+		Arch: Arch{
+			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
+			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
+		},
+		Remote: Remote{Port: DefaultRemotePort},
+		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
+		Learn:  Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 	}
 }
 
@@ -399,11 +730,23 @@ func Parse(data []byte, path string) (Config, error) {
 		Journal  *Journal                  `toml:"journal"`
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
+		Skills   *Skills                   `toml:"skills"`
 		Dog      *Dog                      `toml:"dog"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog}
+		Trod     *Trod                     `toml:"trod"`
+		Arch     *Arch                     `toml:"arch"`
+		Remote   *Remote                   `toml:"remote"`
+		Place    *Place                    `toml:"place"`
+		Peers    map[string]Peer           `toml:"peers"`
+		Env      *Env                      `toml:"env"`
+		Learn    *Learn                    `toml:"learn"`
+		VPN      *VPN                      `toml:"vpn"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
+	}
+	if file.Peers != nil {
+		c.Peers = file.Peers
 	}
 	for _, name := range slices.Sorted(maps.Keys(file.Profiles)) {
 		p, ok := c.Profiles[name]
@@ -447,6 +790,27 @@ func Parse(data []byte, path string) (Config, error) {
 	if c.Dog.Land == nil {
 		c.Dog.Land = map[string]string{}
 	}
+	if c.Learn.Links == nil {
+		c.Learn.Links = map[string]string{}
+	}
+	if c.Skills.Disabled == nil {
+		c.Skills.Disabled = []string{}
+	}
+	if c.Trod.Rules == nil {
+		c.Trod.Rules = []string{}
+	}
+	if c.Trod.Guidelines == nil {
+		c.Trod.Guidelines = []string{}
+	}
+	if c.Arch.Mikael.Good == nil {
+		c.Arch.Mikael.Good = []string{}
+	}
+	if c.Arch.Gabriel.Spare == nil {
+		c.Arch.Gabriel.Spare = []string{}
+	}
+	if c.Spawn.Preferences == nil {
+		c.Spawn.Preferences = []string{}
+	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
 		names := make([]string, len(keys))
@@ -466,6 +830,7 @@ var (
 	tmuxKey     = regexp.MustCompile(`^[!-~]+$`) // printable, no spaces
 	repoName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	branchChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+	skillName   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`) // the Agent Skills spec's names
 )
 
 // hasPrior reports whether a route profile has an accuracy for every class
@@ -542,11 +907,27 @@ func (c Config) Validate() error {
 	if !slices.Contains(Themes, c.UI.Theme) {
 		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))
 	}
+	if c.UI.FreezeDog != 0 && c.UI.FreezeDog < MinFreezeDog {
+		bad("ui.freeze_dog = %v: must be 0s, for never, or at least %v", c.UI.FreezeDog, MinFreezeDog)
+	}
 	if _, ok := c.Profiles[c.Spawn.DefaultProfile]; !ok && c.Spawn.DefaultProfile != Auto {
 		bad("spawn.default_profile = %q: no such profile, and not auto", c.Spawn.DefaultProfile)
 	}
 	if _, ok := c.Profiles[Auto]; ok {
 		bad("profiles.%s: auto is Irie's router; give the profile another name", Auto)
+	}
+	if !slices.Contains(TutorModes, c.Learn.Tutor) {
+		bad("learn.tutor = %q: must be off, explain or teach", c.Learn.Tutor)
+	}
+	for _, m := range []string{TutorExplain, TutorTeach} {
+		if _, ok := c.Profiles[m]; ok {
+			bad("profiles.%s: +%s is tutor mode's word; give the profile another name", m, m)
+		}
+	}
+	for _, title := range slices.Sorted(maps.Keys(c.Learn.Links)) {
+		if u := c.Learn.Links[title]; strings.TrimSpace(title) == "" || !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+			bad("learn.links: %q = %q: a link needs a title and an http or https address", title, u)
+		}
 	}
 	r := c.Route
 	for _, p := range r.Profiles {
@@ -589,6 +970,12 @@ func (c Config) Validate() error {
 	if c.Spawn.CloseDelay < 0 {
 		bad("spawn.close_delay = %v: must not be negative", c.Spawn.CloseDelay)
 	}
+	if c.Spawn.FollowUpWindow < 0 {
+		bad("spawn.follow_up_window = %v: must not be negative", c.Spawn.FollowUpWindow)
+	}
+	if c.Spawn.FollowUpDelay < 0 {
+		bad("spawn.follow_up_delay = %v: must not be negative", c.Spawn.FollowUpDelay)
+	}
 	for _, name := range slices.Sorted(maps.Keys(c.Profiles)) {
 		p := c.Profiles[name]
 		if !slices.Contains(Harnesses, p.Harness) {
@@ -605,6 +992,17 @@ func (c Config) Validate() error {
 		}
 		if strings.ContainsAny(p.Cost, "\n\r") {
 			bad("profiles.%s.cost: must be one line", name)
+		}
+		if p.Arch != "" {
+			if a, ok := arch.Get(p.Arch); !ok || !a.Call {
+				bad("profiles.%s.arch = %q: the arch agents a session can run as are %s", name, p.Arch, strings.Join(arch.Callable(), ", "))
+			} else if p.Harness != "claude-code" {
+				bad("profiles.%s.arch: only the claude-code harness runs as an arch agent yet", name)
+			} else if slices.ContainsFunc(p.Args, func(a string) bool {
+				return a == "--agent" || a == "--agents" || strings.HasPrefix(a, "--agent=") || strings.HasPrefix(a, "--agents=")
+			}) {
+				bad("profiles.%s.args: a profile that runs as an arch agent passes no --agent or --agents of its own", name)
+			}
 		}
 		if l := p.Local; l != nil {
 			switch {
@@ -699,6 +1097,9 @@ func (c Config) Validate() error {
 	if !socketName.MatchString(c.Tmux.Socket) {
 		bad("tmux.socket = %q: use letters, digits, '.', '_' and '-'", c.Tmux.Socket)
 	}
+	if c.Env.Capture != "login-shell" && c.Env.Capture != "none" {
+		bad("env.capture = %q: must be login-shell or none", c.Env.Capture)
+	}
 	if c.Tmux.Path != "" && !filepath.IsAbs(c.Tmux.Path) {
 		bad("tmux.path = %q: must be an absolute path", c.Tmux.Path)
 	}
@@ -711,6 +1112,11 @@ func (c Config) Validate() error {
 	if c.Hold.Max <= 0 {
 		bad("hold.max = %v: must be positive", c.Hold.Max)
 	}
+	for _, n := range c.Skills.Disabled {
+		if !skillName.MatchString(n) || len(n) > 64 {
+			bad("skills.disabled: %q is not a skill's name: lowercase letters, digits and single hyphens, at most 64", n)
+		}
+	}
 	if c.Dog.Nudges < 0 {
 		bad("dog.nudges = %d: must not be negative", c.Dog.Nudges)
 	}
@@ -722,6 +1128,76 @@ func (c Config) Validate() error {
 		case !branchChars.MatchString(branch) || strings.HasPrefix(branch, "-") || strings.Contains(branch, ".."):
 			bad("dog.land.%s = %q: must name a branch, such as live", repo, branch)
 		}
+	}
+	n := c.Trod
+	for _, f := range [][2]string{{"start", n.Start}, {"end", n.End}} {
+		if _, _, ok := clockTime(f[1]); !ok {
+			bad("trod.%s = %q: must be a time of day, such as 23:00", f[0], f[1])
+		}
+	}
+	if n.Away < 0 {
+		bad("trod.away = %v: must not be negative", n.Away)
+	}
+	if n.Nudges < 0 {
+		bad("trod.nudges = %d: must not be negative", n.Nudges)
+	}
+	if n.Retry <= 0 {
+		bad("trod.retry = %v: must be positive", n.Retry)
+	}
+	if n.Within < 0 {
+		bad("trod.within = %v: must not be negative", n.Within)
+	}
+	if n.MaxWorking < 0 {
+		bad("trod.max_working = %d: must not be negative", n.MaxWorking)
+	}
+	if n.MaxPlanUse <= 0 || n.MaxPlanUse > 100 {
+		bad("trod.max_plan_use = %v: must be a percentage above 0", n.MaxPlanUse)
+	}
+	checkLines(bad, "trod.rules", n.Rules, maxTrodLines, "every message the trod bot sends")
+	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
+	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
+	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session Mikael is with hears")
+	g := c.Arch.Gabriel
+	if g.Away < 0 || g.Word < 0 {
+		bad("arch.gabriel.away and arch.gabriel.word must not be negative")
+	}
+	if g.Heavy <= 0 {
+		bad("arch.gabriel.heavy = %v: must be above 0, a percent of one CPU", g.Heavy)
+	}
+	if g.Boost < time.Minute || g.Boost > MaxBoost {
+		bad("arch.gabriel.boost = %v: must be from 1m to %v", g.Boost, MaxBoost)
+	}
+	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps Gabriel never slows")
+	switch c.Place.Mode {
+	case PlaceLocal, PlaceAuto:
+	default:
+		bad("place.mode = %q: must be %q or %q", c.Place.Mode, PlaceLocal, PlaceAuto)
+	}
+	if c.Place.HeadroomCPUs < 0 || c.Place.HeadroomGiB < 0 {
+		bad("place.headroom_cpus and headroom_gib must be 0 or more")
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Peers)) {
+		if name == "" || len(name) > 30 || strings.ContainsFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) {
+			bad("peers.%s: a machine's name is up to 30 letters, digits, - or _", name)
+		}
+		for i, r := range c.Peers[name].Repos {
+			if r == "" || strings.ContainsAny(r, "/ \t") {
+				bad("peers.%s.repos[%d] = %q: must be a repo's @name", name, i, r)
+			}
+		}
+	}
+	rm := c.Remote
+	if rm.Port < 2 || rm.Port > 65535 {
+		bad("remote.port = %d: must be a port from 2 to 65535, since the setup page takes the one below", rm.Port)
+	}
+	if rm.Listen != "" && net.ParseIP(rm.Listen) == nil {
+		bad("remote.listen = %q: must be an IP address of this machine, or empty for all of them", rm.Listen)
+	}
+	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
+		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
+	}
+	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
+		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
 	}
 	return errors.Join(errs...)
 }

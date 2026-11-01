@@ -95,21 +95,29 @@ extension Look {
         return look == .done && s.isParked ? "Parked" : look.label
     }
 
+    /// Which of the agents' colours a session takes: the one the core gave
+    /// it, so cards side by side differ, or one from its ID from a core that
+    /// gives none.
+    private static func slot(_ s: Session) -> Int {
+        if let n = s.hue, n >= 1 { return (n - 1) % Theme.agentSlots }
+        return Theme.agentSlot(s.id)
+    }
+
     /// The agent's colour for this session, while it is working; none otherwise.
     static func agentTint(_ s: Session) -> Color? {
-        Look(s) == .working ? Theme.agent(slot: Theme.agentSlot(s.id)) : nil
+        Look(s) == .working ? Theme.agent(slot: slot(s)) : nil
     }
 
     /// Its card's ground in the agent's colour, while it is working; none
     /// otherwise.
     static func agentWash(_ s: Session) -> Color? {
-        Look(s) == .working ? Theme.agentWash(slot: Theme.agentSlot(s.id)) : nil
+        Look(s) == .working ? Theme.agentWash(slot: slot(s)) : nil
     }
 
     /// Its selected card's trailing end, deep toward the colour round its
     /// terminal, while it is working; none otherwise.
     static func agentDeep(_ s: Session) -> Color? {
-        Look(s) == .working ? Theme.agentDeep(slot: Theme.agentSlot(s.id)) : nil
+        Look(s) == .working ? Theme.agentDeep(slot: slot(s)) : nil
     }
 
     /// The colour that edges the selected card and the terminal's frame, and
@@ -122,7 +130,7 @@ extension Look {
     /// The agent's colour as text, for its state, its details and its
     /// helpers away from its card, while it is working; none otherwise.
     static func agentInk(_ s: Session) -> Color? {
-        Look(s) == .working ? Theme.agentInk(slot: Theme.agentSlot(s.id)) : nil
+        Look(s) == .working ? Theme.agentInk(slot: slot(s)) : nil
     }
 }
 

@@ -56,7 +56,7 @@ func parseStat(pid int, s string) (Proc, bool) {
 	}
 	return Proc{
 		PID: pid, PPID: ppid, PGID: pgid, Start: start,
-		Stopped: f[0] == "T", Zombie: f[0] == "Z", Name: s[open+1 : end],
+		Stopped: f[0] == "T", Zombie: f[0] == "Z", Traced: f[0] == "t", Name: s[open+1 : end],
 	}, true
 }
 

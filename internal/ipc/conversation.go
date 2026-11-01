@@ -87,7 +87,8 @@ type Item struct {
 	Agent     string `json:"agent,omitempty"`      // the helper a subagent item started, as sub:<id>, once known
 	Tools     int    `json:"tools,omitempty"`      // the tool calls a subagent made
 	// From is "parent" on a helper's first message: its task, from the
-	// session that started it, not a message from you.
+	// session that started it, not a message from you; "trod" on a message
+	// the trod bot typed (DESIGN §4.10).
 	From    string   `json:"from,omitempty"`
 	Options []string `json:"options,omitempty"` // a question's choices
 	Reason  string   `json:"reason,omitempty"`  // a need's reason, as a row's

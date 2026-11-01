@@ -577,3 +577,22 @@ func TestReadMachine(t *testing.T) {
 		t.Errorf("machine = %+v", m)
 	}
 }
+
+func TestUnloadLetsAModelGo(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/generate" {
+			http.Error(w, "no", http.StatusNotFound)
+			return
+		}
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte(`{"done":true}`))
+	}))
+	defer srv.Close()
+	if err := (Ollama{URL: srv.URL}).Unload(context.Background(), "qwen3.5:9b"); err != nil {
+		t.Fatal(err)
+	}
+	if got["model"] != "qwen3.5:9b" || got["keep_alive"] != float64(0) {
+		t.Errorf("request = %v, want the model with keep_alive 0", got)
+	}
+}

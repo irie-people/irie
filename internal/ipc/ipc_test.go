@@ -163,3 +163,111 @@ func TestDialFailsFastWithoutServer(t *testing.T) {
 		t.Errorf("dial took %v", d)
 	}
 }
+
+// hearingHandler hears what a subscribed client sends back.
+type hearingHandler struct {
+	testHandler
+	heard chan string
+	on    chan (<-chan Frame)
+}
+
+func (h *hearingHandler) Hear(frames <-chan Frame, line []byte) {
+	h.on <- frames
+	h.heard <- string(line)
+}
+
+func TestASubscriberIsHeardOnItsStream(t *testing.T) {
+	sock := filepath.Join(testutil.ShortDir(t), "core.sock")
+	l, err := Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	h := &hearingHandler{
+		testHandler: testHandler{frames: make(chan Frame, 4), cancelled: make(chan struct{})},
+		heard:       make(chan string, 4), on: make(chan (<-chan Frame), 4),
+	}
+	go Serve(l, h)
+	c, err := Dial(sock, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames, err := c.Subscribe(SubscribeArgs{View: ViewWatch, PID: 42})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.frames <- Frame{T: FramePing, Ping: 7}
+	select {
+	case f := <-frames:
+		if f.T != FramePing || f.Ping != 7 {
+			t.Fatalf("frame %+v, want ping 7", f)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no ping")
+	}
+	if err := c.Send(Pong{Pong: 7, Front: true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case line := <-h.heard:
+		if line != `{"pong":7,"front":true}`+"\n" {
+			t.Errorf("heard %q", line)
+		}
+		if on := <-h.on; on != (<-chan Frame)(h.frames) {
+			t.Error("heard on another stream than the subscription's")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the pong was not heard")
+	}
+	c.Close()
+	select {
+	case <-h.cancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the subscription outlived its client")
+	}
+}
+
+func TestAPingFrameCarriesItsNumberOnly(t *testing.T) {
+	b, err := json.Marshal(Frame{T: FramePing, Ping: 3, ID: "s1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != `{"t":"ping","ping":3}` {
+		t.Errorf("ping frame = %s", b)
+	}
+}
+
+// peerHandler records who called.
+type peerHandler struct {
+	testHandler
+	peers chan int
+}
+
+func (h *peerHandler) CallFrom(peer int, op string, args json.RawMessage) (any, error) {
+	h.peers <- peer
+	return h.Call(op, args)
+}
+
+// TestCallFromKnowsTheCaller: a handler that wants to know learns the
+// client's process id, here this test's own.
+func TestCallFromKnowsTheCaller(t *testing.T) {
+	sock := filepath.Join(testutil.ShortDir(t), "core.sock")
+	l, err := Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	h := &peerHandler{peers: make(chan int, 1)}
+	go Serve(l, h)
+	c, err := Dial(sock, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Call("echo", map[string]int{"n": 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-h.peers; got != os.Getpid() {
+		t.Errorf("peer %d, want this process, %d", got, os.Getpid())
+	}
+}

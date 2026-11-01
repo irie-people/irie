@@ -3,11 +3,14 @@ package core
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -160,6 +163,48 @@ func TestSettingsWriteThroughALink(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(real); !strings.Contains(string(b), "close_when_done = true") {
 		t.Errorf("the linked file is\n%s", b)
+	}
+}
+
+// Two cores on one config file share no lock in memory. Each edits a key
+// of its own over and over, both at once, and the file's write lock keeps
+// either from writing back a file it read before the other's last edit.
+func TestSettingsOfTwoCoresBothLand(t *testing.T) {
+	a := settingsCore(t, mine)
+	cfg, err := config.Load(a.paths.ConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := newCore(Options{Config: cfg, Paths: a.paths, Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}, &tmux.Runner{})
+	const times = 25
+	var wg sync.WaitGroup
+	for _, w := range []struct {
+		c     *Core
+		key   string
+		value func(int) string
+	}{
+		{a, "spawn.close_delay", func(i int) string { return fmt.Sprintf(`"%ds"`, i+1) }},
+		{b, "journal.keep_days", func(i int) string { return strconv.Itoa(i + 1) }},
+	} {
+		wg.Go(func() {
+			for i := range times {
+				if _, err := configure(w.c, w.key, w.value(i)); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	got, err := config.Load(a.paths.ConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Spawn.CloseDelay != times*time.Second || got.Journal.KeepDays != times {
+		t.Errorf("close_delay %v and keep_days %d, want %v and %d: an edit was lost", got.Spawn.CloseDelay, got.Journal.KeepDays, times*time.Second, times)
+	}
+	if file, _ := os.ReadFile(a.paths.ConfigFile()); !strings.Contains(string(file), `default_profile = "claude" # mine`) {
+		t.Errorf("the file lost its own lines:\n%s", file)
 	}
 }
 

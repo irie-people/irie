@@ -29,10 +29,26 @@ final class Store: ObservableObject {
     @Published private(set) var agents: [Agent] = []
     /// Whether the core takes a model for one task.
     @Published private(set) var canPickModel = false
+    /// The core takes a tutor mode for one task, and serves the Help menu
+    /// (docs/proposals/learning.md).
+    @Published private(set) var canTutor = false
+    @Published private(set) var canLearn = false
+    /// The Learn window's page (Learn.swift).
+    @Published var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
     @Published private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
     @Published private(set) var canPark = false
+    /// Whether the core has the trod bot (DESIGN §4.10).
+    @Published private(set) var canTrod = false
+    /// The core gives a boost of Gabriel's (DESIGN §4.11).
+    @Published private(set) var canBoost = false
+    /// The core lists its arch agents (op arch).
+    @Published private(set) var canArch = false
+    /// The arch agents, as the core last listed them.
+    @Published private(set) var archAgents: [ArchAgent] = []
+    /// While a boost is on, when it ends.
+    @Published private(set) var boostUntil: Date?
     /// Cards parked or unparked from under the pointer, each with whether
     /// it is drawn parked: it stays where it was until the pointer leaves
     /// it, so a second click on the same spot takes it back (Controls.swift).
@@ -60,10 +76,20 @@ final class Store: ObservableObject {
     /// itself, so the title bar keeps no To verify count, and the review dock
     /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
+    /// The trod bot, from the core, while it is within its hours; the title
+    /// bar shows it (Counts).
+    @Published private(set) var trod: TrodShift?
+    /// Mullvad VPN, while vpn.on; the title bar shows its mark.
+    @Published private(set) var vpn: VPNMark?
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
-    @Published var spawning = false
+    /// Whether a task is starting. The task bar takes the next one
+    /// meanwhile, so several may be on their way.
+    @Published private(set) var spawning = false
+    private var tasksStarting = 0 {
+        didSet { spawning = tasksStarting > 0 }
+    }
     /// The session whose name its card has open to edit, and the name as
     /// typed so far.
     @Published var renaming: String?
@@ -110,6 +136,21 @@ final class Store: ObservableObject {
     /// (Closing.swift).
     @Published var closed: [ClosedSession] = []
     var outsideProblem = ""
+    /// What this computer still lacks of what Irie needs, from the core's
+    /// ready op, and whether the core has it (Onboarding.swift).
+    @Published var readiness: ReadyReport?
+    var canReady = false
+    var checkingReady = false
+    /// The app starting Irie itself, and why it couldn't (Onboarding.swift).
+    /// It tries once a launch, before it has ever reached a core.
+    @Published var starting = false
+    @Published var startProblem: StartProblem?
+    private var everOnline = false
+    private var triedStart = false
+    /// The walk through a first task, and a bump that gives the task bar
+    /// the keyboard (Onboarding.swift).
+    @Published var coach: Coach?
+    @Published var focusTaskBar = 0
     /// The session the core is to show next, and whether a request is out.
     private var wanted: (id: String, focus: Bool)?
     private var showing = false
@@ -122,6 +163,9 @@ final class Store: ObservableObject {
         var isError: Bool
         /// It offers Undo, which takes back the step it reports.
         var undo = false
+        /// It reports a task added to the one before, and offers New task:
+        /// this input, which takes it back and starts it apart.
+        var apart: InputArgs?
     }
 
     let client: CoreClient
@@ -142,6 +186,10 @@ final class Store: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        if let seconds = FreezeDog.restartedAfter {
+            say("Irie stopped answering for \(seconds) s, so the freeze dog restarted it. Every agent kept running.",
+                error: false, seconds: 10)
+        }
         Task { await run() }
     }
 
@@ -158,11 +206,21 @@ final class Store: ObservableObject {
                 }
                 attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
                 link = .online(version: hello.version)
+                everOnline = true
+                starting = false
+                startProblem = nil
+                canReady = hello.features.contains("ready")
+                checkReady()
                 // A core that restarted asks again.
                 splitShown = nil
                 canPickModel = hello.features.contains("spawn-model")
+                canTutor = hello.features.contains("spawn-tutor")
+                canLearn = hello.features.contains("learn")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
+                canTrod = hello.features.contains("trod")
+                canBoost = hello.features.contains("gabriel")
+                canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
@@ -173,6 +231,13 @@ final class Store: ObservableObject {
                 link = .offline("The core went away.")
             } catch {
                 link = .offline(Self.describe(error))
+                // Opened from the Finder, the Dock or Spotlight, with no
+                // Irie running: the app starts it (Onboarding.swift).
+                if !everOnline, !triedStart, Self.notRunning(error) {
+                    triedStart = true
+                    await startIrie()
+                    continue
+                }
             }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
@@ -187,10 +252,17 @@ final class Store: ObservableObject {
     }
 
     private static func describe(_ error: Error) -> String {
-        if case let CoreError.system(call, code) = error, call == "connect", code == ENOENT || code == ECONNREFUSED {
+        if notRunning(error) {
             return "Irie isn’t running."
         }
         return error.localizedDescription
+    }
+
+    private static func notRunning(_ error: Error) -> Bool {
+        if case let CoreError.system(call, code) = error, call == "connect", code == ENOENT || code == ECONNREFUSED {
+            return true
+        }
+        return false
     }
 
     private func apply(_ f: Frame) {
@@ -204,11 +276,20 @@ final class Store: ObservableObject {
         if let s = f.header?.helperStyle, s != helperStyle {
             helperStyle = s
         }
+        // Each header frame is the whole header: one without the bot is
+        // one out of its hours.
+        if let h = f.header, h.trod != trod {
+            trod = h.trod
+        }
+        if let h = f.header, h.vpn != vpn {
+            vpn = h.vpn
+        }
         switch f.t {
         case "snapshot":
             sessions = (f.sessions ?? []).sorted(by: Self.before)
         case "upsert":
             guard let s = f.session else { return }
+            noteCoach(s)
             if let i = sessions.firstIndex(where: { $0.id == s.id }) {
                 let moved = sessions[i].order != s.order
                 sessions[i] = s
@@ -220,6 +301,7 @@ final class Store: ObservableObject {
         case "remove":
             sessions.removeAll { $0.id == f.id }
             if let id = f.id { lingering[id] = nil }
+            if let id = f.id, coach?.session == id { coach = nil }
         case "outside":
             applyOutside(f)
             return
@@ -263,6 +345,10 @@ final class Store: ObservableObject {
         }
     }
 
+    /// The + words that set a tutor mode rather than name an agent
+    /// (docs/proposals/learning.md).
+    static let tutorWords: Set<String> = ["explain", "teach"]
+
     /// Asks the core for the repos the @ words know and the agents the +
     /// words name. A core that answers neither leaves the menus as they are.
     func loadChoices() {
@@ -271,8 +357,11 @@ final class Store: ObservableObject {
                 repoNames = r.items.map { String($0.dropFirst()) }
             }
             if let r = try? await client.call("complete", CompleteArgs(text: "+"), timeout: 5, as: CompleteResult.self) {
-                agents = r.items.enumerated().map { i, item in
-                    Agent(name: String(item.dropFirst()), note: r.notes.flatMap { i < $0.count ? $0[i] : nil } ?? "")
+                // The tutor words are not agents: the sheet has its own menu for them.
+                agents = r.items.enumerated().compactMap { i, item in
+                    let name = String(item.dropFirst())
+                    if Self.tutorWords.contains(name) { return nil }
+                    return Agent(name: name, note: r.notes.flatMap { i < $0.count ? $0[i] : nil } ?? "")
                 }
             }
         }
@@ -309,8 +398,28 @@ final class Store: ObservableObject {
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
+        canTutor = true
+        canLearn = true
         canConfigure = true
         canPark = true
+        canTrod = true
+        canBoost = true
+        canArch = true
+        archAgents = [
+            ArchAgent(name: "mikael", icon: "🛡️🗡️", title: "a helper against evil",
+                      about: "Mikael, the first of Irie's arch agents, stands with the user against evil and for the good they want to see in the world.",
+                      on: true, status: "With every Claude Code session, weighing the calls that can’t be taken back.",
+                      actions: [ArchAction(label: "Talk with Mikael", op: "spawn")],
+                      settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "Mikael goes with every session", value: .bool(true)),
+                                 ArchSetting(key: "arch.mikael.good", kind: "lines", label: "The good you want to see in the world",
+                                             value: .array([.string("Give credit where it’s due.")]))]),
+            ArchAgent(name: "gabriel", icon: "🪽👟", title: "carries your focus to the machine",
+                      about: "Gabriel carries the user's focus to the machine.",
+                      on: true, status: "Holding back 3 sessions and 1 app for Safari.",
+                      actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
+                      settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
+                                 ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
+        ]
         canUndo = true
         taskRepo = "irie"
     }
@@ -553,44 +662,89 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Starts a task typed in the task bar. With no @repo in its text it
-    /// runs where the bar's menu says. Returns whether it started.
-    func spawn(_ input: String) async -> Bool {
-        await spawn(input, repo: taskRepo, worktree: true, agent: nil, model: nil)
+    /// Sends what was typed in the task bar to the core, which reads it: a
+    /// task with its @ and + words, a question such as "hows the parser?",
+    /// or a : command (docs/CORE.md). With no @repo in its text a task runs
+    /// where the bar's menu says. Returns whether the core took it.
+    func input(_ text: String) async -> Bool {
+        await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil)
     }
 
-    /// Starts a task from the bar or the new-task sheet. The @repo and
-    /// +agent words in its text win over the menus' repo and agent.
-    func spawn(_ input: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
-        var args: SpawnArgs
-        do {
-            args = try TaskParser.parse(input, home: NSHomeDirectory())
-        } catch {
-            say(error.localizedDescription, error: true)
-            return false
+    /// Sends text from the bar or the new-task sheet. The @repo, +agent and
+    /// tutor words in it win over the menus' repo, agent and tutor mode.
+    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?) async -> Bool {
+        var args = InputArgs(text: text)
+        // A : command acts on the selected card, or :move on the selected
+        // row outside Irie.
+        if let o = selectedOutside {
+            args.outside = o.vendorId
+        } else {
+            args.session = selection
         }
-        if args.repo == nil, let repo {
+        if let repo {
             args.repo = repo
             args.inPlace = worktree ? nil : true
         }
-        if args.profile == nil { args.profile = agent }
+        args.profile = agent
         if canPickModel { args.model = model }
-        return await run(args)
+        if canTutor { args.tutor = tutor }
+        return await send(args)
     }
 
-    private func run(_ args: SpawnArgs) async -> Bool {
-        spawning = true
-        defer { spawning = false }
+    /// What the Help menu shows: the resources, with the shown session's
+    /// language first, and the glossary. Nil without a core that serves it.
+    func learn() async -> LearnResult? {
+        guard canLearn else { return nil }
+        return try? await client.call("learn", LearnArgs(session: selection), timeout: 5, as: LearnResult.self)
+    }
+
+    /// Takes a task added to the one before back and starts it as a task
+    /// of its own (the notice's New task).
+    func startApart(_ args: InputArgs) {
+        dismissNotice()
+        Task { _ = await send(args) }
+    }
+
+    private func send(_ args: InputArgs) async -> Bool {
+        tasksStarting += 1
+        defer { tasksStarting -= 1 }
         do {
-            // A task in a repo may make a worktree and check out submodules first.
-            let r = try await client.call("spawn", args, timeout: 600, as: SpawnResult.self)
-            say("Started \(r.session.name).", error: false)
-            // It starts behind the session on show, so a task typed mid-work
-            // never pulls the view or the keyboard away. With nothing on
-            // show, it comes straight up, ready to type to.
-            if selection == nil { show(r.session.id, focus: true) }
-            // A repo it ran in is now among the recent ones.
-            loadChoices()
+            // A task in a repo may make a worktree and check out submodules
+            // first; one added to a task still starting waits for it.
+            let r = try await client.call("input", args, timeout: 600, as: InputResult.self)
+            switch r.did {
+            case "asked":
+                if let c = r.choice, let op = r.op { await answer(op, c) }
+            case "answered":
+                say(r.text, error: false, seconds: 8)
+            case "added":
+                // It went to the agent of the task just before, which gets
+                // it once the delay is over; until then New task takes it
+                // back and starts it apart.
+                var apart: InputArgs?
+                if let id = r.session?.id {
+                    apart = args
+                    apart?.apart = id
+                }
+                let left = max(3, (r.until?.timeIntervalSinceNow ?? 0).rounded(.up))
+                say(r.text, error: false, seconds: UInt64(left), apart: apart)
+            default:
+                say(r.text, error: false, seconds: args.apart == nil ? 3 : 6)
+            }
+            if let s = r.session {
+                if r.did == "spawned" {
+                    if coach != nil, coach?.session == nil { coach?.session = s.id }
+                    // It starts behind the session on show, so a task typed
+                    // mid-work never pulls the view or the keyboard away.
+                    // With nothing on show, it comes straight up, ready to
+                    // type to.
+                    if selection == nil { show(s.id, focus: true) }
+                    // A repo it ran in is now among the recent ones.
+                    loadChoices()
+                } else if r.show == true || r.op == "move" {
+                    show(s.id, focus: true)
+                }
+            }
             return true
         } catch {
             say(error.localizedDescription, error: true)
@@ -637,8 +791,100 @@ final class Store: ObservableObject {
     /// Shows a notice above the task bar and has VoiceOver read it. A
     /// confirmation goes after 3 s; an error stays until the next notice, or
     /// until the user edits or submits (WCAG 2.2.1).
-    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false) {
-        notice = Notice(text: text, isError: error, undo: undo && canUndo)
+    /// Starts a run of the trod bot by hand, which keeps the sessions
+    /// going at once, while you watch, until none has work left or the
+    /// plan is as full as it may get; or stops it (DESIGN §4.10).
+    func setTrod(_ on: Bool) {
+        Task {
+            do {
+                let r = try await client.call("trod", on ? TrodArgs(start: true) : TrodArgs(stop: true), as: TrodResult.self)
+                switch (on, r.hand) {
+                case (true, let h?) where h.on:
+                    say("The trod bot is keeping your sessions going until none has work left. Watch for its boot print.", error: false, seconds: 6)
+                case (true, let h?):
+                    say("The trod bot stopped at once: \(h.why ?? "nothing was left to do").", error: false, seconds: 6)
+                default:
+                    say("The trod bot stopped.", error: false)
+                }
+            } catch {
+                say("Couldn’t \(on ? "start" : "stop") the trod bot: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
+    /// Reads the arch agents again (op arch).
+    func loadArch() async {
+        guard canArch, case .online = link else { return }
+        if let r = try? await client.call("arch", JSONValue.object([:]), timeout: 5, as: ArchResult.self) {
+            archAgents = r.agents
+        }
+    }
+
+    /// Does what an arch agent offers: calls its op with its args as they
+    /// came, says so, and reads the arch agents again.
+    func archAction(_ a: ArchAction) {
+        Task {
+            do {
+                _ = try await client.call(a.op, a.args ?? JSONValue.object([:]), timeout: 20, as: JSONValue.self)
+                say(a.done ?? "\(a.label): done.", error: false, seconds: 5)
+            } catch {
+                say("Couldn’t \(a.label.lowercased()): \(error.localizedDescription)", error: true)
+            }
+            await loadArch()
+        }
+    }
+
+    /// Sets one of an arch agent's settings: shown at once, sent to the
+    /// config op by its key.
+    func setArch(_ agent: String, _ key: String, _ value: JSONValue) {
+        if let i = archAgents.firstIndex(where: { $0.name == agent }),
+           let j = archAgents[i].settings?.firstIndex(where: { $0.key == key }) {
+            archAgents[i].settings?[j].value = value
+            if key == "arch.\(agent).on", let on = value.bool { archAgents[i].on = on }
+        }
+        settings.set(key, value.setting)
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await loadArch()
+        }
+    }
+
+    /// Puts one of an arch agent's settings back to its default.
+    func resetArch(_ key: String) {
+        settings.reset(key)
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await loadArch()
+        }
+    }
+
+    /// Whether a boost is on now.
+    var boosting: Bool { (boostUntil ?? .distantPast) > Date() }
+
+    /// Starts a boost of Gabriel's, for arch.gabriel.boost: the focus gets
+    /// the machine first whether it is busy or not, and idle local models
+    /// let their memory go; or stops it (DESIGN §4.11).
+    func setBoost(_ on: Bool) {
+        Task {
+            do {
+                let r = try await client.call("gabriel", on ? GabrielArgs(boost: true) : GabrielArgs(stop: true), as: GabrielResult.self)
+                boostUntil = r.boostUntil
+                if let until = r.boostUntil {
+                    var text = "Boosting your focus until \(until.formatted(date: .omitted, time: .shortened)): the rest runs on the efficiency cores."
+                    if let freed = r.freed, !freed.isEmpty { text += " Freed \(freed.joined(separator: ", "))." }
+                    if r.lowPower == true { text += " Low Power Mode is on: turn it off in System Settings > Battery for full speed." }
+                    say(text, error: false, seconds: 6)
+                } else {
+                    say("The boost is over.", error: false)
+                }
+            } catch {
+                say("Couldn’t \(on ? "start" : "stop") the boost: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
+    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false, apart: InputArgs? = nil) {
+        notice = Notice(text: text, isError: error, undo: undo && canUndo, apart: apart)
         AccessibilityNotification.Announcement(text).post()
         guard !error else { return }
         let id = notice?.id

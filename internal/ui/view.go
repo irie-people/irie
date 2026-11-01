@@ -144,6 +144,9 @@ func (m Model) header() string {
 		if mem := m.head.Memory; mem != nil && mem.Low {
 			extra = append(extra, band(p.needs).Render("mem low"))
 		}
+		if v := m.head.VPN; v != nil {
+			extra = append(extra, vpnMark(v, band, p))
+		}
 		if pl := m.head.Plan; pl != nil && pl.FiveHour != nil {
 			c := p.muted
 			switch {
@@ -176,6 +179,27 @@ func (m Model) header() string {
 		left += band(p.muted).Render(phrase)
 	}
 	return left + blank(p.ground, m.width-lipgloss.Width(left)-lipgloss.Width(right)-1) + right + blank(p.ground, 1)
+}
+
+// vpnMark is Mullvad VPN in the title bar, while vpn.on
+// (docs/proposals/extensions.md §4.1): green while connected, yellow while
+// it comes or goes, red in error, and faint when off, unless lockdown blocks
+// the network, which is red too. `:vpn` says the rest.
+func vpnMark(v *ipc.VPN, band func(color.Color) lipgloss.Style, p palette) string {
+	switch v.State {
+	case "connected":
+		return band(p.done).Render("vpn")
+	case "connecting", "disconnecting":
+		return band(p.paused).Render("vpn…")
+	case "error":
+		return band(p.needs).Render("vpn!")
+	case "disconnected":
+		if v.Blocked {
+			return band(p.needs).Render("vpn⊘")
+		}
+		return band(p.muted).Render("vpn off")
+	}
+	return band(p.muted).Render("vpn?")
 }
 
 // counts renders the state counts in at most w columns, in DESIGN §4.1's
@@ -333,9 +357,13 @@ func cost(s ipc.Session) string {
 }
 
 // routed says how a session was routed and rated (DESIGN §6.4): "small→local",
-// "↳ delegated", "rated good".
+// "↳ delegated", "rated good"; and its tutor mode, "teach mode"
+// (docs/proposals/learning.md).
 func routed(s ipc.Session) string {
 	var parts []string
+	if s.Tutor != "" {
+		parts = append(parts, s.Tutor+" mode")
+	}
 	if s.Routed && s.Class != "" {
 		parts = append(parts, s.Class+"→"+s.Profile)
 	}

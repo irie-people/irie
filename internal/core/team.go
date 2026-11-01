@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/team"
 	"github.com/irie-people/irie/internal/tmux"
@@ -40,7 +41,7 @@ func (c *Core) teams(h string) bool {
 func (c *Core) anchor(id string) (teamAnchor, error) {
 	conf := c.paths.TeamConf()
 	if old, _ := os.ReadFile(conf); string(old) != tmux.TeamConf() {
-		if err := os.WriteFile(conf, []byte(tmux.TeamConf()), 0o600); err != nil {
+		if err := filetx.WriteFile(conf, []byte(tmux.TeamConf()), 0o600); err != nil {
 			return teamAnchor{}, err
 		}
 	}
@@ -74,7 +75,9 @@ func (c *Core) armTeam(id, dir string, a teamAnchor, profile config.Profile, env
 		return "", err
 	}
 	shim := team.Shim{Tmux: c.tmux.Bin, Socket: a.socket, Session: id, EnvFile: filepath.Join(dir, "team.env")}
-	if err := os.WriteFile(filepath.Join(bin, "tmux"), []byte(shim.Script(c.bin)), 0o700); err != nil {
+	// Replaced in one rename, so a tmux call running the shim meanwhile
+	// reads the old script whole.
+	if err := filetx.WriteFile(filepath.Join(bin, "tmux"), []byte(shim.Script(c.bin)), 0o700); err != nil {
 		return "", err
 	}
 	if _, ok := env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"]; !ok {

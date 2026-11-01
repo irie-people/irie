@@ -91,8 +91,10 @@ struct TerminalArea: View {
             if !store.showTerminal && (store.attach != nil || online) {
                 ConversationView()
             } else if store.attach == nil, !store.isFixture {
-                if case let .offline(why) = store.link {
-                    Placeholder(title: why, text: "Start Irie with `irie up`. The app connects by itself once it’s running.")
+                if store.starting {
+                    ProgressView("Starting Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if case let .offline(why) = store.link {
+                    Placeholder(title: why, text: "The sidebar says what to do. The app connects by itself once Irie is running.")
                 } else {
                     ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

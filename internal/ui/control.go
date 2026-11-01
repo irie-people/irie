@@ -344,59 +344,6 @@ func (m *Model) controlled(msg controlledMsg) {
 	m.setStatus(msg.done, false)
 }
 
-// controlCommand runs :freeze [all], :thaw [all], :prio [reason], :park
-// and :unpark, and reports whether it was one of them.
-func (m Model) controlCommand(name, arg string) (tea.Model, tea.Cmd, bool) {
-	switch {
-	case (name == "freeze" || name == "thaw") && (arg == "" || arg == "all"):
-		on := name == "freeze"
-		if arg == "all" {
-			c, ok := m.controls()
-			if !ok {
-				m.setStatus(noControls, true)
-				return m, nil, true
-			}
-			m.bar.Reset()
-			return m, func() tea.Msg { return controlledMsg{done: name + " every session: done", err: c.Freeze("", on, true)} }, true
-		}
-		if s, ok := m.selSession(); !ok || (s.State == ipc.StateFrozen) == on {
-			what := "frozen"
-			if on {
-				what = "running"
-			}
-			m.setStatus(":"+name+" takes the selected session, which must be "+what+"; or :"+name+" all", true)
-			return m, nil, true
-		}
-		m.bar.Reset()
-		model, cmd := m.freezeKey(false)
-		return model, cmd, true
-	case name == "prio":
-		m.bar.Reset()
-		model, cmd := m.promoteKey(arg)
-		return model, cmd, true
-	case (name == "park" || name == "unpark") && arg == "":
-		on := name == "park"
-		c, ok := m.controls()
-		if !ok {
-			m.setStatus(noControls, true)
-			return m, nil, true
-		}
-		s, ok := m.selSession()
-		if !ok || s.Parked == on {
-			what := "parked"
-			if on {
-				what = "not parked"
-			}
-			m.setStatus(":"+name+" takes the selected session, which must be "+what, true)
-			return m, nil, true
-		}
-		m.bar.Reset()
-		model, cmd := m.park(c, s, on)
-		return model, cmd, true
-	}
-	return m, nil, false
-}
-
 // frozenLine is what the status strip says first about a frozen or promoted
 // session, if anything.
 func frozenLine(s ipc.Session) string {

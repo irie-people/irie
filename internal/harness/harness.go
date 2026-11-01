@@ -12,6 +12,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 // Levels are what Irie can do with a harness (DESIGN §3.1).
@@ -84,7 +85,69 @@ type Spawn struct {
 	// Teams lets the agent start agent teams, each teammate in a tmux pane
 	// on Irie's team server (spawn.teammates).
 	Teams bool
+
+	// PluginDir is the folder of Irie's skills for this session, which a
+	// harness whose probe offers --plugin-dir passes on (internal/skills);
+	// "" = none.
+	PluginDir string
+
+	// Arch is what Irie's arch agents bring to the session (DESIGN §4.11).
+	Arch Arch
+	// Tutor is how the agent works with the user (learn.tutor,
+	// docs/proposals/learning.md): config.TutorExplain or TutorTeach, or ""
+	// for off.
+	Tutor string
+	// Visual asks an agent in a tutor mode to draw a diagram where a picture
+	// helps (learn.visual).
+	Visual bool
+	// Tips are Irie's tips, for a harness that can show them, as Claude
+	// Code does under its spinner (learn.agent_tips).
+	Tips []learn.Tip
 }
+
+// TutorNote is what goes before the task of an agent whose harness has no
+// output styles, for a tutor mode: the instruction alone.
+func TutorNote(mode string) string {
+	switch mode {
+	case config.TutorExplain:
+		return "As you work, explain the reasons for your choices in a few short notes, so that the user learns from what you do."
+	case config.TutorTeach:
+		return "The user wants to learn by doing. Do the routine work yourself. Where a piece of code holds a real decision, leave it to the user: mark the place with a TODO(human) comment, say what is built, what to write and what to weigh, then stop and wait for them."
+	}
+	return ""
+}
+
+// VisualNote asks an agent in a tutor mode for pictures. Words and a picture
+// together teach better than words alone (docs/proposals/learning.md §2).
+const VisualNote = "When a picture would help the user follow an explanation, such as how parts of the code connect, what happens in what order, or how branches and commits relate, draw it as a small Mermaid diagram in a ```mermaid code block, and go on explaining in words beside it."
+
+// WithTutor puts mode's note before task, with VisualNote when visual.
+func WithTutor(mode string, visual bool, task string) string {
+	n := TutorNote(mode)
+	if n == "" {
+		return task
+	}
+	if visual {
+		n += " " + VisualNote
+	}
+	return n + "\n\n" + task
+}
+
+// Arch is what Irie's arch agents bring to a session (DESIGN §4.11). The
+// core asks for it; the adapter gives what its CLI can take and writes that
+// to ArchFile, which the core reads to put their word in front of the
+// session and its subagents as they start.
+type Arch struct {
+	With   []string `json:"with,omitempty"`    // the arch agents with the session, by rank
+	As     string   `json:"as,omitempty"`      // the arch agent the session runs as; "" = none
+	Good   []string `json:"good,omitempty"`    // the good the user wants to see in the world, in their words
+	OnCall bool     `json:"on_call,omitempty"` // the agent can call on them, and on As
+	Door   bool     `json:"door,omitempty"`    // those with a door weigh each call that could do harm before it runs
+}
+
+// ArchFile is the file in the session dir that says what the arch agents
+// brought to the session: Arch, as JSON.
+const ArchFile = "arch.json"
 
 // Probe is what a harness learned about its CLI before a launch.
 type Probe struct {

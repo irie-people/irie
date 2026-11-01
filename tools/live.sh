@@ -15,6 +15,11 @@
 # app, installs it in ~/Applications and relaunches it if it was running. It
 # never starts Irie or the app.
 #
+# With `git config irie.push <remote>` set, a finished install also moves
+# that remote's main to the live build: a fast-forward or nothing, never a
+# force, and only after the repository's own pre-push hook passes. A push that
+# fails leaves the install in place and says why.
+#
 #   tools/live.sh             install this checkout
 #   tools/live.sh --rollback  swap the previous irie back in
 set -eu
@@ -64,6 +69,11 @@ if ! mkdir "$lock" 2>/dev/null; then
 	pid=$(cat "$lock/pid" 2>/dev/null || true)
 	if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
 		say "the install that took the lock, pid $pid, is gone; rm -r $lock, then run this again"
+	elif [ -n "$pid" ] && ps -o stat= -p "$pid" 2>/dev/null | grep -q '^T'; then
+		# A stopped install, as when Irie freezes the session that ran it,
+		# holds the lock until it is let go on.
+		say "the install that holds the lock, pid $pid, is stopped, as when its session is frozen;"
+		say "it goes on when that session is thawed, and no other install can run until it ends"
 	else
 		say "another install is running${pid:+, pid $pid}; wait for it to finish, then run this again"
 	fi
@@ -122,14 +132,23 @@ if [ -n "$core" ]; then
 fi
 
 go vet ./...
+# A session in macOS's background state (another one promoted, or Gabriel
+# holding it back while the user works on something else, DESIGN §4.11)
+# runs the tests slowly: give the slowest package time rather than fail the
+# install. A -timeout of your own in GOFLAGS wins.
+case " ${GOFLAGS:-} " in
+*" -timeout="*) ;;
+*) GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=40m" && export GOFLAGS ;;
+esac
 go test ./...
 
 # A change outside the Go code needs no new core, so the running one stays,
-# unless it runs from somewhere else.
+# unless it runs from somewhere else. Nor does one to the tests' helpers in
+# internal/testutil, which no build of irie links.
 gonew=1
 installed=$(rev "$bin")
 if [ -n "$installed" ] && { [ -z "$corebin" ] || [ "$corebin" = "$bin" ]; } &&
-	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal ':(exclude)*_test.go' 2>/dev/null; then
+	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal ':(exclude)*_test.go' ':(exclude)internal/testutil' 2>/dev/null; then
 	gonew=
 fi
 if [ -n "$gonew" ]; then go build -o "$bin.new" ./cmd/irie; fi
@@ -162,7 +181,25 @@ if [ -n "$gonew" ]; then
 fi
 
 pids=
+# While you use Irie.app (in front, with keyboard or mouse input in the last
+# minute) an install never pulls the window from under you: the new app
+# waits beside the old one, and the core swaps it in once another app is in
+# front or you step away (Gabriel, DESIGN §4.11).
+inuse=
+if [ -n "$newapp" ] && pgrep -x Irie >/dev/null &&
+	lsappinfo list 2>/dev/null | grep -q '"Irie" ASN:[^ ]* (in front)'; then
+	idle=$(ioreg -c IOHIDSystem -d 4 -k HIDIdleTime 2>/dev/null | awk '/HIDIdleTime/ {print int($NF / 1000000000); exit}')
+	if [ "${idle:-999}" -lt 60 ]; then inuse=1; fi
+fi
+if [ -n "$inuse" ]; then
+	rm -rf "$app.next"
+	ditto "$newapp" "$app.next"
+	echo "$head" >"$appstamp.next"
+	say "you are using Irie.app, so the new one waits beside it and swaps in once you look away"
+	newapp=
+fi
 if [ -n "$newapp" ]; then
+	rm -rf "$app.next" "$appstamp.next"
 	# The app keeps no state of its own (docs/MAC.md), so it is stopped, not
 	# asked to quit. Launch Services would bring back an Irie that is still
 	# running instead of starting the new one, so it waits for the exit.
@@ -216,4 +253,32 @@ if [ -n "$pids" ]; then
 	say "Irie.app is rebuilt and relaunched"
 elif [ -n "$newapp" ]; then
 	say "Irie.app is rebuilt in $app"
+fi
+
+# The push comes last, so that a slow or refused one never holds back the
+# install. Every commit going out must carry a GitHub noreply address, as the
+# commit hooks require (AGENTS.md, "No personal data"): a merge, or a commit
+# made where the hooks did not run, never passed them. GIT_TERMINAL_PROMPT=0
+# makes a missing login fail instead of wait.
+remote=$(git config --get irie.push || true)
+if [ -n "$remote" ]; then
+	strangers=$(git log --format='%h %ae %ce' "$head" --not --remotes="$remote" |
+		awk '{ for (i = 2; i <= 3; i++) if ($i !~ /@users\.noreply\.github\.com$/ && $i != "noreply@github.com") { print $1 " " $i; next } }')
+	if [ -n "$strangers" ]; then
+		say "not pushed: these commits carry an address that is not a GitHub noreply one:"
+		printf '%s\n' "$strangers" | sed 's/^/live:   /' >&2
+	elif out=$(GIT_TERMINAL_PROMPT=0 git push "$remote" "$head:refs/heads/main" 2>&1); then
+		case $out in
+		*"Everything up-to-date"*) say "$remote's main already has it" ;;
+		*) say "$remote's main is the live build now" ;;
+		esac
+	else
+		say "not pushed, so $remote's main stays where it was:"
+		printf '%s\n' "$out" | grep -v -E '^(To |hint:)' | sed 's/^/live:   /' >&2
+		case $out in
+		*"fetch first"* | *non-fast-forward*)
+			say "it has commits the live build lacks: git fetch $remote, merge $remote/main, then install again"
+			;;
+		esac
+	fi
 fi

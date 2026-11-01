@@ -7,8 +7,9 @@ import (
 // From the macOS SDK: sys/proc.h for the states, sys/resource.h for the
 // background state that setpriority(2) sets.
 const (
-	sstop = 4 // SSTOP
-	szomb = 5 // SZOMB
+	sstop   = 4     // SSTOP
+	szomb   = 5     // SZOMB
+	ptraced = 0x800 // P_TRACED, in p_flag
 
 	prioDarwinProcess = 4      // PRIO_DARWIN_PROCESS: the second argument is a pid
 	prioDarwinBG      = 0x1000 // PRIO_DARWIN_BG
@@ -29,7 +30,7 @@ func read() ([]Proc, error) {
 		out = append(out, Proc{
 			PID: int(k.Proc.P_pid), PPID: int(k.Eproc.Ppid), PGID: int(k.Eproc.Pgid),
 			Start:   k.Proc.P_starttime.Sec*1_000_000 + int64(k.Proc.P_starttime.Usec),
-			Stopped: k.Proc.P_stat == sstop, Zombie: k.Proc.P_stat == szomb,
+			Stopped: k.Proc.P_stat == sstop, Zombie: k.Proc.P_stat == szomb, Traced: k.Proc.P_flag&ptraced != 0,
 			Name: unix.ByteSliceToString(k.Proc.P_comm[:]),
 		})
 	}

@@ -160,6 +160,7 @@ type slotModel struct {
 
 	w, h    int
 	rows    []ipc.Session
+	listed  bool // a snapshot came, so no rows means no sessions
 	offline bool
 	shown   string
 	talk    talk
@@ -284,7 +285,7 @@ func (m *slotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *slotModel) applyFrame(f ipc.Frame) {
 	switch f.T {
 	case ipc.FrameSnapshot:
-		m.rows = f.Sessions
+		m.rows, m.listed = f.Sessions, true
 	case ipc.FrameUpsert:
 		if f.Session == nil {
 			return
@@ -443,6 +444,7 @@ func (m *slotModel) feedHeight() int {
 func (m *slotModel) View() tea.View {
 	s, ok := m.session()
 	if !ok || m.offline || m.w <= 0 || m.h <= 0 {
+		m.help.first = m.listed && len(m.rows) == 0 && !m.offline
 		v := m.help.View()
 		if m.w > 0 && m.h > 0 {
 			v.SetContent(m.paint(v.Content))

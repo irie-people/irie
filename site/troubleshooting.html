@@ -87,6 +87,18 @@
 
   <p>When something goes wrong, Irie shows it in the row’s mark, and says why in the line under the list. <code>irie ctl list</code> shows the same line under DETAIL, and <code>irie ctl list --json</code> adds the last lines of the agent’s screen.</p>
 
+  <h2 id="setup">Start with irie setup</h2>
+  <p>If agents won’t start, or you’re not sure what is missing, run <code>irie setup</code>. It checks what Irie needs and says how each part stands, in plain words:</p>
+  <ul class="rules">
+    <li><dfn>tmux</dfn>, 3.2 or later.</li>
+    <li>Claude Code, installed. One older than 2.1.295 gets a warning that Irie can’t pause it.</li>
+    <li>Claude Code signed in. An API key in <code>ANTHROPIC_API_KEY</code> counts.</li>
+    <li>git, which only tasks on a project need.</li>
+    <li><code>irie</code> on your <dfn>PATH</dfn>, the list of folders a terminal looks in for programs.</li>
+  </ul>
+  <p>For each part that is missing, it shows the command it would run, and runs it only after a yes. <code>irie setup --check</code> only checks, and changes nothing. <code>irie setup --json</code> prints the check for a script. Both end with an error when agents can’t start yet: tmux, Claude Code or the sign-in is missing. <a href="install.html#setup">What Irie needs</a> says more.</p>
+  <p>In Irie.app, a red banner above the cards says what keeps agents from starting. Its button, <strong>Sign In…</strong>, <strong>Install…</strong> or <strong>Fix…</strong>, runs <code>irie setup</code> in a session of its own, whose terminal the app shows.</p>
+
   <h2 id="stalled">Stalled <span class="glyph red" aria-hidden="true">!</span></h2>
 <pre><code>stalled: no hooks within 30s · &lt;the last line on the agent’s screen&gt;</code></pre>
   <p>The agent didn’t report in within <code>spawn.ready_timeout</code>, 30 seconds unless you changed it. Usually it’s waiting for you at the start: to trust the folder, to sign in, or to accept something on its first run.</p>
@@ -139,6 +151,7 @@
   <h2 id="core-offline">core offline</h2>
   <p>The list can’t reach Irie’s core. Irie restarts the core on its own, waiting a little longer each time, up to 30 seconds, and the list tries again every second.</p>
   <p>If it stays offline, run <code>irie up</code> in another terminal, and read the end of <code>~/.local/state/irie/core.log</code>.</p>
+  <p>In Irie.app, opening the app starts Irie by itself. If Irie is down after that, the sidebar says so, and its <strong>Start Irie</strong> button starts it, as <code>irie up</code> does in a terminal. If it says <strong>Irie couldn’t start</strong>, it says why: <strong>Set Up Irie…</strong> opens Terminal on <code>irie setup</code>, and <strong>Try Again</strong> tries once more. With no <code>irie</code> installed at all, it shows the install line and a <strong>Copy</strong> button: see <a href="install.html">Install</a>.</p>
 
   <h2 id="messages">Messages from irie</h2>
   <div class="table-wrap">
@@ -147,7 +160,7 @@
       <tbody>
         <tr><td><code>Irie is not running; `irie up` starts it</code></td><td><code>irie ctl list</code>, <code>show</code> and <code>watch</code> need a running Irie. Run <code>irie up</code>.</td></tr>
         <tr><td><code>already inside tmux; run `irie attach --nested` to open Irie inside it</code></td><td>Run <code>irie</code> outside tmux, or add <code>--nested</code>.</td></tr>
-        <tr><td><code>tmux not found: install it or set tmux.path</code></td><td>Install tmux, or set <code>tmux.path</code> to its full path.</td></tr>
+        <tr><td><code>tmux not found: `irie setup` installs it, or set tmux.path</code></td><td>Run <code>irie setup</code>, which installs tmux after a yes, or set <code>tmux.path</code> to its full path.</td></tr>
         <tr><td><code>the core did not answer within 5s (…); see …/core.log</code></td><td>The core didn’t start. The log says why.</td></tr>
         <tr><td><code>config …: unknown key "…"</code></td><td>A setting Irie doesn’t know: a typo, or one from a later milestone. Fix or remove it.</td></tr>
         <tr><td><code>config …: spawn.default_profile = "fast": no such profile</code></td><td>A value that makes no sense. The message names the setting and what it must be.</td></tr>
@@ -235,6 +248,12 @@
 </main>
 
 <footer class="site-footer">
+  <nav class="family" aria-label="Irie People">
+    <a href="https://irie-people.github.io/"><strong>Irie People</strong></a>
+    <a href="https://irie-people.github.io/irie/"><span class="dot irie" aria-hidden="true"></span>Irie</a>
+    <a href="https://irie-people.github.io/riddim/"><span class="dot riddim" aria-hidden="true"></span>Riddim</a>
+    <a href="https://irie-people.github.io/steak/"><span class="dot steak" aria-hidden="true"></span>Steak</a>
+  </nav>
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>

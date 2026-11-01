@@ -115,7 +115,8 @@ func (c *Core) keepView() {
 		return
 	}
 	x := c.sessions[c.selected]
-	if c.selected != "" && x == nil {
+	peerPicked := x == nil && c.isPeerRow(c.selected)
+	if c.selected != "" && x == nil && !peerPicked {
 		c.selected = ""
 	}
 	if c.split != "" && c.sessions[c.split] == nil {
@@ -123,6 +124,10 @@ func (c *Core) keepView() {
 	}
 	var cmds [][]string
 	switch {
+	case peerPicked && slot.Role != tmux.RolePlaceholder:
+		// One of the peers' sessions: its terminal is on its machine, so
+		// the slot draws its conversation (peers.go).
+		cmds, _ = tmux.SwapOut(c.snap, slot.ID)
 	case c.split != "" && c.split == c.selected && c.appViews > 0:
 		// The split shows it, not the slot.
 	case c.rawView() && x != nil && slot.Role == tmux.RolePlaceholder:

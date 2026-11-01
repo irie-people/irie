@@ -1,0 +1,12 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:I'm OK
+N:;I'm OK;;;
+EMAIL;TYPE=INTERNET:00000000-0000-4000-8000-000000000001@hc-ping.com
+EMAIL;TYPE=INTERNET:00000000-0000-4000-8000-000000000002@hc-ping.com
+URL:mailto:00000000-0000-4000-8000-000000000001@hc-ping.com,00000000-0000-4
+ 000-8000-000000000002@hc-ping.com?subject=I%27m%20OK&body=I%27m%20OK.
+NOTE:To check in to your dead man's switch\, open the link above and send t
+ he email it starts: it goes to both checks. Keep it short\; whoever gets t
+ he alarm sees your last check-in.
+END:VCARD

@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -24,7 +25,10 @@ var toolInputKeys = []string{"summary", "question"}
 // delegate (DESIGN §6.4); a turn's last message is kept whole for
 // delegation; a turn stopped at a usage limit may fail over; a jot whose
 // turn ends before its work has landed may be sent back to finish it
-// (DESIGN §4.8).
+// (DESIGN §4.8); while you are away at night, an agent that asks you
+// something is told to decide itself (DESIGN §4.10); and a session or
+// subagent that starts hears the word of the arch agents with it (DESIGN
+// §4.11).
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	h, err := harnessFor(a.Harness)
 	if err != nil {
@@ -42,6 +46,19 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	// The jot dog reads what a finished turn left before the turn is
 	// recorded, outside c.mu (dog.go).
 	unfinished, loose := c.dogAtStop(a.Session, evs)
+	// So may the trod bot, which may read the machine's idle time
+	// (trod.go).
+	var trod trodReply
+	if unfinished == "" {
+		trod = c.trodAtHook(a.Session, evs)
+	}
+	// And the arch agents' word to a session or subagent that starts
+	// (arch.go), and Gabriel's guard of the user's focus (gabriel.go).
+	word := c.archWord(a.Session, evs)
+	focusDeny := ""
+	if trod.how != trodAtAsk {
+		focusDeny = c.focusGuard(a.Session, call.Tool, call.Input, evs)
+	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
@@ -52,11 +69,32 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	failover, turnEnded := false, false
 	x.quiet++
 	for _, e := range evs {
-		if unfinished != "" && e.Kind == event.TurnEnded && e.Agent == event.Main {
+		ends := e.Kind == event.TurnEnded && e.Agent == event.Main
+		if ends && asksUser(e.Str("message")) {
+			// Whether it asks is read from the whole message, which the
+			// journal cuts.
+			e.Data["asks"] = true
+		}
+		switch {
+		case unfinished != "" && ends:
 			// The turn goes on, so it has not ended: the dog sent the
 			// agent back to finish what it left.
 			e = nudgeEvent(e, loose)
 			reply.Unfinished = unfinished
+		case trod.how == trodAtStop && ends:
+			// Likewise the trod bot, to decide what it asked.
+			e = trodEvent(e, trodAtStop)
+			reply.Unfinished = trod.note
+		case trod.how == trodAtAsk && e.Kind == event.ToolStarted && e.Str("tool") == "AskUserQuestion":
+			// The question is turned away, so its call never runs.
+			continue
+		case focusDeny != "" && e.Kind == event.ToolStarted:
+			// Gabriel turns the call away, so it never runs.
+			reply.Deny = focusDeny
+			continue
+		case trod.how == trodAtAsk && e.Kind == event.InputNeeded && e.Str("reason") == event.ReasonQuestion:
+			e = trodEvent(e, trodAtAsk)
+			reply.Deny = trod.note
 		}
 		input := call.Input
 		if c.cfg().Journal.ToolInput == "none" {
@@ -69,20 +107,31 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			e.Data["phrase"] = p
 		}
 		// The journal cuts strings, so the whole message is kept first.
-		if msg := e.Str("message"); e.Kind == event.TurnEnded && e.Agent == event.Main && msg != "" {
+		msg := e.Str("message")
+		if e.Kind == event.TurnEnded && e.Agent == event.Main && msg != "" {
 			c.saveResult(x, msg)
 		}
 		c.record(x, e)
+		// A teach-mode turn that asks the user to write a part is theirs:
+		// the agent waits at its prompt (docs/proposals/learning.md §4.4).
+		if e.Kind == event.TurnEnded && e.Agent == event.Main && x.tutor == config.TutorTeach {
+			if line, ok := yourTurn(msg); ok {
+				c.record(x, event.Event{Source: event.SourceIrie, Agent: event.Main, Kind: event.InputNeeded, Vendor: e.Vendor,
+					Data: map[string]any{"reason": event.ReasonTurn, "phrase": "Your turn: " + line}})
+			}
+		}
 		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:
-			reply.Context = c.delegateHint(x)
+			reply.Context = joinNotes(word, c.startNote(x))
+		case e.Kind == event.SubagentStarted:
+			reply.Context = joinNotes(reply.Context, word)
 		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg().Route.Failover:
 			failover = true
 		}
 	}
 	if n := c.takeNote(x, evs); n != "" {
-		reply.Context = strings.TrimSpace(reply.Context + "\n\n" + n)
+		reply.Context = joinNotes(reply.Context, n)
 	}
 	c.followConversation(x)
 	if turnEnded && c.cfg().Spawn.CloseWhenDone {
@@ -95,6 +144,18 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		go c.failover(a.Session)
 	}
 	return reply, nil
+}
+
+// joinNotes puts notes for an agent one after another, a blank line
+// between each, leaving out the empty ones.
+func joinNotes(notes ...string) string {
+	var out []string
+	for _, n := range notes {
+		if n = strings.TrimSpace(n); n != "" {
+			out = append(out, n)
+		}
+	}
+	return strings.Join(out, "\n\n")
 }
 
 // eventPhrase is what an event of a tool call says in plain words (Phrase):

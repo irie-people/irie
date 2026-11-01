@@ -570,8 +570,11 @@ func TestTheSidebarSpawnsAndShows(t *testing.T) {
 	if s.Cwd != dir || s.Name != "Say Hello" {
 		t.Errorf("spawned %+v, want Say Hello in %s", s, dir)
 	}
+	// The row's card, with its mark: the status line says "Started Say
+	// Hello." and the history "start", both before the row may be in.
+	card := regexp.MustCompile(`│ \S Say Hello`)
 	testutil.Eventually(t, 5*time.Second, "the row did not appear", func() bool {
-		return strings.Contains(screen(), "Say Hello")
+		return card.MatchString(screen())
 	})
 
 	// Enter on the new row shows it and focuses it.

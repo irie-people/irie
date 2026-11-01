@@ -65,12 +65,19 @@ func keyLabel(k string) string {
 }
 
 // placeholder is what the slot shows while no session is shown (Slot):
-// the keys. It ignores input.
+// the keys, and with no session at all, a welcome with a first task to
+// try. It ignores input.
 type placeholder struct {
 	w, h     int
 	focusKey string
 	flipKey  string // "" when there is no flip key
+	first    bool   // Irie has no sessions yet
 }
+
+// FirstTask is the task the welcome offers to try: it makes the agent ask
+// before it works, so a newcomer sees a row start, turn red and finish, on
+// Claude's quickest model. The Mac app offers the same (Onboarding.swift).
+const FirstTask = "+haiku Write a haiku about my city. Ask me which city first."
 
 func (placeholder) Init() tea.Cmd { return nil }
 
@@ -141,7 +148,18 @@ func (p placeholder) View() tea.View {
 	if p.h >= markMinHeight {
 		parts = append(parts, mark(), "")
 	}
-	parts = append(parts, styleTitle.Render("Irie"), "", lipgloss.JoinVertical(lipgloss.Left, keys...))
+	parts = append(parts, styleTitle.Render("Irie"), "")
+	if p.first {
+		parts = append(parts, lipgloss.JoinVertical(lipgloss.Center,
+			styleBold.Render("Welcome."),
+			styleDim.Render("Type a task in the box under the list and press Enter:"),
+			styleDim.Render("an agent starts on it, in a folder of its own."),
+			"",
+			styleDim.Render("To try one, type:"),
+			codeStyle.Render(FirstTask),
+		), "")
+	}
+	parts = append(parts, lipgloss.JoinVertical(lipgloss.Left, keys...))
 	v := tea.NewView(lipgloss.Place(p.w, p.h, lipgloss.Center, lipgloss.Center, lipgloss.JoinVertical(lipgloss.Center, parts...)))
 	v.AltScreen = true
 	return v

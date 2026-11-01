@@ -18,16 +18,15 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/irie-people/irie/internal/ipc"
-	"github.com/irie-people/irie/internal/route"
 )
 
 // Backend is what the sidebar asks of the core.
 type Backend interface {
-	Spawn(ipc.SpawnArgs) (ipc.Session, error)
+	// Input sends what was typed in the command bar, which the core reads
+	// and does: a task to start, a status question or a : command (DESIGN
+	// §4.2). The sidebar keeps no rules of its own for the words.
+	Input(ipc.InputArgs) (ipc.InputResult, error)
 	Show(id string, focus bool) error
-	// Rename gives a session a new name and returns it with the name the
-	// core gave it.
-	Rename(id, name string) (ipc.Session, error)
 	// Complete returns the tokens that complete an @ or + token, and for a
 	// + token what each profile runs and costs.
 	Complete(text string) (ipc.CompleteResult, error)
@@ -35,14 +34,8 @@ type Backend interface {
 	Move(vendorID, profile string) (ipc.Session, error)
 	// Rate rates a session's work good or bad, which teaches the router.
 	Rate(id, verdict string) error
-	// Tool starts a tool session: local setup, or the local models.
-	Tool(name string) (ipc.Session, error)
-	// Route says where a task would run, and why.
-	Route(task string) (route.Choice, error)
-	// Close closes a session; Reopen brings back a closed one, the one
-	// closed last when id is empty.
+	// Close closes a session.
 	Close(id string) error
-	Reopen(id string) (ipc.Session, error)
 	// Undo and Redo step back and forth through the history; a choice
 	// answers a question the core asked.
 	Undo(ipc.UndoArgs) (ipc.UndoResult, error)
@@ -56,9 +49,10 @@ type FrameMsg struct{ Frame ipc.Frame }
 type OfflineMsg struct{}
 
 type (
-	spawnedMsg struct {
-		session ipc.Session
-		err     error
+	// inputMsg is what the core made of the command bar's text.
+	inputMsg struct {
+		r   ipc.InputResult
+		err error
 	}
 	shownMsg     struct{ err error }
 	tickMsg      struct{}
@@ -72,24 +66,7 @@ type (
 		name, verdict string
 		err           error
 	}
-	renamedMsg struct {
-		before  string
-		session ipc.Session
-		err     error
-	}
-	toolMsg struct {
-		session ipc.Session
-		err     error
-	}
-	routedMsg struct {
-		choice route.Choice
-		err    error
-	}
 )
-
-// commands are what the command bar takes after a colon (DESIGN §4.2,
-// §4.6, §6.4).
-const commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
 
 type focusArea int
 
@@ -156,7 +133,6 @@ type Model struct {
 	confirmedAt    time.Time // when it asked
 	closing        string    // the session a first x asked to close (close.go)
 	closingAt      time.Time // when it asked
-	reopening      bool
 
 	undoLabel, redoLabel string      // what u and U would do next, from the history frame (undo.go)
 	menu                 *choiceMenu // a question about an undo or redo, while it waits for an answer
@@ -360,33 +336,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.apply(msg.Frame)
 	case OfflineMsg:
 		m.conn = offline
-	case spawnedMsg:
-		m.spawning = false
-		if msg.err != nil {
-			m.setStatus(msg.err.Error(), true)
-			return m, nil
-		}
-		m.bar.Reset()
-		m.chips = nil
-		m.setFocus(focusList)
-		m.setStatus(spawnSummary(msg.session), false)
-		m.pick(msg.session.ID)
+	case inputMsg:
+		// inputDone changes m, so it runs before m is returned.
+		cmd := m.inputDone(msg)
+		return m, cmd
 	case shownMsg:
 		if msg.err != nil {
 			m.setStatus(msg.err.Error(), true)
-		}
-	case renamedMsg:
-		if msg.err != nil {
-			m.setStatus(msg.err.Error(), true)
-		} else {
-			m.setStatus(fmt.Sprintf("renamed %s to %s", msg.before, msg.session.Name), false)
 		}
 	case movedMsg:
 		m.moved(msg)
 	case closedMsg:
 		m.closedDone(msg)
-	case reopenedMsg:
-		m.reopened(msg)
 	case undoneMsg:
 		m.undone(msg)
 	case completedMsg:
@@ -396,24 +357,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatus(msg.err.Error(), true)
 		} else {
 			m.setStatus(fmt.Sprintf("rated %s %s; the router learns from it", msg.name, msg.verdict), false)
-		}
-	case toolMsg:
-		if msg.err != nil {
-			m.setStatus(msg.err.Error(), true)
-			return m, nil
-		}
-		// A tool session waits for its user: it goes into the slot.
-		m.bar.Reset()
-		m.chips = nil
-		m.setFocus(focusList)
-		m.pick(msg.session.ID)
-		id, b := msg.session.ID, m.backend
-		return m, func() tea.Msg { return shownMsg{err: b.Show(id, true)} }
-	case routedMsg:
-		if msg.err != nil {
-			m.setStatus(msg.err.Error(), true)
-		} else {
-			m.setStatus(msg.choice.Reason, false)
 		}
 	case tea.PasteMsg:
 		if m.focus != focusBar {
@@ -562,31 +505,23 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.spawning {
 			return m, nil
 		}
-		if first, _, _ := strings.Cut(strings.TrimSpace(m.bar.Value()), "\n"); strings.HasPrefix(first, ":") {
-			return m.command(first)
+		// The core reads the words, with what is selected for a : command
+		// to act on, and long pastes go as they were pasted.
+		in := ipc.InputArgs{Text: m.bar.Value(), Pastes: pastes(m.chips)}
+		if s, ok := m.selSession(); ok {
+			in.Session = s.ID
 		}
-		if q, ok := ParseHows(m.bar.Value()); ok {
-			if s := FindSession(m.sessions, q); s != nil {
-				m.setStatus(Hows(*s), false)
-			} else {
-				m.setStatus("no agent matches “"+q+"”", true)
-			}
-			m.bar.Reset()
-			m.chips = nil
-			return m, nil
+		if o, ok := m.selOutside(); ok {
+			in.Outside = o.Key()
 		}
-		args, err := ParseTask(m.bar.Value(), m.home)
-		if err != nil {
-			m.setStatus(err.Error(), true)
-			return m, nil
-		}
-		args.Task = expand(args.Task, m.chips)
 		m.spawning = true
-		m.setStatus("starting…", false)
+		if first, _, _ := strings.Cut(strings.TrimSpace(in.Text), "\n"); !strings.HasPrefix(first, ":") {
+			m.setStatus("starting…", false)
+		}
 		b := m.backend
 		return m, func() tea.Msg {
-			s, err := b.Spawn(args)
-			return spawnedMsg{session: s, err: err}
+			r, err := b.Input(in)
+			return inputMsg{r: r, err: err}
 		}
 	case "esc":
 		m.bar.Reset()
@@ -624,64 +559,42 @@ func (m Model) rateCmd(verdict string) tea.Cmd {
 	return func() tea.Msg { return ratedMsg{name: s.Name, verdict: verdict, err: b.Rate(s.ID, verdict)} }
 }
 
-// command runs a command bar command: a line that starts with a colon.
-func (m Model) command(line string) (tea.Model, tea.Cmd) {
-	name, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
-	arg = strings.TrimSpace(arg)
-	b := m.backend
-	done := func(cmd tea.Cmd) (tea.Model, tea.Cmd) {
+// inputDone shows what the core made of the bar's text. The bar empties,
+// but for :route, whose task stays to be changed or started. A question's
+// answer leaves the keyboard in the bar; anything else selects the session
+// it started or acted on, shows a tool session with the keyboard, or opens
+// the core's question when it asks one.
+func (m *Model) inputDone(msg inputMsg) tea.Cmd {
+	m.spawning = false
+	if msg.err != nil {
+		m.setStatus(msg.err.Error(), true)
+		return nil
+	}
+	r := msg.r
+	if r.Op != ipc.OpRoute {
 		m.bar.Reset()
 		m.chips = nil
-		return m, cmd
 	}
-	if model, cmd, ok := m.controlCommand(name, arg); ok {
-		return model, cmd
+	switch r.Did {
+	case ipc.InputAnswered:
+		m.setStatus(r.Text, false)
+		return nil
+	case ipc.InputAsked:
+		m.setFocus(focusList)
+		m.undone(undoneMsg{dir: r.Op, r: ipc.UndoResult{Did: ipc.DidAsk, Label: r.Text, Choice: r.Choice}})
+		return nil
 	}
-	switch {
-	case name == "move":
-		o, err := m.pickOutside(arg)
-		if err != nil {
-			m.setStatus(err.Error(), true)
-			return m, nil
-		}
-		m.setFocus(focusList)
-		return done(m.moveCmd(o))
-	case name == "rename" && arg != "":
-		s, ok := m.selSession()
-		if !ok {
-			m.setStatus("no session to rename; select one of Irie's", true)
-			return m, nil
-		}
-		m.setFocus(focusList)
-		return done(func() tea.Msg {
-			r, err := b.Rename(s.ID, arg)
-			return renamedMsg{before: s.Name, session: r, err: err}
-		})
-	case name == "setup" && (arg == "" || arg == "local"):
-		m.setStatus("starting local setup…", false)
-		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolSetup); return toolMsg{session: s, err: err} }
-	case name == "models" && arg == "":
-		return m, func() tea.Msg { s, err := b.Tool(ipc.ToolModels); return toolMsg{session: s, err: err} }
-	case name == "rate" && (arg == ipc.Good || arg == ipc.Bad):
-		if _, ok := m.selSession(); !ok {
-			m.setStatus("no session to rate; select one of Irie's", true)
-			return m, nil
-		}
-		return done(m.rateCmd(arg))
-	case name == "close" && arg == "":
-		m.setFocus(focusList)
-		return done(m.closeNamed())
-	case name == "reopen" && arg == "":
-		m.setFocus(focusList)
-		return done(m.reopenCmd())
-	case (name == dirUndo || name == dirRedo) && arg == "":
-		m.setFocus(focusList)
-		return done(m.undoCmd(name, "", ""))
-	case name == "route" && arg != "":
-		return m, func() tea.Msg { ch, err := b.Route(arg); return routedMsg{choice: ch, err: err} }
+	m.setFocus(focusList)
+	m.setStatus(r.Text, false)
+	if r.Session == nil {
+		return nil
 	}
-	m.setStatus(fmt.Sprintf("unknown command :%s; the commands are %s", name, commands), true)
-	return m, nil
+	m.pick(r.Session.ID)
+	if !r.Show {
+		return nil
+	}
+	id, b := r.Session.ID, m.backend
+	return func() tea.Msg { return shownMsg{err: b.Show(id, true)} }
 }
 
 // wordAtCursor returns the part before the cursor of the word it is in,
@@ -759,18 +672,4 @@ func commonPrefix(items []string) string {
 		p = p[:n]
 	}
 	return string(p)
-}
-
-// spawnSummary is what the status strip says about a new session: the
-// worktree it got, the local files copied into it, and what Irie could not
-// do or carry over.
-func spawnSummary(s ipc.Session) string {
-	var parts []string
-	if s.Branch != "" {
-		parts = append(parts, "worktree "+s.Branch)
-	}
-	if len(s.Copied) > 0 {
-		parts = append(parts, "copied "+strings.Join(s.Copied, ", "))
-	}
-	return strings.Join(append(parts, s.Warnings...), " · ")
 }

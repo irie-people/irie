@@ -16,11 +16,13 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/harness/generic"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/learn"
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/route"
 	"github.com/irie-people/irie/internal/tmux"
@@ -229,6 +231,16 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	if err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", profileName, err)
 	}
+	tutor, err := c.tutorFor(a, h.ID())
+	if err != nil {
+		return ipc.Session{}, err
+	}
+	if tutor != "" {
+		if extra == nil {
+			extra = map[string]any{}
+		}
+		extra["tutor"] = tutor
+	}
 	if m := c.readMachine(); m.Total > 0 && m.Available < localmodel.Reserve(m) {
 		warnings = append(warnings, fmt.Sprintf("memory is low: %s free of %s", localmodel.Bytes(m.Available), localmodel.Bytes(m.Total)))
 	}
@@ -262,7 +274,7 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		class, _ := extra["class"].(string)
 		c.escalate(hash, class, profileName, time.Now())
 	}
-	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra})
+	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor})
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
 	}
@@ -300,6 +312,7 @@ type job struct {
 	resume  string         // the vendor id of the conversation to carry on
 	data    map[string]any // more data for spawn.requested
 	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
+	tutor   string         // its tutor mode, explain or teach; "" when off (learn.tutor)
 }
 
 // launch writes the session's files, creates its window and records the
@@ -326,19 +339,30 @@ func (c *Core) launch(j job) (*session, error) {
 		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
 		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
 		vendorID: vendorID, warnings: append(slices.Clone(pl.warnings), j.probe.Warnings...),
-		model: profile.Model, local: profile.Local != nil, out: c.outcome(id),
+		model: profile.Model, local: profile.Local != nil, tutor: j.tutor, out: c.outcome(id),
 	}
 
 	dir := c.paths.Session(id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	// A reopened session starts unfrozen (freeze.go).
+	// A reopened session starts unfrozen (freeze.go), with no jots
+	// waiting for it from before it closed (follow.go).
 	os.Remove(c.paths.FreezeFile(id))
+	os.Remove(c.paths.FollowUpFile(id))
+	// Nor with what the arch agents brought it then (arch.go).
+	os.Remove(filepath.Join(dir, harness.ArchFile))
 	s := harness.Spawn{
 		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
 		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
+		Arch:  c.archFor(profile, h.ID()),
+		Tutor: x.tutor, Visual: x.tutor != "" && c.cfg().Learn.Visual,
+	}
+	// Irie's tips go under the agent's spinner, where its harness has one
+	// (docs/proposals/learning.md).
+	if c.cfg().Learn.AgentTips {
+		s.Tips = learn.Get().Tips
 	}
 	// Only the user's name goes to the agent: Claude Code titles a session
 	// it gets no name for, and the row follows the title (title.go).
@@ -356,6 +380,10 @@ func (c *Core) launch(j job) (*session, error) {
 			anchor, s.Teams = a, true
 		}
 	}
+	// Irie's skills, for a harness that loads them as a plugin.
+	if j.probe.Flags["--plugin-dir"] {
+		s.PluginDir = c.skillsFolder(profile, x)
+	}
 	launch := h.Launch
 	if j.resume != "" {
 		r, ok := h.(harness.Resumer)
@@ -369,7 +397,7 @@ func (c *Core) launch(j job) (*session, error) {
 		return nil, err
 	}
 	for f, b := range files {
-		if err := os.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
+		if err := filetx.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
 			return nil, err
 		}
 	}
@@ -396,7 +424,7 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := host.WriteSpec(spec, host.Spec{
 		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Path: path, Cwd: x.cwd, Warnings: x.warnings,
 		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
-		Model: x.model, Local: x.local,
+		Model: x.model, Local: x.local, Tutor: x.tutor,
 	}); err != nil {
 		return nil, err
 	}

@@ -14,6 +14,8 @@ import (
 	"github.com/irie-people/irie/internal/testutil"
 )
 
+func TestMain(m *testing.M) { testutil.Main(m) }
+
 var want = Want{Bin: "/opt/irie/bin/irie", SidebarWidth: 34, Version: "v1"}
 
 // sound is a healthy layout: the core window, the sidebar and the placeholder

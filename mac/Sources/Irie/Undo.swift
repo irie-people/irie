@@ -104,6 +104,13 @@ extension Store {
         }
     }
 
+    /// Answers a question the core asked about a step, as a typed :undo or
+    /// :redo can bring one: in an alert, then back through op.
+    func answer(_ op: String, _ c: UndoChoice) async {
+        guard let key = ask(c) else { return }
+        await step(op, UndoArgs(choiceID: c.id, choice: key))
+    }
+
     /// Asks the core's question in an alert: each option a button, the
     /// recommended one first, so Return takes it, and Cancel on Esc. It
     /// returns the key picked, or nil to change nothing.

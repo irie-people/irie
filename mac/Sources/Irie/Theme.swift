@@ -216,92 +216,98 @@ enum Theme {
         })
     }
 
-    /// How many agent hues there are.
+    /// How many agent colours there are.
     static let agentSlots = 6
 
-    /// An agent's own colour while it works. The slots fan out over the half
-    /// of the colour wheel almost opposite the palette's accent (centred 180°
-    /// away, 36° apart, or closer where the fan skips the needs red), so they
-    /// set the agents apart from each other, from the accent that marks the
-    /// selection, and from what needs you. The brightness is found for the
-    /// grounds its mark sits on, so each keeps 3:1 (WCAG 2.2 non-text) in
-    /// every palette and mode, and Increase Contrast pushes it further.
+    /// An agent's own colour while it works: its mark, and the edge of its
+    /// card and terminal. The six hues spread over the whole colour wheel
+    /// but the needs red (agentHue), so the core can give cards side by side
+    /// colours near opposite (internal/core, hue.go), each at a low chroma,
+    /// so the view stays calm. It starts at the lightness of the palette's
+    /// own marks and goes only as far as keeps 3:1 (WCAG 2.2 non-text) on
+    /// its card's wash and on the selection, in every palette and mode;
+    /// Increase Contrast pushes it to 4.5:1 on the plain card.
     static func agent(slot: Int) -> Color {
         let p = palette
         return computed { agentHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
-    /// A working card's ground: the card washed with its agent's colour, as
-    /// far as keeps the card's text at 4.5:1 and leaves its mark room for
-    /// 3:1. It lies over the card's fill, the selection's too. Under Increase
+    /// A working card's ground: the card's own lightness, a little deeper in
+    /// light mode and lifted in dark mode, in its agent's hue at a lower
+    /// chroma still, as far toward that as keeps the card's text at 4.5:1.
+    /// It lies over the card's fill, the selection's too. Under Increase
     /// Contrast it is clear, so the plain fill shows.
     static func agentWash(slot: Int) -> Color {
         let p = palette
         return computed(alpha: { $0 ? 0 : 1 }) { agentWashHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
-    /// A selected working card's trailing end: its wash taken toward its
-    /// mark's colour, which edges its terminal, as far as keeps ink at 4.5:1,
-    /// so the selection runs into the terminal's colour. Under Increase
-    /// Contrast it is clear, as the wash is.
+    /// A selected working card's trailing end: its wash taken halfway toward
+    /// its mark's colour, which edges its terminal, or less where that keeps
+    /// ink under 4.5:1, so the selection runs into the terminal's colour.
+    /// Under Increase Contrast it is clear, as the wash is.
     static func agentDeep(slot: Int) -> Color {
         let p = palette
         return computed(alpha: { $0 ? 0 : 1 }) { agentDeepHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
     /// An agent's own colour as text, for the lines about it away from its
-    /// card: its mark's hue, as deep or as bright as keeps 4.5:1 on every
+    /// card: its mark's hue and chroma, at the lightness of the palette's
+    /// text marks, or as much deeper or lighter as keeps 4.5:1 on every
     /// ground such a line sits on, and 7:1 under Increase Contrast.
     static func agentInk(slot: Int) -> Color {
         let p = palette
         return computed { agentInkHex(slot: slot, palette: p, dark: $0, high: $1) }
     }
 
-    /// The slot for a session: the same one every time, from its id.
+    /// The slot for a session whose core gives it no colour: the same one
+    /// every time, from its id.
     static func agentSlot(_ id: String) -> Int {
         var h: UInt32 = 2166136261
         for b in id.utf8 { h = (h ^ UInt32(b)) &* 16777619 }
         return Int(h % UInt32(agentSlots))
     }
 
-    /// A slot's hue, from 0 to 1. The fan leaves out 30° either side of the
-    /// palette's needs red, which is only for what needs you (DESIGN §5.3),
-    /// and spreads the slots over the rest of its half of the wheel.
+    // The agents' colours are worked out in OKLCH, Oklab's polar form (Björn
+    // Ottosson, 2020), where hues of one lightness and chroma look equally
+    // light and equally vivid, so the six differ by hue alone and none
+    // glares. A mark and its text have markChroma, and start from the
+    // lightness of the palette's own marks and text, light mode then dark; a
+    // card's wash has washChroma, and the card's lightness moved by
+    // washLift; a selected card's trailing end goes at most `deepest` of the
+    // way from its wash to its mark. internal/ui has the same numbers for
+    // the status line.
+    private static let markChroma = 0.085
+    private static let markLightness = (light: 0.50, dark: 0.78)
+    private static let inkLightness = (light: 0.47, dark: 0.82)
+    private static let washChroma = (light: 0.03, dark: 0.04)
+    private static let washLift = (light: -0.03, dark: 0.025)
+    private static let deepest = 0.5
+
+    /// A slot's hue in OKLCH degrees. The six leave out 30° either side of
+    /// the palette's needs red, which is only for what needs you (DESIGN
+    /// §5.3), and spread evenly over the rest of the wheel, 50° apart.
     private static func agentHue(slot: Int, _ s: Swatches) -> Double {
-        let start = hsb(s.accent).0 * 360 + 90
-        // The red's place along the fan, and the stretch of the fan it takes.
-        var red = (hsb(s.needs).0 * 360 - start).truncatingRemainder(dividingBy: 360)
-        if red < 0 { red += 360 }
-        if red >= 270 { red -= 360 }
-        let from = max(0, red - 30), gap = max(0, min(180, red + 30) - from)
-        var along = Double(slot % agentSlots) * (180 - gap) / Double(agentSlots - 1)
-        if gap > 0, along >= from { along += gap }
-        return (start + along).truncatingRemainder(dividingBy: 360) / 360
+        let gap = 30.0, step = (360 - 2 * gap) / Double(agentSlots)
+        return (oklch(s.needs).h + gap + step / 2 + Double(slot % agentSlots) * step).truncatingRemainder(dividingBy: 360)
     }
 
     static func agentWashHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
         let s = dark ? p.dark : p.light
         if high { return s.card }
-        let hue = agentHue(slot: slot, s)
-        // Toward the hue: at full brightness in light mode, so the wash stays
-        // a pastel rather than greying; at 0.6 in dark mode, so it adds more
-        // colour than light.
-        let vivid = rgb(hue, 0.62, dark ? 0.6 : 1)
+        let full = hex(l: oklch(s.card).l + (dark ? washLift.dark : washLift.light),
+                       c: dark ? washChroma.dark : washChroma.light, h: agentHue(slot: slot, s))
         // The muted text holds the least contrast on a card; a little over
-        // 4.5:1 leaves room for rounding. A dark mark can always darken, but
-        // a bright one keeps its colour only up to full brightness.
-        let muted = luminance(s.muted), brightest = luminance(rgb(hue, 0.62, 1))
-        func fits(_ t: Double) -> Bool {
-            let l = luminance(mix(s.card, vivid, t))
-            return ratio(l, muted) >= 4.6 && (!dark || ratio(l, brightest) >= 3.2)
-        }
-        var lo = 0.0, hi = dark ? 0.45 : 0.2
-        if fits(hi) { return mix(s.card, vivid, hi) }
+        // 4.5:1 leaves room for rounding.
+        let muted = luminance(s.muted)
+        func fits(_ t: Double) -> Bool { ratio(luminance(mix(s.card, full, t)), muted) >= 4.6 }
+        if fits(1) { return full }
+        var lo = 0.0, hi = 1.0
         for _ in 0..<14 {
             let mid = (lo + hi) / 2
             if fits(mid) { lo = mid } else { hi = mid }
         }
-        return mix(s.card, vivid, lo)
+        return mix(s.card, full, lo)
     }
 
     static func agentDeepHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
@@ -313,8 +319,8 @@ enum Theme {
         // leaves room for rounding.
         let ink = luminance(s.ink)
         func fits(_ t: Double) -> Bool { ratio(luminance(mix(wash, mark, t)), ink) >= 4.6 }
-        if fits(1) { return mark }
-        var lo = 0.0, hi = 1.0
+        if fits(deepest) { return mix(wash, mark, deepest) }
+        var lo = 0.0, hi = deepest
         for _ in 0..<14 {
             let mid = (lo + hi) / 2
             if fits(mid) { lo = mid } else { hi = mid }
@@ -330,21 +336,12 @@ enum Theme {
         // under Increase Contrast.
         let want = high ? 4.5 : 3.2
         let grounds = [agentWashHex(slot: slot, palette: p, dark: dark, high: high), s.selection].map(luminance)
-        // Past full brightness the mark pales toward white, for a dark hue,
-        // such as a blue, that full brightness leaves short.
-        func mark(_ x: Double) -> UInt32 { x <= 1 ? rgb(hue, 0.62, x) : rgb(hue, 0.62 * (2 - x), 1) }
-        var lo = 0.0, hi = dark ? 2.0 : 1.0
-        for _ in 0..<14 {
-            let mid = (lo + hi) / 2
-            let l = luminance(mark(mid))
-            // Light cards want the dark end, dark cards the bright end.
-            if grounds.allSatisfy({ ratio(l, $0) >= want }) {
-                if dark { hi = mid } else { lo = mid }
-            } else {
-                if dark { lo = mid } else { hi = mid }
-            }
+        // Light cards want it deeper, dark cards lighter.
+        let l = reach(dark ? markLightness.dark : markLightness.light, dark ? 1 : 0) { l in
+            let y = luminance(hex(l: l, c: markChroma, h: hue))
+            return grounds.allSatisfy { ratio(y, $0) >= want }
         }
-        return mark(dark ? hi : lo)
+        return hex(l: l, c: markChroma, h: hue)
     }
 
     static func agentInkHex(slot: Int, palette p: Palette, dark: Bool, high: Bool) -> UInt32 {
@@ -355,40 +352,67 @@ enum Theme {
         // rounding.
         let want = high ? 7 : 4.6
         let grounds = [s.sidebar, s.ground, s.card, s.panel].map(luminance)
-        // Past full brightness it pales toward white, as the mark does.
-        func ink(_ x: Double) -> UInt32 { x <= 1 ? rgb(hue, 0.62, x) : rgb(hue, 0.62 * (2 - x), 1) }
-        var lo = 0.0, hi = dark ? 2.0 : 1.0
+        let l = reach(dark ? inkLightness.dark : inkLightness.light, dark ? 1 : 0) { l in
+            let y = luminance(hex(l: l, c: markChroma, h: hue))
+            return grounds.allSatisfy { ratio(y, $0) >= want }
+        }
+        return hex(l: l, c: markChroma, h: hue)
+    }
+
+    /// `from`, or the nearest value toward `to` for which `ok` holds, found
+    /// in 14 halvings; `ok` must hold at `to`. internal/ui's reach is the
+    /// same.
+    private static func reach(_ from: Double, _ to: Double, _ ok: (Double) -> Bool) -> Double {
+        if ok(from) { return from }
+        var lo = from, hi = to
         for _ in 0..<14 {
             let mid = (lo + hi) / 2
-            let l = luminance(ink(mid))
-            if grounds.allSatisfy({ ratio(l, $0) >= want }) {
-                if dark { hi = mid } else { lo = mid }
-            } else {
-                if dark { lo = mid } else { hi = mid }
-            }
+            if ok(mid) { hi = mid } else { lo = mid }
         }
-        return ink(dark ? hi : lo)
+        return hi
     }
 
-    private static func hsb(_ hex: UInt32) -> (Double, Double, Double) {
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        NSColor(hex: hex).getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        return (Double(h), Double(s), Double(b))
+    /// A colour's OKLCH: its lightness, its chroma and its hue in degrees.
+    static func oklch(_ hex: UInt32) -> (l: Double, c: Double, h: Double) {
+        let r = linear(hex >> 16), g = linear(hex >> 8), b = linear(hex)
+        let l1 = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        let m1 = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        let s1 = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        let l = 0.2104542553 * l1 + 0.7936177850 * m1 - 0.0040720468 * s1
+        let a = 1.9779984951 * l1 - 2.4285922050 * m1 + 0.4505937099 * s1
+        let bb = 0.0259040371 * l1 + 0.7827717662 * m1 - 0.8086757660 * s1
+        var h = atan2(bb, a) * 180 / .pi
+        if h < 0 { h += 360 }
+        return (l, (a * a + bb * bb).squareRoot(), h)
     }
 
-    private static func rgb(_ h: Double, _ s: Double, _ b: Double) -> UInt32 {
-        let c = NSColor(hue: CGFloat(h), saturation: CGFloat(s), brightness: CGFloat(b), alpha: 1).usingColorSpace(.sRGB)!
-        func ch(_ v: CGFloat) -> UInt32 { UInt32((v * 255).rounded()) }
-        return ch(c.redComponent) << 16 | ch(c.greenComponent) << 8 | ch(c.blueComponent)
+    /// The sRGB colour of an OKLCH lightness, chroma and hue in degrees, each
+    /// channel held to sRGB's range and rounded.
+    static func hex(l: Double, c: Double, h: Double) -> UInt32 {
+        let a = c * cos(h * .pi / 180), b = c * sin(h * .pi / 180)
+        let l1 = l + 0.3963377774 * a + 0.2158037573 * b
+        let m1 = l - 0.1055613458 * a - 0.0638541728 * b
+        let s1 = l - 0.0894841775 * a - 1.2914855480 * b
+        let l3 = l1 * l1 * l1, m3 = m1 * m1 * m1, s3 = s1 * s1 * s1
+        func ch(_ x: Double) -> UInt32 {
+            var v = min(1, max(0, x))
+            v = v <= 0.0031308 ? v * 12.92 : 1.055 * pow(v, 1 / 2.4) - 0.055
+            return UInt32((v * 255).rounded())
+        }
+        return ch(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3) << 16
+            | ch(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3) << 8
+            | ch(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3)
+    }
+
+    /// An sRGB channel's linear light.
+    private static func linear(_ v: UInt32) -> Double {
+        let c = Double(v & 0xFF) / 255
+        return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
     }
 
     /// WCAG 2.2's relative luminance.
     static func luminance(_ hex: UInt32) -> Double {
-        func channel(_ v: UInt32) -> Double {
-            let c = Double(v & 0xFF) / 255
-            return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * channel(hex >> 16) + 0.7152 * channel(hex >> 8) + 0.0722 * channel(hex)
+        0.2126 * linear(hex >> 16) + 0.7152 * linear(hex >> 8) + 0.0722 * linear(hex)
     }
 
     /// WCAG 2.2's contrast ratio between two luminances.

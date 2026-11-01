@@ -7,7 +7,6 @@ package ui
 // details go in the status strip. m m, or :move, moves an idle one in.
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -188,33 +187,6 @@ func (m *Model) moved(msg movedMsg) {
 	}
 	m.setStatus("moved "+msg.name+" into Irie", false)
 	m.pick(msg.session.ID)
-}
-
-// pickOutside finds the outside session that :move names: by its id, short
-// id or name, or the selected one when it names none.
-func (m Model) pickOutside(what string) (ipc.OutsideSession, error) {
-	if what == "" {
-		if o, ok := m.selOutside(); ok {
-			return o, nil
-		}
-		return ipc.OutsideSession{}, errors.New(":move takes the selected session under Outside Irie, or one you name")
-	}
-	var named []ipc.OutsideSession
-	for _, o := range m.outside {
-		switch {
-		case o.VendorID == what || o.ID == what:
-			return o, nil
-		case o.Name == what:
-			named = append(named, o)
-		}
-	}
-	switch len(named) {
-	case 0:
-		return ipc.OutsideSession{}, fmt.Errorf("no session %q outside Irie", what)
-	case 1:
-		return named[0], nil
-	}
-	return ipc.OutsideSession{}, fmt.Errorf("%d sessions outside Irie are named %q; select one and press m", len(named), what)
 }
 
 // printable replaces control characters, which would steer the terminal.

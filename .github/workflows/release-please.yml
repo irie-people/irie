@@ -3,18 +3,57 @@
 # It runs on the built-in GITHUB_TOKEN only. Allow that token to open pull requests (Settings > Actions >
 # General > Workflow permissions). Pull requests it opens start no other workflows, so `commits` doesn't
 # run on them: their titles are conventional already.
+#
+# When it publishes a release, `downloads` builds what the site's install.sh fetches (tools/release.sh)
+# and attaches it to the release. A release made with GITHUB_TOKEN starts no other workflow, so this
+# happens here. Run the workflow by hand with a tag to build a release's downloads again.
 name: release-please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release to build the downloads of again, such as v0.2.0"
+        required: true
 permissions:
   contents: write
   issues: write
   pull-requests: write
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  # irie for macOS and Linux, Irie.app for Apple silicon, and SHA256SUMS. A Mac builds them all: the
+  # app needs Xcode, and Go builds for the other systems from anywhere.
+  downloads:
+    needs: release-please
+    if: ${{ !cancelled() && (needs.release-please.outputs.created == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: tools/release.sh "$TAG" dist
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"

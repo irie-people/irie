@@ -7,4 +7,4 @@ Thanks for helping. Irie is free to use. If Irie ever makes money, it all goes b
 3. Say in the pull request if an agent wrote part of the change. You answer for every line. Drive-by generated changes are closed.
 4. A maintainer sizes merged work in Steak (`steak:N`). Steak starts once a maintainer vouches for you, usually after your first merged change.
 
-Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md). For help, see [SUPPORT.md](SUPPORT.md); for a security problem, [SECURITY.md](SECURITY.md).
+Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md), and [GOVERNANCE.md](GOVERNANCE.md) says how decisions are made. For help, see [SUPPORT.md](SUPPORT.md); for a security problem, [SECURITY.md](SECURITY.md).

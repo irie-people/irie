@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"reflect"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -29,6 +31,7 @@ import (
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/statusline"
+	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/team"
 	"github.com/irie-people/irie/internal/tmux"
 )
@@ -52,13 +55,19 @@ type Core struct {
 	version string
 	log     *slog.Logger
 
-	spawnMu  turns        // one spawn at a time, a promoted session's first; taken before mu
-	sendMu   turns        // one message typed to an agent at a time, likewise
-	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
-	undoMu   sync.Mutex   // one undo or redo at a time, taken before spawnMu and mu
-	http     *http.Client // for local servers
-	sampling atomic.Bool  // a memory sample is running
-	sweeping atomic.Bool  // the jot dog looks at the finished jots (dog.go)
+	spawnMu     turns        // one spawn at a time, a promoted session's first; taken before mu
+	sendMu      turns        // one message typed to an agent at a time, likewise
+	localMu     sync.Mutex   // one start of the local server at a time, taken before mu
+	undoMu      sync.Mutex   // one undo or redo at a time, taken before spawnMu and mu
+	http        *http.Client // for local servers
+	sampling    atomic.Bool  // a memory sample is running
+	gabSweeping atomic.Bool  // Gabriel's sweep is running (gabriel.go)
+	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
+	fdog        *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
+
+	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
+	awakeMu      sync.Mutex  // guards awake; taken after mu
+	awake        *exec.Cmd   // what keeps the Mac awake for the trod bot, while it does
 
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
@@ -82,20 +91,32 @@ type Core struct {
 	outside    outside                  // the Claude Code sessions outside Irie (outside.go)
 	local      localState               // local.json
 	machine    localmodel.Machine       // the machine's memory, last read
+	load       sysload.Load             // how busy the machine is, last read
+	mach       *ipc.Machine             // what this core says of its machine to its peers (machine.go)
+	machAt     time.Time                // when it was last checked
+	signInAt   time.Time                // when Claude Code last said whether it is signed in (machine.go)
 	localMem   int64                    // what the models of Irie's own server take
 	llamaMem   int64                    // what Irie's own llama-server takes
 	plan       ipc.Plan                 // the plan's use, from the newest status update
 	planAt     time.Time
-	outcomes   map[string]*outcome // every session's route and outcome, those gone included
-	order      []string            // the list's order from the top, which the user sets (order.go)
-	bg         map[int]bgProc      // the processes Irie put in the background, by pid (priority.go)
-	closes     closes              // closed sessions, and agents still ending (close.go)
-	steps      stateFile           // state.json: the undo and redo stacks (undo.go)
-	selected   string              // the session you picked, whose conversation or terminal the slot shows (view.go)
-	raw        bool                // the slot shows the picked session's raw terminal, not its conversation
-	split      string              // the session the Mac app shows beside its teammates, in the view session (view.go)
-	team       *tmux.Runner        // the team server, where sessions' teammates run (team.go)
-	teamSocket string              // its socket path, once known
+	outcomes   map[string]*outcome   // every session's route and outcome, those gone included
+	order      []string              // the list's order from the top, which the user sets (order.go)
+	hues       map[string]int        // the colours the core gave the sessions, the closed ones' too (hue.go)
+	bg         map[int]bgProc        // the processes Irie put in the background, by pid (priority.go)
+	gab        gabState              // what Gabriel sees and holds back (gabriel.go)
+	closes     closes                // closed sessions, and agents still ending (close.go)
+	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
+	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
+	peers      map[string]*peerState // the other machines' cores this one is paired with, by name (peers.go)
+	raw        bool                  // the slot shows the picked session's raw terminal, not its conversation
+	split      string                // the session the Mac app shows beside its teammates, in the view session (view.go)
+	team       *tmux.Runner          // the team server, where sessions' teammates run (team.go)
+	teamSocket string                // its socket path, once known
+	trodNow    trodNow               // the trod bot as its last sweep found it (trod.go)
+	trodReset  time.Time             // when the plan's usage limit last reset, as far as the trod bot saw
+	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
+	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
+	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -129,16 +150,23 @@ type session struct {
 	tokens   *ipc.Tokens
 	model    string                 // the model the agent runs, as its profile said
 	local    bool                   // a model of a local runtime
+	tutor    string                 // its tutor mode, explain or teach; "" when off (learn.tutor)
 	usage    statusline.Usage       // its last status line update
 	memory   int64                  // what its processes take, last measured
 	out      *outcome               // its route and how it went, shared with Core.outcomes
 	conv     *conversation          // its conversation, read while clients follow it (conversation.go)
 	note     string                 // what its agent is told at its next tool call, once (freeze.go)
-	demoted  bool                   // its process tree runs in the background, for a promoted session (priority.go)
+	demoted  bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
+	userWord time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
 	convSubs int                    // the subscriptions that follow its conversation
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
 	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
+	hue      int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
+	// Jots added to its own, to type to its agent once it can take them,
+	// and whether that is under way (follow.go).
+	followUps []followUp
+	sending   bool
 }
 
 func (x *session) wire() ipc.Session {
@@ -146,7 +174,8 @@ func (x *session) wire() ipc.Session {
 		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
-		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory, Team: wireTeam(x.team),
+		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory, Team: wireTeam(x.team), Hue: x.hue,
+		Tutor: x.tutor,
 	}
 	if s.Model == "" {
 		s.Model = x.usage.Model
@@ -188,7 +217,8 @@ func newCore(o Options, r *tmux.Runner) *Core {
 		paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
-		history: map[string][]event.Event{}, outcomes: map[string]*outcome{},
+		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, hues: map[string]int{},
+		fdog: newFreezeDog(),
 	}
 	c.useConfig(o.Config)
 	return c
@@ -209,7 +239,7 @@ func Run(o Options) error {
 	if err := o.Paths.EnsureState(); err != nil {
 		return err
 	}
-	lock, err := lockFile(o.Paths.CoreLock(), 3*time.Second)
+	lock, err := filetx.Lock(o.Paths.CoreLock(), 3*time.Second)
 	if err != nil {
 		return fmt.Errorf("core.lock: %w", err)
 	}
@@ -229,17 +259,31 @@ func Run(o Options) error {
 	c.loadLocal()
 	c.loadOutcomes()
 	c.loadOrder()
+	c.loadHues()
 	c.loadClosed()
 	c.loadState()
+	c.loadTrodHand()
 
 	// The layout, the registry and the rows' states are in place before the
-	// first hello.
+	// first hello. Every tree comes out of the background once, since only
+	// the core that put one there knows, so an install never leaves an agent
+	// slowed; so does what Gabriel slowed outside Irie (gabriel.go).
 	c.mu.Lock()
 	c.loadView()
+	for _, x := range c.sessions {
+		x.demoted = true
+	}
 	c.mu.Unlock()
+	c.releaseOutside()
 	c.tick()
+	c.pruneSkills()
 	go c.sample()
 	go c.dogSweep()
+	go c.trodSweep()
+	if err := c.loadPeers(); err != nil {
+		c.log.Warn("peers", "err", err)
+	}
+	go c.checkMachine()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -249,6 +293,7 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
+	go c.watchFreezes()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
@@ -260,12 +305,21 @@ func Run(o Options) error {
 			c.tick()
 			if n%sampleEvery == 0 {
 				go c.sample()
+				go c.gabrielSweep()
 			}
 			if n%dogEvery == 0 {
 				go c.dogSweep()
 			}
+			if n%trodEvery == 0 {
+				go c.trodSweep()
+			}
+			if n%machineEvery == 0 {
+				go c.checkMachine()
+			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
+			// Nothing stays slowed after the core is gone: its agents run on.
+			c.letGo()
 			return nil
 		}
 	}
@@ -291,11 +345,14 @@ func (c *Core) tick() {
 	c.followTeams()
 	c.reap()
 	c.observe(time.Now())
+	c.sendFollowUps(time.Now())
 	c.keepFrozen()
 	c.background()
 	c.countTokens()
 	c.followTitles()
 	c.followConversations()
+	c.keepRemote()
+	c.keepVPN()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -376,7 +433,7 @@ func (c *Core) adopt(p tmux.Pane) *session {
 	if spec, err := host.ReadSpec(c.paths.SpecFile(x.id)); err == nil {
 		x.cwd, x.profile, x.harness, x.warnings = spec.Cwd, spec.Profile, spec.Harness, spec.Warnings
 		x.repo, x.worktree, x.branch, x.copied, x.paste = spec.Repo, spec.Worktree, spec.Branch, spec.Copied, spec.Paste
-		x.model, x.local = spec.Model, spec.Local
+		x.model, x.local, x.tutor = spec.Model, spec.Local, spec.Tutor
 	}
 	c.loadStatus(x)
 	if x.harness == "" {
@@ -390,6 +447,7 @@ func (c *Core) adopt(p tmux.Pane) *session {
 		x.track.apply(e)
 	}
 	delete(c.history, x.id)
+	c.loadFollowUps(x)
 	return x
 }
 
@@ -445,14 +503,25 @@ func (c *Core) record(x *session, e event.Event) {
 	}
 }
 
-// list returns the rows in the list's order (order.go). The caller holds
-// c.mu.
+// list returns the rows in the list's order (order.go), each with its
+// colour (hue.go) and what the trod bot did for it in its last shift. The
+// caller holds c.mu.
 func (c *Core) list() []ipc.Session {
 	out := make([]ipc.Session, 0, len(c.sessions))
+	var from time.Time
+	if n := c.cfg().Trod; n.On {
+		from, _, _ = n.Shift(time.Now())
+	}
 	for _, x := range c.sessions {
-		out = append(out, x.wire())
+		s := x.wire()
+		if !from.IsZero() {
+			s.Trod = trodRow(&x.track, from)
+		}
+		out = append(out, s)
 	}
 	c.sortRows(out)
+	out = append(out, c.peerRows(len(out))...)
+	c.giveHues(out)
 	return out
 }
 
@@ -476,9 +545,42 @@ func (c *Core) changes() []ipc.Frame {
 	return frames
 }
 
-// Call answers one request (ipc.Handler).
-func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
+// CallFrom answers one request from the process peer (ipc.PeerCaller): as
+// Call does, but the ops that change what is the person's alone, the VPN's,
+// whether asked for or typed, learn who asks.
+func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 	switch op {
+	case ipc.OpInput:
+		var a ipc.InputArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.input(a, peer)
+	case ipc.OpVPN:
+		var a ipc.VPNArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.vpnOp(peer, a)
+	}
+	return c.Call(op, raw)
+}
+
+// Call answers one request (ipc.Handler). A call about one of the peers'
+// sessions goes on to its own core (peers.go).
+func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
+	if op != ipc.OpInput {
+		if r, ok, err := c.forward(op, raw); ok {
+			return r, err
+		}
+	}
+	switch op {
+	case ipc.OpPeers:
+		var a ipc.PeersArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.peersOp(a)
 	case ipc.OpHello:
 		var a ipc.HelloArgs
 		if err := decode(raw, &a); err != nil {
@@ -490,7 +592,9 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpVPN, ipc.OpPeers,
+			ipc.OpLearn, ipc.FeatureTutor,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -517,6 +621,20 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return nil, nil
 	case ipc.OpDog:
 		return c.dogList()
+	case ipc.OpReady:
+		return c.ready(), nil
+	case ipc.OpTrod:
+		var a ipc.TrodArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.trodOp(a)
+	case ipc.OpLearn:
+		var a ipc.LearnArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.learnOp(a)
 	case ipc.OpConfig:
 		var a ipc.ConfigArgs
 		if err := decode(raw, &a); err != nil {
@@ -555,6 +673,15 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
+		// A jot may add to the one before it (follow.go).
+		if (a.Jot || a.Apart != "") && !a.Delegate {
+			r, err := c.jot(a)
+			if err != nil {
+				return nil, err
+			}
+			c.markWord(r.Session.ID)
+			return r, nil
+		}
 		s, err := c.spawn(a, true)
 		if err != nil {
 			return nil, err
@@ -562,6 +689,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		// A subtask an agent delegates is the agent's doing, not the user's.
 		if !a.Delegate {
 			c.recordAction(actSpawn, s.ID, nil)
+			c.markWord(s.ID)
 		}
 		return ipc.SpawnResult{Session: s}, nil
 	case ipc.OpShow:
@@ -586,6 +714,18 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.hook(a)
+	case ipc.OpInput:
+		var a ipc.InputArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.input(a, 0)
+	case ipc.OpVPN:
+		var a ipc.VPNArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.vpnOp(0, a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {
@@ -600,7 +740,37 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return nil, c.send(a)
+		if err := c.send(a); err != nil {
+			return nil, err
+		}
+		c.markWord(a.Session)
+		return nil, nil
+	case ipc.OpArch:
+		return c.archList(), nil
+	case ipc.OpGabriel:
+		var a ipc.GabrielArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.gabrielOp(a)
+	case ipc.OpScreen:
+		var a ipc.ScreenArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.screen(a)
+	case ipc.OpPair:
+		var a ipc.PairArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.pair(a)
+	case ipc.OpKeys:
+		var a ipc.KeysArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.keys(a)
 	case ipc.OpConversation:
 		var a ipc.ConversationArgs
 		if err := decode(raw, &a); err != nil {

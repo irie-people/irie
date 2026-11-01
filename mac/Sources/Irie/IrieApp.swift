@@ -16,6 +16,10 @@ enum Launch {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { ConversationSnapshot.run(into: dir) }
         }
+        if let i = args.firstIndex(of: "--render-onboarding") {
+            let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
+            MainActor.assumeIsolated { OnboardingSnapshot.run(into: dir) }
+        }
         IrieApp.main()
     }
 }
@@ -43,12 +47,16 @@ struct IrieApp: App {
         .defaultSize(width: 1200, height: 760)
         .windowToolbarStyle(.unifiedCompact(showsTitle: Self.showsTitle))
         .commands {
+            LearnCommands(store: store)
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("New Task…") { store.newTaskSheet = true }
                     .keyboardShortcut("n")
                 Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                     .keyboardShortcut("n", modifiers: [.command, .option])
+                // A guided session of Irie's own, as :setup switch starts
+                // from any task bar (docs/proposals/extensions.md §2.2).
+                Button("Set Up a Dead Man's Switch…") { Task { _ = await store.input(":setup switch") } }
                 Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
                     .disabled(store.selection == nil || store.outsideSelection != nil)
             }
@@ -64,6 +72,27 @@ struct IrieApp: App {
                 // The sidebar's z key does it while the list has the keyboard.
                 Button(store.closable?.isParked == true ? "Unpark Session" : "Park Session") { store.toggleParked() }
                     .disabled(store.closable == nil || !store.canPark)
+                Divider()
+                // A run you start goes on while you watch, until no session
+                // has work left or the plan is as full as it may get.
+                Button(store.trod?.hand == true ? "Stop the Trod Bot" : "Start the Trod Bot Now") { store.setTrod(store.trod?.hand != true) }
+                    .disabled(!store.canTrod)
+                // Gabriel's boost: your focus gets the machine first for a
+                // while, busy or not; it ends by itself (DESIGN §4.11).
+                Button(store.boosting ? "Stop the Boost" : "Boost Your Focus") { store.setBoost(!store.boosting) }
+                    .disabled(!store.canBoost)
+                // Mullvad VPN, while vpn.on: the same words as :vpn in a
+                // task bar (docs/proposals/extensions.md §4.1).
+                Menu("VPN") {
+                    Button("Connect") { Task { _ = await store.input(":vpn on") } }
+                    Button("Disconnect") { Task { _ = await store.input(":vpn off") } }
+                    Divider()
+                    Button(store.vpn?.lockdown == true ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On") {
+                        Task { _ = await store.input(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on") }
+                    }
+                    Button("Account Time Left") { Task { _ = await store.input(":vpn time") } }
+                }
+                .disabled(store.vpn == nil)
             }
             // Undo and Redo step through the core's history, a park or a
             // close, and name the step; a text field with typing to take
@@ -120,6 +149,12 @@ struct IrieApp: App {
                     .disabled(store.selection == nil || store.outsideSelection != nil)
             }
         }
+        // Help > Learning Resources and Glossary (Learn.swift).
+        Window("Learn", id: LearnWindow.id) {
+            LearnWindow()
+                .environmentObject(store)
+        }
+        .defaultSize(width: 560, height: 640)
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
@@ -174,8 +209,9 @@ final class KeyRouter {
 }
 
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
-/// it quits with its window. `--background`, which `tools/live.sh` passes when
-/// it relaunches the app, leaves the focus where it is.
+/// it quits with its window. `--background`, which `tools/live.sh` and the
+/// freeze dog pass when they open the app again, leaves the focus where it
+/// is. The freeze dog watches the app from the moment it has launched.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -183,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !CommandLine.arguments.contains("--background") {
             NSApp.activate(ignoringOtherApps: true)
         }
+        FreezeDog.start(socketPath: CorePaths.socket())
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }

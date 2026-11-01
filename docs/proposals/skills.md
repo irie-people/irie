@@ -2,6 +2,13 @@
 
 Date: 2026-10-27. Status: proposed, for the maintainer to decide. There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote this proposal. It is the design only and builds no code. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
+**Built so far** (2026-11-01). The delivery of §1.1, for skills that come inside the `irie` binary; the fetched ones of §2 are not built.
+- Each Claude Code launch and reopen gets `--plugin-dir` with a folder under `<data>/skills/plugins/<digest>`: Irie's manifest, a `SOURCES.md`, and `skills/<name>/`, all read-only. The folder is checked before each launch and made again when an agent changed it, and the core removes it when it starts once no session uses it.
+- The probe checks that the CLI loads a plugin passed that way, with `claude --plugin-dir <probe> plugin list --json`. The same list shows a plugin of the user's own named `irie` (§1.2) and a refusal by `disableSideloadFlags`; either leaves the skills out, and the session's warnings say why.
+- `[skills] enabled` and `disabled`, `profiles.<name>.skills` and `irie skills` work as §5 says. `fetch`, `mirror`, `follow_upstream`, `cooldown`, the other commands and the tracked list do not exist yet.
+- The first skill is Irie's own: `present`, run as `/irie:present`, which tells an agent how to show its work so that Irie can draw it (docs/proposals/generative-ui.md).
+- Not built: stepping aside for a user's own skill of the same name (§1.2, decision 4). It reads the folders where Claude Code keeps personal and project skills, and the agent that built this was not allowed to read or name them in code, so it waits for a maintainer. Until then both load: Irie's as `/irie:<name>`, the user's under its own name.
+
 ## Goal
 
 A new user gets a small set of open-source skills, installed and ready the first time Irie runs. Irie hands them to each session at launch and never writes into the user's own skills, settings or repositories. Each skill can be switched off, and so can the whole set. The set is kept up to date, but a pin moves only through a reviewed pull request.
@@ -313,7 +320,7 @@ ECC is the MIT repository formerly called everything-claude-code.
 ## 7. Where it fits
 
 - **DESIGN §2.1.** Principle 4 reads: "Hooks, settings, env and skills go in per launch, through `--settings`, `--plugin-dir`, argv and env." "Editing the user's agent config files" stays on §1.2's list of what v1 doesn't do.
-- **DESIGN §8: a new milestone, M12. Skills.** It needs only what M1–M3 built: the spawn pipeline, profiles, and optional-flag detection from `claude --help`. It can be built any time after M3, and it must land before the first release, since that is when "the first time Irie runs" begins.
+- **DESIGN §8: a new milestone, M12. Skills.** It needs only what M1–M3 built: the spawn pipeline, profiles, and optional-flag detection from `claude --help`. It can be built any time after M3, and it must land before the first release, since that is when "the first time Irie runs" begins. Changed 2026-10-31: 0.1.0 shipped first, so M12 lands before 1.0.0 (decision 8).
   - **Build.** `internal/skills` (the list, fetch, verify, the store, plugin folders, the check for the user's own skills); `--plugin-dir` in the Claude adapter; the `[skills]` config and the profile key; `irie skills`; `tools/skillpin`.
   - **Tests.** List validation. Fetches from an `httptest` server, with a bad hash, a 404 and a timeout; no test touches the network. The plugin folder's layout and digest. Argv goldens with and without skills. The user's-own-skill rule against a synthetic `/home/alice`. The fake agent records `--plugin-dir`.
   - **Manual check.** On a fresh account, run `irie`, spawn a task and type `/irie:` in Claude Code: the five skills are offered. Run `irie skills off`, spawn again, and they are gone.
@@ -343,7 +350,7 @@ ECC is the MIT repository formerly called everything-claude-code.
 **Decided 2026-10-27:**
 - **Decision 1:** a larger set than §6.1's five. The default set is every licensed candidate: `frontend-design`, `webapp-testing` and `mcp-builder` (anthropics/skills); `handle-pr-comments` (storybookjs/storybook); `find-docs` (upstash/context7); `ponytail` (DietrichGebert/ponytail); and `codebase-onboarding`, `context-budget` and `agent-harness-construction` (ECC). `vercel-composition-patterns` joins once its repository has a license file. `verification-before-completion` is not in the set. M12 rewrites §6 to match, and keeps §6.2's cautions in the docs and in `irie skills`. `find-docs` runs `npx ctx7@latest` and sends questions to Context7, `ponytail` changes a whole session's working style, and `codebase-onboarding` writes a `CLAUDE.md`, so each can be switched off on its own.
 - **Decision 3:** option a. Fetch by default on first run, with the status-strip notice.
-- **Decision 8:** option a. M12 is queued after the Irie milestone in progress and before the first release.
+- **Decision 8:** option a. M12 is queued after the Irie milestone in progress and before the first release. Changed 2026-10-31: the owner released 0.1.0 before M12, so M12 now lands before 1.0.0.
 - **Decisions 2, 4, 5, 6, 7 and 10:** the recommendations stand. **Decision 9** waits until the project account exists.
 
 ## Checks for this proposal

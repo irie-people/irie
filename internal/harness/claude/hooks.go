@@ -218,7 +218,7 @@ func (Harness) Respond(e event.Event, r harness.HookReply) []byte {
 			out.PermissionDecision, out.PermissionDecisionReason = "deny", r.Deny
 		}
 		out.AdditionalContext = r.Context
-	case "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart":
+	case "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "SubagentStart":
 		out.AdditionalContext = r.Context
 	case "Stop":
 		// Feedback, not an error: the turn goes on so the agent can finish

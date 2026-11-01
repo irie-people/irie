@@ -327,6 +327,47 @@ struct PromotedBadge: View {
     }
 }
 
+/// The trod bot's boot print on a card it sent on (DESIGN §4.10): how often
+/// in this shift, bright for a while after each time, and a hop each time
+/// it does, so you can watch it work.
+struct TrodPrint: View {
+    let trod: TrodRow
+    let now: Date
+
+    /// How long a boot print stays bright after the bot sent the session on.
+    static let fresh: TimeInterval = 120
+
+    private var bright: Bool { now.timeIntervalSince(trod.last) < Self.fresh }
+
+    var body: some View {
+        HStack(spacing: 1) {
+            Image(systemName: "shoeprints.fill")
+                .symbolEffect(.bounce, value: trod.last)
+            if trod.sent > 1 {
+                Text("\(trod.sent)").monospacedDigit()
+            }
+        }
+        .font(.system(size: 10.5, weight: .bold))
+        .foregroundStyle(bright ? Theme.accentInk : Theme.muted)
+        .help(words)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(words)
+    }
+
+    private var words: String {
+        let why: String
+        switch trod.reason {
+        case "question": why = "it asked you something, so the bot told it to decide"
+        case "error": why = "an API error had stopped its turn"
+        case "limit": why = "the usage limit that stopped it had reset"
+        case "loose": why = "its work wasn’t through yet"
+        default: why = trod.reason
+        }
+        let times = trod.sent == 1 ? "once" : "\(trod.sent) times"
+        return "The trod bot sent it on \(times) this shift, last at \(trod.last.formatted(date: .omitted, time: .shortened)): \(why)."
+    }
+}
+
 /// What the details panel says about a frozen, promoted or parked session,
 /// in short lines with the whole story on hover: plainly what Irie does, and
 /// that memory is not something it can set aside.
