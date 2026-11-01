@@ -1,6 +1,8 @@
 package core
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/irie-people/irie/internal/harness"
@@ -60,6 +62,16 @@ func (c *Core) guide(g guideSpec) (ipc.Session, error) {
 			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "The %s guide needs Claude Code to load Irie's skills, and it doesn't here: %s. `claude update` may help.", g.name, why)
 		}
 	}
+	// A folder of its own, the same every time, so Claude Code asks once
+	// whether to trust it rather than at every guide; what the guide makes
+	// goes in the folder the person picks.
+	dir := c.guideDir(g)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ipc.Session{}, err
+	}
 	task := "/" + skills.Plugin + ":" + g.skill
-	return c.spawnProfile(ipc.SpawnArgs{Task: task, Name: g.name}, true, g.profile, profile, nil, map[string]any{"guide": g.skill})
+	return c.spawnProfile(ipc.SpawnArgs{Task: task, Name: g.name, Cwd: dir}, true, g.profile, profile, nil, map[string]any{"guide": g.skill})
 }
+
+// guideDir is where g's sessions run: <data>/guides/<skill>.
+func (c *Core) guideDir(g guideSpec) string { return filepath.Join(c.paths.Data, "guides", g.skill) }

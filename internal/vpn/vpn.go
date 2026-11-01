@@ -49,9 +49,12 @@ type status struct {
 
 type tunnel struct {
 	Location *struct {
-		City     *string `json:"city"`
-		Country  string  `json:"country"`
-		Location map[string]json.RawMessage
+		City    *string `json:"city"`
+		Country string  `json:"country"`
+		// Hostname is the relay, as mullvad-cli 2026.3 prints it; newer
+		// sources give it in Location's constraint instead.
+		Hostname *string                    `json:"hostname"`
+		Location map[string]json.RawMessage `json:"location"`
 	} `json:"location"`
 	LockedDown bool `json:"locked_down"`
 }
@@ -86,6 +89,9 @@ func Parse(line []byte) (State, bool) {
 			}
 			out.Country = t.Location.Country
 			out.Host = relayHost(t.Location.Location)
+			if h := t.Location.Hostname; h != nil && *h != "" {
+				out.Host = *h
+			}
 		}
 	case Disconnected:
 		// Its location is the machine's own: only the lockdown is kept.

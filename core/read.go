@@ -275,6 +275,11 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	case OpTool:
 		s := as[SpawnResult](result).Session
 		r.Session, r.Show, r.Text = &s, true, "Started "+s.Name+"."
+		// A guide runs in a folder of Irie's, which Claude Code asks to
+		// trust the first time.
+		if as[ToolArgs](st.Args).Name == ToolSwitch {
+			r.Text += " The first time, Claude Code asks whether to trust the guide's folder, which is Irie's own: choose Yes, I trust this folder."
+		}
 	case OpRename:
 		s := as[RenameResult](result).Session
 		r.Session, r.Text = &s, "Renamed "+name+" to "+s.Name+"."
