@@ -104,6 +104,7 @@ type Core struct {
 	teamSocket string              // its socket path, once known
 	trodNow    trodNow             // the trod bot as its last sweep found it (trod.go)
 	trodReset  time.Time           // when the plan's usage limit last reset, as far as the trod bot saw
+	trodHand   trodHand            // the run of the trod bot you started by hand last (trod.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -239,6 +240,7 @@ func Run(o Options) error {
 	c.loadOrder()
 	c.loadClosed()
 	c.loadState()
+	c.loadTrodHand()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
@@ -538,7 +540,11 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 	case ipc.OpDog:
 		return c.dogList()
 	case ipc.OpTrod:
-		return c.trodReport(), nil
+		var a ipc.TrodArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.trodOp(a)
 	case ipc.OpConfig:
 		var a ipc.ConfigArgs
 		if err := decode(raw, &a); err != nil {

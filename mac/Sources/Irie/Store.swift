@@ -33,6 +33,8 @@ final class Store: ObservableObject {
     @Published private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
     @Published private(set) var canPark = false
+    /// Whether the core has the trod bot (DESIGN §4.10).
+    @Published private(set) var canTrod = false
     /// Cards parked or unparked from under the pointer, each with whether
     /// it is drawn parked: it stays where it was until the pointer leaves
     /// it, so a second click on the same spot takes it back (Controls.swift).
@@ -166,6 +168,7 @@ final class Store: ObservableObject {
                 canPickModel = hello.features.contains("spawn-model")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
+                canTrod = hello.features.contains("trod")
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
@@ -317,6 +320,7 @@ final class Store: ObservableObject {
         canPickModel = true
         canConfigure = true
         canPark = true
+        canTrod = true
         canUndo = true
         taskRepo = "irie"
     }
@@ -643,6 +647,27 @@ final class Store: ObservableObject {
     /// Shows a notice above the task bar and has VoiceOver read it. A
     /// confirmation goes after 3 s; an error stays until the next notice, or
     /// until the user edits or submits (WCAG 2.2.1).
+    /// Starts a run of the trod bot by hand, which keeps the sessions
+    /// going at once, while you watch, until none has work left or the
+    /// plan is as full as it may get; or stops it (DESIGN §4.10).
+    func setTrod(_ on: Bool) {
+        Task {
+            do {
+                let r = try await client.call("trod", on ? TrodArgs(start: true) : TrodArgs(stop: true), as: TrodResult.self)
+                switch (on, r.hand) {
+                case (true, let h?) where h.on:
+                    say("The trod bot is keeping your sessions going until none has work left. Watch for its boot print.", error: false, seconds: 6)
+                case (true, let h?):
+                    say("The trod bot stopped at once: \(h.why ?? "nothing was left to do").", error: false, seconds: 6)
+                default:
+                    say("The trod bot stopped.", error: false)
+                }
+            } catch {
+                say("Couldn’t \(on ? "start" : "stop") the trod bot: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
     func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false) {
         notice = Notice(text: text, isError: error, undo: undo && canUndo)
         AccessibilityNotification.Announcement(text).post()

@@ -1042,6 +1042,7 @@ private struct RepoSettings: View {
 /// the plan it may use, and the rules and guidelines every agent it keeps
 /// going is given. Setting it up is writing those.
 private struct TrodSettings: View {
+    @EnvironmentObject private var store: Store
     @ObservedObject var model: SettingsModel
 
     private static let aways = ["0s", "5m", "15m", "30m", "1h"]
@@ -1075,10 +1076,14 @@ private struct TrodSettings: View {
                         Text(d == "0s" ? "No wait" : GeneralSettings.spoken(d)).tag(d)
                     }
                 }
+                LabeledContent("Or now, while you watch") {
+                    Button(store.trod?.hand == true ? "Stop" : "Start Now") { store.setTrod(store.trod?.hand != true) }
+                        .disabled(!store.canTrod)
+                }
             } header: {
                 Text("Trod bot")
             } footer: {
-                footnote("While your Mac has had no keyboard or mouse for that long, it tells an agent that asks you something to decide for itself, and sends on a turn an API error stopped and a task that isn’t through. It never answers in your name or approves a permission. A session you park or freeze is left alone.\(t.start == t.end ? " The same time for both is around the clock." : "")")
+                footnote("While your Mac has had no keyboard or mouse for that long, it tells an agent that asks you something to decide for itself, and sends on a turn an API error stopped and a task that isn’t through. It never answers in your name or approves a permission. A session you park or freeze is left alone. Started now, it works while you watch, until no session has work left or your plan is as full as below. Its boot print marks each card it sends on.\(t.start == t.end ? " The same time for both is around the clock." : "")")
             }
             .disabled(false)
             Section {

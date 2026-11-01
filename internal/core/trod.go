@@ -79,6 +79,104 @@ type trodSend struct {
 // trodBy is how the trod bot's freezes and thaws name it (freeze.on's by).
 const trodBy = "trod"
 
+// trodPrefix starts every note the trod bot gives an agent, so that a view
+// can tell its messages from yours.
+const trodPrefix = "[Irie] The trod bot:"
+
+// trodHandKey is the key of state.json that holds the run of the trod bot
+// you started by hand, so that a restarted core goes on with it.
+const trodHandKey = "trod_now"
+
+// trodHand is a run of the trod bot you started by hand (irie ctl trod
+// now). It works from From whether or not you are at the Mac, and ends
+// once no session it watches has work left, once the plan's use reaches
+// trod.max_plan_use, at Until when that is set, or when you stop it; Ended
+// and Why then say when and why. c.mu guards it.
+type trodHand struct {
+	From  time.Time `json:"from"`
+	Until time.Time `json:"until,omitzero"`
+	Ended time.Time `json:"ended,omitzero"`
+	Why   string    `json:"why,omitempty"`
+}
+
+// on reports whether the run works at now.
+func (h trodHand) on(now time.Time) bool {
+	return !h.From.IsZero() && h.Ended.IsZero() && !h.From.After(now) && (h.Until.IsZero() || now.Before(h.Until))
+}
+
+// trodFrom is a conversation item's From for a message typed to an agent:
+// "trod" for the trod bot's, which a view draws as the bot's rather than
+// yours; "" for yours.
+func trodFrom(text string) string {
+	if strings.HasPrefix(text, trodPrefix) {
+		return trodBy
+	}
+	return ""
+}
+
+// loadTrodHand takes the run you started by hand from state.json, at start.
+// The caller holds c.mu.
+func (c *Core) loadTrodHand() {
+	if raw, ok := c.steps.extra[trodHandKey]; ok {
+		if err := json.Unmarshal(raw, &c.trodHand); err != nil {
+			c.log.Warn("state.json", "key", trodHandKey, "err", err)
+		}
+	}
+}
+
+// setTrodHand keeps the run you started by hand, in state.json too. The
+// caller holds c.mu.
+func (c *Core) setTrodHand(h trodHand) {
+	c.trodHand = h
+	raw, err := json.Marshal(h)
+	if err != nil {
+		return
+	}
+	if c.steps.extra == nil {
+		c.steps.extra = map[string]json.RawMessage{}
+	}
+	c.steps.extra[trodHandKey] = raw
+	c.saveState()
+}
+
+// trodOp is the trod op: it starts a run by hand, or stops one, then
+// reports. A run started by hand works at once.
+func (c *Core) trodOp(a ipc.TrodArgs) (ipc.TrodResult, error) {
+	if a.Start && a.Stop {
+		return ipc.TrodResult{}, ipc.Errorf(ipc.CodeBadArgs, "start or stop, not both")
+	}
+	now := time.Now()
+	if a.Start || a.Stop {
+		c.mu.Lock()
+		switch h := c.trodHand; {
+		case a.Start:
+			h = trodHand{From: now}
+			if a.Until != nil {
+				if !a.Until.After(now) {
+					c.mu.Unlock()
+					return ipc.TrodResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s has passed", a.Until.Local().Format("15:04"))
+				}
+				h.Until = *a.Until
+			}
+			c.setTrodHand(h)
+			c.log.Info("trod bot: started by hand", "until", h.Until)
+		case h.on(now):
+			h.Ended, h.Why = now, "you stopped it"
+			c.setTrodHand(h)
+			c.log.Info("trod bot: stopped by hand")
+		}
+		c.mu.Unlock()
+		// It looks at once, waiting for a look already under way to end.
+		for range 100 {
+			if c.trodSweep() {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	return c.trodReport(), nil
+}
+
 // planUsed is how full one of the plan's windows is now, in percent, by
 // the newest status line: a window whose reset has passed is empty. It is
 // false when the status line said nothing of the window.
@@ -153,6 +251,7 @@ type shift struct {
 	n         config.Trod
 	from, to  time.Time
 	in        bool
+	hand      bool      // a run you started by hand, which works while you are at the Mac
 	until     time.Time // what the notes say the user is away until
 	idle      time.Duration
 	idleKnown bool
@@ -168,6 +267,18 @@ func (c *Core) shiftAt(now time.Time) shift {
 	s.in = s.in && n.On
 	if n.Start != n.End {
 		s.until = s.to
+	}
+	c.mu.Lock()
+	hand := c.trodHand
+	c.mu.Unlock()
+	if hand.on(now) {
+		// A run you started works at once, whoever is at the Mac, and
+		// counts from its start or the night's, whichever came first.
+		if !s.in || hand.From.Before(s.from) {
+			s.from = hand.From
+		}
+		s.in, s.hand, s.to, s.until, s.away = true, true, hand.Until, hand.Until, true
+		return s
 	}
 	if !s.in {
 		return s
@@ -414,10 +525,10 @@ func planLimit(plan ipc.Plan, now time.Time) (time.Time, bool) {
 // away, freezes each session it would have kept the Mac awake for, so
 // that none goes over the week's allotment. It thaws those once the week
 // is back under it in its hours; out of them, they wait for you. One
-// sweep runs at a time.
-func (c *Core) trodSweep() {
+// sweep runs at a time: it reports false when another was under way.
+func (c *Core) trodSweep() bool {
 	if !c.trodSweeping.CompareAndSwap(false, true) {
-		return
+		return false
 	}
 	defer c.trodSweeping.Store(false)
 	now := time.Now()
@@ -462,7 +573,23 @@ func (c *Core) trodSweep() {
 			working++
 		}
 	}
-	c.trodNow = trodNow{in: s.in, away: s.away, until: s.until, idle: s.idle, idleKnown: s.idleKnown, capped: over}
+	// A run you started ends once nothing is left to keep going, or the
+	// plan is as full as it may get; one whose time is up, at its time.
+	if h := c.trodHand; !h.From.IsZero() && h.Ended.IsZero() {
+		switch {
+		case !h.on(now):
+			h.Ended, h.Why = h.Until, "its time was up"
+		case over:
+			h.Ended, h.Why = now, fmt.Sprintf("the plan reached %.0f%%, the most it may use", s.n.MaxPlanUse)
+		case !work && len(dues) == 0:
+			h.Ended, h.Why = now, "no session had work left"
+		}
+		if !h.Ended.IsZero() {
+			c.setTrodHand(h)
+			c.log.Info("trod bot: the run started by hand ended", "why", h.Why)
+		}
+	}
+	c.trodNow = trodNow{in: s.in, away: s.away, until: s.until, idle: s.idle, idleKnown: s.idleKnown, capped: over, hand: s.hand && c.trodHand.Ended.IsZero()}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -473,6 +600,7 @@ func (c *Core) trodSweep() {
 			c.log.Info("trod bot", "session", d.id, "reason", d.reason, "err", err)
 		}
 	}
+	return true
 }
 
 // trodNow is the trod bot as its last sweep found it, for the
@@ -483,6 +611,7 @@ type trodNow struct {
 	idle      time.Duration
 	idleKnown bool
 	capped    bool // past trod.max_plan_use
+	hand      bool // a run you started by hand
 }
 
 // trodTypes is the check typeTo makes for a message the trod bot
@@ -530,23 +659,29 @@ func trodNote(s shift, reason, how, detail string, oneLine bool) string {
 	if !s.until.IsZero() {
 		until = " until " + s.until.Format("15:04")
 	}
+	// Why the user does not answer: away at night, or they started the bot
+	// themselves to keep the agents going without them.
+	away, awayShort, theyAway := "the user is away"+until+" and can’t answer you", "The user is away"+until, "they are away"+until+" and can’t answer"
+	if s.hand {
+		away, awayShort, theyAway = "the user wants you to keep going without them, and won’t answer you", "The user wants you to keep going without them", "they want you to keep going without them"
+	}
 	var lines []string
 	add := func(l ...string) { lines = append(lines, l...) }
 	switch reason {
 	case trodQuestion:
 		if how == trodTyped {
-			add("[Irie] The trod bot: you asked the user something, but they are away" + until + " and can’t answer.")
+			add(trodPrefix + " you asked the user something, but " + theyAway + ".")
 		} else {
-			add("[Irie] The trod bot: the user is away" + until + " and can’t answer you.")
+			add(trodPrefix + " " + away + ".")
 		}
-		add("Don’t wait for them: if your question is about how to do your task, take the option you would recommend and carry on to the end of it. If it offers more than your task, leave that for the morning.")
+		add("Don’t wait for them: if your question is about how to do your task, take the option you would recommend and carry on to the end of it. If it offers more than your task, leave that for later.")
 	case trodError:
-		add(fmt.Sprintf("[Irie] The trod bot: your last turn stopped on an API error (%s). The user is away%s, so carry on with your task from where you stopped.", detail, until))
+		add(fmt.Sprintf("%s your last turn stopped on an API error (%s). %s, so carry on with your task from where you stopped.", trodPrefix, detail, awayShort))
 	case trodLimit:
-		add("[Irie] The trod bot: the usage limit that stopped you has reset. The user is away" + until + ", so carry on with your task from where you stopped.")
+		add(trodPrefix + " the usage limit that stopped you has reset. " + awayShort + ", so carry on with your task from where you stopped.")
 	case trodLoose:
-		add("[Irie] The trod bot: your task is not through yet. " + detail)
-		add("The user is away" + until + ", so finish it now: commit your work, then land it the way this repo’s AGENTS.md or CLAUDE.md says. If an install or another session holds you up, wait for it and try again. If you stopped on purpose, because your task says not to land it or only the user can decide what comes next, say so in one line.")
+		add(trodPrefix + " your task is not through yet. " + detail)
+		add(awayShort + ", so finish it now: commit your work, then land it the way this repo’s AGENTS.md or CLAUDE.md says. If an install or another session holds you up, wait for it and try again. If you stopped on purpose, because your task says not to land it or only the user can decide what comes next, say so in one line.")
 	}
 	list := func(title string, items []string) {
 		if len(items) == 0 {
@@ -645,7 +780,7 @@ func (c *Core) trodHeader(awake bool) *ipc.TrodShift {
 	if !c.trodNow.in {
 		return nil
 	}
-	h := &ipc.TrodShift{Away: c.trodNow.away, Awake: awake, Capped: c.trodNow.capped}
+	h := &ipc.TrodShift{Away: c.trodNow.away, Awake: awake, Capped: c.trodNow.capped, Hand: c.trodNow.hand}
 	if u := c.trodNow.until; !u.IsZero() {
 		h.Until = &u
 	}
@@ -678,6 +813,15 @@ func (c *Core) trodReport() ipc.TrodResult {
 		On: n.On, In: s.in, Away: s.away, Works: s.works(), Awake: awake, From: s.from, To: s.to,
 		Start: n.Start, End: n.End, Rules: slices.Clone(n.Rules), Guidelines: slices.Clone(n.Guidelines),
 		MaxPlanUse: n.MaxPlanUse, Sessions: []ipc.TrodSession{},
+	}
+	if h := c.trodHand; !h.From.IsZero() {
+		r.Hand = &ipc.TrodHand{From: h.From, On: s.hand, Why: h.Why}
+		if !h.Until.IsZero() {
+			r.Hand.Until = &h.Until
+		}
+		if !h.Ended.IsZero() {
+			r.Hand.Ended = &h.Ended
+		}
 	}
 	if s.idleKnown {
 		secs := int64(s.idle / time.Second)

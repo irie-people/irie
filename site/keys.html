@@ -196,8 +196,9 @@ irie: tidy-the-readme failed: failed: exit 127 · irie: aider: command not found
 <pre><code><span class="prompt">$ </span>irie ctl dog
 SESSION        STATE   NAME            LEFT                   WHERE
 s38bvad9qgve0  done    fix-cart-total  2 commits not in main  ~/.local/share/irie/worktrees/shop/fix-cart-total (irie/fix-cart-total)</code></pre>
-  <h3 id="ctl-trod">irie ctl trod [on|off] [--json]</h3>
+  <h3 id="ctl-trod">irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]</h3>
   <p>The trod bot’s report (<a href="profiles.html#trod"><code>[trod]</code></a>). It says whether the bot is working now, and if not, why not: it’s off, it’s out of its hours, or you were at the Mac moments ago. It lists the rules and guidelines it gives every agent it keeps going. Then, for each session, it shows what the bot sent tonight, or last night, and what it left for you. <code>on</code> and <code>off</code> turn the bot on or off first, in your config file.</p>
+  <p><code>now</code> starts a run at once, whatever the hour, so you can watch the bot work. It keeps going while you’re at the Mac, until no session has work left or your plan reaches <code>max_plan_use</code>; <code>--until</code> sets a time to stop by at the latest. <code>stop</code> ends it. The report then says how the run ended.</p>
 <pre><code><span class="prompt">$ </span>irie ctl trod
 Trod bot: on, 23:00–07:00, and working: you are away (no keyboard or mouse for 2h14m).
 It keeps the Mac awake while sessions have work left.

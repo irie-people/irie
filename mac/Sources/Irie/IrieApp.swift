@@ -63,6 +63,11 @@ struct IrieApp: App {
                 // The sidebar's z key does it while the list has the keyboard.
                 Button(store.closable?.isParked == true ? "Unpark Session" : "Park Session") { store.toggleParked() }
                     .disabled(store.closable == nil || !store.canPark)
+                Divider()
+                // A run you start goes on while you watch, until no session
+                // has work left or the plan is as full as it may get.
+                Button(store.trod?.hand == true ? "Stop the Trod Bot" : "Start the Trod Bot Now") { store.setTrod(store.trod?.hand != true) }
+                    .disabled(!store.canTrod)
             }
             // Undo and Redo step through the core's history, a park or a
             // close, and name the step; a text field with typing to take

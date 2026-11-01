@@ -147,7 +147,7 @@ struct FeedContent: View {
             ForEach(Turn.make(items, pending: pending)) { turn in
                 switch turn.kind {
                 case .you(let it):
-                    YouTurn(item: it, from: helper.map { it.from == "parent" ? "From \($0.parent)" : "Message" })
+                    YouTurn(item: it, from: it.from == "trod" ? YouTurn.trod : helper.map { it.from == "parent" ? "From \($0.parent)" : "Message" })
                 case .claude(let parts):
                     ClaudeTurn(parts: parts, session: session, expanded: $expanded, name: helper?.kind ?? "Claude")
                 case .note(let it):
@@ -289,17 +289,24 @@ private struct YouTurn: View {
     var from: String? = nil
     @State private var whole = false
 
+    /// The trod bot, which types its messages as you would (DESIGN §4.10).
+    static let trod = "Trod bot"
+
     private var text: String { item.text ?? "" }
-    private var long: Bool { text.split(separator: "\n", omittingEmptySubsequences: false).count > 12 || text.count > 1400 }
+    private var bot: Bool { from == Self.trod }
+    /// The bot's messages carry your rules and guidelines, so they fold
+    /// sooner.
+    private var fold: Int { bot ? 3 : 12 }
+    private var long: Bool { text.split(separator: "\n", omittingEmptySubsequences: false).count > fold || text.count > (bot ? 300 : 1400) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Speaker(name: from ?? "You", symbol: from == nil ? "person.crop.circle.fill" : "arrow.turn.down.right",
-                    tint: Theme.muted, time: item.when, note: note)
+            Speaker(name: from ?? "You", symbol: bot ? "shoeprints.fill" : from == nil ? "person.crop.circle.fill" : "arrow.turn.down.right",
+                    tint: bot ? Theme.accentInk : Theme.muted, time: item.when, note: note)
             VStack(alignment: .leading, spacing: 6) {
                 Text(text)
                     .font(.body)
-                    .lineLimit(long && !whole ? 12 : nil)
+                    .lineLimit(long && !whole ? fold : nil)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if long {

@@ -183,6 +183,28 @@ type TrodShift struct {
 	Awake bool       `json:"awake,omitempty"` // it keeps the Mac awake
 	// Capped: the plan is past trod.max_plan_use, so it sends nothing on.
 	Capped bool `json:"capped,omitempty"`
+	// Hand: you started it by hand, so it works while you are at the Mac,
+	// until nothing is left or the plan is as full as it may get.
+	Hand bool `json:"hand,omitempty"`
+}
+
+// TrodArgs start a run of the trod bot by hand, which works at once, until
+// Until if given, until no session has work left, or until the plan is as
+// full as trod.max_plan_use; or stop one. With neither, the op only
+// reports.
+type TrodArgs struct {
+	Start bool       `json:"start,omitempty"`
+	Stop  bool       `json:"stop,omitempty"`
+	Until *time.Time `json:"until,omitempty"`
+}
+
+// TrodHand is the run of the trod bot you started by hand last.
+type TrodHand struct {
+	From  time.Time  `json:"from"`
+	Until *time.Time `json:"until,omitempty"`
+	On    bool       `json:"on"`              // it still works
+	Ended *time.Time `json:"ended,omitempty"` // when it ended
+	Why   string     `json:"why,omitempty"`   // why it ended: nothing was left, the plan, its time, or you
 }
 
 // TrodResult is the trod bot's report (DESIGN §4.10).
@@ -201,6 +223,7 @@ type TrodResult struct {
 	FiveHours   *float64      `json:"five_hours,omitempty"` // how full the plan's five hours and week are, in percent, when the status line said
 	Week        *float64      `json:"week,omitempty"`
 	Capped      bool          `json:"capped,omitempty"` // past max_plan_use, so it sends nothing on
+	Hand        *TrodHand     `json:"hand,omitempty"`   // the run you started by hand last
 	Rules       []string      `json:"rules"`
 	Guidelines  []string      `json:"guidelines"`
 	Sessions    []TrodSession `json:"sessions"` // in the list's order

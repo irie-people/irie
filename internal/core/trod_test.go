@@ -335,6 +335,84 @@ func TestTheTrodBotKeepsWithinTheWeeksAllotment(t *testing.T) {
 	}
 }
 
+// trodNow starts a run of the trod bot by hand, or stops it, and returns
+// the report.
+func (c *coreEnv) trodNow(start bool) ipc.TrodResult {
+	c.t.Helper()
+	var r ipc.TrodResult
+	if err := c.call(ipc.OpTrod, ipc.TrodArgs{Start: start, Stop: !start}, &r); err != nil {
+		c.t.Fatalf("trod: %v", err)
+	}
+	return r
+}
+
+func TestARunStartedByHandGoesOnUntilNothingIsLeft(t *testing.T) {
+	// You are at the Mac, and the bot is off: by its hours and its idle
+	// check it would never step in.
+	bin := t.TempDir()
+	fakeTool(t, bin, "ioreg", "printf '    | |     \"HIDIdleTime\" = 0\\n'\n")
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	c := setupWith(t, agentConfig{extra: "\n[trod]\nretry = \"1s\"\nkeep_awake = false\n"})
+	s := c.spawn("prompt,stopfail:server_error")
+	c.waitState(s.ID, ipc.StateNeedsYou)
+
+	r := c.trodNow(true)
+	if r.On || r.Hand == nil || !r.Hand.On || !r.In || !r.Works {
+		t.Fatalf("started: %+v, hand %+v", r, r.Hand)
+	}
+	// It sends the session on while you watch, and the message is the bot's.
+	testutil.Eventually(t, 2*trodEvery*time.Second, "the run never sent the session on", func() bool {
+		return len(c.trodSends(s.ID)) > 0
+	})
+	var cv ipc.Conversation
+	if err := c.call(ipc.OpConversation, ipc.ConversationArgs{Session: s.ID}, &cv); err != nil {
+		t.Fatal(err)
+	}
+	if len(cv.Pending) != 1 || cv.Pending[0].From != "trod" ||
+		!strings.HasPrefix(cv.Pending[0].Text, "[Irie] The trod bot: your last turn stopped on an API error (server_error). The user wants you to keep going without them, so carry on") {
+		t.Errorf("pending = %+v", cv.Pending)
+	}
+	c.waitState(s.ID, ipc.StateDone)
+	// Once nothing is left, the run ends, and says why.
+	testutil.Eventually(t, 2*trodEvery*time.Second, "the run never ended", func() bool {
+		r = c.trodReport()
+		return r.Hand != nil && !r.Hand.On
+	})
+	if r.Hand.Why != "no session had work left" || r.Hand.Ended == nil || r.In || r.Works {
+		t.Errorf("ended: %+v, hand %+v", r, r.Hand)
+	}
+	// A restarted core knows how the run ended.
+	b, err := os.ReadFile(c.paths.StateFile())
+	if err != nil || !strings.Contains(string(b), `"trod_now"`) || !strings.Contains(string(b), "no session had work left") {
+		t.Errorf("state.json = %s, %v", b, err)
+	}
+}
+
+func TestARunStartedByHandStopsWhenAskedOrAtThePlansCap(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	// Only a session that runs a status step says how full the week is.
+	c := setupWith(t, agentConfig{statusLine: true, env: map[string]string{"IRIE_FAKE_WEEK": "95"}, extra: "\n[trod]\nkeep_awake = false\n"})
+	// It keeps going a session that works, until you stop it.
+	s := c.spawn("prompt,sleep:30s,stop")
+	c.waitState(s.ID, ipc.StateWorking)
+	if r := c.trodNow(true); r.Hand == nil || !r.Hand.On {
+		t.Fatalf("started: %+v", r.Hand)
+	}
+	if r := c.trodNow(false); r.Hand == nil || r.Hand.On || r.Hand.Why != "you stopped it" {
+		t.Errorf("stopped: %+v", r.Hand)
+	}
+	// Past the plan's cap it ends at once.
+	full := c.spawn("prompt,status:0.5,stop")
+	c.waitState(full.ID, ipc.StateDone)
+	testutil.Eventually(t, 5*time.Second, "the plan's use never came in", func() bool {
+		w := c.trodReport().Week
+		return w != nil && *w == 95
+	})
+	if r := c.trodNow(true); r.Hand == nil || r.Hand.On || r.Hand.Why != "the plan reached 90%, the most it may use" {
+		t.Errorf("at the cap: %+v", r.Hand)
+	}
+}
+
 // fakeTool puts a script on the PATH Irie runs with, in front of the
 // system's tools.
 func fakeTool(t *testing.T, dir, name, script string) {
@@ -548,6 +626,25 @@ func TestTheTrodBotsChoices(t *testing.T) {
 	os.Remove(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "settings.json"))
 	if !c.spendsAlone(limit, now) {
 		t.Error("limit: Claude Code carries it on at the reset")
+	}
+
+	// A run started by hand works at once, out of its hours and while you
+	// are at the Mac, until it ends.
+	hand := trodCore(t, "[trod]\non = false\naway = \"1h\"\n")
+	hand.trodHand = trodHand{From: now.Add(-time.Minute)}
+	if s := hand.shiftAt(now); !s.in || !s.hand || !s.away || !s.works() || !s.from.Equal(now.Add(-time.Minute)) || !s.until.IsZero() {
+		t.Errorf("by hand: %+v", s)
+	}
+	if note := trodNote(hand.shiftAt(now), trodQuestion, trodAtStop, "", true); !strings.HasPrefix(note, "[Irie] The trod bot: the user wants you to keep going without them, and won’t answer you.") {
+		t.Errorf("note by hand: %q", note)
+	}
+	hand.trodHand.Until = now.Add(-time.Second)
+	if s := hand.shiftAt(now); s.in || s.hand {
+		t.Errorf("by hand, its time up: %+v", s)
+	}
+	hand.trodHand = trodHand{From: now.Add(-time.Minute), Ended: now.Add(-time.Second), Why: "you stopped it"}
+	if s := hand.shiftAt(now); s.in || s.hand {
+		t.Errorf("by hand, stopped: %+v", s)
 	}
 
 	// Questions off: a question waits for the user.

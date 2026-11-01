@@ -204,6 +204,7 @@ private struct SessionCard: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                         if session.isPromoted { PromotedBadge() }
+                        if let t = session.trod { TrodPrint(trod: t, now: now) }
                     }
                 }
                 Text(status)
@@ -944,6 +945,7 @@ private struct Counts: View {
         default: words += ": it steps in once you’ve been away for a while"
         }
         if t.awake ?? false { words += ", and keeps the Mac awake" }
+        if t.hand ?? false { words += ", started by you, until no session has work left" }
         let color = works ? Theme.accent : Theme.muted
         return Image(systemName: "moon.stars")
             .font(Theme.font(10, .bold))
