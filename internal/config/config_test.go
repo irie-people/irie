@@ -24,7 +24,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second, Preferences: Preferences()}); !reflect.DeepEqual(c.Spawn, want) {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -168,6 +168,7 @@ hide_tmux = false
 teammates = "panes"
 follow_up_window = "0s"
 follow_up_delay = "1s"
+preferences = ["Text me in one line."]
 
 [profiles.claude]
 harness = "claude-code"
@@ -261,7 +262,7 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second, Preferences: []string{"Text me in one line."}}); !reflect.DeepEqual(c.Spawn, want) {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	wantClaude := Profile{
@@ -339,6 +340,16 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	// The defaults themselves are untouched.
 	if d := Default(); d.Profiles["claude"].Model != "claude-opus-5-5" || len(d.Worktree.Copy) != 2 || len(d.Repos.Aliases) != 0 {
 		t.Error("loading a file changed the defaults")
+	}
+}
+
+func TestAnEmptyPreferencesListTellsNothing(t *testing.T) {
+	c, err := Load(writeFile(t, "[spawn]\npreferences = []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Spawn.Preferences == nil || len(c.Spawn.Preferences) != 0 {
+		t.Errorf("spawn.preferences = %#v, want an empty list", c.Spawn.Preferences)
 	}
 }
 
@@ -550,6 +561,10 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[trod]\nguidelines = [\"one\\ntwo\"]\n", "trod.guidelines[0]: must be one line"},
 		{"[trod]\nrules = [\"" + strings.Repeat("x", 401) + "\"]\n", "trod.rules[0]: must be at most 400"},
 		{"[trod]\nrules = [" + strings.Repeat("\"x\", ", 21) + "]\n", "trod.rules: at most 20"},
+		{"[spawn]\npreferences = [\"Be brief.\", \"  \"]\n", "spawn.preferences[1]: is empty"},
+		{"[spawn]\npreferences = [\"one\\ntwo\"]\n", "spawn.preferences[0]: must be one line"},
+		{"[spawn]\npreferences = [\"" + strings.Repeat("x", 401) + "\"]\n", "spawn.preferences[0]: must be at most 400"},
+		{"[spawn]\npreferences = [" + strings.Repeat("\"x\", ", 16) + "]\n", "spawn.preferences: at most 15"},
 		{"[learn]\ntutor = \"socratic\"\n", "learn.tutor"},
 		{"[profiles.teach]\nmodel = \"opus\"\n", "profiles.teach"},
 		{"[profiles.explain]\nmodel = \"opus\"\n", "profiles.explain"},

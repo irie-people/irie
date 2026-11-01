@@ -29,10 +29,7 @@ func (c *Core) pair(a ipc.PairArgs) (ipc.PairResult, error) {
 	if err != nil {
 		return ipc.PairResult{}, err
 	}
-	name := cfg.Name
-	if name == "" {
-		name = remote.MachineName()
-	}
+	name := c.machineName()
 	setup := strconv.Itoa(cfg.Port - 1)
 	ca, err := remote.LoadAuthority(c.paths.Remote())
 	if err != nil {
@@ -50,4 +47,13 @@ func (c *Core) pair(a ipc.PairArgs) (ipc.PairResult, error) {
 		r.Link = remote.PairLink("https://"+net.JoinHostPort(u.Hostname(), strconv.Itoa(cfg.Port)), code, ca.FingerprintHex(), name)
 	}
 	return r, nil
+}
+
+// machineName is what this machine is called: remote.name, else its host
+// name. A phone shows it, and ^name places a task on it.
+func (c *Core) machineName() string {
+	if n := c.cfg().Remote.Name; n != "" {
+		return n
+	}
+	return remote.MachineName()
 }

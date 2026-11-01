@@ -200,7 +200,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"snapshot","sessions":[…],"header":{…}}`
   - `{"t":"upsert","session":{…}}` and `{"t":"remove","id":"…"}`
   - `{"t":"history","undo":"…","redo":"…"}`: the labels of what `undo` and `redo` would do next, empty when nothing (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
-  - `{"t":"header","header":{…}}` when the plan's use or the machine's memory changes (§6.3). A snapshot carries the header too. The header also says `red_on_done` when `ui.red_on_done` is set, so every sidebar draws done in red (§5.3).
+  - `{"t":"header","header":{…}}` when the plan's use, the machine's memory (§6.3) or how busy it is changes. A snapshot carries the header too. `load` is how busy the machine is: its CPUs, the work waiting to run over the last minute (to a whole CPU), the kernel's memory pressure (1, 2 or 4) and the ptys in use (to 8) of the most there can be, read every 5 s. A core advertises it to the cores it is paired with ([multi-host](proposals/multi-host.md) §4.2). The header also says `red_on_done` when `ui.red_on_done` is set, so every sidebar draws done in red (§5.3).
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
   - `{"t":"closed","closed":[…]}`: the closed sessions that `reopen` can bring back, the last closed first (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
@@ -248,6 +248,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `screen` | `session` | `lines[]`: what its terminal shows now, as plain text, without the blank lines under the last; `options[]`, each `key`, `label` and `selected`: while it waits on you, the numbered choices of the prompt at the bottom, as Claude Code draws a permission, a question or a plan, and none otherwise | The phone app ([PHONE.md](PHONE.md)) |
 | `keys` | `session`, `keys[]`, `text?` | none. Presses each key in its terminal, a letter or digit or one of Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, PageUp, PageDown, Home and End, never Ctrl+C, then types `text`, with no control character, without Enter. Takes its turn with `send`; refuses with `busy` once the session has ended or while it is frozen | The phone app ([PHONE.md](PHONE.md)) |
 | `pair` | `minutes?`, 10 by default, a week at most | `on`, `name`, `urls[]`, `code`, `until`: opens a six-digit code that pairs a phone with this machine, as `irie remote pair` does, and the setup page's addresses, the Bonjour name first. The gateway takes the code from the state folder; a phone can't open one | The Mac app ([PHONE.md](PHONE.md)) |
+| `peers` | `reload?` | `name`, this machine's, and `peers[]`, each `name`, `url`, `up`, `since`, `problem?`, `version?`, `sessions`, `load?`, `memory?`: the other machines' cores this one is paired with, as it last heard from each; `reload` first reads `peers.json` again, as `irie peer add` and `remove` ask (§2.8) | `irie peer` ([multi-host](proposals/multi-host.md)) |
 
 ### 2.5 Observation
 
@@ -312,6 +313,14 @@ curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 
 ---
 
+### 2.8 Peers: Irie on more than one machine
+
+A core can be paired with another machine's, which then is its peer ([multi-host](proposals/multi-host.md)). `irie peer add` pairs through that machine's phone gateway ([PHONE.md](PHONE.md)) as a phone does, with a pairing link that `irie remote pair --link` prints there, and keeps the token and the fingerprint of its Irie authority in `peers.json` (mode 0600), so the core trusts no other certificate for it. The core then follows the peer's sessions over HTTPS and shows them after its own, each as a row of its own: `host` names the machine, and its id is the machine's name, a slash and that core's own id (`Asahi/s38…`). A client sends that id back as it is, and the core passes the call on: `send`, `close`, `rename`, `park`, `unpark`, `priority`, `freeze`, `thaw`, `rate`, `result`, `screen`, `keys` and `conversation`, and a subscription to that session. `reorder` refuses, since a peer's rows keep that machine's order. `show` picks the row and the slot draws its conversation, since its terminal is on its own machine. `^name` among the first line's words starts the task on that machine, which reads its own `@` and `+` words; `^` and a word that names no machine stay in the task as typed.
+
+**Where a task goes.** Each core advertises its machine in its header: `load` and `memory`, and `machine`: whether Claude Code is signed in, the profiles, the free disk, and the user's own Claude Code hooks (`~/.claude/settings.json`), each as the SHA-256 of its event, matcher and command without the program's folder or the home folder, with any program they start that the machine lacks. A task goes to a peer only where those hooks are all there and all run, so it never runs without a hook it would have had here, such as a repo's guard: `^name` says so and starts nothing anywhere. With `place.mode = "auto"`, a task typed with no `^` word goes to a peer only while this machine is busy (fewer than `headroom_cpus` free, less than `headroom_gib` free, memory pressure, or fewer than 64 ptys), only to a peer where Claude Code is signed in, the profile exists, and the `@repo` is one `peers.<name>.repos` lists, and only to one with at least 2 more CPUs and 2 GiB more free than this machine; each task placed there counts as a CPU and a GiB against it for 2 minutes. A task that reads as more for the jot before it stays with that jot's agent, and one the peer refuses starts here. The result says why it went.
+
+The peer's sessions run on under its own core whatever happens to this one. When its stream ends, or brings nothing for 40 s (its gateway pings every 15 s), its rows stay with `host_down`, the time it went, and calls about them say `peer_down`. The core follows it again after 1, 2, 4 … 30 s. A phone hears none of the peers' rows: it pairs with each machine itself.
+
 ## 3. Harness support
 
 ### 3.1 Support levels
@@ -370,7 +379,7 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 
 | Event | Matcher | Timeout | `onFailure` | Irie use |
 |---|---|---|---|---|
-| SessionStart | none | 10 s | none | Started; transcript path; queued notes |
+| SessionStart | none | 10 s | none | Started; transcript path; the delegation note (§6.4) and the user's preferences (§4.2); queued notes |
 | UserPromptSubmit | none | 10 s | none | Working; notes for an idle agent |
 | PreToolUse | `*` | `hold.max` + 120 s | `block` | Tool started; hold; AskUserQuestion and ExitPlanMode mean "needs you"; notes |
 | PostToolUse, PostToolUseFailure | `*` | `hold.max` + 120 s | none | Tool finished; hold; notes |
@@ -514,6 +523,8 @@ The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3),
 8. The journal records `spawn.requested`, then `session.started` or `spawn.failed`.
 
 `irie ctl spawn` runs `irie up` first, so a script can spawn with no window open.
+
+**Preferences.** `spawn.preferences` is how the user likes agents to work, a line each, such as how short a text to them should be. Every Claude Code session is told them in its SessionStart reply (§3.3), after the delegation note when it gets one (§6.4): `[Irie] The user’s preferences, which always apply:`, then a `- ` line for each. SessionStart comes again after `/clear`, a compaction, a resume and a fork, so they hold all session long. The built-in list has one, from the owner's ask that agents text them in fewer, plainer words: a text or notification to the user reads at a glance on a phone, the point or the ask first, then no more than three short lines, and anything longer goes on a page whose link the text carries. The user's own list replaces it and `[]` tells nothing; the Mac app edits it in Settings > Agents. It takes at most 15 lines of at most 400 characters, so that with the delegation note and a queued note the reply stays within the 10,000 characters Claude Code passes on whole: past that it saves the text to a file and passes a 2,000-character preview. A generic harness has no SessionStart, so its agents are not told.
 
 **More for the last jot.** Context remembered a moment after a task is sent belongs to that task's agent, not to a new one. A task typed to `input`, in a task bar, the command bar or with `irie ctl input`, is a jot (`jot` in `spawn`, which `input` sets). It goes to the agent of the jot sent just before it, as a message, when all of these hold:
 - it comes within `spawn.follow_up_window` (2 minutes) of that jot, or of the last jot added to it;
@@ -953,6 +964,7 @@ close_delay = "30s"           # how long a finished session waits; a new prompt,
 teammates = "off"             # panes | off: Claude Code sessions may start agent teams, each teammate in a terminal beside its session (§2.3)
 follow_up_window = "2m"       # a jot that reads as more for the jot sent within this long before goes to its agent instead of a new one (§4.2); "0s" = never
 follow_up_delay = "8s"        # how long such a jot waits before it is typed to the agent, so that New task can take it back
+preferences = ["Keep any text or notification you send the user short enough to take in at a glance on a phone: …"]   # how you like agents to work, a line each, told to every session as it starts (§4.2); your list replaces the built-in one
 
 [profiles.claude]             # the strongest: hard work and orchestration
 harness = "claude-code"
@@ -1111,6 +1123,14 @@ on = false                    # serve it on this machine's local network; the co
 port = 7387                   # its HTTPS port; the setup page is on the port below, over plain HTTP
 name = ""                     # what the phone calls this machine; "" = its computer name (macOS) or host name
 listen = ""                   # the address to listen on; "" = every address of this machine
+
+[place]                       # where a task typed here starts when its words name no machine (§2.8)
+mode = "local"                # local, or auto: to a peer with clearly more room while this machine is busy
+headroom_cpus = 2             # this machine is busy once the work waiting to run leaves fewer CPUs free
+headroom_gib = 2              # or less memory than this is free, or the kernel warns of memory pressure
+
+# [peers.Asahi]               # one of the machines `irie peer add` paired with
+# repos = ["irie"]            # the @names auto may send there; a task with no @ goes too
 ```
 
 ---

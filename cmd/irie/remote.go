@@ -37,10 +37,12 @@ keeps it running.
                           turn the phone app on for this machine (remote.on),
                           and name it for the phone
   irie remote off         turn it off
-  irie remote pair [--for DURATION] [--open]
+  irie remote pair [--for DURATION] [--open] [--link]
                           open a pairing code for a phone (10 minutes by
                           default) and say where the phone sets up; --open
-                          shows it with a QR code in the browser
+                          shows it with a QR code in the browser; --link
+                          prints only the pairing link, which another
+                          machine's irie peer add takes
   irie remote devices     list the phones paired with this machine
   irie remote forget ID|NAME|all
                           unpair a phone
@@ -99,11 +101,15 @@ func remoteCmd(args []string) error {
 		fs := flag.NewFlagSet("remote pair", flag.ContinueOnError)
 		life := fs.Duration("for", remote.CodeLife, "how long the code works")
 		open := fs.Bool("open", false, "show the code and a QR code in the browser")
+		link := fs.Bool("link", false, "print only the pairing link, for `irie peer add` on another machine")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
 		if *life <= 0 || *life > 7*24*time.Hour {
 			return errors.New("--for takes a duration up to a week, such as 10m or 2h")
+		}
+		if *link {
+			return pairLink(cfg.Remote.Port, cfg.Remote.Name, dir, store, *life)
 		}
 		return pair(cfg.Remote.On, cfg.Remote.Port, cfg.Remote.Name, dir, store, *life, *open)
 	case "on", "off":
@@ -208,6 +214,34 @@ func remoteCmd(args []string) error {
 
 // pair opens a pairing code and says where a phone sets up, in the
 // terminal, and with --open in the browser too.
+// pairLink opens a pairing code and prints only the link that carries it,
+// with the gateway's address and its authority's fingerprint, for another
+// machine's core to pair with this one (`irie peer add`, which runs this
+// over ssh).
+func pairLink(port int, name, dir string, store *remote.Store, life time.Duration) error {
+	ca, err := remote.LoadAuthority(dir)
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		name = remote.MachineName()
+	}
+	host := ""
+	if names := remote.LocalNames(); len(names) > 0 {
+		host = names[0]
+	} else if ip := remote.LANAddr(); ip != nil {
+		host = ip.String()
+	} else {
+		return errors.New("this machine has no local name or address to pair by")
+	}
+	code, err := store.NewCode(life)
+	if err != nil {
+		return err
+	}
+	fmt.Println(remote.PairLink("https://"+net.JoinHostPort(host, strconv.Itoa(port)), code, ca.FingerprintHex(), name))
+	return nil
+}
+
 func pair(on bool, port int, name, dir string, store *remote.Store, life time.Duration, open bool) error {
 	code, err := store.NewCode(life)
 	if err != nil {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,6 +64,9 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	}
 	if a.Conversation && a.Session == "" {
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "a conversation needs a session")
+	}
+	if strings.Contains(a.Session, "/") {
+		return c.subscribePeer(a) // one of the peers' sessions (peers.go)
 	}
 	if isHelper(a.Agent) && !helperAgent.MatchString(a.Agent) {
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "no helper %q", a.Agent)
