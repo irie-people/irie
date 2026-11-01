@@ -177,6 +177,10 @@ func (s *Server) App() http.Handler {
 			h.Set("Cache-Control", "no-store")
 		} else {
 			h.Set("Content-Security-Policy", csp)
+			if r.URL.Path == "/" {
+				// The app opening: once per launch of the app.
+				s.log.Info("app", "from", r.RemoteAddr, "agent", r.UserAgent())
+			}
 		}
 		mux.ServeHTTP(w, r)
 	})
@@ -205,6 +209,9 @@ func (s *Server) Setup() http.Handler {
 	})
 	mux.Handle("GET /", s.files("setup.html"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Few requests come here, and each is a step of a phone's setup,
+		// which the log then shows.
+		s.log.Info("setup", "path", r.URL.Path, "from", r.RemoteAddr, "agent", r.UserAgent())
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", csp)
