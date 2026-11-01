@@ -226,12 +226,13 @@
   <h3 id="says">What it says to them</h3>
   <p>Irie gives an agent your task word for word.</p>
   <p>A task over 100 KiB goes in <code>task.md</code>, and the agent is told: “Your full task is in &lt;path&gt;/task.md. Read all of it before doing anything else.”</p>
-  <p>Beyond that, Irie says three things to agents, and nothing else. Each begins with <code>[Irie]</code>:</p>
+  <p>Beyond that, Irie says four things to agents, and nothing else. Each begins with <code>[Irie]</code>:</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th scope="col">When</th><th scope="col">What it says</th></tr></thead>
       <tbody>
         <tr><td>A Claude Code session starts, and cheaper profiles could take its subtasks. <code>route.delegate = false</code> turns it off.</td><td>[Irie] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run <code>"$IRIE_BIN" ctl delegate "&lt;subtask&gt;"</code> with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (+local, +haiku, +sonnet), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.</td></tr>
+        <tr><td>A Claude Code session starts. Your own list in <code>spawn.preferences</code>, or in Settings &gt; Agents, takes the place of the built-in one, and <code>spawn.preferences = []</code> turns it off.</td><td>[Irie] The user’s preferences, which always apply:<br>- Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.</td></tr>
         <tr><td>A task carries on after its first session stopped at a usage limit. <code>route.failover = false</code> turns it off.</td><td>[Irie] This task ran on +claude, which stopped at its usage limit. What it did so far is in this directory: check it, then finish the task.</td></tr>
         <tr><td>You thaw an agent that was working when you froze it.</td><td>[Irie] The user froze this session for 4m10s (14:02:11–14:06:21 UTC). Network calls or child processes may have failed meanwhile; re-check before you continue.</td></tr>
       </tbody>

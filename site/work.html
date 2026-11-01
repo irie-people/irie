@@ -153,6 +153,7 @@ env = { CLAUDE_CODE_USE_BEDROCK = "1", AWS_REGION = "us-east-1" }</code></pre>
     <li><strong>Share one settings file.</strong> A team can hand out a <code>config.toml</code> with its profiles, project folders and choices. A setting Irie doesn’t know stops it with an error that names it, so a mistake shows at once.</li>
     <li><strong>Choose the permission mode.</strong> Irie’s built-in cloud profiles start Claude Code in auto mode, where Claude Code decides which steps are safe to take without asking. Set <code>permission_mode</code> to your team’s choice.</li>
     <li><strong>Keep tasks off local models,</strong> if you’d rather: leave <code>local</code> out of <code>route.profiles</code>.</li>
+    <li><strong>Say how agents should work.</strong> <code>spawn.preferences</code> holds a line for each thing every session is told as it starts, such as “Ask before you push.” Your list takes the place of the built-in one, which keeps a text or notification to you short, and <code>[]</code> tells agents nothing.</li>
     <li><strong>Turn off what you don’t want.</strong> <code>route.delegate = false</code> stops Irie telling sessions they may hand subtasks to cheaper models, subtasks that edit files without asking. <code>journal.tool_input = "none"</code> keeps the agents’ steps out of Irie’s log.</li>
   </ul>
   <p>A team’s file that does all of that could read:</p>

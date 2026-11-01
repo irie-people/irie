@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
@@ -451,14 +452,18 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 	if fi, err := os.Stat(settings); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("settings file: %v", err)
 	}
-	// Irie says nothing back, but for the delegation note when the session
-	// starts (DESIGN §6.4).
+	// Irie says nothing back, but for what the session is told as it
+	// starts: the user's preferences, the built-in ones here, and the
+	// delegation note when it may delegate (DESIGN §4.2, §6.4).
 	for _, r := range log {
 		if r["t"] != "hook" {
 			continue
 		}
-		hint := r["event"] == "SessionStart" && strings.Contains(fmt.Sprint(r["stdout"]), "ctl delegate")
-		if r["exit"] != 0.0 || r["stdout"] != "" && !hint {
+		start := r["event"] == "SessionStart"
+		if start && !strings.Contains(fmt.Sprint(r["stdout"]), config.Preferences()[0]) {
+			t.Errorf("the session was not told the user's preferences: %v", r)
+		}
+		if r["exit"] != 0.0 || r["stdout"] != "" && !start {
 			t.Errorf("hook reply %v", r)
 		}
 	}

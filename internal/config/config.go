@@ -159,6 +159,20 @@ type Spawn struct {
 	// still be taken back and started apart.
 	FollowUpWindow time.Duration `toml:"follow_up_window"`
 	FollowUpDelay  time.Duration `toml:"follow_up_delay"`
+	// Preferences are how you like agents to work, a line each, such as
+	// how short a text they send you should be. Every session is told them
+	// as it starts (DESIGN §4.2). Your own list replaces the built-in one,
+	// and an empty one tells nothing.
+	Preferences []string `toml:"preferences"`
+}
+
+// Preferences are what every session is told about how you like agents to
+// work, until you write your own: a text or notification it sends you reads
+// at a glance.
+func Preferences() []string {
+	return []string{
+		"Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.",
+	}
 }
 
 // TeammateModes are the values of spawn.teammates.
@@ -316,12 +330,34 @@ func clockTime(s string) (h, m int, ok bool) {
 
 var clockPattern = regexp.MustCompile(`^([01]?[0-9]|2[0-3]):([0-5][0-9])$`)
 
-// Most rules and guidelines the trod bot takes, and the longest each
-// may be: they go into every message it sends.
+// Most rules and guidelines the trod bot takes, which go into every
+// message it sends; most preferences, which go into what every session is
+// told as it starts and must leave room there for the delegation note and
+// a queued note within the 10,000 characters Claude Code passes on whole;
+// and the longest any of them may be.
 const (
-	maxTrodLines = 20
-	maxTrodLine  = 400
+	maxTrodLines   = 20
+	maxPreferences = 15
+	maxLine        = 400
 )
+
+// checkLines checks a list of one-line settings, such as trod.rules: at
+// most `most` of them, each one line, not empty and at most maxLine long.
+func checkLines(bad func(string, ...any), key string, lines []string, most int, why string) {
+	if len(lines) > most {
+		bad("%s: at most %d, as each goes into %s", key, most, why)
+	}
+	for i, l := range lines {
+		switch {
+		case strings.TrimSpace(l) == "":
+			bad("%s[%d]: is empty", key, i)
+		case strings.ContainsAny(l, "\r\n"):
+			bad("%s[%d]: must be one line", key, i)
+		case utf8.RuneCountInString(l) > maxLine:
+			bad("%s[%d]: must be at most %d characters", key, i, maxLine)
+		}
+	}
+}
 
 // Repos is where an @name finds its repo: aliases first, then the git repos
 // two levels under the roots.
@@ -381,6 +417,7 @@ func Default() Config {
 			Teammates:      "off",
 			FollowUpWindow: 2 * time.Minute,
 			FollowUpDelay:  8 * time.Second,
+			Preferences:    Preferences(),
 		},
 		Profiles: map[string]Profile{
 			"claude": {
@@ -597,6 +634,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Trod.Guidelines == nil {
 		c.Trod.Guidelines = []string{}
+	}
+	if c.Spawn.Preferences == nil {
+		c.Spawn.Preferences = []string{}
 	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
@@ -910,24 +950,9 @@ func (c Config) Validate() error {
 	if n.MaxPlanUse <= 0 || n.MaxPlanUse > 100 {
 		bad("trod.max_plan_use = %v: must be a percentage above 0", n.MaxPlanUse)
 	}
-	for _, list := range []struct {
-		key   string
-		lines []string
-	}{{"rules", n.Rules}, {"guidelines", n.Guidelines}} {
-		if len(list.lines) > maxTrodLines {
-			bad("trod.%s: at most %d, as each goes into every message the trod bot sends", list.key, maxTrodLines)
-		}
-		for i, l := range list.lines {
-			switch {
-			case strings.TrimSpace(l) == "":
-				bad("trod.%s[%d]: is empty", list.key, i)
-			case strings.ContainsAny(l, "\r\n"):
-				bad("trod.%s[%d]: must be one line", list.key, i)
-			case utf8.RuneCountInString(l) > maxTrodLine:
-				bad("trod.%s[%d]: must be at most %d characters", list.key, i, maxTrodLine)
-			}
-		}
-	}
+	checkLines(bad, "trod.rules", n.Rules, maxTrodLines, "every message the trod bot sends")
+	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
+	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
 	rm := c.Remote
 	if rm.Port < 2 || rm.Port > 65535 {
 		bad("remote.port = %d: must be a port from 2 to 65535, since the setup page takes the one below", rm.Port)
