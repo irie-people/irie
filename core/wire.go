@@ -92,6 +92,8 @@ type (
 	ConfigArgs       = ipc.ConfigArgs
 	ConfigSet        = ipc.ConfigSet
 	ConfigResult     = ipc.ConfigResult
+	LearnArgs        = ipc.LearnArgs
+	LearnResult      = ipc.LearnResult
 	ShowArgs         = ipc.ShowArgs
 	RenameArgs       = ipc.RenameArgs
 	RenameResult     = ipc.RenameResult
@@ -172,6 +174,8 @@ const (
 	OpTrod            = ipc.OpTrod
 	OpReady           = ipc.OpReady
 	OpVPN             = ipc.OpVPN
+	OpLearn           = ipc.OpLearn
+	FeatureTutor      = ipc.FeatureTutor
 	FeatureSpawnModel = ipc.FeatureSpawnModel
 	FeatureWatch      = ipc.FeatureWatch
 	ViewApp           = ipc.ViewApp

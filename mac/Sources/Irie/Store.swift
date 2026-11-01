@@ -29,6 +29,12 @@ final class Store: ObservableObject {
     @Published private(set) var agents: [Agent] = []
     /// Whether the core takes a model for one task.
     @Published private(set) var canPickModel = false
+    /// The core takes a tutor mode for one task, and serves the Help menu
+    /// (docs/proposals/learning.md).
+    @Published private(set) var canTutor = false
+    @Published private(set) var canLearn = false
+    /// The Learn window's page (Learn.swift).
+    @Published var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
     @Published private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
@@ -200,6 +206,8 @@ final class Store: ObservableObject {
                 // A core that restarted asks again.
                 splitShown = nil
                 canPickModel = hello.features.contains("spawn-model")
+                canTutor = hello.features.contains("spawn-tutor")
+                canLearn = hello.features.contains("learn")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
                 canTrod = hello.features.contains("trod")
@@ -325,6 +333,10 @@ final class Store: ObservableObject {
         }
     }
 
+    /// The + words that set a tutor mode rather than name an agent
+    /// (docs/proposals/learning.md).
+    static let tutorWords: Set<String> = ["explain", "teach"]
+
     /// Asks the core for the repos the @ words know and the agents the +
     /// words name. A core that answers neither leaves the menus as they are.
     func loadChoices() {
@@ -333,8 +345,11 @@ final class Store: ObservableObject {
                 repoNames = r.items.map { String($0.dropFirst()) }
             }
             if let r = try? await client.call("complete", CompleteArgs(text: "+"), timeout: 5, as: CompleteResult.self) {
-                agents = r.items.enumerated().map { i, item in
-                    Agent(name: String(item.dropFirst()), note: r.notes.flatMap { i < $0.count ? $0[i] : nil } ?? "")
+                // The tutor words are not agents: the sheet has its own menu for them.
+                agents = r.items.enumerated().compactMap { i, item in
+                    let name = String(item.dropFirst())
+                    if Self.tutorWords.contains(name) { return nil }
+                    return Agent(name: name, note: r.notes.flatMap { i < $0.count ? $0[i] : nil } ?? "")
                 }
             }
         }
@@ -371,6 +386,8 @@ final class Store: ObservableObject {
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
+        canTutor = true
+        canLearn = true
         canConfigure = true
         canPark = true
         canTrod = true
@@ -621,12 +638,12 @@ final class Store: ObservableObject {
     /// or a : command (docs/CORE.md). With no @repo in its text a task runs
     /// where the bar's menu says. Returns whether the core took it.
     func input(_ text: String) async -> Bool {
-        await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil)
+        await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil)
     }
 
-    /// Sends text from the bar or the new-task sheet. The @repo and +agent
-    /// words in it win over the menus' repo and agent.
-    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
+    /// Sends text from the bar or the new-task sheet. The @repo, +agent and
+    /// tutor words in it win over the menus' repo, agent and tutor mode.
+    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?) async -> Bool {
         var args = InputArgs(text: text)
         // A : command acts on the selected card, or :move on the selected
         // row outside Irie.
@@ -641,7 +658,15 @@ final class Store: ObservableObject {
         }
         args.profile = agent
         if canPickModel { args.model = model }
+        if canTutor { args.tutor = tutor }
         return await send(args)
+    }
+
+    /// What the Help menu shows: the resources, with the shown session's
+    /// language first, and the glossary. Nil without a core that serves it.
+    func learn() async -> LearnResult? {
+        guard canLearn else { return nil }
+        return try? await client.call("learn", LearnArgs(session: selection), timeout: 5, as: LearnResult.self)
     }
 
     /// Takes a task added to the one before back and starts it as a task

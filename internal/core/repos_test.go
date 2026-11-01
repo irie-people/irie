@@ -302,7 +302,7 @@ func TestAGenericProfileGetsItsTask(t *testing.T) {
 		t.Errorf("+nope: %v", err)
 	}
 	var r ipc.CompleteResult
-	if err := c.call("complete", ipc.CompleteArgs{Text: "+"}, &r); err != nil || !slices.Equal(r.Items, []string{"+auto", "+big", "+cat", "+claude", "+echo", "+fake", "+haiku", "+local", "+mikael", "+sonnet"}) {
+	if err := c.call("complete", ipc.CompleteArgs{Text: "+"}, &r); err != nil || !slices.Equal(r.Items, []string{"+auto", "+big", "+cat", "+claude", "+echo", "+fake", "+haiku", "+local", "+mikael", "+sonnet", "+explain", "+teach"}) {
 		t.Errorf("complete + = %q, %v", r.Items, err)
 	}
 	// Each profile says what it runs and costs, a profile with live sessions

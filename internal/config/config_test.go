@@ -133,6 +133,9 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Arch{Mikael: Mikael{On: true, Door: true, Good: []string{}}}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
+	if want := (Learn{Tutor: "off", Visual: true, AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
+		t.Errorf("learn = %+v, want %+v", c.Learn, want)
+	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("defaults do not validate: %v", err)
 	}
@@ -253,6 +256,12 @@ max_plan_use = 75.5
 keep_awake = false
 rules = ["Never touch production."]
 guidelines = []
+
+[learn]
+tutor = "teach"
+visual = false
+agent_tips = false
+links = { "Team handbook" = "https://example.com/handbook" }
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -331,6 +340,9 @@ guidelines = []
 		Rules: []string{"Never touch production."}, Guidelines: []string{},
 	}); !reflect.DeepEqual(c.Trod, want) {
 		t.Errorf("night = %+v, want %+v", c.Trod, want)
+	}
+	if want := (Learn{Tutor: "teach", Visual: false, AgentTips: false, Links: map[string]string{"Team handbook": "https://example.com/handbook"}}); !reflect.DeepEqual(c.Learn, want) {
+		t.Errorf("learn = %+v, want %+v", c.Learn, want)
 	}
 	// The defaults themselves are untouched.
 	if d := Default(); d.Profiles["claude"].Model != "claude-opus-5-5" || len(d.Worktree.Copy) != 2 || len(d.Repos.Aliases) != 0 {
@@ -560,6 +572,11 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[spawn]\npreferences = [\"one\\ntwo\"]\n", "spawn.preferences[0]: must be one line"},
 		{"[spawn]\npreferences = [\"" + strings.Repeat("x", 401) + "\"]\n", "spawn.preferences[0]: must be at most 400"},
 		{"[spawn]\npreferences = [" + strings.Repeat("\"x\", ", 16) + "]\n", "spawn.preferences: at most 15"},
+		{"[learn]\ntutor = \"socratic\"\n", "learn.tutor"},
+		{"[profiles.teach]\nmodel = \"opus\"\n", "profiles.teach"},
+		{"[profiles.explain]\nmodel = \"opus\"\n", "profiles.explain"},
+		{"[learn]\nlinks = { wiki = \"ftp://example.com\" }\n", "learn.links"},
+		{"[learn]\nlinks = { \" \" = \"https://example.com\" }\n", "learn.links"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {

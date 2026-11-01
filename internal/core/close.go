@@ -559,7 +559,7 @@ func (c *Core) reopenJob(r closedRecord) (job, error) {
 	probe.Warnings = append(warnings, probe.Warnings...)
 	j := job{
 		place:   place{cwd: spec.Cwd, repo: spec.Repo, worktree: spec.Worktree, branch: spec.Branch, copied: spec.Copied},
-		profile: spec.Profile, run: profile, h: h, probe: probe, reopen: &r, data: map[string]any{"reopen": true},
+		profile: spec.Profile, run: profile, h: h, probe: probe, reopen: &r, data: map[string]any{"reopen": true}, tutor: spec.Tutor,
 	}
 	if _, resumes := h.(harness.Resumer); r.Resume && resumes {
 		j.resume = r.VendorID

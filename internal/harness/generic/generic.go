@@ -28,15 +28,17 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	if p.Command == "" {
 		return nil, nil, nil, errors.New("generic: the profile has no command")
 	}
+	// With no output styles, a tutor mode is a note before the task.
+	task := harness.WithTutor(s.Tutor, s.Visual, s.Task)
 	argv := append([]string{p.Command}, slices.Clone(p.Args)...)
 	if p.Task != config.TaskPaste {
-		argv = append(argv, harness.TaskArg(s.Task, s.Dir))
+		argv = append(argv, harness.TaskArg(task, s.Dir))
 	}
 	env := maps.Clone(p.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
-	return argv, env, map[string][]byte{harness.TaskFile: []byte(s.Task)}, nil
+	return argv, env, map[string][]byte{harness.TaskFile: []byte(task)}, nil
 }
 
 // Normalize fails: a generic harness has no hooks.
