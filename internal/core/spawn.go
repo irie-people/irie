@@ -16,6 +16,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/harness/generic"
@@ -345,8 +346,10 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	// A reopened session starts unfrozen (freeze.go).
+	// A reopened session starts unfrozen (freeze.go), with no jots
+	// waiting for it from before it closed (follow.go).
 	os.Remove(c.paths.FreezeFile(id))
+	os.Remove(c.paths.FollowUpFile(id))
 	s := harness.Spawn{
 		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
@@ -374,6 +377,10 @@ func (c *Core) launch(j job) (*session, error) {
 			anchor, s.Teams = a, true
 		}
 	}
+	// Irie's skills, for a harness that loads them as a plugin.
+	if j.probe.Flags["--plugin-dir"] {
+		s.PluginDir = c.skillsFolder(profile, x)
+	}
 	launch := h.Launch
 	if j.resume != "" {
 		r, ok := h.(harness.Resumer)
@@ -387,7 +394,7 @@ func (c *Core) launch(j job) (*session, error) {
 		return nil, err
 	}
 	for f, b := range files {
-		if err := os.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
+		if err := filetx.WriteFile(filepath.Join(dir, f), b, 0o600); err != nil {
 			return nil, err
 		}
 	}

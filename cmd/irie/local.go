@@ -200,13 +200,6 @@ func printCheck(w io.Writer, r ipc.PreflightResult) {
 	}
 }
 
-func setup(args []string) error {
-	if len(args) == 0 || args[0] != "local" {
-		return errors.New("usage: irie setup local [--model MODEL] [--yes]")
-	}
-	return setupLocal(args[1:], os.Stdin, os.Stdout)
-}
-
 // setupLocal is `irie setup local`: it makes +local ready on this machine.
 // It installs Ollama by its official route if it is missing, starts Irie's
 // own server, picks a model that fits the machine's memory (one already

@@ -5,13 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/loginenv"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/ready"
 	"github.com/irie-people/irie/internal/tmux"
 )
 
@@ -32,17 +36,40 @@ func hello(p paths.Paths, timeout time.Duration) (string, error) {
 	return r.Version, err
 }
 
+// UpOptions change how `irie up` starts a server.
+type UpOptions struct {
+	// LoginEnv starts a new server with the login shell's environment,
+	// for a launch from the Mac app (DESIGN §7.2). A running server keeps
+	// its own.
+	LoginEnv bool
+}
+
+// ServerEnv is the environment a new server starts with: this process's,
+// or the login shell's, with ~/.local/bin on its PATH (ready.PathEnv).
+func ServerEnv(cfg config.Config, o UpOptions, env []string, goos string) []string {
+	if o.LoginEnv && cfg.Env.Capture != "none" {
+		env, _ = loginenv.ForServer(env, goos)
+	}
+	home := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "HOME="); ok {
+			home = v
+		}
+	}
+	return ready.PathEnv(env, home)
+}
+
 // Up is `irie up`. It is idempotent: it starts the server and the core when
 // the socket does not answer, and replaces a core, sidebar or placeholder
 // that runs another version. Agents are untouched.
-func Up(cfg config.Config, p paths.Paths, bin, version string) error {
+func Up(cfg config.Config, p paths.Paths, bin, version string, opts UpOptions) error {
 	if err := p.EnsureRuntime(); err != nil {
 		return err
 	}
 	if err := p.EnsureState(); err != nil {
 		return err
 	}
-	lock, err := lockFile(p.UpLock(), 2*upWait)
+	lock, err := filetx.Lock(p.UpLock(), 2*upWait)
 	if err != nil {
 		return fmt.Errorf("up.lock: %w", err)
 	}
@@ -56,7 +83,7 @@ func Up(cfg config.Config, p paths.Paths, bin, version string) error {
 	old, _ := os.ReadFile(p.TmuxConf())
 	changed := !bytes.Equal(old, conf)
 	if changed {
-		if err := os.WriteFile(p.TmuxConf(), conf, 0o600); err != nil {
+		if err := filetx.WriteFile(p.TmuxConf(), conf, 0o600); err != nil {
 			return err
 		}
 	}
@@ -64,7 +91,7 @@ func Up(cfg config.Config, p paths.Paths, bin, version string) error {
 	// A changed tmux.conf means a changed config, which the core reads only
 	// when it starts, so the core is replaced as well.
 	if v, err := hello(p, 500*time.Millisecond); err != nil || v != version || changed {
-		if err := startCore(r, p, []string{bin, "core", "--supervise"}, version); err != nil {
+		if err := startCore(r, p, []string{bin, "core", "--supervise"}, version, func() []string { return ServerEnv(cfg, opts, os.Environ(), runtime.GOOS) }); err != nil {
 			if changed {
 				os.Remove(p.TmuxConf()) // so the next up tries again
 			}
@@ -109,10 +136,11 @@ func Up(cfg config.Config, p paths.Paths, bin, version string) error {
 
 // startCore starts the server with a core, or replaces the server's core,
 // and waits for the new core to answer.
-func startCore(r *tmux.Runner, p paths.Paths, coreCmd []string, version string) error {
+func startCore(r *tmux.Runner, p paths.Paths, coreCmd []string, version string, env func() []string) error {
 	snap, err := r.Snapshot()
 	switch {
 	case errors.Is(err, tmux.ErrNoServer):
+		r.Env = env()
 		err = r.StartServer(p.TmuxConf(), coreCmd)
 	case err == nil:
 		err = respawnCore(r, snap, p.TmuxConf(), coreCmd)

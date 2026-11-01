@@ -250,6 +250,17 @@ task = "paste"</code></pre>
     </table>
   </div>
 
+  <h3 id="env">[env]</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>capture</code></td><td><code>"login-shell"</code></td><td><code>login-shell</code> or <code>none</code>. With <code>login-shell</code>, <code>irie up --login-env</code>, which the Mac app runs, starts a new tmux server with your login shell’s environment, so agents find <code>claude</code>, <code>git</code> and whatever else you installed. <code>none</code> keeps the app’s own. A server that is already running keeps its environment.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Whatever this is set to, a tmux server Irie starts gets <code>~/.local/bin</code> added at the end of its PATH when that folder exists and the PATH lacks it. That is where Irie’s and Claude Code’s installers put their programs.</p>
+
   <h3 id="journal">[journal]</h3>
   <div class="table-wrap">
     <table>
@@ -283,6 +294,35 @@ task = "paste"</code></pre>
     </table>
   </div>
 
+  <h3 id="trod">[trod]</h3>
+  <p>The trod bot keeps your sessions going while you’re away at night, until their tasks are through. An agent that asks you something is told that you’re away and to decide for itself. A turn that an API error stopped is sent on, and so is a task that isn’t through, once the jot dog has had its tries. While any session still has work, the bot keeps the Mac awake, so a session stopped at a usage limit carries on when the limit resets. It never answers in your name, and never approves a permission or a plan. It leaves alone any session you park or freeze. Every message it sends carries your rules and guidelines. It is off until you turn it on, with <code>on = true</code>, <code>irie ctl trod on</code> or the app’s Settings. To watch it work, start a run at once with <a href="keys.html#ctl-trod"><code>irie ctl trod now</code></a> or File &gt; Start the Trod Bot Now. Each card it sends on gets its boot print.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>on</code></td><td><code>false</code></td><td>Work every night, from <code>start</code> to <code>end</code>.</td></tr>
+        <tr><td><code>start</code>, <code>end</code></td><td><code>"23:00"</code>, <code>"07:00"</code></td><td>Its hours, in your local time. The same time for both means around the clock.</td></tr>
+        <tr><td><code>away</code></td><td><code>"15m"</code></td><td>It steps in only once your Mac has had no keyboard or mouse input for this long, so it never answers for you while you’re up. <code>"0s"</code> steps in at once.</td></tr>
+        <tr><td><code>questions</code></td><td><code>true</code></td><td>Tell an agent that asks you something to take the option it would recommend. A question asked again waits for you.</td></tr>
+        <tr><td><code>nudges</code></td><td><code>8</code></td><td>The most times it sends one session on in a night.</td></tr>
+        <tr><td><code>retry</code></td><td><code>"15m"</code></td><td>How long a stopped session waits before it’s sent on again, so a task held up by a lock tries again later.</td></tr>
+        <tr><td><code>within</code></td><td><code>"24h"</code></td><td>It keeps going only sessions that stopped this recently. <code>"0s"</code> means however long ago.</td></tr>
+        <tr><td><code>max_working</code></td><td><code>4</code></td><td>It sends a session on only while fewer than this many work, so the Mac and your plan aren’t swamped. <code>0</code> means no limit.</td></tr>
+        <tr><td><code>max_plan_use</code></td><td><code>90</code></td><td>In percent. Once either of your plan’s windows, five hours or a week, is this full, it sends nothing on. Once the week is, it also lets the Mac sleep and freezes the sessions that would still use it, so nothing goes over your weekly allotment. It thaws them if the week resets during its hours; otherwise they wait for you.</td></tr>
+        <tr><td><code>keep_awake</code></td><td><code>true</code></td><td>Keep the Mac from sleeping while sessions have work left. The display may still sleep, and a MacBook whose lid is closed sleeps anyway.</td></tr>
+        <tr><td><code>rules</code></td><td>three</td><td>What every agent it sends on must, or must not, do. The built-in rules: push, publish and send nothing off the machine; delete nothing it didn’t make and rewrite no history; spend no money. Your list replaces them, one line each.</td></tr>
+        <tr><td><code>guidelines</code></td><td>four</td><td>How those agents decide while you’re away, such as <code>"Prefer the smallest change that works."</code> Your list replaces the built-in one.</td></tr>
+      </tbody>
+    </table>
+  </div>
+<pre><code>[trod]
+on = true
+rules = [
+  "Don't spend money you didn't make.",
+  "Don't go over the plan's weekly allotment: never buy usage credits or turn on extra usage.",
+]
+guidelines = ["Prefer the smallest change that finishes the task."]</code></pre>
+
   <h3 id="learn">[learn]</h3>
   <p>What helps you learn while your agents work. Tutor mode changes how Claude Code works with you, in one of its own output styles: <strong>explain</strong> does the work and adds short notes on why it made its choices; <strong>teach</strong> also leaves small parts for you to write, marked <code>TODO(human)</code> in the file, and waits for you. Both make longer replies, so they cost more tokens. To use one for a single task, start it with <code>+explain</code> or <code>+teach</code>. Irie sets the style for that session only, and never changes your own Claude Code settings.</p>
   <div class="table-wrap">
@@ -297,7 +337,7 @@ task = "paste"</code></pre>
     </table>
   </div>
 
-  <p>Settings for later milestones aren’t accepted yet, and Irie would stop with an unknown-setting error. <code>[notes]</code> comes with milestones 5 and 7, <code>[freeze]</code> with milestone 6, <code>[subagents]</code> with milestone 8 and <code>[env]</code> with milestone 9.</p>
+  <p>Settings for later milestones aren’t accepted yet, and Irie would stop with an unknown-setting error. <code>[notes]</code> comes with milestones 5 and 7, <code>[freeze]</code> with milestone 6 and <code>[subagents]</code> with milestone 8.</p>
 
   <nav class="docs-nav" aria-label="Docs">
     <p class="next">Next: <a href="agents.html">Other agents</a></p>
@@ -317,6 +357,12 @@ task = "paste"</code></pre>
 </main>
 
 <footer class="site-footer">
+  <nav class="family" aria-label="Irie People">
+    <a href="https://irie-people.github.io/"><strong>Irie People</strong></a>
+    <a href="https://irie-people.github.io/irie/"><span class="dot irie" aria-hidden="true"></span>Irie</a>
+    <a href="https://irie-people.github.io/riddim/"><span class="dot riddim" aria-hidden="true"></span>Riddim</a>
+    <a href="https://irie-people.github.io/steak/"><span class="dot steak" aria-hidden="true"></span>Steak</a>
+  </nav>
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>

@@ -139,6 +139,8 @@ Words and a picture teach better than words alone (§2), so in a tutor mode the 
 
 ### 5.1 In the Mac app
 
+*Built in brief* (2026-11-01, DESIGN §2.7): the welcome lists what Irie needs with a button for what is missing, and **Try a First Task** puts this task in the task bar; a **Your first task** card above the cards then follows it through steps 2 to 4. The rest of this section, with Show Me Around, Help > Show the Walkthrough Again and `:tour`, is still proposed.
+
 The first time the app opens with no sessions, the list shows a welcome in place of today's empty list. It has the mark and the motto, one line on what Irie does, and two buttons: **Show Me Around** and **Skip**. Then the walkthrough teaches by doing, with one real task:
 
 1. **The task bar.** It is filled in with the site's first task, "Write haiku about my city. Ask me which city first.", on `+haiku`, at a fortieth of Opus's price. The task bar's menu offers `+local` instead when a local model is set up, for no tokens. The step above it says what the task bar takes, and that this task will ask you something. The buttons are **Start It** and **Type My Own**. If `claude` is not found, the step says so first and links to Claude Code's Quickstart. If the session stalls, which on a first run is usually a sign-in or a question whether to trust the folder, the step says to answer it in its terminal.

@@ -137,8 +137,9 @@
     <table>
       <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
       <tbody>
-        <tr><td><code>irie</code></td><td>Start Irie if needed, and open it in this terminal.</td></tr>
-        <tr><td><code>irie up</code></td><td>Start Irie if needed, in the background, without opening it.</td></tr>
+        <tr><td><code>irie</code></td><td>Start Irie if needed, and open it in this terminal. When no Irie is running, it first checks what Irie needs, as <code>irie setup</code> does.</td></tr>
+        <tr><td><code>irie setup [--check] [--json] [--yes]</code></td><td>Check that this computer has what Irie needs, and offer to fix each part that is missing: see <a href="install.html#setup">Install</a>. <code>--check</code> only checks, and changes nothing. <code>--json</code> prints the check as JSON. <code>--yes</code> fixes what is missing without asking.</td></tr>
+        <tr><td><code>irie up [--login-env]</code></td><td>Start Irie if needed, in the background, without opening it. <code>--login-env</code> starts a new server with your login shell’s environment, as the Mac app does.</td></tr>
         <tr><td><code>irie attach [--nested]</code></td><td>Open Irie in this terminal. <code>--nested</code> opens it inside another tmux.</td></tr>
         <tr><td><code>irie ctl &lt;command&gt;</code></td><td>Use Irie from scripts: <a href="#ctl">below</a>.</td></tr>
         <tr><td><code>irie version</code></td><td>Print the version.</td></tr>
@@ -196,6 +197,21 @@ irie: tidy-the-readme failed: failed: exit 127 · irie: aider: command not found
 <pre><code><span class="prompt">$ </span>irie ctl dog
 SESSION        STATE   NAME            LEFT                   WHERE
 s38bvad9qgve0  done    fix-cart-total  2 commits not in main  ~/.local/share/irie/worktrees/shop/fix-cart-total (irie/fix-cart-total)</code></pre>
+  <h3 id="ctl-trod">irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]</h3>
+  <p>The trod bot’s report (<a href="profiles.html#trod"><code>[trod]</code></a>). It says whether the bot is working now, and if not, why not: it’s off, it’s out of its hours, or you were at the Mac moments ago. It lists the rules and guidelines it gives every agent it keeps going. Then, for each session, it shows what the bot sent tonight, or last night, and what it left for you. <code>on</code> and <code>off</code> turn the bot on or off first, in your config file.</p>
+  <p><code>now</code> starts a run at once, whatever the hour, so you can watch the bot work. It keeps going while you’re at the Mac, until no session has work left or your plan reaches <code>max_plan_use</code>; <code>--until</code> sets a time to stop by at the latest. <code>stop</code> ends it. The report then says how the run ended.</p>
+<pre><code><span class="prompt">$ </span>irie ctl trod
+Trod bot: on, 23:00–07:00, and working: you are away (no keyboard or mouse for 2h14m).
+It keeps the Mac awake while sessions have work left.
+
+Rules every agent it sends on must follow:
+  1. Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages.
+  …
+
+Since Sat 23:00:
+SESSION        STATE      NAME            SENT ON                       LEFT FOR YOU
+s38bvad9qgve0  working    fix-cart-total  01:12 question, 03:40 loose
+s38bvaf2kq7m1  needs_you  migrate-db      02:05 error                   Asks: may it run psql …?</code></pre>
 
   <p>More <code>irie ctl</code> commands arrive with the actions they control, such as pausing. Milestone 10 adds <code>irie ctl preflight</code> and <code>spawn --force</code> for local models. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></p>
 
@@ -217,6 +233,12 @@ s38bvad9qgve0  done    fix-cart-total  2 commits not in main  ~/.local/share/iri
 </main>
 
 <footer class="site-footer">
+  <nav class="family" aria-label="Irie People">
+    <a href="https://irie-people.github.io/"><strong>Irie People</strong></a>
+    <a href="https://irie-people.github.io/irie/"><span class="dot irie" aria-hidden="true"></span>Irie</a>
+    <a href="https://irie-people.github.io/riddim/"><span class="dot riddim" aria-hidden="true"></span>Riddim</a>
+    <a href="https://irie-people.github.io/steak/"><span class="dot steak" aria-hidden="true"></span>Steak</a>
+  </nav>
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>

@@ -27,15 +27,22 @@ func (c *Core) send(a ipc.SendArgs) error {
 	if strings.TrimSpace(text) == "" {
 		return ipc.Errorf(ipc.CodeBadArgs, "there is nothing to send")
 	}
-	c.sendMu.LockAt(c.levelOf(a.Session))
+	return c.typeTo(a.Session, text, sendable)
+}
+
+// typeTo types text to session id's agent as send does, once may, called
+// with c.mu held just before the paste, says the session can take it. The
+// trod bot types its messages this way too (trod.go).
+func (c *Core) typeTo(id, text string, may func(*session, string) error) error {
+	c.sendMu.LockAt(c.levelOf(id))
 	defer c.sendMu.Unlock()
 	c.mu.Lock()
-	x := c.sessions[a.Session]
+	x := c.sessions[id]
 	if x == nil {
 		c.mu.Unlock()
-		return ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		return ipc.Errorf(ipc.CodeNotFound, "no session %q", id)
 	}
-	if err := sendable(x, text); err != nil {
+	if err := may(x, text); err != nil {
 		c.mu.Unlock()
 		return err
 	}
@@ -67,7 +74,7 @@ func (c *Core) send(a ipc.SendArgs) error {
 	time.Sleep(enterDelay)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if x := c.sessions[a.Session]; x == nil || x.pane != pane || x.dead {
+	if x := c.sessions[id]; x == nil || x.pane != pane || x.dead {
 		return ipc.Errorf(ipc.CodeBusy, "the session ended before its message was sent")
 	}
 	_, err = c.tmux.Run("send-keys", "-t", pane, "Enter")
@@ -107,7 +114,7 @@ func sendable(x *session, text string) error {
 // it.
 func (cv *conversation) sent(text string, at time.Time, queued bool) {
 	cv.pending = append(cv.pending, ipc.Item{ID: "s:" + at.UTC().Format(time.RFC3339Nano), Kind: ipc.ItemUser, Time: at,
-		Text: capText(text, maxItemText), Queued: queued, Pending: true})
+		Text: capText(text, maxItemText), Queued: queued, Pending: true, From: trodFrom(text)})
 	cv.bumpMeta()
 }
 

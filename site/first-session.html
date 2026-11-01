@@ -48,8 +48,8 @@
   <figure class="picture">
     <div class="window">
       <svg viewBox="0 0 940 356" preserveAspectRatio="xMinYMin slice" role="img" aria-labelledby="first-title" aria-describedby="first-desc">
-        <title id="first-title">The Irie window the first time you open it: an empty list on the left with the task box ready, and the keys on the right.</title>
-        <desc id="first-desc">On the left is Irie’s sidebar. Its header reads Irie, and every count is 0. The list is empty. The line under it reads Enter: start, Ctrl+J: new line, and the task box at the bottom shows its hint, new task (Enter starts it), with the cursor in it. On the right, the slot shows Irie’s mark, a sun over two waves, then the name Irie and the keys: Ctrl+] moves between the sidebar and here. In the sidebar, Tab types a new task, the up and down arrows pick a session, Enter shows it here, and Space shows it while you stay in the sidebar.</desc>
+        <title id="first-title">The Irie window the first time you open it: an empty list on the left with the task box ready, and on the right a welcome with a first task to try, above the keys.</title>
+        <desc id="first-desc">On the left is Irie’s sidebar. Its header reads Irie, and every count is 0. The list is empty. The line under it reads Enter: start, Ctrl+J: new line, and the task box at the bottom shows its hint, new task (Enter starts it), with the cursor in it. On the right, the slot shows the name Irie, then a welcome. It reads: Welcome. Type a task in the box under the list and press Enter: an agent starts on it, in a folder of its own. To try one, type: +haiku Write a haiku about my city. Ask me which city first. Below the welcome are the keys: Ctrl+] moves between the sidebar and here. In the sidebar, Tab types a new task, the up and down arrows pick a session, Enter shows it here, and Space shows it while you stay in the sidebar.</desc>
 
         <!-- Window frame and title bar. tmux titles the window "Irie". -->
         <rect x="10.75" y="10.75" width="918.5" height="334.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
@@ -82,39 +82,44 @@
         <!-- tmux's border between the sidebar and the slot -->
         <path d="M365.5 40V345" class="t-rule"/>
 
-        <!-- The slot's placeholder: the mark, the name and the keys -->
-        <g class="t-sun" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-          <path d="M648 70v7M630 76l5 5M666 76l-5 5M620 92h8M668 92h8"/>
-        </g>
-        <circle cx="648" cy="92" r="7.5" class="t-sun"/>
-        <path d="M603 114q5-4 10 0t10 0t10 0t10 0t10 0t10 0t10 0t10 0t10 0" fill="none" class="s-stroke-sea" stroke-width="2.6" stroke-linecap="round"/>
-        <path d="M613 126q5-4 10 0t10 0t10 0t10 0t10 0t10 0t10 0" fill="none" class="s-stroke-deep-sea" stroke-width="2.6" stroke-linecap="round"/>
-        <text x="648" y="160" text-anchor="middle" font-size="16" font-weight="700" class="mono t-sun">Irie</text>
-        <g font-size="16" class="mono">
-          <text x="433" y="198" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Ctrl+]</tspan><tspan class="t-faint">]</tspan></text>
-          <text x="533" y="198" class="t-faint">move between the sidebar and here</text>
-          <text x="433" y="230" class="t-faint">In the sidebar:</text>
-          <text x="433" y="254" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Tab</tspan><tspan class="t-faint">]</tspan></text>
-          <text x="533" y="254" class="t-faint">type a new task</text>
-          <text x="433" y="276" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">↑</tspan><tspan class="t-faint">][</tspan><tspan class="t-ink" font-weight="700">↓</tspan><tspan class="t-faint">]</tspan></text>
-          <text x="533" y="276" class="t-faint">pick a session</text>
-          <text x="433" y="298" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Enter</tspan><tspan class="t-faint">]</tspan></text>
-          <text x="533" y="298" class="t-faint">show it here</text>
-          <text x="433" y="320" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Space</tspan><tspan class="t-faint">]</tspan></text>
-          <text x="533" y="320" class="t-faint">show it, stay in the sidebar</text>
+        <!-- The slot with no session at all: the name, a welcome with a first
+             task to try, then the keys. The mark is left out to make room;
+             the slot draws it only when it is 20 rows tall or more. -->
+        <g font-size="14" class="mono">
+          <text x="647" y="66" text-anchor="middle" font-weight="700" class="t-sun">Irie</text>
+          <g text-anchor="middle">
+            <text x="647" y="96" font-weight="700" class="t-ink">Welcome.</text>
+            <text x="647" y="116" class="t-faint">Type a task in the box under the list and press Enter:</text>
+            <text x="647" y="136" class="t-faint">an agent starts on it, in a folder of its own.</text>
+            <text x="647" y="166" class="t-faint">To try one, type:</text>
+            <text x="647" y="186" class="t-sun">+haiku Write a haiku about my city. Ask me which city first.</text>
+          </g>
+          <text x="455" y="216" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Ctrl+]</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="543" y="216" class="t-faint">move between the sidebar and here</text>
+          <text x="455" y="246" class="t-faint">In the sidebar:</text>
+          <text x="455" y="266" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Tab</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="543" y="266" class="t-faint">type a new task</text>
+          <text x="455" y="286" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">↑</tspan><tspan class="t-faint">][</tspan><tspan class="t-ink" font-weight="700">↓</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="543" y="286" class="t-faint">pick a session</text>
+          <text x="455" y="306" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Enter</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="543" y="306" class="t-faint">show it here</text>
+          <text x="455" y="326" class="t-faint"><tspan class="t-faint">[</tspan><tspan class="t-ink" font-weight="700">Space</tspan><tspan class="t-faint">]</tspan></text>
+          <text x="543" y="326" class="t-faint">show it, stay in the sidebar</text>
         </g>
       </svg>
     </div>
-    <figcaption>The first time you open Irie: an empty list, and the task box ready for your first task. Until you pick an agent, the right shows the keys.</figcaption>
+    <figcaption>The first time you open Irie: an empty list, and the task box ready for your first task. The right welcomes you with a task to try, above the keys.</figcaption>
   </figure>
 
   <p>This page takes one task from start to finish. You type it, read its row, look in on the agent, answer the question it asks, and see it finish.</p>
-  <p>You need Irie <a href="install.html">installed</a>, and Claude Code signed in.</p>
+  <p>You need Irie <a href="install.html">installed</a>, and Claude Code signed in. <a href="install.html#setup"><code>irie setup</code></a> checks both, and offers to fix what is missing.</p>
 
   <h2 id="open">Open Irie</h2>
   <p>In a <dfn>terminal</dfn>, the window where you type commands, run <code>irie</code>.</p>
-  <p>On the left is Irie’s list, 34 columns wide. On the right is the space where an agent’s screen appears; until you pick one, it shows the keys.</p>
+  <p>On the left is Irie’s list, 34 columns wide. On the right is the space where an agent’s screen appears; until you pick one, it shows the keys. With no tasks yet, it also welcomes you above the keys, with a task to try:</p>
+<pre><code>+haiku Write a haiku about my city. Ask me which city first.</code></pre>
   <p>The task box at the bottom of the list is ready for typing. Its hint reads <code>new task (Enter starts it)</code>.</p>
+  <p>On a Mac, you can open Irie.app from Spotlight instead. Its welcome lists what Irie needs, and its <strong>Try a First Task</strong> button puts that task in the task bar for you to send with Return. A <strong>Your first task</strong> card above the cards then follows it, step by step. When the agent asks which city, the task’s own card turns red: answer on the right, then press Return. If it asks in plain words instead, its turn ends and it’s your move. When it’s done ✓, read the haiku, then close the task with ⌘W or park it with Ⓟ; ⌘Z brings either back. The first-task card’s × hides its steps, and the task runs on.</p>
 
   <h2 id="type">Type a task</h2>
   <p>Type what you want done, in plain words, and press Enter. This task makes the agent ask you something first, so you’ll see a row turn red:</p>
@@ -122,6 +127,7 @@
   <p>Irie starts a <dfn>coding agent</dfn> on the task, Claude Code unless you’ve changed it, and a row appears. The row is named after the task’s first five words: <code>write-haiku-about-my-city</code>.</p>
   <p>The agent gets the task word for word. It works in a new, empty folder of its own, since the task names no project; <a href="tasks.html">Tasks, repos and worktrees</a> shows how to work on yours.</p>
   <p>For a new line inside a task, press Shift+Enter or Ctrl+J.</p>
+  <p>The task the welcome offers works the same way. Its <code>+haiku</code> picks a <dfn>profile</dfn>, a recipe for which agent and model to run: here, Claude’s quickest model. Its row is named from its own first words.</p>
 
   <h2 id="row">Read the row</h2>
   <p>Each row has a mark, a name and an age: how long ago its task started, such as <code>now</code>, <code>42s</code>, <code>3m</code>, <code>2h</code> or <code>5d</code>.</p>
@@ -183,6 +189,12 @@
 </main>
 
 <footer class="site-footer">
+  <nav class="family" aria-label="Irie People">
+    <a href="https://irie-people.github.io/"><strong>Irie People</strong></a>
+    <a href="https://irie-people.github.io/irie/"><span class="dot irie" aria-hidden="true"></span>Irie</a>
+    <a href="https://irie-people.github.io/riddim/"><span class="dot riddim" aria-hidden="true"></span>Riddim</a>
+    <a href="https://irie-people.github.io/steak/"><span class="dot steak" aria-hidden="true"></span>Steak</a>
+  </nav>
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>

@@ -1,0 +1,4 @@
+# What Xcode writes when it opens the package: per-user state.
+.swiftpm/
+xcuserdata/
+.build/

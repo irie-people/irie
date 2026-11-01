@@ -21,10 +21,10 @@ func writeFile(t *testing.T, body string) string {
 
 func TestDefaultsMatchDesign(t *testing.T) {
 	c := Default()
-	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater"}); c.UI != want {
+	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off"}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -120,6 +120,12 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Dog{Watch: true, Nudges: 2, Land: map[string]string{}}); !reflect.DeepEqual(c.Dog, want) {
 		t.Errorf("dog = %+v, want %+v", c.Dog, want)
 	}
+	if want := (Trod{
+		Start: "23:00", End: "07:00", Away: 15 * time.Minute, Questions: true, Nudges: 8, Retry: 15 * time.Minute,
+		Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true, Rules: TrodRules(), Guidelines: TrodGuidelines(),
+	}); !reflect.DeepEqual(c.Trod, want) {
+		t.Errorf("night = %+v, want %+v", c.Trod, want)
+	}
 	if want := (Learn{Tutor: "off", Visual: true, AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
 		t.Errorf("learn = %+v, want %+v", c.Learn, want)
 	}
@@ -150,6 +156,7 @@ red_on_done = true
 ghostty = "off"
 helper_style = "terminal"
 theme = "lilac"
+freeze_dog = "20s"
 
 [spawn]
 default_profile = "fast"
@@ -159,6 +166,8 @@ close_when_done = true
 close_delay = "5s"
 hide_tmux = false
 teammates = "panes"
+follow_up_window = "0s"
+follow_up_delay = "1s"
 
 [profiles.claude]
 harness = "claude-code"
@@ -225,6 +234,21 @@ watch = false
 nudges = 5
 land = { web = "live", "~/code/api" = "main" }
 
+[trod]
+on = true
+start = "22:30"
+end = "6:45"
+away = "30m"
+questions = false
+nudges = 3
+retry = "5m"
+within = "0s"
+max_working = 0
+max_plan_use = 75.5
+keep_awake = false
+rules = ["Never touch production."]
+guidelines = []
+
 [learn]
 tutor = "teach"
 visual = false
@@ -234,10 +258,10 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac"}); c.UI != want {
+	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes"}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	wantClaude := Profile{
@@ -301,6 +325,13 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	}
 	if want := (Dog{Watch: false, Nudges: 5, Land: map[string]string{"web": "live", "~/code/api": "main"}}); !reflect.DeepEqual(c.Dog, want) {
 		t.Errorf("dog = %+v, want %+v", c.Dog, want)
+	}
+	// Your own rules replace the built-in ones; an empty list has none.
+	if want := (Trod{
+		On: true, Start: "22:30", End: "6:45", Away: 30 * time.Minute, Nudges: 3, Retry: 5 * time.Minute, MaxPlanUse: 75.5,
+		Rules: []string{"Never touch production."}, Guidelines: []string{},
+	}); !reflect.DeepEqual(c.Trod, want) {
+		t.Errorf("night = %+v, want %+v", c.Trod, want)
 	}
 	if want := (Learn{Tutor: "teach", Visual: false, AgentTips: false, Links: map[string]string{"Team handbook": "https://example.com/handbook"}}); !reflect.DeepEqual(c.Learn, want) {
 		t.Errorf("learn = %+v, want %+v", c.Learn, want)
@@ -436,8 +467,12 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[ui]\nsidebar_width = 2\n", "sidebar_width"},
 		{"[ui]\nfocus_key = \"C-] x\"\n", "focus_key"},
 		{"[ui]\nmax_sub_rows = -1\n", "max_sub_rows"},
+		{"[ui]\nfreeze_dog = \"1s\"\n", "ui.freeze_dog = 1s: must be 0s, for never, or at least 3s"},
+		{"[ui]\nfreeze_dog = \"-10s\"\n", "ui.freeze_dog"},
 		{"[spawn]\nready_timeout = \"-1s\"\n", "ready_timeout"},
 		{"[spawn]\nclose_delay = \"-1s\"\n", "close_delay"},
+		{"[spawn]\nfollow_up_window = \"-1m\"\n", "spawn.follow_up_window"},
+		{"[spawn]\nfollow_up_delay = \"-1s\"\n", "spawn.follow_up_delay"},
 		{"[profiles.claude]\nharness = \"bogus\"\n", "harness"},
 		{"[tmux]\nsocket = \"a/b\"\n", "socket"},
 		{"[tmux]\npath = \"tmux\"\n", "path"},
@@ -445,6 +480,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[journal]\nkeep_days = 0\n", "keep_days"},
 		{"[journal]\ntool_input = \"everything\"\n", "tool_input"},
 		{"[hold]\nmax = \"0s\"\n", "hold.max"},
+		{"[skills]\ndisabled = [\"Present\"]\n", "skills.disabled"},
+		{"[skills]\ndisabled = [\"a--b\"]\n", "skills.disabled"},
 		{"[repos]\nroots = [\"code\"]\n", "repos.roots"},
 		{"[repos.aliases]\nweb = \"code/website\"\n", "repos.aliases.web"},
 		{"[repos.aliases]\n\"we b\" = \"/home/alice/code/website\"\n", "repos.aliases"},
@@ -499,6 +536,20 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[dog]\nland = { irie = \"a..b\" }\n", "dog.land.irie"},
 		{"[dog]\nland = { irie = \"live now\" }\n", "dog.land.irie"},
 		{"[dog]\nland = { \" \" = \"live\" }\n", "dog.land"},
+		{"[trod]\nstart = \"11pm\"\n", "trod.start"},
+		{"[trod]\nend = \"24:00\"\n", "trod.end"},
+		{"[trod]\nend = \"7:5\"\n", "trod.end"},
+		{"[trod]\naway = \"-1m\"\n", "trod.away"},
+		{"[trod]\nnudges = -1\n", "trod.nudges"},
+		{"[trod]\nretry = \"0s\"\n", "trod.retry"},
+		{"[trod]\nwithin = \"-1h\"\n", "trod.within"},
+		{"[trod]\nmax_working = -2\n", "trod.max_working"},
+		{"[trod]\nmax_plan_use = 0\n", "trod.max_plan_use"},
+		{"[trod]\nmax_plan_use = 101\n", "trod.max_plan_use"},
+		{"[trod]\nrules = [\"Be kind.\", \"  \"]\n", "trod.rules[1]: is empty"},
+		{"[trod]\nguidelines = [\"one\\ntwo\"]\n", "trod.guidelines[0]: must be one line"},
+		{"[trod]\nrules = [\"" + strings.Repeat("x", 401) + "\"]\n", "trod.rules[0]: must be at most 400"},
+		{"[trod]\nrules = [" + strings.Repeat("\"x\", ", 21) + "]\n", "trod.rules: at most 20"},
 		{"[learn]\ntutor = \"socratic\"\n", "learn.tutor"},
 		{"[profiles.teach]\nmodel = \"opus\"\n", "profiles.teach"},
 		{"[profiles.explain]\nmodel = \"opus\"\n", "profiles.explain"},
@@ -513,6 +564,51 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		if !strings.Contains(err.Error(), c.mention) {
 			t.Errorf("%q: error %q does not mention %q", c.body, err, c.mention)
 		}
+	}
+}
+
+// TestNightShiftHours: the shift that a time falls in, or the last one
+// before it, overnight, by day and around the clock.
+func TestNightShiftHours(t *testing.T) {
+	loc := time.FixedZone("EDT", -4*3600)
+	at := func(day, h, m int) time.Time { return time.Date(2026, 10, day, h, m, 0, 0, loc) }
+	for _, c := range []struct {
+		start, end string
+		t          time.Time
+		from, to   time.Time
+		in         bool
+	}{
+		// Overnight: in it after the start and before the end, either side of midnight.
+		{"23:00", "07:00", at(31, 23, 30), at(31, 23, 0), at(32, 7, 0), true},
+		{"23:00", "07:00", at(31, 2, 0), at(30, 23, 0), at(31, 7, 0), true},
+		{"23:00", "07:00", at(31, 23, 0), at(31, 23, 0), at(32, 7, 0), true},
+		// Out of it by day, the last shift is last night's; its end is not in it.
+		{"23:00", "07:00", at(31, 12, 0), at(30, 23, 0), at(31, 7, 0), false},
+		{"23:00", "07:00", at(31, 7, 0), at(30, 23, 0), at(31, 7, 0), false},
+		// A day shift.
+		{"9:00", "17:30", at(31, 12, 0), at(31, 9, 0), at(31, 17, 30), true},
+		{"9:00", "17:30", at(31, 8, 59), at(30, 9, 0), at(30, 17, 30), false},
+		{"9:00", "17:30", at(31, 20, 0), at(31, 9, 0), at(31, 17, 30), false},
+		// Around the clock, a day at a time from its start.
+		{"23:00", "23:00", at(31, 12, 0), at(30, 23, 0), at(31, 23, 0), true},
+		{"0:00", "00:00", at(31, 0, 0), at(31, 0, 0), at(32, 0, 0), true},
+	} {
+		n := Trod{Start: c.start, End: c.end}
+		from, to, in := n.Shift(c.t)
+		if !from.Equal(c.from) || !to.Equal(c.to) || in != c.in {
+			t.Errorf("%s–%s at %s: %s–%s %v, want %s–%s %v", c.start, c.end, c.t.Format("Jan 2 15:04"),
+				from.Format("Jan 2 15:04"), to.Format("Jan 2 15:04"), in, c.from.Format("Jan 2 15:04"), c.to.Format("Jan 2 15:04"), c.in)
+		}
+	}
+	// A change of clocks keeps the shift's hours: the night of 1 November
+	// 2026, when New York's clocks go back, is nine hours long.
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip(err)
+	}
+	from, to, in := Trod{Start: "23:00", End: "07:00"}.Shift(time.Date(2026, 11, 1, 3, 0, 0, 0, ny))
+	if !in || from.Hour() != 23 || to.Hour() != 7 || to.Sub(from) != 9*time.Hour {
+		t.Errorf("across the change of clocks: %s–%s %v", from, to, in)
 	}
 }
 
@@ -547,5 +643,70 @@ func TestPrintRoundTrips(t *testing.T) {
 	}
 	if !reflect.DeepEqual(c, Default()) {
 		t.Errorf("round trip = %+v, want defaults", c)
+	}
+}
+
+func TestFreezeDogIsADurationAndZeroIsNever(t *testing.T) {
+	for body, want := range map[string]time.Duration{
+		"":                            10 * time.Second,
+		"[ui]\nfreeze_dog = \"0s\"\n": 0,
+		"[ui]\nfreeze_dog = \"3s\"\n": 3 * time.Second,
+		"[ui]\nfreeze_dog = \"1m\"\n": time.Minute,
+	} {
+		c, err := Load(writeFile(t, body))
+		if err != nil {
+			t.Errorf("%q: %v", body, err)
+			continue
+		}
+		if c.UI.FreezeDog != want {
+			t.Errorf("%q: freeze_dog = %v, want %v", body, c.UI.FreezeDog, want)
+		}
+	}
+	if got := Tree(Default())["ui"].(map[string]any)["freeze_dog"]; got != "10s" {
+		t.Errorf("the config op shows freeze_dog as %v, want 10s", got)
+	}
+}
+
+func TestSkillsAreOnUntilTurnedOff(t *testing.T) {
+	d := Default()
+	if !d.Skills.Enabled || len(d.Skills.Disabled) != 0 {
+		t.Errorf("default skills = %+v, want on with none left out", d.Skills)
+	}
+	for name, p := range d.Profiles {
+		if !p.TakesSkills() {
+			t.Errorf("profiles.%s takes no skills by default", name)
+		}
+	}
+	c, err := Load(writeFile(t, `
+[skills]
+disabled = ["present"]
+
+[profiles.local]
+skills = false
+
+[profiles.mine]
+command = "claude"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Skills.Enabled || !reflect.DeepEqual(c.Skills.Disabled, []string{"present"}) {
+		t.Errorf("skills = %+v", c.Skills)
+	}
+	if c.Profiles["local"].TakesSkills() {
+		t.Error("profiles.local takes skills after skills = false")
+	}
+	if c.Profiles["local"].Local == nil {
+		t.Error("profiles.local lost its local table")
+	}
+	if !c.Profiles["mine"].TakesSkills() || !c.Profiles["claude"].TakesSkills() {
+		t.Error("a profile that says nothing about skills takes none")
+	}
+	off, err := Load(writeFile(t, "[skills]\nenabled = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.Skills.Enabled || off.Skills.Disabled == nil {
+		t.Errorf("skills = %+v, want off with an empty list", off.Skills)
 	}
 }

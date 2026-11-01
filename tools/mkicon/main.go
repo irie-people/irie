@@ -5,6 +5,14 @@
 //	go run ./tools/mkicon mac/.build/Irie.iconset
 //	iconutil -c icns -o Irie.icns mac/.build/Irie.iconset
 //
+// With -phone it writes the phone app's icons instead: the same picture as
+// full squares, which iOS and the web app's manifest round themselves,
+// into the gateway's files (docs/PHONE.md); with -ios, the native iPhone
+// app's icon, one 1024 px square in an asset catalog's icon set:
+//
+//	go run ./tools/mkicon -phone internal/remote/web
+//	go run ./tools/mkicon -ios ios/Irie.swiftpm/Sources/Assets.xcassets/AppIcon.appiconset
+//
 // It needs the standard library only and draws no text. Each size is drawn
 // from the shapes, not shrunk from the largest, so the small ones stay sharp,
 // and the same shapes give the same bytes on every run.
@@ -40,15 +48,107 @@ var files = []struct {
 	{"icon_512x512@2x.png", 1024},
 }
 
+// phoneFiles are the phone app's icons: apple-touch-icon's 180 px and the
+// manifest's two.
+var phoneFiles = []struct {
+	name string
+	px   int
+}{
+	{"icon-180.png", 180},
+	{"icon-192.png", 192},
+	{"icon-512.png", 512},
+}
+
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: mkicon DIR.iconset")
+	args := os.Args[1:]
+	flagged := len(args) == 2 && (args[0] == "-phone" || args[0] == "-ios")
+	if len(args) != 1 && !flagged {
+		fmt.Fprintln(os.Stderr, "usage: mkicon DIR.iconset | mkicon -phone DIR | mkicon -ios DIR.appiconset")
 		os.Exit(2)
 	}
-	if err := write(os.Args[1]); err != nil {
+	var err error
+	switch {
+	case flagged && args[0] == "-phone":
+		err = writePhone(args[1])
+	case flagged:
+		err = writeIOS(args[1])
+	default:
+		err = write(args[0])
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "mkicon:", err)
 		os.Exit(1)
 	}
+}
+
+// writePhone writes the phone app's icons into dir.
+func writePhone(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, f := range phoneFiles {
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, drawFull(f.px)); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dir, f.name), buf.Bytes(), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// iosContents is the icon set's Contents.json: one universal 1024 px
+// image, which Xcode 14 and later scale to every size iOS needs.
+const iosContents = `{
+  "images" : [
+    {
+      "filename" : "icon-1024.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    }
+  ],
+  "info" : {
+    "author" : "mkicon",
+    "version" : 1
+  }
+}
+`
+
+// writeIOS writes the native iPhone app's icon set into dir.
+func writeIOS(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, drawFull(1024)); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "icon-1024.png"), buf.Bytes(), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "Contents.json"), []byte(iosContents), 0o644)
+}
+
+// drawFull renders the inside of the icon's square, px pixels across, with
+// no corners or shadow: the square fills the picture, and whoever shows it
+// rounds it. It has no transparency, which iOS would show as black.
+func drawFull(px int) *image.NRGBA {
+	m := newMark(px)
+	m.s = float64(px) / (2 * half)
+	img := image.NewNRGBA(image.Rect(0, 0, px, px))
+	var wg sync.WaitGroup
+	for j := 0; j < px; j++ {
+		wg.Go(func() {
+			for i := 0; i < px; i++ {
+				x, y := mid-half+(float64(i)+0.5)/m.s, mid-half+(float64(j)+0.5)/m.s
+				img.SetNRGBA(i, j, m.inside(x, y))
+			}
+		})
+	}
+	wg.Wait()
+	return img
 }
 
 // write draws each size once and writes the iconset's files into dir.
@@ -182,6 +282,22 @@ func (m *mark) at(x, y float64) color.NRGBA {
 		return color.NRGBA{A: channel(alpha)}
 	}
 
+	c := m.ground(x, y)
+
+	// The shadow is black, so under the body's soft edge it only darkens.
+	k := body / alpha
+	return color.NRGBA{channel(c.r * k), channel(c.g * k), channel(c.b * k), channel(alpha)}
+}
+
+// inside is the colour at (x, y) inside the square, opaque.
+func (m *mark) inside(x, y float64) color.NRGBA {
+	c := m.ground(x, y)
+	return color.NRGBA{channel(c.r), channel(c.g), channel(c.b), 255}
+}
+
+// ground is the square's colour at (x, y) under nothing but the light: the
+// green ground, the glow, the sun and its rays, and the waves.
+func (m *mark) ground(x, y float64) rgb {
 	c := mix(groundTop, groundBottom, (y-(mid-half))/(2*half))
 	r2 := (x-mid)*(x-mid) + (y-m.horizon)*(y-m.horizon)
 	c = mix(c, glow, glowAlpha*math.Exp(-r2/(2*glowBlur*glowBlur)))
@@ -194,10 +310,7 @@ func (m *mark) at(x, y float64) color.NRGBA {
 	for k, l := range m.waves {
 		c = mix(c, waveColors[k], m.cover(l.dist(x, y, m.waveW+2/m.s)-m.waveW))
 	}
-
-	// The shadow is black, so under the body's soft edge it only darkens.
-	k := body / alpha
-	return color.NRGBA{channel(c.r * k), channel(c.g * k), channel(c.b * k), channel(alpha)}
+	return c
 }
 
 // cover is how much of a pixel a shape covers, from the signed distance d

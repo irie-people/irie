@@ -5,7 +5,8 @@
 //	reply:   {"id":1,"ok":true,"result":{…}} or {"id":1,"ok":false,"error":{"code":"…","msg":"…"}}
 //
 // After a subscribe reply the connection carries frames until the client
-// closes it.
+// closes it; what the client sends then, such as a watched window's pongs,
+// goes to the handler when it hears (Hearer).
 package ipc
 
 import (
@@ -116,6 +117,15 @@ type Handler interface {
 	Subscribe(args json.RawMessage) (frames <-chan Frame, cancel func(), err error)
 }
 
+// A Hearer is a Handler that hears what a client sends on its stream after
+// subscribing: a watched window's pongs (DESIGN §2.4). Without one, the
+// stream drops what the client sends.
+type Hearer interface {
+	// Hear gets each line the client of frames sends, in order, on the
+	// stream's own goroutine.
+	Hear(frames <-chan Frame, line []byte)
+}
+
 // Serve accepts connections on l until l is closed.
 func Serve(l net.Listener, h Handler) error {
 	for {
@@ -151,8 +161,12 @@ func serveConn(c net.Conn, h Handler) {
 				w.write(Reply{ID: req.ID, Error: asError(err)})
 				continue
 			}
+			var hear func([]byte)
+			if hh, ok := h.(Hearer); ok {
+				hear = func(line []byte) { hh.Hear(frames, line) }
+			}
 			if w.write(Reply{ID: req.ID, OK: true, Result: json.RawMessage(`{}`)}) == nil {
-				stream(r, w, frames)
+				stream(r, w, frames, hear)
 			}
 			cancel()
 			return
@@ -176,11 +190,23 @@ func serveConn(c net.Conn, h Handler) {
 	}
 }
 
-func stream(r *bufio.Reader, w *lineWriter, frames <-chan Frame) {
+// stream sends frames until the client goes, and gives hear, when set,
+// each line the client sends meanwhile.
+func stream(r *bufio.Reader, w *lineWriter, frames <-chan Frame, hear func([]byte)) {
 	gone := make(chan struct{})
 	go func() {
-		io.Copy(io.Discard, r)
-		close(gone)
+		defer close(gone)
+		if hear == nil {
+			io.Copy(io.Discard, r)
+			return
+		}
+		for {
+			line, err := readLine(r)
+			if err != nil {
+				return
+			}
+			hear(line)
+		}
 	}()
 	for {
 		select {
@@ -265,6 +291,12 @@ func (c *Client) Call(op string, args, result any) error {
 		}
 		return json.Unmarshal(rep.Result, result)
 	}
+}
+
+// Send writes v to the core as one line outside a call, such as a Pong on
+// a watch subscription.
+func (c *Client) Send(v any) error {
+	return c.w.write(v)
 }
 
 // Subscribe asks for a stream of frames. The connection then carries only

@@ -74,7 +74,7 @@ func TestCloseAndReopenCommands(t *testing.T) {
 	m = send(m, keyMsg("tab"))
 	m = typeText(m, ":reopen")
 	m = send(m, keyMsg("enter"))
-	if !slices.Equal(b.reopens, []string{""}) || !strings.Contains(m.status, "reopened task-001") {
+	if !slices.Equal(b.reopens, []string{""}) || !strings.Contains(m.status, "Reopened task-001") {
 		t.Fatalf(":reopen asked for %q, status %q", b.reopens, m.status)
 	}
 	if s, ok := m.selSession(); !ok || s.ID != "s000000000001" {

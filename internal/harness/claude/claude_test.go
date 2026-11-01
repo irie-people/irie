@@ -231,6 +231,34 @@ func TestNameNeedsTheFlag(t *testing.T) {
 	}
 }
 
+func TestPluginDirGoesOnlyToACLIThatLoadsIt(t *testing.T) {
+	const skills = "/home/alice/.local/share/irie/skills/plugins/0123456789abcdef"
+	s := spawnOf("x")
+	s.PluginDir = skills
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--name": true, "--plugin-dir": true}}
+	argv, _, _ := launchSpawn(t, defaultProfile(), s)
+	i := slices.Index(argv, "--plugin-dir")
+	if i < 0 || argv[i+1] != skills || argv[i-2] != "--settings" {
+		t.Errorf("argv = %q, want --plugin-dir %s after the settings", argv, skills)
+	}
+	resumed, _, _, err := Harness{}.Resume(defaultProfile(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(resumed, skills) {
+		t.Errorf("resume argv = %q, want the same skills", resumed)
+	}
+	s.Probe = current // the flag is not in its probe
+	if argv, _, _ := launchSpawn(t, defaultProfile(), s); slices.Contains(argv, "--plugin-dir") {
+		t.Errorf("argv = %q: --plugin-dir to a CLI that did not load a plugin", argv)
+	}
+	s.Probe.Flags = map[string]bool{"--plugin-dir": true}
+	s.PluginDir = ""
+	if argv, _, _ := launchSpawn(t, defaultProfile(), s); slices.Contains(argv, "--plugin-dir") {
+		t.Errorf("argv = %q: --plugin-dir with no skills", argv)
+	}
+}
+
 func TestSettingsArePassedWithTheSessionsFile(t *testing.T) {
 	argv, _, files := launch(t, defaultProfile(), "x")
 	i := slices.Index(argv, "--settings")

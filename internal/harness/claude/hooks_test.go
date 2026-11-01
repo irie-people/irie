@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -254,7 +255,11 @@ const helpWithName = "  -n, --name <name>   Set a display name for this session"
 func TestProbeReadsTheVersionAndFlags(t *testing.T) {
 	path, _ := fakeCLI(t, "2.1.310 (Claude Code)", helpWithName)
 	p := Harness{}.Probe(config.Profile{Command: path, Args: []string{"--verbose"}}, os.Environ())
-	want := harness.Probe{Version: "2.1.310", Flags: map[string]bool{"--name": true}}
+	want := harness.Probe{
+		Version:  "2.1.310",
+		Flags:    map[string]bool{"--name": true},
+		Warnings: []string{"--plugin-dir left out: `" + path + " --help` does not list it"},
+	}
 	if !reflect.DeepEqual(p, want) {
 		t.Errorf("probe = %+v, want %+v", p, want)
 	}
@@ -265,13 +270,81 @@ func TestProbeReadsTheVersionAndFlags(t *testing.T) {
 func TestProbeFindsTheAppendFlagQuietly(t *testing.T) {
 	path, _ := fakeCLI(t, "2.1.316 (Claude Code)", helpWithName+"\n  --append-system-prompt <prompt>   Append a system prompt")
 	p := Harness{}.Probe(config.Profile{Command: path}, os.Environ())
-	if !p.Flags["--append-system-prompt"] || !p.Flags["--name"] || len(p.Warnings) != 0 {
+	if !p.Flags["--append-system-prompt"] || !p.Flags["--name"] || strings.Contains(strings.Join(p.Warnings, "\n"), "append-system-prompt") {
 		t.Errorf("probe = %+v", p)
 	}
 	path, _ = fakeCLI(t, "2.1.316 (Claude Code)", helpWithName)
 	p = Harness{}.Probe(config.Profile{Command: path}, os.Environ())
-	if p.Flags["--append-system-prompt"] || len(p.Warnings) != 0 {
+	if p.Flags["--append-system-prompt"] || strings.Contains(strings.Join(p.Warnings, "\n"), "append-system-prompt") {
 		t.Errorf("probe without the flag = %+v", p)
+	}
+}
+
+// fakePluginCLI is a CLI whose --help lists --plugin-dir and whose
+// `plugin list --json` prints list and exits with code, saying stderr.
+func fakePluginCLI(t *testing.T, list string, code int, stderr string) string {
+	t.Helper()
+	old := pluginTimeout
+	pluginTimeout = time.Minute
+	t.Cleanup(func() { pluginTimeout = old })
+	path, _ := fakeCLI(t, "2.1.316 (Claude Code)", helpWithName+"\n  --plugin-dir <path>   Load a plugin")
+	dir := filepath.Dir(path)
+	if err := os.WriteFile(filepath.Join(dir, "list.json"), []byte(list), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nfor a; do case $a in\n" +
+		"--version) echo '2.1.316 (Claude Code)'; exit 0;;\n" +
+		"--help) printf '%s\\n' '" + helpWithName + "' '  --plugin-dir <path>   Load a plugin'; exit 0;;\n" +
+		"list) cat '" + filepath.Join(dir, "list.json") + "'; echo '" + stderr + "' >&2; exit " + strconv.Itoa(code) + ";;\n" +
+		"esac; done\nsleep 30\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestProbeChecksThatAPluginLoads(t *testing.T) {
+	loads := `[{"id": "swift-lsp@claude-plugins-official", "scope": "user", "enabled": true},
+	           {"id": "irie@inline", "scope": "session", "enabled": true}]`
+	for _, c := range []struct {
+		name, list, stderr string
+		code               int
+		want               string // in the warnings; "" when the flag stays
+	}{
+		{"loads", loads, "", 0, ""},
+		{"refused", "", "Error: --plugin-dir is disabled by managed settings", 1, "refused --plugin-dir: Error: --plugin-dir is disabled"},
+		{"a plugin of yours named irie", `[{"id": "irie@my-market", "scope": "user", "enabled": true}, {"id": "irie@inline", "enabled": true}]`, "", 0, "a plugin of your own is named irie (irie@my-market)"},
+		{"not loaded", `[{"id": "swift-lsp@claude-plugins-official", "enabled": true}]`, "", 0, "did not load a plugin"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			path := fakePluginCLI(t, c.list, c.code, c.stderr)
+			p := Harness{}.Probe(config.Profile{Command: path}, os.Environ())
+			joined := strings.Join(p.Warnings, "\n")
+			if c.want == "" {
+				if !p.Flags["--plugin-dir"] || joined != "" {
+					t.Errorf("probe = %+v, want --plugin-dir and no warnings", p)
+				}
+				return
+			}
+			if p.Flags["--plugin-dir"] || !strings.Contains(joined, "Irie's skills left out: ") || !strings.Contains(joined, c.want) {
+				t.Errorf("probe = %+v, want no --plugin-dir and a warning with %q", p, c.want)
+			}
+		})
+	}
+}
+
+func TestPluginListSaysWhy(t *testing.T) {
+	for _, c := range []struct{ out, want string }{
+		{`[{"id": "irie@inline", "scope": "session", "enabled": true}]`, ""},
+		{`[{"id": "irie@inline", "enabled": false}]`, "Claude Code did not load a plugin passed with --plugin-dir"},
+		{`[]`, "Claude Code did not load a plugin passed with --plugin-dir"},
+		{`[{"id": "irie-tools@market", "enabled": true}, {"id": "irie@inline", "enabled": true}]`, ""},
+		{`[{"id": "irie@inline", "enabled": true}, {"id": "irie@skills-dir", "enabled": true}]`, "a plugin of your own is named irie (irie@skills-dir)"},
+		{`Warning: something`, "Claude Code's list of plugins could not be read"},
+	} {
+		if got := pluginList(c.out); got != c.want {
+			t.Errorf("pluginList(%s) = %q, want %q", c.out, got, c.want)
+		}
 	}
 }
 

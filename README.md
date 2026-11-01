@@ -24,15 +24,25 @@ One Go program, `irie`, that runs on your computer, and an optional Mac app. It 
 
 It has no server, account or telemetry, and sends nothing over the network of its own: your agents talk to their own providers, as they would without it. [What Irie is](https://irie-people.github.io/irie/what-irie-is.html) lists every part, file, connection and word it says to an agent, and how to check each one yourself.
 
+## Install
+
+On a Mac or Linux, paste this into a terminal:
+
+```sh
+curl -fsSL https://irie-people.github.io/irie/install.sh | sh
+```
+
+It downloads the latest release for your computer, checks its SHA-256, and installs `irie`, and on a Mac Irie.app too; a release with no download for your computer is built from source instead, which needs Go. Then `irie setup` checks what else Irie needs, tmux, Claude Code and a sign-in, and offers to install each part that is missing, asking first. Open Irie from Spotlight, or type `irie`: its welcome offers a first task to try. [Install](https://irie-people.github.io/irie/install.html) says what each step does, and how to build Irie from source.
+
 ## Status
 
-Early. The first release, 0.1.0, has no download yet, but you can build Irie from source: see [Install](https://irie-people.github.io/irie/install.html).
+Early: see the [roadmap](https://irie-people.github.io/irie/roadmap.html).
 
 ## Docs
 
 The website has the docs, from installing Irie to a merged change. Its pages are in [`site/`](site/), and open from disk too.
 
-- [Install](https://irie-people.github.io/irie/install.html): build Irie from source, and what it does on its first run
+- [Install](https://irie-people.github.io/irie/install.html): one line, what `irie setup` checks, and what Irie does on its first run
 - [Your first session](https://irie-people.github.io/irie/first-session.html): type a task, read its row, look in, and answer an agent that needs you
 - [Tasks, repos and worktrees](https://irie-people.github.io/irie/tasks.html): `@repo`, `@repo!`, `+profile`, Tab completion, pastes, and what a worktree gets
 - [Profiles and models](https://irie-people.github.io/irie/profiles.html): the config file, every setting with its default, and profiles for local models
@@ -49,7 +59,7 @@ The website has the docs, from installing Irie to a merged change. Its pages are
 
 ## Help
 
-[SUPPORT.md](SUPPORT.md) says where to ask, and [SECURITY.md](SECURITY.md) how to report a vulnerability privately. Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+[SUPPORT.md](SUPPORT.md) says where to ask, and [SECURITY.md](SECURITY.md) how to report a vulnerability privately. Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md), and [GOVERNANCE.md](GOVERNANCE.md) says how decisions are made.
 
 ## License
 

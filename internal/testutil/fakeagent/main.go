@@ -8,15 +8,21 @@
 //
 //	prompt            UserPromptSubmit with the task
 //	tool:<name>       PreToolUse, then PostToolUse; AskUserQuestion and
-//	                  ExitPlanMode wait for a line of input in between
+//	                  ExitPlanMode wait for a line of input in between. A
+//	                  PreToolUse hook that denies the call stops it there,
+//	                  as in Claude Code: no input, no PostToolUse, and the
+//	                  log records the reason the agent was given
 //	ask               tool:AskUserQuestion
 //	permission        PreToolUse, PermissionRequest and a permission_prompt
-//	                  Notification for Bash, a line of input, then PostToolUse
+//	                  Notification for Bash, a numbered menu as Claude Code
+//	                  draws one, a line of input, then PostToolUse
 //	stop              Stop; when a Stop hook answers with additionalContext
 //	                  or a block, the turn goes on, as in Claude Code, and
 //	                  stops again with stop_hook_active, up to 8 times
 //	stop:bg           Stop with a shell task running in the background
 //	stop:ask          Stop whose last message asks the user a question
+//	stop:asks         the same, asking again each time a Stop hook sends
+//	                  the turn on
 //	write:<file>      write a file in the agent's folder, as an edit does
 //	commit            git add -A and git commit in the agent's folder
 //	stopfail:<error>  StopFailure
@@ -27,19 +33,25 @@
 //	status:<cost>     run the status line command of --settings with
 //	                  Claude-shaped JSON, as the status line docs describe:
 //	                  that cost in dollars, 12% of the context, and 33% of
-//	                  the plan's five hours
+//	                  the plan's five hours, with IRIE_FAKE_WEEK percent of
+//	                  its week when that is set
 //	kids              start two children that run for an hour: one in the
 //	                  agent's process group, and a shell in a group of its
 //	                  own with a child of its own, as a tool's background
 //	                  job may be; the log records their pids
 //
 // Any other task runs the script "prompt". After the script the agent idles:
-// each line typed is a prompt and a turn, and EOF or a hangup ends the
-// session with SessionEnd. With --resume and no task it starts from a
+// each line typed is a prompt and a turn, and EOF, Ctrl-D at the start of a
+// line or a hangup ends the session with SessionEnd. As Claude Code runs
+// its terminal raw, the agent turns the terminal's line editing off, so a
+// line of any length reaches it whole: a terminal that edits lines cuts one
+// longer than MAX_CANON, 1024 bytes on macOS. With --resume and no task it starts from a
 // resume and idles at once.
 //
 // `fakeagent agents --json` lists no sessions, as `claude agents --json`
-// does on a machine with none outside Irie. The log's first line records
+// does on a machine with none outside Irie. `fakeagent auth status --json`
+// says it is signed in, as Claude Code does, unless IRIE_FAKE_SIGNED_OUT
+// is set. The log's first line records
 // the agent's argv, pid and the names, not the values, of its environment;
 // each SIGHUP, SIGTERM or SIGINT it gets is logged too.
 //
@@ -51,6 +63,8 @@
 //	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
 //	                       agent that hangs
 //	IRIE_FAKE_PACE         a pause before each step, such as 300ms
+//	IRIE_FAKE_WEEK         how much of the plan's week the status line says
+//	                       is used, in percent, resetting in three days
 //	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
 //	                       the --settings file
 package main
@@ -182,6 +196,14 @@ Options:
 `
 
 func run(args []string) int {
+	if len(args) > 1 && args[0] == "auth" && args[1] == "status" {
+		if os.Getenv("IRIE_FAKE_SIGNED_OUT") != "" {
+			fmt.Println(`{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}`)
+			return 1
+		}
+		fmt.Println(`{"loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty", "email": "alice@example.com"}`)
+		return 0
+	}
 	if len(args) > 0 && args[0] == "agents" {
 		if !slices.Contains(args[1:], "--json") {
 			fmt.Fprintln(os.Stderr, "fakeagent: agents needs --json")
@@ -407,6 +429,7 @@ func (a *agent) record(v map[string]any) {
 }
 
 func (a *agent) run() int {
+	rawLines()
 	env := map[string]string{}
 	for _, k := range []string{"IRIE_SESSION", "IRIE_SOCKET", "IRIE_BIN", "TMUX", "TMUX_PANE"} {
 		if v, ok := os.LookupEnv(k); ok {
@@ -458,8 +481,8 @@ func (a *agent) run() int {
 	}
 	fmt.Println("idle")
 	for {
-		line, err := a.in.ReadString('\n')
-		if err != nil {
+		line, ok := a.line()
+		if !ok {
 			a.end("other")
 			return 0
 		}
@@ -571,7 +594,7 @@ func (a *agent) status(cost string) {
 		"version":        a.version,
 		"cost":           map[string]any{"total_cost_usd": usd, "total_duration_ms": 1000, "total_api_duration_ms": 500},
 		"context_window": map[string]any{"total_input_tokens": 24000, "total_output_tokens": 800, "context_window_size": 200000, "used_percentage": 12, "remaining_percentage": 88},
-		"rate_limits":    map[string]any{"five_hour": map[string]any{"used_percentage": 33, "resets_at": time.Now().Add(2 * time.Hour).Unix()}},
+		"rate_limits":    a.rateLimits(),
 	})
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Stdin, cmd.Dir = bytes.NewReader(in), a.cwd
@@ -585,6 +608,16 @@ func (a *agent) status(cost string) {
 		}
 	}
 	a.record(map[string]any{"t": "status", "stdout": string(out), "exit": exit})
+}
+
+// rateLimits is the plan's use the status line reports: 33% of its five
+// hours, and IRIE_FAKE_WEEK percent of its week when that is set.
+func (a *agent) rateLimits() map[string]any {
+	limits := map[string]any{"five_hour": map[string]any{"used_percentage": 33, "resets_at": time.Now().Add(2 * time.Hour).Unix()}}
+	if week, err := strconv.ParseFloat(os.Getenv("IRIE_FAKE_WEEK"), 64); err == nil {
+		limits["seven_day"] = map[string]any{"used_percentage": week, "resets_at": time.Now().Add(72 * time.Hour).Unix()}
+	}
+	return limits
 }
 
 // loadStatusLine returns the status line command of a --settings value.
@@ -621,7 +654,7 @@ func (a *agent) stop(how string) {
 	case "bg":
 		msg = "The install runs in the background; I'll report when it lands."
 		tasks = []any{map[string]any{"id": "task-001", "type": "shell", "status": "running", "description": "Install the build", "command": "tools/live.sh"}}
-	case "ask":
+	case "ask", "asks":
 		msg = "It works. Shall I land it?"
 	case "turn":
 		msg = "Learn by doing\n\nThe notes file has its headings.\n\n**Your Task**: In notes.md, write the summary line under TODO(human).\n\nWeigh how short it can be and still be clear."
@@ -634,8 +667,27 @@ func (a *agent) stop(how string) {
 		}
 		a.record(map[string]any{"t": "continued", "context": more})
 		fmt.Println("↻ " + strings.SplitN(more, "\n", 2)[0])
-		msg = "I stopped on purpose."
+		if how != "asks" {
+			msg = "I stopped on purpose."
+		}
 	}
+}
+
+// denied is the reason a PreToolUse hook gave for denying the call, or ""
+// when none denied it.
+func denied(outputs []string) string {
+	for _, o := range outputs {
+		var r struct {
+			Specific struct {
+				Decision string `json:"permissionDecision"`
+				Reason   string `json:"permissionDecisionReason"`
+			} `json:"hookSpecificOutput"`
+		}
+		if json.Unmarshal([]byte(o), &r) == nil && r.Specific.Decision == "deny" {
+			return r.Specific.Reason
+		}
+	}
+	return ""
 }
 
 // goesOn is why the hooks' answer to a Stop sends the turn on, or "".
@@ -696,14 +748,45 @@ func (a *agent) toolInput(name string) map[string]any {
 
 // readLine waits for a line typed into the agent's terminal.
 func (a *agent) readLine() string {
-	line, _ := a.in.ReadString('\n')
+	line, _ := a.line()
 	return strings.TrimSpace(line)
+}
+
+// line reads one line typed into the terminal, up to Enter; it is false
+// at EOF, or at Ctrl-D at the start of a line, which the terminal no
+// longer turns into EOF (rawLines).
+func (a *agent) line() (string, bool) {
+	var b []byte
+	for {
+		c, err := a.in.ReadByte()
+		switch {
+		case err != nil, c == 4 && len(b) == 0:
+			return string(b), false
+		case c == '\n':
+			return string(b), true
+		}
+		b = append(b, c)
+	}
+}
+
+// rawLines turns off the line editing of the terminal the agent reads,
+// keeping its echo, its signal keys and Enter's newline; it does nothing
+// when stdin is not a terminal.
+func rawLines() {
+	cmd := exec.Command("stty", "-icanon", "min", "1", "time", "0")
+	cmd.Stdin = os.Stdin
+	cmd.Run()
 }
 
 func (a *agent) tool(name string, sub *subagent) {
 	id, input := a.toolID(), a.toolInput(name)
 	fmt.Println("● " + name)
-	a.fire("PreToolUse", name, sub.fields(map[string]any{"tool_name": name, "tool_input": input, "tool_use_id": id}))
+	pre := a.fire("PreToolUse", name, sub.fields(map[string]any{"tool_name": name, "tool_input": input, "tool_use_id": id}))
+	if reason := denied(pre); reason != "" {
+		a.record(map[string]any{"t": "denied", "tool": name, "reason": reason})
+		fmt.Println("⊘ " + strings.SplitN(reason, "\n", 2)[0])
+		return
+	}
 	start := time.Now()
 	response := map[string]any{"stdout": "fake", "stderr": "", "interrupted": false, "isImage": false}
 	switch name {
@@ -731,7 +814,15 @@ func (a *agent) permission(sub *subagent) {
 	a.fire("Notification", "permission_prompt", sub.fields(map[string]any{
 		"message": "Claude needs your permission to use Bash", "title": "Permission needed", "notification_type": "permission_prompt",
 	}))
+	// The menu Claude Code draws for a permission, which the screen op
+	// reads; any line typed answers it.
 	fmt.Println("? allow Bash: rm -rf build (Enter)")
+	fmt.Println("╭────────────────────────────────────────────────╮")
+	fmt.Println("│ Do you want to proceed?                        │")
+	fmt.Println("│ ❯ 1. Yes                                       │")
+	fmt.Println("│   2. Yes, and don't ask again for rm commands  │")
+	fmt.Println("│   3. No, and tell Claude what to do differently │")
+	fmt.Println("╰────────────────────────────────────────────────╯")
 	a.readLine()
 	a.fire("PostToolUse", "Bash", sub.fields(map[string]any{
 		"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": time.Since(start).Milliseconds(),

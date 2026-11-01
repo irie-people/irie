@@ -111,15 +111,16 @@
     <li>Runs small tasks on a model on your own computer, through Ollama, once you set that up.</li>
     <li>Freezes an agent and everything it started at once, puts one session ahead of the rest, and renames, closes and reopens sessions. Undo and redo take back a start, a close or a reopen.</li>
     <li>Lists the Claude Code sessions running outside Irie, and moves one in when you ask.</li>
+    <li>Checks that your computer has what Irie needs, and offers to install each part that is missing, with <code>irie setup</code>. It runs an installer only after you say yes.</li>
     <li>Lets scripts do most of this with <code>irie ctl</code>.</li>
   </ul>
 
   <h2 id="never">What it never does</h2>
   <ul class="rules">
-    <li>It sends nothing over the internet of its own. <a href="#network">What it sends, and where</a> has the one exception, which you start yourself.</li>
+    <li>It sends nothing over the internet of its own. <a href="#network">What it sends, and where</a> has the commands that do reach the network, which you start yourself.</li>
     <li>It has no telemetry, analytics, crash reports or update checks.</li>
     <li>It never reads your logins or sends them anywhere. Each agent signs in its own way, as it would without Irie.</li>
-    <li>It never edits your agents’ settings files, your tmux settings or your shell’s.</li>
+    <li>It never edits your agents’ settings files or your tmux settings. Your shell’s startup file changes only if you say yes when <code>irie setup</code> offers to add one line to it, so a terminal finds <code>irie</code>.</li>
     <li>It never answers a permission prompt for an agent, so the agent’s own permission rules stand.</li>
     <li>It never deletes a worktree, a branch or a folder an agent worked in. The only files it deletes are its own records, such as event logs past 30 days.</li>
     <li>It listens on no network port. The Ollama server it runs for local models listens on 127.0.0.1, which only programs on your computer can reach.</li>
@@ -140,13 +141,14 @@
         <tr><td><code>irie statusline</code></td><td>Claude Code’s status line. It passes the session’s cost to the core, then runs your own status line.</td></tr>
         <tr><td><code>irie runtime</code></td><td>Runs Irie’s own Ollama server for local models, once a task needs one.</td></tr>
         <tr><td><code>irie placeholder</code></td><td>What the right-hand side shows when no agent is on show.</td></tr>
-        <tr><td><code>irie</code>, <code>up</code>, <code>attach</code>, <code>ctl</code>, <code>setup local</code>, <code>config</code>, <code>version</code></td><td>The commands you run. <code>irie help</code> lists them.</td></tr>
+        <tr><td><code>irie</code>, <code>setup</code>, <code>up</code>, <code>attach</code>, <code>ctl</code>, <code>setup local</code>, <code>config</code>, <code>version</code></td><td>The commands you run. <code>irie help</code> lists them.</td></tr>
       </tbody>
     </table>
   </div>
 
   <h3 id="mac">Irie for Mac</h3>
-  <p>An app for the Mac, in its first build, shows the same sessions as cards, beside an agent’s conversation or its terminal. It asks the same core, so you start Irie with <code>irie</code> or <code>irie up</code> first.</p>
+  <p>An app for the Mac, in its first build, shows the same sessions as cards, beside an agent’s conversation or its terminal. It asks the same core. The one-line installer puts it in <code>~/Applications</code> on a Mac with macOS 14 or later.</p>
+  <p>Opened from Spotlight, the Dock or the Finder with no Irie running, it starts Irie itself with <code>irie up --login-env</code>, which gives Irie your login shell’s environment, so agents find <code>claude</code>, <code>git</code> and whatever else you installed. If it can’t, its sidebar says why, and <strong>Set Up Irie…</strong> opens Terminal on <code>irie setup</code>. While something keeps agents from starting, such as no sign-in, a red banner above the cards says what, and its button runs <code>irie setup</code> in a session of its own.</p>
   <p>It shows an agent’s terminal by running tmux, and opens Ghostty only when you ask it to. It keeps your view choices, the task you haven’t sent and your last 50 tasks in its macOS preferences.</p>
 
   <h3 id="tmux">Its own tmux</h3>
@@ -188,6 +190,9 @@
         <tr><td><code>~/.local/state/irie/core.log</code>, <code>ui.log</code></td><td>What the core and the list did, with their errors.</td><td>Until you remove them</td></tr>
         <tr><td><code>~/.local/state/irie/local.json</code></td><td>The local model <code>irie setup local</code> chose, and how much memory models took.</td><td>Until you remove it</td></tr>
         <tr><td><code>~/.local/state/irie/tmux.conf</code></td><td>Irie’s tmux settings.</td><td>Written again as needed</td></tr>
+        <tr><td><code>~/.local/share/irie/bin/irie</code>, and a link to it, <code>~/.local/bin/irie</code></td><td>The <code>irie</code> program, if you used the one-line installer.</td><td>Until you remove it</td></tr>
+        <tr><td><code>~/Applications/Irie.app</code></td><td>The Mac app, if the installer put it there, on a Mac with macOS 14 or later.</td><td>Until you remove it</td></tr>
+        <tr><td>Your shell’s startup file</td><td>One line that <code>irie setup</code> adds, only after you say yes, after the comment <code># Added by irie setup</code>, so a terminal finds <code>irie</code>.</td><td>Until you remove it</td></tr>
         <tr><td><code>~/.local/share/irie/worktrees/</code>, <code>scratch/</code></td><td>The folders agents work in.</td><td>Until you remove them</td></tr>
         <tr><td><code>$XDG_RUNTIME_DIR/irie/</code>, or <code>$TMPDIR/irie-&lt;uid&gt;/</code> without it, as on a Mac</td><td>The core’s socket and locks.</td><td>While Irie runs</td></tr>
       </tbody>
@@ -198,7 +203,9 @@
   <h2 id="network">What it sends, and where</h2>
   <ul class="rules">
     <li><strong>Irie itself</strong> talks only to the server behind your local models: its own Ollama on 127.0.0.1, port 11435, or the one you name in <code>local.url</code>. It never goes through a proxy.</li>
-    <li><strong>The one exception</strong> is <code>irie setup local</code>, which you run yourself. After you say yes, it installs Ollama the official way, with Homebrew on a Mac that has it or Ollama’s install script on Linux, and asks Ollama to download a model.</li>
+    <li><strong>The installer</strong>, which you run yourself, downloads Irie from GitHub: from github.com and its release downloads.</li>
+    <li><strong><code>irie setup</code></strong>, which you run yourself or start from a button in the Mac app, runs the official installers for what Irie needs, and <code>claude auth login</code>, only after you say yes: Homebrew’s installer, Claude Code’s installer, your package manager and Apple’s Command Line Tools. Those reach the network themselves.</li>
+    <li><strong><code>irie setup local</code></strong>, which you also run yourself, installs Ollama the official way after you say yes, with Homebrew on a Mac that has it or Ollama’s install script on Linux, and asks Ollama to download a model.</li>
     <li><strong>Your agents</strong> talk to their AI companies, or your company’s, just as they would without Irie. What each sends is up to that agent.</li>
     <li><strong>Its parts</strong> talk to each other through a socket file, never over the network.</li>
     <li><strong>Building Irie</strong> downloads the modules above, checked against the fingerprints in its code.</li>
@@ -255,10 +262,10 @@
     <li>Sending an agent a note it reads at its next step. <a class="tag" href="roadmap.html#m7" data-m="7">Planned</a></li>
     <li>Parking sessions, and undoing more than a start, a close or a reopen. <a class="tag" href="roadmap.html#m4" data-m="4">Planned</a></li>
     <li>A live view of each helper an agent starts. Today a helper is one line under its session. <a class="tag" href="roadmap.html#m8" data-m="8">Planned</a></li>
-    <li>Opening Irie from the Mac app or Spotlight. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></li>
+    <li>Irie’s terminal window opening in Ghostty when you open Irie from Spotlight. <a class="tag" href="roadmap.html#m9" data-m="9">Planned</a></li>
     <li>tmux telling Irie of changes at once. Today Irie asks it once a second. <a class="tag" href="roadmap.html#m11" data-m="11">Planned</a></li>
     <li>Working, needs you and done for agents other than Claude Code, Codex CLI first. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
-    <li>A release to download. You build Irie from its source code: see <a href="install.html">Install</a>.</li>
+    <li>A download with every release. Releases from the next one on come with downloads, which the one-line installer fetches. Where a release has none for your computer, the install line builds Irie from its source code instead, which needs Go: see <a href="install.html">Install</a>.</li>
   </ul>
 
   <h2 id="who">Who makes it</h2>
@@ -281,6 +288,12 @@ cat ~/.local/state/irie/sessions/&lt;id&gt;/claude-settings.json</code></pre>
 </main>
 
 <footer class="site-footer">
+  <nav class="family" aria-label="Irie People">
+    <a href="https://irie-people.github.io/"><strong>Irie People</strong></a>
+    <a href="https://irie-people.github.io/irie/"><span class="dot irie" aria-hidden="true"></span>Irie</a>
+    <a href="https://irie-people.github.io/riddim/"><span class="dot riddim" aria-hidden="true"></span>Riddim</a>
+    <a href="https://irie-people.github.io/steak/"><span class="dot steak" aria-hidden="true"></span>Steak</a>
+  </nav>
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>

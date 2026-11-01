@@ -28,6 +28,10 @@ struct SidebarView: View {
                 .background(UnevenRoundedRectangle(bottomLeadingRadius: Theme.frameRadius, bottomTrailingRadius: Theme.frameRadius, style: .continuous)
                     .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
                 .zIndex(1)
+            // What keeps agents from starting, and a first task's steps
+            // (Onboarding.swift).
+            ReadyBanner()
+            CoachCard()
             content
                 .frame(minHeight: Self.cardsLeast)
             ReviewDock()
@@ -204,6 +208,7 @@ private struct SessionCard: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                         if session.isPromoted { PromotedBadge() }
+                        if let t = session.trod { TrodPrint(trod: t, now: now) }
                     }
                 }
                 Text(status)
@@ -918,6 +923,9 @@ private struct Counts: View {
                 if store.sessions.contains(where: { Look($0) == .frozen }) {
                     count([.frozen], mark: .frozen, color: Theme.frozen, label: "frozen")
                 }
+                if let t = store.trod {
+                    trod(t)
+                }
             case .offline:
                 Text("offline").font(Theme.font(11, .bold)).foregroundStyle(Theme.needs)
             case .connecting:
@@ -928,6 +936,33 @@ private struct Counts: View {
         // keeps the capsules' edges whole.
         .padding(.horizontal, 1)
         .fixedSize()
+    }
+
+    /// The trod bot within its hours (DESIGN §4.10): a moon, in the accent
+    /// while it steps in, muted while you are at the Mac or the plan's use
+    /// stops it.
+    private func trod(_ t: TrodShift) -> some View {
+        let works = (t.away ?? false) && !(t.capped ?? false)
+        var words = "Trod bot"
+        if let u = t.until { words += " until " + u.formatted(date: .omitted, time: .shortened) }
+        switch (t.capped ?? false, t.away ?? false) {
+        case (true, _): words += ": your plan is as full as it may get, so it sends nothing on"
+        case (false, true): words += ": you’re away, so it keeps your sessions going"
+        default: words += ": it steps in once you’ve been away for a while"
+        }
+        if t.awake ?? false { words += ", and keeps the Mac awake" }
+        if t.hand ?? false { words += ", started by you, until no session has work left" }
+        let color = works ? Theme.accent : Theme.muted
+        return Image(systemName: "moon.stars")
+            .font(Theme.font(10, .bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(Capsule().fill(color.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(color.opacity(0.4), lineWidth: 1))
+            .help(words)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(words)
     }
 
     /// A count of the sessions in these states, with the first state's mark,
@@ -996,39 +1031,6 @@ private struct FindField: View {
         )
         .padding(10)
         .onChange(of: store.focusFind) { focused = true }
-    }
-}
-
-private struct Offline: View {
-    let why: String
-    let socket: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(why).font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
-            Text("Start it in a terminal with `irie up`. The app connects by itself once it’s running.")
-                .font(.system(size: 12)).foregroundStyle(Theme.muted)
-            Text(Age.tilde(socket)).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.muted)
-                .lineLimit(1).truncationMode(.middle)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-/// What an empty Irie says: its mark, its word, and where to start.
-private struct Welcome: View {
-    var body: some View {
-        VStack(spacing: 10) {
-            SunMark().frame(width: 56, height: 56)
-            Text("Everything irie.").font(Theme.font(18, .bold)).foregroundStyle(Theme.ink)
-            Text("No agents yet. Type a task below to start one.")
-                .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
-                .multilineTextAlignment(.center)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
     }
 }
 

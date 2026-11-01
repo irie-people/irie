@@ -97,7 +97,7 @@
         <tr><th scope="row">Does it see our credentials?</th><td>No. Agents sign in as they would without Irie, and Irie never reads their logins or sends them anywhere.</td></tr>
         <tr><th scope="row">Does it change our Claude Code setup?</th><td>No. It adds its hooks to each session it starts, and your company’s managed settings still win. <a href="#managed">Below</a></td></tr>
         <tr><th scope="row">What runs on our computers?</th><td>One program, <code>irie</code>, which needs tmux and git, and the agents you choose. The Mac app is optional. <a href="what-irie-is.html#parts">The details</a></td></tr>
-        <tr><th scope="row">Is it ready?</th><td>It’s early. The first release, 0.1.0, has no download yet, so each person builds it from its source code.</td></tr>
+        <tr><th scope="row">Is it ready?</th><td>It’s early. Each person installs it with one line, which downloads a release from GitHub and checks its <dfn>SHA-256</dfn>, a fingerprint, or builds it from its source code. <a href="install.html">Install</a></td></tr>
         <tr><th scope="row">Who supports it?</th><td>Its community, in public on GitHub. Security problems go to the maintainers privately. There are no support contracts or promised response times.</td></tr>
       </tbody>
     </table>
@@ -149,7 +149,7 @@ env = { CLAUDE_CODE_USE_BEDROCK = "1", AWS_REGION = "us-east-1" }</code></pre>
 
   <h2 id="team">Setting it up for a team</h2>
   <ul class="rules">
-    <li><strong>Each person runs their own.</strong> Everyone builds Irie and runs it on their own computer, as <a href="install.html">Install</a> shows. There’s nothing to run for the whole team.</li>
+    <li><strong>Each person runs their own.</strong> Everyone installs Irie and runs it on their own computer, as <a href="install.html">Install</a> shows: one line downloads a release from GitHub and checks its SHA-256, and running the line again updates it. Irie can be built from its source code instead. There’s nothing to run for the whole team.</li>
     <li><strong>Share one settings file.</strong> A team can hand out a <code>config.toml</code> with its profiles, project folders and choices. A setting Irie doesn’t know stops it with an error that names it, so a mistake shows at once.</li>
     <li><strong>Choose the permission mode.</strong> Irie’s built-in cloud profiles start Claude Code in auto mode, where Claude Code decides which steps are safe to take without asking. Set <code>permission_mode</code> to your team’s choice.</li>
     <li><strong>Keep tasks off local models,</strong> if you’d rather: leave <code>local</code> out of <code>route.profiles</code>.</li>
@@ -175,7 +175,7 @@ tool_input = "none"</code></pre>
 
   <h2 id="not-there">What isn’t there</h2>
   <ul class="rules">
-    <li>No downloads yet. Each person builds Irie from its source code, and updates it with <code>git pull</code> and a new build.</li>
+    <li>No central way to install or update it. Each person installs Irie with one line, which downloads from GitHub, and updates it by running the line again. Building from source works too.</li>
     <li>No central console, policies or audit trail across a team. Each person’s Irie keeps its own records, on their own computer.</li>
     <li>No accounts, single sign-on or roles, because Irie has no accounts at all.</li>
     <li>No Windows: Macs and Linux only.</li>
@@ -204,6 +204,12 @@ tool_input = "none"</code></pre>
 </main>
 
 <footer class="site-footer">
+  <nav class="family" aria-label="Irie People">
+    <a href="https://irie-people.github.io/"><strong>Irie People</strong></a>
+    <a href="https://irie-people.github.io/irie/"><span class="dot irie" aria-hidden="true"></span>Irie</a>
+    <a href="https://irie-people.github.io/riddim/"><span class="dot riddim" aria-hidden="true"></span>Riddim</a>
+    <a href="https://irie-people.github.io/steak/"><span class="dot steak" aria-hidden="true"></span>Steak</a>
+  </nav>
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>

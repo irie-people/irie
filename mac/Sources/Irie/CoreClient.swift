@@ -89,7 +89,13 @@ final class CoreConnection {
     }
 
     func send<A: Encodable>(op: String, args: A?, id: Int = 1) throws {
-        var line = try Wire.encoder.encode(Request(id: id, op: op, args: args))
+        try write(Request(id: id, op: op, args: args))
+    }
+
+    /// Writes one value as a line, such as the answer to a ping of the
+    /// freeze dog's on a watch subscription (FreezeDog.swift).
+    func write<V: Encodable>(_ value: V) throws {
+        var line = try Wire.encoder.encode(value)
         line.append(0x0A)
         try line.withUnsafeBytes { raw in
             var off = 0

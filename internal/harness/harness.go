@@ -86,6 +86,10 @@ type Spawn struct {
 	// on Irie's team server (spawn.teammates).
 	Teams bool
 
+	// PluginDir is the folder of Irie's skills for this session, which a
+	// harness whose probe offers --plugin-dir passes on (internal/skills);
+	// "" = none.
+	PluginDir string
 	// Tutor is how the agent works with the user (learn.tutor,
 	// docs/proposals/learning.md): config.TutorExplain or TutorTeach, or ""
 	// for off.

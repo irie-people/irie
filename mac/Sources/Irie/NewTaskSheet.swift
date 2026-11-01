@@ -155,7 +155,7 @@ struct NewTaskSheet: View {
         guard !input.isEmpty, !store.spawning else { return }
         store.dismissNotice()
         Task {
-            let ok = await store.spawn(input, repo: repo.isEmpty ? nil : repo, worktree: worktree,
+            let ok = await store.input(input, repo: repo.isEmpty ? nil : repo, worktree: worktree,
                                        agent: agent.isEmpty ? nil : agent, model: modelApplies && !model.isEmpty ? model : nil,
                                        tutor: tutor.isEmpty ? nil : tutor)
             if ok {

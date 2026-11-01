@@ -25,7 +25,8 @@ var toolInputKeys = []string{"summary", "question"}
 // delegate (DESIGN §6.4); a turn's last message is kept whole for
 // delegation; a turn stopped at a usage limit may fail over; a jot whose
 // turn ends before its work has landed may be sent back to finish it
-// (DESIGN §4.8).
+// (DESIGN §4.8); and while you are away at night, an agent that asks you
+// something is told to decide itself (DESIGN §4.10).
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	h, err := harnessFor(a.Harness)
 	if err != nil {
@@ -43,6 +44,12 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	// The jot dog reads what a finished turn left before the turn is
 	// recorded, outside c.mu (dog.go).
 	unfinished, loose := c.dogAtStop(a.Session, evs)
+	// So may the trod bot, which may read the machine's idle time
+	// (trod.go).
+	var trod trodReply
+	if unfinished == "" {
+		trod = c.trodAtHook(a.Session, evs)
+	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
@@ -53,11 +60,28 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	failover, turnEnded := false, false
 	x.quiet++
 	for _, e := range evs {
-		if unfinished != "" && e.Kind == event.TurnEnded && e.Agent == event.Main {
+		ends := e.Kind == event.TurnEnded && e.Agent == event.Main
+		if ends && asksUser(e.Str("message")) {
+			// Whether it asks is read from the whole message, which the
+			// journal cuts.
+			e.Data["asks"] = true
+		}
+		switch {
+		case unfinished != "" && ends:
 			// The turn goes on, so it has not ended: the dog sent the
 			// agent back to finish what it left.
 			e = nudgeEvent(e, loose)
 			reply.Unfinished = unfinished
+		case trod.how == trodAtStop && ends:
+			// Likewise the trod bot, to decide what it asked.
+			e = trodEvent(e, trodAtStop)
+			reply.Unfinished = trod.note
+		case trod.how == trodAtAsk && e.Kind == event.ToolStarted && e.Str("tool") == "AskUserQuestion":
+			// The question is turned away, so its call never runs.
+			continue
+		case trod.how == trodAtAsk && e.Kind == event.InputNeeded && e.Str("reason") == event.ReasonQuestion:
+			e = trodEvent(e, trodAtAsk)
+			reply.Deny = trod.note
 		}
 		input := call.Input
 		if c.cfg().Journal.ToolInput == "none" {

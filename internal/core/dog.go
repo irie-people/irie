@@ -294,22 +294,32 @@ func asksUser(msg string) bool {
 func unfinished(loose []looseIn) string {
 	var b strings.Builder
 	b.WriteString("[Irie] The jot dog: this task is not through yet.")
+	for _, l := range looseLines(loose) {
+		b.WriteString("\n- " + l)
+	}
+	b.WriteString("\nFinish it now: commit your work, then land it the way this repo's AGENTS.md or CLAUDE.md says. " +
+		"If an install or another session holds you up, wait for it and try again. " +
+		"If you stopped on purpose, because your task says not to land it or only the user can decide what comes next, say so in one line.")
+	return b.String()
+}
+
+// looseLines says what a jot left, a sentence for each worktree's files
+// not committed and commits not landed.
+func looseLines(loose []looseIn) []string {
+	var out []string
 	for _, in := range loose {
 		where := in.path
 		if in.Branch != "" {
 			where += " (branch " + in.Branch + ")"
 		}
 		if in.Dirty > 0 {
-			fmt.Fprintf(&b, "\n- Not committed in %s: %s%s.", where, strings.Join(in.Files, ", "), andMore(in.Dirty, len(in.Files)))
+			out = append(out, fmt.Sprintf("Not committed in %s: %s%s.", where, strings.Join(in.Files, ", "), andMore(in.Dirty, len(in.Files))))
 		}
 		if in.Ahead > 0 {
-			fmt.Fprintf(&b, "\n- Not in %s yet, from %s: %s%s.", in.land, where, strings.Join(in.Commits, "; "), andMore(in.Ahead, len(in.Commits)))
+			out = append(out, fmt.Sprintf("Not in %s yet, from %s: %s%s.", in.land, where, strings.Join(in.Commits, "; "), andMore(in.Ahead, len(in.Commits))))
 		}
 	}
-	b.WriteString("\nFinish it now: commit your work, then land it the way this repo's AGENTS.md or CLAUDE.md says. " +
-		"If an install or another session holds you up, wait for it and try again. " +
-		"If you stopped on purpose, because your task says not to land it or only the user can decide what comes next, say so in one line.")
-	return b.String()
+	return out
 }
 
 func andMore(all, named int) string {

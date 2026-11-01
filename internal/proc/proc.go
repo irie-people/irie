@@ -17,6 +17,7 @@ type Proc struct {
 	Start   int64
 	Stopped bool   // stopped by a signal: ps's T
 	Zombie  bool   // exited, not yet reaped
+	Traced  bool   // a debugger holds it
 	Name    string // the command's name, cut short by the system
 }
 
