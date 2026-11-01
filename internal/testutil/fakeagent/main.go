@@ -82,6 +82,7 @@ func main() { os.Exit(run(os.Args[1:])) }
 
 type options struct {
 	model, effort, mode, settings, sessionID, name, resume string
+	appendPrompt                                           string // --append-system-prompt, taken and kept in argv
 	version, help                                          bool
 	task                                                   string
 }
@@ -124,6 +125,8 @@ func parseArgs(args []string) (options, error) {
 			dst = &o.mode
 		case "--settings":
 			dst = &o.settings
+		case "--append-system-prompt":
+			dst = &o.appendPrompt
 		case "--session-id":
 			dst = &o.sessionID
 		case "-r", "--resume":
@@ -166,6 +169,7 @@ func parseArgs(args []string) (options, error) {
 const help = `Usage: claude [options] [prompt]
 
 Options:
+  --append-system-prompt <prompt>  Append a system prompt to the default system prompt
   --effort <level>           Effort level for the current session
   -h, --help                 Display help for command
   --model <model>            Model for the current session
@@ -606,8 +610,9 @@ func loadStatusLine(value string) string {
 // with a block and its reason, sends the turn on, as Claude Code's hooks
 // reference describes: the agent goes on, then stops again with
 // stop_hook_active set, at most 8 times in a row. how is "bg" for a turn
-// that leaves a shell task running in the background, and "ask" for one
-// whose last message asks the user something.
+// that leaves a shell task running in the background, "ask" for one whose
+// last message asks the user something, and "turn" for a teach-mode request
+// that the user write a part at a TODO(human), which ends in a full stop.
 func (a *agent) stop(how string) {
 	fmt.Println("✓ done")
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
@@ -618,6 +623,8 @@ func (a *agent) stop(how string) {
 		tasks = []any{map[string]any{"id": "task-001", "type": "shell", "status": "running", "description": "Install the build", "command": "tools/live.sh"}}
 	case "ask":
 		msg = "It works. Shall I land it?"
+	case "turn":
+		msg = "Learn by doing\n\nThe notes file has its headings.\n\n**Your Task**: In notes.md, write the summary line under TODO(human).\n\nWeigh how short it can be and still be clear."
 	}
 	for i := range 8 {
 		out := a.fire("Stop", "", map[string]any{"stop_hook_active": i > 0, "last_assistant_message": msg, "background_tasks": tasks, "session_crons": []any{}})

@@ -120,6 +120,9 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Dog{Watch: true, Nudges: 2, Land: map[string]string{}}); !reflect.DeepEqual(c.Dog, want) {
 		t.Errorf("dog = %+v, want %+v", c.Dog, want)
 	}
+	if want := (Learn{Tutor: "off", Visual: true, AgentTips: true, Links: map[string]string{}}); !reflect.DeepEqual(c.Learn, want) {
+		t.Errorf("learn = %+v, want %+v", c.Learn, want)
+	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("defaults do not validate: %v", err)
 	}
@@ -221,6 +224,12 @@ status_line = false
 watch = false
 nudges = 5
 land = { web = "live", "~/code/api" = "main" }
+
+[learn]
+tutor = "teach"
+visual = false
+agent_tips = false
+links = { "Team handbook" = "https://example.com/handbook" }
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -292,6 +301,9 @@ land = { web = "live", "~/code/api" = "main" }
 	}
 	if want := (Dog{Watch: false, Nudges: 5, Land: map[string]string{"web": "live", "~/code/api": "main"}}); !reflect.DeepEqual(c.Dog, want) {
 		t.Errorf("dog = %+v, want %+v", c.Dog, want)
+	}
+	if want := (Learn{Tutor: "teach", Visual: false, AgentTips: false, Links: map[string]string{"Team handbook": "https://example.com/handbook"}}); !reflect.DeepEqual(c.Learn, want) {
+		t.Errorf("learn = %+v, want %+v", c.Learn, want)
 	}
 	// The defaults themselves are untouched.
 	if d := Default(); d.Profiles["claude"].Model != "claude-opus-5-5" || len(d.Worktree.Copy) != 2 || len(d.Repos.Aliases) != 0 {
@@ -487,6 +499,11 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[dog]\nland = { irie = \"a..b\" }\n", "dog.land.irie"},
 		{"[dog]\nland = { irie = \"live now\" }\n", "dog.land.irie"},
 		{"[dog]\nland = { \" \" = \"live\" }\n", "dog.land"},
+		{"[learn]\ntutor = \"socratic\"\n", "learn.tutor"},
+		{"[profiles.teach]\nmodel = \"opus\"\n", "profiles.teach"},
+		{"[profiles.explain]\nmodel = \"opus\"\n", "profiles.explain"},
+		{"[learn]\nlinks = { wiki = \"ftp://example.com\" }\n", "learn.links"},
+		{"[learn]\nlinks = { \" \" = \"https://example.com\" }\n", "learn.links"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {

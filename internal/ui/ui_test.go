@@ -825,6 +825,9 @@ func TestParseTask(t *testing.T) {
 		{in: "+fast fix it", want: ipc.SpawnArgs{Task: "fix it", Profile: "fast"}},
 		{in: "fix it +aider @web!", want: ipc.SpawnArgs{Task: "fix it", Repo: "web", InPlace: true, Profile: "aider"}},
 		{in: "c++ is fine, and so is a+b", want: ipc.SpawnArgs{Task: "c++ is fine, and so is a+b"}},
+		{in: "+teach build the upload form", want: ipc.SpawnArgs{Task: "build the upload form", Tutor: "teach"}},
+		{in: "+sonnet +explain fix it", want: ipc.SpawnArgs{Task: "fix it", Profile: "sonnet", Tutor: "explain"}},
+		{in: "+explain +teach fix it", err: "one of +explain and +teach"},
 		{in: "@/a @/b fix it", err: "one @"},
 		{in: "+a +b fix it", err: "one +"},
 		{in: "@ fix it", err: "@"},
@@ -1674,5 +1677,16 @@ func TestHeaderShowsPlanUseAndLowMemory(t *testing.T) {
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Header: &ipc.Header{}}})
 	if strings.Contains(header(), "mem low") {
 		t.Errorf("header %q after memory recovered", header())
+	}
+}
+
+// TestRoutedSaysTheTutorMode checks that a session in a tutor mode says so in
+// its card's state line and the status strip (docs/proposals/learning.md).
+func TestRoutedSaysTheTutorMode(t *testing.T) {
+	if got := routed(ipc.Session{Tutor: "teach", Routed: true, Class: "small", Profile: "haiku"}); got != "teach mode small→haiku" {
+		t.Errorf("routed = %q", got)
+	}
+	if got := routed(ipc.Session{}); got != "" {
+		t.Errorf("no mode, no route: %q", got)
 	}
 }

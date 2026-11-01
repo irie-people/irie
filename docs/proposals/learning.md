@@ -1,6 +1,6 @@
 # Proposal: learning in Irie
 
-Date: 2026-10-31. Status: proposed, for the owner to decide. There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote it, from `live` at `d92721f`. It is the design only and builds no code. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-10-31. Status: step 1 is being built at the owner's word (2026-11-01): its core is in, see "Built so far" below, and the Mac app's part comes next. The rest is proposed. There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote it, from `live` at `d92721f`. It is the design only and builds no code. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 ## Goal
 
@@ -14,9 +14,12 @@ Irie helps the person at the keyboard learn while their agents work. They learn 
 | The walkthrough (§5) | On the first run, a short welcome, then a first real task, with short steps that follow its card from starting to done. Help > Show the Walkthrough Again replays it | on, once | a few cents for the first task, or none on `+local` |
 | Tips (§6) | One tip at a time, where it applies, until you have done the thing it teaches: in both sidebars, and as "Irie tip" lines under Claude Code's spinner | on | none |
 | Help and resources (§7) | A Help menu: Irie's own guide pages, a glossary in plain words, and a short list of free learning resources, plus your own links | always there | none |
+| Pictures (§4.8) | In a tutor mode, the agent draws a small diagram where a picture helps (`learn.visual`), and the Mac app draws it in the conversation. Later, explainers the agent makes, in a sandboxed pane | on, in a tutor mode | a little more |
 | Learning from your own sessions (§8) | Later, each opt-in: the Insight notes of a session gathered in one place, Explain This on a call, a short lesson when a session finishes, and questions to check yourself, spaced over days | off | none for the notes; the rest on `+local` first |
 
-The first build (§11) is tutor mode, the Help menu and the agent tips: mostly core work, plus a Settings tab.
+The first build (§11) is tutor mode with its pictures, the Help menu and the agent tips: mostly core work, plus a Settings tab.
+
+**Built so far** (2026-11-01, step 1's core): the `[learn]` table (`tutor`, `visual`, `agent_tips`, `links`); `outputStyle` and Irie's tips in a session's settings file, and the ask for diagrams through `--append-system-prompt`; `+explain` and `+teach` in both task parsers and the `+` list; the tutor mode in `spec.json`, on the row and in the terminal sidebar's words, kept by reopen, failover and a restarted core; your turn in teach mode (§4.4), which the jot dog leaves be and `send` still reaches; the note for generic agents; and the `learn` op over `internal/learn/learn.toml`, with 14 tips, 23 resources and 31 words. Next: the Mac app's part (the Learning tab, the New Task sheet's picker, the Help menu with its sheets, the diagrams drawn in the conversation, and the message box in your turn).
 
 ---
 
@@ -45,6 +48,8 @@ Both tutors that helped had a solution to steer by, and an agent's open-ended wo
 **What helps people learn.** Dunlosky et al. (2013) rated ten study techniques. Practice testing and spacing practice out over time came out high; self-explanation and mixing kinds of problems moderate; rereading, highlighting and summarising low. Novices learn more from studying worked examples than from solving problems alone (Sweller and Cooper, 1985), but help that suits a novice gets in an expert's way, the expertise reversal effect (Kalyuga et al., 2003). Good learners explain worked examples to themselves (Chi et al., 1989). Being tested beats rereading on a later test, though rereading feels better (Roediger and Karpicke, 2006), and Bastani's students thought they had learned more than they had.
 
 **First runs and tips.** Apple's guidelines ask for an onboarding flow that is "fast, fun, and optional", say "Teach through interactivity", and suggest "a collection of context-specific tips instead of a single onboarding flow". A tutorial someone skipped should not come back on later launches, but should be easy to find. Apple's TipKit docs add: "Don't use tips to guide people through your app". Nielsen Norman Group (Laubheimer, 2023) found that tutorials shown out of context, "push revelations", get skipped and don't help, and that help shown when it is needed works.
+
+**Pictures.** Students given an explanation in words and pictures together did better at using what they learned than students given words alone, across the studies Mayer reviewed (1997). That holds for nearly everyone: the claim that teaching should match a person's preferred style, such as "visual learner", has no good evidence behind it (Pashler et al., 2008). So pictures come with every tutor-mode session, not as a mode for some.
 
 **Learning modes elsewhere.** Claude's learning mode and Claude Code's Explanatory and Learning styles arrived in 2025, as did ChatGPT's study mode (July) and Gemini's Guided Learning (August). Each is an instruction to the model that a person switches on, and so is tutor mode.
 
@@ -120,6 +125,15 @@ Other harnesses have no output styles. On a generic profile, `explain` and `teac
 ### 4.7 Later: Irie's own styles
 
 The session plugin of [skills.md](skills.md) (`--plugin-dir`, M12) can carry output styles too: Claude Code's plugin reference lists an `output-styles/` folder. Irie could then offer a style of its own, written for Irie and copied from nowhere. One idea is **Newcomer**: plain words, every term explained the first time it appears, what it will do before it does it, and what to check at the end. It would set `keep-coding-instructions: true`, so Claude Code keeps its coding instructions, and never `force-for-plugin`, which would put it on every session. `learn.tutor = "newcomer"` would pick it.
+
+### 4.8 Pictures
+
+Words and a picture teach better than words alone (§2), so in a tutor mode the agent draws.
+
+- **The ask.** With `learn.visual` on, the default, a session in a tutor mode gets one paragraph through `--append-system-prompt`: when a picture would help the user follow an explanation, such as how parts of the code connect, what happens in what order, or how branches and commits relate, draw a small Mermaid diagram in a `mermaid` code block, and go on explaining in words beside it. The flag appends to Claude Code's instructions and its output style and takes nothing away, and it goes per launch, like the settings file. A generic agent gets the same words after its tutor note (§4.6).
+- **Why Mermaid.** It is text, so the agent writes it like any reply and the transcript keeps it. It is short, models write it well, and it has the shapes teaching needs: flowcharts, sequences, states, and git graphs for branches, commits and merges. A diagram holds no script or markup of its own, so drawing one runs nothing the agent wrote.
+- **Drawing it.** The Mac app's conversation view draws each `mermaid` block as a diagram in the palette's colours, with a button to show its source. It draws it with Mermaid's own library, MIT-licensed, bundled with the app at a pinned version and checked by its hash at build time, as the terminals' libraries are. It draws in a web view with no network and Mermaid's strict security level, so a diagram can neither fetch nor run anything. In the slot and in the agent's terminal the block stays text.
+- **Later: explainers the agent makes.** For what a diagram cannot show, such as a step-by-step animation of an algorithm, the agent could write one self-contained HTML page into the session's folder and say so. The app would show it in a pane beside the conversation, as it shows a helper: sandboxed, with no network, no access to files, and nothing that reaches the app. That is step 3.
 
 ## 5. The walkthrough
 
@@ -226,17 +240,18 @@ Each part is opt-in, and none sends anything anywhere.
 ```toml
 [learn]                      # what helps you learn while your agents work (docs/proposals/learning.md)
 tutor = "off"                # off | explain | teach: Claude Code's Explanatory or Learning output style; +explain and +teach set it for one task
+visual = true                # in a tutor mode, the agent draws a small diagram where a picture helps (§4.8)
 walkthrough = true           # show the walkthrough on the first run; Help > Show the Walkthrough Again replays it
 tips = true                  # one tip at a time in the sidebars, where it applies, until you have done what it teaches
 agent_tips = true            # Irie tips under Claude Code's spinner (spinnerTipsOverride)
 phrase_tips = false          # every other phrase under the terminal is a tip
-links = []                   # your own resources, first in the list: [{ title = "Team handbook", url = "https://example.com/handbook" }]
+links = {}                   # your own resources, by title, first in the list: { "Team handbook" = "https://example.com/handbook" }
 # glossary_hints = false     # later (§8)
 # lessons = false            # later
 # review = false             # later
 ```
 
-Every key is read when a session starts or a view draws, so a change applies to the next task without a restart (DESIGN §5.5). What has been seen, the walkthrough's step and the tips already shown, is kept by the core in `$XDG_STATE_HOME/irie/learn.json`, mode 0600, so both sidebars share it. **Show Tips Again** and `irie ctl learn reset` clear it.
+`links` is a table by title, as `repos.aliases` is, so the Settings window can edit it through the `config` op. Every key is read when a session starts or a view draws, so a change applies to the next task without a restart (DESIGN §5.5). What has been seen, the walkthrough's step and the tips already shown, is kept by the core in `$XDG_STATE_HOME/irie/learn.json`, mode 0600, so both sidebars share it. **Show Tips Again** and `irie ctl learn reset` clear it.
 
 ### 9.2 The Learning tab
 
@@ -262,12 +277,12 @@ Settings gets a sixth tab, **Learning**:
 ## 11. Build order
 
 1. **Tutor mode, the Help menu, agent tips.**
-   - Core: the `[learn]` table, with the reserved profile names. `outputStyle` and `spinnerTipsOverride` in the session's settings file. `tutor` on `spawn` and on rows. The words in both task parsers and in `complete`. The paragraph for generic harnesses. Your turn in teach mode (§4.4). Insight notes marked in the conversation (§4.5).
-   - Mac app: the Learning tab, the New Task sheet's picker, the Help menu with the site's pages, and sheets for the resources and the glossary.
+   - Core (built, 2026-11-01): the `[learn]` table, with the reserved profile names, and `visual` with its `--append-system-prompt` (§4.8). `outputStyle` and `spinnerTipsOverride` in the session's settings file. `tutor` on `spawn` and on rows. The words in both task parsers and in `complete`. The paragraph for generic harnesses. Your turn in teach mode (§4.4). Insight notes marked in the conversation (§4.5).
+   - Mac app: the Learning tab, the New Task sheet's picker, the Help menu with the site's pages, sheets for the resources and the glossary, Mermaid diagrams drawn in the conversation (§4.8), and the message box in your turn.
    - Tests: settings-file goldens with and without a style and tips; the parsers' words; reserved names refused; a teach-mode stop with `TODO(human)` left alone by the dog and kept open by close-when-done, with the fake agent.
    - Docs: DESIGN §3.3, §4.2, §5.5; MAC.md; the site's Profiles, Tasks and Keys pages.
 2. **The walkthrough and tips.** `learn.json` and the `learn` op, the Mac app's walkthrough and tips, `:tour`, `:help` and the status strip's tips in the terminal sidebar, the mid-session change (§4.3), and the phrase bar's tips. Bring the site's Your first session up to date, so it tells the walkthrough's story.
-3. **Learning from your sessions.** The notes gathered, Explain This, lessons, questions and the review sheet, glossary hints, the practice agent, and Irie's own styles once M12's plugin lands.
+3. **Learning from your sessions.** The notes gathered, Explain This, lessons, questions and the review sheet, glossary hints, the practice agent, explainers the agent makes (§4.8), and Irie's own styles once M12's plugin lands.
 
 ## 12. Not doing
 
@@ -286,3 +301,4 @@ Settings gets a sixth tab, **Learning**:
 | 4 | The phrase bar | a. Vibes only, tips opt-in. b. Tips mixed in by default | **a** |
 | 5 | A mid-session change | a. A note now, the style in full from the next reopen (§4.3). b. Restart the agent at its next wait | **a**: no second pass through the cache, and nothing the agent runs is cut off |
 | 6 | Irie's own Newcomer style | a. After M12's plugin. b. Never: only Claude Code's styles | **a** |
+| 7 | Pictures in a tutor mode | a. On by default. b. Off until asked for | **a**: words and pictures teach nearly everyone better (§2), and they come only where a picture helps |

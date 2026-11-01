@@ -7,14 +7,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
 // ParseTask turns command bar input into spawn args (DESIGN §4.2). Only the
 // first line is read for tokens: @name or @path runs the task in a new
 // worktree of that git repo, or in place in a directory git does not know;
-// @name! runs it in the repo's own checkout; +profile picks the profile.
-// The rest of the input is the task, verbatim.
+// @name! runs it in the repo's own checkout; +profile picks the profile;
+// +explain or +teach picks a tutor mode. The rest of the input is the task,
+// verbatim.
 func ParseTask(input, home string) (ipc.SpawnArgs, error) {
 	var a ipc.SpawnArgs
 	first, rest, multi := strings.Cut(input, "\n")
@@ -76,6 +78,15 @@ func isToken(w string) bool { return strings.HasPrefix(w, "@") || strings.HasPre
 func token(a *ipc.SpawnArgs, w, home string) error {
 	v := w[1:]
 	if w[0] == '+' {
+		// The tutor words set how the task works with you, beside its
+		// profile (docs/proposals/learning.md).
+		if v == config.TutorExplain || v == config.TutorTeach {
+			if a.Tutor != "" {
+				return errors.New("one of +explain and +teach per task")
+			}
+			a.Tutor = v
+			return nil
+		}
 		switch {
 		case a.Profile != "":
 			return errors.New("only one +profile per task")

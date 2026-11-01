@@ -11,6 +11,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 // InlineMax and TaskFile are the task-size rule every adapter shares.
@@ -89,7 +90,12 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, []byt
 		l := statusLine(s.Bin, user, ok)
 		status = &l
 	}
-	settings, err := Settings(s.Bin, s.HoldMax, AtLeast(s.Probe.Version, MinVersion), status, s.Teams)
+	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor]}
+	// Tips as objects, with an id and a cooldown, need 2.1.247.
+	if AtLeast(s.Probe.Version, TipsVersion) {
+		x.Tips = s.Tips
+	}
+	settings, err := Settings(s.Bin, s.HoldMax, AtLeast(s.Probe.Version, MinVersion), x)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -104,6 +110,11 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, []byt
 		}
 	}
 	argv = append(argv, "--settings", filepath.Join(s.Dir, SettingsFile))
+	// In a tutor mode, the ask for diagrams goes after Claude Code's own
+	// instructions and its output style, taking nothing away.
+	if s.Visual && s.Tutor != "" && s.Probe.Flags["--append-system-prompt"] {
+		argv = append(argv, "--append-system-prompt", harness.VisualNote)
+	}
 	env := maps.Clone(p.Env)
 	if env == nil {
 		env = map[string]string{}
@@ -149,20 +160,64 @@ type matcherGroup struct {
 	Hooks   []hookCommand `json:"hooks"`
 }
 
+// Styles are Claude Code's output styles for Irie's tutor modes
+// (learn.tutor, docs/proposals/learning.md). Claude Code matches the names
+// exactly, and a name it does not know gives its Default style.
+var Styles = map[string]string{config.TutorExplain: "Explanatory", config.TutorTeach: "Learning"}
+
+// TipsVersion is the first Claude Code that takes a spinner tip as an object
+// with an id and a cooldown.
+const TipsVersion = "2.1.247"
+
+// TipsLabel is what Claude Code shows before Irie's tips.
+const TipsLabel = "Irie tip"
+
+// tipCooldown is how many sessions Claude Code waits before it shows one of
+// Irie's tips again, so they come seldom among its own.
+const tipCooldown = 5
+
+// Extra is what a session's settings file carries besides Irie's hooks.
+type Extra struct {
+	Status *StatusLine // Irie as the session's status line
+	Teams  bool        // agent teams open their teammates in tmux panes
+	Style  string      // the session's output style, such as Explanatory; "" leaves the user's own
+	Tips   []learn.Tip // Irie's tips under the spinner, with Claude Code's own
+}
+
+type spinnerTips struct {
+	Label string       `json:"label"`
+	Tips  []spinnerTip `json:"tips"`
+}
+
+type spinnerTip struct {
+	ID       string `json:"id"`
+	Text     string `json:"text"`
+	Cooldown int    `json:"cooldownSessions"`
+}
+
 // Settings returns the settings file that sends every hook of the table to
-// `<bin> hook`, and makes status the session's status line when it is set.
-// onFailure goes only to a Claude Code that knows it. With teams, agent
-// teams open their teammates in tmux panes, which the shim on the agent's
-// PATH takes to Irie's team server.
-func Settings(bin string, holdMax time.Duration, onFailure bool, status *StatusLine, teams bool) ([]byte, error) {
+// `<bin> hook`. onFailure goes only to a Claude Code that knows it. With
+// x.Status, Irie is the session's status line. With x.Teams, agent teams
+// open their teammates in tmux panes, which the shim on the agent's PATH
+// takes to Irie's team server. x.Style sets the session's output style
+// above the user's own files, and x.Tips go under the spinner.
+func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byte, error) {
 	command := shellQuote(bin) + " hook"
 	file := struct {
 		Hooks        map[string][]matcherGroup `json:"hooks"`
 		StatusLine   *StatusLine               `json:"statusLine,omitempty"`
 		TeammateMode string                    `json:"teammateMode,omitempty"`
-	}{Hooks: map[string][]matcherGroup{}, StatusLine: status}
-	if teams {
+		OutputStyle  string                    `json:"outputStyle,omitempty"`
+		Tips         *spinnerTips              `json:"spinnerTipsOverride,omitempty"`
+	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style}
+	if x.Teams {
 		file.TeammateMode = "tmux"
+	}
+	if len(x.Tips) > 0 {
+		file.Tips = &spinnerTips{Label: TipsLabel}
+		for _, t := range x.Tips {
+			file.Tips.Tips = append(file.Tips.Tips, spinnerTip{ID: t.ID, Text: t.Text, Cooldown: tipCooldown})
+		}
 	}
 	for _, h := range hooks {
 		timeout := h.timeout

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -76,8 +77,13 @@ func (c *Core) send(a ipc.SendArgs) error {
 // sendable says why session x cannot take a message now, if it cannot.
 // The caller holds c.mu.
 func sendable(x *session, text string) error {
-	switch x.wire().State {
+	switch w := x.wire(); w.State {
 	case ipc.StateNeedsYou:
+		// Your turn in teach mode waits at the agent's prompt, for your
+		// word that the part is written.
+		if w.Reason == event.ReasonTurn {
+			break
+		}
 		return ipc.Errorf(ipc.CodeBusy, "%s is waiting for you in its terminal: answer it there", x.name)
 	case ipc.StateStarting, ipc.StateStalled:
 		return ipc.Errorf(ipc.CodeBusy, "%s hasn’t started yet", x.name)

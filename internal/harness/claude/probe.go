@@ -24,8 +24,14 @@ import (
 // times out (DESIGN §3.3).
 const MinVersion = "2.1.295"
 
-// optional are flags Irie passes only to a CLI whose --help lists them.
+// optional are flags Irie passes only to a CLI whose --help lists them; one
+// it lacks is left out with a warning.
 var optional = []string{"--name"}
+
+// quietly are optional flags whose lack needs no warning on every spawn, as
+// they serve only some sessions: --append-system-prompt carries tutor mode's
+// ask for diagrams (learn.visual).
+var quietly = []string{"--append-system-prompt"}
 
 // probeTimeout bounds each run of the CLI.
 var probeTimeout = 5 * time.Second
@@ -79,6 +85,14 @@ func (Harness) Probe(p config.Profile, env []string) harness.Probe {
 				pr.Flags[f] = true
 			} else {
 				pr.Warnings = append(pr.Warnings, fmt.Sprintf("%s left out: `%s --help` does not list it", f, command))
+			}
+		}
+		for _, f := range quietly {
+			if listsFlag(help, f) {
+				if pr.Flags == nil {
+					pr.Flags = map[string]bool{}
+				}
+				pr.Flags[f] = true
 			}
 		}
 	}

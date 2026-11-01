@@ -16,6 +16,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -361,5 +362,87 @@ func TestSessionIDFlagCarriesTheVendorID(t *testing.T) {
 func TestClaudeCodeHasEveryLevel(t *testing.T) {
 	if l := (Harness{}).Levels(); l != harness.Generic|harness.Observed|harness.Held|harness.Subagents {
 		t.Errorf("levels %v, want GOHS", l)
+	}
+}
+
+// TestTutorModeSetsTheStyleAndTipsGoUnderTheSpinner checks the settings file
+// of a session in a tutor mode, with Irie's tips (docs/proposals/learning.md).
+func TestTutorModeSetsTheStyleAndTipsGoUnderTheSpinner(t *testing.T) {
+	s := spawnOf("x")
+	s.Tutor = config.TutorTeach
+	s.Tips = []learn.Tip{{ID: "irie.park", Text: "Park a session you have checked"}, {ID: "irie.red", Text: "A red card needs you"}}
+	_, _, files := launchSpawn(t, defaultProfile(), s)
+	golden(t, "settings-tutor.golden", files[SettingsFile])
+
+	var got struct {
+		Style string `json:"outputStyle"`
+		Tips  *struct {
+			Label string `json:"label"`
+			Tips  []struct {
+				ID       string `json:"id"`
+				Text     string `json:"text"`
+				Cooldown int    `json:"cooldownSessions"`
+			} `json:"tips"`
+		} `json:"spinnerTipsOverride"`
+	}
+	if err := json.Unmarshal(files[SettingsFile], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Style != "Learning" {
+		t.Errorf("outputStyle = %q, want Learning", got.Style)
+	}
+	if got.Tips == nil || got.Tips.Label != "Irie tip" || len(got.Tips.Tips) != 2 || got.Tips.Tips[0].ID != "irie.park" || got.Tips.Tips[0].Cooldown < 1 {
+		t.Errorf("spinnerTipsOverride = %+v", got.Tips)
+	}
+
+	// A resume keeps the style: its settings file is written afresh.
+	s.Tutor = config.TutorExplain
+	_, _, files, err := Harness{}.Resume(defaultProfile(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(files[SettingsFile], []byte(`"outputStyle": "Explanatory"`)) {
+		t.Errorf("resume settings:\n%s", files[SettingsFile])
+	}
+}
+
+func TestOffLeavesTheUsersStyleAndOldVersionsGetNoTips(t *testing.T) {
+	s := spawnOf("x")
+	s.Tips = []learn.Tip{{ID: "irie.park", Text: "Park a session you have checked"}}
+	s.Probe.Version = "2.1.200 (Claude Code)"
+	_, _, files := launchSpawn(t, defaultProfile(), s)
+	for _, key := range []string{"outputStyle", "spinnerTipsOverride"} {
+		if bytes.Contains(files[SettingsFile], []byte(key)) {
+			t.Errorf("%s in the settings file:\n%s", key, files[SettingsFile])
+		}
+	}
+}
+
+// TestVisualAsksForDiagramsInTutorModeOnly checks the append flag that asks a
+// tutor-mode session for diagrams (learn.visual).
+func TestVisualAsksForDiagramsInTutorModeOnly(t *testing.T) {
+	appends := func(s harness.Spawn) bool {
+		argv, _, _ := launchSpawn(t, defaultProfile(), s)
+		i := slices.Index(argv, "--append-system-prompt")
+		return i >= 0 && i+1 < len(argv) && argv[i+1] == harness.VisualNote
+	}
+	s := spawnOf("x")
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--name": true, "--append-system-prompt": true}}
+	s.Visual = true
+	if appends(s) {
+		t.Error("no tutor mode, yet it asks for diagrams")
+	}
+	s.Tutor = config.TutorExplain
+	if !appends(s) {
+		t.Error("explain mode with visual on asks for no diagrams")
+	}
+	s.Visual = false
+	if appends(s) {
+		t.Error("visual off, yet it asks for diagrams")
+	}
+	s.Visual = true
+	s.Probe.Flags = map[string]bool{"--name": true}
+	if appends(s) {
+		t.Error("a CLI without the flag gets it")
 	}
 }

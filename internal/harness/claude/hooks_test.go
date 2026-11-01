@@ -260,6 +260,21 @@ func TestProbeReadsTheVersionAndFlags(t *testing.T) {
 	}
 }
 
+// TestProbeFindsTheAppendFlagQuietly checks that --append-system-prompt, which
+// only tutor mode's diagrams need, is found without a warning when missing.
+func TestProbeFindsTheAppendFlagQuietly(t *testing.T) {
+	path, _ := fakeCLI(t, "2.1.316 (Claude Code)", helpWithName+"\n  --append-system-prompt <prompt>   Append a system prompt")
+	p := Harness{}.Probe(config.Profile{Command: path}, os.Environ())
+	if !p.Flags["--append-system-prompt"] || !p.Flags["--name"] || len(p.Warnings) != 0 {
+		t.Errorf("probe = %+v", p)
+	}
+	path, _ = fakeCLI(t, "2.1.316 (Claude Code)", helpWithName)
+	p = Harness{}.Probe(config.Profile{Command: path}, os.Environ())
+	if p.Flags["--append-system-prompt"] || len(p.Warnings) != 0 {
+		t.Errorf("probe without the flag = %+v", p)
+	}
+}
+
 func TestProbeWarnsAboutAnOldClaude(t *testing.T) {
 	path, _ := fakeCLI(t, "2.1.200 (Claude Code)", "  --model <model>")
 	p := Harness{}.Probe(config.Profile{Command: path}, os.Environ())

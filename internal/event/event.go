@@ -105,6 +105,10 @@ const (
 	ReasonPlan        = "plan"
 	ReasonElicitation = "elicitation"
 	ReasonStalled     = "stalled"
+	// ReasonTurn is a teach-mode turn that ended on a request for the user
+	// to write a part, at a TODO(human) (docs/proposals/learning.md): the
+	// agent waits at its prompt for them.
+	ReasonTurn = "turn"
 )
 
 // Event is one envelope.

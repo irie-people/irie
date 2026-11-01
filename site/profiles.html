@@ -277,8 +277,22 @@ task = "paste"</code></pre>
       <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
       <tbody>
         <tr><td><code>watch</code></td><td><code>true</code></td><td>Look in a task’s own worktree when its turn ends, and say on its card what is left.</td></tr>
-        <tr><td><code>nudges</code></td><td><code>2</code></td><td>How many times the dog sends one task back to finish, between two of your messages. <code>0</code> only watches. It never sends one back while the agent waits on work of its own in the background, or when it asks you something.</td></tr>
+        <tr><td><code>nudges</code></td><td><code>2</code></td><td>How many times the dog sends one task back to finish, between two of your messages. <code>0</code> only watches. It never sends one back while the agent waits on work of its own in the background, when it asks you something, or when, in teach mode, it has left a part for you to write.</td></tr>
         <tr><td><code>land</code></td><td><code>{}</code></td><td>By repo, the branch its work must reach to be through, such as <code>{ shop = "main" }</code>. Name a repo by its alias, its folder’s name or its path. A repo without one is through once its work is committed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="learn">[learn]</h3>
+  <p>What helps you learn while your agents work. Tutor mode changes how Claude Code works with you, in one of its own output styles: <strong>explain</strong> does the work and adds short notes on why it made its choices; <strong>teach</strong> also leaves small parts for you to write, marked <code>TODO(human)</code> in the file, and waits for you. Both make longer replies, so they cost more tokens. To use one for a single task, start it with <code>+explain</code> or <code>+teach</code>. Irie sets the style for that session only, and never changes your own Claude Code settings.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>tutor</code></td><td><code>"off"</code></td><td>How every task works with you: <code>off</code>, <code>explain</code> or <code>teach</code>. Off leaves the output style you chose yourself, if any. While a session is in a tutor mode, change it from Irie: Claude Code’s own <code>/output-style</code> can’t override it there.</td></tr>
+        <tr><td><code>visual</code></td><td><code>true</code></td><td>In a tutor mode, the agent draws a small diagram where a picture helps you follow what it explains, such as how parts of the code connect or how branches and commits relate.</td></tr>
+        <tr><td><code>agent_tips</code></td><td><code>true</code></td><td>Add Irie’s tips to the tips Claude Code shows under its spinner while it works, now and then, marked “Irie tip”. Claude Code’s own setting to hide tips hides these too.</td></tr>
+        <tr><td><code>links</code></td><td><code>{}</code></td><td>Your own learning resources, by title, such as <code>{ "Team handbook" = "https://example.com/handbook" }</code>. They come first in the Help menu’s list.</td></tr>
       </tbody>
     </table>
   </div>

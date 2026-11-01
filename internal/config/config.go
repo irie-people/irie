@@ -36,6 +36,7 @@ type Config struct {
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
 	Dog      Dog                `toml:"dog"`
+	Learn    Learn              `toml:"learn"`
 }
 
 // Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
@@ -190,6 +191,31 @@ type Dog struct {
 	Land   map[string]string `toml:"land"`   // by repo (alias, folder name or path), the branch its work must reach, such as live
 }
 
+// Learn is what helps the person at the keyboard learn while their agents
+// work (docs/proposals/learning.md).
+type Learn struct {
+	// Tutor is how Claude Code sessions work with you: off; explain, in
+	// Claude Code's Explanatory output style, which adds notes on why it
+	// made its choices; or teach, in its Learning style, which also leaves
+	// small parts for you to write. +explain and +teach set it for one task.
+	Tutor string `toml:"tutor"`
+	// Visual asks an agent in a tutor mode to draw a small diagram where a
+	// picture helps, which the Mac app's conversation view renders.
+	Visual    bool              `toml:"visual"`
+	AgentTips bool              `toml:"agent_tips"` // Irie's tips under Claude Code's spinner
+	Links     map[string]string `toml:"links"`      // your own learning resources, by title, first in the Help menu's list
+}
+
+// Tutor modes (learn.tutor), which are also the words +explain and +teach.
+const (
+	TutorOff     = "off"
+	TutorExplain = "explain"
+	TutorTeach   = "teach"
+)
+
+// TutorModes are the values of learn.tutor.
+var TutorModes = []string{TutorOff, TutorExplain, TutorTeach}
+
 // Repos is where an @name finds its repo: aliases first, then the git repos
 // two levels under the roots.
 type Repos struct {
@@ -303,6 +329,7 @@ func Default() Config {
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
+		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 	}
 }
 
@@ -400,7 +427,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
 		Dog      *Dog                      `toml:"dog"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog}
+		Learn    *Learn                    `toml:"learn"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -446,6 +474,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Dog.Land == nil {
 		c.Dog.Land = map[string]string{}
+	}
+	if c.Learn.Links == nil {
+		c.Learn.Links = map[string]string{}
 	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
@@ -547,6 +578,19 @@ func (c Config) Validate() error {
 	}
 	if _, ok := c.Profiles[Auto]; ok {
 		bad("profiles.%s: auto is Irie's router; give the profile another name", Auto)
+	}
+	if !slices.Contains(TutorModes, c.Learn.Tutor) {
+		bad("learn.tutor = %q: must be off, explain or teach", c.Learn.Tutor)
+	}
+	for _, m := range []string{TutorExplain, TutorTeach} {
+		if _, ok := c.Profiles[m]; ok {
+			bad("profiles.%s: +%s is tutor mode's word; give the profile another name", m, m)
+		}
+	}
+	for _, title := range slices.Sorted(maps.Keys(c.Learn.Links)) {
+		if u := c.Learn.Links[title]; strings.TrimSpace(title) == "" || !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+			bad("learn.links: %q = %q: a link needs a title and an http or https address", title, u)
+		}
 	}
 	r := c.Route
 	for _, p := range r.Profiles {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 // Levels are what Irie can do with a harness (DESIGN §3.1).
@@ -84,6 +85,45 @@ type Spawn struct {
 	// Teams lets the agent start agent teams, each teammate in a tmux pane
 	// on Irie's team server (spawn.teammates).
 	Teams bool
+
+	// Tutor is how the agent works with the user (learn.tutor,
+	// docs/proposals/learning.md): config.TutorExplain or TutorTeach, or ""
+	// for off.
+	Tutor string
+	// Visual asks an agent in a tutor mode to draw a diagram where a picture
+	// helps (learn.visual).
+	Visual bool
+	// Tips are Irie's tips, for a harness that can show them, as Claude
+	// Code does under its spinner (learn.agent_tips).
+	Tips []learn.Tip
+}
+
+// TutorNote is what goes before the task of an agent whose harness has no
+// output styles, for a tutor mode: the instruction alone.
+func TutorNote(mode string) string {
+	switch mode {
+	case config.TutorExplain:
+		return "As you work, explain the reasons for your choices in a few short notes, so that the user learns from what you do."
+	case config.TutorTeach:
+		return "The user wants to learn by doing. Do the routine work yourself. Where a piece of code holds a real decision, leave it to the user: mark the place with a TODO(human) comment, say what is built, what to write and what to weigh, then stop and wait for them."
+	}
+	return ""
+}
+
+// VisualNote asks an agent in a tutor mode for pictures. Words and a picture
+// together teach better than words alone (docs/proposals/learning.md §2).
+const VisualNote = "When a picture would help the user follow an explanation, such as how parts of the code connect, what happens in what order, or how branches and commits relate, draw it as a small Mermaid diagram in a ```mermaid code block, and go on explaining in words beside it."
+
+// WithTutor puts mode's note before task, with VisualNote when visual.
+func WithTutor(mode string, visual bool, task string) string {
+	n := TutorNote(mode)
+	if n == "" {
+		return task
+	}
+	if visual {
+		n += " " + VisualNote
+	}
+	return n + "\n\n" + task
 }
 
 // Probe is what a harness learned about its CLI before a launch.
