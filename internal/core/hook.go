@@ -105,7 +105,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:
-			reply.Context = joinNotes(word, c.delegateHint(x))
+			reply.Context = joinNotes(word, c.startNote(x))
 		case e.Kind == event.SubagentStarted:
 			reply.Context = joinNotes(reply.Context, word)
 		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg().Route.Failover:

@@ -182,7 +182,8 @@ enum Fixture {
         },
         "repos": {"aliases": {"irie": "~/code/irie", "notes": "~/notes"}, "roots": ["~/code"]},
         "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
-        "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "follow_up_delay": "8s", "follow_up_window": "2m", "hide_tmux": true, "ready_timeout": "30s", "teammates": "panes"},
+        "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "follow_up_delay": "8s", "follow_up_window": "2m", "hide_tmux": true, "ready_timeout": "30s", "teammates": "panes",
+            "preferences": ["Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.", "Ask before you push."]},
         "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "freeze_dog": "10s", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
         "usage": {"status_line": true},
         "worktree": {"base": "HEAD", "branch_prefix": "irie/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}

@@ -369,7 +369,7 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 
 | Event | Matcher | Timeout | `onFailure` | Irie use |
 |---|---|---|---|---|
-| SessionStart | none | 10 s | none | Started; transcript path; queued notes |
+| SessionStart | none | 10 s | none | Started; transcript path; the delegation note (§6.4) and the user's preferences (§4.2); queued notes |
 | UserPromptSubmit | none | 10 s | none | Working; notes for an idle agent |
 | PreToolUse | `*` | `hold.max` + 120 s | `block` | Tool started; hold; AskUserQuestion and ExitPlanMode mean "needs you"; notes |
 | PostToolUse, PostToolUseFailure | `*` | `hold.max` + 120 s | none | Tool finished; hold; notes |
@@ -514,6 +514,8 @@ The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3),
 8. The journal records `spawn.requested`, then `session.started` or `spawn.failed`.
 
 `irie ctl spawn` runs `irie up` first, so a script can spawn with no window open.
+
+**Preferences.** `spawn.preferences` is how the user likes agents to work, a line each, such as how short a text to them should be. Every Claude Code session is told them in its SessionStart reply (§3.3), after the delegation note when it gets one (§6.4): `[Irie] The user’s preferences, which always apply:`, then a `- ` line for each. SessionStart comes again after `/clear`, a compaction, a resume and a fork, so they hold all session long. The built-in list has one, from the owner's ask that agents text them in fewer, plainer words: a text or notification to the user reads at a glance on a phone, the point or the ask first, then no more than three short lines, and anything longer goes on a page whose link the text carries. The user's own list replaces it and `[]` tells nothing; the Mac app edits it in Settings > Agents. It takes at most 15 lines of at most 400 characters, so that with the delegation note and a queued note the reply stays within the 10,000 characters Claude Code passes on whole: past that it saves the text to a file and passes a 2,000-character preview. A generic harness has no SessionStart, so its agents are not told.
 
 **More for the last jot.** Context remembered a moment after a task is sent belongs to that task's agent, not to a new one. A task typed to `input`, in a task bar, the command bar or with `irie ctl input`, is a jot (`jot` in `spawn`, which `input` sets). It goes to the agent of the jot sent just before it, as a message, when all of these hold:
 - it comes within `spawn.follow_up_window` (2 minutes) of that jot, or of the last jot added to it;
@@ -968,6 +970,7 @@ close_delay = "30s"           # how long a finished session waits; a new prompt,
 teammates = "off"             # panes | off: Claude Code sessions may start agent teams, each teammate in a terminal beside its session (§2.3)
 follow_up_window = "2m"       # a jot that reads as more for the jot sent within this long before goes to its agent instead of a new one (§4.2); "0s" = never
 follow_up_delay = "8s"        # how long such a jot waits before it is typed to the agent, so that New task can take it back
+preferences = ["Keep any text or notification you send the user short enough to take in at a glance on a phone: …"]   # how you like agents to work, a line each, told to every session as it starts (§4.2); your list replaces the built-in one
 
 [profiles.claude]             # the strongest: hard work and orchestration
 harness = "claude-code"
