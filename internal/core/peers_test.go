@@ -89,7 +89,10 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 	if r := rows[0]; r.Host != "Asahi" || r.Parent != "Asahi/s0" || r.Order != 0 || r.HostDown != nil || rows[1].Order != 1 {
 		t.Errorf("rows = %+v", rows)
 	}
-	if len(info) != 1 || !info[0].Up || info[0].Sessions != 2 || info[0].Version != "peer-v" || info[0].Load == nil || info[0].Load.CPUs != 10 {
+	if rows[0].Detail != "on Asahi · working" || rows[1].Detail != "on Asahi · idle" {
+		t.Errorf("details = %q, %q", rows[0].Detail, rows[1].Detail)
+	}
+	if len(info) != 1 || !info[0].Up || info[0].Sessions != 2 || info[0].Version != "peer-v" || info[0].Load == nil || info[0].Load.CPUs != 10 || info[0].Refuses != "" {
 		t.Errorf("peers = %+v", info)
 	}
 
@@ -160,7 +163,7 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		rows := c.list()
-		return len(rows) == 2 && rows[0].HostDown != nil && !c.peersInfo()[0].Up
+		return len(rows) == 2 && rows[0].HostDown != nil && !c.peersInfo()[0].Up && strings.HasPrefix(rows[0].Detail, "Asahi isn't answering · ")
 	})
 	if _, err := c.Call(ipc.OpSend, json.RawMessage(`{"session":"Asahi/s2","text":"hi"}`)); !errors.As(err, &e) || e.Code != ipc.CodePeerDown {
 		t.Errorf("send while down: %v", err)
