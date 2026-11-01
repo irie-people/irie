@@ -73,6 +73,11 @@ const (
 	// and the machine busy, what is in their focus, and what he holds back
 	// (DESIGN §4.11). It answers a GabrielResult.
 	OpGabriel = "gabriel"
+	// OpArch lists Irie's arch agents for any client to draw (DESIGN
+	// §4.11): each one's name and work, whether he is on, what he does now,
+	// what a person can do with him, and his settings. It answers an
+	// ArchResult.
+	OpArch = "arch"
 	// OpReady checks that the computer has what Irie needs, as its agents
 	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
 	// a ready.Report, for the Mac app's welcome.
@@ -252,6 +257,54 @@ type TrodHand struct {
 }
 
 // TrodResult is the trod bot's report (DESIGN §4.10).
+// ArchResult is every arch agent, by rank (OpArch). A client draws each
+// one as it comes, so a new arch agent needs no change to any client.
+type ArchResult struct {
+	Agents []ArchAgent `json:"agents"`
+}
+
+// ArchAgent is one arch agent as a client shows him.
+type ArchAgent struct {
+	Name     string        `json:"name"`               // such as gabriel
+	Nickname string        `json:"nickname,omitempty"` // what people may call him for short, such as Raffi
+	Icon     string        `json:"icon,omitempty"`     // his mark, one or two emoji
+	Title    string        `json:"title"`              // his work in a few words
+	About    string        `json:"about"`              // his work in a sentence or two
+	On       bool          `json:"on"`                 // he works now
+	Status   string        `json:"status,omitempty"`   // what he does now, in a line
+	Actions  []ArchAction  `json:"actions,omitempty"`  // what a person can do with him now
+	Settings []ArchSetting `json:"settings,omitempty"` // his settings, in the order to show them
+}
+
+// ArchAction is something a person can do with an arch agent: a client
+// shows Label and, when it is used, calls Op with Args as they are.
+type ArchAction struct {
+	Label string          `json:"label"` // such as "Boost for 1 hour"
+	Op    string          `json:"op"`    // such as gabriel
+	Args  json.RawMessage `json:"args,omitempty"`
+	Done  string          `json:"done,omitempty"` // what the client says once it worked
+}
+
+// ArchSetting is one of an arch agent's settings: a config key (the config
+// op reads and writes it), how a client edits it, and what to call it.
+type ArchSetting struct {
+	Key   string `json:"key"`            // such as arch.gabriel.away
+	Kind  string `json:"kind"`           // ArchBool, ArchDuration, ArchNumber or ArchLines
+	Label string `json:"label"`          // such as "You're away after"
+	Help  string `json:"help,omitempty"` // a line on what it does
+	// Value is the setting's value now, as the config op has it: a
+	// duration as a string such as "5m".
+	Value json.RawMessage `json:"value,omitempty"`
+}
+
+// The kinds of ArchSetting.
+const (
+	ArchBool     = "bool"     // a switch
+	ArchDuration = "duration" // a duration such as "5m"
+	ArchNumber   = "number"   // a number
+	ArchLines    = "lines"    // a list of one-line texts
+)
+
 // GabrielArgs starts or stops a boost (OpGabriel): for its time, the user's
 // focus gets the machine first whether it is busy or not. No args asks for
 // the report alone.
