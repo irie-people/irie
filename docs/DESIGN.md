@@ -38,6 +38,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | Fewer tokens through local and free models that Irie sets up, in the spawn list with their cost, weighing the machine's memory | Built-in `+sonnet` and `+local`; Irie's own Ollama server; `irie setup local`; what each profile costs in the `+` list; sessions' cost and memory in the sidebar; a memory check before a model loads | §6.1, §6.3, M10 |
 | Route each task by cost, normalised by accuracy; keep orchestration on Opus; delegate to local; fail over at usage limits; set up local models from the sidebar | `+auto`, the default: the lowest cost per success among profiles accurate enough for the task's class, learning from ratings and re-runs; `irie ctl delegate`; failover; `:setup`, `:models`, `:rate`, `:route` | §6.4, M10 |
 | A jot dog that watches the jots and sees each through | When a jot's turn ends with work not committed, or not yet in its repo's land branch (such as `live`), the dog sends its agent back to finish once, then its row says what is left until the work lands; `irie ctl dog` lists every jot that is not through | §4.8 |
+| A trod bot that keeps orchestrators going at night until their tasks are through, set up with your own rules and guidelines, and never over the week's allotment | While you are away at night (its hours, and a Mac with no input), an agent that asks you something is told to decide itself; a turn an API error stopped, a jot that is not through and a session a usage limit stopped are sent on; the Mac stays awake while there is work; past `trod.max_plan_use` it sends nothing on, and freezes what would spend past the week's cap. Every note carries `trod.rules` and `trod.guidelines`; `irie ctl trod` says what it did | §4.10 |
 
 ### 1.2 Not in v1
 
@@ -733,9 +734,40 @@ The dog only reads. It never commits, merges, pushes or removes anything.
 
 **Closed is done.** A jot you close is done, whatever it left: the dog never sends it back, lists it or reopens it. Closing is how you tell the dog that a jot is finished, landed or not.
 
-**Not yet.** A jot stopped by a usage limit could be told to go on when the limit resets; and a jot that closed on its own could be reopened to finish without being asked, though never one you closed.
+**Not yet.** A jot that closed on its own could be reopened to finish without being asked, though never one you closed. (A jot stopped by a usage limit goes on at the reset by Claude Code's own continue, which the trod bot keeps the Mac awake for at night, and sends on when it stays stopped, §4.10.)
 
 **Tests:** git reads against real worktrees (uncommitted, untracked, renamed, copied files left out, commits before the jot's start, a land branch missing, landing by moving the branch); with the fake agent, which goes on after a Stop hook as Claude Code does: a nudge and then the stop it lets through, the row's words, a commit that lands, background work and a question left alone, `nudges = 0`, a delegated task, a scratch jot's own worktree found by its conversation id but not another's; a jot you close left off the report, and one that closed on its own kept on it, across a restart.
+
+### 4.10 The trod bot
+
+At night agents stop for the user as they do by day: one asks a question, an API error ends a turn, a jot is not through once the jot dog's nudges are spent, a usage limit stops a session. Nobody answers until morning. Meanwhile the idle Mac sleeps, so not even Claude Code's own continue at a usage limit's reset runs: Claude Code keeps the Mac awake only while it works. The trod bot keeps the sessions going while the user is away at night, until their tasks are through ("trod on": keep going). It spends no tokens of its own. It reads hooks, the jot dog's look at git, the status line's plan use and the machine's idle time, and it speaks to an agent only when the agent has something left.
+
+**When it works.** It is off until the user turns it on (`trod.on`, `irie ctl trod on`, or the Mac app's Settings). It then works from `trod.start` to `trod.end` local time, around the clock when the two are the same. It steps in once the Mac has had no keyboard or mouse input for `trod.away`, which `ioreg` reads as IOHIDSystem's `HIDIdleTime`; where there is no `ioreg`, the hours alone decide. So it never answers for a user who is still up.
+
+**What it watches.** Every Claude Code session in Irie, with these exceptions:
+- one another session delegated (`irie ctl delegate`'s subtasks are their caller's) or a failover carries on;
+- one the user parked or froze: parking a session keeps the bot off it;
+- one that stopped longer than `trod.within` ago.
+
+**What it does.** It sends one session on `trod.nudges` times a night at most:
+- *A question.* At the end of a turn whose last message asks the user something, it sends the turn on, as the jot dog does (§4.8). The agent is told the user is away until the shift ends, and to take the option it would recommend. At an `AskUserQuestion`, it turns the call away with the same note: a PreToolUse `permissionDecision` of `deny`, whose reason the agent reads. The call never runs, so the session never needs the user. A question asked again before the agent has worked since waits for the user. The bot never answers in the user's name, and never approves a permission, a plan or an elicitation: those wait too.
+- *An API error.* It sends on a turn that failed on `overloaded`, `server_error`, `max_output_tokens` or `unknown` once `trod.retry` has passed. A turn that failed on something only the user can mend, such as `authentication_failed` or `billing_error`, waits.
+- *A jot that is not through.* Once the dog's nudges are spent, the bot sends the jot on every `trod.retry`, with what the dog found left, so a jot held up by an install lock tries again later.
+- *A usage limit.* While the plan is at its limit, by the newest status line, the session waits. At the reset Claude Code carries the task on itself (its automatic continue, on by default since 2.1.234), as long as the Mac is awake. A session still stopped `trod.retry` after the reset is sent on. If the user turned that continue off (`autoContinueAtUsageLimit: false`), Claude Code asks in its terminal instead, and a typed message would answer that, so the session waits for the user.
+
+The question at a turn's end and the question turned away are answered at the hook. Everything else is a message the bot types to the session, as `irie ctl send` does, on one line. It looks every 10 s, in the list's order, while fewer than `trod.max_working` sessions work. The message comes in as a prompt. It is the bot's prompt, not the user's, so the jot dog's count since the user's last prompt goes on.
+
+**Rules and guidelines.** Setting up the bot means writing its rules and guidelines. Every note carries the user's `trod.rules`, which the agent must follow, and `trod.guidelines`, for when it decides. Until the user writes their own, the rules keep everything on the machine and free: nothing is pushed, published or sent; nothing the agent did not make is deleted, and no history is rewritten; no money is spent and no usage credits are bought. The guidelines say how to decide alone: take the recommended option and say so, finish the task without starting new work, wait out a lock, land work as the repo says. Each note ends the same way, whatever the lists say: leave for the user only what needs them, such as a login, an approval in their browser or a permission prompt, and say in one line what was left.
+
+**Within the plan.** Past `trod.max_plan_use` percent of either of the plan's windows, five hours or a week, by the newest status line, the bot sends nothing on. Past it in the week's window it also lets the Mac sleep. While the user is away, it freezes each session that would spend the week on its own: one that works, one whose background work will wake it, and one Claude Code will carry on at a reset (§4.3; `freeze.on` from `irie`, with `by` and `reason`). The row says why. Once the week is under the cap again within the bot's hours, it thaws what it froze. After its hours, those wait for the user. So nothing the bot keeps going goes over the week's allotment, and it never leads to usage charged at API prices.
+
+**Awake.** While any session it watches has work left, the bot keeps the Mac from sleeping with `caffeinate -i -w <core pid>`. The display may still sleep, and the assertion ends with the core. Once every session is through, the Mac may sleep again. A MacBook whose lid is closed sleeps anyway.
+
+**On the row and in the header.** A row carries `trod`: how often the bot sent the session on in this shift or the last, when it last did and why. While the bot is within its hours, the header carries `trod`: until when, whether the user is away, whether it keeps the Mac awake, and whether the plan's use stops it.
+
+**The report.** `irie ctl trod [on|off] [--json]` (op `trod`) says whether the bot works now and why. It gives the plan's use against the cap and the rules and guidelines it hands out. By session, it lists what the bot sent in this shift or the last, and what it leaves for the user: a question asked again, a permission prompt, an error only the user can mend, the night's sends used up, or a freeze at the cap.
+
+**Tests:** the shift's hours overnight, by day, around the clock and across a change of clocks; the choices for each kind of stop (an error that may pass or not, a question once and again, a jot that is not through before and after `retry`, the night's most, a stale, parked, frozen, delegated or generic session, a usage limit before and after its reset and with Claude Code's continue off, the cap in either window). With the fake agent, which honours a PreToolUse deny as Claude Code does and runs its terminal raw, so a long message reaches it whole: a question at a turn's end and an `AskUserQuestion` turned away, a question asked again left for the user, the bot off, a failed turn typed on, a jot sent on until its night's most, what was put aside left alone, an `ioreg` that says the user is at the Mac and then away, a `caffeinate` held while there is work, and the week's cap freezing and then thawing.
 ---
 
 ## 5. Data and config
@@ -778,7 +810,7 @@ One JSON object per journal line and per `event` frame:
 | `session.ended` | `reason` | SessionEnd | `session/close` |
 | `pane.exited` | `code`, `signal` | tmux, host | none |
 | `gate.set`, `gate.held`, `gate.released` | `scope`, `tool`, `held_ms` | irie, shim | blocked |
-| `freeze.on`, `freeze.off` | `pids`, `frozen_ms` | irie, host | none |
+| `freeze.on`, `freeze.off` | `pids`, `frozen_ms`; `by` (`trod`) and `reason` when the trod bot froze or thawed it at the week's cap (§4.10) | user, irie | none |
 | `priority.set` | `level`, `reason` | irie | none |
 | `note.queued`, `note.delivered` | `note`, `kind` | irie, shim | none |
 | `ui.renamed` | `before`, `after`, `before_named`: whether the name before was the user's (§4.2) | irie | none |
@@ -789,6 +821,7 @@ One JSON object per journal line and per `event` frame:
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
 | `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |
 | `dog.nudged` | `dirty`, `ahead`, `land`, `message`: what the jot left, and what its agent had said. It stands in for that stop's `turn.ended`, since the turn goes on | irie (§4.8) | none |
+| `trod.sent` | `reason`: `question`, `error` (with `error`), `limit` or `loose`; `how`: `stop`, standing in for that stop's `turn.ended` (with `message`), `ask`, standing in for the question's `tool.started` and `input.needed` (with `question`), or `typed`, followed by the message's `prompt.submitted` | irie (§4.10) | none |
 
 ### 5.3 Derived state
 
@@ -991,6 +1024,21 @@ status_line = true            # be Claude Code's status line, to read cost and p
 watch = true                  # read a jot's own worktree when its turn ends, and say on its row what is left
 nudges = 2                    # how often it sends one jot back to finish between two of your prompts; 0 = only watch
 land = {}                     # by repo (alias, folder name or path), the branch its work must reach, e.g. { irie = "live" }
+
+[trod]                        # the trod bot: keeps sessions going while you are away at night (§4.10)
+on = false                    # work every night, from start to end
+start = "23:00"               # local time
+end = "07:00"                 # the same as start = around the clock
+away = "15m"                  # it steps in once the Mac has had no keyboard or mouse input this long; "0s" = at once
+questions = true              # tell an agent that asks you something to decide itself
+nudges = 8                    # how often it may send one session on in a night
+retry = "15m"                 # how long a stopped session waits before it is sent on again
+within = "24h"                # it sends on only sessions that stopped this recently; "0s" = however long ago
+max_working = 4               # it sends a session on only while fewer than this many work; 0 = no limit
+max_plan_use = 90             # percent: past this in either window of the plan it sends nothing on, and past it in the week's it freezes what would still spend
+keep_awake = true             # keep the Mac from sleeping while sessions have work left
+rules = ["Don't push, publish or send anything off this machine: …", "Don't delete or overwrite what you didn't make, …", "Don't spend money, …"]
+guidelines = ["When you have to choose, take the option you would recommend, …", …]   # each list replaces the built-in one
 
 [env]
 capture = "login-shell"       # login-shell | none  (used when started from Irie.app)

@@ -1,7 +1,7 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
 // the ui, spawn, profiles, local, route, repos, worktree, tmux, journal,
-// hold, usage and dog sections.
+// hold, usage, dog and trod sections.
 package config
 
 import (
@@ -15,8 +15,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
 
@@ -36,6 +38,7 @@ type Config struct {
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
 	Dog      Dog                `toml:"dog"`
+	Trod     Trod               `toml:"trod"`
 }
 
 // Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
@@ -198,6 +201,95 @@ type Dog struct {
 	Land   map[string]string `toml:"land"`   // by repo (alias, folder name or path), the branch its work must reach, such as live
 }
 
+// Trod is the trod bot (DESIGN §4.10): while you are away at night, it
+// keeps your sessions going until their tasks are through. An agent that
+// asks you something is told to decide itself; a turn an API error
+// stopped, a jot that is not through, and a usage limit that reset without
+// the session carrying on are sent on again; and the Mac stays awake while
+// any of them has work left. Every agent it sends on is told your rules
+// and guidelines. It keeps within the plan: past max_plan_use it sends
+// nothing on, and past it in the week's window it freezes what would
+// still spend the week's allotment.
+type Trod struct {
+	On         bool          `toml:"on"`           // work the shift every night, from start to end
+	Start      string        `toml:"start"`        // when it starts, in local time, such as "23:00"
+	End        string        `toml:"end"`          // when it ends; the same as start means around the clock
+	Away       time.Duration `toml:"away"`         // how long the Mac must have had no keyboard or mouse input before it steps in; 0 = at once
+	Questions  bool          `toml:"questions"`    // tell an agent that asks you something to decide itself
+	Nudges     int           `toml:"nudges"`       // how often it may send one session on in a night
+	Retry      time.Duration `toml:"retry"`        // how long a stopped session waits before it is sent on again
+	Within     time.Duration `toml:"within"`       // it sends on only sessions that stopped this recently; 0 = however long ago
+	MaxWorking int           `toml:"max_working"`  // it sends a session on only while fewer than this many work; 0 = no limit
+	MaxPlanUse float64       `toml:"max_plan_use"` // percent: past this in either of the plan's windows it sends nothing on, and past it in the week's it freezes what still spends
+	KeepAwake  bool          `toml:"keep_awake"`   // keep the Mac from sleeping while sessions have work left
+	Rules      []string      `toml:"rules"`        // what every agent it sends on must, or must not, do
+	Guidelines []string      `toml:"guidelines"`   // how those agents decide while you are away
+}
+
+// TrodRules are the trod bot's rules until you write your own: nothing
+// leaves the machine, nothing that was there is lost, and nothing costs
+// money.
+func TrodRules() []string {
+	return []string{
+		"Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages.",
+		"Don't delete or overwrite what you didn't make, and never rewrite git history.",
+		"Don't spend money, sign up for anything, or change accounts, plans, keys or settings outside your task; never buy usage credits or turn on extra usage.",
+	}
+}
+
+// TrodGuidelines are the trod bot's guidelines until you write your
+// own.
+func TrodGuidelines() []string {
+	return []string{
+		"When you have to choose, take the option you would recommend, and say in your last message which you took and why.",
+		"Finish the task you were given; note new ideas and extra work for the morning instead of starting them.",
+		"If a lock, an install or another session holds you up, wait a few minutes and try again before you stop.",
+		"Commit and land your work the way the repo's AGENTS.md or CLAUDE.md says.",
+	}
+}
+
+// Shift is the trod bot that t falls in, or else the last one before t:
+// when it started and when it ends, and whether t is in it. With the same
+// start and end, the shift goes around the clock, a day at a time from its
+// start. Times are t's location's, so a shift keeps its hours across a
+// change of clocks.
+func (n Trod) Shift(t time.Time) (from, to time.Time, in bool) {
+	sh, sm, _ := clockTime(n.Start)
+	eh, em, _ := clockTime(n.End)
+	at := func(day time.Time, h, m int) time.Time {
+		return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, t.Location())
+	}
+	from = at(t, sh, sm)
+	if from.After(t) {
+		from = at(t.AddDate(0, 0, -1), sh, sm)
+	}
+	to = at(from, eh, em)
+	if !to.After(from) {
+		to = at(from.AddDate(0, 0, 1), eh, em)
+	}
+	return from, to, t.Before(to)
+}
+
+// clockTime reads a time of day such as "23:00" or "7:30".
+func clockTime(s string) (h, m int, ok bool) {
+	g := clockPattern.FindStringSubmatch(s)
+	if g == nil {
+		return 0, 0, false
+	}
+	h, _ = strconv.Atoi(g[1])
+	m, _ = strconv.Atoi(g[2])
+	return h, m, true
+}
+
+var clockPattern = regexp.MustCompile(`^([01]?[0-9]|2[0-3]):([0-5][0-9])$`)
+
+// Most rules and guidelines the trod bot takes, and the longest each
+// may be: they go into every message it sends.
+const (
+	maxTrodLines = 20
+	maxTrodLine  = 400
+)
+
 // Repos is where an @name finds its repo: aliases first, then the git repos
 // two levels under the roots.
 type Repos struct {
@@ -311,6 +403,11 @@ func Default() Config {
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
+		Trod: Trod{
+			Start: "23:00", End: "07:00", Away: 15 * time.Minute, Questions: true, Nudges: 8,
+			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
+			Rules: TrodRules(), Guidelines: TrodGuidelines(),
+		},
 	}
 }
 
@@ -408,7 +505,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
 		Dog      *Dog                      `toml:"dog"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog}
+		Trod     *Trod                     `toml:"trod"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -454,6 +552,12 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Dog.Land == nil {
 		c.Dog.Land = map[string]string{}
+	}
+	if c.Trod.Rules == nil {
+		c.Trod.Rules = []string{}
+	}
+	if c.Trod.Guidelines == nil {
+		c.Trod.Guidelines = []string{}
 	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
@@ -732,6 +836,48 @@ func (c Config) Validate() error {
 			bad("dog.land: a repo needs a name, such as irie")
 		case !branchChars.MatchString(branch) || strings.HasPrefix(branch, "-") || strings.Contains(branch, ".."):
 			bad("dog.land.%s = %q: must name a branch, such as live", repo, branch)
+		}
+	}
+	n := c.Trod
+	for _, f := range [][2]string{{"start", n.Start}, {"end", n.End}} {
+		if _, _, ok := clockTime(f[1]); !ok {
+			bad("trod.%s = %q: must be a time of day, such as 23:00", f[0], f[1])
+		}
+	}
+	if n.Away < 0 {
+		bad("trod.away = %v: must not be negative", n.Away)
+	}
+	if n.Nudges < 0 {
+		bad("trod.nudges = %d: must not be negative", n.Nudges)
+	}
+	if n.Retry <= 0 {
+		bad("trod.retry = %v: must be positive", n.Retry)
+	}
+	if n.Within < 0 {
+		bad("trod.within = %v: must not be negative", n.Within)
+	}
+	if n.MaxWorking < 0 {
+		bad("trod.max_working = %d: must not be negative", n.MaxWorking)
+	}
+	if n.MaxPlanUse <= 0 || n.MaxPlanUse > 100 {
+		bad("trod.max_plan_use = %v: must be a percentage above 0", n.MaxPlanUse)
+	}
+	for _, list := range []struct {
+		key   string
+		lines []string
+	}{{"rules", n.Rules}, {"guidelines", n.Guidelines}} {
+		if len(list.lines) > maxTrodLines {
+			bad("trod.%s: at most %d, as each goes into every message the trod bot sends", list.key, maxTrodLines)
+		}
+		for i, l := range list.lines {
+			switch {
+			case strings.TrimSpace(l) == "":
+				bad("trod.%s[%d]: is empty", list.key, i)
+			case strings.ContainsAny(l, "\r\n"):
+				bad("trod.%s[%d]: must be one line", list.key, i)
+			case utf8.RuneCountInString(l) > maxTrodLine:
+				bad("trod.%s[%d]: must be at most %d characters", list.key, i, maxTrodLine)
+			}
 		}
 	}
 	return errors.Join(errs...)

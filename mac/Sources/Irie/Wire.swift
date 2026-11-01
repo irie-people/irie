@@ -157,12 +157,25 @@ struct Header: Decodable {
     /// ui.helper_style: a helper beside its session is drawn as cards
     /// ("browser") or as a terminal ("terminal").
     var helperStyle: String?
+    /// The trod bot, while it is within its hours (DESIGN §4.10).
+    var trod: TrodShift?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
+        case trod
     }
+}
+
+/// The trod bot within its hours: until when, whether you are away so it
+/// steps in, whether it keeps the Mac awake, and whether the plan's use
+/// stops it sending anything on.
+struct TrodShift: Decodable, Equatable {
+    var until: Date?
+    var away: Bool?
+    var awake: Bool?
+    var capped: Bool?
 }
 
 struct HelloArgs: Encodable {
