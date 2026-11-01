@@ -131,11 +131,22 @@ struct Header: Decodable, Equatable {
     var version: String?
     var redOnDone: Bool?
     var plan: Plan?
+    /// Mullvad VPN on that machine, while its vpn.on
+    /// (docs/proposals/extensions.md §4).
+    var vpn: VPNMark?
 
     enum CodingKeys: String, CodingKey {
-        case version, plan
+        case version, plan, vpn
         case redOnDone = "red_on_done"
     }
+}
+
+/// Mullvad VPN as a machine's core sees it: its state and the state in one
+/// line. Never an address or the account's number.
+struct VPNMark: Decodable, Equatable {
+    var state: String?
+    var blocked: Bool?
+    var text: String
 }
 
 /// The use of a Claude plan's windows, from the newest status line.
