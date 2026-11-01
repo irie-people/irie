@@ -231,6 +231,121 @@ struct TrodResult: Decodable {
     var hand: Hand?
 }
 
+/// Any JSON value: an arch agent's setting as the core has it, or an
+/// action's args, which the app passes on as they came.
+enum JSONValue: Codable, Equatable {
+    case null, bool(Bool), number(Double), string(String), array([JSONValue]), object([String: JSONValue])
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() {
+            self = .null
+        } else if let b = try? c.decode(Bool.self) {
+            self = .bool(b)
+        } else if let n = try? c.decode(Double.self) {
+            self = .number(n)
+        } else if let s = try? c.decode(String.self) {
+            self = .string(s)
+        } else if let a = try? c.decode([JSONValue].self) {
+            self = .array(a)
+        } else {
+            self = .object(try c.decode([String: JSONValue].self))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .null: try c.encodeNil()
+        case let .bool(v): try c.encode(v)
+        case let .number(v): try c.encode(v)
+        case let .string(v): try c.encode(v)
+        case let .array(v): try c.encode(v)
+        case let .object(v): try c.encode(v)
+        }
+    }
+
+    var bool: Bool? { if case let .bool(v) = self { v } else { nil } }
+    var number: Double? { if case let .number(v) = self { v } else { nil } }
+    var string: String? { if case let .string(v) = self { v } else { nil } }
+    var strings: [String]? { if case let .array(v) = self { v.compactMap(\.string) } else { nil } }
+
+    /// The value as the config op takes it.
+    var setting: SettingValue {
+        switch self {
+        case let .bool(v): .bool(v)
+        case let .number(v): .number(v)
+        case let .string(v): .string(v)
+        case let .array(v): .strings(v.compactMap(\.string))
+        default: .null
+        }
+    }
+}
+
+/// Irie's arch agents, as the core lists them (op arch, DESIGN §4.11).
+struct ArchResult: Decodable {
+    var agents: [ArchAgent]
+}
+
+/// One arch agent, as a client draws him.
+struct ArchAgent: Decodable, Identifiable, Equatable {
+    var name: String
+    var nickname: String?
+    var icon: String?
+    var title: String
+    var about: String
+    var on: Bool
+    var status: String?
+    var actions: [ArchAction]?
+    var settings: [ArchSetting]?
+    var id: String { name }
+
+    /// How he is introduced: his icon, his name (with his nickname first)
+    /// and his work.
+    var heading: String {
+        var n = name.prefix(1).uppercased() + name.dropFirst()
+        if let nick = nickname, !nick.isEmpty { n = "\(nick) (\(n))" }
+        if let i = icon, !i.isEmpty { n = "\(i) \(n)" }
+        return title.isEmpty ? n : "\(n) · \(title)"
+    }
+}
+
+/// Something you can do with an arch agent: the app calls op with args as
+/// they came, and says done once it worked.
+struct ArchAction: Decodable, Equatable {
+    var label: String
+    var op: String
+    var args: JSONValue?
+    var done: String?
+}
+
+/// One of an arch agent's settings, with its value now.
+struct ArchSetting: Decodable, Equatable {
+    var key: String
+    var kind: String
+    var label: String
+    var help: String?
+    var value: JSONValue?
+}
+
+/// Start a boost of Gabriel's, or stop it (DESIGN §4.11): for its time, the
+/// focus gets the machine first whether it is busy or not.
+struct GabrielArgs: Encodable {
+    var boost: Bool?
+    var stop: Bool?
+}
+
+/// Gabriel's report, as far as the app reads it.
+struct GabrielResult: Decodable {
+    var boostUntil: Date?
+    var lowPower: Bool?
+    var freed: [String]?
+    enum CodingKeys: String, CodingKey {
+        case freed
+        case boostUntil = "boost_until", lowPower = "low_power"
+    }
+}
+
 struct HelloArgs: Encodable {
     var client = "mac"
     var api = 1

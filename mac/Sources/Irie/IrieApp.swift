@@ -76,6 +76,10 @@ struct IrieApp: App {
                 // has work left or the plan is as full as it may get.
                 Button(store.trod?.hand == true ? "Stop the Trod Bot" : "Start the Trod Bot Now") { store.setTrod(store.trod?.hand != true) }
                     .disabled(!store.canTrod)
+                // Gabriel's boost: your focus gets the machine first for a
+                // while, busy or not; it ends by itself (DESIGN §4.11).
+                Button(store.boosting ? "Stop the Boost" : "Boost Your Focus") { store.setBoost(!store.boosting) }
+                    .disabled(!store.canBoost)
                 // Mullvad VPN, while vpn.on: the same words as :vpn in a
                 // task bar (docs/proposals/extensions.md §4.1).
                 Menu("VPN") {

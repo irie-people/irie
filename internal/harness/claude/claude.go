@@ -149,7 +149,9 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		argv = append(argv, "--agents", defs)
+		if defs != "" {
+			argv = append(argv, "--agents", defs)
+		}
 		if taken.As != "" {
 			argv = append(argv, "--agent", taken.As)
 		}

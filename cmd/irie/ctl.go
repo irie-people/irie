@@ -48,6 +48,18 @@ const ctlUsage = `usage: irie ctl <command>
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
+  irie ctl arch [--json]                 Irie's arch agents: each one's icon, name
+                                         and work, what he does now, and what you
+                                         can do with him
+  irie ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]
+                                         Gabriel: whether you are at the computer
+                                         and it is busy, what is in your focus,
+                                         and the sessions and apps he holds back
+                                         for it; on and off turn him on or off
+                                         (arch.gabriel.on); boost gives your focus
+                                         the machine first for a while (an hour,
+                                         arch.gabriel.boost) busy or not, and frees
+                                         idle local models; boost off ends it
   irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
@@ -126,6 +138,10 @@ func ctl(args []string) error {
 		return ctlDog(args[1:])
 	case "trod":
 		return ctlTrod(args[1:])
+	case "gabriel":
+		return ctlGabriel(args[1:])
+	case "arch":
+		return ctlArch(args[1:])
 	case "show":
 		return ctlShow(args[1:])
 	case "rename":

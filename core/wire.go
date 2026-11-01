@@ -39,6 +39,14 @@ type (
 	TrodShift        = ipc.TrodShift
 	TrodArgs         = ipc.TrodArgs
 	TrodHand         = ipc.TrodHand
+	ArchResult       = ipc.ArchResult
+	ArchAgent        = ipc.ArchAgent
+	ArchAction       = ipc.ArchAction
+	ArchSetting      = ipc.ArchSetting
+	GabrielArgs      = ipc.GabrielArgs
+	GabrielResult    = ipc.GabrielResult
+	GabrielSession   = ipc.GabrielSession
+	GabrielApp       = ipc.GabrielApp
 	TrodResult       = ipc.TrodResult
 	TrodSession      = ipc.TrodSession
 	TrodSend         = ipc.TrodSend
@@ -172,6 +180,8 @@ const (
 	OpDog             = ipc.OpDog
 	OpConfig          = ipc.OpConfig
 	OpTrod            = ipc.OpTrod
+	OpGabriel         = ipc.OpGabriel
+	OpArch            = ipc.OpArch
 	OpReady           = ipc.OpReady
 	OpVPN             = ipc.OpVPN
 	OpLearn           = ipc.OpLearn
@@ -199,6 +209,10 @@ const (
 	StateIdle         = ipc.StateIdle
 	StatePaused       = ipc.StatePaused
 	StatePausing      = ipc.StatePausing
+	ArchBool          = ipc.ArchBool
+	ArchDuration      = ipc.ArchDuration
+	ArchNumber        = ipc.ArchNumber
+	ArchLines         = ipc.ArchLines
 	DidUndo           = ipc.DidUndo
 	DidRedo           = ipc.DidRedo
 	DidSettle         = ipc.DidSettle

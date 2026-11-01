@@ -55,14 +55,15 @@ type Core struct {
 	version string
 	log     *slog.Logger
 
-	spawnMu  turns        // one spawn at a time, a promoted session's first; taken before mu
-	sendMu   turns        // one message typed to an agent at a time, likewise
-	localMu  sync.Mutex   // one start of the local server at a time, taken before mu
-	undoMu   sync.Mutex   // one undo or redo at a time, taken before spawnMu and mu
-	http     *http.Client // for local servers
-	sampling atomic.Bool  // a memory sample is running
-	sweeping atomic.Bool  // the jot dog looks at the finished jots (dog.go)
-	fdog     *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
+	spawnMu     turns        // one spawn at a time, a promoted session's first; taken before mu
+	sendMu      turns        // one message typed to an agent at a time, likewise
+	localMu     sync.Mutex   // one start of the local server at a time, taken before mu
+	undoMu      sync.Mutex   // one undo or redo at a time, taken before spawnMu and mu
+	http        *http.Client // for local servers
+	sampling    atomic.Bool  // a memory sample is running
+	gabSweeping atomic.Bool  // Gabriel's sweep is running (gabriel.go)
+	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
+	fdog        *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
 
 	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
 	awakeMu      sync.Mutex  // guards awake; taken after mu
@@ -102,6 +103,7 @@ type Core struct {
 	order      []string              // the list's order from the top, which the user sets (order.go)
 	hues       map[string]int        // the colours the core gave the sessions, the closed ones' too (hue.go)
 	bg         map[int]bgProc        // the processes Irie put in the background, by pid (priority.go)
+	gab        gabState              // what Gabriel sees and holds back (gabriel.go)
 	closes     closes                // closed sessions, and agents still ending (close.go)
 	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
@@ -154,7 +156,8 @@ type session struct {
 	out      *outcome               // its route and how it went, shared with Core.outcomes
 	conv     *conversation          // its conversation, read while clients follow it (conversation.go)
 	note     string                 // what its agent is told at its next tool call, once (freeze.go)
-	demoted  bool                   // its process tree runs in the background, for a promoted session (priority.go)
+	demoted  bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
+	userWord time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
 	convSubs int                    // the subscriptions that follow its conversation
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
@@ -262,10 +265,16 @@ func Run(o Options) error {
 	c.loadTrodHand()
 
 	// The layout, the registry and the rows' states are in place before the
-	// first hello.
+	// first hello. Every tree comes out of the background once, since only
+	// the core that put one there knows, so an install never leaves an agent
+	// slowed; so does what Gabriel slowed outside Irie (gabriel.go).
 	c.mu.Lock()
 	c.loadView()
+	for _, x := range c.sessions {
+		x.demoted = true
+	}
 	c.mu.Unlock()
+	c.releaseOutside()
 	c.tick()
 	c.pruneSkills()
 	go c.sample()
@@ -296,6 +305,7 @@ func Run(o Options) error {
 			c.tick()
 			if n%sampleEvery == 0 {
 				go c.sample()
+				go c.gabrielSweep()
 			}
 			if n%dogEvery == 0 {
 				go c.dogSweep()
@@ -308,6 +318,8 @@ func Run(o Options) error {
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
+			// Nothing stays slowed after the core is gone: its agents run on.
+			c.letGo()
 			return nil
 		}
 	}
@@ -580,7 +592,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers,
 			ipc.OpLearn, ipc.FeatureTutor,
 		}}, nil
@@ -667,6 +679,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			if err != nil {
 				return nil, err
 			}
+			c.markWord(r.Session.ID)
 			return r, nil
 		}
 		s, err := c.spawn(a, true)
@@ -676,6 +689,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		// A subtask an agent delegates is the agent's doing, not the user's.
 		if !a.Delegate {
 			c.recordAction(actSpawn, s.ID, nil)
+			c.markWord(s.ID)
 		}
 		return ipc.SpawnResult{Session: s}, nil
 	case ipc.OpShow:
@@ -726,7 +740,19 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		return nil, c.send(a)
+		if err := c.send(a); err != nil {
+			return nil, err
+		}
+		c.markWord(a.Session)
+		return nil, nil
+	case ipc.OpArch:
+		return c.archList(), nil
+	case ipc.OpGabriel:
+		var a ipc.GabrielArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.gabrielOp(a)
 	case ipc.OpScreen:
 		var a ipc.ScreenArgs
 		if err := decode(raw, &a); err != nil {
