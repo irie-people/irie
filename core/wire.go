@@ -23,6 +23,7 @@ type (
 	Request          = ipc.Request
 	Reply            = ipc.Reply
 	Error            = ipc.Error
+	Hearer           = ipc.Hearer
 	Client           = ipc.Client
 	OutsideSession   = ipc.OutsideSession
 	MoveArgs         = ipc.MoveArgs
@@ -56,6 +57,7 @@ type (
 	Choice           = ipc.Choice
 	ChoiceOption     = ipc.ChoiceOption
 	SubscribeArgs    = ipc.SubscribeArgs
+	Pong             = ipc.Pong
 	AttachInfoResult = ipc.AttachInfoResult
 	SpawnArgs        = ipc.SpawnArgs
 	SpawnResult      = ipc.SpawnResult
@@ -148,7 +150,9 @@ const (
 	OpConfig          = ipc.OpConfig
 	OpTrod            = ipc.OpTrod
 	FeatureSpawnModel = ipc.FeatureSpawnModel
+	FeatureWatch      = ipc.FeatureWatch
 	ViewApp           = ipc.ViewApp
+	ViewWatch         = ipc.ViewWatch
 	CodeBadRequest    = ipc.CodeBadRequest
 	CodeBadArgs       = ipc.CodeBadArgs
 	CodeUnknownOp     = ipc.CodeUnknownOp
@@ -190,4 +194,5 @@ const (
 	FrameOutside      = ipc.FrameOutside
 	FrameClosed       = ipc.FrameClosed
 	FrameHistory      = ipc.FrameHistory
+	FramePing         = ipc.FramePing
 )
