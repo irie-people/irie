@@ -45,7 +45,38 @@ type Config struct {
 	Trod     Trod               `toml:"trod"`
 	Arch     Arch               `toml:"arch"`
 	Remote   Remote             `toml:"remote"`
+	Place    Place              `toml:"place"`
+	Peers    map[string]Peer    `toml:"peers"`
 	Env      Env                `toml:"env"`
+}
+
+// Place is where a task typed here starts when its words do not say
+// (docs/proposals/multi-host.md §4.3): ^name always picks the machine.
+type Place struct {
+	// Mode is local, for every task here, or auto: a task goes to a peer
+	// that can run it the same way while this machine is busy and the
+	// peer has clearly more room.
+	Mode string `toml:"mode"`
+	// HeadroomCPUs and HeadroomGiB are what this machine keeps free: it is
+	// busy once the work waiting to run leaves fewer CPUs, or less memory
+	// is free.
+	HeadroomCPUs int `toml:"headroom_cpus"`
+	HeadroomGiB  int `toml:"headroom_gib"`
+}
+
+// The place modes.
+const (
+	PlaceLocal = "local"
+	PlaceAuto  = "auto"
+)
+
+// Peer is what this machine says of one of its peers, by the name it pairs
+// with in `irie peer add`; peers.json keeps the pairing itself.
+type Peer struct {
+	// Repos are the @names a task placed there by auto may name; a task
+	// with no @ goes too. You keep these repos cloned there, under the
+	// same names in its [repos], with the hooks they need.
+	Repos []string `toml:"repos"`
 }
 
 // Skills are the skills that come with Irie (docs/proposals/skills.md):
@@ -532,6 +563,7 @@ func Default() Config {
 		},
 		Arch:   Arch{Mikael: Mikael{On: true, Door: true, Good: []string{}}},
 		Remote: Remote{Port: DefaultRemotePort},
+		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
 	}
 }
 
@@ -633,11 +665,16 @@ func Parse(data []byte, path string) (Config, error) {
 		Trod     *Trod                     `toml:"trod"`
 		Arch     *Arch                     `toml:"arch"`
 		Remote   *Remote                   `toml:"remote"`
+		Place    *Place                    `toml:"place"`
+		Peers    map[string]Peer           `toml:"peers"`
 		Env      *Env                      `toml:"env"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Env: &c.Env}
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
+	}
+	if file.Peers != nil {
+		c.Peers = file.Peers
 	}
 	for _, name := range slices.Sorted(maps.Keys(file.Profiles)) {
 		p, ok := c.Profiles[name]
@@ -1029,6 +1066,24 @@ func (c Config) Validate() error {
 	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
 	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session Mikael is with hears")
+	switch c.Place.Mode {
+	case PlaceLocal, PlaceAuto:
+	default:
+		bad("place.mode = %q: must be %q or %q", c.Place.Mode, PlaceLocal, PlaceAuto)
+	}
+	if c.Place.HeadroomCPUs < 0 || c.Place.HeadroomGiB < 0 {
+		bad("place.headroom_cpus and headroom_gib must be 0 or more")
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Peers)) {
+		if name == "" || len(name) > 30 || strings.ContainsFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) {
+			bad("peers.%s: a machine's name is up to 30 letters, digits, - or _", name)
+		}
+		for i, r := range c.Peers[name].Repos {
+			if r == "" || strings.ContainsAny(r, "/ \t") {
+				bad("peers.%s.repos[%d] = %q: must be a repo's @name", name, i, r)
+			}
+		}
+	}
 	rm := c.Remote
 	if rm.Port < 2 || rm.Port > 65535 {
 		bad("remote.port = %d: must be a port from 2 to 65535, since the setup page takes the one below", rm.Port)

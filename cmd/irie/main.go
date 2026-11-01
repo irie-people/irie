@@ -43,6 +43,8 @@ const usage = `usage: irie [command]
                           model that fits this machine's memory, pull and check it
   irie remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (irie remote for help)
+  irie peer <command>     your other machines' Irie, shown in this list and
+                          started on with ^NAME (irie peer for help)
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
   irie skills             list the skills that come with Irie, and whether
@@ -110,6 +112,8 @@ func run(args []string) int {
 		err = ctl(args)
 	case "remote":
 		err = remoteCmd(args)
+	case "peer":
+		err = peerCmd(args)
 	case "setup":
 		err = setup(args)
 	case "version":

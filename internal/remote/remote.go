@@ -487,8 +487,11 @@ func (s *Server) call(w http.ResponseWriter, r *http.Request, d Device) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": s.coreDown(err)})
 		return
 	}
-	if req.Op == ipc.OpHello {
+	switch req.Op {
+	case ipc.OpHello:
 		res = s.hello(res)
+	case ipc.OpList:
+		res = hideInList(res)
 	}
 	if len(res) == 0 {
 		res = json.RawMessage(`{}`)
@@ -593,7 +596,10 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request, d Device) {
 	for {
 		select {
 		case f, ok := <-frames:
-			if !ok || s.writeLine(w, rc, f) != nil {
+			if !ok {
+				return
+			}
+			if f = hidePeers(f); f != nil && s.writeLine(w, rc, f) != nil {
 				return
 			}
 		case <-ping.C:
