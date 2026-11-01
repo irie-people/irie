@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/irie-people/irie/internal/core"
 	"github.com/irie-people/irie/internal/filetx"
+	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/remote"
 	"github.com/irie-people/irie/internal/version"
 )
@@ -30,6 +32,10 @@ The phone app (docs/PHONE.md): this machine's Irie on your phone, over your
 local network. Turn it on with remote.on = true in the config; the core then
 keeps it running.
 
+  irie remote on [--name NAME]
+                          turn the phone app on for this machine (remote.on),
+                          and name it for the phone
+  irie remote off         turn it off
   irie remote pair [--for DURATION] [--open]
                           open a pairing code for a phone (10 minutes by
                           default) and say where the phone sets up; --open
@@ -99,6 +105,29 @@ func remoteCmd(args []string) error {
 			return errors.New("--for takes a duration up to a week, such as 10m or 2h")
 		}
 		return pair(cfg.Remote.On, cfg.Remote.Port, cfg.Remote.Name, dir, store, *life, *open)
+	case "on", "off":
+		fs := flag.NewFlagSet("remote "+sub, flag.ContinueOnError)
+		name := fs.String("name", "", "what the phone calls this machine")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		set := []ipc.ConfigSet{{Key: "remote.on", Value: json.RawMessage(strconv.FormatBool(sub == "on"))}}
+		if *name != "" {
+			b, _ := json.Marshal(*name)
+			set = append(set, ipc.ConfigSet{Key: "remote.name", Value: b})
+		}
+		// The core edits the file in place and runs on it at once, which
+		// starts or stops the gateway within a second.
+		var res ipc.ConfigResult
+		if err := ipc.Call(p.Socket(), 5*time.Second, ipc.OpConfig, ipc.ConfigArgs{Set: set}, &res); err != nil {
+			return fmt.Errorf("the core didn't take it (%w); set remote.on in %s by hand, then run irie up", err, p.ConfigFile())
+		}
+		if sub == "off" {
+			fmt.Println("The phone app is off on this machine.")
+			return nil
+		}
+		fmt.Printf("The phone app is on, on port %d. Pair a phone with `irie remote pair`.\n", cfg.Remote.Port)
+		return nil
 	case "devices":
 		ds, err := store.Devices()
 		if err != nil {
