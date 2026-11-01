@@ -152,6 +152,13 @@ type Spawn struct {
 	// teammate in a terminal pane of its own, which the Mac app shows beside
 	// its session (panes), or start no teams (off).
 	Teammates string `toml:"teammates"`
+	// FollowUpWindow is how long after a jot another jot that reads as
+	// more for it goes to its agent instead of starting one (DESIGN §4.2);
+	// 0 starts every jot as a task of its own. FollowUpDelay is how long
+	// such a jot waits before it is typed to the agent, so that it can
+	// still be taken back and started apart.
+	FollowUpWindow time.Duration `toml:"follow_up_window"`
+	FollowUpDelay  time.Duration `toml:"follow_up_delay"`
 }
 
 // TeammateModes are the values of spawn.teammates.
@@ -372,6 +379,8 @@ func Default() Config {
 			HideTmux:       true,
 			CloseDelay:     30 * time.Second,
 			Teammates:      "off",
+			FollowUpWindow: 2 * time.Minute,
+			FollowUpDelay:  8 * time.Second,
 		},
 		Profiles: map[string]Profile{
 			"claude": {
@@ -733,6 +742,12 @@ func (c Config) Validate() error {
 	}
 	if c.Spawn.CloseDelay < 0 {
 		bad("spawn.close_delay = %v: must not be negative", c.Spawn.CloseDelay)
+	}
+	if c.Spawn.FollowUpWindow < 0 {
+		bad("spawn.follow_up_window = %v: must not be negative", c.Spawn.FollowUpWindow)
+	}
+	if c.Spawn.FollowUpDelay < 0 {
+		bad("spawn.follow_up_delay = %v: must not be negative", c.Spawn.FollowUpDelay)
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.Profiles)) {
 		p := c.Profiles[name]

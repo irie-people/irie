@@ -66,7 +66,17 @@ func Read(in InputArgs, v View) (Step, error) {
 		a.Profile = in.Profile
 	}
 	a.Model = in.Model
-	return Step{Op: OpSpawn, Args: a}, nil
+	// A typed task is a jot: one that reads as more for the jot sent just
+	// before goes to that jot's agent instead (DESIGN §4.2). Apart starts
+	// one that went there on its own after all.
+	a.Jot, a.Apart = true, in.Apart
+	st := Step{Op: OpSpawn, Args: a}
+	for i := range v.Sessions {
+		if in.Apart != "" && v.Sessions[i].ID == in.Apart {
+			st.Session = &v.Sessions[i]
+		}
+	}
+	return st, nil
 }
 
 // command reads a : command: its name, without the colon, and the rest of
@@ -229,8 +239,16 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	case "":
 		r.Did, r.Text = InputAnswered, st.Answer
 	case OpSpawn:
-		s := as[SpawnResult](result).Session
+		sr := as[SpawnResult](result)
+		s := sr.Session
 		r.Did, r.Session, r.Text = InputSpawned, &s, started(s)
+		switch {
+		case sr.Added:
+			r.Did, r.Until, r.Text = InputAdded, sr.Until, "Added to "+s.Name+", the task sent just before."
+		case sr.Late && name != "":
+			// Taken back too late: that agent has it as well.
+			r.Text += " " + name + " has it too."
+		}
 	case OpTool:
 		s := as[SpawnResult](result).Session
 		r.Session, r.Show, r.Text = &s, true, "Started "+s.Name+"."
