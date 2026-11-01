@@ -527,11 +527,13 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 		args, name, title = []string{"setup", "local"}, "setup-local", "set up local models"
 	case ipc.ToolModels:
 		args, name, title = []string{"ctl", "local"}, "models", "local models and their memory"
+	case ipc.ToolSwitch:
+		return c.guide(guideSwitch)
 	default:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s and %s", a.Name, ipc.ToolSetup, ipc.ToolModels)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s, %s and %s", a.Name, ipc.ToolSetup, ipc.ToolModels, ipc.ToolSwitch)
 	}
 	p := config.Profile{Harness: "tool", Command: c.bin, Args: args, Env: map[string]string{}}
-	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{})
+	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{}, false)
 }
 
 // saveResult keeps a turn's last message whole, for `irie ctl delegate`.

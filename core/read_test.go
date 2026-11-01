@@ -48,6 +48,7 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{"  :redo  ", "", "", OpRedo, UndoArgs{}},
 		{":setup", "", "", OpTool, ToolArgs{Name: ToolSetup}},
 		{":setup local", "", "", OpTool, ToolArgs{Name: ToolSetup}},
+		{":setup switch", "", "", OpTool, ToolArgs{Name: ToolSwitch}},
 		{":models", "", "", OpTool, ToolArgs{Name: ToolModels}},
 		{":route fix the typo", "", "", OpRoute, RouteArgs{Task: "fix the typo"}},
 		{":freeze", "s1", "", OpFreeze, FreezeArgs{Session: "s1"}},

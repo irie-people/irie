@@ -363,3 +363,60 @@ func TestClaudeCodeHasEveryLevel(t *testing.T) {
 		t.Errorf("levels %v, want GOHS", l)
 	}
 }
+
+// TestArgvGoldenWithIrieSkills: a session that gets Irie's own skills, such
+// as the dead man's switch guide, gets its plugin folder with --plugin-dir,
+// between --settings and --session-id (docs/proposals/extensions.md §1.2).
+func TestArgvGoldenWithIrieSkills(t *testing.T) {
+	s := spawnOf("/irie:dead-mans-switch")
+	s.Name = "Dead Man's Switch"
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--name": true, "--plugin-dir": true}}
+	s.PluginDir = "/home/alice/.local/share/irie/skills/plugins/0123456789abcdef"
+	argv, _, _ := launchSpawn(t, defaultProfile(), s)
+	got, err := json.MarshalIndent(argv, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "argv-skills.golden", append(got, '\n'))
+
+	// A resume of that session gets the folder again.
+	r, _, _, err := Harness{}.Resume(defaultProfile(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(r, "--plugin-dir"); i < 0 || r[i+1] != s.PluginDir {
+		t.Errorf("resume argv = %q, want --plugin-dir %s", r, s.PluginDir)
+	}
+}
+
+// TestPluginDirNeedsTheFlag: a CLI whose --help lists no --plugin-dir cannot
+// run a session that needs Irie's skills, and says why; one that needs none
+// is not warned about it.
+func TestPluginDirNeedsTheFlag(t *testing.T) {
+	s := spawnOf("/irie:dead-mans-switch")
+	s.PluginDir = "/home/alice/.local/share/irie/skills/plugins/0123456789abcdef"
+	if _, _, _, err := (Harness{}).Launch(defaultProfile(), s); err == nil || !strings.Contains(err.Error(), "--plugin-dir") {
+		t.Errorf("err = %v, want one that names --plugin-dir", err)
+	}
+	argv, _, _ := launch(t, defaultProfile(), "x")
+	if slices.Contains(argv, "--plugin-dir") {
+		t.Errorf("argv = %q: a session without skills got --plugin-dir", argv)
+	}
+}
+
+func TestProbeWarnsOnlyForFlagsEverySessionUses(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "claude")
+	script := "#!/bin/sh\ncase \"$1\" in --version) echo '2.1.316 (Claude Code)';; --help) echo '  -n, --name <name>  Set a display name';; esac\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pr := Harness{}.Probe(config.Profile{Command: bin}, os.Environ())
+	if pr.Flags["--plugin-dir"] {
+		t.Error("found --plugin-dir in help that lacks it")
+	}
+	for _, w := range pr.Warnings {
+		if strings.Contains(w, "--plugin-dir") {
+			t.Errorf("warning %q on every session", w)
+		}
+	}
+}

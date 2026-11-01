@@ -56,6 +56,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 | `:move [NAME]` | Brings in the session outside Irie by its id or name, else the selected one (`outside`) | `ran`, with `session` |
 | `:route TASK` | Says where `+auto` would run the task, and why | `answered` |
 | `:setup [local]`, `:models` | Starts a tool session, which waits on its user | `ran`, with `session` and `show` |
+| `:setup switch` | Starts the dead man's switch guide: a Claude Code session on `+claude` with Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2) | `ran`, with `session` and `show` |
 
 Every op runs through the core's dispatch as if the client had sent it, so a typed `:park` is a park in every way: its checks, its journal and its step of the history. What the words can't do comes back as an error in plain words, such as `:park takes the selected session, which must be not parked.`, and nothing runs.
 

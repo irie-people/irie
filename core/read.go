@@ -14,7 +14,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch], :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -113,6 +113,8 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(name, UndoArgs{}, nil)
 	case name == "setup" && (arg == "" || arg == "local"):
 		return step(OpTool, ToolArgs{Name: ToolSetup}, nil)
+	case name == "setup" && arg == "switch":
+		return step(OpTool, ToolArgs{Name: ToolSwitch}, nil)
 	case name == "models" && arg == "":
 		return step(OpTool, ToolArgs{Name: ToolModels}, nil)
 	case name == "route" && arg != "":

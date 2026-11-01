@@ -48,6 +48,9 @@ struct IrieApp: App {
                     .keyboardShortcut("n")
                 Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                     .keyboardShortcut("n", modifiers: [.command, .option])
+                // A guided session of Irie's own, as :setup switch starts
+                // from any task bar (docs/proposals/extensions.md §2.2).
+                Button("Set Up a Dead Man's Switch…") { Task { _ = await store.input(":setup switch") } }
                 Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
                     .disabled(store.selection == nil || store.outsideSelection != nil)
             }

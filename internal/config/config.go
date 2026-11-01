@@ -1,7 +1,7 @@
 // Package config loads Irie's TOML config (DESIGN §5.5). Every key is
 // optional, and an unknown key is an error that names it. This version knows
 // the ui, spawn, profiles, local, route, repos, worktree, tmux, journal,
-// hold, usage, dog and trod sections.
+// hold, usage, dog, trod, remote and skills sections.
 package config
 
 import (
@@ -42,6 +42,7 @@ type Config struct {
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
 	Remote   Remote             `toml:"remote"`
+	Skills   Skills             `toml:"skills"`
 }
 
 // Remote is the phone app (docs/PHONE.md): this machine's Irie, served over
@@ -52,6 +53,14 @@ type Remote struct {
 	Port   int    `toml:"port"`   // its HTTPS port; the setup page is on the port below, over plain HTTP
 	Name   string `toml:"name"`   // what the phone calls this machine; "" = its host name
 	Listen string `toml:"listen"` // the address to listen on, such as 192.168.1.20; "" = every address of this machine
+}
+
+// Skills are the skills Irie hands its agents (docs/proposals/skills.md
+// §5.1). Irie's own come inside irie; each goes to Claude Code in the
+// session-only plugin of docs/proposals/extensions.md §1.2.
+type Skills struct {
+	Enabled  bool     `toml:"enabled"`  // false: Irie hands no skill to any agent
+	Disabled []string `toml:"disabled"` // skills to leave out, by name, such as ["dead-mans-switch"]
 }
 
 // DefaultRemotePort is the phone app's HTTPS port; the setup page is on the
@@ -426,6 +435,7 @@ func Default() Config {
 			Rules: TrodRules(), Guidelines: TrodGuidelines(),
 		},
 		Remote: Remote{Port: DefaultRemotePort},
+		Skills: Skills{Enabled: true, Disabled: []string{}},
 	}
 }
 
@@ -525,7 +535,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
 		Remote   *Remote                   `toml:"remote"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote}
+		Skills   *Skills                   `toml:"skills"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Skills: &c.Skills}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -578,6 +589,9 @@ func Parse(data []byte, path string) (Config, error) {
 	if c.Trod.Guidelines == nil {
 		c.Trod.Guidelines = []string{}
 	}
+	if c.Skills.Disabled == nil {
+		c.Skills.Disabled = []string{}
+	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
 		names := make([]string, len(keys))
@@ -597,6 +611,7 @@ var (
 	tmuxKey     = regexp.MustCompile(`^[!-~]+$`) // printable, no spaces
 	repoName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	branchChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+	skillName   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`) // the Agent Skills rule
 )
 
 // hasPrior reports whether a route profile has an accuracy for every class
@@ -908,6 +923,11 @@ func (c Config) Validate() error {
 	}
 	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
 		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
+	}
+	for _, name := range c.Skills.Disabled {
+		if len(name) > 64 || !skillName.MatchString(name) {
+			bad("skills.disabled: %q is not a skill's name, which is lowercase letters, digits and hyphens", name)
+		}
 	}
 	return errors.Join(errs...)
 }

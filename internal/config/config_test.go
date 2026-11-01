@@ -643,3 +643,21 @@ func TestFreezeDogIsADurationAndZeroIsNever(t *testing.T) {
 		t.Errorf("the config op shows freeze_dog as %v, want 10s", got)
 	}
 }
+
+func TestSkillsSection(t *testing.T) {
+	if s := Default().Skills; !s.Enabled || s.Disabled == nil || len(s.Disabled) != 0 {
+		t.Errorf("default skills = %+v, want on with none left out", s)
+	}
+	c, err := Load(writeFile(t, "[skills]\nenabled = false\ndisabled = [\"dead-mans-switch\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Skills.Enabled || len(c.Skills.Disabled) != 1 || c.Skills.Disabled[0] != "dead-mans-switch" {
+		t.Errorf("skills = %+v", c.Skills)
+	}
+	for _, bad := range []string{`disabled = ["Dead Man's Switch"]`, `disabled = ["-x"]`, `disabled = [""]`} {
+		if _, err := Load(writeFile(t, "[skills]\n"+bad+"\n")); err == nil || !strings.Contains(err.Error(), "skills.disabled") {
+			t.Errorf("%s: err = %v", bad, err)
+		}
+	}
+}

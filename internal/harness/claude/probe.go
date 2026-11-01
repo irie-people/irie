@@ -25,7 +25,12 @@ import (
 const MinVersion = "2.1.295"
 
 // optional are flags Irie passes only to a CLI whose --help lists them.
-var optional = []string{"--name"}
+// warn says whether a CLI without one gets a warning on every session; a
+// flag only some sessions need warns when one does, as --plugin-dir does.
+var optional = []struct {
+	flag string
+	warn bool
+}{{"--name", true}, {"--plugin-dir", false}}
 
 // probeTimeout bounds each run of the CLI.
 var probeTimeout = 5 * time.Second
@@ -72,13 +77,13 @@ func (Harness) Probe(p config.Profile, env []string) harness.Probe {
 	if err == nil {
 		help, _ := probe(path, append(slices.Clone(p.Args), "--help"), env)
 		for _, f := range optional {
-			if listsFlag(help, f) {
+			if listsFlag(help, f.flag) {
 				if pr.Flags == nil {
 					pr.Flags = map[string]bool{}
 				}
-				pr.Flags[f] = true
-			} else {
-				pr.Warnings = append(pr.Warnings, fmt.Sprintf("%s left out: `%s --help` does not list it", f, command))
+				pr.Flags[f.flag] = true
+			} else if f.warn {
+				pr.Warnings = append(pr.Warnings, fmt.Sprintf("%s left out: `%s --help` does not list it", f.flag, command))
 			}
 		}
 	}

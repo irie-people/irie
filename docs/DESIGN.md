@@ -71,7 +71,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 1. **tmux is the engine.** It keeps agents alive with no window open, swaps panes into view, reports process facts and carries typed input. Ghostty is the window around it.
 2. **One writer.** `irie core` owns all state and every rule, and is the only process that drives tmux. The sidebar, the Mac app, `irie ctl`, the hook shim, the subagent mirrors and any other front-end are all clients of its socket API, which [CORE.md](CORE.md) describes for whoever writes one: irie-core. A client keeps no rules of its own, not even what the words in its task bar mean (`input`).
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
-4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
+4. **Inject, never edit.** Hooks, settings, env and Irie's own skills go in per launch, through `--settings`, `--plugin-dir`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
 6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze, promote or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
 
@@ -283,6 +283,8 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `tools/mkicon/` | Icon generator | M9 |
 | `internal/localmodel/` | Ollama client, memory estimates and the machine's memory, preflight, setup suggestions, `irie runtime` | M10 |
 | `internal/statusline/` | `irie statusline`: cost, context and plan use from Claude Code's status line | M10 |
+| `internal/skills/` | Irie's own skills, compiled in from `builtin/`, and the plugin folder that hands them to a guide's session ([extensions.md](proposals/extensions.md) §1.2) | M12, first slice |
+| `internal/dms/` | The dead man's switch guide's helpers, `irie dms`: the Healthchecks checks, the phone's check-in and the calendar file ([extensions.md](proposals/extensions.md) §2) | Extensions |
 | `e2e/` | Opt-in tests against the real Claude Code | M11 |
 
 ---
@@ -337,6 +339,7 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | Resume (move into Irie, §4.6) | `claude <profile flags> --settings <file> --resume <uuid>`: no `--session-id`, since a resumed session keeps its id, and no task, since it waits for input. `--name` is left out; the conversation keeps its own |
 | Env | Adds `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`. Removes `TMUX` and `TMUX_PANE` (`spawn.hide_tmux`), so an agent's own `tmux` commands cannot reach Irie's server. With agent teams (`spawn.teammates = "panes"`, §2.3) `TMUX` and `TMUX_PANE` name the session's anchor on the team server instead, the tmux shim's dir goes first on `PATH`, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set, unless the profile sets it; a `0` in the user's own settings still turns teams off. Removes the inherited variables that tie a process to another Claude Code session or terminal pane (§4.6), unless the profile sets them. A local profile also gets the environment that points Claude Code at its model (§6.1), under the profile's own `env` |
 | Versions | `claude --version` must be 2.1.295 or later for `onFailure`. Older versions still spawn, but pause is disabled for that session and the row says why. Optional flags (`--name`) are detected from `claude --help` once per version; an unsupported optional flag is dropped with a warning. Required values (model, effort, permission mode) are never dropped: if the CLI rejects one, the spawn fails visibly |
+| `--plugin-dir` | Only for a guide, such as `:setup switch` (§4.2): the folder of Irie's own skills, `<data>/skills/plugins/<digest>/`, a plugin named `irie` that loads for that session only. Found through `--help` like `--name`, but no other session is warned when it is missing; a guide on a CLI without it fails with the reason. A reopened guide gets the folder of the day's skills again ([extensions.md](proposals/extensions.md) §1.2) |
 | `--settings` | From M2. The settings file adds hooks for this session only. Claude Code merges hook lists, so the user's own hooks still run. With `usage.status_line` it also sets `statusLine` to `irie statusline`; that key does not merge, so Irie's runs the user's own (§6.3). With agent teams it sets `teammateMode` to `tmux`. Claude Code passes the file on to split-pane teammates |
 
 **Hooks in `claude-settings.json`.** Every hook uses `{"type":"command","command":"<IRIE_BIN> hook"}`.
@@ -467,7 +470,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
 | `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10) |
 | (the Mac app's sheet) | A model for this one task, `model` in `spawn`: an alias Claude Code's `--model` takes (`fable`, `opus`, `sonnet`) or a model's full name. Only a Claude Code profile takes it; a core that does lists `spawn-model` in `hello` |
-| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
+| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:setup switch` starts the dead man's switch guide, a Claude Code session on `+claude` that runs Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2); `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
 
@@ -878,6 +881,8 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_RUNTIME_DIR/irie/`, or `$TMPDIR/irie-<uid>/` if unset (macOS) | `core.sock`, `core.lock`, `app.lock`. macOS limits socket paths to about 104 bytes, so this path must stay short | core |
 | `$XDG_DATA_HOME/irie/worktrees/<repo>/<slug>/` | Worktrees | core |
 | `$XDG_DATA_HOME/irie/scratch/<slug>/` | Working dir for tasks that name no repo | core |
+| `$XDG_DATA_HOME/irie/skills/plugins/<digest>/` | The plugin folder of Irie's own skills, named by a digest of what it holds, its files read-only; checked before each launch that uses it and made again if anything changed; removed at the next core start when no session uses it | core |
+| `$XDG_STATE_HOME/irie/dms/` | The dead man's switch helpers' `healthchecks.key` and `switch.json` (the checks' ids and ping URLs), both 0600 and never printed | `irie dms` |
 | `$XDG_CACHE_HOME/irie/env.json` | Captured login-shell environment | `irie app-launch` |
 | `~/Applications/Irie.app` | The launcher | `irie install-app` |
 
@@ -1058,6 +1063,10 @@ on = false                    # serve it on this machine's local network; the co
 port = 7387                   # its HTTPS port; the setup page is on the port below, over plain HTTP
 name = ""                     # what the phone calls this machine; "" = its computer name (macOS) or host name
 listen = ""                   # the address to listen on; "" = every address of this machine
+
+[skills]                      # Irie's own skills (proposals/skills.md §5.1, proposals/extensions.md §1.2)
+enabled = true                # false = no skill of Irie's for any agent; IRIE_SKILLS=off where the core starts does the same
+disabled = []                 # skills to leave out, by name, such as ["dead-mans-switch"]
 ```
 
 ---

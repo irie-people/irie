@@ -35,6 +35,10 @@ const usage = `usage: irie [command]
                           model that fits this machine's memory, pull and check it
   irie remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (irie remote for help)
+  irie dms <command>      the dead man's switch guide's helpers: its checks,
+                          check-in and calendar (irie dms for help)
+  irie skills             Irie's own skills, whether each is on, and how to
+                          start it
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
 
@@ -100,6 +104,10 @@ func run(args []string) int {
 		err = ctl(args)
 	case "remote":
 		err = remoteCmd(args)
+	case "dms":
+		err = dmsCmd(args)
+	case "skills":
+		err = skillsCmd(args)
 	case "setup":
 		err = setup(args)
 	case "version":

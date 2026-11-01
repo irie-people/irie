@@ -390,6 +390,13 @@ For Irie to offer it, a session option such as a profile's `browser = "mullvad"`
 | 8 | Vault approvals from a phone | a. Deny only, at first. b. Allow, signed by the native iPhone app's own Secure Enclave key after Face ID | **a**, then **b** with the native app |
 | 9 | Mullvad Browser | a. A recipe in the docs, for now (§5.4). b. `irie browser mcp` now | **a** |
 
+**Decided 2026-11-01:**
+- **Decision 1:** a, the dead man's switch first.
+- **Decision 2:** a, then Mullvad VPN control; Bitwarden for agents waits for its approval design.
+- **Decision 3:** a, only a guide's own session gets Irie's plugin.
+- **Decision 4:** the user's choice: the guide offers the iPhone shortcut and the contact card, and each user takes either or both.
+- **Decisions 5 to 9:** the recommendations stand.
+
 ## Checks for this proposal
 
 - `mullvad`, `bw` and `claude` were read through their own `--help` only. Nothing read an account, a vault or the VPN's state, and nothing changed a setting.

@@ -673,8 +673,10 @@ type ResultResult struct {
 	Text string `json:"text"`
 }
 
-// ToolArgs start a tool session: setup (`irie setup local`) or models
-// (`irie ctl local`).
+// ToolArgs start a tool session: setup (`irie setup local`), models
+// (`irie ctl local`) or switch, the dead man's switch guide: a Claude Code
+// session that runs one of Irie's own skills (docs/proposals/extensions.md
+// §2.2).
 type ToolArgs struct {
 	Name string `json:"name"`
 }
@@ -683,6 +685,7 @@ type ToolArgs struct {
 const (
 	ToolSetup  = "setup"
 	ToolModels = "models"
+	ToolSwitch = "switch"
 )
 
 // StatusArgs carry one status line update of a Claude Code session: its

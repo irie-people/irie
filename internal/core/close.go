@@ -561,6 +561,12 @@ func (c *Core) reopenJob(r closedRecord) (job, error) {
 		place:   place{cwd: spec.Cwd, repo: spec.Repo, worktree: spec.Worktree, branch: spec.Branch, copied: spec.Copied},
 		profile: spec.Profile, run: profile, h: h, probe: probe, reopen: &r, data: map[string]any{"reopen": true},
 	}
+	// A guide gets Irie's skills again, in the folder of today's set.
+	if spec.Skills {
+		if j.plugin, err = c.pluginDir(); err != nil {
+			return job{}, fmt.Errorf("cannot reopen %s: %v", r.Name, err)
+		}
+	}
 	if _, resumes := h.(harness.Resumer); r.Resume && resumes {
 		j.resume = r.VendorID
 		j.data["resume"] = r.VendorID

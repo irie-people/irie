@@ -194,6 +194,7 @@ const (
 	Bad               = ipc.Bad
 	ToolSetup         = ipc.ToolSetup
 	ToolModels        = ipc.ToolModels
+	ToolSwitch        = ipc.ToolSwitch
 	FrameSnapshot     = ipc.FrameSnapshot
 	FrameUpsert       = ipc.FrameUpsert
 	FrameRemove       = ipc.FrameRemove

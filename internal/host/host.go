@@ -40,6 +40,7 @@ type Spec struct {
 	Paste    bool              `json:"paste,omitempty"`  // the core pastes the task into the terminal once the agent runs
 	Model    string            `json:"model,omitempty"`  // the model the agent runs
 	Local    bool              `json:"local,omitempty"`  // a model of a local runtime
+	Skills   bool              `json:"skills,omitempty"` // it gets Irie's own skills, again when reopened
 }
 
 // Exit is exit.json, written when the agent exits.

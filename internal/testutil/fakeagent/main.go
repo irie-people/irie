@@ -58,6 +58,8 @@
 //	IRIE_FAKE_VERSION      what --version reports (default 2.1.300); a version
 //	                       before 2.1.295 refuses settings that use onFailure
 //	IRIE_FAKE_NO_NAME      when set, --help lists no --name and --name is refused
+//	IRIE_FAKE_NO_PLUGIN_DIR when set, --help lists no --plugin-dir and
+//	                       --plugin-dir is refused
 //	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
 //	                       agent that hangs
 //	IRIE_FAKE_PACE         a pause before each step, such as 300ms
@@ -96,6 +98,7 @@ type options struct {
 	model, effort, mode, settings, sessionID, name, resume string
 	version, help                                          bool
 	task                                                   string
+	plugins                                                []string // --plugin-dir, repeatable
 }
 
 var (
@@ -144,6 +147,11 @@ func parseArgs(args []string) (options, error) {
 			if os.Getenv("IRIE_FAKE_NO_NAME") == "" {
 				dst = &o.name
 			}
+		case "--plugin-dir":
+			if os.Getenv("IRIE_FAKE_NO_PLUGIN_DIR") == "" {
+				o.plugins = append(o.plugins, "")
+				dst = &o.plugins[len(o.plugins)-1]
+			}
 		}
 		if dst == nil {
 			return o, fmt.Errorf("error: unknown option '%s'", flag)
@@ -183,6 +191,7 @@ Options:
   --model <model>            Model for the current session
   -n, --name <name>          Set a display name for this session
   --permission-mode <mode>   Permission mode to use for the session
+  --plugin-dir <path>        Load a plugin from a directory for this session only
   -r, --resume [value]       Resume a conversation by session ID
   --session-id <uuid>        Use a specific session ID for the conversation
   --settings <file-or-json>  Path to a settings JSON file or a JSON string
@@ -216,8 +225,15 @@ func run(args []string) int {
 		if os.Getenv("IRIE_FAKE_NO_NAME") != "" {
 			h = strings.Replace(h, "  -n, --name <name>          Set a display name for this session\n", "", 1)
 		}
+		if os.Getenv("IRIE_FAKE_NO_PLUGIN_DIR") != "" {
+			h = strings.Replace(h, "  --plugin-dir <path>        Load a plugin from a directory for this session only\n", "", 1)
+		}
 		fmt.Print(h)
 		return 0
+	}
+	if err := findSkill(o.task, o.plugins); err != nil {
+		fmt.Fprintln(os.Stderr, "fakeagent:", err)
+		return 1
 	}
 	a, err := newAgent(o, version)
 	if err != nil {
@@ -225,6 +241,28 @@ func run(args []string) int {
 		return 1
 	}
 	return a.run()
+}
+
+// findSkill checks a task that runs a plugin's skill, /<plugin>:<skill>, as
+// Claude Code would: some --plugin-dir must hold a plugin of that name with
+// that skill.
+func findSkill(task string, plugins []string) error {
+	cmd, _, _ := strings.Cut(task, " ")
+	plugin, skill, ok := strings.Cut(strings.TrimPrefix(cmd, "/"), ":")
+	if !strings.HasPrefix(cmd, "/") || !ok {
+		return nil
+	}
+	for _, dir := range plugins {
+		var m struct{ Name string }
+		b, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
+		if err != nil || json.Unmarshal(b, &m) != nil || m.Name != plugin {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, "skills", skill, "SKILL.md")); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown skill %s", cmd)
 }
 
 // handler and group are the hook settings of Claude Code's hooks reference.
