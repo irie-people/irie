@@ -338,10 +338,13 @@ func (c *Core) launch(j job) (*session, error) {
 	// waiting for it from before it closed (follow.go).
 	os.Remove(c.paths.FreezeFile(id))
 	os.Remove(c.paths.FollowUpFile(id))
+	// Nor with what the arch agents brought it then (arch.go).
+	os.Remove(filepath.Join(dir, harness.ArchFile))
 	s := harness.Spawn{
 		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
 		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
+		Arch: c.archFor(profile, h.ID()),
 	}
 	// Only the user's name goes to the agent: Claude Code titles a session
 	// it gets no name for, and the row follows the title (title.go).

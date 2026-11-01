@@ -451,13 +451,14 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 	if fi, err := os.Stat(settings); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("settings file: %v", err)
 	}
-	// Irie says nothing back, but for the delegation note when the session
-	// starts (DESIGN §6.4).
+	// Irie says nothing back, but for Mikael's word and the delegation note
+	// when the session starts (DESIGN §4.11, §6.4).
 	for _, r := range log {
 		if r["t"] != "hook" {
 			continue
 		}
-		hint := r["event"] == "SessionStart" && strings.Contains(fmt.Sprint(r["stdout"]), "ctl delegate")
+		out := fmt.Sprint(r["stdout"])
+		hint := r["event"] == "SessionStart" && (strings.Contains(out, "ctl delegate") || strings.Contains(out, "Mikael, the first of Irie's arch agents, is with you"))
 		if r["exit"] != 0.0 || r["stdout"] != "" && !hint {
 			t.Errorf("hook reply %v", r)
 		}
