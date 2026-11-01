@@ -170,6 +170,11 @@ type Session struct {
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
 
+	// Hue is which of the agents' colours it takes while it works, from 1
+	// to ui.AgentColors, the same for as long as it lives (internal/core,
+	// hue.go); 0 until the core gives it one.
+	Hue int `json:"hue,omitempty"`
+
 	// Loose is what its jot left that has not landed, by the jot dog's
 	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
 	// through or the dog does not watch it.

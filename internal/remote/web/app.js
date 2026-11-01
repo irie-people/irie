@@ -771,7 +771,7 @@ function fillCard(row, c, s, now) {
   if (row._sig === sig) return;
   row._sig = sig;
   const card = row._card;
-  card.className = 'card' + (loud ? ' loud' : '') + (quiet ? ' quiet' : '') + (lk === 'working' ? ' working slot' + L.agentSlot(s.id) : '') + (s.loose && !loud ? ' loose' : '');
+  card.className = 'card' + (loud ? ' loud' : '') + (quiet ? ' quiet' : '') + (lk === 'working' ? ' working slot' + L.slotOf(s) : '') + (s.loose && !loud ? ' loose' : '');
   card.innerHTML =
     `<span class="${L.markClass(s, c.redOnDone)}">${L.glyph(lk)}</span>` +
     '<div class="c-main">' +

@@ -192,32 +192,34 @@ enum Fixture {
         let now = Date()
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
         let irie = "/home/alice/code/irie", bigup = "/home/alice/code/bigup"
+        // Each with the colour the core gives it, from the top of the list
+        // down, so cards side by side stand apart (internal/core, hue.go).
         return [
             Session(id: "s01syncagent", name: "sync-agents", state: "needs_you", reason: "permission",
                     detail: "Asks: may it run rm -rf build?", command: "Bash · rm -rf build", created: ago(30), cwd: irie + "-sync-agents",
                     repo: irie, branch: "irie/sync-agents", profile: "claude",
-                    tokens: Tokens(input: 1200, output: 3400, cacheRead: 40000, cacheWrite: 3600)),
+                    tokens: Tokens(input: 1200, output: 3400, cacheRead: 40000, cacheWrite: 3600), hue: 1),
             Session(id: selected, name: "docs-guide", state: "working", detail: "Running the tests", command: "Bash · go test ./...",
                     created: ago(26), cwd: irie + "-docs-guide", repo: irie, branch: "irie/docs-guide", profile: "claude",
                     subagents: [Subagent(agent: "sub:a1", type: "Explore", started: ago(3), detail: "Reading DESIGN.md", command: "Read · docs/DESIGN.md"),
                                 Subagent(agent: "sub:a2", type: "Plan", started: ago(2))],
-                    tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800)),
+                    tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800), hue: 5),
             Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "irie/conversation-view", profile: "claude",
-                    trod: TrodRow(sent: 2, last: ago(0.5), reason: "error")),
+                    trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
-                    repo: irie, branch: "irie/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question")),
+                    repo: irie, branch: "irie/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
-                    created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude"),
+                    created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude", hue: 3),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),
-                    cwd: "/home/alice/.local/share/irie/scratch/summarise-the-notes", profile: "claude", parked: true),
+                    cwd: "/home/alice/.local/share/irie/scratch/summarise-the-notes", profile: "claude", parked: true, hue: 2),
             Session(id: "s07stalled01", name: "try-the-login", state: "stalled", reason: "stalled",
                     detail: "stalled: no hooks within 30s · Do you trust the files in this folder?", created: ago(6),
-                    cwd: "/home/alice/scratch/try-the-login", profile: "claude"),
+                    cwd: "/home/alice/scratch/try-the-login", profile: "claude", hue: 1),
             Session(id: "s08exited01", name: "old-experiment", state: "exited", detail: "exited 1", exitCode: 1,
-                    created: ago(4), cwd: "/home/alice/scratch/old-experiment", profile: "claude", parked: true),
+                    created: ago(4), cwd: "/home/alice/scratch/old-experiment", profile: "claude", parked: true, hue: 6),
             Session(id: "s09starting", name: "write-the-changelog", state: "starting", created: ago(0.2),
-                    cwd: irie + "-write-the-changelog", repo: irie, branch: "irie/write-the-changelog", profile: "claude"),
+                    cwd: irie + "-write-the-changelog", repo: irie, branch: "irie/write-the-changelog", profile: "claude", hue: 4),
         ]
     }
 }
