@@ -280,6 +280,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/testutil/` | `BuildIrie`, tmux test server, `ShortDir`; `fakeagent/` from M2; `fakeollama/` and `ollamafake/` from M10 | M1–M2, M10 |
 | `internal/repo/`, `internal/worktree/` | Repo lookup, worktrees | M3 |
 | `internal/transcript/`, `internal/mirror/` | JSONL follower and parser, mirror view | M8 |
+| `internal/skills/` | The skills that come with Irie: those built into the binary, which go to each session, and the plugin folder Claude Code loads them from | M12 |
 | `internal/ghostty/`, `internal/macapp/` | AppleScript driver, Irie.app bundle | M9 |
 | `internal/loginenv/` | The login shell's environment, for a server the Mac app starts (§7.2) | §2.7 |
 | `internal/ready/` | What a computer has of what Irie needs, and how to get the rest: `irie setup`, the first `irie`, the `ready` op | §2.7 |
@@ -369,12 +370,13 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | Env | Adds `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`. Removes `TMUX` and `TMUX_PANE` (`spawn.hide_tmux`), so an agent's own `tmux` commands cannot reach Irie's server. With agent teams (`spawn.teammates = "panes"`, §2.3) `TMUX` and `TMUX_PANE` name the session's anchor on the team server instead, the tmux shim's dir goes first on `PATH`, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set, unless the profile sets it; a `0` in the user's own settings still turns teams off. Removes the inherited variables that tie a process to another Claude Code session or terminal pane (§4.6), unless the profile sets them. A local profile also gets the environment that points Claude Code at its model (§6.1), under the profile's own `env` |
 | Versions | `claude --version` must be 2.1.295 or later for `onFailure`. Older versions still spawn, but pause is disabled for that session and the row says why. Optional flags (`--name`) are detected from `claude --help` once per version; an unsupported optional flag is dropped with a warning. Required values (model, effort, permission mode) are never dropped: if the CLI rejects one, the spawn fails visibly |
 | `--settings` | From M2. The settings file adds hooks for this session only. Claude Code merges hook lists, so the user's own hooks still run. With `usage.status_line` it also sets `statusLine` to `irie statusline`; that key does not merge, so Irie's runs the user's own (§6.3). With agent teams it sets `teammateMode` to `tmux`. Claude Code passes the file on to split-pane teammates |
+| `--plugin-dir` | Irie's skills (`internal/skills`, docs/proposals/skills.md), as a plugin named `irie` for this session only, whose skills run as `/irie:<name>`: a folder under `<data>/skills/plugins/`, named by a digest of what it holds, with read-only files. It is checked again before each launch and made again when an agent changed it, and the core removes folders no session uses when it starts. Passed only when `--help` lists the flag and `claude --plugin-dir <probe> plugin list --json` shows the probe's plugin loaded as `irie@inline`: managed settings may refuse the flag (`disableSideloadFlags`), and Irie's would stand in for a plugin of the user's own named `irie`. Otherwise the session's warnings say why. `skills.enabled`, `skills.disabled` and a profile's `skills` choose what goes in (§5.5); `irie skills` lists it |
 
 **Hooks in `claude-settings.json`.** Every hook uses `{"type":"command","command":"<IRIE_BIN> hook"}`.
 
 | Event | Matcher | Timeout | `onFailure` | Irie use |
 |---|---|---|---|---|
-| SessionStart | none | 10 s | none | Started; transcript path; queued notes |
+| SessionStart | none | 10 s | none | Started; transcript path; the delegation note (§6.4) and the user's preferences (§4.2); queued notes |
 | UserPromptSubmit | none | 10 s | none | Working; notes for an idle agent |
 | PreToolUse | `*` | `hold.max` + 120 s | `block` | Tool started; hold; AskUserQuestion and ExitPlanMode mean "needs you"; notes |
 | PostToolUse, PostToolUseFailure | `*` | `hold.max` + 120 s | none | Tool finished; hold; notes |
@@ -517,6 +519,8 @@ The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3),
 8. The journal records `spawn.requested`, then `session.started` or `spawn.failed`.
 
 `irie ctl spawn` runs `irie up` first, so a script can spawn with no window open.
+
+**Preferences.** `spawn.preferences` is how the user likes agents to work, a line each, such as how short a text to them should be. Every Claude Code session is told them in its SessionStart reply (§3.3), after the delegation note when it gets one (§6.4): `[Irie] The user’s preferences, which always apply:`, then a `- ` line for each. SessionStart comes again after `/clear`, a compaction, a resume and a fork, so they hold all session long. The built-in list has one, from the owner's ask that agents text them in fewer, plainer words: a text or notification to the user reads at a glance on a phone, the point or the ask first, then no more than three short lines, and anything longer goes on a page whose link the text carries. The user's own list replaces it and `[]` tells nothing; the Mac app edits it in Settings > Agents. It takes at most 15 lines of at most 400 characters, so that with the delegation note and a queued note the reply stays within the 10,000 characters Claude Code passes on whole: past that it saves the text to a file and passes a 2,000-character preview. A generic harness has no SessionStart, so its agents are not told.
 
 **More for the last jot.** Context remembered a moment after a task is sent belongs to that task's agent, not to a new one. A task typed to `input`, in a task bar, the command bar or with `irie ctl input`, is a jot (`jot` in `spawn`, which `input` sets). It goes to the agent of the jot sent just before it, as a message, when all of these hold:
 - it comes within `spawn.follow_up_window` (2 minutes) of that jot, or of the last jot added to it;
@@ -955,6 +959,7 @@ close_delay = "30s"           # how long a finished session waits; a new prompt,
 teammates = "off"             # panes | off: Claude Code sessions may start agent teams, each teammate in a terminal beside its session (§2.3)
 follow_up_window = "2m"       # a jot that reads as more for the jot sent within this long before goes to its agent instead of a new one (§4.2); "0s" = never
 follow_up_delay = "8s"        # how long such a jot waits before it is typed to the agent, so that New task can take it back
+preferences = ["Keep any text or notification you send the user short enough to take in at a glance on a phone: …"]   # how you like agents to work, a line each, told to every session as it starts (§4.2); your list replaces the built-in one
 
 [profiles.claude]             # the strongest: hard work and orchestration
 harness = "claude-code"
@@ -1074,6 +1079,10 @@ tool_input = "summary"        # summary | none
 
 [usage]
 status_line = true            # be Claude Code's status line, to read cost and plan use; yours still runs (§6.3)
+
+[skills]                      # the skills that come with Irie, as a plugin for each Claude Code session only (§3.3)
+enabled = true                # false = hand agents no skills
+disabled = []                 # skills to leave out, such as ["present"]; a profile with skills = false gets none
 
 [dog]                         # the jot dog: sees each jot through until its work lands (§4.8)
 watch = true                  # read a jot's own worktree when its turn ends, and say on its row what is left

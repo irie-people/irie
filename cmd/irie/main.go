@@ -47,6 +47,8 @@ const usage = `usage: irie [command]
                           started on with ^NAME (irie peer for help)
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
+  irie skills             list the skills that come with Irie, and whether
+                          sessions get each
 
 Used by Irie itself:
   irie core [--supervise]   the core
@@ -118,6 +120,8 @@ func run(args []string) int {
 		fmt.Println("irie", version.String())
 	case "config":
 		err = configCmd(args)
+	case "skills":
+		err = skillsCmd(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:

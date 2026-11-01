@@ -36,7 +36,8 @@ func (Harness) Levels() harness.Levels {
 // Launch builds:
 //
 //	<command> <args...> --model M --effort E --permission-mode P \
-//	    --settings <dir>/claude-settings.json --session-id <uuid> [--name <name>] <task>
+//	    --settings <dir>/claude-settings.json [--plugin-dir <skills>] \
+//	    --session-id <uuid> [--name <name>] <task>
 //
 // The profile's own args come right after the command. A flag whose value is
 // empty in the profile is left out. --name goes only with a name the user
@@ -104,6 +105,11 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, []byt
 		}
 	}
 	argv = append(argv, "--settings", filepath.Join(s.Dir, SettingsFile))
+	// Irie's skills, as a plugin for this session only (internal/skills),
+	// only to a CLI the probe saw load one.
+	if s.PluginDir != "" && s.Probe.Flags["--plugin-dir"] {
+		argv = append(argv, "--plugin-dir", s.PluginDir)
+	}
 	env := maps.Clone(p.Env)
 	if env == nil {
 		env = map[string]string{}

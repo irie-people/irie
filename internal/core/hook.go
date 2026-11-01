@@ -100,7 +100,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:
-			reply.Context = c.delegateHint(x)
+			reply.Context = c.startNote(x)
 		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg().Route.Failover:
 			failover = true
 		}

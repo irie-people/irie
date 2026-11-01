@@ -84,6 +84,11 @@ type Spawn struct {
 	// Teams lets the agent start agent teams, each teammate in a tmux pane
 	// on Irie's team server (spawn.teammates).
 	Teams bool
+
+	// PluginDir is the folder of Irie's skills for this session, which a
+	// harness whose probe offers --plugin-dir passes on (internal/skills);
+	// "" = none.
+	PluginDir string
 }
 
 // Probe is what a harness learned about its CLI before a launch.
