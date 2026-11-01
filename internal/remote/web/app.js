@@ -1144,7 +1144,9 @@ const OS = { darwin: 'macOS', linux: 'Linux', windows: 'Windows' };
 
 function machineCard(c) {
   const i = c.info || {};
-  const meta = [i.version || c.version ? 'Irie ' + (i.version || c.version) : '', OS[i.os] || i.os || '', host(c.m.url)].filter(Boolean).join(' · ');
+  // The release, without the build's hash after the +.
+  const version = String(i.version || c.version || '').split('+')[0];
+  const meta = [version ? 'Irie ' + version : '', OS[i.os] || i.os || '', host(c.m.url)].filter(Boolean).join(' · ');
   const plan = c.header && c.header.plan;
   const kids = [
     h('div', { class: 'mc-head' }, h('span', { class: 'dot ' + c.status, 'aria-hidden': 'true' }), h('span', { class: 'mc-name', text: c.m.name }),

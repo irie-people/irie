@@ -506,6 +506,17 @@ func (s *Server) push(w http.ResponseWriter, r *http.Request, d Device) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": ipc.Errorf(ipc.CodeBadArgs, "%v", err)})
 		return
 	}
+	// A subscription the phone sent before needs no first notification
+	// again, as when it only asks for finished turns too.
+	if d.Push != nil && d.Push.Endpoint == p.Endpoint && d.Push.P256dh == p.P256dh && d.Push.Auth == p.Auth && d.Push.VAPIDPublic == p.VAPIDPublic {
+		if err := s.store.SetPush(d.ID, &p); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": ipc.Errorf(ipc.CodeInternal, "%v", err)})
+			return
+		}
+		s.log.Info("push kept", "device", d.ID, "done", p.Done)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	n := Note{Title: "Notifications from " + s.opt.Name + " are on", Body: "You'll hear when a session needs you" + map[bool]string{true: " or finishes.", false: "."}[p.Done],

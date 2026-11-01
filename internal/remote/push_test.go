@@ -216,6 +216,31 @@ func TestAPhoneHearsWhenASessionNeedsIt(t *testing.T) {
 		t.Errorf("first notification %+v, headers %v", hello, r.Header)
 	}
 
+	// The same subscription again, asking for finished turns too, gets no
+	// first notification again.
+	sub["done"] = true
+	body, _ = json.Marshal(sub)
+	req, _ = http.NewRequest("POST", ts.URL+"/api/push", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != http.StatusNoContent {
+		t.Fatalf("push again: %v %v", res, err)
+	}
+	select {
+	case <-got:
+		t.Error("a subscription sent again got a first notification again")
+	case <-time.After(300 * time.Millisecond):
+	}
+	if ds, _ := srv.store.Devices(); len(ds) != 1 || ds[0].Push == nil || !ds[0].Push.Done {
+		t.Errorf("devices after asking for finished turns: %+v", ds)
+	}
+	sub["done"] = false
+	body, _ = json.Marshal(sub)
+	req, _ = http.NewRequest("POST", ts.URL+"/api/push", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != http.StatusNoContent {
+		t.Fatalf("push without finished turns: %v %v", res, err)
+	}
+
 	// The core's sessions: at work at first, which is not news; then one
 	// needs you, which is; then its turn ends, which this phone did not
 	// ask for.
