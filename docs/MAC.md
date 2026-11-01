@@ -69,6 +69,8 @@ SwiftTerm is v1.18.0, the newest release whose manifest builds with Swift 5.9. T
 
 `Irie --render-conversation DIR` draws the conversation view offscreen with SwiftUI's ImageRenderer, from fixture items in `/home/alice`, never a core: `conversation-<palette>-<light|dark>.png` for each palette, and `waiting-…png` for a session that waits on you. ImageRenderer leaves out AppKit's own controls, such as the text field, so the rendering draws the field's placeholder in its place; `--snapshot` shows the same fixtures in the real window.
 
+**Signing.** The script signs the app ad hoc, which runs on this Mac only, unless `IRIE_SIGN_IDENTITY`, or `git config irie.sign`, names a code signing identity in the keychain, as `security find-identity -v -p codesigning` lists them. An "Apple Development" identity, which Xcode makes once you sign in with your Apple ID (Xcode > Settings > Accounts), signs it as yours; a "Developer ID Application" identity, from the paid Apple Developer Program, signs it for other Macs, with the hardened runtime and a secure timestamp from Apple, as notarization wants. A new identity is a new app to macOS's privacy settings, which then ask again for what they had allowed the ad hoc one.
+
 `IRIE_MAC_NO_SWIFTTERM=1 mac/build.sh` builds with Apple's frameworks only. The terminal then opens in a Ghostty window that follows the selected session. Where SwiftPM works (Xcode, or newer Command Line Tools), `mac/Package.swift` builds the same app.
 
 The app finds the core the way `irie` does (`internal/paths`). `--socket PATH`, or `IRIE_CORE_SOCKET`, points it at another Irie. It needs a core with `attach-info`; an older one gets a message to run the new build's `irie up`.

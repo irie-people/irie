@@ -2,6 +2,7 @@ package remote
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"rsc.io/qr"
@@ -33,4 +34,18 @@ func QRSVG(text string) (string, error) {
 	}
 	b.WriteString(`"/></svg>`)
 	return b.String(), nil
+}
+
+// PairLink is the link that pairs the native iPhone app with a machine:
+// the gateway's HTTPS address, the code, the full fingerprint of Irie's
+// authority and the machine's name. It travels by a channel the person
+// trusts, as a QR code on the machine's screen, so the app pins the
+// authority it names and needs no profile.
+func PairLink(base, code, fingerprint, name string) string {
+	q := url.Values{}
+	q.Set("u", base)
+	q.Set("c", code)
+	q.Set("f", fingerprint)
+	q.Set("n", name)
+	return "irie://pair?" + q.Encode()
 }

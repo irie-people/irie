@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -264,6 +265,13 @@ func (a *Authority) Fingerprint() string {
 		fmt.Fprintf(&b, "%02X", c)
 	}
 	return b.String()
+}
+
+// FingerprintHex is the fingerprint as 64 hex digits, with no spaces, as
+// a pairing link carries it.
+func (a *Authority) FingerprintHex() string {
+	sum := sha256.Sum256(a.Cert.Raw)
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
 }
 
 // FingerprintStart is the fingerprint's first eight bytes, enough to tell
