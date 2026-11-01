@@ -11,6 +11,8 @@
 # IRIE_MAC_NO_SWIFTTERM=1 builds with Apple's frameworks only; the terminal
 # then opens in Ghostty. IRIE_MAC_NO_GHOSTTY=1 leaves GhosttyKit out.
 # IRIE_SIGN_IDENTITY signs it with your own identity (below).
+# IRIE_MAC_UNIVERSAL=1 on Apple silicon adds an Intel slice, drawn with
+# SwiftTerm, as a release's app has (tools/release.sh).
 set -eu
 cd "$(dirname "$0")"
 
@@ -20,16 +22,16 @@ app=build/Irie.app
 term=1
 [ "${IRIE_MAC_NO_SWIFTTERM:-}" = 1 ] && term=0
 
-if [ "$term" = 1 ]; then
-	v=1.18.0
-	sum=57fb6256525f725913469e002c9d62084b01fff53b24faa700b79c1830700d48
-	# One copy for every checkout and worktree, so SwiftTerm compiles once
-	# per release, target and compiler, not once per worktree. A module
-	# loads only into the compiler that built it, so the compiler is in the
-	# name.
+v=1.18.0
+sum=57fb6256525f725913469e002c9d62084b01fff53b24faa700b79c1830700d48
+# swiftterm TARGET builds SwiftTerm for TARGET once and sets deps to it.
+# One copy for every checkout and worktree, so SwiftTerm compiles once per
+# release, target and compiler, not once per worktree. A module loads only
+# into the compiler that built it, so the compiler is in the name.
+swiftterm() {
 	cc=$(swiftc --version 2>&1 | shasum -a 256 | cut -c1-12)
 	cache=${XDG_CACHE_HOME:-$HOME/Library/Caches}/irie
-	deps="$cache/swiftterm-$v-$target-$cc"
+	deps="$cache/swiftterm-$v-$1-$cc"
 	if [ ! -f "$deps/libSwiftTerm.a" ]; then
 		# Built aside and renamed into place, so a build running alongside
 		# never sees half a library.
@@ -44,13 +46,16 @@ if [ "$term" = 1 ]; then
 		tar -xzf "$tmp/src.tar.gz" -C "$tmp"
 		# SwiftTerm's own file names have no spaces, so the list splits safely.
 		(cd "$tmp/SwiftTerm-$v/Sources/SwiftTerm" &&
-			swiftc -O -wmo -parse-as-library -target "$target" -sdk "$sdk" \
+			swiftc -O -wmo -parse-as-library -target "$1" -sdk "$sdk" \
 				-module-name SwiftTerm -emit-module -emit-module-path "$tmp/SwiftTerm.swiftmodule" \
 				-emit-library -static -o "$tmp/libSwiftTerm.a" \
 				$(find . -name '*.swift' -not -path './iOS/*'))
 		# A build alongside may have finished first; either copy will do.
 		if [ ! -e "$deps" ]; then mv "$tmp" "$deps"; fi
 	fi
+}
+if [ "$term" = 1 ]; then
+	swiftterm "$target"
 fi
 
 # GhosttyKit, when it builds: a Ghostty that will not build, as without Xcode
@@ -77,6 +82,20 @@ if [ "$term" = 1 ]; then
 	swiftc -O -parse-as-library -target "$target" -sdk "$sdk" \
 		-I "$deps" -L "$deps" -lSwiftTerm "$@" \
 		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
+	# The Intel slice draws with SwiftTerm: GhosttyKit builds for this
+	# Mac's own processor only. Without its module, `canImport(GhosttyKit)`
+	# is false in that slice.
+	if [ "${IRIE_MAC_UNIVERSAL:-}" = 1 ] && [ "$(uname -m)" = arm64 ]; then
+		native=$deps
+		swiftterm x86_64-apple-macos14.0
+		swiftc -O -parse-as-library -target x86_64-apple-macos14.0 -sdk "$sdk" \
+			-I "$deps" -L "$deps" -lSwiftTerm \
+			-o build/Irie-x86_64 Sources/Irie/*.swift
+		lipo -create "$app/Contents/MacOS/Irie" build/Irie-x86_64 -output build/Irie-universal
+		mv build/Irie-universal "$app/Contents/MacOS/Irie"
+		rm -f build/Irie-x86_64
+		deps=$native
+	fi
 	# SwiftTerm's Metal renderer compiles these shaders at run time.
 	cp "$deps/SwiftTerm-$v/Sources/SwiftTerm/Apple/Metal/Shaders.metal" "$app/Contents/Resources/"
 	# Ghostty finds terminfo and its shell integration beside its

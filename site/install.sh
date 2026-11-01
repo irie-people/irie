@@ -5,7 +5,7 @@
 #
 # It downloads the latest release of irie for this computer from GitHub,
 # checks its SHA-256, and puts it in ~/.local/share/irie/bin, with a link
-# in ~/.local/bin. On a Mac with Apple silicon it puts Irie.app in
+# in ~/.local/bin. On a Mac with macOS 14 or later it puts Irie.app in
 # ~/Applications, where Spotlight finds it. Then `irie setup` checks for
 # tmux, Claude Code and a sign-in, and offers to install each one that is
 # missing; nothing is installed without a yes. Running it again updates
@@ -182,11 +182,12 @@ from_source() {
 # app puts Irie.app in ~/Applications, or updates it where it is, and
 # reopens it when it was open. Its agents run on without it.
 app() {
-	if [ "$arch" != arm64 ]; then
-		say "Irie.app is for Apple silicon for now; on this Mac, type irie in a terminal."
+	major=$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)
+	if [ "${major:-0}" -lt 14 ]; then
+		say "Irie.app needs macOS 14 or later; on this Mac, type irie in a terminal."
 		return
 	fi
-	zip=Irie-macos-arm64.zip
+	zip=Irie-macos.zip
 	if ! fetch "$from/$zip" "$tmp/$zip"; then
 		say "This release has no Irie.app; type irie in a terminal."
 		return

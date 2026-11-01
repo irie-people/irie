@@ -147,7 +147,7 @@
   </div>
 
   <h3 id="mac">Irie for Mac</h3>
-  <p>An app for the Mac, in its first build, shows the same sessions as cards, beside an agent’s conversation or its terminal. It asks the same core. The one-line installer puts it in <code>~/Applications</code> on a Mac with Apple silicon.</p>
+  <p>An app for the Mac, in its first build, shows the same sessions as cards, beside an agent’s conversation or its terminal. It asks the same core. The one-line installer puts it in <code>~/Applications</code> on a Mac with macOS 14 or later.</p>
   <p>Opened from Spotlight, the Dock or the Finder with no Irie running, it starts Irie itself with <code>irie up --login-env</code>, which gives Irie your login shell’s environment, so agents find <code>claude</code>, <code>git</code> and whatever else you installed. If it can’t, its sidebar says why, and <strong>Set Up Irie…</strong> opens Terminal on <code>irie setup</code>. While something keeps agents from starting, such as no sign-in, a red banner above the cards says what, and its button runs <code>irie setup</code> in a session of its own.</p>
   <p>It shows an agent’s terminal by running tmux, and opens Ghostty only when you ask it to. It keeps your view choices, the task you haven’t sent and your last 50 tasks in its macOS preferences.</p>
 
@@ -191,7 +191,7 @@
         <tr><td><code>~/.local/state/irie/local.json</code></td><td>The local model <code>irie setup local</code> chose, and how much memory models took.</td><td>Until you remove it</td></tr>
         <tr><td><code>~/.local/state/irie/tmux.conf</code></td><td>Irie’s tmux settings.</td><td>Written again as needed</td></tr>
         <tr><td><code>~/.local/share/irie/bin/irie</code>, and a link to it, <code>~/.local/bin/irie</code></td><td>The <code>irie</code> program, if you used the one-line installer.</td><td>Until you remove it</td></tr>
-        <tr><td><code>~/Applications/Irie.app</code></td><td>The Mac app, if the installer put it there, on a Mac with Apple silicon.</td><td>Until you remove it</td></tr>
+        <tr><td><code>~/Applications/Irie.app</code></td><td>The Mac app, if the installer put it there, on a Mac with macOS 14 or later.</td><td>Until you remove it</td></tr>
         <tr><td>Your shell’s startup file</td><td>One line that <code>irie setup</code> adds, only after you say yes, after the comment <code># Added by irie setup</code>, so a terminal finds <code>irie</code>.</td><td>Until you remove it</td></tr>
         <tr><td><code>~/.local/share/irie/worktrees/</code>, <code>scratch/</code></td><td>The folders agents work in.</td><td>Until you remove them</td></tr>
         <tr><td><code>$XDG_RUNTIME_DIR/irie/</code>, or <code>$TMPDIR/irie-&lt;uid&gt;/</code> without it, as on a Mac</td><td>The core’s socket and locks.</td><td>While Irie runs</td></tr>

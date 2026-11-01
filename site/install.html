@@ -72,7 +72,7 @@
   <ol class="rules">
     <li>downloads the latest release of Irie for your computer from GitHub, and checks the download against the <dfn>SHA-256</dfn>, a fingerprint, that the release lists for it, so a file that was changed is refused;</li>
     <li>puts the <code>irie</code> program in <code>~/.local/share/irie/bin</code>, with a link in <code>~/.local/bin</code>, where Claude Code’s own installer puts <code>claude</code> too;</li>
-    <li>on a Mac with Apple silicon, puts Irie.app in <code>~/Applications</code>, where Spotlight finds it;</li>
+    <li>on a Mac with macOS 14 or later, puts Irie.app in <code>~/Applications</code>, where Spotlight finds it;</li>
     <li>runs <code>irie setup</code>, which checks what else Irie needs, and offers to install each part that is missing.</li>
   </ol>
   <p>Nothing is installed without a yes, and nothing changes outside those folders, apart from one line <code>irie setup</code> may offer to add to your shell’s startup file. The installer is a short script you can <a href="https://github.com/irie-people/irie/blob/main/site/install.sh">read first</a>. <code>IRIE_VERSION=0.2.0</code> in front of <code>sh</code> installs a release other than the latest.</p>

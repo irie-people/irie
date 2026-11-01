@@ -71,6 +71,8 @@ SwiftTerm is v1.18.0, the newest release whose manifest builds with Swift 5.9. T
 
 **Signing.** The script signs the app ad hoc, which runs on this Mac only, unless `IRIE_SIGN_IDENTITY`, or `git config irie.sign`, names a code signing identity in the keychain, as `security find-identity -v -p codesigning` lists them. An "Apple Development" identity, which Xcode makes once you sign in with your Apple ID (Xcode > Settings > Accounts), signs it as yours; a "Developer ID Application" identity, from the paid Apple Developer Program, signs it for other Macs, with the hardened runtime and a secure timestamp from Apple, as notarization wants. A new identity is a new app to macOS's privacy settings, which then ask again for what they had allowed the ad hoc one.
 
+`IRIE_MAC_UNIVERSAL=1 mac/build.sh`, on Apple silicon, adds an Intel slice to the app, as a release's app has (`tools/release.sh`). That slice draws its terminals with SwiftTerm, because GhosttyKit builds for the Mac's own processor only, and `lipo` joins the two.
+
 `IRIE_MAC_NO_SWIFTTERM=1 mac/build.sh` builds with Apple's frameworks only. The terminal then opens in a Ghostty window that follows the selected session. Where SwiftPM works (Xcode, or newer Command Line Tools), `mac/Package.swift` builds the same app.
 
 The app finds the core the way `irie` does (`internal/paths`). `--socket PATH`, or `IRIE_CORE_SOCKET`, points it at another Irie. It needs a core with `attach-info`; an older one gets a message to run the new build's `irie up`.
@@ -130,5 +132,4 @@ These come with the core features they need, or after:
 - notes to an agent (M7);
 - buttons that answer a question or approve a command;
 - choosing a local model for small jobs;
-- a signed, notarized app, which a browser's download would open without Gatekeeper's warning (until then the installer, whose curl download is not quarantined, puts the app in place);
-- the app for Intel Macs.
+- a signed, notarized app, which a browser's download would open without Gatekeeper's warning (until then the installer, whose curl download is not quarantined, puts the app in place).
