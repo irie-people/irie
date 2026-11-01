@@ -38,6 +38,9 @@ type (
 	TrodShift        = ipc.TrodShift
 	TrodArgs         = ipc.TrodArgs
 	TrodHand         = ipc.TrodHand
+	GabrielResult    = ipc.GabrielResult
+	GabrielSession   = ipc.GabrielSession
+	GabrielApp       = ipc.GabrielApp
 	TrodResult       = ipc.TrodResult
 	TrodSession      = ipc.TrodSession
 	TrodSend         = ipc.TrodSend
@@ -169,6 +172,7 @@ const (
 	OpDog             = ipc.OpDog
 	OpConfig          = ipc.OpConfig
 	OpTrod            = ipc.OpTrod
+	OpGabriel         = ipc.OpGabriel
 	OpReady           = ipc.OpReady
 	OpVPN             = ipc.OpVPN
 	FeatureSpawnModel = ipc.FeatureSpawnModel
