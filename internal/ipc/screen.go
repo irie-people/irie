@@ -67,4 +67,8 @@ type PairResult struct {
 	URLs  []string  `json:"urls"`
 	Code  string    `json:"code"`
 	Until time.Time `json:"until"`
+	// Fingerprint is the start of the SHA-256 fingerprint of Irie's
+	// certificate authority, which the person checks on the phone before
+	// trusting it, so a stranger on the network can't stand in for it.
+	Fingerprint string `json:"fingerprint"`
 }

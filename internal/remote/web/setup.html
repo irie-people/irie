@@ -85,6 +85,7 @@ ol b, p b { color: var(--ink); font-weight: 600; }
 .elsewhere { margin: 8px 6px 0; text-align: center; font-size: 14px; color: var(--muted); }
 .elsewhere code { font: 13px var(--mono); color: var(--ink); overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  .fp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -106,7 +107,8 @@ ol b, p b { color: var(--ink); font-weight: 600; }
         Install the certificate</a>
       <ol>
         <li>Tap <b>Allow</b> when Safari asks to download a profile.</li>
-        <li>Open <b>Settings</b> and tap <b>Profile Downloaded</b> near the top, then <b>Install</b>.</li>
+        <li>Open <b>Settings</b> and tap <b>Profile Downloaded</b> near the top. Before you tap <b>Install</b>, tap <b>More Details</b>, then the certificate: its <b>SHA-256</b> should begin <b class="fp" id="fp">as on the machine</b>, the same as the machine shows, or the text Irie sent you. If it doesn’t, stop: someone else on this Wi-Fi may be answering for it.</li>
+        <li>Tap <b>Install</b>.</li>
         <li>In <b>Settings → General → About → Certificate Trust Settings</b>, turn on <b>Irie local CA</b>.</li>
       </ol>
       <div class="status" id="trust" role="status"><span class="dot"></span><span>Waiting for your iPhone to trust it…</span></div>

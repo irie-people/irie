@@ -33,7 +33,11 @@ func (c *Core) pair(a ipc.PairArgs) (ipc.PairResult, error) {
 		name = remote.MachineName()
 	}
 	setup := strconv.Itoa(cfg.Port - 1)
-	r := ipc.PairResult{On: cfg.On, Name: name, Code: code, Until: time.Now().Add(life).UTC(), URLs: []string{}}
+	ca, err := remote.LoadAuthority(c.paths.Remote())
+	if err != nil {
+		return ipc.PairResult{}, err
+	}
+	r := ipc.PairResult{On: cfg.On, Name: name, Code: code, Until: time.Now().Add(life).UTC(), URLs: []string{}, Fingerprint: ca.FingerprintStart()}
 	for _, n := range remote.LocalNames() {
 		r.URLs = append(r.URLs, "http://"+net.JoinHostPort(n, setup)+"/")
 	}

@@ -186,6 +186,16 @@ func (s *Store) Device(token string) (Device, error) {
 	return Device{}, ErrUnpaired
 }
 
+// Paired says whether the phone with this id is still paired.
+func (s *Store) Paired(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.load() != nil {
+		return true // a file that can't be read now is no reason to cut a stream
+	}
+	return slices.ContainsFunc(s.devices, func(d Device) bool { return d.ID == id })
+}
+
 // Saw notes that a phone was used now, written down at most every
 // seenEvery.
 func (s *Store) Saw(d Device) {

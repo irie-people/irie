@@ -242,13 +242,20 @@ func pair(on bool, port int, name, dir string, store *remote.Store, life time.Du
 		}
 	}
 	fmt.Println("   and follow its steps: install Irie's certificate, open Irie, add it to the Home Screen.")
+	if ca, err := remote.LoadAuthority(dir); err == nil {
+		fmt.Printf("   Before you trust the certificate, check under its More Details that its SHA-256\n   begins %s. A stranger on the Wi-Fi could hand you another.\n", ca.FingerprintStart())
+	}
 	fmt.Printf("2. In the app, enter the code  %s  (it works until %s).\n\n", spaced, until.Format("15:04"))
 	if q, err := terminalQR(urls[0]); err == nil {
 		fmt.Println(q)
 	}
 	if open {
 		page := filepath.Join(dir, "pair.html")
-		html, err := pairPage(name, urls, spaced, until)
+		fp := ""
+		if ca, err := remote.LoadAuthority(dir); err == nil {
+			fp = ca.FingerprintStart()
+		}
+		html, err := pairPage(name, urls, spaced, until, fp)
 		if err != nil {
 			return err
 		}
@@ -298,7 +305,7 @@ func terminalQR(text string) (string, error) {
 
 // pairPage is a page that shows the code and a QR code of the setup page,
 // for a phone's camera.
-func pairPage(name string, urls []string, code string, until time.Time) (string, error) {
+func pairPage(name string, urls []string, code string, until time.Time, fingerprint string) (string, error) {
 	svg, err := remote.QRSVG(urls[0])
 	if err != nil {
 		return "", err
@@ -330,5 +337,6 @@ small{color:var(--muted)}
 <div class=url>%[3]s</div>%[4]s
 <div class=code>%[5]s</div>
 <small>Enter this code in the app. It works until %[6]s.</small>
-</main>`, esc(name), svg, esc(urls[0]), more.String(), esc(code), until.Format("15:04")), nil
+<p style="margin:20px 0 0;font-size:14px">Before you trust Irie's certificate on the phone, check under its More Details that its SHA-256 begins<br><b style="font:600 15px ui-monospace,Menlo,monospace">%[7]s</b></p>
+</main>`, esc(name), svg, esc(urls[0]), more.String(), esc(code), until.Format("15:04"), esc(fingerprint)), nil
 }

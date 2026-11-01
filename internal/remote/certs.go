@@ -19,6 +19,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -191,9 +192,14 @@ func newAuthority(now time.Time) (*Authority, error) {
 		BasicConstraintsValid:       true,
 		MaxPathLenZero:              true,
 		KeyUsage:                    x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:                 []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		PermittedDNSDomainsCritical: true,
 		PermittedDNSDomains:         localDomains,
 		PermittedIPRanges:           permitted,
+		// No e-mail address or URI can be under .invalid (RFC 6761), so
+		// it vouches for none: only for TLS servers.
+		PermittedEmailAddresses: []string{".invalid"},
+		PermittedURIDomains:     []string{".invalid"},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
 	if err != nil {
@@ -260,6 +266,13 @@ func (a *Authority) Fingerprint() string {
 	return b.String()
 }
 
+// FingerprintStart is the fingerprint's first eight bytes, enough to tell
+// the authority from one an attacker made: matching them takes about 2^64
+// tries. A person compares them with what iOS shows before trusting it.
+func (a *Authority) FingerprintStart() string {
+	return a.Fingerprint()[:8*3-1]
+}
+
 func serial() *big.Int {
 	n, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 127))
 	if err != nil {
@@ -268,10 +281,13 @@ func serial() *big.Int {
 	return n.Add(n, big.NewInt(1))
 }
 
-// Leaves issues the server's certificate: for the machine's local names
-// and addresses, those a phone dials it by, signed by the authority. A
-// handshake on an address or name the certificate lacks, as after the
-// network gave the machine a new address, gets a new one that has it.
+// Leaves issues the server's certificate: for the machine's own local
+// names and addresses, those a phone dials it by, signed by the authority.
+// A handshake on an address of the machine's that the certificate lacks,
+// as after the network gave the machine a new one, gets a new certificate
+// that has it. The name a client asks for (SNI) never goes in: a client
+// chooses it, and a certificate with a name the machine doesn't have would
+// be no use, or fail to parse for strict verifiers.
 type Leaves struct {
 	CA *Authority
 	// Names are the DNS names besides localhost, such as studio.local.
@@ -293,17 +309,17 @@ func (l *Leaves) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, e
 			dialed = a.IP
 		}
 	}
-	return l.get(hello.ServerName, dialed)
+	return l.get(dialed)
 }
 
-func (l *Leaves) get(name string, dialed net.IP) (*tls.Certificate, error) {
+func (l *Leaves) get(dialed net.IP) (*tls.Certificate, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
-	if l.cert != nil && now.Before(l.leaf.NotAfter.Add(-leafRenew)) && l.covers(name, dialed) {
+	if l.cert != nil && now.Before(l.leaf.NotAfter.Add(-leafRenew)) && l.covers(dialed) {
 		return l.cert, nil
 	}
-	cert, leaf, err := l.issue(now, name, dialed)
+	cert, leaf, err := l.issue(now, dialed)
 	if err != nil {
 		return nil, err
 	}
@@ -318,25 +334,38 @@ func (l *Leaves) now() time.Time {
 	return time.Now()
 }
 
-// covers says whether the current certificate has name and the address.
-// The caller holds l.mu.
-func (l *Leaves) covers(name string, dialed net.IP) bool {
-	if name != "" && localName(name) && l.leaf.VerifyHostname(name) != nil {
+// covers says whether the current certificate has the address a client
+// dialed, when it is one a certificate can have. The caller holds l.mu.
+func (l *Leaves) covers(dialed net.IP) bool {
+	return dialed == nil || !vouchable(dialed) || slices.ContainsFunc(l.leaf.IPAddresses, dialed.Equal)
+}
+
+// vouchable says whether a server certificate may name ip: a local address
+// with no zone, which link-local ones need.
+func vouchable(ip net.IP) bool {
+	return localIP(ip) && !ip.IsLinkLocalUnicast()
+}
+
+// hostLabel is one label of a host name (RFC 1123).
+var hostLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// hostName says whether n is a host name made of such labels.
+func hostName(n string) bool {
+	if n == "" || len(n) > 253 {
 		return false
 	}
-	if dialed != nil && localIP(dialed) && !slices.ContainsFunc(l.leaf.IPAddresses, dialed.Equal) {
-		return false
+	for _, label := range strings.Split(n, ".") {
+		if !hostLabel.MatchString(label) {
+			return false
+		}
 	}
 	return true
 }
 
-func (l *Leaves) issue(now time.Time, name string, dialed net.IP) (*tls.Certificate, *x509.Certificate, error) {
+func (l *Leaves) issue(now time.Time, dialed net.IP) (*tls.Certificate, *x509.Certificate, error) {
 	names := []string{"localhost"}
 	if l.Names != nil {
 		names = append(names, l.Names()...)
-	}
-	if name != "" {
-		names = append(names, name)
 	}
 	var ips []net.IP
 	if l.Addrs != nil {
@@ -350,7 +379,7 @@ func (l *Leaves) issue(now time.Time, name string, dialed net.IP) (*tls.Certific
 	var dns []string
 	for _, n := range names {
 		n = strings.ToLower(strings.TrimSuffix(n, "."))
-		if localName(n) && !slices.Contains(dns, n) {
+		if hostName(n) && localName(n) && !slices.Contains(dns, n) {
 			dns = append(dns, n)
 		}
 	}
@@ -359,7 +388,7 @@ func (l *Leaves) issue(now time.Time, name string, dialed net.IP) (*tls.Certific
 		if ip4 := ip.To4(); ip4 != nil {
 			ip = ip4
 		}
-		if localIP(ip) && !ip.IsLinkLocalUnicast() && !slices.ContainsFunc(addrs, ip.Equal) {
+		if vouchable(ip) && !slices.ContainsFunc(addrs, ip.Equal) {
 			addrs = append(addrs, ip)
 		}
 	}

@@ -102,7 +102,23 @@ function cells(line) {
   let t = line.trim();
   if (t.startsWith('|')) t = t.slice(1);
   if (t.endsWith('|') && !t.endsWith('\\|')) t = t.slice(0, -1);
-  return t.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
+  // Split on every | that no backslash escapes, by hand: Safari before
+  // 16.4 can't parse a lookbehind, and would fail the whole module.
+  const out = [];
+  let cell = '';
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === '\\' && t[i + 1] === '|') {
+      cell += '|';
+      i++;
+    } else if (t[i] === '|') {
+      out.push(cell.trim());
+      cell = '';
+    } else {
+      cell += t[i];
+    }
+  }
+  out.push(cell.trim());
+  return out;
 }
 
 function align(rule) {

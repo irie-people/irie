@@ -163,6 +163,10 @@ func (s *Server) App() http.Handler {
 	mux.HandleFunc("GET /irie.mobileconfig", s.profile)
 	mux.Handle("GET /", s.files("index.html"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !localPeer(r.RemoteAddr) {
+			s.refuse(w, r)
+			return
+		}
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
@@ -209,6 +213,10 @@ func (s *Server) Setup() http.Handler {
 	})
 	mux.Handle("GET /", s.files("setup.html"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !localPeer(r.RemoteAddr) {
+			s.refuse(w, r)
+			return
+		}
 		// Few requests come here, and each is a step of a phone's setup,
 		// which the log then shows.
 		s.log.Info("setup", "path", r.URL.Path, "from", r.RemoteAddr, "agent", r.UserAgent())
@@ -217,6 +225,71 @@ func (s *Server) Setup() http.Handler {
 		w.Header().Set("Content-Security-Policy", csp)
 		mux.ServeHTTP(w, r)
 	})
+}
+
+// refuse turns away a request from beyond the machine's local networks.
+func (s *Server) refuse(w http.ResponseWriter, r *http.Request) {
+	s.log.Warn("refused", "from", r.RemoteAddr, "path", r.URL.Path)
+	http.Error(w, "Irie answers only on its machine's local network.", http.StatusForbidden)
+}
+
+// localPeer says whether a request comes from the machine's own networks:
+// from an address the authority could name (private, shared, link-local
+// or loopback), or from one on the same link as an address of this
+// machine's, as a phone's global IPv6 address on the home network is.
+func localPeer(remote string) bool {
+	host, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		host = remote
+	}
+	host, _, _ = strings.Cut(host, "%") // a link-local address's zone
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if localIP(ip) {
+		return true
+	}
+	return slices.ContainsFunc(links(), func(n *net.IPNet) bool { return n.Contains(ip) })
+}
+
+var (
+	linksMu   sync.Mutex
+	linksAt   time.Time
+	linksSeen []*net.IPNet
+)
+
+// links are the networks this machine's interfaces are on, as their
+// addresses and masks say, read again every 10 s. A mask too short to be
+// one link, as a tunnel's may be, is left out.
+func links() []*net.IPNet {
+	linksMu.Lock()
+	defer linksMu.Unlock()
+	if time.Since(linksAt) < 10*time.Second {
+		return linksSeen
+	}
+	linksAt, linksSeen = time.Now(), nil
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, i := range ifs {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		as, _ := i.Addrs()
+		for _, a := range as {
+			n, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ones, bits := n.Mask.Size()
+			if bits == 32 && ones >= 16 || bits == 128 && ones >= 48 {
+				linksSeen = append(linksSeen, &net.IPNet{IP: n.IP.Mask(n.Mask), Mask: n.Mask})
+			}
+		}
+	}
+	return linksSeen
 }
 
 // files serves the app's files, with index for "/". Every file is checked
@@ -401,8 +474,10 @@ func (s *Server) hello(raw json.RawMessage) json.RawMessage {
 	return b
 }
 
-// pingEvery keeps a phone's stream from looking dead while nothing changes.
-const pingEvery = 15 * time.Second
+// pingEvery keeps a phone's stream from looking dead while nothing
+// changes, and is how soon a forgotten phone's stream ends. Tests shorten
+// it.
+var pingEvery = 15 * time.Second
 
 // subscribe relays a subscription: the core's reply as the first line,
 // then its frames as it writes them, and a ping when it is quiet.
@@ -486,7 +561,8 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request, d Device) {
 				return
 			}
 		case <-ping.C:
-			if s.writeLine(w, rc, []byte(`{"t":"ping"}`)) != nil {
+			// A phone forgotten meanwhile hears no more.
+			if !s.store.Paired(d.ID) || s.writeLine(w, rc, []byte(`{"t":"ping"}`)) != nil {
 				return
 			}
 		case <-r.Context().Done():

@@ -126,7 +126,7 @@ func TestTheAuthorityVouchesOnlyForLocalNames(t *testing.T) {
 			return []net.IP{net.ParseIP("192.168.1.20"), net.ParseIP("203.0.113.9"), net.ParseIP("fe80::1")}
 		},
 	}
-	cert, err := l.get("", net.ParseIP("10.0.0.5"))
+	cert, err := l.get(net.ParseIP("10.0.0.5"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestTheAuthorityVouchesOnlyForLocalNames(t *testing.T) {
 		}
 	}
 	// A new address the network gave the machine gets a new certificate.
-	again2, err := l.get("", net.ParseIP("10.0.0.77"))
+	again2, err := l.get(net.ParseIP("10.0.0.77"))
 	if err != nil || again2 == cert {
 		t.Fatalf("a new address kept the old certificate: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestTheAuthorityVouchesOnlyForLocalNames(t *testing.T) {
 		t.Errorf("verify for the new address: %v", err)
 	}
 	// One the authority may not vouch for can't be had.
-	bad, err := (&Leaves{CA: ca}).get("", nil)
+	bad, err := (&Leaves{CA: ca}).get(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,5 +388,101 @@ func TestTheAppsFilesAreServed(t *testing.T) {
 	}
 	if errors.Is(nil, io.EOF) {
 		t.Skip()
+	}
+}
+
+func TestOnlyTheLocalNetworkIsAnswered(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"10.0.0.5:51000":       true,
+		"192.168.1.20:51000":   true,
+		"127.0.0.1:51000":      true,
+		"100.101.102.103:443":  true,
+		"[fe80::1%en0]:51000":  true,
+		"[fd00::5]:51000":      true,
+		"203.0.113.9:51000":    false,
+		"[2001:db8::1]:51000":  false,
+		"not an address":       false,
+		"[2001:db8::1%x]:5100": false,
+	} {
+		if got := localPeer(addr); got != want {
+			t.Errorf("localPeer(%q) = %v, want %v", addr, got, want)
+		}
+	}
+	// An address on one of this machine's own links is local, whatever
+	// its range, as a phone's global IPv6 address at home is.
+	for _, n := range links() {
+		ip := append(net.IP{}, n.IP...)
+		ip[len(ip)-1] |= 1
+		if !localPeer(net.JoinHostPort(ip.String(), "5")) {
+			t.Errorf("%s, on this machine's link %s, is not local", ip, n)
+		}
+	}
+}
+
+func TestCertificatesTakeOnlyHostNames(t *testing.T) {
+	for n, want := range map[string]bool{
+		"studio.local": true, "a-b.local": true, "localhost": true,
+		"a..local": false, "x\x01.local": false, "a b.local": false, "*.local": false, "-a.local": false, "": false,
+	} {
+		if got := hostName(n); got != want {
+			t.Errorf("hostName(%q) = %v, want %v", n, got, want)
+		}
+	}
+	ca, err := LoadAuthority(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := &Leaves{CA: ca, Names: func() []string { return []string{"a..local", "studio.local"} }}
+	c, err := l.get(net.ParseIP("fe80::1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(c.Leaf.DNSNames, []string{"localhost", "studio.local"}) || len(c.Leaf.IPAddresses) != 0 {
+		t.Errorf("names %v, addresses %v", c.Leaf.DNSNames, c.Leaf.IPAddresses)
+	}
+	// A link-local address it can't name is no reason for a new one each time.
+	if again, _ := l.get(net.ParseIP("fe80::1")); again != c {
+		t.Error("a handshake on a link-local address made a new certificate")
+	}
+	if !slices.Equal(ca.Cert.ExtKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}) ||
+		!slices.Equal(ca.Cert.PermittedEmailAddresses, []string{".invalid"}) || !slices.Equal(ca.Cert.PermittedURIDomains, []string{".invalid"}) {
+		t.Errorf("the authority vouches for more than servers: eku %v, email %v, uri %v", ca.Cert.ExtKeyUsage, ca.Cert.PermittedEmailAddresses, ca.Cert.PermittedURIDomains)
+	}
+}
+
+func TestAForgottenPhonesStreamEnds(t *testing.T) {
+	old := pingEvery
+	pingEvery = 100 * time.Millisecond
+	defer func() { pingEvery = old }()
+	ts, srv, f := gateway(t)
+	code, _ := srv.store.NewCode(CodeLife)
+	_, out := post(t, ts.URL+"/api/pair", "", `{"code":"`+code+`"}`)
+	token := out["token"].(string)
+	f.frames <- ipc.Frame{T: ipc.FrameSnapshot}
+	req, _ := http.NewRequest("POST", ts.URL+"/api/subscribe", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	ended := make(chan struct{})
+	go func() {
+		io.Copy(io.Discard, res.Body)
+		close(ended)
+	}()
+	time.Sleep(300 * time.Millisecond)
+	select {
+	case <-ended:
+		t.Fatal("the stream ended while the phone was paired")
+	default:
+	}
+	if _, err := srv.store.Forget("all"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ended:
+	case <-time.After(3 * time.Second):
+		t.Error("a forgotten phone's stream went on")
 	}
 }

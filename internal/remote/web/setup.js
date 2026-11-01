@@ -15,6 +15,7 @@
       document.title = 'Set up Irie for ' + c.name;
     }
     if (c.https) https = c.https;
+    if (c.fingerprint) document.getElementById('fp').textContent = c.fingerprint.split(' ').slice(0, 8).join(' ');
     if (c.profile) document.getElementById('profile').setAttribute('href', c.profile);
     document.getElementById('open').setAttribute('href', https);
     document.getElementById('url').textContent = https.replace(/\/$/, '');
