@@ -24,8 +24,10 @@ var toolInputKeys = []string{"summary", "question"}
 // delegate (DESIGN §6.4); a turn's last message is kept whole for
 // delegation; a turn stopped at a usage limit may fail over; a jot whose
 // turn ends before its work has landed may be sent back to finish it
-// (DESIGN §4.8); and while you are away at night, an agent that asks you
-// something is told to decide itself (DESIGN §4.10).
+// (DESIGN §4.8); while you are away at night, an agent that asks you
+// something is told to decide itself (DESIGN §4.10); and a session or
+// subagent that starts hears the word of the arch agents with it (DESIGN
+// §4.11).
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	h, err := harnessFor(a.Harness)
 	if err != nil {
@@ -49,6 +51,9 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	if unfinished == "" {
 		trod = c.trodAtHook(a.Session, evs)
 	}
+	// And the arch agents' word to a session or subagent that starts
+	// (arch.go).
+	word := c.archWord(a.Session, evs)
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
@@ -100,13 +105,15 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:
-			reply.Context = c.startNote(x)
+			reply.Context = joinNotes(word, c.startNote(x))
+		case e.Kind == event.SubagentStarted:
+			reply.Context = joinNotes(reply.Context, word)
 		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg().Route.Failover:
 			failover = true
 		}
 	}
 	if n := c.takeNote(x, evs); n != "" {
-		reply.Context = strings.TrimSpace(reply.Context + "\n\n" + n)
+		reply.Context = joinNotes(reply.Context, n)
 	}
 	c.followConversation(x)
 	if turnEnded && c.cfg().Spawn.CloseWhenDone {
@@ -119,6 +126,18 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		go c.failover(a.Session)
 	}
 	return reply, nil
+}
+
+// joinNotes puts notes for an agent one after another, a blank line
+// between each, leaving out the empty ones.
+func joinNotes(notes ...string) string {
+	var out []string
+	for _, n := range notes {
+		if n = strings.TrimSpace(n); n != "" {
+			out = append(out, n)
+		}
+	}
+	return strings.Join(out, "\n\n")
 }
 
 // eventPhrase is what an event of a tool call says in plain words (Phrase):
