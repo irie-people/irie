@@ -181,13 +181,11 @@ func (m Model) card(it item, selected, hovered bool) []string {
 	if needs {
 		dc = p.needs
 	}
-	// Another machine's session (docs/proposals/multi-host.md §4.5) says
-	// where it runs, and when that machine isn't answering.
-	switch {
-	case s.Host != "" && s.HostDown != nil:
-		detail, dc = s.Host+" isn't answering · "+detail, p.muted
-	case s.Host != "":
-		detail = "on " + s.Host + " · " + detail
+	// Another machine's session (docs/proposals/multi-host.md §4.5): the
+	// core's detail says where it runs; it is muted while that machine
+	// isn't answering.
+	if s.HostDown != nil {
+		dc = p.muted
 	}
 	first := append(marks, piece{name, l.name, selected}, piece{spaces(nameW - lipgloss.Width(name) + 1), p.ink, false}, piece{a, p.muted, false})
 	lines := []string{

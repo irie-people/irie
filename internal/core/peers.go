@@ -241,10 +241,13 @@ func (c *Core) peerRows(from int) []ipc.Session {
 			if s.Parent != "" {
 				s.Parent = name + "/" + s.Parent
 			}
+			where := "on " + name
 			if !p.up {
 				t := p.since
 				s.HostDown = &t
+				where = name + " isn't answering"
 			}
+			s.Detail = hostDetail(where, s)
 			s.Pane = ""
 			s.Shown = drawn && c.selected == s.ID
 			s.Order = from + len(out)
@@ -488,10 +491,32 @@ func (c *Core) subscribePeer(a ipc.SubscribeArgs) (<-chan ipc.Frame, func(), err
 	return out, cancel, nil
 }
 
+// hostDetail is a peer's row's detail, which says where it runs first, so
+// every client shows it: "on Asahi · running go test", or "Asahi isn't
+// answering · …" while that machine is away.
+func hostDetail(where string, s ipc.Session) string {
+	d := s.Detail
+	if d == "" {
+		d = stateWords[s.State]
+	}
+	if d == "" {
+		return where
+	}
+	return where + " · " + d
+}
+
+// stateWords say a row's state where it has no detail of its own.
+var stateWords = map[string]string{
+	ipc.StateFailed: "failed", ipc.StateExited: "exited", ipc.StateFrozen: "frozen", ipc.StatePaused: "paused",
+	ipc.StateNeedsYou: "needs you", ipc.StateStalled: "stalled", ipc.StatePausing: "pausing",
+	ipc.StateStarting: "starting", ipc.StateWorking: "working", ipc.StateDone: "done", ipc.StateIdle: "idle",
+}
+
 // hostFrame makes the ids in one of a peer's frames this list's.
 func hostFrame(name string, f *ipc.Frame) {
 	fix := func(s *ipc.Session) {
 		s.ID, s.Host, s.Pane, s.Shown = name+"/"+s.ID, name, "", false
+		s.Detail = hostDetail("on "+name, *s)
 		if s.Parent != "" {
 			s.Parent = name + "/" + s.Parent
 		}
