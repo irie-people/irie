@@ -90,6 +90,9 @@ type Spawn struct {
 	// harness whose probe offers --plugin-dir passes on (internal/skills);
 	// "" = none.
 	PluginDir string
+
+	// Arch is what Irie's arch agents bring to the session (DESIGN §4.11).
+	Arch Arch
 	// Tutor is how the agent works with the user (learn.tutor,
 	// docs/proposals/learning.md): config.TutorExplain or TutorTeach, or ""
 	// for off.
@@ -129,6 +132,22 @@ func WithTutor(mode string, visual bool, task string) string {
 	}
 	return n + "\n\n" + task
 }
+
+// Arch is what Irie's arch agents bring to a session (DESIGN §4.11). The
+// core asks for it; the adapter gives what its CLI can take and writes that
+// to ArchFile, which the core reads to put their word in front of the
+// session and its subagents as they start.
+type Arch struct {
+	With   []string `json:"with,omitempty"`    // the arch agents with the session, by rank
+	As     string   `json:"as,omitempty"`      // the arch agent the session runs as; "" = none
+	Good   []string `json:"good,omitempty"`    // the good the user wants to see in the world, in their words
+	OnCall bool     `json:"on_call,omitempty"` // the agent can call on them, and on As
+	Door   bool     `json:"door,omitempty"`    // those with a door weigh each call that could do harm before it runs
+}
+
+// ArchFile is the file in the session dir that says what the arch agents
+// brought to the session: Arch, as JSON.
+const ArchFile = "arch.json"
 
 // Probe is what a harness learned about its CLI before a launch.
 type Probe struct {

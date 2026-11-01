@@ -250,14 +250,18 @@ func countRuns(t *testing.T, runs string) int {
 	return strings.Count(string(b), "run")
 }
 
-const helpWithName = "  -n, --name <name>   Set a display name for this session"
+// helpWithName is what --help of a recent Claude Code lists of the
+// optional flags.
+const helpWithName = "  --agent <agent>      Agent for the current session\n" +
+	"  --agents <json>      JSON object defining custom agents\n" +
+	"  -n, --name <name>   Set a display name for this session"
 
 func TestProbeReadsTheVersionAndFlags(t *testing.T) {
 	path, _ := fakeCLI(t, "2.1.310 (Claude Code)", helpWithName)
 	p := Harness{}.Probe(config.Profile{Command: path, Args: []string{"--verbose"}}, os.Environ())
 	want := harness.Probe{
 		Version:  "2.1.310",
-		Flags:    map[string]bool{"--name": true},
+		Flags:    map[string]bool{"--name": true, "--agents": true, "--agent": true},
 		Warnings: []string{"--plugin-dir left out: `" + path + " --help` does not list it"},
 	}
 	if !reflect.DeepEqual(p, want) {

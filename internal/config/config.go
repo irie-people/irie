@@ -24,6 +24,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/irie-people/irie/internal/arch"
 	"github.com/irie-people/irie/internal/route"
 )
 
@@ -42,6 +43,7 @@ type Config struct {
 	Skills   Skills             `toml:"skills"`
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
+	Arch     Arch               `toml:"arch"`
 	Remote   Remote             `toml:"remote"`
 	Place    Place              `toml:"place"`
 	Peers    map[string]Peer    `toml:"peers"`
@@ -84,6 +86,24 @@ type Peer struct {
 type Skills struct {
 	Enabled  bool     `toml:"enabled"`  // false = hand agents no skills
 	Disabled []string `toml:"disabled"` // skills to leave out, such as ["present"]
+}
+
+// Arch is Irie's arch agents (DESIGN §4.11): helpers that go with every
+// Claude Code session Irie starts. Their charges are part of Irie
+// (internal/arch); here you choose who goes with you.
+type Arch struct {
+	Mikael Mikael `toml:"mikael"`
+}
+
+// Mikael is the first arch agent: a helper who stands with you against evil
+// and for the good you want to see in the world. With every Claude Code session he puts his word in front
+// of the agent as it starts and is on call as the mikael agent; at the
+// door he weighs each call that could do harm that can't be taken back
+// before it runs, and stops one that would do evil.
+type Mikael struct {
+	On   bool     `toml:"on"`   // go with every Claude Code session Irie starts
+	Door bool     `toml:"door"` // weigh each call that could do harm that can't be taken back before it runs
+	Good []string `toml:"good"` // the good you want to see in the world, in your own words; every agent hears it
 }
 
 // Env is the environment of a server that the Mac app starts (DESIGN §7.2).
@@ -232,6 +252,7 @@ type Profile struct {
 	Local          *LocalModel       `toml:"local"`  // the agent runs on a model of a local runtime
 	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
+	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
 }
 
 // TakesSkills reports whether the profile's sessions get Irie's skills.
@@ -386,6 +407,10 @@ const (
 	maxLine        = 400
 )
 
+// The most lines of good arch.mikael.good takes: they go to every session
+// Mikael is with.
+const maxGoodLines = 20
+
 // checkLines checks a list of one-line settings, such as trod.rules: at
 // most `most` of them, each one line, not empty and at most maxLine long.
 func checkLines(bad func(string, ...any), key string, lines []string, most int, why string) {
@@ -530,6 +555,16 @@ func Default() Config {
 				Env:     map[string]string{},
 				Local:   &LocalModel{Runtime: "llama-server", MinContext: DefaultMinContext, Enforce: true},
 			},
+			"mikael": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-opus-5-5",
+				Effort:         "high",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+				Arch:           "mikael",
+			},
 		},
 		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}},
 		Route: DefaultRoute(),
@@ -552,6 +587,7 @@ func Default() Config {
 			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
 			Rules: TrodRules(), Guidelines: TrodGuidelines(),
 		},
+		Arch:   Arch{Mikael: Mikael{On: true, Door: true, Good: []string{}}},
 		Remote: Remote{Port: DefaultRemotePort},
 		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
 		Learn:  Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
@@ -654,12 +690,13 @@ func Parse(data []byte, path string) (Config, error) {
 		Skills   *Skills                   `toml:"skills"`
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
+		Arch     *Arch                     `toml:"arch"`
 		Remote   *Remote                   `toml:"remote"`
 		Place    *Place                    `toml:"place"`
 		Peers    map[string]Peer           `toml:"peers"`
 		Env      *Env                      `toml:"env"`
 		Learn    *Learn                    `toml:"learn"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, Learn: &c.Learn}
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -720,6 +757,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Trod.Guidelines == nil {
 		c.Trod.Guidelines = []string{}
+	}
+	if c.Arch.Mikael.Good == nil {
+		c.Arch.Mikael.Good = []string{}
 	}
 	if c.Spawn.Preferences == nil {
 		c.Spawn.Preferences = []string{}
@@ -906,6 +946,17 @@ func (c Config) Validate() error {
 		if strings.ContainsAny(p.Cost, "\n\r") {
 			bad("profiles.%s.cost: must be one line", name)
 		}
+		if p.Arch != "" {
+			if _, ok := arch.Get(p.Arch); !ok {
+				bad("profiles.%s.arch = %q: the arch agents are %s", name, p.Arch, strings.Join(arch.Names(), ", "))
+			} else if p.Harness != "claude-code" {
+				bad("profiles.%s.arch: only the claude-code harness runs as an arch agent yet", name)
+			} else if slices.ContainsFunc(p.Args, func(a string) bool {
+				return a == "--agent" || a == "--agents" || strings.HasPrefix(a, "--agent=") || strings.HasPrefix(a, "--agents=")
+			}) {
+				bad("profiles.%s.args: a profile that runs as an arch agent passes no --agent or --agents of its own", name)
+			}
+		}
 		if l := p.Local; l != nil {
 			switch {
 			case !slices.Contains(Runtimes, l.Runtime):
@@ -1058,6 +1109,7 @@ func (c Config) Validate() error {
 	checkLines(bad, "trod.rules", n.Rules, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
+	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session Mikael is with hears")
 	switch c.Place.Mode {
 	case PlaceLocal, PlaceAuto:
 	default:

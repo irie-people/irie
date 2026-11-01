@@ -350,10 +350,13 @@ func (c *Core) launch(j job) (*session, error) {
 	// waiting for it from before it closed (follow.go).
 	os.Remove(c.paths.FreezeFile(id))
 	os.Remove(c.paths.FollowUpFile(id))
+	// Nor with what the arch agents brought it then (arch.go).
+	os.Remove(filepath.Join(dir, harness.ArchFile))
 	s := harness.Spawn{
 		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
 		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
+		Arch:  c.archFor(profile, h.ID()),
 		Tutor: x.tutor, Visual: x.tutor != "" && c.cfg().Learn.Visual,
 	}
 	// Irie's tips go under the agent's spinner, where its harness has one

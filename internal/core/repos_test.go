@@ -298,17 +298,17 @@ func TestAGenericProfileGetsItsTask(t *testing.T) {
 
 	// An unknown profile spawns nothing and names the profiles there are.
 	err := c.call("spawn", ipc.SpawnArgs{Task: "x", Profile: "nope"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "nope") || !strings.Contains(err.Error(), "cat, claude, echo, fake, haiku, local, sonnet, +auto") {
+	if err == nil || !strings.Contains(err.Error(), "nope") || !strings.Contains(err.Error(), "cat, claude, echo, fake, haiku, local, mikael, sonnet, +auto") {
 		t.Errorf("+nope: %v", err)
 	}
 	var r ipc.CompleteResult
-	if err := c.call("complete", ipc.CompleteArgs{Text: "+"}, &r); err != nil || !slices.Equal(r.Items, []string{"+auto", "+big", "+cat", "+claude", "+echo", "+fake", "+haiku", "+local", "+sonnet", "+explain", "+teach"}) {
+	if err := c.call("complete", ipc.CompleteArgs{Text: "+"}, &r); err != nil || !slices.Equal(r.Items, []string{"+auto", "+big", "+cat", "+claude", "+echo", "+fake", "+haiku", "+local", "+mikael", "+sonnet", "+explain", "+teach"}) {
 		t.Errorf("complete + = %q, %v", r.Items, err)
 	}
 	// Each profile says what it runs and costs, a profile with live sessions
 	// what one takes in memory too, and auto where it sends each class.
 	if len(r.Notes) != len(r.Items) || !strings.Contains(r.Notes[0], "hard→claude") || !strings.Contains(r.Notes[1], "no llama-server") || !strings.HasPrefix(r.Notes[2], "/bin/cat") ||
-		!strings.Contains(r.Notes[3], "opus-5-5 max") || !strings.Contains(r.Notes[7], "local, $0") || !strings.Contains(r.Notes[8], "sonnet-5-5 medium") {
+		!strings.Contains(r.Notes[3], "opus-5-5 max") || !strings.Contains(r.Notes[7], "local, $0") || !strings.Contains(r.Notes[8], "opus-5-5 high") || !strings.Contains(r.Notes[9], "sonnet-5-5 medium") {
 		t.Errorf("notes = %q", r.Notes)
 	}
 }
