@@ -35,6 +35,7 @@ struct TaskBar: View {
                 .onChange(of: text) {
                     if store.notice?.isError == true { store.dismissNotice() }
                 }
+                .onChange(of: store.focusTaskBar) { focused = true }
                 .accessibilityLabel("New task")
                 .accessibilityHint("Start with @repo or +profile to pick where and who. Return starts it.")
             VStack(alignment: .trailing, spacing: 0) {

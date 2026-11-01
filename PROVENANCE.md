@@ -303,6 +303,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-10-31 | `claude auth --help`, `claude auth status --help` and `claude auth status --json` (Claude Code 2.1.316, run locally, signed in, signed out in an empty `CLAUDE_CONFIG_DIR`, and with an API key) | `loggedIn` and `authMethod` in its JSON, exit 1 when signed out, and `claude auth login`: the sign-in check and its fix. Only those two fields are read; the rest names the person (DESIGN §2.7) |
 | 2026-10-31 | https://brew.sh ; `xcode-select --help` (macOS 14, run locally) | Homebrew's install command, and `xcode-select -p` and `--install` for Apple's Command Line Tools: the fixes `irie setup` offers on a Mac without Homebrew, and the git check that never runs macOS's stub `/usr/bin/git` (DESIGN §2.7) |
 | 2026-10-31 | zsh(1) and env(1) (macOS 14, run locally) | `-l -i -c` runs the startup files of a login and interactive shell, and `env -0` prints the environment NUL-separated: `irie up --login-env` (internal/loginenv, DESIGN §7.2) |
+| 2026-11-01 | Terminal.app's Info.plist (macOS 14, read locally with `plutil -p`) | Terminal declares the `.command` extension as `com.apple.terminal.shell-script`, so opening such a file runs it in Terminal: the Mac app's Set Up Irie button, which needs no permission to script Terminal (docs/MAC.md) |
 
 ## Third-party code
 

@@ -28,6 +28,10 @@ struct SidebarView: View {
                 .background(UnevenRoundedRectangle(bottomLeadingRadius: Theme.frameRadius, bottomTrailingRadius: Theme.frameRadius, style: .continuous)
                     .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
                 .zIndex(1)
+            // What keeps agents from starting, and a first task's steps
+            // (Onboarding.swift).
+            ReadyBanner()
+            CoachCard()
             content
                 .frame(minHeight: Self.cardsLeast)
             ReviewDock()
@@ -994,39 +998,6 @@ private struct FindField: View {
         )
         .padding(10)
         .onChange(of: store.focusFind) { focused = true }
-    }
-}
-
-private struct Offline: View {
-    let why: String
-    let socket: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(why).font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
-            Text("Start it in a terminal with `irie up`. The app connects by itself once it’s running.")
-                .font(.system(size: 12)).foregroundStyle(Theme.muted)
-            Text(Age.tilde(socket)).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(Theme.muted)
-                .lineLimit(1).truncationMode(.middle)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-/// What an empty Irie says: its mark, its word, and where to start.
-private struct Welcome: View {
-    var body: some View {
-        VStack(spacing: 10) {
-            SunMark().frame(width: 56, height: 56)
-            Text("Everything irie.").font(Theme.font(18, .bold)).foregroundStyle(Theme.ink)
-            Text("No agents yet. Type a task below to start one.")
-                .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
-                .multilineTextAlignment(.center)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
     }
 }
 
