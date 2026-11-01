@@ -91,7 +91,8 @@ type Skills struct {
 // Claude Code session Irie starts. Their charges are part of Irie
 // (internal/arch); here you choose who goes with you.
 type Arch struct {
-	Mikael Mikael `toml:"mikael"`
+	Mikael  Mikael  `toml:"mikael"`
+	Gabriel Gabriel `toml:"gabriel"`
 }
 
 // Mikael is the first arch agent: a helper who stands with you against evil
@@ -103,6 +104,29 @@ type Mikael struct {
 	On   bool     `toml:"on"`   // go with every Claude Code session Irie starts
 	Door bool     `toml:"door"` // weigh each call that could do harm that can't be taken back before it runs
 	Good []string `toml:"good"` // the good you want to see in the world, in your own words; every agent hears it
+}
+
+// Gabriel is the arch agent who carries your focus to the machine. While
+// you are at your computer and it is busy, what you are working on comes
+// first: the session you are looking at or messaged lately, and the app in
+// front. Every other session's processes, and your other heavy apps, step
+// back into macOS's background state until it is calm again or you walk
+// away. macOS lets a process slow another of its user's down and undo it,
+// but not raise one, and gives no way to set memory aside, so the others
+// step back instead.
+type Gabriel struct {
+	On      bool          `toml:"on"`      // give your focus the machine first while it is busy
+	Outside bool          `toml:"outside"` // slow your heavy apps outside Irie too, not only Irie's sessions
+	Away    time.Duration `toml:"away"`    // with no keyboard or mouse for this long you are away, and nothing is held back; 0 = always at the computer
+	Word    time.Duration `toml:"word"`    // a session you message or start stays in your focus this long
+	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
+	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
+}
+
+// GabrielSpare are the apps Gabriel never slows until you write your own
+// list: calls, music, video and recording, which must not stutter.
+func GabrielSpare() []string {
+	return []string{"zoom.us", "FaceTime", "Microsoft Teams", "Webex", "Slack", "Discord", "Music", "Spotify", "QuickTime Player", "OBS", "Logic Pro", "GarageBand", "Final Cut Pro"}
 }
 
 // Env is the environment of a server that the Mac app starts (DESIGN §7.2).
@@ -561,7 +585,10 @@ func Default() Config {
 			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
 			Rules: TrodRules(), Guidelines: TrodGuidelines(),
 		},
-		Arch:   Arch{Mikael: Mikael{On: true, Door: true, Good: []string{}}},
+		Arch: Arch{
+			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
+			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare()},
+		},
 		Remote: Remote{Port: DefaultRemotePort},
 		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
 	}
@@ -729,6 +756,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Arch.Mikael.Good == nil {
 		c.Arch.Mikael.Good = []string{}
+	}
+	if c.Arch.Gabriel.Spare == nil {
+		c.Arch.Gabriel.Spare = []string{}
 	}
 	if c.Spawn.Preferences == nil {
 		c.Spawn.Preferences = []string{}
@@ -903,8 +933,8 @@ func (c Config) Validate() error {
 			bad("profiles.%s.cost: must be one line", name)
 		}
 		if p.Arch != "" {
-			if _, ok := arch.Get(p.Arch); !ok {
-				bad("profiles.%s.arch = %q: the arch agents are %s", name, p.Arch, strings.Join(arch.Names(), ", "))
+			if a, ok := arch.Get(p.Arch); !ok || !a.Call {
+				bad("profiles.%s.arch = %q: the arch agents a session can run as are %s", name, p.Arch, strings.Join(arch.Callable(), ", "))
 			} else if p.Harness != "claude-code" {
 				bad("profiles.%s.arch: only the claude-code harness runs as an arch agent yet", name)
 			} else if slices.ContainsFunc(p.Args, func(a string) bool {
@@ -1066,6 +1096,14 @@ func (c Config) Validate() error {
 	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
 	checkLines(bad, "arch.mikael.good", c.Arch.Mikael.Good, maxGoodLines, "what every session Mikael is with hears")
+	g := c.Arch.Gabriel
+	if g.Away < 0 || g.Word < 0 {
+		bad("arch.gabriel.away and arch.gabriel.word must not be negative")
+	}
+	if g.Heavy <= 0 {
+		bad("arch.gabriel.heavy = %v: must be above 0, a percent of one CPU", g.Heavy)
+	}
+	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps Gabriel never slows")
 	switch c.Place.Mode {
 	case PlaceLocal, PlaceAuto:
 	default:

@@ -167,7 +167,8 @@ enum Fixture {
     /// and Mikael's good of its own, as the core writes it (config.Tree).
     static let config = #"""
     {"path": "/home/alice/.config/irie/config.toml", "config": {
-        "arch": {"mikael": {"on": true, "door": true, "good": ["Give credit where it's due.", "Be honest with clients, even when it costs me the job."]}},
+        "arch": {"mikael": {"on": true, "door": true, "good": ["Give credit where it's due.", "Be honest with clients, even when it costs me the job."]},
+            "gabriel": {"on": true, "outside": true, "away": "5m", "word": "10m", "heavy": 50, "spare": ["zoom.us", "FaceTime", "Music", "Spotify"]}},
         "dog": {"land": {"irie": "live"}, "nudges": 2, "watch": true},
         "trod": {"on": true, "start": "23:00", "end": "07:00", "away": "15m", "questions": true, "nudges": 8, "retry": "15m", "within": "24h", "max_working": 4, "max_plan_use": 90, "keep_awake": true,
             "rules": ["Don't spend money you didn't make.", "Don't go over the plan's weekly allotment: never buy usage credits or turn on extra usage.", "Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages."],

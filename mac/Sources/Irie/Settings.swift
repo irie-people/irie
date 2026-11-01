@@ -214,6 +214,8 @@ struct CoreConfig: Decodable, Equatable {
     /// Irie's arch agents (DESIGN §4.11): helpers who go with every session.
     struct Arch: Decodable, Equatable {
         var mikael: Mikael
+        /// Gabriel; nil from a core from before him.
+        var gabriel: Gabriel?
 
         /// Mikael, the first: he stands with you against evil and for the good
         /// you want to see in the world.
@@ -221,6 +223,18 @@ struct CoreConfig: Decodable, Equatable {
             var on: Bool
             var door: Bool
             var good: [String]
+        }
+
+        /// Gabriel, who carries your focus to the machine: while you are at
+        /// your computer and it is busy, what you work on comes first.
+        /// Durations are as the core writes them, such as "5m".
+        struct Gabriel: Decodable, Equatable {
+            var on: Bool
+            var outside: Bool
+            var away: String
+            var word: String
+            var heavy: Double
+            var spare: [String]
         }
     }
 
@@ -1127,7 +1141,7 @@ private struct ArchSettings: View {
     var body: some View {
         WithConfig(model: model) { c in
             if let a = c.arch {
-                form(a.mikael)
+                form(a)
             } else {
                 ContentUnavailableView("This Irie has no arch agents yet", systemImage: "shield.lefthalf.filled",
                                        description: Text("Install a newer build to have Mikael with your sessions."))
@@ -1140,8 +1154,16 @@ private struct ArchSettings: View {
         model.binding(m[keyPath: path], "arch.mikael." + key) { $0.arch?.mikael[keyPath: path] = $1 }
     }
 
-    private func form(_ m: CoreConfig.Arch.Mikael) -> some View {
-        SettingsForm(model: model) {
+    /// A binding to one of Gabriel's settings.
+    private func bindG<V: SettingType>(_ g: CoreConfig.Arch.Gabriel, _ path: WritableKeyPath<CoreConfig.Arch.Gabriel, V>, _ key: String) -> Binding<V> {
+        model.binding(g[keyPath: path], "arch.gabriel." + key) { $0.arch?.gabriel?[keyPath: path] = $1 }
+    }
+
+    private static let aways = ["2m", "5m", "10m", "15m"]
+
+    private func form(_ a: CoreConfig.Arch) -> some View {
+        let m = a.mikael
+        return SettingsForm(model: model) {
             Section {
                 Toggle("Mikael goes with every session", isOn: bind(m, \.on, "on"))
                 Toggle("He weighs calls that can’t be taken back", isOn: bind(m, \.door, "door"))
@@ -1161,6 +1183,33 @@ private struct ArchSettings: View {
                 footnote("In your own words. Every agent Mikael goes with hears them, and he helps it toward them.")
             }
             .disabled(!m.on)
+            if let g = a.gabriel {
+                Section {
+                    Toggle("Gabriel gives your focus the machine first", isOn: bindG(g, \.on, "on"))
+                    Toggle("Slow your heavy apps outside Irie too", isOn: bindG(g, \.outside, "outside"))
+                        .disabled(!g.on)
+                    Picker("You’re away after", selection: bindG(g, \.away, "away")) {
+                        ForEach(Self.aways.contains(g.away) ? Self.aways : Self.aways + [g.away], id: \.self) { d in
+                            Text(d == "0s" ? "Never" : GeneralSettings.spoken(d)).tag(d)
+                        }
+                    }
+                    .disabled(!g.on)
+                } header: {
+                    Text("Gabriel")
+                } footer: {
+                    footnote("While you’re at your computer and it’s busy, what you’re working on comes first: the session you’re looking at or messaged in the last \(GeneralSettings.spoken(g.word)), and the app in front. Every other session, and your other heavy apps, step back into macOS’s background state until there’s room again or you step away. Nothing is held back while you’re away. `irie ctl gabriel` says what he holds back.")
+                }
+                Section {
+                    LineList(lines: g.spare, prompt: "Add an app never to slow, such as “Xcode”") {
+                        bindG(g, \.spare, "spare").wrappedValue = $0
+                    }
+                } header: {
+                    ListHeader(title: "Apps Gabriel never slows", reset: { model.reset("arch.gabriel.spare") })
+                } footer: {
+                    footnote("Calls, music, video and recording, which must never stutter. An app that plays sound or video, or holds a call, is spared too.")
+                }
+                .disabled(!g.on || !g.outside)
+            }
         }
     }
 }

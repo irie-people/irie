@@ -68,6 +68,10 @@ const (
 	// OpTrod is the trod bot's report: whether it works now, the
 	// rules and guidelines it gives, and what it did (DESIGN §4.10).
 	OpTrod = "trod"
+	// OpGabriel is Gabriel's report: whether the user is at the computer
+	// and the machine busy, what is in their focus, and what he holds back
+	// (DESIGN §4.11). It answers a GabrielResult.
+	OpGabriel = "gabriel"
 	// OpReady checks that the computer has what Irie needs, as its agents
 	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
 	// a ready.Report, for the Mac app's welcome.
@@ -236,6 +240,36 @@ type TrodHand struct {
 }
 
 // TrodResult is the trod bot's report (DESIGN §4.10).
+// GabrielResult is Gabriel's report (OpGabriel).
+type GabrielResult struct {
+	On       bool             `json:"on"`      // he works in this core
+	Outside  bool             `json:"outside"` // he slows apps outside Irie too
+	Present  bool             `json:"present"` // the user is at the computer
+	Idle     string           `json:"idle"`    // since their last keyboard or mouse input, such as "4s"
+	Busy     bool             `json:"busy"`    // the machine is busy
+	Holding  bool             `json:"holding"` // he holds back what is out of the user's focus
+	CPUs     int              `json:"cpus"`
+	RunQueue float64          `json:"run_queue"`
+	Pressure int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
+	Front    string           `json:"front,omitempty"` // the app in front, when he read it
+	Focus    []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
+	Held     []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
+	Apps     []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
+}
+
+// GabrielSession is a session in Gabriel's report.
+type GabrielSession struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// GabrielApp is an app outside Irie that Gabriel slowed.
+type GabrielApp struct {
+	PID  int     `json:"pid"`
+	Name string  `json:"name"`
+	CPU  float64 `json:"cpu"` // its share of a CPU when he slowed it, in percent
+}
+
 type TrodResult struct {
 	On          bool          `json:"on"`                     // trod.on
 	In          bool          `json:"in"`                     // on, and in its hours now

@@ -130,7 +130,10 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	}); !reflect.DeepEqual(c.Trod, want) {
 		t.Errorf("night = %+v, want %+v", c.Trod, want)
 	}
-	if want := (Arch{Mikael: Mikael{On: true, Door: true, Good: []string{}}}); !reflect.DeepEqual(c.Arch, want) {
+	if want := (Arch{
+		Mikael:  Mikael{On: true, Door: true, Good: []string{}},
+		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare()},
+	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
 	if err := c.Validate(); err != nil {
@@ -739,7 +742,7 @@ func TestArchValidation(t *testing.T) {
 		"[arch.mikael]\ngood = [\"one\\ntwo\"]\n":                                            "arch.mikael.good[0]: must be one line",
 		"[arch.mikael]\ngood = [\"" + strings.Repeat("g", 401) + "\"]\n":                     "at most 400 characters",
 		"[arch.mikael]\ngood = [" + strings.Repeat("\"g\", ", 21) + "]\n":                    "arch.mikael.good: at most 20",
-		"[profiles.helper]\narch = \"nobody\"\n":                                             `profiles.helper.arch = "nobody": the arch agents are mikael`,
+		"[profiles.helper]\narch = \"nobody\"\n":                                             `profiles.helper.arch = "nobody": the arch agents a session can run as are mikael`,
 		"[profiles.helper]\nharness = \"generic\"\ncommand = \"aider\"\narch = \"mikael\"\n": "profiles.helper.arch: only the claude-code harness",
 		"[profiles.helper]\narch = \"mikael\"\nargs = [\"--agent\", \"x\"]\n":                "profiles.helper.args: a profile that runs as an arch agent",
 	} {
@@ -750,5 +753,24 @@ func TestArchValidation(t *testing.T) {
 	c, err := Load(writeFile(t, "[profiles.mikael-sonnet]\nmodel = \"claude-sonnet-5-5\"\narch = \"mikael\"\n"))
 	if err != nil || c.Profiles["mikael-sonnet"].Arch != "mikael" {
 		t.Errorf("a profile of the user's own that runs as Mikael: %+v, %v", c.Profiles["mikael-sonnet"], err)
+	}
+}
+
+func TestArchGabrielFromTheFile(t *testing.T) {
+	c, err := Load(writeFile(t, "[arch.gabriel]\noutside = false\naway = \"2m\"\nspare = [\"Xcode\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Gabriel{On: true, Outside: false, Away: 2 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: []string{"Xcode"}}); !reflect.DeepEqual(c.Arch.Gabriel, want) {
+		t.Errorf("arch.gabriel = %+v, want %+v", c.Arch.Gabriel, want)
+	}
+	for body, want := range map[string]string{
+		"[arch.gabriel]\nheavy = 0\n":      "arch.gabriel.heavy = 0",
+		"[arch.gabriel]\naway = \"-1m\"\n": "must not be negative",
+		"[arch.gabriel]\nspare = [\"\"]\n": "arch.gabriel.spare[0]: is empty",
+	} {
+		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", body, err, want)
+		}
 	}
 }

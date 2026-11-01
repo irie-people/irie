@@ -11,6 +11,7 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/proc"
 )
 
 // archFor is what Irie's arch agents bring to a session of profile p (DESIGN
@@ -19,6 +20,7 @@ import (
 // every one; with arch.mikael.door too, he weighs the calls at its door,
 // except for a session on a local model, where the small model that would
 // weigh them is the local one, and one that runs as an arch agent itself.
+// With arch.gabriel.on, Gabriel's word goes with it too.
 func (c *Core) archFor(p config.Profile, harnessID string) harness.Arch {
 	if harnessID != "claude-code" {
 		return harness.Arch{}
@@ -28,6 +30,11 @@ func (c *Core) archFor(p config.Profile, harnessID string) harness.Arch {
 	if m.On {
 		a.With = []string{"mikael"}
 		a.Door = m.Door && p.Local == nil && p.Arch == ""
+	}
+	// Gabriel works in the core (gabriel.go); a session hears his word only
+	// where he can work.
+	if g := c.cfg().Arch.Gabriel; g.On && proc.CanBackground && !gabrielOff() {
+		a.With = append(a.With, "gabriel")
 	}
 	return a
 }
@@ -69,7 +76,7 @@ func (c *Core) archWord(id string, evs []event.Event) string {
 		if !ok {
 			continue
 		}
-		w := ag.Word(arch.WordData{OnCall: a.OnCall && !sub, Door: a.Door && ag.Door != nil, Good: a.Good})
+		w := ag.Word(arch.WordData{OnCall: a.OnCall && !sub && ag.Call, Door: a.Door && ag.Door != nil, Good: a.Good})
 		if w != "" {
 			words = append(words, w)
 		}
