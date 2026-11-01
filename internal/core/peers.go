@@ -276,6 +276,15 @@ func (c *Core) peersInfo() []ipc.PeerInfo {
 		if h := p.header; h != nil {
 			i.Version, i.Load, i.Memory = h.Version, h.Load, h.Memory
 		}
+		switch {
+		case !p.up:
+			i.Refuses = "it isn't answering"
+		default:
+			i.Refuses = c.hooksDiffer(p)
+			if m := p.header.Machine; i.Refuses == "" && m != nil && m.Claude != "ok" {
+				i.Refuses = "Claude Code isn't signed in there (claude auth login, there)"
+			}
+		}
 		out = append(out, i)
 	}
 	return out

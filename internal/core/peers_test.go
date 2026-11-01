@@ -92,7 +92,7 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 	if rows[0].Detail != "on Asahi · working" || rows[1].Detail != "on Asahi · idle" {
 		t.Errorf("details = %q, %q", rows[0].Detail, rows[1].Detail)
 	}
-	if len(info) != 1 || !info[0].Up || info[0].Sessions != 2 || info[0].Version != "peer-v" || info[0].Load == nil || info[0].Load.CPUs != 10 {
+	if len(info) != 1 || !info[0].Up || info[0].Sessions != 2 || info[0].Version != "peer-v" || info[0].Load == nil || info[0].Load.CPUs != 10 || info[0].Refuses != "" {
 		t.Errorf("peers = %+v", info)
 	}
 
