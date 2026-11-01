@@ -6,12 +6,18 @@
 // session one is about. Bump VERSION whenever this file or the shell's file
 // list changes.
 
-const VERSION = 'irie-shell-3';
+const VERSION = 'irie-shell-4';
 const SHELL = [
   './', 'index.html', 'app.css', 'app.js',
   'js/ui.js', 'js/look.js', 'js/net.js', 'js/md.js', 'js/conv.js', 'js/push.js',
   'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png',
 ];
+// Only the app's own page and files are kept, by their place in the scope:
+// any other page of the origin, such as the setup page or the profile, goes
+// to the network as it is and never stands in for the app.
+const SCOPE = new URL(self.registration.scope);
+const PAGES = new Set([SCOPE.pathname, new URL('index.html', SCOPE).pathname]);
+const KEPT = new Set(SHELL.map((p) => new URL(p, SCOPE).pathname));
 // How long the network may take before the cached shell is served instead;
 // the network's answer still refreshes the cache when it comes.
 const PATIENCE = 2500;
@@ -37,13 +43,14 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  if (req.mode === 'navigate' ? !PAGES.has(url.pathname) : !KEPT.has(url.pathname)) return;
   event.respondWith(shell(event, req, url));
 });
 
 async function shell(event, req, url) {
   const cache = await caches.open(VERSION);
-  // Pages are the app's one page, whatever their query.
-  const key = req.mode === 'navigate' ? new Request(new URL('./', self.location).href) : new Request(url.origin + url.pathname);
+  // The app's page is kept once, as the scope, whatever its query.
+  const key = req.mode === 'navigate' ? new Request(SCOPE.href) : new Request(url.origin + url.pathname);
   // A navigation can't be copied with options, so it is asked for by its address.
   const fresh = (req.mode === 'navigate' ? fetch(url.href, { cache: 'no-store' }) : fetch(req, { cache: 'no-store' })).then((res) => {
     if (res.ok && res.type === 'basic') event.waitUntil(cache.put(key, res.clone()));

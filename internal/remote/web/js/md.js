@@ -195,18 +195,60 @@ function nest(items) {
 
 const LINK = (url, text) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 
+/** ASCII punctuation: what a backslash escapes. */
+const PUNCT = /[!-/:-@[-`{-~]/;
+
 /** One line's inline Markdown, escaped. */
 export function inline(source) {
+  const s = String(source ?? '').replace(/\u0000/g, '');
   const keep = [];
   const stash = (html) => `\u0000${keep.push(html) - 1}\u0000`;
-  let t = esc(source);
-  // Code spans first: nothing inside them is Markdown.
-  t = t.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (_, _f, c) => stash(`<code>${c.replace(/^ (.+) $/, '$1')}</code>`));
-  // Backslash escapes.
-  t = t.replace(/\\(&gt;|&lt;|&amp;|[\\`*_{}[\]()#+\-.!|~])/g, (_, c) => stash(c));
-  // [text](https://…) and <https://…>.
-  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, text, url) => stash(LINK(url, emphasis(text))));
-  t = t.replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, (_, url) => stash(LINK(url, url)));
+  // A kept piece may hold others, as a link's text holds code: expand until none is left.
+  const restore = (x) => {
+    for (let k = 0; k < 8 && x.includes('\u0000'); k++) x = x.replace(/\u0000(\d+)\u0000/g, (_, n) => keep[+n] ?? '');
+    return x;
+  };
+  // Backslash escapes and code spans, read left to right as CommonMark reads
+  // them: an escaped backtick opens no code span, and nothing inside a code
+  // span is Markdown, its backslashes included. Everything else is escaped.
+  let t = '';
+  let plain = '';
+  const flush = () => {
+    t += esc(plain);
+    plain = '';
+  };
+  for (let i = 0; i < s.length;) {
+    const c = s[i];
+    if (c === '\\' && i + 1 < s.length && PUNCT.test(s[i + 1])) {
+      flush();
+      t += stash(esc(s[i + 1]));
+      i += 2;
+      continue;
+    }
+    if (c === '`') {
+      let n = 1;
+      while (s[i + n] === '`') n++;
+      const close = closing(s, i + n, n);
+      if (close < 0) {
+        plain += '`'.repeat(n);
+        i += n;
+        continue;
+      }
+      let code = s.slice(i + n, close).replace(/\n/g, ' ');
+      if (code.length > 2 && code[0] === ' ' && code[code.length - 1] === ' ' && code.trim()) code = code.slice(1, -1);
+      flush();
+      t += stash(`<code>${esc(code)}</code>`);
+      i = close + n;
+      continue;
+    }
+    plain += c;
+    i++;
+  }
+  flush();
+  // [text](https://…), whose text may hold code and escapes, and <https://…>.
+  // No address takes a kept piece, so none is ever anything but escaped text.
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)\u0000]+)\)/g, (_, text, url) => stash(LINK(url, restore(emphasis(text)))));
+  t = t.replace(/&lt;(https?:\/\/[^\s&\u0000]+)&gt;/g, (_, url) => stash(LINK(url, url)));
   // Bare addresses, without the punctuation that ends a sentence.
   t = t.replace(/(^|[\s(]|&quot;|&#39;)(https?:\/\/[^\s\u0000]+)/g, (_, pre, url) => {
     let tail = '';
@@ -222,8 +264,18 @@ export function inline(source) {
     }
     return pre + (/^https?:\/\/[^/]/.test(url) ? stash(LINK(url, url)) : url) + tail;
   });
-  t = emphasis(t);
-  return t.replace(/\u0000(\d+)\u0000/g, (_, n) => keep[+n]);
+  return restore(emphasis(t));
+}
+
+/** Where a run of exactly n backticks closes a code span, from from; -1 when none does. */
+function closing(s, from, n) {
+  for (let j = s.indexOf('`', from); j >= 0; j = s.indexOf('`', j)) {
+    let m = 1;
+    while (s[j + m] === '`') m++;
+    if (m === n) return j;
+    j += m;
+  }
+  return -1;
 }
 
 function emphasis(t) {
