@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"reflect"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -59,6 +61,11 @@ type Core struct {
 	http     *http.Client // for local servers
 	sampling atomic.Bool  // a memory sample is running
 	sweeping atomic.Bool  // the jot dog looks at the finished jots (dog.go)
+	fdog     *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
+
+	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
+	awakeMu      sync.Mutex  // guards awake; taken after mu
+	awake        *exec.Cmd   // what keeps the Mac awake for the trod bot, while it does
 
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
@@ -96,6 +103,9 @@ type Core struct {
 	split      string              // the session the Mac app shows beside its teammates, in the view session (view.go)
 	team       *tmux.Runner        // the team server, where sessions' teammates run (team.go)
 	teamSocket string              // its socket path, once known
+	trodNow    trodNow             // the trod bot as its last sweep found it (trod.go)
+	trodReset  time.Time           // when the plan's usage limit last reset, as far as the trod bot saw
+	trodHand   trodHand            // the run of the trod bot you started by hand last (trod.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -189,6 +199,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
 		history: map[string][]event.Event{}, outcomes: map[string]*outcome{},
+		fdog: newFreezeDog(),
 	}
 	c.useConfig(o.Config)
 	return c
@@ -209,7 +220,7 @@ func Run(o Options) error {
 	if err := o.Paths.EnsureState(); err != nil {
 		return err
 	}
-	lock, err := lockFile(o.Paths.CoreLock(), 3*time.Second)
+	lock, err := filetx.Lock(o.Paths.CoreLock(), 3*time.Second)
 	if err != nil {
 		return fmt.Errorf("core.lock: %w", err)
 	}
@@ -231,6 +242,7 @@ func Run(o Options) error {
 	c.loadOrder()
 	c.loadClosed()
 	c.loadState()
+	c.loadTrodHand()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello.
@@ -240,6 +252,7 @@ func Run(o Options) error {
 	c.tick()
 	go c.sample()
 	go c.dogSweep()
+	go c.trodSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -249,6 +262,7 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
+	go c.watchFreezes()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
@@ -263,6 +277,9 @@ func Run(o Options) error {
 			}
 			if n%dogEvery == 0 {
 				go c.dogSweep()
+			}
+			if n%trodEvery == 0 {
+				go c.trodSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
@@ -296,6 +313,7 @@ func (c *Core) tick() {
 	c.countTokens()
 	c.followTitles()
 	c.followConversations()
+	c.keepRemote()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -445,12 +463,20 @@ func (c *Core) record(x *session, e event.Event) {
 	}
 }
 
-// list returns the rows in the list's order (order.go). The caller holds
-// c.mu.
+// list returns the rows in the list's order (order.go), each with what
+// the trod bot did for it in its last shift. The caller holds c.mu.
 func (c *Core) list() []ipc.Session {
 	out := make([]ipc.Session, 0, len(c.sessions))
+	var from time.Time
+	if n := c.cfg().Trod; n.On {
+		from, _, _ = n.Shift(time.Now())
+	}
 	for _, x := range c.sessions {
-		out = append(out, x.wire())
+		s := x.wire()
+		if !from.IsZero() {
+			s.Trod = trodRow(&x.track, from)
+		}
+		out = append(out, s)
 	}
 	c.sortRows(out)
 	return out
@@ -490,7 +516,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -519,6 +545,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return c.dogList()
 	case ipc.OpReady:
 		return c.ready(), nil
+	case ipc.OpTrod:
+		var a ipc.TrodArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.trodOp(a)
 	case ipc.OpConfig:
 		var a ipc.ConfigArgs
 		if err := decode(raw, &a); err != nil {
@@ -588,6 +620,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.hook(a)
+	case ipc.OpInput:
+		var a ipc.InputArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.input(a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {
@@ -603,6 +641,24 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return nil, c.send(a)
+	case ipc.OpScreen:
+		var a ipc.ScreenArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.screen(a)
+	case ipc.OpPair:
+		var a ipc.PairArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.pair(a)
+	case ipc.OpKeys:
+		var a ipc.KeysArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.keys(a)
 	case ipc.OpConversation:
 		var a ipc.ConversationArgs
 		if err := decode(raw, &a); err != nil {

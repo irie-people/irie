@@ -22,6 +22,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/journal"
@@ -538,15 +539,7 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 // saveResult keeps a turn's last message whole, for `irie ctl delegate`.
 // The caller holds c.mu.
 func (c *Core) saveResult(x *session, msg string) {
-	if err := writeFileAtomic(filepath.Join(c.paths.Session(x.id), resultFile), []byte(msg)); err != nil {
+	if err := filetx.WriteFile(filepath.Join(c.paths.Session(x.id), resultFile), []byte(msg), 0o600); err != nil {
 		c.log.Warn("result", "session", x.id, "err", err)
 	}
-}
-
-func writeFileAtomic(path string, b []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
 }

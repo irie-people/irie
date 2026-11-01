@@ -38,6 +38,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | Fewer tokens through local and free models that Irie sets up, in the spawn list with their cost, weighing the machine's memory | Built-in `+sonnet` and `+local`; Irie's own Ollama server; `irie setup local`; what each profile costs in the `+` list; sessions' cost and memory in the sidebar; a memory check before a model loads | §6.1, §6.3, M10 |
 | Route each task by cost, normalised by accuracy; keep orchestration on Opus; delegate to local; fail over at usage limits; set up local models from the sidebar | `+auto`, the default: the lowest cost per success among profiles accurate enough for the task's class, learning from ratings and re-runs; `irie ctl delegate`; failover; `:setup`, `:models`, `:rate`, `:route` | §6.4, M10 |
 | A jot dog that watches the jots and sees each through | When a jot's turn ends with work not committed, or not yet in its repo's land branch (such as `live`), the dog sends its agent back to finish once, then its row says what is left until the work lands; `irie ctl dog` lists every jot that is not through | §4.8 |
+| A trod bot that keeps orchestrators going at night until their tasks are through, set up with your own rules and guidelines, and never over the week's allotment | While you are away at night (its hours, and a Mac with no input), an agent that asks you something is told to decide itself; a turn an API error stopped, a jot that is not through and a session a usage limit stopped are sent on; the Mac stays awake while there is work; past `trod.max_plan_use` it sends nothing on, and freezes what would spend past the week's cap. Every note carries `trod.rules` and `trod.guidelines`; `irie ctl trod` says what it did | §4.10 |
 
 ### 1.2 Not in v1
 
@@ -68,7 +69,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 ### 2.1 Principles
 
 1. **tmux is the engine.** It keeps agents alive with no window open, swaps panes into view, reports process facts and carries typed input. Ghostty is the window around it.
-2. **One writer.** `irie core` owns all state and is the only process that drives tmux. The sidebar, `irie ctl`, the hook shim, the subagent mirrors and any future native front-end are all clients of its socket API.
+2. **One writer.** `irie core` owns all state and every rule, and is the only process that drives tmux. The sidebar, the Mac app, `irie ctl`, the hook shim, the subagent mirrors and any other front-end are all clients of its socket API, which [CORE.md](CORE.md) describes for whoever writes one: irie-core. A client keeps no rules of its own, not even what the words in its task bar mean (`input`).
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
 4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
@@ -122,12 +123,13 @@ flowchart LR
 | `irie` | the user's terminal, or Irie.app | Runs `irie up`, then opens or focuses the Irie window in Ghostty (macOS, from M9) or attaches in the current terminal | tmux, `osascript` |
 | `irie up` | any terminal | Idempotent. Starts the server and the core if the socket does not answer `hello`, and waits up to 5 s for it. If the running core or UI is a different version, respawns those panes (`respawn-pane -k`); agents are untouched | tmux, socket |
 | `irie attach` | any terminal | `exec tmux -L irie attach -t irie`. Inside another tmux it refuses unless given `--nested`. Inside Irie's own server it runs `switch-client` | tmux |
-| `irie core --supervise` | `irie-agents:core` | Holds `core.lock` (flock). Owns the registry, state derivation, gates, notes, undo log, journal, worktrees, spawning, the swap-in and observation. The supervisor restarts it with backoff (1, 2, 4 … 30 s) | socket (server), tmux, hosts (signals), transcripts |
+| `irie core --supervise` | `irie-agents:core` | Holds `core.lock` (flock). Owns the registry, state derivation, gates, notes, undo log, journal, worktrees, spawning, the swap-in and observation, and runs the freeze dog, which restarts a frozen Irie.app (§2.4). The supervisor restarts it with backoff (1, 2, 4 … 30 s) | socket (server), tmux, hosts (signals), transcripts |
 | `irie ui --supervise` | `irie:0.0` | The sidebar, a pure client of the socket. It never calls tmux | socket |
 | `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; continues stops it did not cause, but leaves a frozen agent stopped; says who it is in `host.json`; records the exit status | the agent (fork/exec), socket (best effort) |
 | `irie hook` | started by the agent for each hook event | Forwards the event, waits while held, prints the harness's reply | socket, gate file |
 | `irie statusline` | started by Claude Code for each status line update (§6.3) | Forwards the session's cost, context and plan use, then runs the user's own status line | socket |
 | `irie team-tmux` | the `tmux` an agent with agent teams finds first on its PATH (§2.3) | Takes Claude Code's teammate panes to the team server, a tmux session each; sends every other tmux call where it would go without Irie | tmux (exec) |
+| `irie remote serve --supervise` | `irie-agents:irie-remote`, while `remote.on` ([PHONE.md](PHONE.md)) | The phone app's gateway: HTTPS on the local network, a client of the socket that relays a phone's ops and subscriptions. The core starts it, and starts it again after an install or a change of its settings | the core (socket), phones (HTTPS) |
 | `irie runtime -- ollama serve` | `irie-agents:irie-ollama`, started on first need (§6.3) | Irie's own Ollama server, in a process group of its own, so its model runners stop with it | the agents (HTTP on 127.0.0.1) |
 | `irie mirror` | subagent panes (M8) | Read-only live view of one subagent | socket, transcript |
 | `irie ctl` | anywhere | Scripting and tests: `list`, `spawn`, `show`, `watch`, `pause`, and so on | socket |
@@ -190,7 +192,7 @@ The Mac app shows a session that has teammates beside them in its terminal view,
 
 ### 2.4 Socket API
 
-The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in a 0700 directory. There is no TCP listener. Messages are NDJSON, one object per line:
+The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in a 0700 directory. The core has no TCP listener; the phone app reaches it through its own gateway, `irie remote serve`, a client of this socket that lets a phone use only a phone's ops ([PHONE.md](PHONE.md)). Messages are NDJSON, one object per line:
 - Request: `{"id":1,"op":"spawn","args":{…}}`.
 - Reply: `{"id":1,"ok":true,"result":{…}}` or `{"id":1,"ok":false,"error":{"code":"…","msg":"…"}}`.
 - `subscribe` replies once, then streams frames until the client closes:
@@ -202,15 +204,18 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
   - `{"t":"closed","closed":[…]}`: the closed sessions that `reopen` can bring back, the last closed first (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
   - `{"t":"conversation","conversation":{…}}`, sent only when `conversation:true` was requested for one session: its whole conversation first (`reset`), then the items that changed and what it waits on you for (§4.7).
+  - `{"t":"ping","ping":N}`: the freeze dog's ping, the only frame of a `view: "watch"` subscription (below).
 - Frames to the UI are coalesced to at most 10 per second.
+- **The freeze dog.** A window of Irie's own, such as the Mac app, asks to be watched with `subscribe`, `view: "watch"`, its `pid` and, for the Mac app, its `bundle`, on a connection of its own. The core pings it once a second, one ping at a time, and the window answers each on the same connection from its main loop, `{"pong":N,"front":…,"hidden":…}`: whether its app is the active one, and whether it is hidden. A ping left unanswered for `ui.freeze_dog` (10 s) means the window no longer answers its user. The core then has `sample` write down where the process is stuck, in a report in `<state>/freezes/` (the newest ten are kept); force quits it with SIGKILL once the stacks are read, about 1.3 s later; waits for it to go; and opens the bundle again as it stood, with `/usr/bin/open`, `open -g` or `open -j` and the arguments `--freeze-dog <seconds>`, which the app says in a notice, and `--background` when it was not in front. Agents are untouched (§2.1, principle 6). The dog's clock waits while the core itself is held up, since a late look restarts every unanswered ping's time; a process under a debugger is left be; and the dog restarts windows three times in ten minutes at most, so an app that freezes as it opens is not opened again and again. The dog has a lock of its own, so a busy core never holds a ping or an answer up. `hello` lists `watch` when the core has the dog.
 - The API version is `1`. Additions keep backwards compatibility.
 
 | Op | Args | Result | From |
 |---|---|---|---|
 | `hello` | `client`, `api` | `version`, `api`, `features[]`, which name the ops served, `move` among them | M1 |
 | `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
-| `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session`; with `agent: "sub:<id>"` it follows that helper's own conversation (§4.4) | M1 (`view`: Mac app; `conversation`: §4.7) |
+| `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?`, `pid?`, `bundle?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `view: "watch"`, with `pid` and `bundle`, asks the freeze dog to watch a window (above). `conversation` needs `session`; with `agent: "sub:<id>"` it follows that helper's own conversation (§4.4) | M1 (`view`: Mac app; `conversation`: §4.7; `watch`: the freeze dog) |
 | `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?` (`auto` routes it), `name?` (the user's, §4.2), `force?`, `delegate?`, `parent?`, `permission_mode?`, `continues?` | `session` | M1 (`repo`, `profile` M3; `force`, `delegate`, `parent`, `permission_mode`, `continues` M10) |
+| `input` | `text`, as typed; `session?`, the selected session; `outside?`, the selected session outside Irie; `repo?`, `in_place?`, `profile?`, `model?`, the client's menus; `pastes[]?`, each `label` and `text` | `did`: `spawned`, `answered`, `ran` or `asked`; `op`, the op it ran; `text`, to show as it is; `session?`; `show?`; `choice?`, as `undo`'s. Reads what a person typed, a task, a status question or a `:` command, and runs the op it means through this table (§4.2, [CORE.md](CORE.md) §3) | irie-core |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
@@ -238,6 +243,9 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
 | `conversation` | `session`, `agent?`, `limit?` | `session`, `agent?`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7), or with `agent: "sub:<id>"` that helper's, read from its own (§4.4) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
+| `screen` | `session` | `lines[]`: what its terminal shows now, as plain text, without the blank lines under the last; `options[]`, each `key`, `label` and `selected`: while it waits on you, the numbered choices of the prompt at the bottom, as Claude Code draws a permission, a question or a plan, and none otherwise | The phone app ([PHONE.md](PHONE.md)) |
+| `keys` | `session`, `keys[]`, `text?` | none. Presses each key in its terminal, a letter or digit or one of Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, PageUp, PageDown, Home and End, never Ctrl+C, then types `text`, with no control character, without Enter. Takes its turn with `send`; refuses with `busy` once the session has ended or while it is frozen | The phone app ([PHONE.md](PHONE.md)) |
+| `pair` | `minutes?`, 10 by default, a week at most | `on`, `name`, `urls[]`, `code`, `until`: opens a six-digit code that pairs a phone with this machine, as `irie remote pair` does, and the setup page's addresses, the Bonjour name first. The gateway takes the code from the state folder; a phone can't open one | The Mac app ([PHONE.md](PHONE.md)) |
 
 ### 2.5 Observation
 
@@ -257,6 +265,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | Path | Contents | From |
 |---|---|---|
 | `cmd/irie/` | Entry point and subcommand dispatch | M1 |
+| `core/` | irie-core's contract for Go clients: the wire types and op names, generated from `internal/ipc`, the socket's place, a client, and the language a person types (`Read`, `Said`) ([CORE.md](CORE.md)) | irie-core |
 | `internal/paths/` | XDG and runtime dirs, socket path | M1 |
 | `internal/config/` | TOML config, defaults, validation | M1 |
 | `internal/tmux/` | Command runner, generated tmux.conf, layout, swap-in, sizes; `control/` from M11 | M1 |
@@ -483,6 +492,8 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
+
+The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3), so every client's bar takes the same words and every `:` command the core knows. The words above are the plan; the core reads `:rename`, `:rate`, `:close`, `:reopen`, `:undo`, `:redo`, `:freeze`, `:thaw`, `:prio`, `:park`, `:unpark`, `:move`, `:route`, `:setup` and `:models`, and a status question such as "hows the parser?", which it answers from the rows and which starts nothing.
 
 **Spawn pipeline.** Reliable headless spawning means the task never travels through tmux and is never typed into a TUI:
 1. Parse the first line: `@…` and `+…` tokens are removed, and the rest is the task.
@@ -753,9 +764,42 @@ The dog only reads. It never commits, merges, pushes or removes anything.
 
 **Closed is done.** A jot you close is done, whatever it left: the dog never sends it back, lists it or reopens it. Closing is how you tell the dog that a jot is finished, landed or not.
 
-**Not yet.** A jot stopped by a usage limit could be told to go on when the limit resets; and a jot that closed on its own could be reopened to finish without being asked, though never one you closed.
+**Not yet.** A jot that closed on its own could be reopened to finish without being asked, though never one you closed. (A jot stopped by a usage limit goes on at the reset by Claude Code's own continue, which the trod bot keeps the Mac awake for at night, and sends on when it stays stopped, §4.10.)
 
 **Tests:** git reads against real worktrees (uncommitted, untracked, renamed, copied files left out, commits before the jot's start, a land branch missing, landing by moving the branch); with the fake agent, which goes on after a Stop hook as Claude Code does: a nudge and then the stop it lets through, the row's words, a commit that lands, background work and a question left alone, `nudges = 0`, a delegated task, a scratch jot's own worktree found by its conversation id but not another's; a jot you close left off the report, and one that closed on its own kept on it, across a restart.
+
+### 4.10 The trod bot
+
+At night agents stop for the user as they do by day: one asks a question, an API error ends a turn, a jot is not through once the jot dog's nudges are spent, a usage limit stops a session. Nobody answers until morning. Meanwhile the idle Mac sleeps, so not even Claude Code's own continue at a usage limit's reset runs: Claude Code keeps the Mac awake only while it works. The trod bot keeps the sessions going while the user is away at night, until their tasks are through ("trod on": keep going). It spends no tokens of its own. It reads hooks, the jot dog's look at git, the status line's plan use and the machine's idle time, and it speaks to an agent only when the agent has something left.
+
+**When it works.** It is off until the user turns it on (`trod.on`, `irie ctl trod on`, or the Mac app's Settings). It then works from `trod.start` to `trod.end` local time, around the clock when the two are the same. It steps in once the Mac has had no keyboard or mouse input for `trod.away`, which `ioreg` reads as IOHIDSystem's `HIDIdleTime`; where there is no `ioreg`, the hours alone decide. So it never answers for a user who is still up.
+
+**Started by hand.** `irie ctl trod now` (op `trod` with `start`, or the Mac app's Start the Trod Bot Now) starts a run at once, out of its hours, even with `trod.on` off. The bot then works while the user is at the Mac and watches it. The run has no clock. It ends once no session it watches has work left: every one is through, or waits only on the user. It also ends once the plan is as full as `trod.max_plan_use`, at `--until` if one was given, or when the user stops it (`irie ctl trod stop`). The run, and why it ended, are kept in `state.json` (`trod_now`), so a restarted core goes on with it. Its notes say the user wants the agent to keep going without them, rather than that they are away.
+
+**What it watches.** Every Claude Code session in Irie, with these exceptions:
+- one another session delegated (`irie ctl delegate`'s subtasks are their caller's) or a failover carries on;
+- one the user parked or froze: parking a session keeps the bot off it;
+- one that stopped longer than `trod.within` ago.
+
+**What it does.** It sends one session on `trod.nudges` times a night at most:
+- *A question.* At the end of a turn whose last message asks the user something, it sends the turn on, as the jot dog does (§4.8). The agent is told the user is away until the shift ends, and to take the option it would recommend. At an `AskUserQuestion`, it turns the call away with the same note: a PreToolUse `permissionDecision` of `deny`, whose reason the agent reads. The call never runs, so the session never needs the user. A question asked again before the agent has worked since waits for the user. The bot never answers in the user's name, and never approves a permission, a plan or an elicitation: those wait too.
+- *An API error.* It sends on a turn that failed on `overloaded`, `server_error`, `max_output_tokens` or `unknown` once `trod.retry` has passed. A turn that failed on something only the user can mend, such as `authentication_failed` or `billing_error`, waits.
+- *A jot that is not through.* Once the dog's nudges are spent, the bot sends the jot on every `trod.retry`, with what the dog found left, so a jot held up by an install lock tries again later.
+- *A usage limit.* While the plan is at its limit, by the newest status line, the session waits. At the reset Claude Code carries the task on itself (its automatic continue, on by default since 2.1.234), as long as the Mac is awake. A session still stopped `trod.retry` after the reset is sent on. If the user turned that continue off (`autoContinueAtUsageLimit: false`), Claude Code asks in its terminal instead, and a typed message would answer that, so the session waits for the user.
+
+The question at a turn's end and the question turned away are answered at the hook. Everything else is a message the bot types to the session, as `irie ctl send` does, on one line. It looks every 10 s, in the list's order, while fewer than `trod.max_working` sessions work. The message comes in as a prompt. It is the bot's prompt, not the user's, so the jot dog's count since the user's last prompt goes on.
+
+**Rules and guidelines.** Setting up the bot means writing its rules and guidelines. Every note carries the user's `trod.rules`, which the agent must follow, and `trod.guidelines`, for when it decides. Until the user writes their own, the rules keep everything on the machine and free: nothing is pushed, published or sent; nothing the agent did not make is deleted, and no history is rewritten; no money is spent and no usage credits are bought. The guidelines say how to decide alone: take the recommended option and say so, finish the task without starting new work, wait out a lock, land work as the repo says. Each note ends the same way, whatever the lists say: leave for the user only what needs them, such as a login, an approval in their browser or a permission prompt, and say in one line what was left.
+
+**Within the plan.** Past `trod.max_plan_use` percent of either of the plan's windows, five hours or a week, by the newest status line, the bot sends nothing on. Past it in the week's window it also lets the Mac sleep. While the user is away, it freezes each session that would spend the week on its own: one that works, one whose background work will wake it, and one Claude Code will carry on at a reset (§4.3; `freeze.on` from `irie`, with `by` and `reason`). The row says why. Once the week is under the cap again within the bot's hours, it thaws what it froze. After its hours, those wait for the user. So nothing the bot keeps going goes over the week's allotment, and it never leads to usage charged at API prices.
+
+**Awake.** While any session it watches has work left, the bot keeps the Mac from sleeping with `caffeinate -i -w <core pid>`. The display may still sleep, and the assertion ends with the core. Once every session is through, the Mac may sleep again. A MacBook whose lid is closed sleeps anyway.
+
+**On the row and in the header.** A row carries `trod`: how often the bot sent the session on in this shift or the last, when it last did and why. The Mac app draws it as a boot print on the card, with the count. The print is in the accent for two minutes after each send and hops each time, so the user can watch the bot work. In the conversation, a message the bot typed is drawn as the bot's, with its boot print (an item's `from` is `trod`), not as the user's. While the bot is within its hours, the header carries `trod`: until when, whether the user is away, whether it keeps the Mac awake, whether the plan's use stops it, and whether the user started it by hand.
+
+**The report.** `irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]` (op `trod`) says whether the bot works now and why, and how the last run started by hand ended. It gives the plan's use against the cap and the rules and guidelines it hands out. By session, it lists what the bot sent in this shift or the last, and what it leaves for the user: a question asked again, a permission prompt, an error only the user can mend, the night's sends used up, or a freeze at the cap.
+
+**Tests:** the shift's hours overnight, by day, around the clock and across a change of clocks; the choices for each kind of stop (an error that may pass or not, a question once and again, a jot that is not through before and after `retry`, the night's most, a stale, parked, frozen, delegated or generic session, a usage limit before and after its reset and with Claude Code's continue off, the cap in either window). With the fake agent, which honours a PreToolUse deny as Claude Code does and runs its terminal raw, so a long message reaches it whole: a question at a turn's end and an `AskUserQuestion` turned away, a question asked again left for the user, the bot off, a failed turn typed on, a jot sent on until its night's most, what was put aside left alone, an `ioreg` that says the user is at the Mac and then away, a `caffeinate` held while there is work, and the week's cap freezing and then thawing; a run started by hand that works while the user is at the Mac and ends once nothing is left, and one stopped by hand or at the plan's cap.
 ---
 
 ## 5. Data and config
@@ -798,7 +842,7 @@ One JSON object per journal line and per `event` frame:
 | `session.ended` | `reason` | SessionEnd | `session/close` |
 | `pane.exited` | `code`, `signal` | tmux, host | none |
 | `gate.set`, `gate.held`, `gate.released` | `scope`, `tool`, `held_ms` | irie, shim | blocked |
-| `freeze.on`, `freeze.off` | `pids`, `frozen_ms` | irie, host | none |
+| `freeze.on`, `freeze.off` | `pids`, `frozen_ms`; `by` (`trod`) and `reason` when the trod bot froze or thawed it at the week's cap (§4.10) | user, irie | none |
 | `priority.set` | `level`, `reason` | irie | none |
 | `note.queued`, `note.delivered` | `note`, `kind` | irie, shim | none |
 | `ui.renamed` | `before`, `after`, `before_named`: whether the name before was the user's (§4.2) | irie | none |
@@ -809,6 +853,7 @@ One JSON object per journal line and per `event` frame:
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
 | `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |
 | `dog.nudged` | `dirty`, `ahead`, `land`, `message`: what the jot left, and what its agent had said. It stands in for that stop's `turn.ended`, since the turn goes on | irie (§4.8) | none |
+| `trod.sent` | `reason`: `question`, `error` (with `error`), `limit` or `loose`; `how`: `stop`, standing in for that stop's `turn.ended` (with `message`), `ask`, standing in for the question's `tool.started` and `input.needed` (with `question`), or `typed`, followed by the message's `prompt.submitted` | irie (§4.10) | none |
 
 ### 5.3 Derived state
 
@@ -858,11 +903,13 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_CACHE_HOME/irie/env.json` | Captured login-shell environment | `irie app-launch` |
 | `~/Applications/Irie.app` | The launcher | `irie install-app` |
 
+**Writes are transactions** (`internal/filetx`). A writer holds the file's write lock, an flock on `.<name>.lock` beside it, from before it reads the file until the new contents are in place. So writers take turns, whether goroutines of one process or processes of their own, and none loses a change another made meanwhile: the `config` op reads, changes and writes `config.toml` all under it (§5.5). The new contents go to a temporary file in the same directory, `.<name>.<random>.tmp`, which is synced with fsync(2) and then renamed over the file. So a reader, which takes no lock, and a restart after a crash find the old file or the new one, never part of either. The sync is fsync, as SQLite's is by default on macOS, and not `F_FULLFSYNC`, which also empties the drive's cache: that took about 8 ms a write against under 1 ms, and some files, such as `status.json`, are rewritten many times a minute. The kernel lets a lock go when its holder exits, so a crash never leaves one held, and a writer that waits 5 s for its turn gives up with `held by another process`. Lock files stay once made: removing one while a writer waits on it would let two writers in. A file linked from elsewhere is written where it lives, so the link stays, and a file replaced keeps its mode. `core.lock` and `up.lock` are flocks of the same kind. Only two kinds of file are written otherwise: the journal and the logs, which are only appended to, and the message file that `send` hands to tmux, which the core removes at once.
+
 ### 5.5 Config and defaults
 
 `$XDG_CONFIG_HOME/irie/config.toml`. Every key is optional, and an unknown key is an error that names it. The values shown are the defaults.
 
-The Mac app's Settings window changes the file through the `config` op (§2.4), which edits it in place: a key the file sets keeps its line, its comment and its place, a new key goes after the last key of its table, and a new table goes at the end. The edit is refused unless the file then decodes to its old values with exactly the change made, and loads. A file linked from elsewhere is written where it lives, and the file keeps its mode. The core runs on the result at once, with any hand edit made since it started: the next task, the agents' menus and the sidebars' header (`red_on_done`, `close_when_done`) follow, and turning `close_when_done` off stops the closes still waiting. What is read only as Irie starts waits for its next start: `tmux.*`, `journal.keep_days`, the tmux keys, and the terminal sidebar's `ui.theme` and `ui.red_on_done`. Irie's own Ollama server keeps its settings until it starts again.
+The Mac app's Settings window changes the file through the `config` op (§2.4), which edits it in place: a key the file sets keeps its line, its comment and its place, a new key goes after the last key of its table, and a new table goes at the end. The edit is refused unless the file then decodes to its old values with exactly the change made, and loads. It is one transaction under the file's write lock (§5.4), so another writer waits its turn and neither change is lost. A file linked from elsewhere is written where it lives, and the file keeps its mode. The core runs on the result at once, with any hand edit made since it started: the next task, the agents' menus and the sidebars' header (`red_on_done`, `close_when_done`) follow, and turning `close_when_done` off stops the closes still waiting. What is read only as Irie starts waits for its next start: `tmux.*`, `journal.keep_days`, the tmux keys, and the terminal sidebar's `ui.theme` and `ui.red_on_done`. Irie's own Ollama server keeps its settings until it starts again.
 
 ```toml
 [ui]
@@ -875,6 +922,7 @@ red_on_done = false
 helper_style = "browser"      # browser | terminal: how a view draws a helper beside its session (§4.4)
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
 theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
+freeze_dog = "10s"            # how long Irie's window may stop answering before the freeze dog force quits it and opens it again (§2.4); "0s" = never, else at least 3s
 
 [spawn]
 default_profile = "auto"      # auto = the lowest cost per success among profiles accurate enough (§6.4)
@@ -1009,8 +1057,29 @@ watch = true                  # read a jot's own worktree when its turn ends, an
 nudges = 2                    # how often it sends one jot back to finish between two of your prompts; 0 = only watch
 land = {}                     # by repo (alias, folder name or path), the branch its work must reach, e.g. { irie = "live" }
 
+[trod]                        # the trod bot: keeps sessions going while you are away at night (§4.10)
+on = false                    # work every night, from start to end
+start = "23:00"               # local time
+end = "07:00"                 # the same as start = around the clock
+away = "15m"                  # it steps in once the Mac has had no keyboard or mouse input this long; "0s" = at once
+questions = true              # tell an agent that asks you something to decide itself
+nudges = 8                    # how often it may send one session on in a night
+retry = "15m"                 # how long a stopped session waits before it is sent on again
+within = "24h"                # it sends on only sessions that stopped this recently; "0s" = however long ago
+max_working = 4               # it sends a session on only while fewer than this many work; 0 = no limit
+max_plan_use = 90             # percent: past this in either window of the plan it sends nothing on, and past it in the week's it freezes what would still spend
+keep_awake = true             # keep the Mac from sleeping while sessions have work left
+rules = ["Don't push, publish or send anything off this machine: …", "Don't delete or overwrite what you didn't make, …", "Don't spend money, …"]
+guidelines = ["When you have to choose, take the option you would recommend, …", …]   # each list replaces the built-in one
+
 [env]
 capture = "login-shell"       # login-shell | none: the environment of a server `irie up --login-env` starts, as Irie.app does (§2.7)
+
+[remote]                      # the phone app (PHONE.md)
+on = false                    # serve it on this machine's local network; the core keeps the gateway running
+port = 7387                   # its HTTPS port; the setup page is on the port below, over plain HTTP
+name = ""                     # what the phone calls this machine; "" = its computer name (macOS) or host name
+listen = ""                   # the address to listen on; "" = every address of this machine
 ```
 
 ---
@@ -1544,6 +1613,7 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
 | A failover repeats work | Tokens spent twice | The continuation starts from the work in the directory; a session fails over once; hard work waits for the reset (§6.4) |
 | Disk growth | Worktrees and the journal fill the disk | Journal retention; worktree sizes shown in the status strip; `irie gc` after v1 |
 | Two cores race at start | Double spawns | `flock` on `core.lock`; `irie up` is idempotent; spawn ids |
+| Two writers change one file at once, or Irie crashes mid-write | A change is lost, or a file is left half written | Writes are transactions: the file's write lock, then fsync and one rename (§5.4) |
 | The server goes away under a running core | Its layout repair's `new-session` would start a new server with a sidebar and no core | Every tmux command but `irie up`'s start carries `-N`, which never starts a server |
 | Supplier policy shifts on billing or third-party tools | A feature becomes non-compliant | Irie only launches the unmodified CLI under the user's own login. It never reads or relays credentials |
 | Huge tasks or pastes | The UI lags | Paste chips; tasks handed over as files |

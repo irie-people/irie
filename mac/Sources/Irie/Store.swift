@@ -33,6 +33,8 @@ final class Store: ObservableObject {
     @Published private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
     @Published private(set) var canPark = false
+    /// Whether the core has the trod bot (DESIGN §4.10).
+    @Published private(set) var canTrod = false
     /// Cards parked or unparked from under the pointer, each with whether
     /// it is drawn parked: it stays where it was until the pointer leaves
     /// it, so a second click on the same spot takes it back (Controls.swift).
@@ -60,6 +62,9 @@ final class Store: ObservableObject {
     /// itself, so the title bar keeps no To verify count, and the review dock
     /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
     @Published private(set) var closeWhenDone = false
+    /// The trod bot, from the core, while it is within its hours; the title
+    /// bar shows it (Counts).
+    @Published private(set) var trod: TrodShift?
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
@@ -157,6 +162,10 @@ final class Store: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        if let seconds = FreezeDog.restartedAfter {
+            say("Irie stopped answering for \(seconds) s, so the freeze dog restarted it. Every agent kept running.",
+                error: false, seconds: 10)
+        }
         Task { await run() }
     }
 
@@ -183,6 +192,7 @@ final class Store: ObservableObject {
                 canPickModel = hello.features.contains("spawn-model")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
+                canTrod = hello.features.contains("trod")
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
@@ -235,6 +245,11 @@ final class Store: ObservableObject {
         }
         if let s = f.header?.helperStyle, s != helperStyle {
             helperStyle = s
+        }
+        // Each header frame is the whole header: one without the bot is
+        // one out of its hours.
+        if let h = f.header, h.trod != trod {
+            trod = h.trod
         }
         switch f.t {
         case "snapshot":
@@ -345,6 +360,7 @@ final class Store: ObservableObject {
         canPickModel = true
         canConfigure = true
         canPark = true
+        canTrod = true
         canUndo = true
         taskRepo = "irie"
     }
@@ -587,45 +603,58 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Starts a task typed in the task bar. With no @repo in its text it
-    /// runs where the bar's menu says. Returns whether it started.
-    func spawn(_ input: String) async -> Bool {
-        await spawn(input, repo: taskRepo, worktree: true, agent: nil, model: nil)
+    /// Sends what was typed in the task bar to the core, which reads it: a
+    /// task with its @ and + words, a question such as "hows the parser?",
+    /// or a : command (docs/CORE.md). With no @repo in its text a task runs
+    /// where the bar's menu says. Returns whether the core took it.
+    func input(_ text: String) async -> Bool {
+        await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil)
     }
 
-    /// Starts a task from the bar or the new-task sheet. The @repo and
-    /// +agent words in its text win over the menus' repo and agent.
-    func spawn(_ input: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
-        var args: SpawnArgs
-        do {
-            args = try TaskParser.parse(input, home: NSHomeDirectory())
-        } catch {
-            say(error.localizedDescription, error: true)
-            return false
+    /// Sends text from the bar or the new-task sheet. The @repo and +agent
+    /// words in it win over the menus' repo and agent.
+    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
+        var args = InputArgs(text: text)
+        // A : command acts on the selected card, or :move on the selected
+        // row outside Irie.
+        if let o = selectedOutside {
+            args.outside = o.vendorId
+        } else {
+            args.session = selection
         }
-        if args.repo == nil, let repo {
+        if let repo {
             args.repo = repo
             args.inPlace = worktree ? nil : true
         }
-        if args.profile == nil { args.profile = agent }
+        args.profile = agent
         if canPickModel { args.model = model }
-        return await run(args)
-    }
-
-    private func run(_ args: SpawnArgs) async -> Bool {
         spawning = true
         defer { spawning = false }
         do {
             // A task in a repo may make a worktree and check out submodules first.
-            let r = try await client.call("spawn", args, timeout: 600, as: SpawnResult.self)
-            say("Started \(r.session.name).", error: false)
-            if coach != nil, coach?.session == nil { coach?.session = r.session.id }
-            // It starts behind the session on show, so a task typed mid-work
-            // never pulls the view or the keyboard away. With nothing on
-            // show, it comes straight up, ready to type to.
-            if selection == nil { show(r.session.id, focus: true) }
-            // A repo it ran in is now among the recent ones.
-            loadChoices()
+            let r = try await client.call("input", args, timeout: 600, as: InputResult.self)
+            switch r.did {
+            case "asked":
+                if let c = r.choice, let op = r.op { await answer(op, c) }
+            case "answered":
+                say(r.text, error: false, seconds: 8)
+            default:
+                say(r.text, error: false)
+            }
+            if let s = r.session {
+                if r.did == "spawned" {
+                    if coach != nil, coach?.session == nil { coach?.session = s.id }
+                    // It starts behind the session on show, so a task typed
+                    // mid-work never pulls the view or the keyboard away.
+                    // With nothing on show, it comes straight up, ready to
+                    // type to.
+                    if selection == nil { show(s.id, focus: true) }
+                    // A repo it ran in is now among the recent ones.
+                    loadChoices()
+                } else if r.show == true || r.op == "move" {
+                    show(s.id, focus: true)
+                }
+            }
             return true
         } catch {
             say(error.localizedDescription, error: true)
@@ -672,6 +701,27 @@ final class Store: ObservableObject {
     /// Shows a notice above the task bar and has VoiceOver read it. A
     /// confirmation goes after 3 s; an error stays until the next notice, or
     /// until the user edits or submits (WCAG 2.2.1).
+    /// Starts a run of the trod bot by hand, which keeps the sessions
+    /// going at once, while you watch, until none has work left or the
+    /// plan is as full as it may get; or stops it (DESIGN §4.10).
+    func setTrod(_ on: Bool) {
+        Task {
+            do {
+                let r = try await client.call("trod", on ? TrodArgs(start: true) : TrodArgs(stop: true), as: TrodResult.self)
+                switch (on, r.hand) {
+                case (true, let h?) where h.on:
+                    say("The trod bot is keeping your sessions going until none has work left. Watch for its boot print.", error: false, seconds: 6)
+                case (true, let h?):
+                    say("The trod bot stopped at once: \(h.why ?? "nothing was left to do").", error: false, seconds: 6)
+                default:
+                    say("The trod bot stopped.", error: false)
+                }
+            } catch {
+                say("Couldn’t \(on ? "start" : "stop") the trod bot: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
     func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false) {
         notice = Notice(text: text, isError: error, undo: undo && canUndo)
         AccessibilityNotification.Announcement(text).post()

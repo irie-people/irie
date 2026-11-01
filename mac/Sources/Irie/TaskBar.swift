@@ -150,18 +150,9 @@ struct TaskBar: View {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty, !store.spawning else { return }
         store.dismissNotice()
-        if let q = Hows.parse(input) {
-            if let s = Hows.find(store.sessions, q) {
-                store.say(Hows.line(s), error: false, seconds: 8)
-            } else {
-                store.say("No agent matches “\(q)”.", error: true)
-            }
-            text = ""
-            return
-        }
         Task {
             let shown = store.selection
-            if await store.spawn(input) {
+            if await store.input(input) {
                 remember(input)
                 text = ""
                 // A task starts behind the session on show and the bar keeps

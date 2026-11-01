@@ -2,8 +2,8 @@ package ui
 
 // Closing sessions (DESIGN §4.1, §4.5). x x closes the selected session: the
 // first x says what it closes, and any other key cancels it, as m m does for
-// a move. :close closes it at once, and :reopen brings back the session
-// closed last.
+// a move. The core reads :close, which closes it at once, and :reopen, which
+// brings back the session closed last.
 
 import (
 	tea "charm.land/bubbletea/v2"
@@ -11,16 +11,10 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-type (
-	closedMsg struct {
-		name string
-		err  error
-	}
-	reopenedMsg struct {
-		session ipc.Session
-		err     error
-	}
-)
+type closedMsg struct {
+	name string
+	err  error
+}
 
 // closeConfirm is how long a first x waits for the second.
 const closeConfirm = moveConfirm
@@ -49,45 +43,10 @@ func (m *Model) closeCmd(s ipc.Session) tea.Cmd {
 	return func() tea.Msg { return closedMsg{name: name, err: b.Close(id)} }
 }
 
-// closeNamed is :close: the selected session, at once.
-func (m *Model) closeNamed() tea.Cmd {
-	s, ok := m.selSession()
-	if !ok {
-		m.setStatus(":close closes the selected session; select one of Irie's", true)
-		return nil
-	}
-	return m.closeCmd(s)
-}
-
-// reopenCmd is :reopen: the core brings back the session closed last.
-func (m *Model) reopenCmd() tea.Cmd {
-	if m.reopening {
-		return nil
-	}
-	m.reopening = true
-	m.setStatus("reopening…", false)
-	b := m.backend
-	return func() tea.Msg {
-		s, err := b.Reopen("")
-		return reopenedMsg{session: s, err: err}
-	}
-}
-
 func (m *Model) closedDone(msg closedMsg) {
 	if msg.err != nil {
 		m.setStatus(msg.err.Error(), true)
 		return
 	}
 	m.setStatus("closed "+msg.name+"; :reopen brings it back", false)
-}
-
-// reopened selects the session that came back, once its row is in.
-func (m *Model) reopened(msg reopenedMsg) {
-	m.reopening = false
-	if msg.err != nil {
-		m.setStatus(msg.err.Error(), true)
-		return
-	}
-	m.setStatus("reopened "+msg.session.Name, false)
-	m.pick(msg.session.ID)
 }

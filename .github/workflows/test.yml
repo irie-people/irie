@@ -1,0 +1,35 @@
+# go vet and go test on Linux and macOS, for every push to main and every pull request, as
+# tools/live.sh runs them before an install. The Mac app (mac/) is not built here; mac/build.sh
+# takes about ten minutes and needs Xcode.
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      # Irie runs every agent in tmux, and its tests start private tmux servers.
+      - name: tmux
+        run: |
+          if ! command -v tmux >/dev/null; then
+            if [ "$RUNNER_OS" = Linux ]; then
+              sudo apt-get update -q && sudo apt-get install -y -q tmux
+            else
+              brew install tmux
+            fi
+          fi
+          tmux -V
+      - run: go vet ./...
+      - run: go test ./...

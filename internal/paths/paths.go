@@ -69,6 +69,7 @@ func (p Paths) Journal() string               { return filepath.Join(p.State, "j
 func (p Paths) Session(id string) string      { return filepath.Join(p.Sessions(), id) }
 func (p Paths) CoreLog() string               { return filepath.Join(p.State, "core.log") }
 func (p Paths) UILog() string                 { return filepath.Join(p.State, "ui.log") }
+func (p Paths) Freezes() string               { return filepath.Join(p.State, "freezes") }
 func (p Paths) Scratch() string               { return filepath.Join(p.Data, "scratch") }
 func (p Paths) Worktrees() string             { return filepath.Join(p.Data, "worktrees") }
 func (p Paths) Models() string                { return filepath.Join(p.Data, "models") }
@@ -83,6 +84,8 @@ func (p Paths) FreezeFile(id string) string   { return filepath.Join(p.Session(i
 func (p Paths) StatusFile(id string) string   { return filepath.Join(p.Session(id), "status.json") }
 func (p Paths) LocalFile() string             { return filepath.Join(p.State, "local.json") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
+func (p Paths) Remote() string                { return filepath.Join(p.State, "remote") }
+func (p Paths) RemoteLog() string             { return filepath.Join(p.State, "remote.log") }
 func (p Paths) ScratchDir(slug string) string { return filepath.Join(p.Scratch(), slug) }
 
 // EnsureState creates the state and data directories with mode 0700.

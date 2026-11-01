@@ -208,6 +208,7 @@ private struct SessionCard: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                         if session.isPromoted { PromotedBadge() }
+                        if let t = session.trod { TrodPrint(trod: t, now: now) }
                     }
                 }
                 Text(status)
@@ -920,6 +921,9 @@ private struct Counts: View {
                 if store.sessions.contains(where: { Look($0) == .frozen }) {
                     count([.frozen], mark: .frozen, color: Theme.frozen, label: "frozen")
                 }
+                if let t = store.trod {
+                    trod(t)
+                }
             case .offline:
                 Text("offline").font(Theme.font(11, .bold)).foregroundStyle(Theme.needs)
             case .connecting:
@@ -930,6 +934,33 @@ private struct Counts: View {
         // keeps the capsules' edges whole.
         .padding(.horizontal, 1)
         .fixedSize()
+    }
+
+    /// The trod bot within its hours (DESIGN §4.10): a moon, in the accent
+    /// while it steps in, muted while you are at the Mac or the plan's use
+    /// stops it.
+    private func trod(_ t: TrodShift) -> some View {
+        let works = (t.away ?? false) && !(t.capped ?? false)
+        var words = "Trod bot"
+        if let u = t.until { words += " until " + u.formatted(date: .omitted, time: .shortened) }
+        switch (t.capped ?? false, t.away ?? false) {
+        case (true, _): words += ": your plan is as full as it may get, so it sends nothing on"
+        case (false, true): words += ": you’re away, so it keeps your sessions going"
+        default: words += ": it steps in once you’ve been away for a while"
+        }
+        if t.awake ?? false { words += ", and keeps the Mac awake" }
+        if t.hand ?? false { words += ", started by you, until no session has work left" }
+        let color = works ? Theme.accent : Theme.muted
+        return Image(systemName: "moon.stars")
+            .font(Theme.font(10, .bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(Capsule().fill(color.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(color.opacity(0.4), lineWidth: 1))
+            .help(words)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(words)
     }
 
     /// A count of the sessions in these states, with the first state's mark,

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/loginenv"
 	"github.com/irie-people/irie/internal/paths"
@@ -68,7 +69,7 @@ func Up(cfg config.Config, p paths.Paths, bin, version string, opts UpOptions) e
 	if err := p.EnsureState(); err != nil {
 		return err
 	}
-	lock, err := lockFile(p.UpLock(), 2*upWait)
+	lock, err := filetx.Lock(p.UpLock(), 2*upWait)
 	if err != nil {
 		return fmt.Errorf("up.lock: %w", err)
 	}
@@ -82,7 +83,7 @@ func Up(cfg config.Config, p paths.Paths, bin, version string, opts UpOptions) e
 	old, _ := os.ReadFile(p.TmuxConf())
 	changed := !bytes.Equal(old, conf)
 	if changed {
-		if err := os.WriteFile(p.TmuxConf(), conf, 0o600); err != nil {
+		if err := filetx.WriteFile(p.TmuxConf(), conf, 0o600); err != nil {
 			return err
 		}
 	}

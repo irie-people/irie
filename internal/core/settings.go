@@ -1,12 +1,8 @@
 package core
 
 import (
-	"errors"
-	"io/fs"
-	"os"
-	"path/filepath"
-
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -45,24 +41,23 @@ func (c *Core) configure(path string, sets []ipc.ConfigSet) error {
 	}
 	c.confMu.Lock()
 	defer c.confMu.Unlock()
-	// A config file linked from elsewhere, as dotfiles often are, is
-	// written where it lives, so the link stays.
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		path = real
-	}
-	data, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	out, err := config.Apply(data, edits)
+	// The edit is one transaction on the file (internal/filetx): a writer
+	// elsewhere waits its turn, so neither loses the other's change, and no
+	// reader sees half of the file. A config file linked from elsewhere, as
+	// dotfiles often are, is written where it lives, so the link stays. The
+	// file keeps its mode; a new one is the user's alone.
+	var cfg config.Config
+	err := filetx.Update(path, 0o600, func(data []byte) ([]byte, error) {
+		out, err := config.Apply(data, edits)
+		if err != nil {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "config %s: %v", path, err)
+		}
+		if cfg, err = config.Parse(out, path); err != nil {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
+		}
+		return out, nil
+	})
 	if err != nil {
-		return ipc.Errorf(ipc.CodeBadArgs, "config %s: %v", path, err)
-	}
-	cfg, err := config.Parse(out, path)
-	if err != nil {
-		return ipc.Errorf(ipc.CodeBadArgs, "%v", err)
-	}
-	if err := writeConfig(path, out); err != nil {
 		return err
 	}
 	c.useConfig(cfg)
@@ -70,32 +65,4 @@ func (c *Core) configure(path string, sets []ipc.ConfigSet) error {
 	// Every sidebar hears red_on_done and close_when_done at once.
 	c.publishHeader()
 	return nil
-}
-
-// writeConfig replaces the config file whole, so no reader sees half of
-// it. The file keeps its mode; a new one is the user's alone.
-func writeConfig(path string, data []byte) error {
-	mode := fs.FileMode(0o600)
-	if fi, err := os.Stat(path); err == nil {
-		mode = fi.Mode().Perm()
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".config-*.toml")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	_, err = f.Write(data)
-	if err == nil {
-		err = f.Chmod(mode)
-	}
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
 }

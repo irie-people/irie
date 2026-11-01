@@ -336,7 +336,7 @@ func (cv *conversation) said(id string, at time.Time, text string, queued bool) 
 		return
 	}
 	if text != "" {
-		it := ipc.Item{ID: "u:" + id, Kind: ipc.ItemUser, Time: at, Text: capText(text, maxItemText), Queued: queued}
+		it := ipc.Item{ID: "u:" + id, Kind: ipc.ItemUser, Time: at, Text: capText(text, maxItemText), Queued: queued, From: trodFrom(text)}
 		if cv.sidechain && !cv.tasked {
 			// A helper's first message is the task its session gave it.
 			it.From, cv.tasked = "parent", true
