@@ -359,6 +359,10 @@ func (c *Core) launch(j job) (*session, error) {
 			anchor, s.Teams = a, true
 		}
 	}
+	// Irie's skills, for a harness that loads them as a plugin.
+	if j.probe.Flags["--plugin-dir"] {
+		s.PluginDir = c.skillsFolder(profile, x)
+	}
 	launch := h.Launch
 	if j.resume != "" {
 		r, ok := h.(harness.Resumer)

@@ -279,6 +279,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/testutil/` | `BuildIrie`, tmux test server, `ShortDir`; `fakeagent/` from M2; `fakeollama/` and `ollamafake/` from M10 | M1–M2, M10 |
 | `internal/repo/`, `internal/worktree/` | Repo lookup, worktrees | M3 |
 | `internal/transcript/`, `internal/mirror/` | JSONL follower and parser, mirror view | M8 |
+| `internal/skills/` | The skills that come with Irie: those built into the binary, which go to each session, and the plugin folder Claude Code loads them from | M12 |
 | `internal/ghostty/`, `internal/macapp/` | AppleScript driver, Irie.app bundle | M9 |
 | `internal/loginenv/` | The login shell's environment, for a server the Mac app starts (§7.2) | §2.7 |
 | `internal/ready/` | What a computer has of what Irie needs, and how to get the rest: `irie setup`, the first `irie`, the `ready` op | §2.7 |
@@ -360,6 +361,7 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | Env | Adds `IRIE_SESSION`, `IRIE_SOCKET` and `IRIE_BIN`. Removes `TMUX` and `TMUX_PANE` (`spawn.hide_tmux`), so an agent's own `tmux` commands cannot reach Irie's server. With agent teams (`spawn.teammates = "panes"`, §2.3) `TMUX` and `TMUX_PANE` name the session's anchor on the team server instead, the tmux shim's dir goes first on `PATH`, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set, unless the profile sets it; a `0` in the user's own settings still turns teams off. Removes the inherited variables that tie a process to another Claude Code session or terminal pane (§4.6), unless the profile sets them. A local profile also gets the environment that points Claude Code at its model (§6.1), under the profile's own `env` |
 | Versions | `claude --version` must be 2.1.295 or later for `onFailure`. Older versions still spawn, but pause is disabled for that session and the row says why. Optional flags (`--name`) are detected from `claude --help` once per version; an unsupported optional flag is dropped with a warning. Required values (model, effort, permission mode) are never dropped: if the CLI rejects one, the spawn fails visibly |
 | `--settings` | From M2. The settings file adds hooks for this session only. Claude Code merges hook lists, so the user's own hooks still run. With `usage.status_line` it also sets `statusLine` to `irie statusline`; that key does not merge, so Irie's runs the user's own (§6.3). With agent teams it sets `teammateMode` to `tmux`. Claude Code passes the file on to split-pane teammates |
+| `--plugin-dir` | Irie's skills (`internal/skills`, docs/proposals/skills.md), as a plugin named `irie` for this session only, whose skills run as `/irie:<name>`: a folder under `<data>/skills/plugins/`, named by a digest of what it holds, with read-only files. It is checked again before each launch and made again when an agent changed it, and the core removes folders no session uses when it starts. Passed only when `--help` lists the flag and `claude --plugin-dir <probe> plugin list --json` shows the probe's plugin loaded as `irie@inline`: managed settings may refuse the flag (`disableSideloadFlags`), and Irie's would stand in for a plugin of the user's own named `irie`. Otherwise the session's warnings say why. `skills.enabled`, `skills.disabled` and a profile's `skills` choose what goes in (§5.5); `irie skills` lists it |
 
 **Hooks in `claude-settings.json`.** Every hook uses `{"type":"command","command":"<IRIE_BIN> hook"}`.
 
@@ -1068,6 +1070,10 @@ tool_input = "summary"        # summary | none
 
 [usage]
 status_line = true            # be Claude Code's status line, to read cost and plan use; yours still runs (§6.3)
+
+[skills]                      # the skills that come with Irie, as a plugin for each Claude Code session only (§3.3)
+enabled = true                # false = hand agents no skills
+disabled = []                 # skills to leave out, such as ["present"]; a profile with skills = false gets none
 
 [dog]                         # the jot dog: sees each jot through until its work lands (§4.8)
 watch = true                  # read a jot's own worktree when its turn ends, and say on its row what is left

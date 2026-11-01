@@ -258,6 +258,7 @@ func Run(o Options) error {
 	c.loadView()
 	c.mu.Unlock()
 	c.tick()
+	c.pruneSkills()
 	go c.sample()
 	go c.dogSweep()
 	go c.trodSweep()

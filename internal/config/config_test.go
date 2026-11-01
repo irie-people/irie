@@ -479,6 +479,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[journal]\nkeep_days = 0\n", "keep_days"},
 		{"[journal]\ntool_input = \"everything\"\n", "tool_input"},
 		{"[hold]\nmax = \"0s\"\n", "hold.max"},
+		{"[skills]\ndisabled = [\"Present\"]\n", "skills.disabled"},
+		{"[skills]\ndisabled = [\"a--b\"]\n", "skills.disabled"},
 		{"[repos]\nroots = [\"code\"]\n", "repos.roots"},
 		{"[repos.aliases]\nweb = \"code/website\"\n", "repos.aliases.web"},
 		{"[repos.aliases]\n\"we b\" = \"/home/alice/code/website\"\n", "repos.aliases"},
@@ -660,5 +662,49 @@ func TestFreezeDogIsADurationAndZeroIsNever(t *testing.T) {
 	}
 	if got := Tree(Default())["ui"].(map[string]any)["freeze_dog"]; got != "10s" {
 		t.Errorf("the config op shows freeze_dog as %v, want 10s", got)
+	}
+}
+
+func TestSkillsAreOnUntilTurnedOff(t *testing.T) {
+	d := Default()
+	if !d.Skills.Enabled || len(d.Skills.Disabled) != 0 {
+		t.Errorf("default skills = %+v, want on with none left out", d.Skills)
+	}
+	for name, p := range d.Profiles {
+		if !p.TakesSkills() {
+			t.Errorf("profiles.%s takes no skills by default", name)
+		}
+	}
+	c, err := Load(writeFile(t, `
+[skills]
+disabled = ["present"]
+
+[profiles.local]
+skills = false
+
+[profiles.mine]
+command = "claude"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Skills.Enabled || !reflect.DeepEqual(c.Skills.Disabled, []string{"present"}) {
+		t.Errorf("skills = %+v", c.Skills)
+	}
+	if c.Profiles["local"].TakesSkills() {
+		t.Error("profiles.local takes skills after skills = false")
+	}
+	if c.Profiles["local"].Local == nil {
+		t.Error("profiles.local lost its local table")
+	}
+	if !c.Profiles["mine"].TakesSkills() || !c.Profiles["claude"].TakesSkills() {
+		t.Error("a profile that says nothing about skills takes none")
+	}
+	off, err := Load(writeFile(t, "[skills]\nenabled = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.Skills.Enabled || off.Skills.Disabled == nil {
+		t.Errorf("skills = %+v, want off with an empty list", off.Skills)
 	}
 }
