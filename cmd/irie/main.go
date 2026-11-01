@@ -45,6 +45,8 @@ const usage = `usage: irie [command]
                           share the certificate authority (irie remote for help)
   irie dms <command>      the dead man's switch guide's helpers: its checks,
                           check-in and calendar (irie dms for help)
+  irie peer <command>     your other machines' Irie, shown in this list and
+                          started on with ^NAME (irie peer for help)
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
   irie skills             list the skills that come with Irie, and whether
@@ -114,6 +116,8 @@ func run(args []string) int {
 		err = remoteCmd(args)
 	case "dms":
 		err = dmsCmd(args)
+	case "peer":
+		err = peerCmd(args)
 	case "setup":
 		err = setup(args)
 	case "version":

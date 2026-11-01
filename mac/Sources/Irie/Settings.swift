@@ -1317,7 +1317,9 @@ private struct LineField: View {
     var body: some View {
         TextField("", text: $text, axis: .vertical)
             .labelsHidden()
-            .lineLimit(1...4)
+            // A line may be 400 characters, which wraps to five lines at
+            // the window's width.
+            .lineLimit(1...6)
             .focused($focused)
             .onAppear { text = value }
             .onChange(of: value) { text = value }

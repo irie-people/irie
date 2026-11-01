@@ -29,6 +29,10 @@ type (
 	OutsideSession   = ipc.OutsideSession
 	MoveArgs         = ipc.MoveArgs
 	MoveResult       = ipc.MoveResult
+	PeersArgs        = ipc.PeersArgs
+	PeersResult      = ipc.PeersResult
+	PeerInfo         = ipc.PeerInfo
+	Machine          = ipc.Machine
 	Session          = ipc.Session
 	TrodRow          = ipc.TrodRow
 	TrodShift        = ipc.TrodShift
@@ -45,6 +49,7 @@ type (
 	Subagent         = ipc.Subagent
 	Teammate         = ipc.Teammate
 	Header           = ipc.Header
+	Load             = ipc.Load
 	Window           = ipc.Window
 	Plan             = ipc.Plan
 	Memory           = ipc.Memory
@@ -136,6 +141,8 @@ const (
 	StatusBusy        = ipc.StatusBusy
 	StatusWaiting     = ipc.StatusWaiting
 	StatusIdle        = ipc.StatusIdle
+	OpPeers           = ipc.OpPeers
+	CodePeerDown      = ipc.CodePeerDown
 	API               = ipc.API
 	OpHello           = ipc.OpHello
 	OpList            = ipc.OpList
