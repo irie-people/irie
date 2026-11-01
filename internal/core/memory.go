@@ -33,6 +33,7 @@ func (c *Core) sample() {
 		return
 	}
 	defer c.sampling.Store(false)
+	defer c.perf.Since("sample", time.Now())
 	c.mu.Lock()
 	roots := map[string]int{}
 	for id, x := range c.sessions {
@@ -176,6 +177,9 @@ func (c *Core) publishHeader() {
 	h := c.headerNow()
 	changed := !reflect.DeepEqual(h, c.lastHeader)
 	c.lastHeader = h
+	if changed {
+		c.perf.Add("header.changed", 1)
+	}
 	subs := make([]*subscriber, 0, len(c.subs))
 	for s := range c.subs {
 		subs = append(subs, s)

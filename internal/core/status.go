@@ -31,11 +31,14 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 		c.mu.Unlock()
 		return nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
+	x.statusN++
 	if !reflect.DeepEqual(x.usage, u) {
 		x.usage = u
 		if err := writeJSON(c.paths.StatusFile(x.id), u); err != nil {
 			c.log.Warn("status.json", "session", x.id, "err", err)
 		}
+	} else {
+		c.perf.Add("status.unchanged", 1)
 	}
 	if u.FiveHour != nil || u.SevenDay != nil {
 		c.plan = ipc.Plan{FiveHour: u.FiveHour, SevenDay: u.SevenDay}

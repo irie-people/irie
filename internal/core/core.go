@@ -30,6 +30,7 @@ import (
 	"github.com/irie-people/irie/internal/journal"
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/perf"
 	"github.com/irie-people/irie/internal/statusline"
 	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/team"
@@ -76,7 +77,11 @@ type Core struct {
 	ggufs   map[string]ggufEntry
 	builds  map[string]buildEntry
 
-	mu         sync.Mutex // guards everything below, and serialises tmux calls
+	started time.Time // when the core started counting (perf.go)
+	perfOps perf.Set  // each request's time to answer, by op
+	perf    perf.Set  // the core's own work and what it sent (ipc.PerfResult)
+
+	mu         perf.Mutex // guards everything below, and serialises tmux calls; it times its waits and holds
 	sessions   map[string]*session
 	snap       tmux.Snapshot
 	published  map[string]ipc.Session // what subscribers last heard
@@ -145,6 +150,7 @@ type session struct {
 	track    track
 	quiet    int        // counts the session's events and messages; a close-when-done timer fires only if it has not moved
 	tally    tokenTally // read from the transcripts track names
+	statusN  uint64     // its status line updates, counted for perf
 	tokens   *ipc.Tokens
 	model    string                 // the model the agent runs, as its profile said
 	local    bool                   // a model of a local runtime
@@ -213,7 +219,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
 		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, hues: map[string]int{},
-		fdog: newFreezeDog(),
+		fdog: newFreezeDog(), started: time.Now(),
 	}
 	c.useConfig(o.Config)
 	return c
@@ -323,6 +329,7 @@ func (c *Core) want() tmux.Want {
 // tick polls tmux, repairs the layout, records what tmux and the clock say
 // and tells subscribers what changed.
 func (c *Core) tick() {
+	defer c.perf.Since("tick", time.Now())
 	c.mu.Lock()
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
@@ -347,7 +354,7 @@ func (c *Core) tick() {
 // refresh takes a snapshot, repairs the layout until it is sound and
 // updates the registry. The caller holds c.mu.
 func (c *Core) refresh() error {
-	snap, err := c.tmux.Snapshot()
+	snap, err := c.snapshot()
 	if err != nil {
 		return err
 	}
@@ -361,13 +368,19 @@ func (c *Core) refresh() error {
 			c.log.Warn("repair", "err", err)
 			break
 		}
-		if snap, err = c.tmux.Snapshot(); err != nil {
+		if snap, err = c.snapshot(); err != nil {
 			return err
 		}
 	}
 	c.snap = snap
 	c.sync(snap)
 	return nil
+}
+
+// snapshot runs `tmux list-panes`, timed. The caller holds c.mu.
+func (c *Core) snapshot() (tmux.Snapshot, error) {
+	defer c.perf.Since("tmux.snapshot", time.Now())
+	return c.tmux.Snapshot()
 }
 
 var sessionID = regexp.MustCompile(`^s[0-9a-z]{12}$`)
@@ -514,6 +527,7 @@ func (c *Core) list() []ipc.Session {
 // changes returns frames for the rows that changed since the last call.
 // The caller holds c.mu.
 func (c *Core) changes() []ipc.Frame {
+	defer c.perf.Since("changes", time.Now())
 	var frames []ipc.Frame
 	now := map[string]ipc.Session{}
 	for _, s := range c.list() {
@@ -535,6 +549,7 @@ func (c *Core) changes() []ipc.Frame {
 // Call does, but the ops that change what is the person's alone, the VPN's,
 // whether asked for or typed, learn who asks.
 func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
+	defer c.perfOps.Since(op, time.Now())
 	switch op {
 	case ipc.OpInput:
 		var a ipc.InputArgs
@@ -579,12 +594,14 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpPeers,
+			ipc.OpVPN, ipc.OpPeers, ipc.OpPerf,
 		}}, nil
+	case ipc.OpPerf:
+		return c.perfResult(), nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
 		// refreshed when they are old; a problem is in the result.
-		c.refreshOutside(outsideEvery, false)
+		c.refreshOutside("list", outsideEvery, false)
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		return ipc.ListResult{Sessions: c.list(), Outside: c.outsideList(), OutsideProblem: c.outside.problem, Closed: c.closedList()}, nil

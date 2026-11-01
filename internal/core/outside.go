@@ -88,7 +88,7 @@ func (c *Core) watchOutside() {
 		look := c.looking()
 		c.mu.Unlock()
 		if look {
-			c.refreshOutside(outsideEvery, false)
+			c.refreshOutside("watch", outsideEvery, false)
 		}
 	}
 }
@@ -98,7 +98,7 @@ func (c *Core) watchOutside() {
 // problem changed. Unless wait is set it gives up at once while another run
 // is going, and the cached list stands. A run that fails keeps the last list
 // and records the problem. The caller holds no lock.
-func (c *Core) refreshOutside(maxAge time.Duration, wait bool) error {
+func (c *Core) refreshOutside(why string, maxAge time.Duration, wait bool) error {
 	o := &c.outside
 	if wait {
 		o.runMu.Lock()
@@ -114,7 +114,10 @@ func (c *Core) refreshOutside(maxAge time.Duration, wait bool) error {
 	if !ok {
 		return errors.New("no profile runs Claude Code")
 	}
-	list, err := listOutside(p.Command, c.agentEnv(p))
+	list, cpu, err := listOutside(p.Command, c.agentEnv(p))
+	c.perf.Since("outside.run", o.ran)
+	c.perf.Add("outside."+why, 1)
+	c.perf.Add("outside.cpu_us", uint64(cpu/time.Microsecond))
 
 	// A session that changed its id, as /clear does, is still Irie's when
 	// its process runs in an agent pane. Only then is the process table read.
@@ -231,24 +234,25 @@ func (c *Core) publishOutside() {
 }
 
 // listOutside runs `<command> agents --json` with env and reads the
-// sessions it prints.
-func listOutside(command string, env []string) ([]ipc.OutsideSession, error) {
+// sessions it prints; it also says what CPU the run took.
+func listOutside(command string, env []string) ([]ipc.OutsideSession, time.Duration, error) {
 	path, err := host.LookPath(command, env)
 	if err != nil {
-		return nil, fmt.Errorf("%s: command not found", command)
+		return nil, 0, fmt.Errorf("%s: command not found", command)
 	}
-	out, err := runCLI(path, []string{"agents", "--json"}, env)
+	out, cpu, err := runCLI(path, []string{"agents", "--json"}, env)
 	if err != nil {
-		return nil, err
+		return nil, cpu, err
 	}
-	return parseAgents(out)
+	list, err := parseAgents(out)
+	return list, cpu, err
 }
 
 // runCLI runs path with args and env in its own process group, which is
-// killed when it takes longer than outsideTimeout, and returns its stdout.
-// Only stdout is read as output, since the CLI may print warnings on stderr;
-// a failure quotes stderr's first line.
-func runCLI(path string, args, env []string) ([]byte, error) {
+// killed when it takes longer than outsideTimeout, and returns its stdout
+// and the CPU it took. Only stdout is read as output, since the CLI may
+// print warnings on stderr; a failure quotes stderr's first line.
+func runCLI(path string, args, env []string) ([]byte, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), outsideTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, args...)
@@ -259,18 +263,19 @@ func runCLI(path string, args, env []string) ([]byte, error) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	cpu := cpuOf(cmd.ProcessState)
 	name := strings.Join(append([]string{filepath.Base(path)}, args...), " ")
 	switch {
 	case ctx.Err() != nil:
-		return nil, fmt.Errorf("`%s` did not answer within %v", name, outsideTimeout)
+		return nil, cpu, fmt.Errorf("`%s` did not answer within %v", name, outsideTimeout)
 	case err != nil:
 		first, _, _ := strings.Cut(strings.TrimSpace(stderr.String()), "\n")
 		if first != "" {
-			return nil, fmt.Errorf("`%s` failed: %v: %s", name, err, cleanText(first, 200))
+			return nil, cpu, fmt.Errorf("`%s` failed: %v: %s", name, err, cleanText(first, 200))
 		}
-		return nil, fmt.Errorf("`%s` failed: %v", name, err)
+		return nil, cpu, fmt.Errorf("`%s` failed: %v", name, err)
 	}
-	return out, nil
+	return out, cpu, nil
 }
 
 var (

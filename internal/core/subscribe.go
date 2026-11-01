@@ -32,6 +32,7 @@ type subscriber struct {
 	agent        string // only this agent's events, when set
 	events       bool   // event frames too
 	conversation bool   // the session's conversation frames too
+	view         string // which it is, for perf: ipc.ViewApp, "session" or "all"
 	out          chan ipc.Frame
 	wake         chan struct{}
 	done         chan struct{}
@@ -72,8 +73,16 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "no helper %q", a.Agent)
 	}
 	app := a.View == ipc.ViewApp
+	view := "all"
+	switch {
+	case app:
+		view = ipc.ViewApp
+	case a.Session != "":
+		view = "session"
+	}
+	c.perf.Add("subscribe."+view, 1)
 	sub := &subscriber{
-		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation,
+		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation, view: view,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
 		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "", hist: a.Session == "", talk: a.Conversation,
 	}
@@ -97,8 +106,8 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	}
 	c.mu.Unlock()
 	if app {
-		go c.tick()                              // zoom the slot now, not at the next tick
-		go c.refreshOutside(outsideEvery, false) // someone looks now
+		go c.tick()                                      // zoom the slot now, not at the next tick
+		go c.refreshOutside("look", outsideEvery, false) // someone looks now
 	}
 	sub.wake <- struct{}{}
 	go sub.loop()
@@ -261,9 +270,7 @@ func (s *subscriber) loop() {
 		s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.hist, s.talk = false, map[string]bool{}, false, nil, false, false, false, false
 		s.mu.Unlock()
 		for _, f := range queue {
-			select {
-			case s.out <- f:
-			case <-s.done:
+			if !s.send(f) {
 				return
 			}
 		}
@@ -272,9 +279,7 @@ func (s *subscriber) loop() {
 			s.c.mu.Lock()
 			h := s.c.headerNow()
 			s.c.mu.Unlock()
-			select {
-			case s.out <- ipc.Frame{T: ipc.FrameHeader, Header: &h}:
-			case <-s.done:
+			if !s.send(ipc.Frame{T: ipc.FrameHeader, Header: &h}) {
 				return
 			}
 		}
@@ -302,9 +307,7 @@ func (s *subscriber) loop() {
 			continue
 		}
 		for _, f := range frames {
-			select {
-			case s.out <- f:
-			case <-s.done:
+			if !s.send(f) {
 				return
 			}
 		}
@@ -313,6 +316,18 @@ func (s *subscriber) loop() {
 		case <-s.done:
 			return
 		}
+	}
+}
+
+// send hands the client one frame, and counts it by type; false when the
+// client has gone.
+func (s *subscriber) send(f ipc.Frame) bool {
+	select {
+	case s.out <- f:
+		s.c.perf.Add("frame."+f.T, 1)
+		return true
+	case <-s.done:
+		return false
 	}
 }
 
