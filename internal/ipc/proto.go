@@ -390,12 +390,12 @@ type Header struct {
 type Load struct {
 	CPUs int `json:"cpus"`
 	// RunQueue is the work waiting to run, averaged over the last minute
-	// and rounded to the half: how many CPUs it would keep busy.
+	// and rounded to a whole CPU: how many CPUs it would keep busy.
 	RunQueue float64 `json:"run_queue"`
 	// Pressure is the kernel's memory pressure: 1 normal, 2 a warning, 4
 	// critical; none where the system does not say.
 	Pressure int `json:"pressure,omitempty"`
-	PTYs     int `json:"ptys"`              // ptys in use: every pane takes one
+	PTYs     int `json:"ptys"`              // ptys in use, to 8: every pane takes one
 	PTYMax   int `json:"pty_max,omitempty"` // the most there can be
 }
 

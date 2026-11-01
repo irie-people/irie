@@ -157,14 +157,15 @@ func (c *Core) headerNow() ipc.Header {
 }
 
 // loadNow is how busy the machine is, last read, or nil before the first
-// read. The run queue is rounded to the half, so the header changes when
-// the load does and not with every tick. The caller holds c.mu.
+// read. The run queue is rounded to a whole CPU and the ptys in use to 8,
+// so the header changes when the load does and not with every sample. The
+// caller holds c.mu.
 func (c *Core) loadNow() *ipc.Load {
 	l := c.load
 	if l.CPUs == 0 {
 		return nil
 	}
-	return &ipc.Load{CPUs: l.CPUs, RunQueue: math.Round(l.RunQueue*2) / 2, Pressure: l.Pressure, PTYs: l.PTYs, PTYMax: l.PTYMax}
+	return &ipc.Load{CPUs: l.CPUs, RunQueue: math.Round(l.RunQueue), Pressure: l.Pressure, PTYs: l.PTYs / 8 * 8, PTYMax: l.PTYMax}
 }
 
 // publishHeader sends a header frame to every subscriber when the header

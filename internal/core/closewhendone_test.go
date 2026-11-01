@@ -124,7 +124,7 @@ func TestTheHeaderSaysHowBusyTheMachineIs(t *testing.T) {
 	}
 	c.load = sysload.Load{CPUs: 12, RunQueue: 14.3, Pressure: sysload.PressureWarn, PTYs: 134, PTYMax: 511}
 	got := c.headerNow().Load
-	want := ipc.Load{CPUs: 12, RunQueue: 14.5, Pressure: 2, PTYs: 134, PTYMax: 511}
+	want := ipc.Load{CPUs: 12, RunQueue: 14, Pressure: 2, PTYs: 128, PTYMax: 511}
 	if got == nil || *got != want {
 		t.Errorf("header load = %+v, want %+v", got, want)
 	}

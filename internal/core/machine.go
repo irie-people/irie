@@ -24,20 +24,35 @@ import (
 	"github.com/irie-people/irie/internal/ready"
 )
 
-// machineEvery is how often, in ticks, the core checks its machine: the
-// sign-in check starts Claude Code.
-const machineEvery = 60
+// machineEvery is how often, in ticks, the core checks its machine, and
+// signInEvery how often it also asks Claude Code whether it is signed in,
+// which starts it: only while the gateway runs, through which another core
+// can be paired with this one.
+const (
+	machineEvery = 60
+	signInEvery  = 10 * time.Minute
+)
 
 // checkMachine reads what the core says of its machine, and tells
 // subscribers when it changed. The caller holds no lock.
 func (c *Core) checkMachine() {
 	home, _ := os.UserHomeDir()
 	m := ipc.Machine{Name: c.machineNameLocked(), OS: runtime.GOOS}
-	r := c.ready()
-	for _, it := range r.Items {
-		if it.ID == ready.SignInID {
-			m.Claude = string(it.Status)
+	c.mu.Lock()
+	if c.mach != nil {
+		m.Claude = c.mach.Claude
+	}
+	ask := c.cfg().Remote.On && (m.Claude == "" || time.Since(c.signInAt) >= signInEvery)
+	c.mu.Unlock()
+	if ask {
+		for _, it := range c.ready().Items {
+			if it.ID == ready.SignInID {
+				m.Claude = string(it.Status)
+			}
 		}
+		c.mu.Lock()
+		c.signInAt = time.Now()
+		c.mu.Unlock()
 	}
 	m.Hooks, m.HooksMissing = userHooks(home, os.Getenv("PATH"))
 	for name := range c.cfg().Profiles {

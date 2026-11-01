@@ -93,6 +93,7 @@ type Core struct {
 	load       sysload.Load             // how busy the machine is, last read
 	mach       *ipc.Machine             // what this core says of its machine to its peers (machine.go)
 	machAt     time.Time                // when it was last checked
+	signInAt   time.Time                // when Claude Code last said whether it is signed in (machine.go)
 	localMem   int64                    // what the models of Irie's own server take
 	llamaMem   int64                    // what Irie's own llama-server takes
 	plan       ipc.Plan                 // the plan's use, from the newest status update
