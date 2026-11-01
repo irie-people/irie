@@ -63,7 +63,8 @@ type Core struct {
 	sampling    atomic.Bool  // a memory sample is running
 	gabSweeping atomic.Bool  // Gabriel's sweep is running (gabriel.go)
 	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
-	fdog        *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
+	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
+	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
 
 	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
 	awakeMu      sync.Mutex  // guards awake; taken after mu
@@ -263,6 +264,7 @@ func Run(o Options) error {
 	c.loadClosed()
 	c.loadState()
 	c.loadTrodHand()
+	c.loadRaphael()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello. Every tree comes out of the background once, since only
@@ -294,6 +296,7 @@ func Run(o Options) error {
 	go ipc.Serve(l, c)
 	go c.watchOutside()
 	go c.watchFreezes()
+	go c.watchCore()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
@@ -303,6 +306,10 @@ func Run(o Options) error {
 		select {
 		case <-t.C:
 			c.tick()
+			c.beat()
+			if n%raphaelEvery == 0 {
+				go c.raphaelSweep()
+			}
 			if n%sampleEvery == 0 {
 				go c.sample()
 				go c.gabrielSweep()
@@ -562,6 +569,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.vpnOp(peer, a)
+	case ipc.OpRaphael:
+		var a ipc.RaphaelArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.raphaelOp(peer, a)
 	}
 	return c.Call(op, raw)
 }
@@ -592,7 +605,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers,
 			ipc.OpLearn, ipc.FeatureTutor,
 		}}, nil
@@ -747,6 +760,17 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return nil, nil
 	case ipc.OpArch:
 		return c.archList(), nil
+	case ipc.OpRaphael:
+		// Not from a socket, which CallFrom answers: no one to tell from
+		// an agent, so it reports, looks, and fixes nothing.
+		var a ipc.RaphaelArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if a.Fix != "" || a.Mine != "" {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over Irie's socket.")
+		}
+		return c.raphaelOp(0, a)
 	case ipc.OpGabriel:
 		var a ipc.GabrielArgs
 		if err := decode(raw, &a); err != nil {

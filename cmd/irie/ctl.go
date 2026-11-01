@@ -60,6 +60,18 @@ const ctlUsage = `usage: irie ctl <command>
                                          the machine first for a while (an hour,
                                          arch.gabriel.boost) busy or not, and frees
                                          idle local models; boost off ends it
+  irie ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]
+                                         Raphael (Raffi): what his last look over
+                                         your Mac found, with his advice: what runs
+                                         hot, memory and swap, the disk and the
+                                         caches safe to clear, startup items with
+                                         warning signs, macOS's protections, and
+                                         what he restarted when it stopped
+                                         answering. look has him look again; fix N
+                                         shows what finding N's fix runs and runs
+                                         it on your OK; mine N tells him a startup
+                                         item is yours; on and off turn him on or
+                                         off (arch.raphael.on)
   irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
@@ -140,6 +152,8 @@ func ctl(args []string) error {
 		return ctlTrod(args[1:])
 	case "gabriel":
 		return ctlGabriel(args[1:])
+	case "raphael", "raffi":
+		return ctlRaphael(args[1:])
 	case "arch":
 		return ctlArch(args[1:])
 	case "show":

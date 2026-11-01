@@ -314,6 +314,9 @@ func (m *Model) pick(id string) {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case pingMsg:
+		// The loop is here: the answer goes out on a goroutine of its own.
+		return m, func() tea.Msg { msg.answer(msg.n); return nil }
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.bar.MaxHeight = m.maxBar()

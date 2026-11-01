@@ -223,6 +223,9 @@ func NewEnv(t *testing.T) *Env {
 	// focus (Gabriel, DESIGN §4.11): it would take the user's own agents for
 	// apps outside it.
 	t.Setenv("IRIE_GABRIEL", "off")
+	// Nor does it look over the machine, or restart itself, for Raphael
+	// (DESIGN §4.11): the user's own core does that once.
+	t.Setenv("IRIE_RAPHAEL", "off")
 	for _, k := range []string{"TMUX", "TMUX_PANE", "IRIE_BIN"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)

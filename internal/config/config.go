@@ -105,6 +105,7 @@ type Skills struct {
 type Arch struct {
 	Mikael  Mikael  `toml:"mikael"`
 	Gabriel Gabriel `toml:"gabriel"`
+	Raphael Raphael `toml:"raphael"`
 }
 
 // Mikael is the first arch agent: a helper who stands with you against evil
@@ -136,6 +137,23 @@ type Gabriel struct {
 	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
 	Guard   bool          `toml:"guard"`   // turn away an agent's call that would bring an app or a page to the front while you look elsewhere
 }
+
+// Raphael is the arch agent who heals. He restarts a part of Irie that
+// stops answering: the Mac app and the sidebars after ui.freeze_dog, and
+// the core after Core. He looks over the computer every Every, and says in
+// plain words, with advice, what slows it down, fills it up or may have
+// got in; he fixes a thing only on your OK, one at a time, and shows first
+// what he will run.
+type Raphael struct {
+	On    bool          `toml:"on"`    // restart what stops answering, and look over the computer by himself
+	Core  time.Duration `toml:"core"`  // how long the core's own loop may stand still before he restarts the core; 0 = never
+	Every time.Duration `toml:"every"` // how often he looks over the computer by himself; 0 = only when asked
+	Known []string      `toml:"known"` // startup items you know, by label, plist or program, which he no longer flags
+}
+
+// MinRaphaelCore is the shortest arch.raphael.core: a core may be busy for
+// a moment, on a busy machine for many.
+const MinRaphaelCore = 30 * time.Second
 
 // MaxBoost is the longest a boost may last, so none is ever forgotten.
 const MaxBoost = 12 * time.Hour
@@ -630,6 +648,7 @@ func Default() Config {
 		Arch: Arch{
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
+			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
 		},
 		Remote: Remote{Port: DefaultRemotePort},
 		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
@@ -804,6 +823,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Arch.Mikael.Good == nil {
 		c.Arch.Mikael.Good = []string{}
+	}
+	if c.Arch.Raphael.Known == nil {
+		c.Arch.Raphael.Known = []string{}
 	}
 	if c.Arch.Gabriel.Spare == nil {
 		c.Arch.Gabriel.Spare = []string{}
@@ -1168,6 +1190,14 @@ func (c Config) Validate() error {
 		bad("arch.gabriel.boost = %v: must be from 1m to %v", g.Boost, MaxBoost)
 	}
 	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps Gabriel never slows")
+	ra := c.Arch.Raphael
+	if ra.Core != 0 && ra.Core < MinRaphaelCore {
+		bad("arch.raphael.core = %v: must be 0s, for never, or at least %v", ra.Core, MinRaphaelCore)
+	}
+	if ra.Every != 0 && ra.Every < 10*time.Minute {
+		bad("arch.raphael.every = %v: must be 0s, for only when asked, or at least 10m", ra.Every)
+	}
+	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items Raphael no longer flags")
 	switch c.Place.Mode {
 	case PlaceLocal, PlaceAuto:
 	default:

@@ -187,7 +187,7 @@ final class Store: ObservableObject {
         guard !started else { return }
         started = true
         if let seconds = FreezeDog.restartedAfter {
-            say("Irie stopped answering for \(seconds) s, so the freeze dog restarted it. Every agent kept running.",
+            say("Irie stopped answering for \(seconds) s, so ❤️‍🩹 Raffi restarted it. Every agent kept running.",
                 error: false, seconds: 10)
         }
         Task { await run() }
@@ -417,6 +417,21 @@ final class Store: ObservableObject {
                       actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
                       settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
                                  ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
+            ArchAgent(name: "raphael", nickname: "Raffi", icon: "❤️‍🩹", title: "heals Irie and your Mac",
+                      about: "Raphael keeps Irie and the computer it runs on well.",
+                      on: true, status: "Looked at 14:05: 2 things need care, and 1 is worth a look.",
+                      actions: [ArchAction(label: "Look over my Mac now", op: "raphael")],
+                      items: [ArchItem(text: "Your disk is nearly full: 9.9 GB free of 995 GB (1%).",
+                                       detail: "macOS needs room for updates and swap, and slows down without it. Clear the caches below, and empty the Trash.", level: "warn"),
+                              ArchItem(text: "Go’s build cache takes 13.8 GB (~/Library/Caches/go-build).",
+                                       detail: "It is safe to clear: Go builds what it needs again, so the next builds and tests take longer.", level: "warn",
+                                       actions: [ArchAction(label: "Clear Go’s build cache", op: "raphael",
+                                                            ask: "Raffi will run:\n    go clean -cache\n\nFrees about 13.8 GB. Raffi waits until no Go build or test runs, so none of them breaks.")]),
+                              ArchItem(text: "com.example.helper is worth a look: it starts ~/.local/bin/helper as you log in.",
+                                       detail: "If you know it, mark it as yours and Raffi no longer flags it.\nIts program is signed by no one in particular (an ad-hoc signature).\nNot sure: many good programs show these signs too.", level: "note",
+                                       actions: [ArchAction(label: "It’s mine", op: "raphael")])],
+                      settings: [ArchSetting(key: "arch.raphael.on", kind: "bool", label: "Raffi restarts what stops answering, and looks over your Mac", value: .bool(true)),
+                                 ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app or a sidebar that has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
         taskRepo = "irie"
@@ -819,11 +834,14 @@ final class Store: ObservableObject {
     }
 
     /// Does what an arch agent offers: calls its op with its args as they
-    /// came, says so, and reads the arch agents again.
-    func archAction(_ a: ArchAction) {
+    /// came, says so, and reads the arch agents again. ok says you have
+    /// read what an action that asks first does, and said OK to it: only
+    /// then does one with ask run.
+    func archAction(_ a: ArchAction, ok: Bool = false) {
+        if a.ask != nil && !ok { return }
         Task {
             do {
-                _ = try await client.call(a.op, a.args ?? JSONValue.object([:]), timeout: 20, as: JSONValue.self)
+                _ = try await client.call(a.op, ok ? a.argsOK : a.args ?? JSONValue.object([:]), timeout: 20, as: JSONValue.self)
                 say(a.done ?? "\(a.label): done.", error: false, seconds: 5)
             } catch {
                 say("Couldn’t \(a.label.lowercased()): \(error.localizedDescription)", error: true)

@@ -84,18 +84,13 @@ struct CoreConfig: Decodable, Equatable {
         var redOnDone: Bool
         /// How a helper beside its session is drawn: browser or terminal.
         var helperStyle: String
-        /// How long the app may leave the freeze dog unanswered before the
-        /// dog restarts it, "0s" for never (FreezeDog.swift); nil from a
-        /// core from before the dog.
-        var freezeDog: String?
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", freezeDog = "freeze_dog" }
+        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style" }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             redOnDone = try c.decode(Bool.self, forKey: .redOnDone)
             // A core from before helper styles has none: the cards.
             helperStyle = try c.decodeIfPresent(String.self, forKey: .helperStyle) ?? "browser"
-            freezeDog = try c.decodeIfPresent(String.self, forKey: .freezeDog)
         }
     }
 
@@ -526,9 +521,6 @@ private struct GeneralSettings: View {
     private static let delays = ["10s", "30s", "1m", "2m", "5m", "10m"]
     /// How long after a jot one that reads as more for it goes to its agent.
     private static let windows = ["0s", "1m", "2m", "5m", "10m"]
-    /// How long Irie may stop answering before the freeze dog restarts it.
-    private static let freezes = ["5s", "10s", "20s", "30s", "1m"]
-    private static let defaultFreeze = "10s"
 
     var body: some View {
         WithConfig(model: model) { c in
@@ -580,25 +572,6 @@ private struct GeneralSettings: View {
                     Text("Jot dog")
                 } footer: {
                     footnote("When a jot’s turn ends with work uncommitted or not yet in its branch, its card says what is left, and the dog sends it back between two of your prompts.")
-                }
-                if let wait = c.ui.freezeDog {
-                    Section {
-                        let dog = model.binding(wait, "ui.freeze_dog") { $0.ui.freezeDog = $1 }
-                        Toggle("Restart Irie when it stops answering", isOn: Binding(get: { wait != "0s" },
-                                                                                set: { dog.wrappedValue = $0 ? Self.defaultFreeze : "0s" }))
-                        // While the dog is off, the picker shows what turning it on picks.
-                        Picker("Once it has not answered for", selection: Binding(get: { wait == "0s" ? Self.defaultFreeze : wait },
-                                                                                set: { dog.wrappedValue = $0 })) {
-                            ForEach(Self.freezes + (Self.freezes.contains(wait) || wait == "0s" ? [] : [wait]), id: \.self) { d in
-                                Text(Self.spoken(d)).tag(d)
-                            }
-                        }
-                        .disabled(wait == "0s")
-                    } header: {
-                        Text("Freeze dog")
-                    } footer: {
-                        footnote("Irie is force quit and opened again as it was, and your agents keep running. A report of where it was stuck goes in the freezes folder beside core.log.")
-                    }
                 }
                 Section {
                     Toggle("Read cost and plan use from Claude Code’s status line", isOn: model.bind(c, \.usage.statusLine, "usage.status_line"))
@@ -1242,6 +1215,8 @@ private struct RepoSettings: View {
 private struct ArchSettings: View {
     @EnvironmentObject private var store: Store
     @ObservedObject var model: SettingsModel
+    /// An action that asks first, waiting for your OK.
+    @State private var asking: ArchAction?
 
     var body: some View {
         WithConfig(model: model) { _ in
@@ -1253,6 +1228,13 @@ private struct ArchSettings: View {
                     ForEach(store.archAgents) { a in sections(a) }
                 }
             }
+        }
+        // What an action that asks first will do, and your OK to it.
+        .alert(asking?.label ?? "", isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), presenting: asking) { x in
+            Button(x.label) { store.archAction(x, ok: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: { x in
+            Text(x.ask ?? "")
         }
         // What each does changes as you work: read it again while the tab shows.
         .task {
@@ -1274,9 +1256,12 @@ private struct ArchSettings: View {
             if let actions = a.actions, !actions.isEmpty {
                 HStack {
                     ForEach(actions, id: \.label) { x in
-                        Button(x.label) { store.archAction(x) }
+                        Button(x.label) { act(x) }
                     }
                 }
+            }
+            ForEach(Array((a.items ?? []).enumerated()), id: \.offset) { _, it in
+                ArchItemRow(item: it, act: act)
             }
             ForEach((a.settings ?? []).filter { $0.kind != "lines" }, id: \.key) { s in control(a, s) }
         } header: {
@@ -1298,6 +1283,15 @@ private struct ArchSettings: View {
         }
     }
 
+    /// Does what an action offers, once you said OK when it asks first.
+    private func act(_ x: ArchAction) {
+        if x.ask != nil {
+            asking = x
+        } else {
+            store.archAction(x)
+        }
+    }
+
     /// One setting, drawn by its kind.
     @ViewBuilder
     private func control(_ a: ArchAgent, _ s: ArchSetting) -> some View {
@@ -1315,6 +1309,57 @@ private struct ArchSettings: View {
             .help(s.help ?? "")
         default:
             EmptyView()
+        }
+    }
+}
+
+/// One thing an arch agent found or holds: a mark for how it stands, the
+/// line, his advice beneath, and what you can do about it.
+private struct ArchItemRow: View {
+    let item: ArchItem
+    let act: (ArchAction) -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: symbol)
+                .foregroundStyle(tint)
+                .accessibilityLabel(item.level == "warn" ? "Needs care" : item.level == "ok" ? "Well" : "Worth a look")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let d = item.detail, !d.isEmpty {
+                    Text(d)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                if let xs = item.actions, !xs.isEmpty {
+                    HStack {
+                        ForEach(xs, id: \.label) { x in
+                            Button(x.ask != nil ? x.label + "…" : x.label) { act(x) }
+                                .controlSize(.small)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var symbol: String {
+        switch item.level {
+        case "warn": "exclamationmark.triangle"
+        case "ok": "checkmark.circle"
+        default: "info.circle"
+        }
+    }
+
+    private var tint: Color {
+        switch item.level {
+        case "warn": .orange
+        case "ok": .green
+        default: .secondary
         }
     }
 }
