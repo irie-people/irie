@@ -1,5 +1,82 @@
 # Changelog
 
+## [0.2.0](https://github.com/irie-people/irie/compare/v0.1.0...v0.2.0) (2026-11-01)
+
+
+### Features
+
+* **arch:** every arch agent reports through the core, with a nickname and an icon ([71759a3](https://github.com/irie-people/irie/commit/71759a3637be814a9dd973100cb4d7dba929711e))
+* **arch:** Gabriel gives the user's focus the machine first while it is busy ([a6cba59](https://github.com/irie-people/irie/commit/a6cba59e658980303cf8c0496d8c9ccd1f818bb5))
+* **arch:** Gabriel keeps agents from taking your focus, and installs wait until you look away ([ca11ba9](https://github.com/irie-people/irie/commit/ca11ba909982ddd22a447510d17b34aedf2aa2aa))
+* **arch:** Gabriel's boost puts your focus first at once, the safe overclock ([b6ca0b5](https://github.com/irie-people/irie/commit/b6ca0b5c87194e6db5a6a908caa05812dd5e161d))
+* **arch:** Mikael, the first arch agent, stands with every session against evil ([819788e](https://github.com/irie-people/irie/commit/819788e257e1a03abc374b8d5b4fc19d4c77bcd1))
+* **core:** a jot that reads as more for the one just sent goes to its agent ([0800284](https://github.com/irie-people/irie/commit/08002847c118d34591f844375e7842c5f1c84945))
+* **core:** a pair op for clients that show a pairing code ([d26a49e](https://github.com/irie-people/irie/commit/d26a49ed9fbd82741eaff765f0a83a2a8c74ffcb))
+* **core:** a peer's finished work comes back, and no peer's frame can stop the core ([e5262b0](https://github.com/irie-people/irie/commit/e5262b0231d3c1f50f94ff89dd0d1ef3c67362d3))
+* **core:** a peer's row says where it runs, in every client ([aa603e0](https://github.com/irie-people/irie/commit/aa603e0ce7d1efa6b3ac027b1e0ec141a75ac5dc))
+* **core:** a task typed to input is a jot, and input's apart takes one back ([2f14c08](https://github.com/irie-people/irie/commit/2f14c084759db0988c194d00ce011c893b2d081a))
+* **core:** irie-core, one core that reads what a person types for every client ([126f2e3](https://github.com/irie-people/irie/commit/126f2e31d99d45afcd14edafc3fed144af194752))
+* **core:** peers, another machine's sessions in the list and ^name to start one there ([10e4299](https://github.com/irie-people/irie/commit/10e42997fc0120902124e325260da6020f8f9b28))
+* **core:** screen and keys ops for clients without a terminal ([111ef03](https://github.com/irie-people/irie/commit/111ef0347eefa2fbc071a934f9ce5e507046fd21))
+* **core:** the balancer, and no task where the hooks differ ([87bce2b](https://github.com/irie-people/irie/commit/87bce2bcaa4fa59134e56284ab5a5adbc9664ca5))
+* **core:** the header says how busy the machine is ([f25c4ef](https://github.com/irie-people/irie/commit/f25c4ef41da32cedc57e394d39fe0248a721b1b5))
+* **filetx:** writes take the file's write lock and land in one rename ([b071a38](https://github.com/irie-people/irie/commit/b071a384821b7ddbb8f06180e37090bd24078399))
+* **install:** one line installs Irie from each release's downloads ([ad52ee6](https://github.com/irie-people/irie/commit/ad52ee6f08d7a44e46a473ac92c3500516680e6e))
+* **ios:** a native iPhone app ([6e4d5ec](https://github.com/irie-people/irie/commit/6e4d5ecb3dfa109bb801d5066080f4ddb8613eeb))
+* **ios:** the VPN on each machine's card, with Connect and Disconnect ([2e85559](https://github.com/irie-people/irie/commit/2e85559431015bdaccdbcf4a8fcf23b804e863f7))
+* **learn:** tutor mode, pictures and Irie tips for Claude Code sessions ([84b5116](https://github.com/irie-people/irie/commit/84b51167f6e762c6a46efb86a71b6598d6c63182))
+* **live:** an install can also fast-forward a remote main, with irie.push ([611cdd1](https://github.com/irie-people/irie/commit/611cdd1fb9bb4e65a015175ab674a12b3fd73eda))
+* **mac:** a Learning tab, a Help menu with resources and a glossary, and diagrams ([812f854](https://github.com/irie-people/irie/commit/812f8548fb2d4046a31c8fa200befe38cd80a566))
+* **mac:** Irie.app for Intel Macs too, in a release's universal app ([1310b0a](https://github.com/irie-people/irie/commit/1310b0a1cea0eb1c0c482dfe2a943d1cbd668df9))
+* **mac:** Irie.app starts Irie itself and welcomes a first run ([1bd163c](https://github.com/irie-people/irie/commit/1bd163cbef88ad1f2da8a0f0affda5c8f950197a))
+* **mac:** sign Irie.app with your own identity ([02ba684](https://github.com/irie-people/irie/commit/02ba684725df0cd29c9b591173fb887e9d38922d))
+* **mac:** the task bar sends what is typed to the core, so every : command works ([e514df3](https://github.com/irie-people/irie/commit/e514df3517d1f5282f55ccb21854b410ef7719ae))
+* **mac:** the task bar takes the next jot at once and offers New task ([155ed49](https://github.com/irie-people/irie/commit/155ed492581cd77fca24d513394cdc8b7b931c49))
+* **peer:** irie peer list says whether each machine takes tasks, and why not ([ce9878b](https://github.com/irie-people/irie/commit/ce9878b0215d52707432f1c0f60c60dced639428))
+* **remote:** a pairing link for a native iPhone app ([c7d93be](https://github.com/irie-people/irie/commit/c7d93bed944c7ca45bc0ba3e205fe838303f8031))
+* **remote:** irie remote on and off ([d0ce282](https://github.com/irie-people/irie/commit/d0ce282398e7eae4f31b0db70ab4a315fb09e447))
+* **remote:** log each setup step and each launch of the app ([64ef56c](https://github.com/irie-people/irie/commit/64ef56c2b03bf1ab3a79fd332f349a7dfa716a35))
+* **remote:** notifications in the phone app, and polish ([fdcea11](https://github.com/irie-people/irie/commit/fdcea117e6ad8f129069ab8d2bfe066e34788f74))
+* **remote:** notifications when a session needs you ([c66dd4a](https://github.com/irie-people/irie/commit/c66dd4a769e499fa9b224c3a9f7d3d1fcfef404d))
+* **remote:** the phone app ([5a944c2](https://github.com/irie-people/irie/commit/5a944c2ed27190995b4e29b6089aa0ef053827b7))
+* **remote:** the phone app's gateway, pairing and certificate authority ([a0779ff](https://github.com/irie-people/irie/commit/a0779ffe98dd04dbfa776e5e0e8fbf2dac599963))
+* **setup:** irie setup and a first run that get a computer ready for Irie ([ef33a7b](https://github.com/irie-people/irie/commit/ef33a7b87393c7b2f197aa03af06c8cc11b80bf2))
+* **skills:** a dead man's switch guide, the first of Irie's own skills ([0272b94](https://github.com/irie-people/irie/commit/0272b9453d44d6c72771b6e1f40a1b26403ed1e7))
+* **skills:** hand each Claude Code session Irie's own skills as a plugin ([aa041dd](https://github.com/irie-people/irie/commit/aa041ddd109ad95f844dea28a633a1d5a4512584))
+* **spawn:** your preferences, told to every session as it starts ([e66020e](https://github.com/irie-people/irie/commit/e66020eb17b208f2f82a43eec3dddb3bdd6d7f75))
+* the freeze dog restarts Irie.app when it stops answering ([865d507](https://github.com/irie-people/irie/commit/865d507b00206abda887032b36fa8d4c8912ac49))
+* **trod:** keep sessions going at night while you are away ([82a7cf8](https://github.com/irie-people/irie/commit/82a7cf828cb65e4fa319174f6c230d188dca5991))
+* **trod:** start the trod bot by hand and see its boot print ([0a4c23d](https://github.com/irie-people/irie/commit/0a4c23df6691b8d2291935ce0a38329ea11f1851))
+* **ui:** the terminal sidebar welcomes a first run with a task to try ([18ba5d8](https://github.com/irie-people/irie/commit/18ba5d84e2fb623f951cde027c13c42cb4442d72))
+* **vpn:** Mullvad VPN in every task bar, the sidebars and the phone app ([2fb303b](https://github.com/irie-people/irie/commit/2fb303b93cec3be1053696ddbad34e8166747903))
+
+
+### Bug Fixes
+
+* calm agent colours, near opposite for cards side by side ([f9e03cc](https://github.com/irie-people/irie/commit/f9e03cc7954dfce8e0a47adf983c073dd76ce357))
+* **core:** the public wire carries Gabriel's report ([7a776e2](https://github.com/irie-people/irie/commit/7a776e29ad646b49d7e4366bd94e4e2eb727b99b))
+* **install:** no curl error before building from source ([cb82e71](https://github.com/irie-people/irie/commit/cb82e71af774c78b35f0b8a8ea24be8aee64e51d))
+* **install:** sign a release's Irie.app with the identity build.sh uses ([3d11d93](https://github.com/irie-people/irie/commit/3d11d934e6ec2d83f58460c392061778ab9dc349))
+* **ios:** the calm agent colours, and the colour the core gives ([b8e2327](https://github.com/irie-people/irie/commit/b8e23273810558eae5b0c5d1bebfcd293b677193))
+* **live:** say when the install holding the lock is stopped ([412f15b](https://github.com/irie-people/irie/commit/412f15b5c7ba8f92ab29ace3a3ec29f8aa18d8aa))
+* **mac:** read the setup session's reply with a type of its own ([c941874](https://github.com/irie-people/irie/commit/c9418744e626fbe567e4a60bf8e9a2e5d55b2668))
+* **mac:** show a long preference or rule whole in Settings ([4aedb46](https://github.com/irie-people/irie/commit/4aedb46abd332ce5bb0cac9a538dad2be6cdd436))
+* **mac:** the task bar's count of tasks starting no longer clashes with starting ([2aa2357](https://github.com/irie-people/irie/commit/2aa235727075d8c87634a87e5de558ea2caef2bd))
+* **remote:** close what a review of the gateway found ([95ef8c7](https://github.com/irie-people/irie/commit/95ef8c770b6fff8a3617aa775441354609b92ffb))
+* **remote:** code in link text, escaped backticks, and the app's cache ([9235848](https://github.com/irie-people/irie/commit/92358486477d14984a97ac5e9f9e607a011dada9))
+* **remote:** no second first notification for a subscription the phone sent before ([95ef15f](https://github.com/irie-people/irie/commit/95ef15f24b1b56d409ccc7473c2f116027fd4118))
+* **remote:** no Undo after a freeze, which the core can't undo ([ad7a063](https://github.com/irie-people/irie/commit/ad7a063ba7f0990690972ed990b6091f4282fe17))
+* **remote:** the rest of the gateway review ([b66a865](https://github.com/irie-people/irie/commit/b66a865e27af7390382c84c487c5b922dc8ef0b6))
+* **skills:** a guide runs in a folder of its own, trusted once ([7f59304](https://github.com/irie-people/irie/commit/7f593040c7f257db441d0f64c24d18c668aefa21))
+* **skills:** the dead man's switch guide lists its contact card helper ([b23c999](https://github.com/irie-people/irie/commit/b23c99946cd30d5e386400d10df4a562216cdbcf))
+* **test:** a killed or timed-out test run leaves no tmux servers behind ([90d30fc](https://github.com/irie-people/irie/commit/90d30fc718dede62d9f092eaad8c216d9fc03dd9))
+* **vpn:** read the relay's name as mullvad-cli 2026.3 prints it ([13b838e](https://github.com/irie-people/irie/commit/13b838ecff194199647de7640038f6900905abe1))
+
+
+### Performance Improvements
+
+* **core:** the machine advert costs less while nothing changes ([235a62e](https://github.com/irie-people/irie/commit/235a62e929d6b7f704a1b9b99aa2bb4596e284b9))
+
 ## 0.1.0 (2026-10-31)
 
 
