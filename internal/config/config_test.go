@@ -75,8 +75,12 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if got := c.Profiles["big"]; !reflect.DeepEqual(got, wantBig) {
 		t.Errorf("profiles.big = %+v, want %+v", got, wantBig)
 	}
-	if len(c.Profiles) != 5 {
-		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local and big", c.Profiles)
+	wantMikael := Profile{Harness: "claude-code", Command: "claude", Model: "claude-opus-5-5", Effort: "high", PermissionMode: "auto", Args: []string{}, Env: map[string]string{}, Arch: "mikael"}
+	if got := c.Profiles["mikael"]; !reflect.DeepEqual(got, wantMikael) {
+		t.Errorf("profiles.mikael = %+v, want %+v", got, wantMikael)
+	}
+	if len(c.Profiles) != 6 {
+		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local, big and mikael", c.Profiles)
 	}
 	r := c.Route
 	if !reflect.DeepEqual(r.Profiles, []string{"local", "haiku", "sonnet", "claude"}) || r.MinAccuracy != 0.85 || r.PriorWeight != 10 ||
@@ -125,6 +129,9 @@ func TestDefaultsMatchDesign(t *testing.T) {
 		Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true, Rules: TrodRules(), Guidelines: TrodGuidelines(),
 	}); !reflect.DeepEqual(c.Trod, want) {
 		t.Errorf("night = %+v, want %+v", c.Trod, want)
+	}
+	if want := (Arch{Mikael: Mikael{On: true, Door: true, Good: []string{}}}); !reflect.DeepEqual(c.Arch, want) {
+		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("defaults do not validate: %v", err)
@@ -719,5 +726,42 @@ func TestVPNSection(t *testing.T) {
 	}
 	if _, err := Load(writeFile(t, "[vpn]\nmullvad = \"mullvad\"\n")); err == nil || !strings.Contains(err.Error(), "vpn.mullvad") {
 		t.Errorf("a bare name: %v", err)
+	}
+}
+
+func TestArchMikaelFromTheFile(t *testing.T) {
+	c, err := Load(writeFile(t, "[arch.mikael]\ndoor = false\ngood = [\"Give credit where it is due.\", \"Be honest with clients.\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Mikael{On: true, Door: false, Good: []string{"Give credit where it is due.", "Be honest with clients."}}); !reflect.DeepEqual(c.Arch.Mikael, want) {
+		t.Errorf("arch.mikael = %+v, want %+v", c.Arch.Mikael, want)
+	}
+	c, err = Load(writeFile(t, "[arch.mikael]\non = false\n"))
+	if err != nil || c.Arch.Mikael.On || !c.Arch.Mikael.Door || c.Arch.Mikael.Good == nil {
+		t.Errorf("arch.mikael = %+v, %v; want off, the rest kept", c.Arch.Mikael, err)
+	}
+	if _, err := Load(writeFile(t, "[arch.uriel]\non = true\n")); err == nil || !strings.Contains(err.Error(), "arch.uriel") {
+		t.Errorf("an arch agent Irie lacks: %v", err)
+	}
+}
+
+func TestArchValidation(t *testing.T) {
+	for body, want := range map[string]string{
+		"[arch.mikael]\ngood = [\"\"]\n":                                                     "arch.mikael.good[0]: is empty",
+		"[arch.mikael]\ngood = [\"one\\ntwo\"]\n":                                            "arch.mikael.good[0]: must be one line",
+		"[arch.mikael]\ngood = [\"" + strings.Repeat("g", 401) + "\"]\n":                     "at most 400 characters",
+		"[arch.mikael]\ngood = [" + strings.Repeat("\"g\", ", 21) + "]\n":                    "arch.mikael.good: at most 20",
+		"[profiles.helper]\narch = \"nobody\"\n":                                             `profiles.helper.arch = "nobody": the arch agents are mikael`,
+		"[profiles.helper]\nharness = \"generic\"\ncommand = \"aider\"\narch = \"mikael\"\n": "profiles.helper.arch: only the claude-code harness",
+		"[profiles.helper]\narch = \"mikael\"\nargs = [\"--agent\", \"x\"]\n":                "profiles.helper.args: a profile that runs as an arch agent",
+	} {
+		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", body, err, want)
+		}
+	}
+	c, err := Load(writeFile(t, "[profiles.mikael-sonnet]\nmodel = \"claude-sonnet-5-5\"\narch = \"mikael\"\n"))
+	if err != nil || c.Profiles["mikael-sonnet"].Arch != "mikael" {
+		t.Errorf("a profile of the user's own that runs as Mikael: %+v, %v", c.Profiles["mikael-sonnet"], err)
 	}
 }

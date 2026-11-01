@@ -453,8 +453,9 @@ func TestTheAgentGetsIriesEnvAndNoTMUX(t *testing.T) {
 		t.Errorf("settings file: %v", err)
 	}
 	// Irie says nothing back, but for what the session is told as it
-	// starts: the user's preferences, the built-in ones here, and the
-	// delegation note when it may delegate (DESIGN §4.2, §6.4).
+	// starts: Mikael's word, the user's preferences, the built-in ones here,
+	// and the delegation note when it may delegate (DESIGN §4.2, §4.11,
+	// §6.4).
 	for _, r := range log {
 		if r["t"] != "hook" {
 			continue

@@ -48,6 +48,11 @@
 // longer than MAX_CANON, 1024 bytes on macOS. With --resume and no task it starts from a
 // resume and idles at once.
 //
+// --agents takes a JSON object of agents, each with a description and a
+// prompt, and --agent must name one of them: as from 2.1.243, Claude Code
+// exits at once on one that does not read. The log's first line has both
+// in the agent's argv.
+//
 // `fakeagent agents --json` lists no sessions, as `claude agents --json`
 // does on a machine with none outside Irie. `fakeagent auth status --json`
 // says it is signed in, as Claude Code does, unless IRIE_FAKE_SIGNED_OUT
@@ -101,6 +106,7 @@ func main() { os.Exit(run(os.Args[1:])) }
 
 type options struct {
 	model, effort, mode, settings, sessionID, name, resume string
+	agents, agent                                          string
 	version, help                                          bool
 	task                                                   string
 	plugins                                                []string // --plugin-dir, repeatable
@@ -160,6 +166,10 @@ func parseArgs(args []string) (options, error) {
 		case "--plugin-dir":
 			o.plugins = append(o.plugins, "")
 			dst = &o.plugins[len(o.plugins)-1]
+		case "--agents":
+			dst = &o.agents
+		case "--agent":
+			dst = &o.agent
 		}
 		if dst == nil {
 			return o, fmt.Errorf("error: unknown option '%s'", flag)
@@ -193,12 +203,35 @@ func parseArgs(args []string) (options, error) {
 	if o.sessionID != "" && !uuid.MatchString(o.sessionID) {
 		return o, fmt.Errorf("error: --session-id must be a valid UUID")
 	}
+	var agents map[string]struct {
+		Description string   `json:"description"`
+		Prompt      string   `json:"prompt"`
+		Tools       []string `json:"tools"`
+		Color       string   `json:"color"`
+	}
+	if o.agents != "" {
+		dec := json.NewDecoder(strings.NewReader(o.agents))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&agents); err != nil {
+			return o, fmt.Errorf("Invalid --agents configuration: %v", err)
+		}
+		for name, a := range agents {
+			if a.Description == "" || a.Prompt == "" {
+				return o, fmt.Errorf("Invalid --agents configuration: agent %q needs a description and a prompt", name)
+			}
+		}
+	}
+	if _, ok := agents[o.agent]; o.agent != "" && !ok {
+		return o, fmt.Errorf("error: agent %q not found", o.agent)
+	}
 	return o, nil
 }
 
 const help = `Usage: claude [options] [prompt]
 
 Options:
+  --agent <agent>            Agent for the current session
+  --agents <json-or-file>    JSON object defining custom agents
   --effort <level>           Effort level for the current session
   -h, --help                 Display help for command
   --model <model>            Model for the current session
@@ -315,12 +348,16 @@ func findSkill(task string, plugins []string) error {
 }
 
 // handler and group are the hook settings of Claude Code's hooks reference.
+// A prompt hook, which asks a model, is read and checked but never runs.
 type handler struct {
-	Type      string   `json:"type"`
-	Command   string   `json:"command"`
-	Args      []string `json:"args"`
-	Timeout   int      `json:"timeout"`
-	OnFailure string   `json:"onFailure"`
+	Type            string   `json:"type"`
+	Command         string   `json:"command"`
+	Args            []string `json:"args"`
+	Timeout         int      `json:"timeout"`
+	OnFailure       string   `json:"onFailure"`
+	If              string   `json:"if"`
+	Prompt          string   `json:"prompt"`
+	ContinueOnBlock bool     `json:"continueOnBlock"`
 }
 
 type group struct {
@@ -328,8 +365,9 @@ type group struct {
 	Hooks   []handler `json:"hooks"`
 }
 
-// handlerKeys are the command hook fields the hooks reference documents.
-var handlerKeys = []string{"type", "command", "args", "timeout", "onFailure", "async", "asyncRewake", "shell", "if", "statusMessage", "once"}
+// handlerKeys are the hook fields the hooks reference documents, for
+// command and prompt hooks.
+var handlerKeys = []string{"type", "command", "args", "timeout", "onFailure", "async", "asyncRewake", "shell", "if", "statusMessage", "once", "prompt", "model", "continueOnBlock"}
 
 // loadHooks reads the hooks of a --settings value, a path or inline JSON. It
 // is strict, as a CLI that validates its settings would be.
@@ -371,6 +409,16 @@ func loadHooks(value, version string) (map[string][]group, error) {
 				}
 				if h.OnFailure != "" && (h.OnFailure != "block" && h.OnFailure != "continue" || !atLeast(version, "2.1.295")) {
 					return nil, fmt.Errorf("settings: %s: onFailure %q is not supported", where, h.OnFailure)
+				}
+				switch {
+				case h.Type == "command" && (h.Command == "" || h.Prompt != "" || h.ContinueOnBlock):
+					return nil, fmt.Errorf("settings: %s: a command hook takes a command, and no prompt or continueOnBlock", where)
+				case h.Type == "prompt" && (h.Prompt == "" || h.Command != ""):
+					return nil, fmt.Errorf("settings: %s: a prompt hook takes a prompt, and no command", where)
+				case h.Type != "command" && h.Type != "prompt":
+					return nil, fmt.Errorf("settings: %s: hook type %q is not supported", where, h.Type)
+				case h.If != "" && ev != "PreToolUse" && ev != "PostToolUse" && ev != "PostToolUseFailure" && ev != "PermissionRequest" && ev != "PermissionDenied":
+					return nil, fmt.Errorf("settings: %s: if is only for tool events", where)
 				}
 				out[ev][gi].Hooks = append(out[ev][gi].Hooks, h)
 			}

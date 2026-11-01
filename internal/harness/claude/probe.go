@@ -28,8 +28,9 @@ import (
 const MinVersion = "2.1.295"
 
 // optional are flags Irie passes only to a CLI whose --help lists them.
-// --plugin-dir also needs the CLI to load a plugin passed with it (plugins).
-var optional = []string{"--name", "--plugin-dir"}
+// --plugin-dir also needs the CLI to load a plugin passed with it (plugins);
+// --agents and --agent bring Irie's arch agents (DESIGN §4.11).
+var optional = []string{"--name", "--plugin-dir", "--agents", "--agent"}
 
 // probeTimeout bounds each run of the CLI, and pluginTimeout the run that
 // lists its plugins, which reads every plugin's manifest.

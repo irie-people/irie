@@ -71,6 +71,8 @@ struct CoreConfig: Decodable, Equatable {
     var dog: Dog
     /// The trod bot; nil from a core from before it.
     var trod: Trod?
+    /// The arch agents; nil from a core from before them.
+    var arch: Arch?
     /// Mullvad VPN control; nil from a core from before it.
     var vpn: VPN?
 
@@ -212,6 +214,19 @@ struct CoreConfig: Decodable, Equatable {
         enum CodingKeys: String, CodingKey {
             case on, start, end, away, questions, nudges, retry, within, rules, guidelines
             case maxWorking = "max_working", maxPlanUse = "max_plan_use", keepAwake = "keep_awake"
+        }
+    }
+
+    /// Irie's arch agents (DESIGN §4.11): helpers who go with every session.
+    struct Arch: Decodable, Equatable {
+        var mikael: Mikael
+
+        /// Mikael, the first: he stands with you against evil and for the good
+        /// you want to see in the world.
+        struct Mikael: Decodable, Equatable {
+            var on: Bool
+            var door: Bool
+            var good: [String]
         }
     }
 
@@ -361,7 +376,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
-        case general, appearance, agents, trod, local, repos
+        case general, appearance, agents, arch, trod, local, repos
 
         var id: String { rawValue }
 
@@ -370,6 +385,7 @@ struct SettingsView: View {
             case .general: return "General"
             case .appearance: return "Appearance"
             case .agents: return "Agents"
+            case .arch: return "Arch Agents"
             case .trod: return "Trod Bot"
             case .local: return "Local Models"
             case .repos: return "Repos"
@@ -381,6 +397,7 @@ struct SettingsView: View {
             case .general: return "gearshape"
             case .appearance: return "paintpalette"
             case .agents: return "person.2"
+            case .arch: return "shield.lefthalf.filled"
             case .trod: return "moon.stars"
             case .local: return "desktopcomputer"
             case .repos: return "folder"
@@ -418,6 +435,7 @@ struct SettingsView: View {
         case .general: GeneralSettings(model: model)
         case .appearance: AppearanceSettings(model: model)
         case .agents: AgentSettings(model: model)
+        case .arch: ArchSettings(model: model)
         case .trod: TrodSettings(model: model)
         case .local: LocalSettings(model: model)
         case .repos: RepoSettings(model: model)
@@ -1110,6 +1128,55 @@ private struct RepoSettings: View {
             name = "\(base)-\(n)"
         }
         return name
+    }
+}
+
+// MARK: Arch agents
+
+/// Irie's arch agents (DESIGN §4.11): helpers who go with every session.
+/// Mikael, the first, stands with you against evil and for the good you
+/// want to see in the world, which you write here in your own words.
+private struct ArchSettings: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        WithConfig(model: model) { c in
+            if let a = c.arch {
+                form(a.mikael)
+            } else {
+                ContentUnavailableView("This Irie has no arch agents yet", systemImage: "shield.lefthalf.filled",
+                                       description: Text("Install a newer build to have Mikael with your sessions."))
+            }
+        }
+    }
+
+    /// A binding to one of Mikael's settings.
+    private func bind<V: SettingType>(_ m: CoreConfig.Arch.Mikael, _ path: WritableKeyPath<CoreConfig.Arch.Mikael, V>, _ key: String) -> Binding<V> {
+        model.binding(m[keyPath: path], "arch.mikael." + key) { $0.arch?.mikael[keyPath: path] = $1 }
+    }
+
+    private func form(_ m: CoreConfig.Arch.Mikael) -> some View {
+        SettingsForm(model: model) {
+            Section {
+                Toggle("Mikael goes with every session", isOn: bind(m, \.on, "on"))
+                Toggle("He weighs calls that can’t be taken back", isOn: bind(m, \.door, "door"))
+                    .disabled(!m.on)
+            } header: {
+                Text("Mikael")
+            } footer: {
+                footnote("He stands with you against evil, and for the good you want to see, in every session. Each agent hears his word as it starts, and can ask him whether something is right, a scam or a trap. Before a call that could do harm that can’t be taken back, such as sending something off your Mac, deleting, or running code from the web, a small model weighs it in his name and stops one that would do evil, telling the agent why. Start a task with +mikael to talk with him yourself.")
+            }
+            Section {
+                LineList(lines: m.good, prompt: "Add the good you want to see, such as “Give credit where it’s due.”") {
+                    bind(m, \.good, "good").wrappedValue = $0
+                }
+            } header: {
+                ListHeader(title: "The good you want to see in the world", reset: { model.reset("arch.mikael.good") })
+            } footer: {
+                footnote("In your own words. Every agent Mikael goes with hears them, and he helps it toward them.")
+            }
+            .disabled(!m.on)
+        }
     }
 }
 
