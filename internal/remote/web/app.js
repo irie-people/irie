@@ -309,7 +309,7 @@ function sessionActions(conn, s, { inSession = false } = {}) {
   if (!ended && conn.can('freeze')) {
     items.push(frozen
       ? { label: 'Thaw', note: 'It carries on where it stopped', run: () => op(conn, 'thaw', { session: s.id }, { done: `Thawed “${s.name}”` }) }
-      : { label: 'Freeze', note: 'Stops it at once, every process', run: () => op(conn, 'freeze', { session: s.id }, { undo: `Froze “${s.name}”` }) });
+      : { label: 'Freeze', note: 'Stops it at once, every process', run: () => op(conn, 'freeze', { session: s.id }, { done: `Froze “${s.name}”` }) });
   }
   if (!ended && conn.can('priority')) {
     items.push(s.priority

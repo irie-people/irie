@@ -7,9 +7,11 @@
 //
 // With -phone it writes the phone app's icons instead: the same picture as
 // full squares, which iOS and the web app's manifest round themselves,
-// into the gateway's files (docs/PHONE.md):
+// into the gateway's files (docs/PHONE.md); with -ios, the native iPhone
+// app's icon, one 1024 px square in an asset catalog's icon set:
 //
 //	go run ./tools/mkicon -phone internal/remote/web
+//	go run ./tools/mkicon -ios ios/Irie.swiftpm/Sources/Assets.xcassets/AppIcon.appiconset
 //
 // It needs the standard library only and draws no text. Each size is drawn
 // from the shapes, not shrunk from the largest, so the small ones stay sharp,
@@ -59,15 +61,18 @@ var phoneFiles = []struct {
 
 func main() {
 	args := os.Args[1:]
-	phone := len(args) == 2 && args[0] == "-phone"
-	if len(args) != 1 && !phone {
-		fmt.Fprintln(os.Stderr, "usage: mkicon DIR.iconset | mkicon -phone DIR")
+	flagged := len(args) == 2 && (args[0] == "-phone" || args[0] == "-ios")
+	if len(args) != 1 && !flagged {
+		fmt.Fprintln(os.Stderr, "usage: mkicon DIR.iconset | mkicon -phone DIR | mkicon -ios DIR.appiconset")
 		os.Exit(2)
 	}
 	var err error
-	if phone {
+	switch {
+	case flagged && args[0] == "-phone":
 		err = writePhone(args[1])
-	} else {
+	case flagged:
+		err = writeIOS(args[1])
+	default:
 		err = write(args[0])
 	}
 	if err != nil {
@@ -91,6 +96,39 @@ func writePhone(dir string) error {
 		}
 	}
 	return nil
+}
+
+// iosContents is the icon set's Contents.json: one universal 1024 px
+// image, which Xcode 14 and later scale to every size iOS needs.
+const iosContents = `{
+  "images" : [
+    {
+      "filename" : "icon-1024.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    }
+  ],
+  "info" : {
+    "author" : "mkicon",
+    "version" : 1
+  }
+}
+`
+
+// writeIOS writes the native iPhone app's icon set into dir.
+func writeIOS(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, drawFull(1024)); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "icon-1024.png"), buf.Bytes(), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "Contents.json"), []byte(iosContents), 0o644)
 }
 
 // drawFull renders the inside of the icon's square, px pixels across, with
