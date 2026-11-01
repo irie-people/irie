@@ -1,0 +1,41 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Irie//Dead man's switch//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:checkin-7f3a9c1e@irie
+DTSTAMP:20261101T120000Z
+DTSTART:20261108T100000
+DURATION:PT15M
+RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=SU
+SUMMARY:Check in: tap I'm OK
+DESCRIPTION:Tap I'm OK on your phone\, so your dead man's switch knows you 
+ are well.\n\nMissed it? You get an email 2 days later\; the people you cho
+ se\, 16 days after that.
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Check in: tap I'm OK
+TRIGGER:PT0S
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:review-7f3a9c1e@irie
+DTSTAMP:20261101T120000Z
+DTSTART:20270110T100000
+DURATION:PT30M
+RRULE:FREQ=YEARLY
+SUMMARY:Review your dead man's switch
+DESCRIPTION:Once a year\, check that your switch still fits your life:\n- T
+ he people: still the right ones\, with the right email addresses and the r
+ ight access?\n- The letter: READ ME FIRST still true\, and every account i
+ n it still there?\n- The emergency access in your password manager: every 
+ contact still confirmed?\n- The check-in: tap I'm OK\, and see it arrive.
+ \n- Google and Apple: the Inactive Account Manager and the Legacy Contact 
+ still set?\nYour switch.md says where each part is.
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Review your dead man's switch
+TRIGGER:PT0S
+END:VALARM
+END:VEVENT
+END:VCALENDAR

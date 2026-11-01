@@ -65,6 +65,8 @@ final class Store: ObservableObject {
     /// The trod bot, from the core, while it is within its hours; the title
     /// bar shows it (Counts).
     @Published private(set) var trod: TrodShift?
+    /// Mullvad VPN, while vpn.on; the title bar shows its mark.
+    @Published private(set) var vpn: VPNMark?
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
@@ -258,6 +260,9 @@ final class Store: ObservableObject {
         // one out of its hours.
         if let h = f.header, h.trod != trod {
             trod = h.trod
+        }
+        if let h = f.header, h.vpn != vpn {
+            vpn = h.vpn
         }
         switch f.t {
         case "snapshot":

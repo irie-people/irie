@@ -132,7 +132,7 @@ func peerCmd(args []string) error {
 			return nil
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tSTATE\tSESSIONS\tLOAD\tMEMORY FREE\tURL")
+		fmt.Fprintln(w, "NAME\tSTATE\tSESSIONS\tLOAD\tMEMORY FREE\tTAKES TASKS\tURL")
 		for _, i := range res.Peers {
 			state := "up since " + i.Since.Local().Format("15:04")
 			if !i.Up {
@@ -145,7 +145,11 @@ func peerCmd(args []string) error {
 			if i.Memory != nil && i.Memory.Total > 0 {
 				mem = fmt.Sprintf("%.1f of %.0f GiB", float64(i.Memory.Available)/(1<<30), float64(i.Memory.Total)/(1<<30))
 			}
-			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\n", i.Name, state, i.Sessions, load, mem, i.URL)
+			takes := "yes"
+			if i.Refuses != "" {
+				takes = "no: " + i.Refuses
+			}
+			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\t%s\n", i.Name, state, i.Sessions, load, mem, takes, i.URL)
 		}
 		return w.Flush()
 	case "remove":

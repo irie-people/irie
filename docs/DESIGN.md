@@ -72,7 +72,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 1. **tmux is the engine.** It keeps agents alive with no window open, swaps panes into view, reports process facts and carries typed input. Ghostty is the window around it.
 2. **One writer.** `irie core` owns all state and every rule, and is the only process that drives tmux. The sidebar, the Mac app, `irie ctl`, the hook shim, the subagent mirrors and any other front-end are all clients of its socket API, which [CORE.md](CORE.md) describes for whoever writes one: irie-core. A client keeps no rules of its own, not even what the words in its task bar mean (`input`).
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
-4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
+4. **Inject, never edit.** Hooks, settings, env and Irie's own skills go in per launch, through `--settings`, `--plugin-dir`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
 6. **Restart without disturbing.** A hard requirement: restarting or replacing any part of Irie (the core, the sidebar, the placeholder, Irie.app, an install) never stops, restarts or signals an agent or any process an agent started. Only the user's own close, pause, freeze, promote or move acts on an agent. `tools/live.sh` checks every agent's process after an install and fails loudly if one changed.
 
@@ -289,6 +289,8 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `tools/mkicon/` | Icon generator | M9 |
 | `internal/localmodel/` | Ollama client, memory estimates and the machine's memory, preflight, setup suggestions, `irie runtime` | M10 |
 | `internal/statusline/` | `irie statusline`: cost, context and plan use from Claude Code's status line | M10 |
+| `internal/dms/` | The dead man's switch guide's helpers, `irie dms`: the Healthchecks checks, the phone's check-in and the calendar file ([extensions.md](proposals/extensions.md) §2) | Extensions |
+| `internal/vpn/` | Mullvad VPN through its own CLI: the tunnel's state from `mullvad status --json` and `status listen --json`, lockdown, the account's expiry and the `:vpn` changes ([extensions.md](proposals/extensions.md) §4) | Extensions |
 | `e2e/` | Opt-in tests against the real Claude Code | M11 |
 
 ### 2.7 Install and first run
@@ -314,7 +316,7 @@ curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 
 ### 2.8 Peers: Irie on more than one machine
 
-A core can be paired with another machine's, which then is its peer ([multi-host](proposals/multi-host.md)). `irie peer add` pairs through that machine's phone gateway ([PHONE.md](PHONE.md)) as a phone does, with a pairing link that `irie remote pair --link` prints there, and keeps the token and the fingerprint of its Irie authority in `peers.json` (mode 0600), so the core trusts no other certificate for it. The core then follows the peer's sessions over HTTPS and shows them after its own, each as a row of its own: `host` names the machine, and its id is the machine's name, a slash and that core's own id (`Asahi/s38…`). A client sends that id back as it is, and the core passes the call on: `send`, `close`, `rename`, `park`, `unpark`, `priority`, `freeze`, `thaw`, `rate`, `result`, `screen`, `keys` and `conversation`, and a subscription to that session. `reorder` refuses, since a peer's rows keep that machine's order. `show` picks the row and the slot draws its conversation, since its terminal is on its own machine. `^name` among the first line's words starts the task on that machine, which reads its own `@` and `+` words; `^` and a word that names no machine stay in the task as typed.
+A core can be paired with another machine's, which then is its peer ([multi-host](proposals/multi-host.md)). `irie peer add` pairs through that machine's phone gateway ([PHONE.md](PHONE.md)) as a phone does, with a pairing link that `irie remote pair --link` prints there, and keeps the token and the fingerprint of its Irie authority in `peers.json` (mode 0600), so the core trusts no other certificate for it. The core then follows the peer's sessions over HTTPS and shows them after its own, each as a row of its own: `host` names the machine, its id is the machine's name, a slash and that core's own id (`Asahi/s38…`), and its detail starts with where it runs (`on Asahi · running go test`), so every client shows it. A client sends that id back as it is, and the core passes the call on: `send`, `close`, `rename`, `park`, `unpark`, `priority`, `freeze`, `thaw`, `rate`, `result`, `screen`, `keys` and `conversation`, and a subscription to that session. `reorder` refuses, since a peer's rows keep that machine's order. `show` picks the row and the slot draws its conversation, since its terminal is on its own machine. `^name` among the first line's words starts the task on that machine, which reads its own `@` and `+` words; `^` and a word that names no machine stay in the task as typed.
 
 **Where a task goes.** Each core advertises its machine in its header: `load` and `memory`, and `machine`: whether Claude Code is signed in, the profiles, the free disk, and the user's own Claude Code hooks (`~/.claude/settings.json`), each as the SHA-256 of its event, matcher and command without the program's folder or the home folder, with any program they start that the machine lacks. A task goes to a peer only where those hooks are all there and all run, so it never runs without a hook it would have had here, such as a repo's guard: `^name` says so and starts nothing anywhere. With `place.mode = "auto"`, a task typed with no `^` word goes to a peer only while this machine is busy (fewer than `headroom_cpus` free, less than `headroom_gib` free, memory pressure, or fewer than 64 ptys), only to a peer where Claude Code is signed in, the profile exists, and the `@repo` is one `peers.<name>.repos` lists, and only to one with at least 2 more CPUs and 2 GiB more free than this machine; each task placed there counts as a CPU and a GiB against it for 2 minutes. A task that reads as more for the jot before it stays with that jot's agent, and one the peer refuses starts here. The result says why it went.
 
@@ -506,7 +508,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
 | `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10) |
 | (the Mac app's sheet) | A model for this one task, `model` in `spawn`: an alias Claude Code's `--model` takes (`fable`, `opus`, `sonnet`) or a model's full name. Only a Claude Code profile takes it; a core that does lists `spawn-model` in `hello` |
-| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
+| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:setup switch` starts the dead man's switch guide, a Claude Code session on `+claude` that runs Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2); with `vpn.on`, `:vpn` says Mullvad VPN's state, and `:vpn on`, `:vpn off`, `:vpn lockdown on\|off`, `:vpn time` and `:vpn <place>` (`se`, `se got`, `se-got-wg-001`) change it or read the account's time, unless an agent types them (§4.4 of the same proposal); `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
 
@@ -956,6 +958,8 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_RUNTIME_DIR/irie/`, or `$TMPDIR/irie-<uid>/` if unset (macOS) | `core.sock`, `core.lock`, `app.lock`. macOS limits socket paths to about 104 bytes, so this path must stay short | core |
 | `$XDG_DATA_HOME/irie/worktrees/<repo>/<slug>/` | Worktrees | core |
 | `$XDG_DATA_HOME/irie/scratch/<slug>/` | Working dir for tasks that name no repo | core |
+| `$XDG_DATA_HOME/irie/skills/plugins/<digest>/` | The plugin folder of Irie's own skills, named by a digest of what it holds, its files read-only; checked before each launch that uses it and made again if anything changed; removed at the next core start when no session uses it | core |
+| `$XDG_STATE_HOME/irie/dms/` | The dead man's switch helpers' `healthchecks.key` and `switch.json` (the checks' ids and ping URLs), both 0600 and never printed | `irie dms` |
 | `$XDG_CACHE_HOME/irie/env.json` | Captured login-shell environment | `irie app-launch` |
 | `~/Applications/Irie.app` | The launcher | `irie install-app` |
 
@@ -1172,6 +1176,10 @@ headroom_gib = 2              # or less memory than this is free, or the kernel 
 
 # [peers.Asahi]               # one of the machines `irie peer add` paired with
 # repos = ["irie"]            # the @names auto may send there; a task with no @ goes too
+
+[vpn]                         # Mullvad VPN control (proposals/extensions.md §4)
+on = false                    # show the VPN in every client, and take the :vpn words
+mullvad = ""                  # the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
 ```
 
 ---

@@ -153,6 +153,7 @@ func (c *Core) headerNow() ipc.Header {
 	h.Machine = c.mach
 	h.Peers = c.peersInfo()
 	h.Trod = c.trodHeader(c.awakeNow())
+	h.VPN = c.vpnHeader(time.Now())
 	return h
 }
 

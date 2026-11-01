@@ -89,7 +89,10 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 	if r := rows[0]; r.Host != "Asahi" || r.Parent != "Asahi/s0" || r.Order != 0 || r.HostDown != nil || rows[1].Order != 1 {
 		t.Errorf("rows = %+v", rows)
 	}
-	if len(info) != 1 || !info[0].Up || info[0].Sessions != 2 || info[0].Version != "peer-v" || info[0].Load == nil || info[0].Load.CPUs != 10 {
+	if rows[0].Detail != "on Asahi · working" || rows[1].Detail != "on Asahi · idle" {
+		t.Errorf("details = %q, %q", rows[0].Detail, rows[1].Detail)
+	}
+	if len(info) != 1 || !info[0].Up || info[0].Sessions != 2 || info[0].Version != "peer-v" || info[0].Load == nil || info[0].Load.CPUs != 10 || info[0].Refuses != "" {
 		t.Errorf("peers = %+v", info)
 	}
 
@@ -142,7 +145,7 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 
 	// ^name starts a task there, which reads its own @ and + words.
 	g.Core.Set(ipc.OpInput, ipc.InputResult{Did: "started", Op: ipc.OpSpawn, Text: "Started fix it", Session: &ipc.Session{ID: "s7", Name: "fix it"}})
-	r, err := c.input(ipc.InputArgs{Text: "@irie ^asa fix it\nand test it", Session: "s1"})
+	r, err := c.input(ipc.InputArgs{Text: "@irie ^asa fix it\nand test it", Session: "s1"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,12 +163,12 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		rows := c.list()
-		return len(rows) == 2 && rows[0].HostDown != nil && !c.peersInfo()[0].Up
+		return len(rows) == 2 && rows[0].HostDown != nil && !c.peersInfo()[0].Up && strings.HasPrefix(rows[0].Detail, "Asahi isn't answering · ")
 	})
 	if _, err := c.Call(ipc.OpSend, json.RawMessage(`{"session":"Asahi/s2","text":"hi"}`)); !errors.As(err, &e) || e.Code != ipc.CodePeerDown {
 		t.Errorf("send while down: %v", err)
 	}
-	if _, err := c.input(ipc.InputArgs{Text: "^asahi fix it"}); !errors.As(err, &e) || e.Code != ipc.CodePeerDown {
+	if _, err := c.input(ipc.InputArgs{Text: "^asahi fix it"}, 0); !errors.As(err, &e) || e.Code != ipc.CodePeerDown {
 		t.Errorf("^asahi while down: %v", err)
 	}
 

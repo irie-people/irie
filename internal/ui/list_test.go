@@ -443,8 +443,8 @@ func TestAnotherMachinesCardSaysWhereItRuns(t *testing.T) {
 	down := time.Date(2026, 11, 1, 10, 41, 0, 0, time.UTC)
 	m, _ := newModel(t, 60, 40, 0)
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Header: &ipc.Header{}, Sessions: []ipc.Session{
-		{ID: "Asahi/s1", Name: "fix the build", State: ipc.StateWorking, Detail: "running go test", Host: "Asahi", Created: now},
-		{ID: "Asahi/s2", Name: "write the docs", State: ipc.StateIdle, Host: "Asahi", HostDown: &down, Created: now},
+		{ID: "Asahi/s1", Name: "fix the build", State: ipc.StateWorking, Detail: "on Asahi · running go test", Host: "Asahi", Created: now},
+		{ID: "Asahi/s2", Name: "write the docs", State: ipc.StateIdle, Detail: "Asahi isn't answering · idle", Host: "Asahi", HostDown: &down, Created: now},
 	}}})
 	view := strings.Join(screen(t, m), "\n")
 	for _, want := range []string{"on Asahi · running go test", "Asahi isn't answering · "} {

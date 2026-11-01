@@ -14,7 +14,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup, :models, :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch], :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -123,8 +123,12 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(name, UndoArgs{}, nil)
 	case name == "setup" && (arg == "" || arg == "local"):
 		return step(OpTool, ToolArgs{Name: ToolSetup}, nil)
+	case name == "setup" && arg == "switch":
+		return step(OpTool, ToolArgs{Name: ToolSwitch}, nil)
 	case name == "models" && arg == "":
 		return step(OpTool, ToolArgs{Name: ToolModels}, nil)
+	case name == "vpn":
+		return step(OpVPN, vpnArgs(arg), nil)
 	case name == "route" && arg != "":
 		return step(OpRoute, RouteArgs{Task: arg}, nil)
 	case (name == OpFreeze || name == OpThaw) && arg == "all":
@@ -173,6 +177,22 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return Step{Op: OpMove, Args: MoveArgs{VendorID: o.VendorID}, Outside: o}, nil
 	}
 	return Step{}, Errorf(CodeBadArgs, "Irie has no :%s. The commands are %s.", name, Commands)
+}
+
+// vpnArgs reads the words after :vpn (docs/proposals/extensions.md §4.1):
+// nothing for the state, on, off, time, lockdown on or off, or else a place
+// such as se, se got or se-got-wg-001, which the core checks.
+func vpnArgs(arg string) VPNArgs {
+	words := strings.Fields(strings.ToLower(arg))
+	switch {
+	case len(words) == 0:
+		return VPNArgs{}
+	case len(words) == 1 && (words[0] == VPNOn || words[0] == VPNOff || words[0] == VPNTime):
+		return VPNArgs{Do: words[0]}
+	case words[0] == VPNLockdown:
+		return VPNArgs{Do: VPNLockdown, Args: words[1:]}
+	}
+	return VPNArgs{Do: VPNPlace, Args: words}
 }
 
 // live reports whether a session's agent has not ended.
@@ -267,6 +287,11 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Session, r.Text = &s, "Moved "+outsideName(*st.Outside)+" into Irie."
 	case OpRoute:
 		r.Did, r.Text = InputAnswered, as[RouteChoice](result).Reason
+	case OpVPN:
+		r.Text = as[VPNResult](result).Text
+		if d := as[VPNArgs](st.Args).Do; d == "" || d == VPNTime {
+			r.Did = InputAnswered
+		}
 	case OpUndo, OpRedo:
 		u := as[UndoResult](result)
 		r.Text = undone(st.Op, u)

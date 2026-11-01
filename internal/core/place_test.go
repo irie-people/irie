@@ -174,7 +174,7 @@ func TestATaskTypedHereGoesToTheRoomierMachine(t *testing.T) {
 		p := c.peers["Asahi"]
 		return p.up && p.header != nil && p.header.Machine != nil
 	})
-	r, err := c.input(ipc.InputArgs{Text: "fix it"})
+	r, err := c.input(ipc.InputArgs{Text: "fix it"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestATaskTypedHereGoesToTheRoomierMachine(t *testing.T) {
 	c.mu.Lock()
 	c.mach = &ipc.Machine{Name: "Mac", Hooks: []string{"guard"}}
 	c.mu.Unlock()
-	if _, err := c.input(ipc.InputArgs{Text: "^asahi fix it"}); err == nil || !strings.Contains(err.Error(), "doesn't run the Claude Code hooks") {
+	if _, err := c.input(ipc.InputArgs{Text: "^asahi fix it"}, 0); err == nil || !strings.Contains(err.Error(), "doesn't run the Claude Code hooks") {
 		t.Errorf("^asahi with other hooks: %v", err)
 	}
 	if n := len(g.Core.Calls(ipc.OpInput)); n != 1 {

@@ -719,6 +719,19 @@ command = "claude"
 	}
 }
 
+func TestVPNSection(t *testing.T) {
+	if v := Default().VPN; v.On || v.Mullvad != "" {
+		t.Errorf("default vpn = %+v, want off", v)
+	}
+	c, err := Load(writeFile(t, "[vpn]\non = true\nmullvad = \"/usr/local/bin/mullvad\"\n"))
+	if err != nil || !c.VPN.On || c.VPN.Mullvad != "/usr/local/bin/mullvad" {
+		t.Errorf("vpn = %+v, %v", c.VPN, err)
+	}
+	if _, err := Load(writeFile(t, "[vpn]\nmullvad = \"mullvad\"\n")); err == nil || !strings.Contains(err.Error(), "vpn.mullvad") {
+		t.Errorf("a bare name: %v", err)
+	}
+}
+
 func TestArchMikaelFromTheFile(t *testing.T) {
 	c, err := Load(writeFile(t, "[arch.mikael]\ndoor = false\ngood = [\"Give credit where it is due.\", \"Be honest with clients.\"]\n"))
 	if err != nil {
