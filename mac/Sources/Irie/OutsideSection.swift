@@ -108,7 +108,8 @@ extension Store {
 
     /// Takes an outside frame. A problem listing them shows once, when new.
     func applyOutside(_ f: Frame) {
-        outside = f.outside ?? []
+        let list = f.outside ?? []
+        if list != outside { outside = list }
         if let k = outsideSelection, !outside.contains(where: { $0.id == k }) {
             outsideSelection = nil
         }
