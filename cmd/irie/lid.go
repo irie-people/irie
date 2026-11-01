@@ -173,7 +173,7 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 			return err
 		}
 		if _, err := os.Stat(lid.Rule); err == nil {
-			if err := asRoot(lid.RemoveScript(), "Irie wants to remove the rule that let it keep this Mac awake with its lid closed.", stdin); err != nil {
+			if err := asRoot(lid.RemoveScript(), "Irie wants to remove the rule that let it keep this Mac awake with its lid closed."); err != nil {
 				return fmt.Errorf("setup lid: remove %s: %w", lid.Rule, err)
 			}
 		}
@@ -193,7 +193,7 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if err := asRoot(script, "Irie wants to keep this Mac awake with its lid closed while agents work. It adds a rule that lets you turn sleep off and on without a password.", stdin); err != nil {
+		if err := asRoot(script, "Irie wants to keep this Mac awake with its lid closed while agents work. It adds a rule that lets you turn sleep off and on without a password."); err != nil {
 			return fmt.Errorf("setup lid: install %s: %w", lid.Rule, err)
 		}
 		if !m.Allowed() {
@@ -226,10 +226,13 @@ Undo it with irie setup lid --remove.
 	return nil
 }
 
-// asRoot runs script as root, through sudo's prompt in a terminal or macOS's
-// password dialog, which says why.
-func asRoot(script, why string, stdin io.Reader) error {
-	if isTerminal(stdin) {
+// asRoot runs script as root, through sudo's prompt in a terminal or, with
+// none, macOS's password dialog, which says why. sudo asks on the
+// controlling terminal, which a shell an agent or an app runs, such as
+// Claude Code's !, lacks even when its stdin is a device such as /dev/null.
+func asRoot(script, why string) error {
+	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		tty.Close()
 		cmd := exec.Command("/usr/bin/sudo", "/bin/sh", "-c", script)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		return cmd.Run()
@@ -237,7 +240,7 @@ func asRoot(script, why string, stdin io.Reader) error {
 	quote := func(s string) string { return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"` }
 	out, err := exec.Command("/usr/bin/osascript", "-e", "do shell script "+quote(script)+" with prompt "+quote(why)+" with administrator privileges").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("macOS's password dialog: %v: %s (or run irie setup lid in a terminal)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
