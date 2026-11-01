@@ -11,6 +11,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/focus"
+	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/sysload"
@@ -160,5 +161,33 @@ func TestOutsideSurvivesTheCore(t *testing.T) {
 	c.saveOutside(nil)
 	if _, err := os.Stat(c.outsideFile()); !os.IsNotExist(err) {
 		t.Errorf("nothing slowed, yet a file: %v", err)
+	}
+}
+
+func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
+	// A boost wakes a sweep, which must not slow this machine's processes.
+	t.Setenv("IRIE_GABRIEL", "off")
+	cfg := config.Default()
+	cfg.Local.URL = "http://127.0.0.1:1" // not Irie's own Ollama: no models to free
+	c := &Core{sessions: map[string]*session{}, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	c.useConfig(cfg)
+	for _, bad := range []ipc.GabrielArgs{{Boost: true, Stop: true}, {Boost: true, For: "10s"}, {Boost: true, For: "13h"}, {Boost: true, For: "soon"}} {
+		if _, err := c.gabrielOp(bad); err == nil {
+			t.Errorf("%+v: no error", bad)
+		}
+	}
+	r, err := c.gabrielOp(ipc.GabrielArgs{Boost: true, For: "30m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.BoostUntil == nil || time.Until(*r.BoostUntil) < 29*time.Minute || time.Until(*r.BoostUntil) > 30*time.Minute {
+		t.Errorf("boost until %v, want in half an hour", r.BoostUntil)
+	}
+	r, _ = c.gabrielOp(ipc.GabrielArgs{Boost: true})
+	if r.BoostUntil == nil || time.Until(*r.BoostUntil) < 59*time.Minute {
+		t.Errorf("a boost of the configured hour ends at %v", r.BoostUntil)
+	}
+	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil {
+		t.Errorf("stopped, still until %v", r.BoostUntil)
 	}
 }

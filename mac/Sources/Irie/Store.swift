@@ -35,6 +35,10 @@ final class Store: ObservableObject {
     @Published private(set) var canPark = false
     /// Whether the core has the trod bot (DESIGN §4.10).
     @Published private(set) var canTrod = false
+    /// The core gives a boost of Gabriel's (DESIGN §4.11).
+    @Published private(set) var canBoost = false
+    /// While a boost is on, when it ends.
+    @Published private(set) var boostUntil: Date?
     /// Cards parked or unparked from under the pointer, each with whether
     /// it is drawn parked: it stays where it was until the pointer leaves
     /// it, so a second click on the same spot takes it back (Controls.swift).
@@ -203,6 +207,7 @@ final class Store: ObservableObject {
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
                 canTrod = hello.features.contains("trod")
+                canBoost = hello.features.contains("gabriel")
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
@@ -374,6 +379,7 @@ final class Store: ObservableObject {
         canConfigure = true
         canPark = true
         canTrod = true
+        canBoost = true
         canUndo = true
         taskRepo = "irie"
     }
@@ -754,6 +760,31 @@ final class Store: ObservableObject {
                 }
             } catch {
                 say("Couldn’t \(on ? "start" : "stop") the trod bot: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
+    /// Whether a boost is on now.
+    var boosting: Bool { (boostUntil ?? .distantPast) > Date() }
+
+    /// Starts a boost of Gabriel's, for arch.gabriel.boost: the focus gets
+    /// the machine first whether it is busy or not, and idle local models
+    /// let their memory go; or stops it (DESIGN §4.11).
+    func setBoost(_ on: Bool) {
+        Task {
+            do {
+                let r = try await client.call("gabriel", on ? GabrielArgs(boost: true) : GabrielArgs(stop: true), as: GabrielResult.self)
+                boostUntil = r.boostUntil
+                if let until = r.boostUntil {
+                    var text = "Boosting your focus until \(until.formatted(date: .omitted, time: .shortened)): the rest runs on the efficiency cores."
+                    if let freed = r.freed, !freed.isEmpty { text += " Freed \(freed.joined(separator: ", "))." }
+                    if r.lowPower == true { text += " Low Power Mode is on: turn it off in System Settings > Battery for full speed." }
+                    say(text, error: false, seconds: 6)
+                } else {
+                    say("The boost is over.", error: false)
+                }
+            } catch {
+                say("Couldn’t \(on ? "start" : "stop") the boost: \(error.localizedDescription)", error: true)
             }
         }
     }

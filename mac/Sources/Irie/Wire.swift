@@ -228,6 +228,24 @@ struct TrodResult: Decodable {
     var hand: Hand?
 }
 
+/// Start a boost of Gabriel's, or stop it (DESIGN §4.11): for its time, the
+/// focus gets the machine first whether it is busy or not.
+struct GabrielArgs: Encodable {
+    var boost: Bool?
+    var stop: Bool?
+}
+
+/// Gabriel's report, as far as the app reads it.
+struct GabrielResult: Decodable {
+    var boostUntil: Date?
+    var lowPower: Bool?
+    var freed: [String]?
+    enum CodingKeys: String, CodingKey {
+        case freed
+        case boostUntil = "boost_until", lowPower = "low_power"
+    }
+}
+
 struct HelloArgs: Encodable {
     var client = "mac"
     var api = 1

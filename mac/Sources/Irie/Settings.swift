@@ -241,6 +241,8 @@ struct CoreConfig: Decodable, Equatable {
             var word: String
             var heavy: Double
             var spare: [String]
+            /// How long a boost lasts, such as "1h"; nil from a core from before boosts.
+            var boost: String?
         }
     }
 
@@ -1151,6 +1153,7 @@ private struct RepoSettings: View {
 /// Mikael, the first, stands with you against evil and for the good you
 /// want to see in the world, which you write here in your own words.
 private struct ArchSettings: View {
+    @EnvironmentObject private var store: Store
     @ObservedObject var model: SettingsModel
 
     var body: some View {
@@ -1203,6 +1206,10 @@ private struct ArchSettings: View {
                     Toggle("Gabriel gives your focus the machine first", isOn: bindG(g, \.on, "on"))
                     Toggle("Slow your heavy apps outside Irie too", isOn: bindG(g, \.outside, "outside"))
                         .disabled(!g.on)
+                    LabeledContent("Boost your focus") {
+                        Button(store.boosting ? "Stop" : "Boost for " + GeneralSettings.spoken(g.boost ?? "1h")) { store.setBoost(!store.boosting) }
+                            .disabled(!store.canBoost || !g.on)
+                    }
                     Picker("You’re away after", selection: bindG(g, \.away, "away")) {
                         ForEach(Self.aways.contains(g.away) ? Self.aways : Self.aways + [g.away], id: \.self) { d in
                             Text(d == "0s" ? "Never" : GeneralSettings.spoken(d)).tag(d)
@@ -1212,7 +1219,7 @@ private struct ArchSettings: View {
                 } header: {
                     Text("Gabriel")
                 } footer: {
-                    footnote("While you’re at your computer and it’s busy, what you’re working on comes first: the session you’re looking at or messaged in the last \(GeneralSettings.spoken(g.word)), and the app in front. Every other session, and your other heavy apps, step back into macOS’s background state until there’s room again or you step away. Nothing is held back while you’re away. `irie ctl gabriel` says what he holds back.")
+                    footnote("While you’re at your computer and it’s busy, what you’re working on comes first: the session you’re looking at or messaged in the last \(GeneralSettings.spoken(g.word)), and the app in front. Every other session, and your other heavy apps, step back into macOS’s background state until there’s room again or you step away. Nothing is held back while you’re away. A boost puts your focus first right away, busy or not, and frees idle local models, until it ends by itself; it changes only what runs first, never a clock or a fan. `irie ctl gabriel` says what he holds back.")
                 }
                 Section {
                     LineList(lines: g.spare, prompt: "Add an app never to slow, such as “Xcode”") {

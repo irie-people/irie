@@ -129,7 +129,11 @@ type Gabriel struct {
 	Word    time.Duration `toml:"word"`    // a session you message or start stays in your focus this long
 	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
 	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
+	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
 }
+
+// MaxBoost is the longest a boost may last, so none is ever forgotten.
+const MaxBoost = 12 * time.Hour
 
 // GabrielSpare are the apps Gabriel never slows until you write your own
 // list: calls, music, video and recording, which must not stutter.
@@ -595,7 +599,7 @@ func Default() Config {
 		},
 		Arch: Arch{
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
-			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare()},
+			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour},
 		},
 		Remote: Remote{Port: DefaultRemotePort},
 		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
@@ -1111,6 +1115,9 @@ func (c Config) Validate() error {
 	}
 	if g.Heavy <= 0 {
 		bad("arch.gabriel.heavy = %v: must be above 0, a percent of one CPU", g.Heavy)
+	}
+	if g.Boost < time.Minute || g.Boost > MaxBoost {
+		bad("arch.gabriel.boost = %v: must be from 1m to %v", g.Boost, MaxBoost)
 	}
 	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps Gabriel never slows")
 	switch c.Place.Mode {

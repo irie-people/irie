@@ -737,7 +737,11 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		c.markWord(a.Session)
 		return nil, nil
 	case ipc.OpGabriel:
-		return c.gabrielReport(), nil
+		var a ipc.GabrielArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.gabrielOp(a)
 	case ipc.OpScreen:
 		var a ipc.ScreenArgs
 		if err := decode(raw, &a); err != nil {

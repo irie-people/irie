@@ -244,21 +244,35 @@ type TrodHand struct {
 }
 
 // TrodResult is the trod bot's report (DESIGN §4.10).
+// GabrielArgs starts or stops a boost (OpGabriel): for its time, the user's
+// focus gets the machine first whether it is busy or not. No args asks for
+// the report alone.
+type GabrielArgs struct {
+	Boost bool   `json:"boost,omitempty"` // start a boost, or make the one on go on for For from now
+	Stop  bool   `json:"stop,omitempty"`  // end the boost
+	For   string `json:"for,omitempty"`   // how long, such as "30m"; "" = arch.gabriel.boost
+}
+
 // GabrielResult is Gabriel's report (OpGabriel).
 type GabrielResult struct {
-	On       bool             `json:"on"`      // he works in this core
-	Outside  bool             `json:"outside"` // he slows apps outside Irie too
-	Present  bool             `json:"present"` // the user is at the computer
-	Idle     string           `json:"idle"`    // since their last keyboard or mouse input, such as "4s"
-	Busy     bool             `json:"busy"`    // the machine is busy
-	Holding  bool             `json:"holding"` // he holds back what is out of the user's focus
-	CPUs     int              `json:"cpus"`
-	RunQueue float64          `json:"run_queue"`
-	Pressure int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
-	Front    string           `json:"front,omitempty"` // the app in front, when he read it
-	Focus    []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
-	Held     []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
-	Apps     []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
+	On      bool   `json:"on"`      // he works in this core
+	Outside bool   `json:"outside"` // he slows apps outside Irie too
+	Present bool   `json:"present"` // the user is at the computer
+	Idle    string `json:"idle"`    // since their last keyboard or mouse input, such as "4s"
+	Busy    bool   `json:"busy"`    // the machine is busy
+	Holding bool   `json:"holding"` // he holds back what is out of the user's focus
+	// BoostUntil is when the boost ends, while one is on: the user's focus
+	// gets the machine first then whether it is busy or not.
+	BoostUntil *time.Time       `json:"boost_until,omitempty"`
+	LowPower   bool             `json:"low_power,omitempty"` // macOS's Low Power Mode is on, which slows the whole machine
+	Freed      []string         `json:"freed,omitempty"`     // the idle local models the boost unloaded
+	CPUs       int              `json:"cpus"`
+	RunQueue   float64          `json:"run_queue"`
+	Pressure   int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
+	Front      string           `json:"front,omitempty"` // the app in front, when he read it
+	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
+	Held       []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
+	Apps       []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
 }
 
 // GabrielSession is a session in Gabriel's report.

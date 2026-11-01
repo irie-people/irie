@@ -132,7 +132,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	}
 	if want := (Arch{
 		Mikael:  Mikael{On: true, Door: true, Good: []string{}},
-		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare()},
+		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour},
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
@@ -774,13 +774,15 @@ func TestArchGabrielFromTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Gabriel{On: true, Outside: false, Away: 2 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: []string{"Xcode"}}); !reflect.DeepEqual(c.Arch.Gabriel, want) {
+	if want := (Gabriel{On: true, Outside: false, Away: 2 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: []string{"Xcode"}, Boost: time.Hour}); !reflect.DeepEqual(c.Arch.Gabriel, want) {
 		t.Errorf("arch.gabriel = %+v, want %+v", c.Arch.Gabriel, want)
 	}
 	for body, want := range map[string]string{
-		"[arch.gabriel]\nheavy = 0\n":      "arch.gabriel.heavy = 0",
-		"[arch.gabriel]\naway = \"-1m\"\n": "must not be negative",
-		"[arch.gabriel]\nspare = [\"\"]\n": "arch.gabriel.spare[0]: is empty",
+		"[arch.gabriel]\nheavy = 0\n":       "arch.gabriel.heavy = 0",
+		"[arch.gabriel]\naway = \"-1m\"\n":  "must not be negative",
+		"[arch.gabriel]\nspare = [\"\"]\n":  "arch.gabriel.spare[0]: is empty",
+		"[arch.gabriel]\nboost = \"13h\"\n": "arch.gabriel.boost = 13h0m0s: must be from 1m to 12h0m0s",
+		"[arch.gabriel]\nboost = \"10s\"\n": "arch.gabriel.boost = 10s",
 	} {
 		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: err = %v, want %q", body, err, want)

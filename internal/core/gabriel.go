@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -15,6 +16,7 @@ import (
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/focus"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/sysload"
 )
@@ -65,6 +67,9 @@ type gabState struct {
 	irieFront bool            // Irie, or a terminal it may be in, is in front
 	focus     map[string]bool // the sessions in the user's focus
 	outside   map[int]outProc // the apps outside Irie it slowed, by pid
+	// boostUntil is when the boost on ends: until then the user's focus
+	// gets the machine first whether it is busy or not.
+	boostUntil time.Time
 }
 
 // outProc is an app outside Irie that Gabriel slowed.
@@ -161,7 +166,10 @@ func (c *Core) gabrielSweep() {
 	} else {
 		st.present, st.busy, st.calmSince = false, false, time.Time{}
 	}
-	st.holding = on && st.present && st.busy
+	// A boost holds back as a busy machine does, until its time is up;
+	// while the user is away it waits like the rest.
+	boosting := now.Before(st.boostUntil)
+	st.holding = on && st.present && (st.busy || boosting)
 	st.frontOK, st.irieFront = false, false
 	if st.holding {
 		if a, ok, err := focus.Front(); err == nil && ok {
@@ -184,6 +192,11 @@ func (c *Core) gabrielSweep() {
 
 	c.mu.Lock()
 	st.outside = outside
+	// A boost started or stopped meanwhile wins; one whose time is up ends.
+	st.boostUntil = c.gab.boostUntil
+	if !st.boostUntil.IsZero() && !now.Before(st.boostUntil) {
+		st.boostUntil = time.Time{}
+	}
 	c.gab = st
 	frames := c.changes()
 	c.mu.Unlock()
@@ -392,9 +405,83 @@ func (c *Core) releaseOutside() {
 	os.Remove(c.outsideFile())
 }
 
+// gabrielOp starts or stops a boost, then reports (OpGabriel). A boost
+// lasts For, or arch.gabriel.boost, at most config.MaxBoost; starting one
+// lets the idle models of Irie's own Ollama go, to free their memory. It
+// changes only which processes macOS runs first, never a clock or a fan.
+func (c *Core) gabrielOp(a ipc.GabrielArgs) (ipc.GabrielResult, error) {
+	var freed []string
+	switch {
+	case a.Boost && a.Stop:
+		return ipc.GabrielResult{}, ipc.Errorf(ipc.CodeBadArgs, "boost or stop, not both")
+	case a.Boost:
+		d := c.cfg().Arch.Gabriel.Boost
+		if a.For != "" {
+			var err error
+			if d, err = time.ParseDuration(a.For); err != nil || d < time.Minute || d > config.MaxBoost {
+				return ipc.GabrielResult{}, ipc.Errorf(ipc.CodeBadArgs, "for %q: give from 1m to %v, such as 30m", a.For, config.MaxBoost)
+			}
+		}
+		c.mu.Lock()
+		c.gab.boostUntil = time.Now().Add(d)
+		c.mu.Unlock()
+		freed = c.freeModels()
+		go c.gabrielSweep()
+	case a.Stop:
+		c.mu.Lock()
+		c.gab.boostUntil = time.Time{}
+		c.mu.Unlock()
+		go c.gabrielSweep()
+	}
+	r := c.gabrielReport()
+	r.Freed = freed
+	return r, nil
+}
+
+// freeModels lets the models of Irie's own Ollama go that no live session
+// runs on, and returns their names. It holds no lock.
+func (c *Core) freeModels() []string {
+	c.mu.Lock()
+	inUse := map[string]bool{}
+	for _, x := range c.sessions {
+		if x.local && !x.dead && x.model != "" {
+			inUse[x.model] = true
+		}
+	}
+	own := false
+	if c.cfg().Local.URL == "" {
+		rt := c.runtimePane()
+		own = rt != nil && !rt.Dead
+	}
+	c.mu.Unlock()
+	if !own {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	o := localmodel.Ollama{URL: c.ownURL(), HTTP: c.http}
+	loaded, err := o.Running(ctx)
+	if err != nil {
+		return nil
+	}
+	var freed []string
+	for _, l := range loaded {
+		if inUse[l.Name] {
+			continue
+		}
+		if err := o.Unload(ctx, l.Name); err != nil {
+			c.log.Warn("gabriel: unload", "model", l.Name, "err", err)
+			continue
+		}
+		freed = append(freed, l.Name)
+	}
+	return freed
+}
+
 // gabrielReport is `irie ctl gabriel`: what Gabriel sees and holds back.
 func (c *Core) gabrielReport() ipc.GabrielResult {
 	g := c.cfg().Arch.Gabriel
+	lowPower := focus.LowPower()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	st := c.gab
@@ -405,6 +492,11 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 	if st.frontOK {
 		r.Front = st.front.Name
 	}
+	if time.Now().Before(st.boostUntil) {
+		until := st.boostUntil
+		r.BoostUntil = &until
+	}
+	r.LowPower = lowPower
 	for _, id := range slices.Sorted(maps.Keys(st.focus)) {
 		if x := c.sessions[id]; x != nil {
 			r.Focus = append(r.Focus, ipc.GabrielSession{ID: id, Name: x.name})

@@ -135,6 +135,23 @@ func ParseProcs(out string) []Proc {
 	return ps
 }
 
+// LowPower reports whether macOS's Low Power Mode is on, which slows the
+// whole machine to save power (`pmset -g`, whose lowpowermode is 1 then).
+func LowPower() bool {
+	out, err := run("/usr/bin/pmset", "-g")
+	return err == nil && ParseLowPower(out)
+}
+
+// ParseLowPower reads the output of `pmset -g`.
+func ParseLowPower(out string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[0] == "lowpowermode" {
+			return f[1] == "1"
+		}
+	}
+	return false
+}
+
 // Awake returns the processes macOS is asked to keep the Mac or its
 // display awake for, by `pmset -g assertions`: each assertion's owner, and
 // the process it was made for, as coreaudiod makes one for an app that

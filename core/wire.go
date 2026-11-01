@@ -38,6 +38,7 @@ type (
 	TrodShift        = ipc.TrodShift
 	TrodArgs         = ipc.TrodArgs
 	TrodHand         = ipc.TrodHand
+	GabrielArgs      = ipc.GabrielArgs
 	GabrielResult    = ipc.GabrielResult
 	GabrielSession   = ipc.GabrielSession
 	GabrielApp       = ipc.GabrielApp

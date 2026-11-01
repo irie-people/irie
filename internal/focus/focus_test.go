@@ -2,6 +2,7 @@ package focus
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +74,15 @@ Listed by owning process:
 	want := map[int]bool{21888: true, 312: true, 777: true, 900: true}
 	if got := ParseAwake(out); !reflect.DeepEqual(got, want) {
 		t.Errorf("awake = %v, want %v", got, want)
+	}
+}
+
+func TestParseLowPower(t *testing.T) {
+	on := "System-wide power settings:\nCurrently in use:\n standby              1\n lowpowermode         1\n hibernatemode        3\n"
+	if !ParseLowPower(on) {
+		t.Error("Low Power Mode on was read as off")
+	}
+	if ParseLowPower(strings.Replace(on, "lowpowermode         1", "lowpowermode         0", 1)) || ParseLowPower("") {
+		t.Error("Low Power Mode off, or unsaid, was read as on")
 	}
 }
