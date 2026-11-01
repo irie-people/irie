@@ -206,3 +206,28 @@ func TestAJotWaitingForItsAgentOutlivesACoreRestart(t *testing.T) {
 	c.restartCore()
 	c.prompted(a.Session.ID, "also keep the old flag")
 }
+
+// A task typed to input is a jot: one that reads as more for the task
+// typed just before goes to its agent, and the same text typed with Apart
+// takes it back and starts it on its own, as the Mac app's New task does.
+func TestATypedJotThatReadsAsMoreGoesToTheTaskTypedBefore(t *testing.T) {
+	c := setupWith(t, agentConfig{spawn: "follow_up_delay = \"30s\"\n"})
+	a, err := c.input(ipc.InputArgs{Text: "prompt,stop"})
+	if err != nil || a.Did != ipc.InputSpawned || a.Session == nil {
+		t.Fatalf("the first: %+v, %v", a, err)
+	}
+	b, err := c.input(ipc.InputArgs{Text: "also check the docs"})
+	if err != nil || b.Did != ipc.InputAdded || b.Session == nil || b.Session.ID != a.Session.ID || b.Until.IsZero() || !strings.HasPrefix(b.Text, "Added to ") {
+		t.Fatalf("the second: %+v, %v", b, err)
+	}
+	n, err := c.input(ipc.InputArgs{Text: "also check the docs", Apart: a.Session.ID})
+	if err != nil || n.Did != ipc.InputSpawned || n.Session == nil || n.Session.ID == a.Session.ID || strings.Contains(n.Text, "has it too") {
+		t.Errorf("started apart: %+v, %v", n, err)
+	}
+	if _, err := os.Stat(c.paths.FollowUpFile(a.Session.ID)); !os.IsNotExist(err) {
+		t.Errorf("the jot taken back still waits: %v", err)
+	}
+	if n := c.agentPanes(); n != 2 {
+		t.Errorf("%d agents, want 2", n)
+	}
+}

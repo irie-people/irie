@@ -122,6 +122,7 @@ const (
 	OpFlip            = ipc.OpFlip
 	OpInput           = ipc.OpInput
 	InputSpawned      = ipc.InputSpawned
+	InputAdded        = ipc.InputAdded
 	InputAnswered     = ipc.InputAnswered
 	InputRan          = ipc.InputRan
 	InputAsked        = ipc.InputAsked
