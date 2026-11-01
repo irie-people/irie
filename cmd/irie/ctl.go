@@ -48,6 +48,11 @@ const ctlUsage = `usage: irie ctl <command>
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
+  irie ctl trod [on|off] [--json]       the trod bot: whether it works now,
+                                         the rules and guidelines it gives each
+                                         agent it sends on, and what it did
+                                         tonight or last night; on and off turn
+                                         it on or off (trod.on)
   irie ctl close [SESSION]               close a session, by id or name, or with
                                          none the one this runs in: an agent
                                          closes its own once you approve its
@@ -114,6 +119,8 @@ func ctl(args []string) error {
 		return ctlReopen(args[1:])
 	case "dog":
 		return ctlDog(args[1:])
+	case "trod":
+		return ctlTrod(args[1:])
 	case "show":
 		return ctlShow(args[1:])
 	case "rename":

@@ -65,6 +65,9 @@ const (
 	// place and runs on the result at once: the Mac app's Settings window
 	// (DESIGN §5.5).
 	OpConfig = "config"
+	// OpTrod is the trod bot's report: whether it works now, the
+	// rules and guidelines it gives, and what it did (DESIGN §4.10).
+	OpTrod = "trod"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -160,6 +163,64 @@ type Session struct {
 	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
 	// through or the dog does not watch it.
 	Loose *Loose `json:"loose,omitempty"`
+	// Trod is what the trod bot did for it in this night's shift or
+	// the last (DESIGN §4.10); nil when it did nothing.
+	Trod *TrodRow `json:"trod,omitempty"`
+}
+
+// TrodRow is what the trod bot did for a session in one shift.
+type TrodRow struct {
+	Sent   int       `json:"sent"`   // how often it sent the session on
+	Last   time.Time `json:"last"`   // when it last did
+	Reason string    `json:"reason"` // why it last did: question, error, limit or loose
+}
+
+// TrodShift is the trod bot while it is in its hours, for the
+// sidebars' header (DESIGN §4.10).
+type TrodShift struct {
+	Until *time.Time `json:"until,omitempty"` // when its hours end; nil for a shift around the clock
+	Away  bool       `json:"away,omitempty"`  // you are away, so it steps in
+	Awake bool       `json:"awake,omitempty"` // it keeps the Mac awake
+	// Capped: the plan is past trod.max_plan_use, so it sends nothing on.
+	Capped bool `json:"capped,omitempty"`
+}
+
+// TrodResult is the trod bot's report (DESIGN §4.10).
+type TrodResult struct {
+	On          bool          `json:"on"`                     // trod.on
+	In          bool          `json:"in"`                     // on, and in its hours now
+	Away        bool          `json:"away"`                   // you are away, by trod.away
+	Works       bool          `json:"works"`                  // in its hours and you are away: it steps in
+	Awake       bool          `json:"awake"`                  // it keeps the Mac awake
+	IdleSeconds *int64        `json:"idle_seconds,omitempty"` // how long the Mac has had no keyboard or mouse input, when Irie can tell
+	Start       string        `json:"start"`                  // trod.start and trod.end
+	End         string        `json:"end"`
+	From        time.Time     `json:"from"` // this night's shift, or the last
+	To          time.Time     `json:"to"`
+	MaxPlanUse  float64       `json:"max_plan_use"`         // trod.max_plan_use, in percent
+	FiveHours   *float64      `json:"five_hours,omitempty"` // how full the plan's five hours and week are, in percent, when the status line said
+	Week        *float64      `json:"week,omitempty"`
+	Capped      bool          `json:"capped,omitempty"` // past max_plan_use, so it sends nothing on
+	Rules       []string      `json:"rules"`
+	Guidelines  []string      `json:"guidelines"`
+	Sessions    []TrodSession `json:"sessions"` // in the list's order
+}
+
+// TrodSession is what the trod bot did for one session in that shift,
+// and why it leaves the session for you, if it does.
+type TrodSession struct {
+	ID    string     `json:"id"`
+	Name  string     `json:"name"`
+	State string     `json:"state"`
+	Sent  []TrodSend `json:"sent,omitempty"`
+	Left  string     `json:"left,omitempty"`
+}
+
+// TrodSend is one time the trod bot sent a session on.
+type TrodSend struct {
+	At     time.Time `json:"at"`
+	Reason string    `json:"reason"` // question, error, limit or loose
+	How    string    `json:"how"`    // stop (it sent the turn on), ask (it turned a question away) or typed
 }
 
 // Loose is what a jot left that has not landed (DESIGN §4.8).
@@ -263,6 +324,8 @@ type Header struct {
 	HelperStyle string  `json:"helper_style,omitempty"`
 	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
 	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
+	// Trod is the trod bot while it is in its hours (DESIGN §4.10).
+	Trod *TrodShift `json:"trod,omitempty"`
 }
 
 // Window is one window of a plan's use, such as the five hours.

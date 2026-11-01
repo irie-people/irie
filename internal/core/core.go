@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"reflect"
@@ -61,6 +62,10 @@ type Core struct {
 	sampling atomic.Bool  // a memory sample is running
 	sweeping atomic.Bool  // the jot dog looks at the finished jots (dog.go)
 
+	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
+	awakeMu      sync.Mutex  // guards awake; taken after mu
+	awake        *exec.Cmd   // what keeps the Mac awake for the trod bot, while it does
+
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
 
@@ -97,6 +102,8 @@ type Core struct {
 	split      string              // the session the Mac app shows beside its teammates, in the view session (view.go)
 	team       *tmux.Runner        // the team server, where sessions' teammates run (team.go)
 	teamSocket string              // its socket path, once known
+	trodNow    trodNow             // the trod bot as its last sweep found it (trod.go)
+	trodReset  time.Time           // when the plan's usage limit last reset, as far as the trod bot saw
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -241,6 +248,7 @@ func Run(o Options) error {
 	c.tick()
 	go c.sample()
 	go c.dogSweep()
+	go c.trodSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -264,6 +272,9 @@ func Run(o Options) error {
 			}
 			if n%dogEvery == 0 {
 				go c.dogSweep()
+			}
+			if n%trodEvery == 0 {
+				go c.trodSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
@@ -446,12 +457,20 @@ func (c *Core) record(x *session, e event.Event) {
 	}
 }
 
-// list returns the rows in the list's order (order.go). The caller holds
-// c.mu.
+// list returns the rows in the list's order (order.go), each with what
+// the trod bot did for it in its last shift. The caller holds c.mu.
 func (c *Core) list() []ipc.Session {
 	out := make([]ipc.Session, 0, len(c.sessions))
+	var from time.Time
+	if n := c.cfg().Trod; n.On {
+		from, _, _ = n.Shift(time.Now())
+	}
 	for _, x := range c.sessions {
-		out = append(out, x.wire())
+		s := x.wire()
+		if !from.IsZero() {
+			s.Trod = trodRow(&x.track, from)
+		}
+		out = append(out, s)
 	}
 	c.sortRows(out)
 	return out
@@ -491,7 +510,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -518,6 +537,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return nil, nil
 	case ipc.OpDog:
 		return c.dogList()
+	case ipc.OpTrod:
+		return c.trodReport(), nil
 	case ipc.OpConfig:
 		var a ipc.ConfigArgs
 		if err := decode(raw, &a); err != nil {

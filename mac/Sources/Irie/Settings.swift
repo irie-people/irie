@@ -69,6 +69,8 @@ struct CoreConfig: Decodable, Equatable {
     var worktree: Worktree
     var usage: Usage
     var dog: Dog
+    /// The trod bot; nil from a core from before it.
+    var trod: Trod?
 
     struct UI: Decodable, Equatable {
         var redOnDone: Bool
@@ -169,6 +171,28 @@ struct CoreConfig: Decodable, Equatable {
     struct Dog: Decodable, Equatable {
         var watch: Bool
         var nudges: Int
+    }
+
+    /// The trod bot (DESIGN §4.10). Durations are as the core writes them,
+    /// such as "15m"; times of day as "23:00".
+    struct Trod: Decodable, Equatable {
+        var on: Bool
+        var start: String
+        var end: String
+        var away: String
+        var questions: Bool
+        var nudges: Int
+        var retry: String
+        var within: String
+        var maxWorking: Int
+        var maxPlanUse: Double
+        var keepAwake: Bool
+        var rules: [String]
+        var guidelines: [String]
+        enum CodingKeys: String, CodingKey {
+            case on, start, end, away, questions, nudges, retry, within, rules, guidelines
+            case maxWorking = "max_working", maxPlanUse = "max_plan_use", keepAwake = "keep_awake"
+        }
     }
 
     /// The profiles by name, the default's first among equals: auto's own
@@ -317,7 +341,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
-        case general, appearance, agents, local, repos
+        case general, appearance, agents, trod, local, repos
 
         var id: String { rawValue }
 
@@ -326,6 +350,7 @@ struct SettingsView: View {
             case .general: return "General"
             case .appearance: return "Appearance"
             case .agents: return "Agents"
+            case .trod: return "Trod Bot"
             case .local: return "Local Models"
             case .repos: return "Repos"
             }
@@ -336,6 +361,7 @@ struct SettingsView: View {
             case .general: return "gearshape"
             case .appearance: return "paintpalette"
             case .agents: return "person.2"
+            case .trod: return "moon.stars"
             case .local: return "desktopcomputer"
             case .repos: return "folder"
             }
@@ -372,6 +398,7 @@ struct SettingsView: View {
         case .general: GeneralSettings(model: model)
         case .appearance: AppearanceSettings(model: model)
         case .agents: AgentSettings(model: model)
+        case .trod: TrodSettings(model: model)
         case .local: LocalSettings(model: model)
         case .repos: RepoSettings(model: model)
         }
@@ -1006,6 +1033,224 @@ private struct RepoSettings: View {
             name = "\(base)-\(n)"
         }
         return name
+    }
+}
+
+// MARK: Trod bot
+
+/// The trod bot (DESIGN §4.10): when it works, how far it goes, how much of
+/// the plan it may use, and the rules and guidelines every agent it keeps
+/// going is given. Setting it up is writing those.
+private struct TrodSettings: View {
+    @ObservedObject var model: SettingsModel
+
+    private static let aways = ["0s", "5m", "15m", "30m", "1h"]
+    private static let retries = ["5m", "10m", "15m", "30m", "1h"]
+    private static let withins = ["12h", "24h", "48h", "0s"]
+
+    var body: some View {
+        WithConfig(model: model) { c in
+            if let t = c.trod {
+                form(t)
+            } else {
+                ContentUnavailableView("This Irie has no trod bot yet", systemImage: "moon.stars",
+                                       description: Text("Install a newer build to keep sessions going at night."))
+            }
+        }
+    }
+
+    /// A binding to one of the bot's settings.
+    private func bind<V: SettingType>(_ t: CoreConfig.Trod, _ path: WritableKeyPath<CoreConfig.Trod, V>, _ key: String) -> Binding<V> {
+        model.binding(t[keyPath: path], "trod." + key) { $0.trod?[keyPath: path] = $1 }
+    }
+
+    private func form(_ t: CoreConfig.Trod) -> some View {
+        SettingsForm(model: model) {
+            Section {
+                Toggle("Keep sessions going while you’re away at night", isOn: bind(t, \.on, "on"))
+                DatePicker("From", selection: clock(bind(t, \.start, "start")), displayedComponents: .hourAndMinute)
+                DatePicker("Until", selection: clock(bind(t, \.end, "end")), displayedComponents: .hourAndMinute)
+                Picker("Once you’ve been away for", selection: bind(t, \.away, "away")) {
+                    ForEach(Self.choices(Self.aways, t.away), id: \.self) { d in
+                        Text(d == "0s" ? "No wait" : GeneralSettings.spoken(d)).tag(d)
+                    }
+                }
+            } header: {
+                Text("Trod bot")
+            } footer: {
+                footnote("While your Mac has had no keyboard or mouse for that long, it tells an agent that asks you something to decide for itself, and sends on a turn an API error stopped and a task that isn’t through. It never answers in your name or approves a permission. A session you park or freeze is left alone.\(t.start == t.end ? " The same time for both is around the clock." : "")")
+            }
+            .disabled(false)
+            Section {
+                Toggle("Tell agents that ask you something to decide", isOn: bind(t, \.questions, "questions"))
+                LabeledContent("Send one session on") {
+                    Stepper(value: bind(t, \.nudges, "nudges"), in: 0...30) {
+                        Text(t.nudges == 0 ? "Never" : t.nudges == 1 ? "Once a night" : "Up to \(t.nudges) times a night")
+                    }
+                }
+                Picker("Before it tries again, wait", selection: bind(t, \.retry, "retry")) {
+                    ForEach(Self.choices(Self.retries, t.retry), id: \.self) { d in Text(GeneralSettings.spoken(d)).tag(d) }
+                }
+                Picker("Keep going sessions that stopped", selection: bind(t, \.within, "within")) {
+                    ForEach(Self.choices(Self.withins, t.within), id: \.self) { d in
+                        Text(d == "0s" ? "However long ago" : "In the last " + GeneralSettings.spoken(d)).tag(d)
+                    }
+                }
+                LabeledContent("Sessions working at once") {
+                    Stepper(value: bind(t, \.maxWorking, "max_working"), in: 0...20) {
+                        Text(t.maxWorking == 0 ? "No limit" : "Up to \(t.maxWorking)")
+                    }
+                }
+                Toggle("Keep the Mac awake while sessions have work left", isOn: bind(t, \.keepAwake, "keep_awake"))
+            } header: {
+                Text("How far it goes")
+            } footer: {
+                footnote("The display may still sleep, and a MacBook with its lid closed sleeps anyway.")
+            }
+            .disabled(!t.on)
+            Section {
+                LabeledContent("Stop at") {
+                    Stepper(value: bind(t, \.maxPlanUse, "max_plan_use"), in: 5...100, step: 5) {
+                        Text("\(Int(t.maxPlanUse))% of your plan").monospacedDigit()
+                    }
+                }
+            } header: {
+                Text("Your plan")
+            } footer: {
+                footnote("Once your plan’s five hours or its week are this full, it sends nothing on. Once the week is, it also lets the Mac sleep and freezes the sessions that would still use it, so nothing goes over your weekly allotment. It thaws them if the week resets before morning.")
+            }
+            .disabled(!t.on)
+            Section {
+                LineList(lines: t.rules, prompt: "Add a rule, such as “Never touch production.”") {
+                    bind(t, \.rules, "rules").wrappedValue = $0
+                }
+            } header: {
+                ListHeader(title: "Rules", reset: { model.reset("trod.rules") })
+            } footer: {
+                footnote("Every agent the trod bot keeps going must follow these. Each message also tells it to leave you only what needs you, such as a login or a permission prompt.")
+            }
+            Section {
+                LineList(lines: t.guidelines, prompt: "Add a guideline, such as “Prefer the smallest change.”") {
+                    bind(t, \.guidelines, "guidelines").wrappedValue = $0
+                }
+            } header: {
+                ListHeader(title: "Guidelines", reset: { model.reset("trod.guidelines") })
+            } footer: {
+                footnote("What those agents weigh when they decide while you’re away.")
+            }
+        }
+    }
+
+    /// A list's choices, with the value in effect when it is not one of them.
+    private static func choices(_ list: [String], _ value: String) -> [String] {
+        list.contains(value) ? list : list + [value]
+    }
+
+    /// A time of day such as "23:00" as a date today, for a picker; set, it
+    /// writes the time back the same way.
+    private func clock(_ value: Binding<String>) -> Binding<Date> {
+        Binding(get: {
+            let parts = value.wrappedValue.split(separator: ":").compactMap { Int($0) }
+            let cal = Calendar.current
+            return cal.date(bySettingHour: parts.first ?? 0, minute: parts.count > 1 ? parts[1] : 0, second: 0, of: Date()) ?? Date()
+        }, set: { d in
+            let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+            value.wrappedValue = String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+        })
+    }
+}
+
+/// A list's header, with a way back to the built-in list.
+private struct ListHeader: View {
+    let title: String
+    let reset: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Button("Restore Defaults", action: reset)
+                .buttonStyle(.borderless)
+                .foregroundStyle(Theme.accent)
+                .font(.callout)
+        }
+    }
+}
+
+/// A list of one-line settings, such as the trod bot's rules: each row
+/// edits one in place and can remove it, and a last row adds one.
+private struct LineList: View {
+    let lines: [String]
+    let prompt: String
+    let change: ([String]) -> Void
+    @State private var adding = ""
+
+    var body: some View {
+        ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(i + 1).")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                LineField(value: line) { new in
+                    var l = lines
+                    if new.isEmpty { l.remove(at: i) } else { l[i] = new }
+                    change(l)
+                }
+                Button {
+                    var l = lines
+                    l.remove(at: i)
+                    change(l)
+                } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Remove")
+                .accessibilityLabel("Remove \(line)")
+            }
+        }
+        HStack(alignment: .firstTextBaseline) {
+            Image(systemName: "plus.circle").foregroundStyle(Theme.muted)
+            TextField("", text: $adding, prompt: Text(prompt), axis: .vertical)
+                .labelsHidden()
+                .onSubmit(add)
+        }
+    }
+
+    private func add() {
+        let t = LineField.oneLine(adding)
+        guard !t.isEmpty else { return }
+        change(lines + [t])
+        adding = ""
+    }
+}
+
+/// One line of a LineList: it wraps to show a long line whole, and is sent
+/// on Return or when it loses the keyboard, as one line.
+private struct LineField: View {
+    let value: String
+    let commit: (String) -> Void
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("", text: $text, axis: .vertical)
+            .labelsHidden()
+            .lineLimit(1...4)
+            .focused($focused)
+            .onAppear { text = value }
+            .onChange(of: value) { text = value }
+            .onSubmit(send)
+            .onChange(of: focused) { if !focused { send() } }
+    }
+
+    private func send() {
+        let t = Self.oneLine(text)
+        if t != value { commit(t) }
+    }
+
+    /// The text on one line, as each rule must be.
+    static func oneLine(_ s: String) -> String {
+        s.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
     }
 }
 
