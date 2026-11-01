@@ -81,6 +81,16 @@ export function pair(url, code, device) {
 export const forget = (m) => request(m.url + '/api/device', { method: 'DELETE', token: m.token, timeout: 6000 });
 
 /**
+ * POST /api/push: the machine notifies this phone through its push
+ * subscription. The machine sends a first notification before it answers,
+ * so this may take a while.
+ */
+export const pushTo = (m, body) => request(m.url + '/api/push', { method: 'POST', token: m.token, body, timeout: 30000 });
+
+/** DELETE /api/push: the machine stops notifying this phone. */
+export const unpush = (m) => request(m.url + '/api/push', { method: 'DELETE', token: m.token, timeout: 8000 });
+
+/**
  * One op through /api/call: its result, or an ApiError with the core's
  * words. A 401 means the machine no longer knows this phone (code unpaired).
  */

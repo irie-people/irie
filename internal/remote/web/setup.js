@@ -32,6 +32,7 @@
       document.getElementById('s1').className = 'step done';
       document.getElementById('trust').lastChild.textContent = 'This iPhone trusts it.';
       document.getElementById('open').className = 'btn';
+      document.getElementById('profile').className = 'btn quiet';
     }).catch(function () {});
   }
   setInterval(check, 3000);

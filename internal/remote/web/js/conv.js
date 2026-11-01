@@ -38,7 +38,11 @@ export class SessionView {
     this.el = this.build();
     this.stream = new Stream(conn.m, { session: sid, conversation: true }, {
       frame: (f) => this.onFrame(f),
-      unpaired: (msg) => ctx.unpaired(conn, msg),
+      unpaired: (msg) => {
+        this.problem = msg || `${conn.m.name} no longer knows this phone.`;
+        this.invalidate();
+        ctx.unpaired(conn, msg);
+      },
       refused: (e) => {
         this.problem = e.message;
         this.invalidate();
@@ -59,6 +63,7 @@ export class SessionView {
 
   destroy() {
     this.destroyed = true;
+    if (this.ro) this.ro.disconnect();
     this.stream.stop();
     clearTimeout(this.pollTimer);
     this.pollTimer = null;
@@ -77,13 +82,31 @@ export class SessionView {
       h('button', { class: 'icon-btn', 'aria-label': 'Actions for this session', html: ICON.more, onclick: () => this.openActions() }));
     this.detailsEl = h('div', { class: 'details', hidden: true });
     this.moreEl = h('div', { class: 'conv-more', hidden: true, text: 'Earlier messages are in its terminal.' });
-    this.convEl = h('div', { class: 'conv', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
+    // Quiet until the first frame is drawn, so VoiceOver doesn't read the whole history.
+    this.convEl = h('div', { class: 'conv', role: 'log', 'aria-live': 'off', 'aria-relevant': 'additions' });
     this.emptyEl = h('div', { class: 'empty', hidden: true });
     this.scrollEl = h('div', { class: 'scroll feed' }, this.moreEl, this.convEl, this.emptyEl);
     this.pill = h('button', { class: 'new-pill', hidden: true, onclick: () => this.toBottom(true) }, h('span', { html: ICON.down }), 'New');
+    // Stuck to the bottom while the person is there: new items and blocks
+    // that settle their height keep it there, until they scroll up.
+    this.stuck = true;
     this.scrollEl.addEventListener('scroll', () => {
-      if (this.nearBottom()) this.pill.hidden = true;
+      const near = this.nearBottom();
+      this.stuck = near;
+      if (near) this.pill.hidden = true;
     }, { passive: true });
+    this.scrollEl.addEventListener('touchstart', () => (this.touching = true), { passive: true });
+    this.scrollEl.addEventListener('touchend', () => (this.touching = false), { passive: true });
+    this.scrollEl.addEventListener('touchcancel', () => (this.touching = false), { passive: true });
+    if ('ResizeObserver' in window) {
+      this.ro = new ResizeObserver(() => {
+        if (this.stuck && !this.touching) this.pin();
+      });
+      // The conversation as it grows, and the feed as the keyboard, the
+      // details or the needs card take room from it.
+      this.ro.observe(this.convEl);
+      this.ro.observe(this.scrollEl);
+    }
     this.bottomEl = h('div', { class: 'bottom session-bottom' });
     this.buildComposer();
     return h('section', { class: 'screen session', 'aria-label': 'Session' }, header, this.detailsEl,
@@ -296,14 +319,17 @@ export class SessionView {
     const empty = !blocks.length && !this.needs;
     this.emptyEl.hidden = !empty;
     if (empty) this.renderEmpty(s);
-    const first = !this.drawn && blocks.length > 0;
-    const stick = first || this.nearBottom();
+    if (!this.drawn && blocks.length) this.stuck = true;
+    const stick = this.stuck;
     this.reconcile(blocks);
     const last = blocks.length ? blocks[blocks.length - 1].key : '';
     const grew = last !== this.lastKey;
     this.lastKey = last;
-    if (blocks.length) this.drawn = true;
-    if (stick) this.toBottom(false, first);
+    if (blocks.length && !this.drawn) {
+      this.drawn = true;
+      requestAnimationFrame(() => this.convEl.setAttribute('aria-live', 'polite'));
+    }
+    if (stick) this.pin();
     else if (grew && blocks.length) this.pill.hidden = false;
   }
 
@@ -486,13 +512,18 @@ export class SessionView {
     return sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
   }
 
-  toBottom(smooth, settle) {
-    const sc = this.scrollEl;
-    const go = () => sc.scrollTo({ top: sc.scrollHeight, behavior: smooth && !reduced() ? 'smooth' : 'auto' });
-    go();
+  /** Holds the newest item in view. */
+  pin() {
+    this.scrollEl.scrollTop = this.scrollEl.scrollHeight;
+  }
+
+  toBottom(smooth) {
     this.pill.hidden = true;
-    // Blocks drawn lazily settle their height a frame later.
-    if (settle || !smooth) requestAnimationFrame(() => requestAnimationFrame(go));
+    if (smooth && !reduced()) this.scrollEl.scrollTo({ top: this.scrollEl.scrollHeight, behavior: 'smooth' });
+    else {
+      this.stuck = true;
+      this.pin();
+    }
   }
 
   // ---- The foot: message box, needs card, or why not ------------------------
@@ -693,7 +724,7 @@ export class SessionView {
   openActions() {
     const s = this.row;
     if (!s) return;
-    actions({ title: s.name, items: this.ctx.sessionActions(this.conn, s, { inSession: true }) });
+    actions({ title: s.name, message: `${L.label(s)} · ${this.conn.m.name}`, items: this.ctx.sessionActions(this.conn, s, { inSession: true }) });
   }
 }
 

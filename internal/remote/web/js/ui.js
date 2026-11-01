@@ -153,17 +153,17 @@ export function actions({ title, message, items }) {
         group),
       h('button', { class: 'action cancel', text: 'Cancel', onclick: () => s.close() })),
   });
-  for (const it of shown) {
-    group.append(h('button', {
-      class: 'action' + (it.destructive ? ' destructive' : '') + (it.checked ? ' checked' : ''),
-      disabled: !!it.disabled,
-      onclick: () => {
-        if (it.confirm) return confirmIn(s, it);
-        s.close();
-        it.run && it.run();
-      },
-    }, h('span', { class: 'action-label', text: it.label }), it.note ? h('span', { class: 'action-note', text: it.note }) : null));
-  }
+  const button = (it) => h('button', {
+    class: 'action' + (it.destructive ? ' destructive' : '') + (it.checked ? ' checked' : ''),
+    disabled: !!it.disabled,
+    onclick: () => {
+      if (it.confirm) return confirmIn(s, it);
+      s.close();
+      it.run && it.run();
+    },
+  }, h('span', { class: 'action-label', text: it.label }), it.note ? h('span', { class: 'action-note', text: it.note }) : null);
+  // An item with row puts its own items side by side, such as Rate good and Rate bad.
+  for (const it of shown) group.append(it.row ? h('div', { class: 'action-row' }, it.row.filter(Boolean).map(button)) : button(it));
   return s;
 }
 

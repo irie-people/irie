@@ -3,11 +3,12 @@
 // frames. Like every Irie client it draws what the core says, sends what is
 // typed to `input`, and shows the core's words as they are (docs/CORE.md).
 
-import { h, $, ICON, sheet, actions, ask, toast, closeSheet } from './js/ui.js';
+import { h, $, ICON, sheet, actions, ask, toast, closeSheet, openSheet } from './js/ui.js';
 import * as L from './js/look.js';
 import { esc } from './js/md.js';
 import { loadMachines, saveMachines, call, pair, info, forget, normalize, host, Stream } from './js/net.js';
 import { SessionView, grow, looseWords } from './js/conv.js';
+import * as Push from './js/push.js';
 
 const params = new URLSearchParams(location.search);
 const root = document.documentElement;
@@ -316,8 +317,10 @@ function sessionActions(conn, s, { inSession = false } = {}) {
       : { label: 'Promote', note: 'To the top, and the machine first', run: () => op(conn, 'priority', { session: s.id, level: 1 }, { done: `Promoted “${s.name}”` }) });
   }
   if (conn.can('rate')) {
-    items.push({ label: 'Rate it good', checked: s.rated === 'good', run: () => op(conn, 'rate', { session: s.id, verdict: 'good' }, { done: 'Rated good. Irie’s router learns from it.' }) });
-    items.push({ label: 'Rate it bad', checked: s.rated === 'bad', run: () => op(conn, 'rate', { session: s.id, verdict: 'bad' }, { done: 'Rated bad. Irie’s router learns from it.' }) });
+    items.push({ row: [
+      { label: 'Rate good', checked: s.rated === 'good', run: () => op(conn, 'rate', { session: s.id, verdict: 'good' }, { done: 'Rated good. Irie’s router learns from it.' }) },
+      { label: 'Rate bad', checked: s.rated === 'bad', run: () => op(conn, 'rate', { session: s.id, verdict: 'bad' }, { done: 'Rated bad. Irie’s router learns from it.' }) },
+    ] });
   }
   if (conn.can('rename')) {
     items.push({
@@ -337,7 +340,7 @@ function sessionActions(conn, s, { inSession = false } = {}) {
       }),
     });
   }
-  if (inSession && !ended && lk !== 'starting') {
+  if (inSession && !ended && lk !== 'starting' && conn.can('keys')) {
     items.push({ label: 'Stop the turn', note: 'As Esc in its terminal', run: () => op(conn, 'keys', { session: s.id, keys: ['Escape'] }, { done: 'Sent Esc.' }) });
   }
   if (conn.can('close')) {
@@ -381,6 +384,9 @@ function remember(url, r) {
   S.machines.push(m);
   saveMachines(S.machines);
   startAll();
+  // A machine paired now has none of this phone's notifications yet.
+  forgetSent(m.id);
+  if (pushReady()) syncPush([S.conns.get(m.id)]);
   return m;
 }
 
@@ -404,6 +410,7 @@ function show() {
       startAll();
       route();
     }
+    trackBottom();
   }
   invalidate();
 }
@@ -585,7 +592,7 @@ function renderHome() {
     refs.chipsKey = chipsKey;
     refs.chips.replaceChildren(...all.map((c) => h('button', {
       class: 'mchip ' + c.status, role: 'listitem', 'aria-label': `${c.m.name}: ${statusWords(c)}. Shows the machines.`, onclick: openMachines,
-    }, h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { class: 'mchip-name', text: c.m.name }),
+    }, h('span', { class: 'dot ' + c.status, 'aria-hidden': 'true' }), h('span', { class: 'mchip-name', text: c.m.name }),
     c.status === 'connected' ? null : h('span', { class: 'mchip-status', text: statusWords(c) }))),
     h('button', { class: 'mchip add', 'aria-label': 'Machines', onclick: openMachines, html: ICON.machine }));
   }
@@ -599,6 +606,13 @@ function renderHome() {
   for (const c of all) {
     keep.add(c.m.id);
     let sec = refs.sections.querySelector(`:scope > [data-mid="${CSS.escape(c.m.id)}"]`);
+    // A machine paired again is a new connection: its cards start afresh,
+    // so no gesture keeps the old one's token.
+    if (sec && sec._conn !== c) {
+      const fresh = buildSection(c);
+      sec.replaceWith(fresh);
+      sec = fresh;
+    }
     if (!sec) {
       sec = buildSection(c);
       refs.sections.append(sec);
@@ -617,6 +631,7 @@ function renderHome() {
 
 function buildSection(c) {
   const sec = h('section', { class: 'msec', 'data-mid': c.m.id });
+  sec._conn = c;
   sec._head = h('h2', { class: 'msec-head' });
   sec._note = h('div', { class: 'msec-note', hidden: true });
   sec._live = h('div', { class: 'cards' });
@@ -812,7 +827,7 @@ function gestures(row, c, id) {
       mode = 'long';
       press(false);
       const s = c.sessions.get(id);
-      if (s) actions({ title: s.name, items: sessionActions(c, s) });
+      if (s) actions({ title: s.name, message: `${L.label(s)} · ${c.m.name}`, items: sessionActions(c, s) });
     }, 520);
   });
   card.addEventListener('pointermove', (e) => {
@@ -883,7 +898,7 @@ function gestures(row, c, id) {
     e.preventDefault();
     if (kind === 'touch' || long) return;
     const s = c.sessions.get(id);
-    if (s) actions({ title: s.name, items: sessionActions(c, s) });
+    if (s) actions({ title: s.name, message: `${L.label(s)} · ${c.m.name}`, items: sessionActions(c, s) });
   });
 }
 
@@ -1111,8 +1126,10 @@ async function submitTask() {
 function openMachines() {
   // Only the cards are drawn again; the form keeps its text and the keyboard.
   const cards = h('div', { class: 'mcards' });
-  const body = h('div', { class: 'machines' }, cards, addMachineForm());
+  const notes = pushPanel();
+  const body = h('div', { class: 'machines' }, cards, notes.el, addMachineForm());
   const draw = () => {
+    notes.draw();
     const key = JSON.stringify(conns().map((c) => [c.m.id, c.m.name, c.status, c.info, c.version, c.header && c.header.plan, c.confirming]));
     if (cards._key === key) return;
     cards._key = key;
@@ -1178,6 +1195,7 @@ async function forgetMachine(c) {
   S.conns.delete(c.m.id);
   S.machines = S.machines.filter((m) => m.id !== c.m.id);
   saveMachines(S.machines);
+  forgetSent(c.m.id);
   if (S.view && S.view.conn === c) back();
   if (!S.machines.length) {
     closeSheet();
@@ -1196,7 +1214,8 @@ function addMachineForm() {
   const go = h('button', { class: 'btn primary', type: 'submit', text: 'Add' });
   const form = h('form', { class: 'add-machine' },
     h('h3', { class: 'group-title', text: 'Add a machine' }),
-    h('div', { class: 'add-row' }, addr, code, go),
+    addr,
+    h('div', { class: 'add-row' }, code, go),
     h('p', { class: 'hint' }, 'On that machine, run ', h('code', { text: 'irie remote pair' }), '. A machine new to this phone needs its setup page first: port 7386, over http.'),
     problem);
   code.addEventListener('input', () => {
@@ -1228,6 +1247,188 @@ function addMachineForm() {
     }
   });
   return form;
+}
+
+// ---- Notifications ------------------------------------------------------------
+// Web Push, from the Home Screen app only (iOS 16.4 and later). Each machine
+// gets this phone's subscription and key once; what was sent is kept, so a
+// start sends again only when the subscription changed, as each send makes
+// the machine push a first notification.
+
+const pushState = { busy: false, problem: '' };
+const SENT = 'irie.pushSent';
+
+const pushable = () => Push.supported() && STANDALONE;
+const pushReady = () => pushable() && Push.prefs().on && Notification.permission === 'granted';
+const sentKey = (sub, done) => sub.endpoint + '|' + (done ? 1 : 0);
+
+function forgetSent(id) {
+  const sent = read(SENT, {});
+  if (id) delete sent[id];
+  localStorage.setItem(SENT, JSON.stringify(id ? sent : {}));
+}
+
+function redrawPush() {
+  if (refs.machinesSheet) refs.machinesSheet.render();
+}
+
+function pushPanel() {
+  const box = h('div', { class: 'push-panel' });
+  const draw = () => {
+    const p = Push.prefs();
+    const on = pushReady();
+    const key = JSON.stringify([pushable(), on, p.done, pushState, conns().map((c) => [c.m.name, c.push || ''])]);
+    if (box._key === key) return;
+    box._key = key;
+    box.replaceChildren(...pushRows(on, p));
+  };
+  return { el: box, draw };
+}
+
+function pushRows(on, p) {
+  if (!pushable()) {
+    if (!IOS || STANDALONE) return [];
+    return [h('h3', { class: 'group-title', text: 'Notifications' }),
+      h('p', { class: 'hint pad', text: 'Notifications work once Irie is on your Home Screen: open it from there to turn them on.' })];
+  }
+  const toggle = (checked, label, run) => h('button', {
+    class: 'switch', role: 'switch', 'aria-checked': String(checked), 'aria-label': label, disabled: pushState.busy, onclick: run,
+  });
+  const row = (label, note, sw) => h('div', { class: 'set-row' },
+    h('div', { class: 'set-text' }, h('div', { class: 'set-label', text: label }), note ? h('div', { class: 'set-note', text: note }) : null), sw);
+  const out = [
+    h('h3', { class: 'group-title', text: 'Notifications' }),
+    h('div', { class: 'set-group' },
+      row('Notify me', 'When a session needs you, fails or stalls', toggle(on, 'Notify me', togglePush)),
+      on ? row('Also when a task finishes', 'Its turn is over, to verify', toggle(p.done, 'Also when a task finishes', toggleDone)) : null),
+  ];
+  if (on) out.push(h('div', { class: 'push-lines' }, conns().map(pushLine)));
+  if (pushState.problem) out.push(h('div', { class: 'problem pad', role: 'alert', text: pushState.problem }));
+  return out;
+}
+
+function pushLine(c) {
+  const st = c.push || '';
+  const ok = st === 'on';
+  const busy = st === 'sending';
+  return h('div', { class: 'push-line' + (ok ? ' ok' : !busy && st ? ' bad' : '') },
+    h('span', { class: 'dot ' + (ok ? 'connected' : busy ? 'connecting' : st ? 'unpaired' : 'offline'), 'aria-hidden': 'true' }),
+    h('span', { class: 'pl-name', text: c.m.name }),
+    h('span', { class: 'pl-state', text: ok ? 'On' : busy ? 'Turning on…' : st || 'Not yet' }),
+    !ok && !busy ? h('button', { class: 'linkish', text: 'Try again', onclick: () => syncPush([c], true) }) : null);
+}
+
+/** The switch: it asks for permission in the tap itself, as iOS wants. */
+function togglePush() {
+  if (pushReady()) return pushOff();
+  let asked;
+  try {
+    asked = Notification.requestPermission();
+  } catch {
+    asked = Promise.resolve(Notification.permission);
+  }
+  Promise.resolve(asked).then(pushOn, (e) => {
+    pushState.problem = e.message || String(e);
+    redrawPush();
+  });
+}
+
+async function pushOn(perm) {
+  if (perm !== 'granted') {
+    pushState.problem = perm === 'denied'
+      ? 'Notifications are off for Irie. Turn them on in Settings → Notifications → Irie.'
+      : 'Irie can’t notify you until you allow it.';
+    return redrawPush();
+  }
+  const p = Push.prefs();
+  p.on = true;
+  Push.savePrefs(p);
+  pushState.problem = '';
+  await syncPush(conns(), true);
+}
+
+/** Sends the subscription to these machines; all of them, or only those it changed for. */
+async function syncPush(list, always) {
+  list = list.filter((c) => c && c.status !== 'unpaired');
+  if (!list.length) return;
+  pushState.busy = true;
+  redrawPush();
+  try {
+    const { sub, k } = await Push.subscription();
+    const done = Push.prefs().done;
+    const key = sentKey(sub, done);
+    const sent = read(SENT, {});
+    await Promise.all(list.map(async (c) => {
+      if (!always && sent[c.m.id] === key) {
+        c.push = 'on';
+        return;
+      }
+      if (c.info && !('push' in c.info)) {
+        c.push = 'Its Irie can’t send notifications yet';
+        return;
+      }
+      c.push = 'sending';
+      redrawPush();
+      try {
+        await Push.tell(c.m, sub, k, done);
+        c.push = 'on';
+        sent[c.m.id] = key;
+      } catch (e) {
+        c.push = e.status === 404 || e.status === 405 ? 'Its Irie can’t send notifications yet' : e.message;
+        if (e.status === 401) unpaired(c, e.message);
+      }
+      redrawPush();
+    }));
+    localStorage.setItem(SENT, JSON.stringify(sent));
+  } catch (e) {
+    pushState.problem = e.message || String(e);
+  } finally {
+    pushState.busy = false;
+    redrawPush();
+  }
+}
+
+async function pushOff() {
+  const p = Push.prefs();
+  p.on = false;
+  Push.savePrefs(p);
+  pushState.busy = true;
+  pushState.problem = '';
+  redrawPush();
+  await Promise.all(conns().map(async (c) => {
+    try {
+      await Push.untell(c.m);
+    } catch {
+      // A machine that can't be reached drops this phone when its push fails.
+    }
+    c.push = '';
+  }));
+  try {
+    await Push.unsubscribe();
+  } catch {
+    // Nothing to end.
+  }
+  forgetSent();
+  pushState.busy = false;
+  redrawPush();
+}
+
+function toggleDone() {
+  const p = Push.prefs();
+  p.done = !p.done;
+  Push.savePrefs(p);
+  syncPush(conns(), true);
+}
+
+/** At start: keeps the machines' notifications going as this phone's subscription changes. */
+function resumePush() {
+  if (!pushable() || !Push.prefs().on) return;
+  if (Notification.permission !== 'granted') {
+    // Turned off in Settings: so is the switch.
+    Push.savePrefs({ ...Push.prefs(), on: false });
+    return;
+  }
+  syncPush(conns(), false);
 }
 
 // ---- The session screen and the hash ---------------------------------------
@@ -1275,6 +1476,7 @@ function route() {
   const v = new SessionView(ctx, c, sid);
   S.view = v;
   app.append(v.el);
+  trackBottom();
   refs.home.setAttribute('aria-hidden', 'true');
   requestAnimationFrame(() => requestAnimationFrame(() => {
     v.el.classList.add('in');
@@ -1292,11 +1494,107 @@ function closeView(instant) {
     refs.home.removeAttribute('aria-hidden');
   }
   v.el.classList.remove('in');
+  trackBottom();
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => v.el.remove(), instant || reduced ? 0 : 340);
 }
 
 window.addEventListener('hashchange', route);
+
+// ---- New versions --------------------------------------------------------------
+// The phone picks up a new install on its own: a new service worker, or a
+// new build of the machine that served the app, reloads it once nobody is
+// typing, answering or picking. The shell comes from the network first.
+
+let reloadWanted = false;
+let build = '';
+
+function idle() {
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
+  if (openSheet()) return false;
+  if (refs.task && (refs.task.busy || refs.task.picking)) return false;
+  if (S.view && (S.view.sending || S.view.busyKey || S.view.input.value.trim())) return false;
+  return true;
+}
+
+function reloadSoon() {
+  reloadWanted = true;
+  tryReload();
+}
+
+function tryReload() {
+  if (reloadWanted && (document.visibilityState === 'hidden' || idle())) location.reload();
+}
+
+async function checkBuild() {
+  try {
+    const i = await info(location.origin);
+    if (i && i.version) {
+      if (!build) build = i.version;
+      else if (i.version !== build) reloadSoon();
+    }
+  } catch {
+    // Asleep or offline: next time.
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then((r) => r && r.update()).catch(() => {});
+  }
+}
+
+/** Opens what a notification is about: a session, or the list. */
+function openHash(url) {
+  if (typeof url !== 'string') return;
+  if (!/^#\/m\/[^/]+\/s\/[^/?#]+$/.test(url)) {
+    if (S.view) location.replace('#/');
+    return;
+  }
+  if (location.hash === url) return;
+  if (S.view || S.screen !== 'home') location.replace(url);
+  else {
+    S.pushed = true;
+    location.hash = url;
+  }
+}
+
+if ('serviceWorker' in navigator) {
+  let had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // The first worker taking the page is not news; a later one is.
+    if (had) reloadSoon();
+    had = true;
+  });
+  navigator.serviceWorker.addEventListener('message', (e) => openHash(e.data && e.data.open));
+}
+document.addEventListener('focusout', () => setTimeout(tryReload, 400));
+setInterval(tryReload, 5000);
+setInterval(() => {
+  if (document.visibilityState === 'visible') checkBuild();
+}, 5 * 60e3);
+
+// ---- Toasts' place ------------------------------------------------------------
+// Toasts float just above the bottom bar on show, whatever its height.
+
+const bottomRO = 'ResizeObserver' in window ? new ResizeObserver(() => setBottom()) : null;
+
+function bottomBar() {
+  if (S.view) return S.view.bottomEl;
+  return S.screen === 'home' && refs.task ? refs.task.bar : null;
+}
+
+function setBottom() {
+  const el = bottomBar();
+  root.style.setProperty('--bottom-h', (el ? el.getBoundingClientRect().height : 0) + 'px');
+}
+
+function trackBottom() {
+  if (bottomRO) {
+    bottomRO.disconnect();
+    const el = bottomBar();
+    if (el) bottomRO.observe(el);
+  }
+  setBottom();
+}
 
 // ---- Coming back --------------------------------------------------------------
 // iOS ends streams in the background, often without a word: a stream that
@@ -1312,8 +1610,13 @@ function kickAll() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') S.hiddenAt = Date.now();
-  else if (Date.now() - S.hiddenAt > 2500) kickAll();
+  if (document.visibilityState === 'hidden') {
+    S.hiddenAt = Date.now();
+    tryReload();
+  } else if (Date.now() - S.hiddenAt > 2500) {
+    kickAll();
+    checkBuild();
+  }
 });
 window.addEventListener('online', kickAll);
 window.addEventListener('pageshow', (e) => {
@@ -1328,6 +1631,8 @@ setInterval(() => {
 
 app.append(h('div', { id: 'toasts', class: 'toasts', 'aria-live': 'polite' }));
 show();
+checkBuild();
+resumePush();
 
 if ('serviceWorker' in navigator && window.isSecureContext && !params.has('nosw')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

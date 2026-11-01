@@ -2,12 +2,14 @@
 // machine that served it is asleep and the others are awake. The shell comes
 // from the network first, so an install lands at once, and from the cache
 // when the network fails or takes too long. Nothing under /api/ is touched.
-// Bump VERSION whenever the shell's file list changes.
+// It also shows the machines' notifications (Web Push) and opens the
+// session one is about. Bump VERSION whenever this file or the shell's file
+// list changes.
 
-const VERSION = 'irie-shell-1';
+const VERSION = 'irie-shell-3';
 const SHELL = [
   './', 'index.html', 'app.css', 'app.js',
-  'js/ui.js', 'js/look.js', 'js/net.js', 'js/md.js', 'js/conv.js',
+  'js/ui.js', 'js/look.js', 'js/net.js', 'js/md.js', 'js/conv.js', 'js/push.js',
   'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png',
 ];
 // How long the network may take before the cached shell is served instead;
@@ -42,7 +44,8 @@ async function shell(event, req, url) {
   const cache = await caches.open(VERSION);
   // Pages are the app's one page, whatever their query.
   const key = req.mode === 'navigate' ? new Request(new URL('./', self.location).href) : new Request(url.origin + url.pathname);
-  const fresh = fetch(req, { cache: 'no-store' }).then((res) => {
+  // A navigation can't be copied with options, so it is asked for by its address.
+  const fresh = (req.mode === 'navigate' ? fetch(url.href, { cache: 'no-store' }) : fetch(req, { cache: 'no-store' })).then((res) => {
     if (res.ok && res.type === 'basic') event.waitUntil(cache.put(key, res.clone()));
     return res;
   });
@@ -58,3 +61,52 @@ async function shell(event, req, url) {
   if (cached) return cached;
   return fresh;
 }
+
+// ---- Notifications ------------------------------------------------------------
+// A machine's push carries {title, body, tag, url}: the tag is one per
+// session, so a newer one replaces it, and url is the session's place in the
+// app, such as #/m/<machine>/s/<session>.
+
+self.addEventListener('push', (event) => {
+  let n = {};
+  try {
+    n = event.data ? event.data.json() : {};
+  } catch {
+    try {
+      n = { body: event.data.text() };
+    } catch {
+      n = {};
+    }
+  }
+  const title = n.title || 'Irie';
+  const options = {
+    body: n.body || (n.title ? '' : 'Something changed'),
+    icon: 'icon-192.png',
+    data: { url: typeof n.url === 'string' ? n.url : '' },
+  };
+  if (n.tag) {
+    options.tag = n.tag;
+    options.renotify = true;
+  }
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '';
+  event.waitUntil((async () => {
+    const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const app = open.find((c) => new URL(c.url).origin === self.location.origin);
+    if (app) {
+      // The app goes to the session itself, keeping what it has open.
+      try {
+        await app.focus();
+      } catch {
+        // Not every browser lets a worker focus a window.
+      }
+      app.postMessage({ open: url });
+      return;
+    }
+    await self.clients.openWindow('./' + url);
+  })());
+});
