@@ -13,12 +13,26 @@ const CodePeerDown = "peer_down"
 
 type PeersArgs struct {
 	Reload bool `json:"reload,omitempty"`
+	// Fetch fetches the work of one of the peers' sessions back at once,
+	// by its id here, or of every one whose turn ended, for "all".
+	Fetch string `json:"fetch,omitempty"`
 }
 
 type PeersResult struct {
 	// Name is this machine's: remote.name, else its host name.
-	Name  string     `json:"name"`
-	Peers []PeerInfo `json:"peers"`
+	Name    string      `json:"name"`
+	Peers   []PeerInfo  `json:"peers"`
+	Fetched []PeerFetch `json:"fetched,omitempty"`
+}
+
+// PeerFetch is how fetching one of the peers' sessions' work went: its
+// branch, fetched into the repo of the same name here as Ref
+// (<peer>/<branch> under refs/remotes) at Head, or why not.
+type PeerFetch struct {
+	Session string `json:"session"`
+	Ref     string `json:"ref,omitempty"`
+	Head    string `json:"head,omitempty"`
+	Problem string `json:"problem,omitempty"`
 }
 
 // PeerInfo is one of the cores this one is paired with.

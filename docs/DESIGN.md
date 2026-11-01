@@ -322,6 +322,8 @@ A core can be paired with another machine's, which then is its peer ([multi-host
 
 **Where a task goes.** Each core advertises its machine in its header: `load` and `memory`, and `machine`: whether Claude Code is signed in, the profiles, the free disk, and the user's own Claude Code hooks (`~/.claude/settings.json`), each as the SHA-256 of its event, matcher and command without the program's folder or the home folder, with any program they start that the machine lacks. A task goes to a peer only where those hooks are all there and all run, so it never runs without a hook it would have had here, such as a repo's guard: `^name` says so and starts nothing anywhere. With `place.mode = "auto"`, a task typed with no `^` word goes to a peer only while this machine is busy (fewer than `headroom_cpus` free, less than `headroom_gib` free, memory pressure, or fewer than 64 ptys), only to a peer where Claude Code is signed in, the profile exists, and the `@repo` is one `peers.<name>.repos` lists, and only to one with at least 2 more CPUs and 2 GiB more free than this machine; each task placed there counts as a CPU and a GiB against it for 2 minutes. A task that reads as more for the jot before it stays with that jot's agent, and one the peer refuses starts here. The result says why it went.
 
+**Work comes back.** A task in a repo runs on the peer in its own checkout, which the owner keeps there, with its hooks and guard, under the same `@name` as here. Once its turn ends (done, idle, exited or failed), this core fetches its branch over ssh into the repo of that name here, as `refs/remotes/<peer>/<branch>`, so it never moves a branch of this machine's, and the row says `fetched as Asahi/irie/…`, or why not. The ssh name is the one `irie peer add --ssh` paired over, or `peers.<name>.ssh`; `irie peer fetch [SESSION]` fetches at once. A peer's frame can't stop this core: one that goes wrong ends that peer's stream, which marks it down until it is followed again.
+
 The peer's sessions run on under its own core whatever happens to this one. When its stream ends, or brings nothing for 40 s (its gateway pings every 15 s), its rows stay with `host_down`, the time it went, and calls about them say `peer_down`. The core follows it again after 1, 2, 4 … 30 s. A phone hears none of the peers' rows: it pairs with each machine itself.
 
 ## 3. Harness support
@@ -1191,6 +1193,7 @@ headroom_gib = 2              # or less memory than this is free, or the kernel 
 
 # [peers.Asahi]               # one of the machines `irie peer add` paired with
 # repos = ["irie"]            # the @names auto may send there; a task with no @ goes too
+# ssh = "asahi"               # its ssh name, for fetching work back; "" = the one irie peer add --ssh used
 
 [vpn]                         # Mullvad VPN control (proposals/extensions.md §4)
 on = false                    # show the VPN in every client, and take the :vpn words
