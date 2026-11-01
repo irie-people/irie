@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"math"
 	"os/exec"
 	"reflect"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/sysload"
 )
 
 // Memory is a cost too (DESIGN §6.3): every agent takes the machine's
@@ -60,7 +62,11 @@ func (c *Core) sample() {
 		cancel()
 	}
 	c.readMachine()
+	load, loadErr := sysload.Read()
 	c.mu.Lock()
+	if loadErr == nil {
+		c.load = load
+	}
 	for id, x := range c.sessions {
 		x.memory = mem[id]
 	}
@@ -143,8 +149,20 @@ func (c *Core) headerNow() ipc.Header {
 		m := c.memoryNow()
 		h.Memory = &m
 	}
+	h.Load = c.loadNow()
 	h.Trod = c.trodHeader(c.awakeNow())
 	return h
+}
+
+// loadNow is how busy the machine is, last read, or nil before the first
+// read. The run queue is rounded to the half, so the header changes when
+// the load does and not with every tick. The caller holds c.mu.
+func (c *Core) loadNow() *ipc.Load {
+	l := c.load
+	if l.CPUs == 0 {
+		return nil
+	}
+	return &ipc.Load{CPUs: l.CPUs, RunQueue: math.Round(l.RunQueue*2) / 2, Pressure: l.Pressure, PTYs: l.PTYs, PTYMax: l.PTYMax}
 }
 
 // publishHeader sends a header frame to every subscriber when the header

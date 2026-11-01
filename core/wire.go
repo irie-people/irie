@@ -47,6 +47,7 @@ type (
 	Window           = ipc.Window
 	Plan             = ipc.Plan
 	Memory           = ipc.Memory
+	Load             = ipc.Load
 	HelloArgs        = ipc.HelloArgs
 	HelloResult      = ipc.HelloResult
 	ListResult       = ipc.ListResult

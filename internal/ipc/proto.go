@@ -367,8 +367,23 @@ type Header struct {
 	HelperStyle string  `json:"helper_style,omitempty"`
 	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
 	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
+	Load        *Load   `json:"load,omitempty"`   // how busy the machine is
 	// Trod is the trod bot while it is in its hours (DESIGN §4.10).
 	Trod *TrodShift `json:"trod,omitempty"`
+}
+
+// Load is how busy the machine is, which a core also advertises to the
+// cores it is paired with (docs/proposals/multi-host.md §4.2).
+type Load struct {
+	CPUs int `json:"cpus"`
+	// RunQueue is the work waiting to run, averaged over the last minute
+	// and rounded to the half: how many CPUs it would keep busy.
+	RunQueue float64 `json:"run_queue"`
+	// Pressure is the kernel's memory pressure: 1 normal, 2 a warning, 4
+	// critical; none where the system does not say.
+	Pressure int `json:"pressure,omitempty"`
+	PTYs     int `json:"ptys"`              // ptys in use: every pane takes one
+	PTYMax   int `json:"pty_max,omitempty"` // the most there can be
 }
 
 // Window is one window of a plan's use, such as the five hours.

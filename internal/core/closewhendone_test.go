@@ -7,6 +7,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
@@ -112,5 +113,19 @@ func TestCloseWhenDoneLeavesWorkInTheBackground(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	if row, ok := c.row(a.ID); !ok || row.Detail != "Waiting on its work in the background · Install the build" {
 		t.Fatalf("the session waiting on its own work: %+v, open %v", row, ok)
+	}
+}
+
+func TestTheHeaderSaysHowBusyTheMachineIs(t *testing.T) {
+	c := &Core{version: "test"}
+	c.useConfig(config.Default())
+	if c.headerNow().Load != nil {
+		t.Error("a load before the first read")
+	}
+	c.load = sysload.Load{CPUs: 12, RunQueue: 14.3, Pressure: sysload.PressureWarn, PTYs: 134, PTYMax: 511}
+	got := c.headerNow().Load
+	want := ipc.Load{CPUs: 12, RunQueue: 14.5, Pressure: 2, PTYs: 134, PTYMax: 511}
+	if got == nil || *got != want {
+		t.Errorf("header load = %+v, want %+v", got, want)
 	}
 }

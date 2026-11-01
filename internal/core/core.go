@@ -31,6 +31,7 @@ import (
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/statusline"
+	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/team"
 	"github.com/irie-people/irie/internal/tmux"
 )
@@ -89,6 +90,7 @@ type Core struct {
 	outside    outside                  // the Claude Code sessions outside Irie (outside.go)
 	local      localState               // local.json
 	machine    localmodel.Machine       // the machine's memory, last read
+	load       sysload.Load             // how busy the machine is, last read
 	localMem   int64                    // what the models of Irie's own server take
 	llamaMem   int64                    // what Irie's own llama-server takes
 	plan       ipc.Plan                 // the plan's use, from the newest status update

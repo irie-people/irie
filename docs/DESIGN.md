@@ -199,7 +199,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"snapshot","sessions":[…],"header":{…}}`
   - `{"t":"upsert","session":{…}}` and `{"t":"remove","id":"…"}`
   - `{"t":"history","undo":"…","redo":"…"}`: the labels of what `undo` and `redo` would do next, empty when nothing (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
-  - `{"t":"header","header":{…}}` when the plan's use or the machine's memory changes (§6.3). A snapshot carries the header too. The header also says `red_on_done` when `ui.red_on_done` is set, so every sidebar draws done in red (§5.3).
+  - `{"t":"header","header":{…}}` when the plan's use, the machine's memory (§6.3) or how busy it is changes. A snapshot carries the header too. `load` is how busy the machine is: its CPUs, the work waiting to run over the last minute (to the half), the kernel's memory pressure (1, 2 or 4) and the ptys in use of the most there can be, read every 5 s. A core advertises it to the cores it is paired with ([multi-host](proposals/multi-host.md) §4.2). The header also says `red_on_done` when `ui.red_on_done` is set, so every sidebar draws done in red (§5.3).
   - `{"t":"event","event":{…}}`, sent only when `events:true` was requested.
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
   - `{"t":"closed","closed":[…]}`: the closed sessions that `reopen` can bring back, the last closed first (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
