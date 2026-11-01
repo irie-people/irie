@@ -924,6 +924,9 @@ private struct Counts: View {
                 if let t = store.trod {
                     trod(t)
                 }
+                if let v = store.vpn {
+                    vpnMark(v)
+                }
             case .offline:
                 Text("offline").font(Theme.font(11, .bold)).foregroundStyle(Theme.needs)
             case .connecting:
@@ -961,6 +964,32 @@ private struct Counts: View {
             .help(words)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(words)
+    }
+
+    /// Mullvad VPN (docs/proposals/extensions.md §4.1): a shield, green while
+    /// connected, yellow while it comes or goes, red in error or while
+    /// lockdown blocks the network, and muted when off. A click says the
+    /// state in a notice; File > VPN changes it.
+    private func vpnMark(_ v: VPNMark) -> some View {
+        let color: Color
+        switch v.state {
+        case "connected": color = Theme.done
+        case "connecting", "disconnecting": color = Theme.paused
+        case "error": color = Theme.needs
+        default: color = (v.blocked ?? false) ? Theme.needs : Theme.muted
+        }
+        return Button { Task { _ = await store.input(":vpn") } } label: {
+            Image(systemName: v.state == "connected" ? "lock.shield" : "shield.slash")
+                .font(Theme.font(10, .bold))
+                .foregroundStyle(color)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(Capsule().fill(color.opacity(0.12)))
+                .overlay(Capsule().strokeBorder(color.opacity(0.4), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(v.text)
+        .accessibilityLabel(v.text)
     }
 
     /// A count of the sessions in these states, with the first state's mark,

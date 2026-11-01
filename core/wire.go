@@ -23,6 +23,7 @@ type (
 	Request          = ipc.Request
 	Reply            = ipc.Reply
 	Error            = ipc.Error
+	PeerCaller       = ipc.PeerCaller
 	Hearer           = ipc.Hearer
 	Client           = ipc.Client
 	OutsideSession   = ipc.OutsideSession
@@ -82,6 +83,9 @@ type (
 	ResultArgs       = ipc.ResultArgs
 	ResultResult     = ipc.ResultResult
 	ToolArgs         = ipc.ToolArgs
+	VPNArgs          = ipc.VPNArgs
+	VPNResult        = ipc.VPNResult
+	VPN              = ipc.VPN
 	StatusArgs       = ipc.StatusArgs
 	StatusReply      = ipc.StatusReply
 	ThemeArgs        = ipc.ThemeArgs
@@ -167,6 +171,7 @@ const (
 	OpConfig          = ipc.OpConfig
 	OpTrod            = ipc.OpTrod
 	OpReady           = ipc.OpReady
+	OpVPN             = ipc.OpVPN
 	FeatureSpawnModel = ipc.FeatureSpawnModel
 	FeatureWatch      = ipc.FeatureWatch
 	ViewApp           = ipc.ViewApp
@@ -205,6 +210,12 @@ const (
 	ToolSetup         = ipc.ToolSetup
 	ToolModels        = ipc.ToolModels
 	ToolReady         = ipc.ToolReady
+	ToolSwitch        = ipc.ToolSwitch
+	VPNOn             = ipc.VPNOn
+	VPNOff            = ipc.VPNOff
+	VPNLockdown       = ipc.VPNLockdown
+	VPNPlace          = ipc.VPNPlace
+	VPNTime           = ipc.VPNTime
 	FrameSnapshot     = ipc.FrameSnapshot
 	FrameUpsert       = ipc.FrameUpsert
 	FrameRemove       = ipc.FrameRemove

@@ -145,7 +145,7 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 
 	// ^name starts a task there, which reads its own @ and + words.
 	g.Core.Set(ipc.OpInput, ipc.InputResult{Did: "started", Op: ipc.OpSpawn, Text: "Started fix it", Session: &ipc.Session{ID: "s7", Name: "fix it"}})
-	r, err := c.input(ipc.InputArgs{Text: "@irie ^asa fix it\nand test it", Session: "s1"})
+	r, err := c.input(ipc.InputArgs{Text: "@irie ^asa fix it\nand test it", Session: "s1"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 	if _, err := c.Call(ipc.OpSend, json.RawMessage(`{"session":"Asahi/s2","text":"hi"}`)); !errors.As(err, &e) || e.Code != ipc.CodePeerDown {
 		t.Errorf("send while down: %v", err)
 	}
-	if _, err := c.input(ipc.InputArgs{Text: "^asahi fix it"}); !errors.As(err, &e) || e.Code != ipc.CodePeerDown {
+	if _, err := c.input(ipc.InputArgs{Text: "^asahi fix it"}, 0); !errors.As(err, &e) || e.Code != ipc.CodePeerDown {
 		t.Errorf("^asahi while down: %v", err)
 	}
 

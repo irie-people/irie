@@ -459,6 +459,10 @@ svg { display: block; }
 .mc-status.connected { color: var(--done); }
 .mc-status.unpaired { color: var(--needs); }
 .mc-meta { font-size: 13.5px; color: var(--muted); padding-left: 17px; }
+.mc-vpn { display: flex; align-items: center; gap: 8px; padding: 2px 0 2px 17px; font-size: 13.5px; color: var(--muted); }
+.mc-vpn-text { flex: 1; }
+.mc-vpn.on .mc-vpn-text { color: var(--done); }
+.mc-vpn.bad .mc-vpn-text { color: var(--needs); }
 .meters { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 2px 17px; }
 .meter { display: grid; grid-template-columns: 62px 1fr 38px; align-items: center; column-gap: 9px; font-size: 13px; }
 .m-label { color: var(--muted); }

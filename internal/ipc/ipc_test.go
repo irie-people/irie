@@ -236,3 +236,38 @@ func TestAPingFrameCarriesItsNumberOnly(t *testing.T) {
 		t.Errorf("ping frame = %s", b)
 	}
 }
+
+// peerHandler records who called.
+type peerHandler struct {
+	testHandler
+	peers chan int
+}
+
+func (h *peerHandler) CallFrom(peer int, op string, args json.RawMessage) (any, error) {
+	h.peers <- peer
+	return h.Call(op, args)
+}
+
+// TestCallFromKnowsTheCaller: a handler that wants to know learns the
+// client's process id, here this test's own.
+func TestCallFromKnowsTheCaller(t *testing.T) {
+	sock := filepath.Join(testutil.ShortDir(t), "core.sock")
+	l, err := Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	h := &peerHandler{peers: make(chan int, 1)}
+	go Serve(l, h)
+	c, err := Dial(sock, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Call("echo", map[string]int{"n": 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-h.peers; got != os.Getpid() {
+		t.Errorf("peer %d, want this process, %d", got, os.Getpid())
+	}
+}
