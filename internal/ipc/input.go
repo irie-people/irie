@@ -32,12 +32,14 @@ type InputArgs struct {
 	// Outside is the selected session outside Irie, by its key (its vendor
 	// id, else id:<short id>), which :move with no name brings in.
 	Outside string `json:"outside,omitempty"`
-	// Repo, InPlace, Profile and Model say where and on what a task runs
-	// when its words do not: the client's own menus. The words win.
+	// Repo, InPlace, Profile, Model and Tutor say where, on what and how a
+	// task runs when its words do not: the client's own menus. The words
+	// win. Tutor is off, explain or teach (docs/proposals/learning.md).
 	Repo    string `json:"repo,omitempty"`
 	InPlace bool   `json:"in_place,omitempty"`
 	Profile string `json:"profile,omitempty"`
 	Model   string `json:"model,omitempty"`
+	Tutor   string `json:"tutor,omitempty"`
 	// Apart is the session a task typed before was added to, as more for
 	// its jot: the task is taken back from it and started on its own.
 	Apart string `json:"apart,omitempty"`

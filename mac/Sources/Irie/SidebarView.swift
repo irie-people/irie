@@ -780,6 +780,8 @@ struct DetailsPanel: View {
             ControlLines(session: s)
             line(s.command, mono: true, color: meta)
             line([s.profile, s.branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "), mono: true, color: meta)
+            // Its tutor mode (docs/proposals/learning.md).
+            line(s.tutor.map { $0 == "teach" ? "Teach mode: it leaves parts for you to write" : "Explain mode: it says why it does what it does" }, color: meta)
             line(s.cwd.map(Age.tilde), mono: true, color: meta)
             line(s.tokens?.breakdown, color: meta)
             ForEach((s.subagents ?? []).prefix(3)) { h in

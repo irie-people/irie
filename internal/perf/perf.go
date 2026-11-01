@@ -170,6 +170,17 @@ func (m *Mutex) Lock() {
 	m.wait.Add(m.at.Sub(t))
 }
 
+// TryLock takes the mutex if it is free, as sync.Mutex's does, and says
+// whether it did.
+func (m *Mutex) TryLock() bool {
+	if !m.mu.TryLock() {
+		return false
+	}
+	m.at = time.Now()
+	m.n.Add(1)
+	return true
+}
+
 func (m *Mutex) Unlock() {
 	m.hold.Since(m.at)
 	m.mu.Unlock()

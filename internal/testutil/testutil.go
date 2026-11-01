@@ -219,6 +219,10 @@ func NewEnv(t *testing.T) *Env {
 	t.Setenv("XDG_CACHE_HOME", e.CacheHome)
 	t.Setenv("XDG_RUNTIME_DIR", e.RuntimeDir)
 	t.Setenv("TMUX_TMPDIR", e.TmuxTmpDir)
+	// A test core never slows the machine's other processes for the user's
+	// focus (Gabriel, DESIGN §4.11): it would take the user's own agents for
+	// apps outside it.
+	t.Setenv("IRIE_GABRIEL", "off")
 	for _, k := range []string{"TMUX", "TMUX_PANE", "IRIE_BIN"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)

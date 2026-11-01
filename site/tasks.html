@@ -114,7 +114,7 @@
   <ul class="rules">
     <li>The <code>@</code> and <code>+</code> words can go anywhere on the first line. Irie takes them out, and the rest goes to the agent as you wrote it.</li>
     <li>Any word on the first line that starts with <code>@</code> or <code>+</code> is read this way, so <code>add +5 to the total</code> asks for a profile called 5. Put such words on a later line.</li>
-    <li>One <code>@</code> and one <code>+</code> per task.</li>
+    <li>One <code>@</code> and one <code>+</code> per task, plus <code>+explain</code> or <code>+teach</code> if you want one.</li>
     <li>Write a folder from your home folder, <code>~/</code>, or from the top, <code>/</code>, such as <code>@/home/alice/code/shop</code>. Paths such as <code>./shop</code> aren’t accepted.</li>
   </ul>
 
@@ -175,6 +175,9 @@ git branch -d irie/fix-cart-total</code></pre>
   <h2 id="profile">Pick the agent with +</h2>
   <p><code>+</code> and a <dfn>profile</dfn>’s name picks the agent and its AI model for one task, such as <code>+local</code>. Without one, a task uses <code>spawn.default_profile</code>: out of the box, Claude Code with Opus 5.5 at max effort in auto mode.</p>
   <p>A name Irie doesn’t know starts nothing, and the line under the list names the profiles there are. <a href="profiles.html">Profiles and models</a> shows how to make your own.</p>
+
+  <h2 id="tutor">Learn as it works: +explain and +teach</h2>
+  <p><code>+explain</code> makes the agent tell you why it does what it does, in short notes as it works. <code>+teach</code> does that too, and leaves small parts for you to write yourself: it marks the spot in the file with <code>TODO(human)</code>, says what to write, and waits. Its card turns red and says it’s your turn. Write the part, then tell the agent you’re done. Either can go beside a profile, as in <code>+sonnet +teach build the upload form</code>. Both make longer replies, so they cost more tokens. In either, the agent draws a small diagram when a picture helps. To use one for every task, set <a href="profiles.html#learn"><code>learn.tutor</code></a>.</p>
 
   <h2 id="tab">Tab completion</h2>
   <p>Press <kbd>Tab</kbd> with the cursor in an <code>@</code> or <code>+</code> word on the first line:</p>

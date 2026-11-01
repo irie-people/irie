@@ -20,10 +20,11 @@ const File = "peers.json"
 
 // Peer is one other machine's core this one is paired with.
 type Peer struct {
-	URL         string    `json:"url"`         // its gateway, https://host:port
-	Token       string    `json:"token"`       // what its gateway issued this machine
-	Fingerprint string    `json:"fingerprint"` // the SHA-256 of its Irie authority, hex
-	Machine     string    `json:"machine"`     // its id, as its gateway says
+	URL         string    `json:"url"`           // its gateway, https://host:port
+	Token       string    `json:"token"`         // what its gateway issued this machine
+	Fingerprint string    `json:"fingerprint"`   // the SHA-256 of its Irie authority, hex
+	Machine     string    `json:"machine"`       // its id, as its gateway says
+	SSH         string    `json:"ssh,omitempty"` // its ssh name, which paired it, for fetching work back
 	Paired      time.Time `json:"paired"`
 }
 

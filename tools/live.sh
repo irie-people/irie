@@ -132,6 +132,14 @@ if [ -n "$core" ]; then
 fi
 
 go vet ./...
+# A session in macOS's background state (another one promoted, or Gabriel
+# holding it back while the user works on something else, DESIGN §4.11)
+# runs the tests slowly: give the slowest package time rather than fail the
+# install. A -timeout of your own in GOFLAGS wins.
+case " ${GOFLAGS:-} " in
+*" -timeout="*) ;;
+*) GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=40m" && export GOFLAGS ;;
+esac
 go test ./...
 
 # A change outside the Go code needs no new core, so the running one stays,

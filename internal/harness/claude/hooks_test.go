@@ -269,6 +269,21 @@ func TestProbeReadsTheVersionAndFlags(t *testing.T) {
 	}
 }
 
+// TestProbeFindsTheAppendFlagQuietly checks that --append-system-prompt, which
+// only tutor mode's diagrams need, is found without a warning when missing.
+func TestProbeFindsTheAppendFlagQuietly(t *testing.T) {
+	path, _ := fakeCLI(t, "2.1.316 (Claude Code)", helpWithName+"\n  --append-system-prompt <prompt>   Append a system prompt")
+	p := Harness{}.Probe(config.Profile{Command: path}, os.Environ())
+	if !p.Flags["--append-system-prompt"] || !p.Flags["--name"] || strings.Contains(strings.Join(p.Warnings, "\n"), "append-system-prompt") {
+		t.Errorf("probe = %+v", p)
+	}
+	path, _ = fakeCLI(t, "2.1.316 (Claude Code)", helpWithName)
+	p = Harness{}.Probe(config.Profile{Command: path}, os.Environ())
+	if p.Flags["--append-system-prompt"] || strings.Contains(strings.Join(p.Warnings, "\n"), "append-system-prompt") {
+		t.Errorf("probe without the flag = %+v", p)
+	}
+}
+
 // fakePluginCLI is a CLI whose --help lists --plugin-dir and whose
 // `plugin list --json` prints list and exits with code, saying stderr.
 func fakePluginCLI(t *testing.T, list string, code int, stderr string) string {

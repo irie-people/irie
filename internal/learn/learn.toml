@@ -1,0 +1,346 @@
+# What Irie teaches with (docs/proposals/learning.md): the tips it adds under
+# Claude Code's spinner, and the learning resources and glossary of the Help
+# menu. Irie links to the resources and copies nothing of theirs. Each link
+# was checked live when it was added; PROVENANCE.md lists them.
+
+# Tips go to Claude Code's spinner under the label "Irie tip", one line each
+# (at most 500 characters), each with an id Claude Code keeps its history by.
+
+[[tip]]
+id = "irie.keep-running"
+text = "Your agents keep running when Irie's window closes; open it again and each is where you left it"
+
+[[tip]]
+id = "irie.red"
+text = "A red card needs you: a question, a permission or a plan to approve"
+
+[[tip]]
+id = "irie.verify"
+text = "A ✓ on a card means its turn is over and the work waits for you to check it"
+
+[[tip]]
+id = "irie.park"
+text = "Park a session you have checked: it leaves the to-verify count and keeps running"
+
+[[tip]]
+id = "irie.undo"
+text = "Irie's undo takes back a park, a close or a reopen, and a closed session comes back with its conversation"
+
+[[tip]]
+id = "irie.pause"
+text = "Pause holds an agent at its next tool call; freeze stops everything it runs at once"
+
+[[tip]]
+id = "irie.promote"
+text = "Promote a session to give it the machine first; the others run in the background until you stop"
+
+[[tip]]
+id = "irie.repo"
+text = "Start a task with @ and a repo's name to run it in a worktree of its own, so agents never edit each other's files"
+
+[[tip]]
+id = "irie.haiku"
+text = "Start a small task with +haiku: it costs a fortieth of Opus's price"
+
+[[tip]]
+id = "irie.local"
+text = "Start a task with +local to run it on a model on this computer, with no tokens"
+
+[[tip]]
+id = "irie.tutor"
+text = "Start a task with +explain to hear why the agent does what it does, or +teach to write the key parts yourself"
+
+[[tip]]
+id = "irie.hows"
+text = "Ask how a session is going: type hows and its name in Irie's task bar"
+
+[[tip]]
+id = "irie.dog"
+text = "A finished jot whose work has not landed says what is left on its card, and irie ctl dog lists them all"
+
+[[tip]]
+id = "irie.learn"
+text = "Irie's Help menu has a glossary of the words agents use, and free courses on git, the terminal and Claude Code"
+
+# Resources show in the Help menu's Learning Resources, by group. One with a
+# lang is the official tutorial of a language, shown first when the shown
+# session's project is written in it.
+
+[[resource]]
+group = "Irie"
+title = "Get started"
+url = "https://irie-people.github.io/irie/get-started.html"
+about = "Build Irie, open it, type a task, watch the colours and look in."
+
+[[resource]]
+group = "Irie"
+title = "Your first session"
+url = "https://irie-people.github.io/irie/first-session.html"
+about = "One task from start to finish: read its card, answer it and see it finish."
+
+[[resource]]
+group = "Irie"
+title = "Tasks, repos and worktrees"
+url = "https://irie-people.github.io/irie/tasks.html"
+about = "Where agents work: @repo, @repo!, +profile, and what a worktree gets."
+
+[[resource]]
+group = "Irie"
+title = "Keys and commands"
+url = "https://irie-people.github.io/irie/keys.html"
+about = "Every key and command, and irie ctl for scripts."
+
+[[resource]]
+group = "Irie"
+title = "Recipes"
+url = "https://irie-people.github.io/irie/recipes.html"
+about = "From an idea to a merged change, with agents side by side."
+
+[[resource]]
+group = "Irie"
+title = "Troubleshooting"
+url = "https://irie-people.github.io/irie/troubleshooting.html"
+about = "Each stall, failure and warning, and what to do about it."
+
+[[resource]]
+group = "Working with Claude Code"
+title = "Quickstart"
+url = "https://code.claude.com/docs/en/quickstart"
+about = "Install Claude Code, sign in and make a first change."
+
+[[resource]]
+group = "Working with Claude Code"
+title = "Best practices"
+url = "https://code.claude.com/docs/en/best-practices"
+about = "How to give an agent what it needs: context, a check it can run, a plan."
+
+[[resource]]
+group = "Working with Claude Code"
+title = "Common workflows"
+url = "https://code.claude.com/docs/en/common-workflows"
+about = "Everyday work with Claude Code, step by step."
+note = "In an agent's terminal, /powerup gives Claude Code's own lessons, with animated demos."
+
+[[resource]]
+group = "Working with Claude Code"
+title = "Output styles"
+url = "https://code.claude.com/docs/en/output-styles"
+about = "The Explanatory and Learning styles that Irie's tutor mode uses."
+
+[[resource]]
+group = "Working with Claude Code"
+title = "Glossary"
+url = "https://code.claude.com/docs/en/glossary"
+about = "Claude Code's own words, each linked to more."
+
+[[resource]]
+group = "Courses"
+title = "Anthropic Academy"
+url = "https://academy.claude.com/courses"
+about = "Free courses: Claude 101, Claude Code 101 and AI Fluency."
+note = "Free with a sign-in. Claude Code 101 assumes you know the command line."
+
+[[resource]]
+group = "Prompting"
+title = "Prompt engineering"
+url = "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview"
+about = "Anthropic's guide to writing prompts that work."
+
+[[resource]]
+group = "Git"
+title = "Pro Git"
+url = "https://git-scm.com/book/en/v2"
+about = "The free book on git, from a first commit to how git works inside."
+note = "CC BY-NC-SA 3.0."
+
+[[resource]]
+group = "Git"
+title = "Learn Git Branching"
+url = "https://learngitbranching.js.org/"
+about = "A game in the browser that teaches branches, merges and rebases."
+
+[[resource]]
+group = "Git"
+title = "GitHub Skills"
+url = "https://skills.github.com/"
+about = "Short courses that run in a repository of your own."
+note = "Needs a GitHub account."
+
+[[resource]]
+group = "The terminal"
+title = "The Missing Semester of Your CS Education"
+url = "https://missing.csail.mit.edu/"
+about = "MIT's course on the shell, editors, git and the other tools around code."
+note = "CC BY-NC-SA 4.0. Its 2026 edition has a lecture on agentic coding."
+
+[[resource]]
+group = "The language at hand"
+lang = "go"
+title = "A Tour of Go"
+url = "https://go.dev/tour/"
+about = "Go's own tour of the language, run in the browser."
+
+[[resource]]
+group = "The language at hand"
+lang = "swift"
+title = "The Swift Programming Language"
+url = "https://docs.swift.org/swift-book/"
+about = "The Swift book: a tour, then the language in full."
+
+[[resource]]
+group = "The language at hand"
+lang = "python"
+title = "The Python Tutorial"
+url = "https://docs.python.org/3/tutorial/"
+about = "Python's own tutorial, from the interpreter to classes."
+
+[[resource]]
+group = "The language at hand"
+lang = "rust"
+title = "The Rust Programming Language"
+url = "https://doc.rust-lang.org/book/"
+about = "The Rust book, from installing Rust to ownership and beyond."
+
+[[resource]]
+group = "The language at hand"
+lang = "typescript"
+title = "The TypeScript Handbook"
+url = "https://www.typescriptlang.org/docs/handbook/intro.html"
+about = "TypeScript's own guide to the language."
+
+[[resource]]
+group = "The language at hand"
+lang = "javascript"
+title = "Learn web development"
+url = "https://developer.mozilla.org/en-US/docs/Learn_web_development"
+about = "MDN's course on HTML, CSS and JavaScript."
+
+# The glossary: the words Irie and its agents use, in plain words.
+
+[[term]]
+term = "agent"
+means = "A program that does a task for you with an AI model: it reads files, runs commands and writes code. Claude Code is one."
+
+[[term]]
+term = "branch"
+means = "A line of commits that grows on its own, so work can go on without touching the main line until it is ready."
+
+[[term]]
+term = "commit"
+means = "A saved step in a repo's history, with a message that says what changed."
+
+[[term]]
+term = "context"
+means = "Everything a model can see at once: your task, the files it read and the conversation so far. When it fills up, the older part is summarised."
+
+[[term]]
+term = "diff"
+means = "The lines a change adds and removes, marked + and −."
+
+[[term]]
+term = "freeze"
+means = "Stop a session and everything it runs at once. Thaw carries it all on."
+
+[[term]]
+term = "helper"
+means = "A subagent: a smaller agent that a session starts for one part of its task, such as a search. It shows under its session's card."
+
+[[term]]
+term = "Insight"
+means = "A short note, in explain and teach modes, on why the agent made a choice."
+
+[[term]]
+term = "jot"
+means = "A task typed into the task bar and left to run. Irie's jot dog checks that its work is finished and lands."
+
+[[term]]
+term = "land"
+means = "Work has landed when it reaches the branch that counts, such as main, or the branch an install is made from."
+
+[[term]]
+term = "local model"
+means = "A model that runs on your own computer. It costs no tokens, but takes memory while it runs."
+
+[[term]]
+term = "merge"
+means = "Bring the commits of one branch into another."
+
+[[term]]
+term = "model"
+means = "The AI an agent thinks with, such as Opus, Sonnet or Haiku. A bigger model does harder work and costs more."
+
+[[term]]
+term = "needs you"
+means = "The session waits for you: a question, a permission or a plan to approve. Its card turns red."
+
+[[term]]
+term = "output style"
+means = "How Claude Code talks to you. Irie's tutor mode uses its Explanatory and Learning styles."
+
+[[term]]
+term = "park"
+means = "Move a session you have checked to the Parked group at the end of the list. It keeps running, and leaves the to-verify count."
+
+[[term]]
+term = "pause"
+means = "Hold an agent at its next tool call, so it finishes the step it is on first. Resume carries it on."
+
+[[term]]
+term = "permission"
+means = "An agent's question before a step, such as running a command or editing a file, that needs your yes."
+
+[[term]]
+term = "profile"
+means = "A named way to run an agent: which program, which model, and how hard it thinks. +haiku and +local are profiles."
+
+[[term]]
+term = "promote"
+means = "Put a session first and give it the machine first; the other sessions run in the background."
+
+[[term]]
+term = "prompt"
+means = "What you type to an agent: a task, an answer or a note."
+
+[[term]]
+term = "repo"
+means = "A folder whose history git keeps: every change, who made it and when. Short for repository."
+
+[[term]]
+term = "session"
+means = "One agent at work on one task, with its own card in Irie's list and its own terminal."
+
+[[term]]
+term = "task"
+means = "What you ask an agent to do, in plain words. Each task you type starts a session."
+
+[[term]]
+term = "terminal"
+means = "A window where you type commands and programs answer in text. Each agent runs in one, which Irie can show."
+
+[[term]]
+term = "test"
+means = "A small program that checks that code does what it should. Agents run tests to check their own work."
+
+[[term]]
+term = "to verify"
+means = "The agent's turn is over and you have not checked its work yet. Its card shows ✓."
+
+[[term]]
+term = "TODO(human)"
+means = "A mark the agent leaves in a file in teach mode, where you write the next piece of code yourself."
+
+[[term]]
+term = "token"
+means = "The unit a model reads and writes in, a few letters long. Cloud models are paid for by the token."
+
+[[term]]
+term = "tool call"
+means = "One step an agent takes: reading a file, running a command or editing code. Irie says each in plain words."
+
+[[term]]
+term = "tutor mode"
+means = "How Claude Code sessions work with you: off; explain, where it tells you why; or teach, where it leaves parts for you to write."
+
+[[term]]
+term = "worktree"
+means = "Another copy of a repo's files, on a branch of its own. Irie gives each @repo task its own, so agents never edit each other's files."

@@ -167,11 +167,13 @@ enum Fixture {
     /// and Mikael's good of its own, as the core writes it (config.Tree).
     static let config = #"""
     {"path": "/home/alice/.config/irie/config.toml", "config": {
-        "arch": {"mikael": {"on": true, "door": true, "good": ["Give credit where it's due.", "Be honest with clients, even when it costs me the job."]}},
+        "arch": {"mikael": {"on": true, "door": true, "good": ["Give credit where it's due.", "Be honest with clients, even when it costs me the job."]},
+            "gabriel": {"on": true, "outside": true, "away": "5m", "word": "10m", "heavy": 50, "spare": ["zoom.us", "FaceTime", "Music", "Spotify"], "boost": "1h"}},
         "dog": {"land": {"irie": "live"}, "nudges": 2, "watch": true},
         "trod": {"on": true, "start": "23:00", "end": "07:00", "away": "15m", "questions": true, "nudges": 8, "retry": "15m", "within": "24h", "max_working": 4, "max_plan_use": 90, "keep_awake": true,
             "rules": ["Don't spend money you didn't make.", "Don't go over the plan's weekly allotment: never buy usage credits or turn on extra usage.", "Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages."],
             "guidelines": ["When you have to choose, take the option you would recommend, and say in your last message which you took and why.", "Finish the task you were given; note new ideas and extra work for the morning instead of starting them."]},
+        "learn": {"agent_tips": true, "links": {"Team handbook": "https://example.com/handbook"}, "tutor": "explain", "visual": true},
         "local": {"context": 65536, "env": {}, "kv_cache": "q8_0", "memory_gib": 0, "ollama": "", "port": 11435, "url": ""},
         "profiles": {
             "claude": {"command": "claude", "effort": "max", "harness": "claude-code", "model": "claude-opus-5-5", "permission_mode": "auto"},

@@ -24,6 +24,7 @@ When you need the person to choose, ask with the `AskUserQuestion` tool, not in 
 - **A comparison or a set of results:** a Markdown table with few columns and short cells. Irie draws tables natively.
 - **Steps or findings:** a short list.
 - **Changed lines:** a fenced `diff` block, with `+` and `-` lines.
+- **How parts connect, or what happens in what order:** where a picture helps, a small fenced `mermaid` diagram, a dozen nodes at most, with the words beside it. Irie's Mac app draws it; a terminal shows its text.
 - **Commands, paths and code:** a fenced block with its language.
 - **Numbers:** their units, and what they compare with ("40 ms, from 120 ms").
 - **A file you made for the person to open,** such as a page or a report: its full path on a line of its own.

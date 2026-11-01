@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -240,7 +241,7 @@ func (c *Core) dogAtStop(id string, evs []event.Event) (string, []looseIn) {
 		c.mu.Unlock()
 		return "", nil
 	}
-	l, repos, nudged := c.lookAt(x, true), c.knownRepos(), x.track.nudged
+	l, repos, nudged, teach := c.lookAt(x, true), c.knownRepos(), x.track.nudged, x.tutor == config.TutorTeach
 	c.mu.Unlock()
 
 	start := time.Now()
@@ -257,6 +258,10 @@ func (c *Core) dogAtStop(id string, evs []event.Event) (string, []looseIn) {
 	case e.Data["stop_hook_active"] == true, waiting > 0, asksUser(e.Str("message")):
 		// A stop hook sent it on already, so it has had its say; work of
 		// its own in the background will wake it; or it waits for you.
+		return "", nil
+	case teach && turnAsked(e.Str("message")):
+		// In teach mode it left a part for you to write, which is the
+		// TODO(human) the dog would count (docs/proposals/learning.md §4.4).
 		return "", nil
 	}
 	return unfinished(loose), loose

@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -98,10 +99,19 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			e.Data["phrase"] = p
 		}
 		// The journal cuts strings, so the whole message is kept first.
-		if msg := e.Str("message"); e.Kind == event.TurnEnded && e.Agent == event.Main && msg != "" {
+		msg := e.Str("message")
+		if e.Kind == event.TurnEnded && e.Agent == event.Main && msg != "" {
 			c.saveResult(x, msg)
 		}
 		c.record(x, e)
+		// A teach-mode turn that asks the user to write a part is theirs:
+		// the agent waits at its prompt (docs/proposals/learning.md §4.4).
+		if e.Kind == event.TurnEnded && e.Agent == event.Main && x.tutor == config.TutorTeach {
+			if line, ok := yourTurn(msg); ok {
+				c.record(x, event.Event{Source: event.SourceIrie, Agent: event.Main, Kind: event.InputNeeded, Vendor: e.Vendor,
+					Data: map[string]any{"reason": event.ReasonTurn, "phrase": "Your turn: " + line}})
+			}
+		}
 		turnEnded = turnEnded || e.Kind == event.TurnEnded && e.Agent == event.Main
 		switch {
 		case e.Kind == event.SessionStarted:

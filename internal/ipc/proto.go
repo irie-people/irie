@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 // API is the protocol version. Additions keep backwards compatibility.
@@ -68,6 +69,15 @@ const (
 	// OpTrod is the trod bot's report: whether it works now, the
 	// rules and guidelines it gives, and what it did (DESIGN §4.10).
 	OpTrod = "trod"
+	// OpGabriel is Gabriel's report: whether the user is at the computer
+	// and the machine busy, what is in their focus, and what he holds back
+	// (DESIGN §4.11). It answers a GabrielResult.
+	OpGabriel = "gabriel"
+	// OpArch lists Irie's arch agents for any client to draw (DESIGN
+	// §4.11): each one's name and work, whether he is on, what he does now,
+	// what a person can do with him, and his settings. It answers an
+	// ArchResult.
+	OpArch = "arch"
 	// OpReady checks that the computer has what Irie needs, as its agents
 	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
 	// a ready.Report, for the Mac app's welcome.
@@ -76,7 +86,13 @@ const (
 	// (docs/proposals/extensions.md §4). A change from inside an agent is
 	// refused.
 	OpVPN = "vpn"
+	// OpLearn gives what the Help menu shows: the learning resources, the
+	// user's own links and the glossary (docs/proposals/learning.md).
+	OpLearn = "learn"
 )
+
+// FeatureTutor is in hello's features when spawn takes SpawnArgs.Tutor.
+const FeatureTutor = "spawn-tutor"
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
@@ -159,6 +175,7 @@ type Session struct {
 	Tokens *Tokens `json:"tokens,omitempty"`
 
 	// What the session runs on and costs (DESIGN §6.3).
+	Tutor   string   `json:"tutor,omitempty"`    // its tutor mode, explain or teach; empty when off (learn.tutor)
 	Model   string   `json:"model,omitempty"`    // the model the agent runs
 	Local   bool     `json:"local,omitempty"`    // a local model, which costs memory rather than tokens
 	CostUSD *float64 `json:"cost_usd,omitempty"` // what it has cost at list price, from its status line
@@ -240,6 +257,98 @@ type TrodHand struct {
 }
 
 // TrodResult is the trod bot's report (DESIGN §4.10).
+// ArchResult is every arch agent, by rank (OpArch). A client draws each
+// one as it comes, so a new arch agent needs no change to any client.
+type ArchResult struct {
+	Agents []ArchAgent `json:"agents"`
+}
+
+// ArchAgent is one arch agent as a client shows him.
+type ArchAgent struct {
+	Name     string        `json:"name"`               // such as gabriel
+	Nickname string        `json:"nickname,omitempty"` // what people may call him for short, such as Raffi
+	Icon     string        `json:"icon,omitempty"`     // his mark, one or two emoji
+	Title    string        `json:"title"`              // his work in a few words
+	About    string        `json:"about"`              // his work in a sentence or two
+	On       bool          `json:"on"`                 // he works now
+	Status   string        `json:"status,omitempty"`   // what he does now, in a line
+	Actions  []ArchAction  `json:"actions,omitempty"`  // what a person can do with him now
+	Settings []ArchSetting `json:"settings,omitempty"` // his settings, in the order to show them
+}
+
+// ArchAction is something a person can do with an arch agent: a client
+// shows Label and, when it is used, calls Op with Args as they are.
+type ArchAction struct {
+	Label string          `json:"label"` // such as "Boost for 1 hour"
+	Op    string          `json:"op"`    // such as gabriel
+	Args  json.RawMessage `json:"args,omitempty"`
+	Done  string          `json:"done,omitempty"` // what the client says once it worked
+}
+
+// ArchSetting is one of an arch agent's settings: a config key (the config
+// op reads and writes it), how a client edits it, and what to call it.
+type ArchSetting struct {
+	Key   string `json:"key"`            // such as arch.gabriel.away
+	Kind  string `json:"kind"`           // ArchBool, ArchDuration, ArchNumber or ArchLines
+	Label string `json:"label"`          // such as "You're away after"
+	Help  string `json:"help,omitempty"` // a line on what it does
+	// Value is the setting's value now, as the config op has it: a
+	// duration as a string such as "5m".
+	Value json.RawMessage `json:"value,omitempty"`
+}
+
+// The kinds of ArchSetting.
+const (
+	ArchBool     = "bool"     // a switch
+	ArchDuration = "duration" // a duration such as "5m"
+	ArchNumber   = "number"   // a number
+	ArchLines    = "lines"    // a list of one-line texts
+)
+
+// GabrielArgs starts or stops a boost (OpGabriel): for its time, the user's
+// focus gets the machine first whether it is busy or not. No args asks for
+// the report alone.
+type GabrielArgs struct {
+	Boost bool   `json:"boost,omitempty"` // start a boost, or make the one on go on for For from now
+	Stop  bool   `json:"stop,omitempty"`  // end the boost
+	For   string `json:"for,omitempty"`   // how long, such as "30m"; "" = arch.gabriel.boost
+}
+
+// GabrielResult is Gabriel's report (OpGabriel).
+type GabrielResult struct {
+	On      bool   `json:"on"`      // he works in this core
+	Outside bool   `json:"outside"` // he slows apps outside Irie too
+	Present bool   `json:"present"` // the user is at the computer
+	Idle    string `json:"idle"`    // since their last keyboard or mouse input, such as "4s"
+	Busy    bool   `json:"busy"`    // the machine is busy
+	Holding bool   `json:"holding"` // he holds back what is out of the user's focus
+	// BoostUntil is when the boost ends, while one is on: the user's focus
+	// gets the machine first then whether it is busy or not.
+	BoostUntil *time.Time       `json:"boost_until,omitempty"`
+	LowPower   bool             `json:"low_power,omitempty"` // macOS's Low Power Mode is on, which slows the whole machine
+	Freed      []string         `json:"freed,omitempty"`     // the idle local models the boost unloaded
+	CPUs       int              `json:"cpus"`
+	RunQueue   float64          `json:"run_queue"`
+	Pressure   int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
+	Front      string           `json:"front,omitempty"` // the app in front, when he read it
+	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
+	Held       []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
+	Apps       []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
+}
+
+// GabrielSession is a session in Gabriel's report.
+type GabrielSession struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// GabrielApp is an app outside Irie that Gabriel slowed.
+type GabrielApp struct {
+	PID  int     `json:"pid"`
+	Name string  `json:"name"`
+	CPU  float64 `json:"cpu"` // its share of a CPU when he slowed it, in percent
+}
+
 type TrodResult struct {
 	On          bool          `json:"on"`                     // trod.on
 	In          bool          `json:"in"`                     // on, and in its hours now
@@ -606,6 +715,10 @@ type SpawnArgs struct {
 	// Apart takes a jot that was added to session Apart back, if its agent
 	// has not had it yet, and starts it as a task of its own.
 	Apart string `json:"apart,omitempty"`
+	// Tutor is how the agent works with the user (learn.tutor): off,
+	// explain or teach; "" takes learn.tutor. A delegated subtask runs off
+	// unless it says otherwise (docs/proposals/learning.md).
+	Tutor string `json:"tutor,omitempty"`
 }
 
 type SpawnResult struct {
@@ -834,6 +947,20 @@ type ConfigResult struct {
 	// not, as after a hand edit gone wrong; the core runs on the config it
 	// loaded last.
 	Problem string `json:"problem,omitempty"`
+}
+
+// LearnArgs ask what the Help menu shows; with Session, the tutorials of the
+// languages its project is written in come first.
+type LearnArgs struct {
+	Session string `json:"session,omitempty"`
+}
+
+// LearnResult is what the Help menu shows (docs/proposals/learning.md): the
+// user's own links (learn.links), then the learning resources, and the
+// glossary of the words Irie and its agents use.
+type LearnResult struct {
+	Resources []learn.Resource `json:"resources"`
+	Glossary  []learn.Term     `json:"glossary"`
 }
 
 type ShowArgs struct {

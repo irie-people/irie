@@ -278,6 +278,12 @@ func (o Ollama) Load(ctx context.Context, model string) error {
 	}, nil)
 }
 
+// Unload lets a loaded model go at once, freeing the memory it holds
+// (POST /api/generate with keep_alive 0, as Ollama's API documents).
+func (o Ollama) Unload(ctx context.Context, model string) error {
+	return o.call(ctx, http.MethodPost, "/api/generate", map[string]any{"model": model, "keep_alive": 0}, nil)
+}
+
 // Progress is one status line of a pull.
 type Progress struct {
 	Status    string `json:"status"`

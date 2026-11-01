@@ -31,6 +31,7 @@ type (
 	MoveResult       = ipc.MoveResult
 	PeersArgs        = ipc.PeersArgs
 	PeersResult      = ipc.PeersResult
+	PeerFetch        = ipc.PeerFetch
 	PeerInfo         = ipc.PeerInfo
 	Machine          = ipc.Machine
 	Session          = ipc.Session
@@ -38,6 +39,14 @@ type (
 	TrodShift        = ipc.TrodShift
 	TrodArgs         = ipc.TrodArgs
 	TrodHand         = ipc.TrodHand
+	ArchResult       = ipc.ArchResult
+	ArchAgent        = ipc.ArchAgent
+	ArchAction       = ipc.ArchAction
+	ArchSetting      = ipc.ArchSetting
+	GabrielArgs      = ipc.GabrielArgs
+	GabrielResult    = ipc.GabrielResult
+	GabrielSession   = ipc.GabrielSession
+	GabrielApp       = ipc.GabrielApp
 	TrodResult       = ipc.TrodResult
 	TrodSession      = ipc.TrodSession
 	TrodSend         = ipc.TrodSend
@@ -91,6 +100,8 @@ type (
 	ConfigArgs       = ipc.ConfigArgs
 	ConfigSet        = ipc.ConfigSet
 	ConfigResult     = ipc.ConfigResult
+	LearnArgs        = ipc.LearnArgs
+	LearnResult      = ipc.LearnResult
 	ShowArgs         = ipc.ShowArgs
 	RenameArgs       = ipc.RenameArgs
 	RenameResult     = ipc.RenameResult
@@ -169,8 +180,12 @@ const (
 	OpDog             = ipc.OpDog
 	OpConfig          = ipc.OpConfig
 	OpTrod            = ipc.OpTrod
+	OpGabriel         = ipc.OpGabriel
+	OpArch            = ipc.OpArch
 	OpReady           = ipc.OpReady
 	OpVPN             = ipc.OpVPN
+	OpLearn           = ipc.OpLearn
+	FeatureTutor      = ipc.FeatureTutor
 	FeatureSpawnModel = ipc.FeatureSpawnModel
 	FeatureWatch      = ipc.FeatureWatch
 	ViewApp           = ipc.ViewApp
@@ -194,6 +209,10 @@ const (
 	StateIdle         = ipc.StateIdle
 	StatePaused       = ipc.StatePaused
 	StatePausing      = ipc.StatePausing
+	ArchBool          = ipc.ArchBool
+	ArchDuration      = ipc.ArchDuration
+	ArchNumber        = ipc.ArchNumber
+	ArchLines         = ipc.ArchLines
 	DidUndo           = ipc.DidUndo
 	DidRedo           = ipc.DidRedo
 	DidSettle         = ipc.DidSettle

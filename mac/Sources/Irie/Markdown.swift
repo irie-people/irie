@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Markdown as the agent writes it: headings, lists, code blocks, quotes,
-/// tables and rules, with bold, italics, code and links inside a line
+/// Markdown as the agent writes it: headings, lists, code blocks, Mermaid
+/// diagrams (Diagram.swift), quotes, tables and rules, with bold, italics, code and links inside a line
 /// (Foundation's inline Markdown). A line break stays a line break, as in
 /// the terminal.
 struct MarkdownText: View {
@@ -40,6 +40,8 @@ struct MarkdownText: View {
                 .padding(.vertical, 10)
                 .background(RoundedRectangle(cornerRadius: Theme.radius - 2, style: .continuous).fill(Theme.panel))
                 .overlay(RoundedRectangle(cornerRadius: Theme.radius - 2, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
+        case let .diagram(text):
+            Diagram(source: text)
         case let .quote(text):
             HStack(alignment: .top, spacing: 10) {
                 RoundedRectangle(cornerRadius: 1.5).fill(Theme.edge).frame(width: 3)
@@ -82,6 +84,8 @@ enum MarkdownBlock: Equatable {
     case heading(Int, String)
     case item(Int, String, String) // depth, marker, text
     case code(String)
+    /// A fenced block marked mermaid, drawn as a diagram.
+    case diagram(String)
     case quote(String)
     case table([[String]])
     case rule
@@ -91,7 +95,7 @@ enum MarkdownBlock: Equatable {
         var paragraph: [String] = []
         var quote: [String] = []
         var table: [[String]] = []
-        var fence: (marker: String, lines: [String])?
+        var fence: (marker: String, lines: [String], diagram: Bool)?
 
         func flush() {
             if !paragraph.isEmpty { out.append(.paragraph(paragraph.joined(separator: "\n"))) }
@@ -107,7 +111,8 @@ enum MarkdownBlock: Equatable {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if var f = fence {
                 if trimmed.hasPrefix(f.marker) && trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "`~")).isEmpty {
-                    out.append(.code(f.lines.joined(separator: "\n")))
+                    let text = f.lines.joined(separator: "\n")
+                    out.append(f.diagram ? .diagram(text) : .code(text))
                     fence = nil
                 } else {
                     f.lines.append(raw)
@@ -118,7 +123,9 @@ enum MarkdownBlock: Equatable {
             if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                 flush()
                 let marker = String(trimmed.prefix { $0 == "`" || $0 == "~" })
-                fence = (marker, [])
+                // The info string names the block's language: mermaid draws.
+                let info = trimmed.dropFirst(marker.count).trimmingCharacters(in: .whitespaces).lowercased()
+                fence = (marker, [], info.split(separator: " ").first == "mermaid")
                 continue
             }
             if trimmed.isEmpty {
@@ -153,6 +160,7 @@ enum MarkdownBlock: Equatable {
             if !quote.isEmpty || !table.isEmpty { flush() }
             paragraph.append(trimmed)
         }
+        // A fence never closed stays code: a diagram cut short would not draw.
         if let f = fence { out.append(.code(f.lines.joined(separator: "\n"))) }
         flush()
         return out

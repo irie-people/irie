@@ -357,9 +357,13 @@ func cost(s ipc.Session) string {
 }
 
 // routed says how a session was routed and rated (DESIGN §6.4): "small→local",
-// "↳ delegated", "rated good".
+// "↳ delegated", "rated good"; and its tutor mode, "teach mode"
+// (docs/proposals/learning.md).
 func routed(s ipc.Session) string {
 	var parts []string
+	if s.Tutor != "" {
+		parts = append(parts, s.Tutor+" mode")
+	}
 	if s.Routed && s.Class != "" {
 		parts = append(parts, s.Class+"→"+s.Profile)
 	}

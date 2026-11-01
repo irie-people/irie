@@ -18,10 +18,13 @@ import (
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
 func TestArchForFollowsTheConfig(t *testing.T) {
+	// Gabriel's part is below.
+	t.Setenv("IRIE_GABRIEL", "off")
 	cfg := config.Default()
 	cfg.Arch.Mikael.Good = []string{"Give credit where it is due."}
 	c := &Core{}
@@ -56,6 +59,19 @@ func TestArchForFollowsTheConfig(t *testing.T) {
 	// Off, he still answers a session started to talk to him.
 	if got := c.archFor(mikael, "claude-code"); got.As != "mikael" || len(got.With) != 0 {
 		t.Errorf("Mikael off, +mikael: %+v", got)
+	}
+	// Gabriel goes with every session where he can work.
+	t.Setenv("IRIE_GABRIEL", "")
+	cfg = config.Default()
+	c.useConfig(cfg)
+	got := c.archFor(claude, "claude-code")
+	if want := []string{"mikael", "gabriel"}; proc.CanBackground && !slices.Equal(got.With, want) {
+		t.Errorf("with Gabriel: %v, want %v", got.With, want)
+	}
+	cfg.Arch.Gabriel.On = false
+	c.useConfig(cfg)
+	if got := c.archFor(claude, "claude-code"); slices.Contains(got.With, "gabriel") {
+		t.Errorf("Gabriel off: %v", got.With)
 	}
 }
 

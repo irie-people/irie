@@ -8,6 +8,9 @@
 # cache, which every checkout and worktree shares. Ghostty's own engine,
 # GhosttyKit, draws the terminals when it builds (ghostty.sh, cached the same
 # way); without it the app uses SwiftTerm alone. The icon is drawn in Go.
+# Mermaid (MIT) draws the diagrams agents write in tutor mode; its script is
+# fetched at the pinned release and checked against its SHA-256 the same
+# way, and without it a diagram shows as its text.
 # IRIE_MAC_NO_SWIFTTERM=1 builds with Apple's frameworks only; the terminal
 # then opens in Ghostty. IRIE_MAC_NO_GHOSTTY=1 leaves GhosttyKit out.
 # IRIE_SIGN_IDENTITY signs it with your own identity (below).
@@ -56,6 +59,28 @@ swiftterm() {
 }
 if [ "$term" = 1 ]; then
 	swiftterm "$target"
+fi
+
+# Mermaid's script and license, for the diagrams in the conversation view
+# (docs/proposals/learning.md §4.8). One copy in the cache for every
+# checkout; a download that fails or does not match leaves diagrams as text.
+mv=11.4.1
+msum=a43bc1afd446f9c4cc66ac5dd45d02e8d65e26fc5344ec0ef787f88d6ddb6f9e
+lsum=ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80
+mcache=${XDG_CACHE_HOME:-$HOME/Library/Caches}/irie
+mermaid="$mcache/mermaid-$mv"
+if [ ! -f "$mermaid/mermaid.min.js" ]; then
+	mkdir -p "$mcache"
+	mtmp=$(mktemp -d "$mcache/.mermaid.XXXXXX")
+	if curl -fsSL --max-time 120 -o "$mtmp/mermaid.min.js" "https://cdn.jsdelivr.net/npm/mermaid@$mv/dist/mermaid.min.js" &&
+		curl -fsSL --max-time 60 -o "$mtmp/LICENSE" "https://cdn.jsdelivr.net/npm/mermaid@$mv/LICENSE" &&
+		[ "$(shasum -a 256 "$mtmp/mermaid.min.js" | cut -d' ' -f1)" = "$msum" ] &&
+		[ "$(shasum -a 256 "$mtmp/LICENSE" | cut -d' ' -f1)" = "$lsum" ]; then
+		if [ ! -e "$mermaid" ]; then mv "$mtmp" "$mermaid"; else rm -rf "$mtmp"; fi
+	else
+		rm -rf "$mtmp"
+		echo "build.sh: Mermaid $mv did not download or its SHA-256 did not match, so diagrams show as text" >&2
+	fi
 fi
 
 # GhosttyKit, when it builds: a Ghostty that will not build, as without Xcode
@@ -108,6 +133,10 @@ else
 		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
 fi
 cp Info.plist "$app/Contents/Info.plist"
+if [ -f "$mermaid/mermaid.min.js" ]; then
+	cp "$mermaid/mermaid.min.js" "$app/Contents/Resources/"
+	cp "$mermaid/LICENSE" "$app/Contents/Resources/mermaid-LICENSE.txt"
+fi
 # Irie's icon (DESIGN §7.2): tools/mkicon draws the iconset, iconutil packs it.
 rm -rf build/Irie.iconset
 go run ../tools/mkicon build/Irie.iconset

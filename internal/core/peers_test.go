@@ -210,3 +210,30 @@ func TestACaretWordNamesAMachine(t *testing.T) {
 		}
 	}
 }
+
+func TestABadFrameFromAPeerCannotStopThisCore(t *testing.T) {
+	c := newPeerCore(t)
+	p := &peerState{name: "Asahi", stop: func() {}, rows: map[string]ipc.Session{},
+		fetchq: make(chan ipc.Session, 1), done: map[string]bool{}, fetched: map[string]fetched{}}
+	c.peers = map[string]*peerState{"Asahi": p}
+	for _, f := range []ipc.Frame{{T: ipc.FrameSnapshot}, {T: ipc.FrameHeader}, {T: ipc.FrameUpsert}, {T: ipc.FrameUpsert, Session: &ipc.Session{}}, {T: "nonsense"}} {
+		if err := c.safePeerFrame(p, f); err != nil {
+			t.Errorf("%+v: %v", f, err)
+		}
+	}
+	c.mu.Lock()
+	info := c.peersInfo()
+	c.mu.Unlock()
+	if len(info) != 1 || !info[0].Up {
+		t.Errorf("peers = %+v", info)
+	}
+	// A frame that goes wrong ends the stream and lets the lock go.
+	p.rows = nil
+	if err := c.safePeerFrame(p, ipc.Frame{T: ipc.FrameUpsert, Session: &ipc.Session{ID: "s1"}}); err == nil {
+		t.Error("a frame that went wrong passed")
+	}
+	if !c.mu.TryLock() {
+		t.Fatal("the core's lock is still held")
+	}
+	c.mu.Unlock()
+}

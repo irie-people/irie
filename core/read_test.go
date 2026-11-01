@@ -125,14 +125,16 @@ func TestReadRefusesInWords(t *testing.T) {
 
 // A task runs where its words say, else where the client's menus say.
 func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
-	menus := InputArgs{Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet"}
+	menus := InputArgs{Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain"}
 	for _, c := range []struct {
 		text string
 		want SpawnArgs
 	}{
-		{"fix the flaky test", SpawnArgs{Task: "fix the flaky test", Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Jot: true}},
-		{"@web fix it", SpawnArgs{Task: "fix it", Repo: "web", Profile: "haiku", Model: "sonnet", Jot: true}},
-		{"+auto @~/code/x! fix it", SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x", InPlace: true, Profile: "auto", Model: "sonnet", Jot: true}},
+		{"fix the flaky test", SpawnArgs{Task: "fix the flaky test", Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Jot: true}},
+		{"@web fix it", SpawnArgs{Task: "fix it", Repo: "web", Profile: "haiku", Model: "sonnet", Tutor: "explain", Jot: true}},
+		{"+auto @~/code/x! fix it", SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x", InPlace: true, Profile: "auto", Model: "sonnet", Tutor: "explain", Jot: true}},
+		// The tutor words win over the menu's tutor mode, as the other words do.
+		{"+teach fix it", SpawnArgs{Task: "fix it", Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "teach", Jot: true}},
 	} {
 		in := menus
 		in.Text = c.text

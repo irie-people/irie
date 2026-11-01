@@ -53,7 +53,7 @@ func parseStep(item string, inSub bool) (step, error) {
 		}
 		return step{kind: name}, nil
 	case "stop":
-		if inSub || hasArg && arg != "bg" && arg != "ask" && arg != "asks" {
+		if inSub || hasArg && arg != "bg" && arg != "ask" && arg != "asks" && arg != "turn" {
 			return bad()
 		}
 		return step{kind: name, arg: arg}, nil

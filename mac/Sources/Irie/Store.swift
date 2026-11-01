@@ -29,12 +29,26 @@ final class Store: ObservableObject {
     @Published private(set) var agents: [Agent] = []
     /// Whether the core takes a model for one task.
     @Published private(set) var canPickModel = false
+    /// The core takes a tutor mode for one task, and serves the Help menu
+    /// (docs/proposals/learning.md).
+    @Published private(set) var canTutor = false
+    @Published private(set) var canLearn = false
+    /// The Learn window's page (Learn.swift).
+    @Published var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
     @Published private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
     @Published private(set) var canPark = false
     /// Whether the core has the trod bot (DESIGN §4.10).
     @Published private(set) var canTrod = false
+    /// The core gives a boost of Gabriel's (DESIGN §4.11).
+    @Published private(set) var canBoost = false
+    /// The core lists its arch agents (op arch).
+    @Published private(set) var canArch = false
+    /// The arch agents, as the core last listed them.
+    @Published private(set) var archAgents: [ArchAgent] = []
+    /// While a boost is on, when it ends.
+    @Published private(set) var boostUntil: Date?
     /// Cards parked or unparked from under the pointer, each with whether
     /// it is drawn parked: it stays where it was until the pointer leaves
     /// it, so a second click on the same spot takes it back (Controls.swift).
@@ -200,9 +214,13 @@ final class Store: ObservableObject {
                 // A core that restarted asks again.
                 splitShown = nil
                 canPickModel = hello.features.contains("spawn-model")
+                canTutor = hello.features.contains("spawn-tutor")
+                canLearn = hello.features.contains("learn")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
                 canTrod = hello.features.contains("trod")
+                canBoost = hello.features.contains("gabriel")
+                canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
@@ -325,6 +343,10 @@ final class Store: ObservableObject {
         }
     }
 
+    /// The + words that set a tutor mode rather than name an agent
+    /// (docs/proposals/learning.md).
+    static let tutorWords: Set<String> = ["explain", "teach"]
+
     /// Asks the core for the repos the @ words know and the agents the +
     /// words name. A core that answers neither leaves the menus as they are.
     func loadChoices() {
@@ -333,8 +355,11 @@ final class Store: ObservableObject {
                 repoNames = r.items.map { String($0.dropFirst()) }
             }
             if let r = try? await client.call("complete", CompleteArgs(text: "+"), timeout: 5, as: CompleteResult.self) {
-                agents = r.items.enumerated().map { i, item in
-                    Agent(name: String(item.dropFirst()), note: r.notes.flatMap { i < $0.count ? $0[i] : nil } ?? "")
+                // The tutor words are not agents: the sheet has its own menu for them.
+                agents = r.items.enumerated().compactMap { i, item in
+                    let name = String(item.dropFirst())
+                    if Self.tutorWords.contains(name) { return nil }
+                    return Agent(name: name, note: r.notes.flatMap { i < $0.count ? $0[i] : nil } ?? "")
                 }
             }
         }
@@ -371,9 +396,28 @@ final class Store: ObservableObject {
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
+        canTutor = true
+        canLearn = true
         canConfigure = true
         canPark = true
         canTrod = true
+        canBoost = true
+        canArch = true
+        archAgents = [
+            ArchAgent(name: "mikael", icon: "🛡️🗡️", title: "a helper against evil",
+                      about: "Mikael, the first of Irie's arch agents, stands with the user against evil and for the good they want to see in the world.",
+                      on: true, status: "With every Claude Code session, weighing the calls that can’t be taken back.",
+                      actions: [ArchAction(label: "Talk with Mikael", op: "spawn")],
+                      settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "Mikael goes with every session", value: .bool(true)),
+                                 ArchSetting(key: "arch.mikael.good", kind: "lines", label: "The good you want to see in the world",
+                                             value: .array([.string("Give credit where it’s due.")]))]),
+            ArchAgent(name: "gabriel", icon: "🪽👟", title: "carries your focus to the machine",
+                      about: "Gabriel carries the user's focus to the machine.",
+                      on: true, status: "Holding back 3 sessions and 1 app for Safari.",
+                      actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
+                      settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
+                                 ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
+        ]
         canUndo = true
         taskRepo = "irie"
     }
@@ -621,12 +665,12 @@ final class Store: ObservableObject {
     /// or a : command (docs/CORE.md). With no @repo in its text a task runs
     /// where the bar's menu says. Returns whether the core took it.
     func input(_ text: String) async -> Bool {
-        await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil)
+        await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil)
     }
 
-    /// Sends text from the bar or the new-task sheet. The @repo and +agent
-    /// words in it win over the menus' repo and agent.
-    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
+    /// Sends text from the bar or the new-task sheet. The @repo, +agent and
+    /// tutor words in it win over the menus' repo, agent and tutor mode.
+    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?) async -> Bool {
         var args = InputArgs(text: text)
         // A : command acts on the selected card, or :move on the selected
         // row outside Irie.
@@ -641,7 +685,15 @@ final class Store: ObservableObject {
         }
         args.profile = agent
         if canPickModel { args.model = model }
+        if canTutor { args.tutor = tutor }
         return await send(args)
+    }
+
+    /// What the Help menu shows: the resources, with the shown session's
+    /// language first, and the glossary. Nil without a core that serves it.
+    func learn() async -> LearnResult? {
+        guard canLearn else { return nil }
+        return try? await client.call("learn", LearnArgs(session: selection), timeout: 5, as: LearnResult.self)
     }
 
     /// Takes a task added to the one before back and starts it as a task
@@ -754,6 +806,77 @@ final class Store: ObservableObject {
                 }
             } catch {
                 say("Couldn’t \(on ? "start" : "stop") the trod bot: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
+    /// Reads the arch agents again (op arch).
+    func loadArch() async {
+        guard canArch, case .online = link else { return }
+        if let r = try? await client.call("arch", JSONValue.object([:]), timeout: 5, as: ArchResult.self) {
+            archAgents = r.agents
+        }
+    }
+
+    /// Does what an arch agent offers: calls its op with its args as they
+    /// came, says so, and reads the arch agents again.
+    func archAction(_ a: ArchAction) {
+        Task {
+            do {
+                _ = try await client.call(a.op, a.args ?? JSONValue.object([:]), timeout: 20, as: JSONValue.self)
+                say(a.done ?? "\(a.label): done.", error: false, seconds: 5)
+            } catch {
+                say("Couldn’t \(a.label.lowercased()): \(error.localizedDescription)", error: true)
+            }
+            await loadArch()
+        }
+    }
+
+    /// Sets one of an arch agent's settings: shown at once, sent to the
+    /// config op by its key.
+    func setArch(_ agent: String, _ key: String, _ value: JSONValue) {
+        if let i = archAgents.firstIndex(where: { $0.name == agent }),
+           let j = archAgents[i].settings?.firstIndex(where: { $0.key == key }) {
+            archAgents[i].settings?[j].value = value
+            if key == "arch.\(agent).on", let on = value.bool { archAgents[i].on = on }
+        }
+        settings.set(key, value.setting)
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await loadArch()
+        }
+    }
+
+    /// Puts one of an arch agent's settings back to its default.
+    func resetArch(_ key: String) {
+        settings.reset(key)
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await loadArch()
+        }
+    }
+
+    /// Whether a boost is on now.
+    var boosting: Bool { (boostUntil ?? .distantPast) > Date() }
+
+    /// Starts a boost of Gabriel's, for arch.gabriel.boost: the focus gets
+    /// the machine first whether it is busy or not, and idle local models
+    /// let their memory go; or stops it (DESIGN §4.11).
+    func setBoost(_ on: Bool) {
+        Task {
+            do {
+                let r = try await client.call("gabriel", on ? GabrielArgs(boost: true) : GabrielArgs(stop: true), as: GabrielResult.self)
+                boostUntil = r.boostUntil
+                if let until = r.boostUntil {
+                    var text = "Boosting your focus until \(until.formatted(date: .omitted, time: .shortened)): the rest runs on the efficiency cores."
+                    if let freed = r.freed, !freed.isEmpty { text += " Freed \(freed.joined(separator: ", "))." }
+                    if r.lowPower == true { text += " Low Power Mode is on: turn it off in System Settings > Battery for full speed." }
+                    say(text, error: false, seconds: 6)
+                } else {
+                    say("The boost is over.", error: false)
+                }
+            } catch {
+                say("Couldn’t \(on ? "start" : "stop") the boost: \(error.localizedDescription)", error: true)
             }
         }
     }

@@ -752,7 +752,9 @@ struct Composer: View {
     @State private var problem: String?
     @FocusState private var focused: Bool
 
-    private var waits: Bool { session.state == "needs_you" }
+    /// It waits on you in its terminal. Your turn in teach mode waits at its
+    /// prompt instead, so the box takes your word that the part is written.
+    private var waits: Bool { session.state == "needs_you" && session.reason != "turn" }
     private var ended: Bool { session.state == "exited" || session.state == "failed" }
     private var early: Bool { session.state == "starting" || session.state == "stalled" }
 

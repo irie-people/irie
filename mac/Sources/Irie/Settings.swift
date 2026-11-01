@@ -71,14 +71,14 @@ struct CoreConfig: Decodable, Equatable {
     var dog: Dog
     /// The trod bot; nil from a core from before it.
     var trod: Trod?
-    /// The arch agents; nil from a core from before them.
-    var arch: Arch?
     /// Mullvad VPN control; nil from a core from before it.
     var vpn: VPN?
 
     struct VPN: Decodable, Equatable {
         var on: Bool
     }
+    /// Nil from a core older than the learning settings.
+    var learn: Learn?
 
     struct UI: Decodable, Equatable {
         var redOnDone: Bool
@@ -217,16 +217,15 @@ struct CoreConfig: Decodable, Equatable {
         }
     }
 
-    /// Irie's arch agents (DESIGN §4.11): helpers who go with every session.
-    struct Arch: Decodable, Equatable {
-        var mikael: Mikael
-
-        /// Mikael, the first: he stands with you against evil and for the good
-        /// you want to see in the world.
-        struct Mikael: Decodable, Equatable {
-            var on: Bool
-            var door: Bool
-            var good: [String]
+    /// What helps you learn while your agents work (docs/proposals/learning.md).
+    struct Learn: Decodable, Equatable {
+        var tutor: String
+        var visual: Bool
+        var agentTips: Bool
+        var links: [String: String]
+        enum CodingKeys: String, CodingKey {
+            case tutor, visual, links
+            case agentTips = "agent_tips"
         }
     }
 
@@ -300,6 +299,12 @@ final class SettingsModel: ObservableObject {
     func bind<V: SettingType>(profile name: String, _ p: CoreConfig.Profile,
                               _ path: WritableKeyPath<CoreConfig.Profile, V>, _ field: String) -> Binding<V> {
         binding(p[keyPath: path], configKey("profiles", name, field)) { $0.profiles[name]?[keyPath: path] = $1 }
+    }
+
+    /// Sends one setting by its key, for a setting the app knows only by
+    /// its key, such as an arch agent's (op arch).
+    func set(_ key: String, _ value: SettingValue) {
+        send(ConfigSet(key: key, value: value))
     }
 
     /// Puts a key back to its default.
@@ -376,7 +381,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
-        case general, appearance, agents, arch, trod, local, repos
+        case general, appearance, agents, arch, trod, local, repos, learning
 
         var id: String { rawValue }
 
@@ -389,6 +394,7 @@ struct SettingsView: View {
             case .trod: return "Trod Bot"
             case .local: return "Local Models"
             case .repos: return "Repos"
+            case .learning: return "Learning"
             }
         }
 
@@ -401,6 +407,7 @@ struct SettingsView: View {
             case .trod: return "moon.stars"
             case .local: return "desktopcomputer"
             case .repos: return "folder"
+            case .learning: return "graduationcap"
             }
         }
     }
@@ -439,6 +446,7 @@ struct SettingsView: View {
         case .trod: TrodSettings(model: model)
         case .local: LocalSettings(model: model)
         case .repos: RepoSettings(model: model)
+        case .learning: LearningSettings(model: model)
         }
     }
 }
@@ -1036,6 +1044,100 @@ private struct LocalSettings: View {
 
 // MARK: Repos
 
+/// What helps you learn while your agents work (docs/proposals/learning.md):
+/// tutor mode and its pictures, Irie's tips, and your own links.
+private struct LearningSettings: View {
+    @ObservedObject var model: SettingsModel
+    @State private var title = ""
+    @State private var url = ""
+
+    var body: some View {
+        WithConfig(model: model) { c in
+            SettingsForm(model: model) {
+                if let l = c.learn {
+                    Section {
+                        Picker("Tutor mode", selection: model.bind(c, \.learn!.tutor, "learn.tutor")) {
+                            Text("Off").tag("off")
+                            Text("Explain as it goes").tag("explain")
+                            Text("Teach me").tag("teach")
+                        }
+                        .pickerStyle(.radioGroup)
+                        Toggle("Draw a picture where it helps", isOn: model.bind(c, \.learn!.visual, "learn.visual"))
+                            .disabled(l.tutor == "off")
+                    } header: {
+                        Text("Tutor mode")
+                    } footer: {
+                        footnote(Self.about(l.tutor) + " Sessions started from now on follow this; +explain or +teach in a task sets it for that task alone.")
+                    }
+                    Section {
+                        Toggle("Show Irie’s tips under Claude Code’s spinner", isOn: model.bind(c, \.learn!.agentTips, "learn.agent_tips"))
+                    } header: {
+                        Text("Tips")
+                    } footer: {
+                        footnote("Now and then, among Claude Code’s own tips, marked “Irie tip”. Claude Code’s own setting to hide tips hides these too.")
+                    }
+                    Section {
+                        ForEach(l.links.keys.sorted(), id: \.self) { name in
+                            HStack {
+                                Image(systemName: "link").foregroundStyle(Theme.muted)
+                                Text(name).fontWeight(.semibold)
+                                Text(l.links[name] ?? "").foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                Button {
+                                    var m = l.links
+                                    m[name] = nil
+                                    model.bind(c, \.learn!.links, "learn.links").wrappedValue = m
+                                } label: { Image(systemName: "minus.circle") }
+                                    .buttonStyle(.borderless)
+                                    .help("Remove")
+                                    .accessibilityLabel("Remove \(name)")
+                            }
+                        }
+                        HStack {
+                            TextField("Title", text: $title).frame(maxWidth: 160)
+                            TextField("https://", text: $url)
+                            Button("Add") {
+                                var m = l.links
+                                m[title.trimmingCharacters(in: .whitespaces)] = url.trimmingCharacters(in: .whitespaces)
+                                model.bind(c, \.learn!.links, "learn.links").wrappedValue = m
+                                title = ""
+                                url = ""
+                            }
+                            .disabled(!addable)
+                        }
+                    } header: {
+                        Text("Your links")
+                    } footer: {
+                        footnote("They come first in Help > Learning Resources, before the free courses Irie links to.")
+                    }
+                } else {
+                    Section {
+                        Text("This Irie’s core is older than the learning settings. Install the new build to set them here.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var addable: Bool {
+        let u = url.trimmingCharacters(in: .whitespaces)
+        return !title.trimmingCharacters(in: .whitespaces).isEmpty && (u.hasPrefix("https://") || u.hasPrefix("http://")) && u.count > 8
+    }
+
+    /// What a tutor mode does, in a sentence or two.
+    static func about(_ tutor: String) -> String {
+        switch tutor {
+        case "explain":
+            return "Claude Code’s Explanatory style: it does the work and adds short notes on why it made its choices. Replies are longer, so tasks use more tokens."
+        case "teach":
+            return "Claude Code’s Learning style: it also leaves small parts for you to write, marked TODO(human), and waits for you. Pick it when you can edit code; otherwise start with Explain."
+        default:
+            return "Agents do the work and say what they did, as usual."
+        }
+    }
+}
+
 private struct RepoSettings: View {
     @ObservedObject var model: SettingsModel
 
@@ -1133,49 +1235,86 @@ private struct RepoSettings: View {
 
 // MARK: Arch agents
 
-/// Irie's arch agents (DESIGN §4.11): helpers who go with every session.
-/// Mikael, the first, stands with you against evil and for the good you
-/// want to see in the world, which you write here in your own words.
+/// Irie's arch agents (DESIGN §4.11), as the core lists them (op arch): each
+/// one's icon, name and work, what he does now, what you can do with him,
+/// and his settings, drawn by their kind. The app knows none of them by
+/// name, so a new arch agent shows here with no change to the app.
 private struct ArchSettings: View {
+    @EnvironmentObject private var store: Store
     @ObservedObject var model: SettingsModel
 
     var body: some View {
-        WithConfig(model: model) { c in
-            if let a = c.arch {
-                form(a.mikael)
-            } else {
+        WithConfig(model: model) { _ in
+            if store.archAgents.isEmpty {
                 ContentUnavailableView("This Irie has no arch agents yet", systemImage: "shield.lefthalf.filled",
-                                       description: Text("Install a newer build to have Mikael with your sessions."))
+                                       description: Text("Install a newer build to meet them here."))
+            } else {
+                SettingsForm(model: model) {
+                    ForEach(store.archAgents) { a in sections(a) }
+                }
+            }
+        }
+        // What each does changes as you work: read it again while the tab shows.
+        .task {
+            while !Task.isCancelled {
+                await store.loadArch()
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
             }
         }
     }
 
-    /// A binding to one of Mikael's settings.
-    private func bind<V: SettingType>(_ m: CoreConfig.Arch.Mikael, _ path: WritableKeyPath<CoreConfig.Arch.Mikael, V>, _ key: String) -> Binding<V> {
-        model.binding(m[keyPath: path], "arch.mikael." + key) { $0.arch?.mikael[keyPath: path] = $1 }
-    }
-
-    private func form(_ m: CoreConfig.Arch.Mikael) -> some View {
-        SettingsForm(model: model) {
-            Section {
-                Toggle("Mikael goes with every session", isOn: bind(m, \.on, "on"))
-                Toggle("He weighs calls that can’t be taken back", isOn: bind(m, \.door, "door"))
-                    .disabled(!m.on)
-            } header: {
-                Text("Mikael")
-            } footer: {
-                footnote("He stands with you against evil, and for the good you want to see, in every session. Each agent hears his word as it starts, and can ask him whether something is right, a scam or a trap. Before a call that could do harm that can’t be taken back, such as sending something off your Mac, deleting, or running code from the web, a small model weighs it in his name and stops one that would do evil, telling the agent why. Start a task with +mikael to talk with him yourself.")
+    /// An arch agent's sections: what he does and his switches, then one for
+    /// each list of his.
+    @ViewBuilder
+    private func sections(_ a: ArchAgent) -> some View {
+        Section {
+            if let s = a.status, !s.isEmpty {
+                Text(s).foregroundStyle(.secondary)
             }
+            if let actions = a.actions, !actions.isEmpty {
+                HStack {
+                    ForEach(actions, id: \.label) { x in
+                        Button(x.label) { store.archAction(x) }
+                    }
+                }
+            }
+            ForEach((a.settings ?? []).filter { $0.kind != "lines" }, id: \.key) { s in control(a, s) }
+        } header: {
+            Text(a.heading)
+        } footer: {
+            footnote(a.about)
+        }
+        ForEach((a.settings ?? []).filter { $0.kind == "lines" }, id: \.key) { s in
             Section {
-                LineList(lines: m.good, prompt: "Add the good you want to see, such as “Give credit where it’s due.”") {
-                    bind(m, \.good, "good").wrappedValue = $0
+                LineList(lines: s.value?.strings ?? [], prompt: "Add a line") {
+                    store.setArch(a.name, s.key, .array($0.map { .string($0) }))
                 }
             } header: {
-                ListHeader(title: "The good you want to see in the world", reset: { model.reset("arch.mikael.good") })
+                ListHeader(title: s.label, reset: { store.resetArch(s.key) })
             } footer: {
-                footnote("In your own words. Every agent Mikael goes with hears them, and he helps it toward them.")
+                if let h = s.help { footnote(h) }
             }
-            .disabled(!m.on)
+            .disabled(!a.on)
+        }
+    }
+
+    /// One setting, drawn by its kind.
+    @ViewBuilder
+    private func control(_ a: ArchAgent, _ s: ArchSetting) -> some View {
+        switch s.kind {
+        case "bool":
+            Toggle(s.label, isOn: Binding(get: { s.value?.bool ?? false }, set: { store.setArch(a.name, s.key, .bool($0)) }))
+                .help(s.help ?? "")
+        case "duration":
+            CommitField(title: s.label, prompt: "such as 5m", value: Binding(get: { s.value?.string ?? "" }, set: { store.setArch(a.name, s.key, .string($0)) }))
+                .help(s.help ?? "")
+        case "number":
+            CommitField(title: s.label, prompt: "a number", value: Binding(get: { s.value?.number.map { String(format: "%g", $0) } ?? "" }, set: { v in
+                if let n = Double(v) { store.setArch(a.name, s.key, .number(n)) }
+            }))
+            .help(s.help ?? "")
+        default:
+            EmptyView()
         }
     }
 }

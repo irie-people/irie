@@ -5,8 +5,10 @@
 // Each arch agent is a few markdown files in agents/, which anyone can read
 // and change without knowing Go:
 //
-//   - <name>.md: a few fields, then his charge, the prompt he works by when
-//     an agent calls on him or a session runs as him;
+//   - <name>.md: a few fields (his name, a nickname if he has one, his icon, his rank,
+//     his work in a few words and in a sentence, the tools he may use, and
+//     "call: no" when nobody calls on him), then his charge, the prompt he
+//     works by when an agent calls on him or a session runs as him;
 //   - <name>.word.md: what every session hears from him as it starts, a Go
 //     template of WordData;
 //   - <name>.door.md: the calls he weighs before they run, as permission
@@ -34,12 +36,15 @@ var files embed.FS
 // Agent is one arch agent.
 type Agent struct {
 	Name        string   // such as mikael
+	Nickname    string   // what people may call him for short, such as Raffi; "" for none
+	Icon        string   // his mark, one or two emoji, which every client can draw
 	Rank        int      // the order arch agents come in, Mikael first
 	Title       string   // his work in a few words, such as a helper against evil
 	Description string   // when an agent should call on him, as Claude Code's agent list shows it
 	Tools       []string // the tools he may use; none means every tool
 	Color       string   // his colour in Claude Code's task list
-	Charge      string   // the prompt he works by
+	Call        bool     // agents can call on him (Claude Code's --agents); a field of "call: no" leaves him off
+	Charge      string   // the prompt he works by; one nobody calls may have none
 	Door        *Door    // nil: he keeps no door
 
 	word *template.Template // nil: he says nothing as a session starts
@@ -111,9 +116,22 @@ func Names() []string {
 	return names
 }
 
+// Callable returns the names of the arch agents agents can call on, and a
+// session can run as, by rank.
+func Callable() []string {
+	var names []string
+	for _, a := range All() {
+		if a.Call {
+			names = append(names, a.Name)
+		}
+	}
+	return names
+}
+
 // Definitions is the value of Claude Code's --agents flag that puts the
-// named arch agents on call, by name. When the user wrote the good they
-// want to see in the world, each charge ends with it, in their words.
+// named arch agents on call, by name, leaving out those nobody calls; ""
+// when that leaves none. When the user wrote the good they want to see in
+// the world, each charge ends with it, in their words.
 func Definitions(names []string, good []string) (string, error) {
 	type definition struct {
 		Description string   `json:"description"`
@@ -127,6 +145,9 @@ func Definitions(names []string, good []string) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("arch: no arch agent %q", name)
 		}
+		if !a.Call {
+			continue
+		}
 		prompt := a.Charge
 		if len(good) > 0 {
 			prompt += "\n\n## The good your user wants to see in the world\n"
@@ -135,6 +156,9 @@ func Definitions(names []string, good []string) (string, error) {
 			}
 		}
 		defs[name] = definition{Description: a.Description, Prompt: prompt, Tools: a.Tools, Color: a.Color}
+	}
+	if len(defs) == 0 {
+		return "", nil
 	}
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -194,14 +218,14 @@ func loadAgent(fsys fs.FS, name string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	a := Agent{Name: fields["name"], Title: fields["title"], Description: fields["description"], Color: fields["color"], Charge: body}
+	a := Agent{Name: fields["name"], Nickname: fields["nickname"], Icon: fields["icon"], Title: fields["title"], Description: fields["description"], Color: fields["color"], Charge: body, Call: fields["call"] != "no"}
 	switch {
 	case a.Name != name:
 		return Agent{}, fmt.Errorf("name %q must be the file's name, %q", a.Name, name)
 	case !agentName.MatchString(a.Name):
 		return Agent{}, fmt.Errorf("name %q: use lower-case letters, digits and dashes", a.Name)
-	case a.Description == "" || a.Charge == "":
-		return Agent{}, fmt.Errorf("an arch agent needs a description and a charge")
+	case a.Description == "" || a.Call && a.Charge == "":
+		return Agent{}, fmt.Errorf("an arch agent needs a description, and a charge unless call is no")
 	}
 	if r := fields["rank"]; r != "" {
 		if a.Rank, err = strconv.Atoi(r); err != nil {

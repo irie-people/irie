@@ -149,3 +149,23 @@ func TestLoadRefusesBrokenFiles(t *testing.T) {
 		t.Errorf("load = %+v, %v; want uriel (rank 0) before gabriel (rank 2), with no door or word", got, err)
 	}
 }
+
+func TestGabrielWorksInTheCore(t *testing.T) {
+	g, ok := Get("gabriel")
+	if !ok || g.Call || g.Rank != 2 || g.Door != nil {
+		t.Fatalf("gabriel = %+v, %v; want rank 2, not called, no door", g, ok)
+	}
+	if w := g.Word(WordData{}); !strings.HasPrefix(w, "[Irie] Gabriel") || !strings.Contains(w, "ctl gabriel") {
+		t.Errorf("word:\n%s", w)
+	}
+	// Nobody calls him: he is left off --agents, and alone gives none.
+	if raw, err := Definitions([]string{"mikael", "gabriel"}, nil); err != nil || strings.Contains(raw, "gabriel") || !strings.Contains(raw, "mikael") {
+		t.Errorf("definitions = %s, %v", raw, err)
+	}
+	if raw, err := Definitions([]string{"gabriel"}, nil); err != nil || raw != "" {
+		t.Errorf("Gabriel alone: %q, %v", raw, err)
+	}
+	if want := []string{"mikael"}; !slices.Equal(Callable(), want) {
+		t.Errorf("callable = %v, want %v", Callable(), want)
+	}
+}

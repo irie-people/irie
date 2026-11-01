@@ -59,9 +59,11 @@ func (c *Core) setPriority(a ipc.PriorityArgs) error {
 }
 
 // background puts each session's process tree in the background, or takes
-// it out, as the promotions want: while a live session is promoted, the
-// others' trees are in the background. A process Irie put there that left
-// every tree, such as a daemon, comes out. The caller holds c.mu.
+// it out, as the promotions and Gabriel want: while a live session is
+// promoted, the others' trees are in the background; while Gabriel holds
+// back (gabriel.go), so are those of the sessions out of the user's focus.
+// A promoted tree never is. A process Irie put there that left every tree,
+// such as a daemon, comes out. The caller holds c.mu.
 func (c *Core) background() {
 	if !proc.CanBackground {
 		return
@@ -71,7 +73,8 @@ func (c *Core) background() {
 		promoted = promoted || x.track.priority > 0 && !x.dead
 		demoted = demoted || x.demoted
 	}
-	if !promoted && !demoted {
+	holding := c.gab.holding
+	if !promoted && !demoted && !holding {
 		return
 	}
 	t, err := proc.Read()
@@ -88,7 +91,7 @@ func (c *Core) background() {
 		if p == nil || p.Dead || p.PID <= 1 {
 			continue
 		}
-		want := promoted && x.track.priority == 0
+		want := x.track.priority == 0 && (promoted || holding && !c.gab.focus[x.id])
 		for _, q := range t.Tree(p.PID) {
 			inTree[q.PID] = true
 			b, ok := c.bg[q.PID]
@@ -116,4 +119,27 @@ func (c *Core) background() {
 			delete(c.bg, pid)
 		}
 	}
+}
+
+// letGo takes every tree Irie put in the background out of it, and what
+// Gabriel slowed outside Irie, as the core stops.
+func (c *Core) letGo() {
+	c.mu.Lock()
+	if proc.CanBackground {
+		if t, err := proc.Read(); err == nil {
+			for _, x := range c.sessions {
+				if p := c.snap.Pane(x.pane); x.demoted && p != nil && !p.Dead && p.PID > 1 {
+					for _, q := range t.Tree(p.PID) {
+						proc.SetBackground(q.PID, false)
+					}
+				}
+			}
+			for pid := range c.bg {
+				proc.SetBackground(pid, false)
+			}
+		}
+	}
+	c.bg = nil
+	c.mu.Unlock()
+	c.releaseOutside()
 }

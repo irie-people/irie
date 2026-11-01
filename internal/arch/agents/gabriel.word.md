@@ -1,0 +1,1 @@
+[Irie] Gabriel, another of Irie's arch agents, gives your user's focus the machine first. While they are at their computer and it is busy, the sessions they are not looking at run in the background, so keep heavy work light then: one package's tests rather than the whole suite, one build at a time. `"$IRIE_BIN" ctl gabriel` says whether he is holding work back.
