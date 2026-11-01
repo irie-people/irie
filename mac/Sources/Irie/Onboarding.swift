@@ -54,6 +54,11 @@ struct ToolArgs: Encodable {
     var name: String
 }
 
+/// The tool op's answer: the session it started.
+struct ToolResult: Decodable {
+    var session: Session
+}
+
 // MARK: Starting Irie
 
 /// Finds irie and starts Irie with it, for an app opened from the Finder,
@@ -212,7 +217,7 @@ extension Store {
     func runSetup() {
         Task {
             do {
-                let r = try await client.call("tool", ToolArgs(name: "ready"), timeout: 30, as: SpawnResult.self)
+                let r = try await client.call("tool", ToolArgs(name: "ready"), timeout: 30, as: ToolResult.self)
                 if !showTerminal { showTerminal = true }
                 show(r.session.id, focus: true)
                 checkReady()
