@@ -114,7 +114,7 @@ const ctlUsage = `usage: irie ctl <command>
                                          is still running at the timeout
   irie ctl rate SESSION good|bad         rate a session's work; the router learns
                                          each profile's accuracy from it
-` + controlUsage
+` + controlUsage + contextUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -174,6 +174,10 @@ func ctl(args []string) error {
 		return ctlReorder(args[1:])
 	case "park", "unpark":
 		return ctlPark(args[1:], args[0] == "park")
+	case "ctx", "context":
+		return ctlContext(args[1:])
+	case "fork":
+		return ctlFork(args[1:])
 	}
 	return fmt.Errorf("unknown ctl command %q\n\n%s", args[0], ctlUsage)
 }

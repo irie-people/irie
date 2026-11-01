@@ -309,6 +309,7 @@ type job struct {
 	h       harness.Harness
 	probe   harness.Probe
 	task    string         // the task; empty when the job resumes
+	next    string         // a resumed conversation's next prompt, as a fork's task (ctx.go)
 	resume  string         // the vendor id of the conversation to carry on
 	data    map[string]any // more data for spawn.requested
 	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
@@ -353,7 +354,7 @@ func (c *Core) launch(j job) (*session, error) {
 	// Nor with what the arch agents brought it then (arch.go).
 	os.Remove(filepath.Join(dir, harness.ArchFile))
 	s := harness.Spawn{
-		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
+		Session: id, Task: j.task, Next: j.next, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
 		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
 		Arch:  c.archFor(profile, h.ID()),

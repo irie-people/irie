@@ -67,8 +67,9 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 //	    --settings <dir>/claude-settings.json --resume <uuid>
 //
 // A resumed session keeps its id unless --fork-session is passed, so there
-// is no --session-id, and it waits for input, so there is no task. --name is
-// left out too: the conversation keeps its own name.
+// is no --session-id. It waits for input, so there is no task, unless the
+// spawn has a next prompt, as a fork of a context may (DESIGN §4.13): that
+// comes last. --name is left out too: the conversation keeps its own name.
 func (Harness) Resume(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[string][]byte, error) {
 	if strings.HasPrefix(s.VendorID, "-") {
 		return nil, nil, nil, errors.New("claude: a session id cannot start with -")
@@ -77,7 +78,15 @@ func (Harness) Resume(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return append(argv, "--resume", s.VendorID), env, files, nil
+	argv = append(argv, "--resume", s.VendorID)
+	// A fork carries its conversation on with a prompt of its own, which
+	// Claude Code takes as the resumed conversation's next. The spawn's
+	// task, which a reopen carries, is never sent again.
+	if s.Next != "" {
+		argv = append(argv, harness.TaskArg(s.Next, s.Dir))
+		files[TaskFile] = []byte(s.Next)
+	}
+	return argv, env, files, nil
 }
 
 // base is what a launch and a resume share: the profile's command, args and
