@@ -28,6 +28,11 @@ type (
 	MoveArgs         = ipc.MoveArgs
 	MoveResult       = ipc.MoveResult
 	Session          = ipc.Session
+	TrodRow          = ipc.TrodRow
+	TrodShift        = ipc.TrodShift
+	TrodResult       = ipc.TrodResult
+	TrodSession      = ipc.TrodSession
+	TrodSend         = ipc.TrodSend
 	Loose            = ipc.Loose
 	LoosePlace       = ipc.LoosePlace
 	DogResult        = ipc.DogResult
@@ -141,6 +146,7 @@ const (
 	OpTheme           = ipc.OpTheme
 	OpDog             = ipc.OpDog
 	OpConfig          = ipc.OpConfig
+	OpTrod            = ipc.OpTrod
 	FeatureSpawnModel = ipc.FeatureSpawnModel
 	ViewApp           = ipc.ViewApp
 	CodeBadRequest    = ipc.CodeBadRequest
