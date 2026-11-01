@@ -27,12 +27,12 @@ const appInUse = time.Minute
 
 // appSwap is how the core swaps Irie.app; tests replace its parts.
 type appSwap struct {
-	app, stamp string                                 // the installed app, and the build it came from
-	front      func() (bundleID string, ok bool)      // the app in front
-	idle       func() (time.Duration, bool)           // since the user's last input
-	stop       func() (stopped bool)                  // stops the running app; whether one ran
-	open       func(app string, inFront bool) error   // opens app, in front or in the background
-	register   func(app string)                       // tells Launch Services of the new app
+	app, stamp string                               // the installed app, and the build it came from
+	front      func() (bundleID string, ok bool)    // the app in front
+	idle       func() (time.Duration, bool)         // since the user's last input
+	stop       func() (stopped bool)                // stops the running app; whether one ran
+	open       func(app string, inFront bool) error // opens app, in front or in the background
+	register   func(app string)                     // tells Launch Services of the new app
 }
 
 // swapApp swaps in Irie.app's next build when it waits and the app is not
