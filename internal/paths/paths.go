@@ -86,6 +86,7 @@ func (p Paths) FollowUpFile(id string) string { return filepath.Join(p.Session(i
 func (p Paths) StatusFile(id string) string   { return filepath.Join(p.Session(id), "status.json") }
 func (p Paths) LocalFile() string             { return filepath.Join(p.State, "local.json") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
+func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 func (p Paths) Remote() string                { return filepath.Join(p.State, "remote") }
 func (p Paths) RemoteLog() string             { return filepath.Join(p.State, "remote.log") }
 func (p Paths) ScratchDir(slug string) string { return filepath.Join(p.Scratch(), slug) }
