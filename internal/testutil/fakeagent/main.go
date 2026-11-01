@@ -14,7 +14,8 @@
 //	                  log records the reason the agent was given
 //	ask               tool:AskUserQuestion
 //	permission        PreToolUse, PermissionRequest and a permission_prompt
-//	                  Notification for Bash, a line of input, then PostToolUse
+//	                  Notification for Bash, a numbered menu as Claude Code
+//	                  draws one, a line of input, then PostToolUse
 //	stop              Stop; when a Stop hook answers with additionalContext
 //	                  or a block, the turn goes on, as in Claude Code, and
 //	                  stops again with stop_hook_active, up to 8 times
@@ -796,7 +797,15 @@ func (a *agent) permission(sub *subagent) {
 	a.fire("Notification", "permission_prompt", sub.fields(map[string]any{
 		"message": "Claude needs your permission to use Bash", "title": "Permission needed", "notification_type": "permission_prompt",
 	}))
+	// The menu Claude Code draws for a permission, which the screen op
+	// reads; any line typed answers it.
 	fmt.Println("? allow Bash: rm -rf build (Enter)")
+	fmt.Println("╭────────────────────────────────────────────────╮")
+	fmt.Println("│ Do you want to proceed?                        │")
+	fmt.Println("│ ❯ 1. Yes                                       │")
+	fmt.Println("│   2. Yes, and don't ask again for rm commands  │")
+	fmt.Println("│   3. No, and tell Claude what to do differently │")
+	fmt.Println("╰────────────────────────────────────────────────╯")
 	a.readLine()
 	a.fire("PostToolUse", "Bash", sub.fields(map[string]any{
 		"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": time.Since(start).Milliseconds(),

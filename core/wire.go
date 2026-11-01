@@ -84,6 +84,10 @@ type (
 	HookArgs         = ipc.HookArgs
 	HookResult       = ipc.HookResult
 	Frame            = ipc.Frame
+	ScreenArgs       = ipc.ScreenArgs
+	ScreenResult     = ipc.ScreenResult
+	ScreenOption     = ipc.ScreenOption
+	KeysArgs         = ipc.KeysArgs
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -190,4 +194,6 @@ const (
 	FrameOutside      = ipc.FrameOutside
 	FrameClosed       = ipc.FrameClosed
 	FrameHistory      = ipc.FrameHistory
+	OpScreen          = ipc.OpScreen
+	OpKeys            = ipc.OpKeys
 )
