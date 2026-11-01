@@ -563,44 +563,57 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Starts a task typed in the task bar. With no @repo in its text it
-    /// runs where the bar's menu says. Returns whether it started.
-    func spawn(_ input: String) async -> Bool {
-        await spawn(input, repo: taskRepo, worktree: true, agent: nil, model: nil)
+    /// Sends what was typed in the task bar to the core, which reads it: a
+    /// task with its @ and + words, a question such as "hows the parser?",
+    /// or a : command (docs/CORE.md). With no @repo in its text a task runs
+    /// where the bar's menu says. Returns whether the core took it.
+    func input(_ text: String) async -> Bool {
+        await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil)
     }
 
-    /// Starts a task from the bar or the new-task sheet. The @repo and
-    /// +agent words in its text win over the menus' repo and agent.
-    func spawn(_ input: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
-        var args: SpawnArgs
-        do {
-            args = try TaskParser.parse(input, home: NSHomeDirectory())
-        } catch {
-            say(error.localizedDescription, error: true)
-            return false
+    /// Sends text from the bar or the new-task sheet. The @repo and +agent
+    /// words in it win over the menus' repo and agent.
+    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?) async -> Bool {
+        var args = InputArgs(text: text)
+        // A : command acts on the selected card, or :move on the selected
+        // row outside Irie.
+        if let o = selectedOutside {
+            args.outside = o.vendorId
+        } else {
+            args.session = selection
         }
-        if args.repo == nil, let repo {
+        if let repo {
             args.repo = repo
             args.inPlace = worktree ? nil : true
         }
-        if args.profile == nil { args.profile = agent }
+        args.profile = agent
         if canPickModel { args.model = model }
-        return await run(args)
-    }
-
-    private func run(_ args: SpawnArgs) async -> Bool {
         spawning = true
         defer { spawning = false }
         do {
             // A task in a repo may make a worktree and check out submodules first.
-            let r = try await client.call("spawn", args, timeout: 600, as: SpawnResult.self)
-            say("Started \(r.session.name).", error: false)
-            // It starts behind the session on show, so a task typed mid-work
-            // never pulls the view or the keyboard away. With nothing on
-            // show, it comes straight up, ready to type to.
-            if selection == nil { show(r.session.id, focus: true) }
-            // A repo it ran in is now among the recent ones.
-            loadChoices()
+            let r = try await client.call("input", args, timeout: 600, as: InputResult.self)
+            switch r.did {
+            case "asked":
+                if let c = r.choice, let op = r.op { await answer(op, c) }
+            case "answered":
+                say(r.text, error: false, seconds: 8)
+            default:
+                say(r.text, error: false)
+            }
+            if let s = r.session {
+                if r.did == "spawned" {
+                    // It starts behind the session on show, so a task typed
+                    // mid-work never pulls the view or the keyboard away.
+                    // With nothing on show, it comes straight up, ready to
+                    // type to.
+                    if selection == nil { show(s.id, focus: true) }
+                    // A repo it ran in is now among the recent ones.
+                    loadChoices()
+                } else if r.show == true || r.op == "move" {
+                    show(s.id, focus: true)
+                }
+            }
             return true
         } catch {
             say(error.localizedDescription, error: true)

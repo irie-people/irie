@@ -12,9 +12,9 @@ import (
 	"text/tabwriter"
 	"time"
 
+	irie "github.com/irie-people/irie/core"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
-	"github.com/irie-people/irie/internal/ui"
 )
 
 const ctlUsage = `usage: irie ctl <command>
@@ -30,6 +30,13 @@ const ctlUsage = `usage: irie ctl <command>
                                          until the agent is ready, and fails if it
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short
+  irie ctl input [--json] [--session SESSION] TEXT...
+                                         type to Irie as into a task bar, and
+                                         print what it says: a task with its @
+                                         and + words, a question such as "hows
+                                         the parser?", or a : command, which acts
+                                         on SESSION, by id or name. TEXT - reads
+                                         stdin
   irie ctl history [--json] [QUERY...]   the sessions that closed, newest first, whose
                                          name or id has every QUERY word. With
                                          spawn.close_when_done a finished session
@@ -102,6 +109,8 @@ func ctl(args []string) error {
 		return ctlList(args[1:])
 	case "spawn":
 		return ctlSpawn(args[1:])
+	case "input":
+		return ctlInput(args[1:])
 	case "history":
 		return ctlHistory(args[1:])
 	case "close":
@@ -223,6 +232,61 @@ func printList(w io.Writer, r ipc.ListResult) error {
 }
 
 // ctlRename renames one of Irie's sessions, which it finds by id or name.
+// ctlInput types to Irie as a task bar does, and prints what the core
+// said: the same words, read the same way, as in every client.
+func ctlInput(args []string) error {
+	fs := flag.NewFlagSet("ctl input", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print the core's reply as JSON")
+	session := fs.String("session", "", "the session a : command acts on, by id or name")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	text := strings.Join(fs.Args(), " ")
+	if text == "-" {
+		b, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		text = string(b)
+	}
+	if strings.TrimSpace(text) == "" {
+		return errors.New("usage: irie ctl input [--json] [--session SESSION] TEXT...")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	in := ipc.InputArgs{Text: text, Session: *session}
+	if *session != "" {
+		var l ipc.ListResult
+		if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+			return err
+		}
+		for _, s := range l.Sessions {
+			if s.Name == *session {
+				in.Session = s.ID
+			}
+		}
+	}
+	// What was typed may start a task, which may make a worktree first.
+	var r ipc.InputResult
+	if err := ipc.Call(sock, 10*time.Minute, ipc.OpInput, in, &r); err != nil {
+		return err
+	}
+	if *asJSON {
+		return json.NewEncoder(os.Stdout).Encode(r)
+	}
+	fmt.Println(r.Text)
+	// A question waits for an answer in the sidebar or the app; nothing
+	// changed yet.
+	if r.Did == ipc.InputAsked && r.Choice != nil {
+		for _, o := range r.Choice.Options {
+			fmt.Printf("  %s: %s\n", o.Label, o.Detail)
+		}
+	}
+	return nil
+}
+
 func ctlRename(args []string) error {
 	if len(args) < 2 {
 		return errors.New("usage: irie ctl rename SESSION NAME...")
@@ -351,7 +415,7 @@ func ctlSpawn(args []string) error {
 	// The @ and + tokens of the command bar may lead the task.
 	home, _ := os.UserHomeDir()
 	var a ipc.SpawnArgs
-	words, err := ui.SpawnTokens(&a, fs.Args(), home)
+	words, err := irie.SpawnTokens(&a, fs.Args(), home)
 	if err != nil {
 		return err
 	}
