@@ -304,3 +304,16 @@ func TestNoLookHoldsOnceTheCoreLetGo(t *testing.T) {
 		t.Errorf("sudo ran %q after the core let go", got)
 	}
 }
+
+func TestTheLookAfterSetupHoldsAtOnce(t *testing.T) {
+	m := newLidMac(t)
+	rule := lidRule
+	os.Remove(rule)
+	c, _ := lidCore(t, "")
+	c.lidSweep()
+	m.set("irie-lid", "the rule") // irie setup lid
+	c.lidSweep()
+	if got := m.sudo(); len(got) != 1 || got[0] != sleepOff {
+		t.Errorf("sudo ran %q, want sleep off at the first look after setup", got)
+	}
+}

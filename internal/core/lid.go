@@ -12,7 +12,6 @@ package core
 // turns sleep back on once no core has touched it for a while.
 
 import (
-	"errors"
 	"os"
 	"time"
 
@@ -158,17 +157,19 @@ func (c *Core) lidHoldLocked(m lid.Mac, now time.Time, why string) {
 	if dark, err := m.Dark(); err == nil && dark {
 		return
 	}
+	// Without the rule nothing is tried, so the look that follows `irie
+	// setup lid` holds at once.
 	if _, err := os.Stat(lidRule); err != nil {
-		h.retry = now.Add(lidRetry)
 		c.lidWarnLocked("the Mac sleeps when its lid closes: " + lid.ErrNoRule.Error())
 		return
 	}
 	off, err := m.IsOff()
-	switch {
-	case err != nil:
-	case off:
-		err = errors.New("sleep is already off, and not by Irie: Irie leaves it so")
-	default:
+	if err == nil && off {
+		h.retry = now.Add(lidRetry)
+		c.lidWarnLocked("sleep is already off, and not by Irie: Irie leaves it so")
+		return
+	}
+	if err == nil {
 		err = m.SleepOff(true)
 	}
 	if err != nil {
