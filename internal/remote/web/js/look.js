@@ -1,6 +1,7 @@
 // How a row looks: its state's name, glyph and colour role (DESIGN §5.3,
 // mac/Sources/Irie/States.swift), the agents' own colours while they work
-// (Theme.swift: agentSlot, agentHue, agentWashHex, agentHex, agentInkHex),
+// (Theme.swift: agentHue, agentWashHex, agentHex, agentInkHex; the core
+// picks which of them a session takes, internal/core/hue.go),
 // and the short forms of ages, durations and token counts. The palette is
 // Evergreen; app.css holds the same swatches as CSS variables.
 
@@ -103,7 +104,7 @@ export function glyph(lk) {
 export function markClass(s, redOnDone) {
   const lk = look(s);
   let c = 'mark r-' + role(lk, redOnDone);
-  if (lk === 'working') c += ' slot' + agentSlot(s.id);
+  if (lk === 'working') c += ' slot' + slotOf(s);
   if (dimmed(lk)) c += ' dim';
   return c;
 }
@@ -112,7 +113,17 @@ export function markClass(s, redOnDone) {
 
 const SLOTS = 6;
 
-/** The slot for a session, the same one every time: FNV-1a of its id's UTF-8 bytes. */
+/**
+ * Which of the agents' colours a session takes: the one the core gave it
+ * (its hue, from 1), so cards side by side differ, or for a core that gives
+ * none, one from its id.
+ */
+export function slotOf(s) {
+  const n = s && s.hue;
+  return Number.isInteger(n) && n >= 1 ? (n - 1) % SLOTS : agentSlot(s.id);
+}
+
+/** A slot from a session's id, the same one every time: FNV-1a of its UTF-8 bytes. */
 export function agentSlot(id) {
   let h = 0x811c9dc5;
   for (const b of new TextEncoder().encode(String(id))) {
@@ -130,94 +141,111 @@ export function mix(a, b, t) {
   return (m(16) | m(8) | m(0)) >>> 0;
 }
 
+/** An sRGB channel's linear light. */
+function linear(v) {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
 /** WCAG 2.2's relative luminance. */
 export function luminance(hex) {
-  const lin = (v) => {
-    const c = v / 255;
-    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  };
-  return 0.2126 * lin(ch(hex, 16)) + 0.7152 * lin(ch(hex, 8)) + 0.0722 * lin(ch(hex, 0));
+  return 0.2126 * linear(ch(hex, 16)) + 0.7152 * linear(ch(hex, 8)) + 0.0722 * linear(ch(hex, 0));
 }
 
 const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-/** A colour's hue in degrees, as AppKit's getHue gives it. */
-function hueOf(hex) {
-  const r = ch(hex, 16) / 255, g = ch(hex, 8) / 255, b = ch(hex, 0) / 255;
-  const hi = Math.max(r, g, b), lo = Math.min(r, g, b);
-  if (hi === lo) return 0;
-  let h;
-  if (hi === r) h = (g - b) / (hi - lo);
-  else if (hi === g) h = 2 + (b - r) / (hi - lo);
-  else h = 4 + (r - g) / (hi - lo);
-  h *= 60;
-  return h < 0 ? h + 360 : h;
+// The colours are worked out in OKLCH, Oklab's polar form (Björn Ottosson,
+// 2020), where hues of one lightness and chroma look equally light and
+// equally vivid: six hues round the whole wheel at a low chroma, so the
+// agents differ by hue and none glares. A mark and its text start from the
+// lightness of the palette's own, light mode then dark; a wash is the
+// card's lightness, moved a little, at a lower chroma still. The numbers
+// are Theme.swift's.
+const MARK_C = 0.085, MARK_L = [0.50, 0.78], INK_L = [0.47, 0.82];
+const WASH_C = [0.03, 0.04], WASH_LIFT = [-0.03, 0.025];
+
+/** A colour's OKLCH: its lightness, its chroma and its hue in degrees. */
+function oklch(h) {
+  const r = linear(ch(h, 16)), g = linear(ch(h, 8)), b = linear(ch(h, 0));
+  const l1 = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m1 = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s1 = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const l = 0.2104542553 * l1 + 0.7936177850 * m1 - 0.0040720468 * s1;
+  const a = 1.9779984951 * l1 - 2.4285922050 * m1 + 0.4505937099 * s1;
+  const bb = 0.0259040371 * l1 + 0.7827717662 * m1 - 0.8086757660 * s1;
+  let hue = Math.atan2(bb, a) * 180 / Math.PI;
+  if (hue < 0) hue += 360;
+  return [l, Math.sqrt(a * a + bb * bb), hue];
 }
 
-/** The sRGB colour of a hue in degrees, a saturation and a brightness. */
-function fromHSB(hDeg, s, v) {
-  const h = (((hDeg % 360) + 360) % 360) / 60;
-  const i = Math.floor(h), f = h - i;
-  const p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f));
-  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6];
-  const c = (x) => Math.round(x * 255);
-  return ((c(r) << 16) | (c(g) << 8) | c(b)) >>> 0;
-}
-
-/** A slot's hue: a fan over the half of the wheel opposite the accent, that skips the needs red. */
-function agentHue(slot, s) {
-  const start = hueOf(s.accent) + 90;
-  let red = (hueOf(s.needs) - start) % 360;
-  if (red < 0) red += 360;
-  if (red >= 270) red -= 360;
-  const from = Math.max(0, red - 30), gap = Math.max(0, Math.min(180, red + 30) - from);
-  let along = (slot % SLOTS) * (180 - gap) / (SLOTS - 1);
-  if (gap > 0 && along >= from) along += gap;
-  return (start + along) % 360;
-}
-
-/** A working card's ground: the card washed with the hue, keeping its muted text at 4.6:1. */
-function agentWash(slot, s, dark) {
-  const hue = agentHue(slot, s);
-  const vivid = fromHSB(hue, 0.62, dark ? 0.6 : 1);
-  const muted = luminance(s.muted), brightest = luminance(fromHSB(hue, 0.62, 1));
-  const fits = (t) => {
-    const l = luminance(mix(s.card, vivid, t));
-    return ratio(l, muted) >= 4.6 && (!dark || ratio(l, brightest) >= 3.2);
+/** The sRGB colour of an OKLCH lightness, chroma and hue, each channel held to sRGB's range. */
+function fromOKLCH(l, c, hDeg) {
+  const a = c * Math.cos(hDeg * Math.PI / 180), b = c * Math.sin(hDeg * Math.PI / 180);
+  const l1 = l + 0.3963377774 * a + 0.2158037573 * b;
+  const m1 = l - 0.1055613458 * a - 0.0638541728 * b;
+  const s1 = l - 0.0894841775 * a - 1.2914855480 * b;
+  const l3 = l1 * l1 * l1, m3 = m1 * m1 * m1, s3 = s1 * s1 * s1;
+  const enc = (x) => {
+    let v = Math.min(1, Math.max(0, x));
+    v = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+    return Math.round(v * 255);
   };
-  let lo = 0, hi = dark ? 0.45 : 0.2;
-  if (fits(hi)) return mix(s.card, vivid, hi);
+  return ((enc(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3) << 16) |
+    (enc(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3) << 8) |
+    enc(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3)) >>> 0;
+}
+
+/** from, or the nearest value toward to for which ok holds, in 14 halvings. */
+function reach(from, to, ok) {
+  if (ok(from)) return from;
+  let lo = from, hi = to;
+  for (let k = 0; k < 14; k++) {
+    const mid = (lo + hi) / 2;
+    if (ok(mid)) hi = mid; else lo = mid;
+  }
+  return hi;
+}
+
+/** A slot's hue in OKLCH degrees: six, 50° apart, round the wheel but 30° either side of the needs red. */
+function agentHue(slot, s) {
+  const gap = 30, step = (360 - 2 * gap) / SLOTS;
+  return (oklch(s.needs)[2] + gap + step / 2 + (slot % SLOTS) * step) % 360;
+}
+
+/** A working card's ground: the card's lightness, moved a little, in the hue, keeping its muted text at 4.6:1. */
+function agentWash(slot, s, dark) {
+  const d = dark ? 1 : 0;
+  const full = fromOKLCH(oklch(s.card)[0] + WASH_LIFT[d], WASH_C[d], agentHue(slot, s));
+  const muted = luminance(s.muted);
+  const fits = (t) => ratio(luminance(mix(s.card, full, t)), muted) >= 4.6;
+  if (fits(1)) return full;
+  let lo = 0, hi = 1;
   for (let k = 0; k < 14; k++) {
     const mid = (lo + hi) / 2;
     if (fits(mid)) lo = mid; else hi = mid;
   }
-  return mix(s.card, vivid, lo);
+  return mix(s.card, full, lo);
 }
 
-/** Searches the brightness that keeps want:1 on every ground: past 1 it pales toward white. */
-function searchHue(hue, grounds, want, dark) {
-  const at = (x) => (x <= 1 ? fromHSB(hue, 0.62, x) : fromHSB(hue, 0.62 * (2 - x), 1));
-  let lo = 0, hi = dark ? 2 : 1;
-  for (let k = 0; k < 14; k++) {
-    const mid = (lo + hi) / 2;
-    const l = luminance(at(mid));
-    if (grounds.every((g) => ratio(l, g) >= want)) {
-      if (dark) hi = mid; else lo = mid;
-    } else if (dark) lo = mid; else hi = mid;
-  }
-  return at(dark ? hi : lo);
+/** The hue at lightness from, or deeper (light mode) or lighter (dark) as keeps want:1 on every ground. */
+function calm(hue, from, grounds, want, dark) {
+  const l = reach(from, dark ? 1 : 0, (x) => {
+    const y = luminance(fromOKLCH(x, MARK_C, hue));
+    return grounds.every((g) => ratio(y, g) >= want);
+  });
+  return fromOKLCH(l, MARK_C, hue);
 }
 
 /** A working card's mark: 3.2:1 on its wash and on the selection. */
 function agentMark(slot, s, dark) {
   const grounds = [agentWash(slot, s, dark), s.selection].map(luminance);
-  return searchHue(agentHue(slot, s), grounds, 3.2, dark);
+  return calm(agentHue(slot, s), MARK_L[dark ? 1 : 0], grounds, 3.2, dark);
 }
 
 /** The agent's colour as text, away from its card: 4.6:1 on every ground. */
 function agentInk(slot, s, dark) {
   const grounds = [s.sidebar, s.ground, s.card, s.panel].map(luminance);
-  return searchHue(agentHue(slot, s), grounds, 4.6, dark);
+  return calm(agentHue(slot, s), INK_L[dark ? 1 : 0], grounds, 4.6, dark);
 }
 
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');

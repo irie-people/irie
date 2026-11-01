@@ -284,6 +284,12 @@ func TestToolSessions(t *testing.T) {
 	}
 	// It prints and exits; its pane keeps what it printed.
 	c.waitState(r.Session.ID, ipc.StateExited)
+	if err := c.call("tool", ipc.ToolArgs{Name: ipc.ToolReady}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if spec, err := host.ReadSpec(c.paths.SpecFile(r.Session.ID)); err != nil || !slices.Equal(spec.Argv, []string{c.bin, "setup"}) || r.Session.Name != "setup" {
+		t.Errorf("ready tool: spec %+v (%v), session %+v", spec, err, r.Session)
+	}
 	if err := c.call("tool", ipc.ToolArgs{Name: "bogus"}, &r); err == nil {
 		t.Error("a tool that is not there")
 	}

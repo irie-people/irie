@@ -68,6 +68,10 @@ const (
 	// OpTrod is the trod bot's report: whether it works now, the
 	// rules and guidelines it gives, and what it did (DESIGN §4.10).
 	OpTrod = "trod"
+	// OpReady checks that the computer has what Irie needs, as its agents
+	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
+	// a ready.Report, for the Mac app's welcome.
+	OpReady = "ready"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -169,6 +173,11 @@ type Session struct {
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
+
+	// Hue is which of the agents' colours it takes while it works, from 1
+	// to ui.AgentColors, the same for as long as it lives (internal/core,
+	// hue.go); 0 until the core gives it one.
+	Hue int `json:"hue,omitempty"`
 
 	// Loose is what its jot left that has not landed, by the jot dog's
 	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
@@ -673,8 +682,9 @@ type ResultResult struct {
 	Text string `json:"text"`
 }
 
-// ToolArgs start a tool session: setup (`irie setup local`) or models
-// (`irie ctl local`).
+// ToolArgs start a tool session: setup (`irie setup local`), models
+// (`irie ctl local`) or ready (`irie setup`, which fixes what the ready op
+// finds missing).
 type ToolArgs struct {
 	Name string `json:"name"`
 }
@@ -683,6 +693,7 @@ type ToolArgs struct {
 const (
 	ToolSetup  = "setup"
 	ToolModels = "models"
+	ToolReady  = "ready"
 )
 
 // StatusArgs carry one status line update of a Claude Code session: its
