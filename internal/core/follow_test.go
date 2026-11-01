@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
@@ -31,96 +33,130 @@ func (c *coreEnv) prompted(id, text string) event.Event {
 	c.t.Helper()
 	var got event.Event
 	testutil.Eventually(c.t, 15*time.Second, "the agent never got “"+text+"”", func() bool {
-		got = c.promptOf(id, text)
-		return got.Kind != ""
+		for _, e := range c.events(id) {
+			if n, _ := e.Int("chars"); e.Kind == event.PromptSubmitted && e.Source == event.SourceHook && n == utf8.RuneCountInString(text) {
+				got = e
+				return true
+			}
+		}
+		return false
 	})
 	return got
 }
 
-// promptOf is the prompt event of text in session id, if its agent had it.
-func (c *coreEnv) promptOf(id, text string) event.Event {
-	for _, e := range c.events(id) {
-		if n, _ := e.Int("chars"); e.Kind == event.PromptSubmitted && e.Source == event.SourceHook && n == utf8.RuneCountInString(text) {
-			return e
+// A jot adds to the one before only when it reads as more for it, soon
+// after, in the same place and for the same agent, while that one is still
+// starting or its agent is still there.
+func TestAJotAddsOnlyToARecentLiveJotInTheSamePlace(t *testing.T) {
+	now := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	over := make(chan struct{})
+	close(over)
+	before := ipc.SpawnArgs{Task: "fix the footer", Repo: "/home/alice/code/web", Jot: true}
+	for _, tc := range []struct {
+		name   string
+		args   ipc.SpawnArgs
+		after  time.Duration
+		change func(c *Core, last *lastJot, x *session)
+		want   bool
+	}{
+		{"more for it", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 30 * time.Second, nil, true},
+		{"a task of its own", ipc.SpawnArgs{Task: "deep research lovable", Repo: before.Repo}, 30 * time.Second, nil, false},
+		{"another repo", ipc.SpawnArgs{Task: "also the header", Repo: "/home/alice/code/api"}, 30 * time.Second, nil, false},
+		{"its main checkout", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, InPlace: true}, 30 * time.Second, nil, false},
+		{"another agent", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, Profile: "haiku"}, 30 * time.Second, nil, false},
+		{"another model", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, Model: "sonnet"}, 30 * time.Second, nil, false},
+		{"a name of its own", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo, Name: "Header"}, 30 * time.Second, nil, false},
+		{"after the window", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 2*time.Minute + time.Second, nil, false},
+		{"with the window off", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 30 * time.Second,
+			func(c *Core, _ *lastJot, _ *session) {
+				cfg := *c.cfg()
+				cfg.Spawn.FollowUpWindow = 0
+				c.useConfig(cfg)
+			}, false},
+		{"its session closed", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 30 * time.Second,
+			func(c *Core, _ *lastJot, _ *session) { delete(c.sessions, "s1") }, false},
+		{"its agent ended", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 30 * time.Second,
+			func(_ *Core, _ *lastJot, x *session) { x.dead = true }, false},
+		{"its spawn failed", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 30 * time.Second,
+			func(c *Core, last *lastJot, _ *session) {
+				last.session, last.err = "", errors.New("no such repo")
+				delete(c.sessions, "s1")
+			}, false},
+		{"its spawn not over yet", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 2 * time.Second,
+			func(c *Core, last *lastJot, _ *session) {
+				last.session, last.done = "", make(chan struct{})
+				delete(c.sessions, "s1")
+			}, true},
+		{"no jot before", ipc.SpawnArgs{Task: "also the header", Repo: before.Repo}, 30 * time.Second,
+			func(c *Core, _ *lastJot, _ *session) { c.last = nil }, false},
+	} {
+		x := &session{id: "s1", name: "Fix the Footer"}
+		last := &lastJot{args: before, at: now, session: x.id, done: over}
+		c := &Core{sessions: map[string]*session{x.id: x}, last: last}
+		c.useConfig(config.Default())
+		if tc.change != nil {
+			tc.change(c, last, x)
+		}
+		got, why, ok := c.addable(tc.args, now.Add(tc.after))
+		if ok != tc.want || ok && (got != last || why == "") {
+			t.Errorf("%s: added %v (%q), want %v", tc.name, ok, why, tc.want)
 		}
 	}
-	return event.Event{}
 }
 
-func TestAJotThatReadsAsMoreGoesToTheAgentOfTheOneBefore(t *testing.T) {
-	c := setupWith(t, agentConfig{spawn: "follow_up_delay = \"1s\"\n"})
-	a := c.jot(ipc.SpawnArgs{Task: "prompt,stop"})
-	if a.Added {
-		t.Fatalf("the first jot was added to %s", a.Session.Name)
+// What is typed adds to the task typed just before when it reads as more
+// for it, and goes in once spawn.follow_up_delay is over; the same text
+// typed with Apart takes it back and starts it on its own, before then or
+// after, as the Mac app's New task does.
+func TestATypedJotThatReadsAsMoreGoesToTheAgentOfTheOneBefore(t *testing.T) {
+	c := setupWith(t, agentConfig{spawn: "follow_up_delay = \"2s\"\n"})
+	in := func(text, apart string) ipc.InputResult {
+		t.Helper()
+		r, err := c.input(ipc.InputArgs{Text: text, Apart: apart})
+		if err != nil || r.Session == nil {
+			t.Fatalf("%q: %+v, %v", text, r, err)
+		}
+		return r
 	}
-	sent := time.Now()
-	b := c.jot(ipc.SpawnArgs{Task: "also check the docs"})
-	if !b.Added || b.Session.ID != a.Session.ID {
-		t.Fatalf("the second jot: %+v, want it added to %s", b, a.Session.ID)
+	a := in("prompt,stop", "")
+	b := in("also check the docs", "")
+	if a.Did != ipc.InputSpawned || b.Did != ipc.InputAdded || b.Session.ID != a.Session.ID || b.Until.IsZero() || !strings.HasPrefix(b.Text, "Added to ") {
+		t.Fatalf("typed %+v, then %+v; want the second added to the first", a, b)
 	}
-	if b.Until.Before(sent.Add(900 * time.Millisecond)) {
-		t.Errorf("it can be taken back until %v, want a second from %v", b.Until, sent)
+	if _, err := os.Stat(c.paths.FollowUpFile(a.Session.ID)); err != nil {
+		t.Errorf("it does not wait in the session's folder: %v", err)
 	}
-	if n := c.agentPanes(); n != 1 {
-		t.Errorf("%d agents, want 1", n)
-	}
-	// It goes to the agent as a prompt of its own, once the delay is over.
-	if e := c.prompted(a.Session.ID, "also check the docs"); e.Time().Before(b.Until.Add(-100 * time.Millisecond)) {
-		t.Errorf("typed at %v, before %v", e.Time(), b.Until)
+	// Taken back before it is typed, it starts on its own, and nothing is
+	// left waiting for the first.
+	n := in("also check the docs", a.Session.ID)
+	if n.Did != ipc.InputSpawned || n.Session.ID == a.Session.ID || strings.Contains(n.Text, "has it too") {
+		t.Fatalf("taken back: %+v", n)
 	}
 	if _, err := os.Stat(c.paths.FollowUpFile(a.Session.ID)); !os.IsNotExist(err) {
-		t.Errorf("the waiting jots' file is left: %v", err)
+		t.Errorf("the jot taken back still waits: %v", err)
 	}
-
-	// A jot that reads as a task of its own starts an agent of its own, and
-	// is the one the next jot adds to.
-	n := c.jot(ipc.SpawnArgs{Task: "prompt,stop"})
-	if n.Added || n.Session.ID == a.Session.ID {
-		t.Fatalf("a task of its own: %+v", n)
+	// The one started apart is the jot the next adds to, and its agent
+	// gets that once the delay is over.
+	m := in("and a big one", "")
+	if m.Did != ipc.InputAdded || m.Session.ID != n.Session.ID {
+		t.Fatalf("after the one started apart: %+v, want it added to %s", m, n.Session.ID)
 	}
-	if m := c.jot(ipc.SpawnArgs{Task: "it's the second button"}); !m.Added || m.Session.ID != n.Session.ID {
-		t.Errorf("after a new jot: %+v, want it added to %s", m, n.Session.ID)
+	if e := c.prompted(n.Session.ID, "and a big one"); e.Time().Before(m.Until.Add(-100 * time.Millisecond)) {
+		t.Errorf("typed at %v, before %v", e.Time(), m.Until)
 	}
-	if n := c.agentPanes(); n != 2 {
-		t.Errorf("%d agents, want 2", n)
+	// Taken back once its agent has it, it starts apart all the same, and
+	// says so.
+	if late := in("and a big one", n.Session.ID); late.Did != ipc.InputSpawned || late.Session.ID == n.Session.ID || !strings.Contains(late.Text, "has it too") {
+		t.Errorf("taken back too late: %+v", late)
 	}
-}
-
-func TestOnlyAJotForTheSamePlaceSoonAfterAddsToTheOneBefore(t *testing.T) {
-	c := setupWith(t, agentConfig{spawn: "follow_up_window = \"3s\"\nfollow_up_delay = \"0s\"\n"})
-	dir := t.TempDir()
-	apart := func(r ipc.SpawnResult, before ipc.SpawnResult, why string) {
-		t.Helper()
-		if r.Added || r.Session.ID == before.Session.ID {
-			t.Errorf("%s: %+v, want a session of its own", why, r)
-		}
-	}
-	a := c.jot(ipc.SpawnArgs{Task: "prompt,stop"})
-	// Another folder, or another agent, is a task of its own.
-	b := c.jot(ipc.SpawnArgs{Task: "also over here", Cwd: dir})
-	apart(b, a, "another folder")
-	d := c.jot(ipc.SpawnArgs{Task: "also with the fake agent", Cwd: dir, Profile: "fake"})
-	apart(d, b, "another agent")
-	if r := c.jot(ipc.SpawnArgs{Task: "it is in main.go", Cwd: dir, Profile: "fake"}); !r.Added || r.Session.ID != d.Session.ID {
-		t.Fatalf("the same place and agent: %+v, want it added to %s", r, d.Session.ID)
-	}
-	// A spawn that is not a jot, as irie ctl spawn's, never adds, and is not
-	// the jot the next one adds to.
+	// A spawn that is not a jot, as irie ctl spawn's, never adds.
 	var r ipc.SpawnResult
-	if err := c.call("spawn", ipc.SpawnArgs{Task: "also from a script", Cwd: dir, Profile: "fake"}, &r); err != nil || r.Added || r.Session.ID == d.Session.ID {
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "also from a script"}, &r); err != nil || r.Added {
 		t.Errorf("not a jot: %+v, %v", r, err)
 	}
-	if r := c.jot(ipc.SpawnArgs{Task: "and the footer", Cwd: dir, Profile: "fake"}); !r.Added || r.Session.ID != d.Session.ID {
-		t.Errorf("after a spawn that is not a jot: %+v, want it added to %s", r, d.Session.ID)
+	if got := c.agentPanes(); got != 4 {
+		t.Errorf("%d agents, want 4", got)
 	}
-	// Once the window has passed since it was last added to, a jot starts
-	// its own agent.
-	time.Sleep(3500 * time.Millisecond)
-	e := c.jot(ipc.SpawnArgs{Task: "also too late", Cwd: dir, Profile: "fake"})
-	apart(e, d, "after the window")
-	// So does one after the jot before it was closed.
-	c.closeSession(e.Session.ID)
-	apart(c.jot(ipc.SpawnArgs{Task: "also after the close", Cwd: dir, Profile: "fake"}), e, "after a close")
 }
 
 func TestAJotAddedWhileTheOneBeforeStartsGoesInOnceItsAgentRuns(t *testing.T) {
@@ -140,7 +176,7 @@ func TestAJotAddedWhileTheOneBeforeStartsGoesInOnceItsAgentRuns(t *testing.T) {
 	first := make(chan spawned, 1)
 	go func() {
 		var r ipc.SpawnResult
-		err := c.call("spawn", ipc.SpawnArgs{Task: "sleep:2s,prompt,stop", Jot: true}, &r)
+		err := c.call("spawn", ipc.SpawnArgs{Task: "sleep:1s,prompt,stop", Jot: true}, &r)
 		first <- spawned{r, err}
 	}()
 	time.Sleep(300 * time.Millisecond)
@@ -153,7 +189,7 @@ func TestAJotAddedWhileTheOneBeforeStartsGoesInOnceItsAgentRuns(t *testing.T) {
 		t.Fatalf("the second jot: %+v, want it added to %s", b, a.r.Session.ID)
 	}
 	// It is typed once the agent has its task, not while it starts.
-	task := c.prompted(a.r.Session.ID, "sleep:2s,prompt,stop")
+	task := c.prompted(a.r.Session.ID, "sleep:1s,prompt,stop")
 	c.prompted(a.r.Session.ID, "also the second part, please")
 	var cv ipc.Conversation
 	if err := c.call(ipc.OpConversation, ipc.ConversationArgs{Session: a.r.Session.ID}, &cv); err != nil {
@@ -164,33 +200,6 @@ func TestAJotAddedWhileTheOneBeforeStartsGoesInOnceItsAgentRuns(t *testing.T) {
 	}
 	if n := c.agentPanes(); n != 1 {
 		t.Errorf("%d agents, want 1", n)
-	}
-}
-
-func TestAJotTakenBackStartsApart(t *testing.T) {
-	c := setupWith(t, agentConfig{spawn: "follow_up_delay = \"2s\"\n"})
-	a := c.jot(ipc.SpawnArgs{Task: "prompt,stop"})
-	c.waitState(a.Session.ID, ipc.StateDone)
-	if b := c.jot(ipc.SpawnArgs{Task: "also make an icon"}); !b.Added {
-		t.Fatalf("not added: %+v", b)
-	}
-	// Taken back before its agent has it: only the new agent gets it.
-	n := c.jot(ipc.SpawnArgs{Task: "also make an icon", Apart: a.Session.ID})
-	if n.Added || n.Late || n.Session.ID == a.Session.ID {
-		t.Fatalf("taken back: %+v", n)
-	}
-	time.Sleep(3 * time.Second)
-	if e := c.promptOf(a.Session.ID, "also make an icon"); e.Kind != "" {
-		t.Errorf("the first agent got the jot taken back: %+v", e)
-	}
-	// The one started apart is the jot the next adds to. Taken back once
-	// its agent has it, it starts apart all the same, and says so.
-	if m := c.jot(ipc.SpawnArgs{Task: "and a big one"}); !m.Added || m.Session.ID != n.Session.ID {
-		t.Fatalf("after the one started apart: %+v, want it added to %s", m, n.Session.ID)
-	}
-	c.prompted(n.Session.ID, "and a big one")
-	if late := c.jot(ipc.SpawnArgs{Task: "and a big one", Apart: n.Session.ID}); !late.Late || late.Added || late.Session.ID == n.Session.ID {
-		t.Errorf("taken back too late: %+v", late)
 	}
 }
 
@@ -205,29 +214,4 @@ func TestAJotWaitingForItsAgentOutlivesACoreRestart(t *testing.T) {
 	}
 	c.restartCore()
 	c.prompted(a.Session.ID, "also keep the old flag")
-}
-
-// A task typed to input is a jot: one that reads as more for the task
-// typed just before goes to its agent, and the same text typed with Apart
-// takes it back and starts it on its own, as the Mac app's New task does.
-func TestATypedJotThatReadsAsMoreGoesToTheTaskTypedBefore(t *testing.T) {
-	c := setupWith(t, agentConfig{spawn: "follow_up_delay = \"30s\"\n"})
-	a, err := c.input(ipc.InputArgs{Text: "prompt,stop"})
-	if err != nil || a.Did != ipc.InputSpawned || a.Session == nil {
-		t.Fatalf("the first: %+v, %v", a, err)
-	}
-	b, err := c.input(ipc.InputArgs{Text: "also check the docs"})
-	if err != nil || b.Did != ipc.InputAdded || b.Session == nil || b.Session.ID != a.Session.ID || b.Until.IsZero() || !strings.HasPrefix(b.Text, "Added to ") {
-		t.Fatalf("the second: %+v, %v", b, err)
-	}
-	n, err := c.input(ipc.InputArgs{Text: "also check the docs", Apart: a.Session.ID})
-	if err != nil || n.Did != ipc.InputSpawned || n.Session == nil || n.Session.ID == a.Session.ID || strings.Contains(n.Text, "has it too") {
-		t.Errorf("started apart: %+v, %v", n, err)
-	}
-	if _, err := os.Stat(c.paths.FollowUpFile(a.Session.ID)); !os.IsNotExist(err) {
-		t.Errorf("the jot taken back still waits: %v", err)
-	}
-	if n := c.agentPanes(); n != 2 {
-		t.Errorf("%d agents, want 2", n)
-	}
 }

@@ -697,7 +697,7 @@ func TestSubmitSpawnsAndSelectsTheNewRow(t *testing.T) {
 	}
 	m = typeText(m, "@/home/alice/code/website describe this repo")
 	m = send(m, keyMsg("enter"))
-	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website"}}
+	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website", Jot: true}}
 	if !reflect.DeepEqual(b.spawns, want) {
 		t.Fatalf("spawns = %+v, want %+v", b.spawns, want)
 	}
