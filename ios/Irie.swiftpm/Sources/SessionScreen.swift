@@ -92,8 +92,8 @@ import SwiftUI
                 HStack(spacing: 5) {
                     if let s {
                         let look = Look(s)
-                        StateMark(look: look, color: look.color(redOnDone: model.conn.redOnDone, id: s.id), size: 12)
-                        Text(Look.label(s)).fontWeight(.semibold).foregroundStyle(look.textColor(redOnDone: model.conn.redOnDone, id: s.id))
+                        StateMark(look: look, color: look.color(redOnDone: model.conn.redOnDone, session: s), size: 12)
+                        Text(Look.label(s)).fontWeight(.semibold).foregroundStyle(look.textColor(redOnDone: model.conn.redOnDone, session: s))
                     } else {
                         Text("Closed")
                     }
