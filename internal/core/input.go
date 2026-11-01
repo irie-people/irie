@@ -20,12 +20,20 @@ func (c *Core) input(a ipc.InputArgs) (ipc.InputResult, error) {
 	}
 	home, _ := os.UserHomeDir()
 	c.mu.Lock()
-	// ^name starts the task on that machine (peers.go).
+	// ^name starts the task on that machine (peers.go), when that machine
+	// runs every Claude Code hook this one does (place.go).
 	p, text, _ := c.placeOn(a.Text)
 	a.Text = text
+	why := ""
+	if p != nil {
+		why = c.hooksDiffer(p)
+	}
 	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home}
 	c.mu.Unlock()
 	if p != nil {
+		if why != "" {
+			return ipc.InputResult{}, ipc.Errorf(ipc.CodeBadArgs, "Not started on %s: %s.", p.name, why)
+		}
 		return c.inputOn(p, a)
 	}
 	st, err := irie.Read(a, v)
@@ -34,6 +42,12 @@ func (c *Core) input(a ipc.InputArgs) (ipc.InputResult, error) {
 	}
 	if st.Op == "" {
 		return irie.Said(st, nil, nil)
+	}
+	// With place.mode = auto, a new task may go to a peer with more room.
+	if sa, ok := st.Args.(ipc.SpawnArgs); ok && st.Op == ipc.OpSpawn {
+		if r, placed, err := c.placeTask(a, sa); placed {
+			return r, err
+		}
 	}
 	raw, err := json.Marshal(st.Args)
 	if err != nil {

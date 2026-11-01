@@ -44,9 +44,10 @@ type peerState struct {
 	client  *peer.Client
 	rows    map[string]ipc.Session // by the peer's own id
 	header  *ipc.Header
-	up      bool      // its stream runs and sent its snapshot
-	since   time.Time // when it came up or went down
-	problem string    // why it is down
+	placed  []time.Time // when the balancer last put tasks there (place.go)
+	up      bool        // its stream runs and sent its snapshot
+	since   time.Time   // when it came up or went down
+	problem string      // why it is down
 	stop    context.CancelFunc
 }
 

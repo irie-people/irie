@@ -376,6 +376,9 @@ type Header struct {
 	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
 	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
 	Load        *Load   `json:"load,omitempty"`   // how busy the machine is
+	// Machine is what another core needs to know of this machine before
+	// it starts a task here.
+	Machine *Machine `json:"machine,omitempty"`
 	// Peers are the cores this one is paired with, and how each is.
 	Peers []PeerInfo `json:"peers,omitempty"`
 	// Trod is the trod bot while it is in its hours (DESIGN §4.10).

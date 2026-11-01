@@ -33,3 +33,26 @@ type PeerInfo struct {
 	Load     *Load     `json:"load,omitempty"`
 	Memory   *Memory   `json:"memory,omitempty"`
 }
+
+// Machine is what a core says of its machine that another core needs
+// before it starts a task there (docs/proposals/multi-host.md §4.2, §4.4).
+type Machine struct {
+	Name string `json:"name"`
+	OS   string `json:"os"`
+	// Claude says whether Claude Code is signed in here: ok, missing or
+	// unknown; empty before the first check.
+	Claude string `json:"claude,omitempty"`
+	// Profiles are the profiles a task here may name.
+	Profiles []string `json:"profiles,omitempty"`
+	// Hooks are the user's own Claude Code hooks here, from
+	// ~/.claude/settings.json: each the SHA-256 of its event, matcher and
+	// command, with the program's folder and the home folder left out, so
+	// two machines can tell that they run the same hooks without either
+	// saying what they are.
+	Hooks []string `json:"hooks,omitempty"`
+	// HooksMissing are the programs those hooks start that this machine
+	// lacks.
+	HooksMissing []string `json:"hooks_missing,omitempty"`
+	// Disk is the free space where worktrees go, in bytes.
+	Disk int64 `json:"disk,omitempty"`
+}

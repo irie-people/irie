@@ -150,6 +150,7 @@ func (c *Core) headerNow() ipc.Header {
 		h.Memory = &m
 	}
 	h.Load = c.loadNow()
+	h.Machine = c.mach
 	h.Peers = c.peersInfo()
 	h.Trod = c.trodHeader(c.awakeNow())
 	return h

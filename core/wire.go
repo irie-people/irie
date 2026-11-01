@@ -31,6 +31,7 @@ type (
 	PeersArgs        = ipc.PeersArgs
 	PeersResult      = ipc.PeersResult
 	PeerInfo         = ipc.PeerInfo
+	Machine          = ipc.Machine
 	Session          = ipc.Session
 	TrodRow          = ipc.TrodRow
 	TrodShift        = ipc.TrodShift

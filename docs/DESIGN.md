@@ -314,6 +314,8 @@ curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 
 A core can be paired with another machine's, which then is its peer ([multi-host](proposals/multi-host.md)). `irie peer add` pairs through that machine's phone gateway ([PHONE.md](PHONE.md)) as a phone does, with a pairing link that `irie remote pair --link` prints there, and keeps the token and the fingerprint of its Irie authority in `peers.json` (mode 0600), so the core trusts no other certificate for it. The core then follows the peer's sessions over HTTPS and shows them after its own, each as a row of its own: `host` names the machine, and its id is the machine's name, a slash and that core's own id (`Asahi/s38…`). A client sends that id back as it is, and the core passes the call on: `send`, `close`, `rename`, `park`, `unpark`, `priority`, `freeze`, `thaw`, `rate`, `result`, `screen`, `keys` and `conversation`, and a subscription to that session. `reorder` refuses, since a peer's rows keep that machine's order. `show` picks the row and the slot draws its conversation, since its terminal is on its own machine. `^name` among the first line's words starts the task on that machine, which reads its own `@` and `+` words; `^` and a word that names no machine stay in the task as typed.
 
+**Where a task goes.** Each core advertises its machine in its header: `load` and `memory`, and `machine`: whether Claude Code is signed in, the profiles, the free disk, and the user's own Claude Code hooks (`~/.claude/settings.json`), each as the SHA-256 of its event, matcher and command without the program's folder or the home folder, with any program they start that the machine lacks. A task goes to a peer only where those hooks are all there and all run, so it never runs without a hook it would have had here, such as a repo's guard: `^name` says so and starts nothing anywhere. With `place.mode = "auto"`, a task typed with no `^` word goes to a peer only while this machine is busy (fewer than `headroom_cpus` free, less than `headroom_gib` free, memory pressure, or fewer than 64 ptys), only to a peer where Claude Code is signed in, the profile exists, and the `@repo` is one `peers.<name>.repos` lists, and only to one with at least 2 more CPUs and 2 GiB more free than this machine; each task placed there counts as a CPU and a GiB against it for 2 minutes. A task that reads as more for the jot before it stays with that jot's agent, and one the peer refuses starts here. The result says why it went.
+
 The peer's sessions run on under its own core whatever happens to this one. When its stream ends, or brings nothing for 40 s (its gateway pings every 15 s), its rows stay with `host_down`, the time it went, and calls about them say `peer_down`. The core follows it again after 1, 2, 4 … 30 s. A phone hears none of the peers' rows: it pairs with each machine itself.
 
 ## 3. Harness support
@@ -1101,6 +1103,14 @@ on = false                    # serve it on this machine's local network; the co
 port = 7387                   # its HTTPS port; the setup page is on the port below, over plain HTTP
 name = ""                     # what the phone calls this machine; "" = its computer name (macOS) or host name
 listen = ""                   # the address to listen on; "" = every address of this machine
+
+[place]                       # where a task typed here starts when its words name no machine (§2.8)
+mode = "local"                # local, or auto: to a peer with clearly more room while this machine is busy
+headroom_cpus = 2             # this machine is busy once the work waiting to run leaves fewer CPUs free
+headroom_gib = 2              # or less memory than this is free, or the kernel warns of memory pressure
+
+# [peers.Asahi]               # one of the machines `irie peer add` paired with
+# repos = ["irie"]            # the @names auto may send there; a task with no @ goes too
 ```
 
 ---

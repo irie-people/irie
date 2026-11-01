@@ -29,6 +29,7 @@ func newPeerCore(t *testing.T) *Core {
 	}
 	c.useConfig(config.Default())
 	c.cfg().Remote.Name = "Mac"
+	c.mach = &ipc.Machine{Name: "Mac"} // no hooks of its own
 	t.Cleanup(func() {
 		c.mu.Lock()
 		for _, p := range c.peers {
@@ -75,7 +76,7 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 	g.Core.Start([]ipc.Session{
 		{ID: "s2", Name: "write the docs", State: ipc.StateIdle, Order: 1},
 		{ID: "s1", Name: "fix the build", State: ipc.StateWorking, Order: 0, Parent: "s0"},
-	}, &ipc.Header{Version: "peer-v", Load: &ipc.Load{CPUs: 10, RunQueue: 0.5, PTYs: 8, PTYMax: 4096}})
+	}, &ipc.Header{Version: "peer-v", Load: &ipc.Load{CPUs: 10, RunQueue: 0.5, PTYs: 8, PTYMax: 4096}, Machine: &ipc.Machine{Name: "Asahi", Claude: "ok"}})
 	c := newPeerCore(t)
 	pairWith(t, c, g, "Asahi")
 

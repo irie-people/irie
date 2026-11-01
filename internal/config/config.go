@@ -42,7 +42,38 @@ type Config struct {
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
 	Remote   Remote             `toml:"remote"`
+	Place    Place              `toml:"place"`
+	Peers    map[string]Peer    `toml:"peers"`
 	Env      Env                `toml:"env"`
+}
+
+// Place is where a task typed here starts when its words do not say
+// (docs/proposals/multi-host.md §4.3): ^name always picks the machine.
+type Place struct {
+	// Mode is local, for every task here, or auto: a task goes to a peer
+	// that can run it the same way while this machine is busy and the
+	// peer has clearly more room.
+	Mode string `toml:"mode"`
+	// HeadroomCPUs and HeadroomGiB are what this machine keeps free: it is
+	// busy once the work waiting to run leaves fewer CPUs, or less memory
+	// is free.
+	HeadroomCPUs int `toml:"headroom_cpus"`
+	HeadroomGiB  int `toml:"headroom_gib"`
+}
+
+// The place modes.
+const (
+	PlaceLocal = "local"
+	PlaceAuto  = "auto"
+)
+
+// Peer is what this machine says of one of its peers, by the name it pairs
+// with in `irie peer add`; peers.json keeps the pairing itself.
+type Peer struct {
+	// Repos are the @names a task placed there by auto may name; a task
+	// with no @ goes too. You keep these repos cloned there, under the
+	// same names in its [repos], with the hooks they need.
+	Repos []string `toml:"repos"`
 }
 
 // Env is the environment of a server that the Mac app starts (DESIGN §7.2).
@@ -445,6 +476,7 @@ func Default() Config {
 			Rules: TrodRules(), Guidelines: TrodGuidelines(),
 		},
 		Remote: Remote{Port: DefaultRemotePort},
+		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
 	}
 }
 
@@ -544,11 +576,16 @@ func Parse(data []byte, path string) (Config, error) {
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
 		Remote   *Remote                   `toml:"remote"`
+		Place    *Place                    `toml:"place"`
+		Peers    map[string]Peer           `toml:"peers"`
 		Env      *Env                      `toml:"env"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Env: &c.Env}
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Place: &c.Place, Env: &c.Env}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
+	}
+	if file.Peers != nil {
+		c.Peers = file.Peers
 	}
 	for _, name := range slices.Sorted(maps.Keys(file.Profiles)) {
 		p, ok := c.Profiles[name]
@@ -925,6 +962,24 @@ func (c Config) Validate() error {
 				bad("trod.%s[%d]: must be one line", list.key, i)
 			case utf8.RuneCountInString(l) > maxTrodLine:
 				bad("trod.%s[%d]: must be at most %d characters", list.key, i, maxTrodLine)
+			}
+		}
+	}
+	switch c.Place.Mode {
+	case PlaceLocal, PlaceAuto:
+	default:
+		bad("place.mode = %q: must be %q or %q", c.Place.Mode, PlaceLocal, PlaceAuto)
+	}
+	if c.Place.HeadroomCPUs < 0 || c.Place.HeadroomGiB < 0 {
+		bad("place.headroom_cpus and headroom_gib must be 0 or more")
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Peers)) {
+		if name == "" || len(name) > 30 || strings.ContainsFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) {
+			bad("peers.%s: a machine's name is up to 30 letters, digits, - or _", name)
+		}
+		for i, r := range c.Peers[name].Repos {
+			if r == "" || strings.ContainsAny(r, "/ \t") {
+				bad("peers.%s.repos[%d] = %q: must be a repo's @name", name, i, r)
 			}
 		}
 	}

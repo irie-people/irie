@@ -1,6 +1,6 @@
 # Proposal: Irie on two machines
 
-Date: 2026-11-01. Status: proposed, for the owner to decide; the leak fix in §1.2 is built and live. There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote it from `live` at `2670fc7`, after measuring both machines. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-01. Status: the owner chose design A, placement by you and then automatic (2026-11-01). Built: the leak fix (§1.2), adverts (step 1), peers with their sessions in the list, `^name` and the forwarded ops (steps 2 and 3), and the balancer (step 4), with the hooks check of §4.4; DESIGN §2.8 says how they work. Steps 5 and 6 are not built yet. There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote it from `live` at `2670fc7`, after measuring both machines. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 The owner asked: can Irie offload CPU and memory to their Asahi Linux laptop, and can a peer-to-peer balancer manage that?
 

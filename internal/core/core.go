@@ -91,6 +91,8 @@ type Core struct {
 	local      localState               // local.json
 	machine    localmodel.Machine       // the machine's memory, last read
 	load       sysload.Load             // how busy the machine is, last read
+	mach       *ipc.Machine             // what this core says of its machine to its peers (machine.go)
+	machAt     time.Time                // when it was last checked
 	localMem   int64                    // what the models of Irie's own server take
 	llamaMem   int64                    // what Irie's own llama-server takes
 	plan       ipc.Plan                 // the plan's use, from the newest status update
@@ -267,6 +269,7 @@ func Run(o Options) error {
 	if err := c.loadPeers(); err != nil {
 		c.log.Warn("peers", "err", err)
 	}
+	go c.checkMachine()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -294,6 +297,9 @@ func Run(o Options) error {
 			}
 			if n%trodEvery == 0 {
 				go c.trodSweep()
+			}
+			if n%machineEvery == 0 {
+				go c.checkMachine()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
