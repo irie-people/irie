@@ -69,7 +69,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 ### 2.1 Principles
 
 1. **tmux is the engine.** It keeps agents alive with no window open, swaps panes into view, reports process facts and carries typed input. Ghostty is the window around it.
-2. **One writer.** `irie core` owns all state and is the only process that drives tmux. The sidebar, `irie ctl`, the hook shim, the subagent mirrors and any future native front-end are all clients of its socket API.
+2. **One writer.** `irie core` owns all state and every rule, and is the only process that drives tmux. The sidebar, the Mac app, `irie ctl`, the hook shim, the subagent mirrors and any other front-end are all clients of its socket API, which [CORE.md](CORE.md) describes for whoever writes one: irie-core. A client keeps no rules of its own, not even what the words in its task bar mean (`input`).
 3. **State is derived, not stored.** The core records facts in an append-only journal and computes each row's state from them.
 4. **Inject, never edit.** Hooks, settings and env go in per launch, through `--settings`, argv and env. User config files are not touched.
 5. **Fail open, except for a pause.** If Irie is down, hooks return at once and agents keep working. An agent the user paused stays held through its gate file.
@@ -212,6 +212,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
 | `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session`; with `agent: "sub:<id>"` it follows that helper's own conversation (§4.4) | M1 (`view`: Mac app; `conversation`: §4.7) |
 | `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?` (`auto` routes it), `name?` (the user's, §4.2), `force?`, `delegate?`, `parent?`, `permission_mode?`, `continues?` | `session` | M1 (`repo`, `profile` M3; `force`, `delegate`, `parent`, `permission_mode`, `continues` M10) |
+| `input` | `text`, as typed; `session?`, the selected session; `outside?`, the selected session outside Irie; `repo?`, `in_place?`, `profile?`, `model?`, the client's menus; `pastes[]?`, each `label` and `text` | `did`: `spawned`, `answered`, `ran` or `asked`; `op`, the op it ran; `text`, to show as it is; `session?`; `show?`; `choice?`, as `undo`'s. Reads what a person typed, a task, a status question or a `:` command, and runs the op it means through this table (§4.2, [CORE.md](CORE.md) §3) | irie-core |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
@@ -258,6 +259,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | Path | Contents | From |
 |---|---|---|
 | `cmd/irie/` | Entry point and subcommand dispatch | M1 |
+| `core/` | irie-core's contract for Go clients: the wire types and op names, generated from `internal/ipc`, the socket's place, a client, and the language a person types (`Read`, `Said`) ([CORE.md](CORE.md)) | irie-core |
 | `internal/paths/` | XDG and runtime dirs, socket path | M1 |
 | `internal/config/` | TOML config, defaults, validation | M1 |
 | `internal/tmux/` | Command runner, generated tmux.conf, layout, swap-in, sizes; `control/` from M11 | M1 |
@@ -462,6 +464,8 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
+
+The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3), so every client's bar takes the same words and every `:` command the core knows. The words above are the plan; the core reads `:rename`, `:rate`, `:close`, `:reopen`, `:undo`, `:redo`, `:freeze`, `:thaw`, `:prio`, `:park`, `:unpark`, `:move`, `:route`, `:setup` and `:models`, and a status question such as "hows the parser?", which it answers from the rows and which starts nothing.
 
 **Spawn pipeline.** Reliable headless spawning means the task never travels through tmux and is never typed into a TUI:
 1. Parse the first line: `@…` and `+…` tokens are removed, and the rest is the task.
