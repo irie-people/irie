@@ -39,7 +39,7 @@ The HTTPS port (`remote.port`, 7387) serves the app and its API; the port below 
 | `POST /api/push` `{subscription, vapid, done}` | Notifications to this phone: its `PushSubscription`, the key it subscribed with, and whether a finished turn is news too. A first notification goes out at once, so the phone knows they work; a push service that can't be reached is `push_failed` |
 | `DELETE /api/push` | No more notifications to this phone |
 
-Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unknown token is 401 `unpaired`. The API allows any origin, since the app on one machine talks to every other machine's gateway, and a token, never a cookie, says who calls.
+Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unknown token is 401 `unpaired`. The app on one machine talks to every other machine's gateway, so the API lets a page from any local name or address ask (CORS), and no page on the internet; a token, never a cookie, says who calls. Every POST must say `Content-Type: application/json`, which no page can send to another origin without asking first, so no page elsewhere can spend a pairing code's tries. The setup port serves only the setup page, its script, its icons and the profile.
 
 ## 3. Trust
 
@@ -63,9 +63,9 @@ It keeps the paired machines in the browser's storage on the phone, and a servic
 
 ## 5. Notifications
 
-Each gateway follows its core's sessions (a `subscribe` of its own) and tells every phone that asked when one needs you, failed or stalled, and, for a phone that asked for them too, when a turn ends. A first look after the gateway or the core starts is not news, so a restart never sends a flood; a question that changes while the session still needs you is. One kind of news about one session goes out at most every 20 s, with the session's name, what it asks or did, and the machine; a tap opens the session.
+Each gateway follows its core's sessions (a `subscribe` of its own) and tells every phone that asked when one needs you, failed or stalled, and, for a phone that asked for them too, when a turn ends. A first look after the gateway or the core starts is not news, so a restart never sends a flood; a question that changes while the session still needs you is. One kind of news about one session goes out at most every 20 s, with the session's name, what it asks or did (cut at 200 characters), and the machine; a tap opens the session.
 
-They go through the phone's own push service (Apple's, for an iPhone on iOS 16.4 or later with the app on its Home Screen), as Web Push has it: RFC 8030 for the push, RFC 8291 for encrypting each message to the phone, RFC 8292 (VAPID) for signing the request. A subscription is bound to one key, and every machine pushes to it, so the app makes that key itself, a P-256 pair, and gives each machine the subscription and the key. A machine keeps them with the phone in `devices.json`; a subscription the push service no longer has (404, 410) is dropped. Each VAPID token lasts 12 hours and is reused, as Apple asks. Pushes leave the machine for the push service over the internet, a VPN's tunnel included; nothing comes in.
+They go through the phone's own push service (Apple's, for an iPhone on iOS 16.4 or later with the app on its Home Screen), as Web Push has it: RFC 8030 for the push, RFC 8291 for encrypting each message to the phone, RFC 8292 (VAPID) for signing the request. A subscription is bound to one key, and every machine pushes to it, so the app makes that key itself, a P-256 pair, and gives each machine the subscription and the key. A machine keeps them with the phone in `devices.json`, and posts only to the browsers' push services (Apple's, Google's, Mozilla's and Microsoft's hosts, on port 443), so a subscription can't point it at anything else; a push service's refusal reaches the phone as its status alone. A subscription the push service no longer has (404, 410) is dropped. Each VAPID token lasts 12 hours and is reused, as Apple asks. Pushes leave the machine for the push service over the internet, a VPN's tunnel included; nothing comes in.
 
 ## 6. Next
 

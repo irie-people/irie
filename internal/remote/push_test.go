@@ -17,6 +17,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -170,6 +171,8 @@ func TestAPhoneHearsWhenASessionNeedsIt(t *testing.T) {
 
 	ts, srv, f := gateway(t)
 	srv.pusher.client = service.Client()
+	allowEndpoint = func(*url.URL) bool { return true } // the test's own push service
+	defer func() { allowEndpoint = pushService }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go srv.notify(ctx) // as Run does
@@ -190,6 +193,7 @@ func TestAPhoneHearsWhenASessionNeedsIt(t *testing.T) {
 	body, _ := json.Marshal(sub)
 	req, _ := http.NewRequest("POST", ts.URL+"/api/push", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil || res.StatusCode != http.StatusNoContent {
 		t.Fatalf("push on: %v %v", res, err)
@@ -222,6 +226,7 @@ func TestAPhoneHearsWhenASessionNeedsIt(t *testing.T) {
 	body, _ = json.Marshal(sub)
 	req, _ = http.NewRequest("POST", ts.URL+"/api/push", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != http.StatusNoContent {
 		t.Fatalf("push again: %v %v", res, err)
 	}
@@ -237,6 +242,7 @@ func TestAPhoneHearsWhenASessionNeedsIt(t *testing.T) {
 	body, _ = json.Marshal(sub)
 	req, _ = http.NewRequest("POST", ts.URL+"/api/push", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != http.StatusNoContent {
 		t.Fatalf("push without finished turns: %v %v", res, err)
 	}
@@ -279,9 +285,11 @@ func TestABadSubscriptionIsRefused(t *testing.T) {
 	vpriv := make([]byte, 32)
 	vapid.D.FillBytes(vpriv)
 	for _, sub := range []string{
+		`{"subscription":{"endpoint":"https://127.0.0.1:8443/router-admin","keys":{"p256dh":"` + rfcUAPublic + `","auth":"` + rfcAuth + `"}}}`,
+		`{"subscription":{"endpoint":"https://web.push.apple.com:8443/x","keys":{"p256dh":"` + rfcUAPublic + `","auth":"` + rfcAuth + `"}}}`,
 		`{"subscription":{"endpoint":"http://push.example.com/x","keys":{"p256dh":"` + rfcUAPublic + `","auth":"` + rfcAuth + `"}}}`,
-		`{"subscription":{"endpoint":"https://push.example.com/x","keys":{"p256dh":"AAAA","auth":"` + rfcAuth + `"}}}`,
-		`{"subscription":{"endpoint":"https://push.example.com/x","keys":{"p256dh":"` + rfcUAPublic + `","auth":"` + rfcAuth + `"}},"vapid":{"public":"` + b64(vpub) + `","private":"` + b64(vpriv) + `"}}`,
+		`{"subscription":{"endpoint":"https://web.push.apple.com/x","keys":{"p256dh":"AAAA","auth":"` + rfcAuth + `"}}}`,
+		`{"subscription":{"endpoint":"https://web.push.apple.com/x","keys":{"p256dh":"` + rfcUAPublic + `","auth":"` + rfcAuth + `"}},"vapid":{"public":"` + b64(vpub) + `","private":"` + b64(vpriv) + `"}}`,
 	} {
 		res, out := post(t, ts.URL+"/api/push", token, sub)
 		if res.StatusCode != http.StatusBadRequest {

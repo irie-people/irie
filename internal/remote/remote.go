@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -171,14 +172,25 @@ func (s *Server) App() http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			// The app on one machine talks to the others' gateways. A
-			// token, never a cookie, carries who it is, so any origin
-			// may ask.
-			h.Set("Access-Control-Allow-Origin", "*")
-			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-			h.Set("Access-Control-Max-Age", "600")
+			// The app on one machine talks to the others' gateways, so
+			// a page served from a local name or address may ask; a
+			// page on the internet may not. A token, never a cookie,
+			// carries who is asking.
+			if o := r.Header.Get("Origin"); o != "" && localOrigin(o) {
+				h.Set("Access-Control-Allow-Origin", o)
+				h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+				h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+				h.Set("Access-Control-Max-Age", "600")
+				h.Add("Vary", "Origin")
+			}
 			h.Set("Cache-Control", "no-store")
+			// A POST must say it is JSON, which no page can send to
+			// another origin without asking first: so no page elsewhere
+			// can spend a pairing code's tries.
+			if r.Method == http.MethodPost && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+				writeJSON(w, http.StatusUnsupportedMediaType, map[string]any{"error": ipc.Errorf(ipc.CodeBadRequest, "send JSON, with Content-Type: application/json")})
+				return
+			}
 		} else {
 			h.Set("Content-Security-Policy", csp)
 			if r.URL.Path == "/" {
@@ -211,7 +223,17 @@ func (s *Server) Setup() http.Handler {
 		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
 		w.Write(s.ca.Cert.Raw)
 	})
-	mux.Handle("GET /", s.files("setup.html"))
+	// Only the setup page's own files: the app itself, and its token,
+	// belong on the HTTPS side.
+	files := s.files("setup.html")
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		switch strings.TrimPrefix(path.Clean(r.URL.Path), "/") {
+		case "", "setup.html", "setup.js", "icon-180.png", "icon-192.png", "icon-512.png", "favicon.ico":
+			files.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !localPeer(r.RemoteAddr) {
 			s.refuse(w, r)
@@ -225,6 +247,20 @@ func (s *Server) Setup() http.Handler {
 		w.Header().Set("Content-Security-Policy", csp)
 		mux.ServeHTTP(w, r)
 	})
+}
+
+// localOrigin says whether a page's origin is on a local name or address,
+// as every gateway's own pages are.
+func localOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	h := u.Hostname()
+	if ip := net.ParseIP(h); ip != nil {
+		return localIP(ip) || slices.ContainsFunc(links(), func(n *net.IPNet) bool { return n.Contains(ip) })
+	}
+	return localName(h)
 }
 
 // refuse turns away a request from beyond the machine's local networks.

@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,9 @@ func (p Push) check() error {
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return errors.New("the subscription's endpoint must be an https URL")
 	}
+	if !allowEndpoint(u) {
+		return fmt.Errorf("%s is not a push service Irie knows", u.Hostname())
+	}
 	ua, err := unb64(p.P256dh)
 	if err != nil {
 		return errors.New("the subscription's p256dh is not base64url")
@@ -92,6 +96,26 @@ func (p Push) check() error {
 		return err
 	}
 	return nil
+}
+
+// pushServices are the hosts of the browsers' push services: Apple's,
+// Google's, Mozilla's and Microsoft's. A gateway posts only to them, so a
+// subscription can't make it reach anything else, such as a service on
+// the local network.
+var pushServices = []string{"web.push.apple.com", "fcm.googleapis.com", "updates.push.services.mozilla.com"}
+
+// allowEndpoint says whether the gateway may post to u. Tests let their
+// own push service in.
+var allowEndpoint = pushService
+
+// pushService says whether u is at a known push service, on its default
+// port.
+func pushService(u *url.URL) bool {
+	if u.Port() != "" && u.Port() != "443" {
+		return false
+	}
+	h := strings.ToLower(u.Hostname())
+	return slices.Contains(pushServices, h) || strings.HasSuffix(h, ".notify.windows.com")
 }
 
 // vapid is the phone's application server key.
@@ -206,6 +230,12 @@ type Note struct {
 	URL   string `json:"url"` // where the app opens: the session
 }
 
+// serviceError is a push service's refusal: its status for whoever asked,
+// and what it said, for the log.
+type serviceError struct{ status, body string }
+
+func (e *serviceError) Error() string { return "the push service answered " + e.status }
+
 // errGone is a subscription the push service no longer has: the phone
 // unsubscribed, or the app was removed.
 var errGone = errors.New("the push service no longer has this subscription")
@@ -287,7 +317,8 @@ func (ps *pusher) send(ctx context.Context, p Push, n Note, urgent bool) error {
 	case res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusGone:
 		return errGone
 	case res.StatusCode >= 300:
-		return fmt.Errorf("the push service answered %s: %s", res.Status, strings.TrimSpace(string(msg)))
+		// Its words stay in the log: a phone hears only the status.
+		return &serviceError{status: res.Status, body: strings.TrimSpace(string(msg))}
 	}
 	return nil
 }
@@ -348,7 +379,25 @@ func news(was *seen, now seen, machine string) (n Note, urgent, done, ok bool) {
 	if body == "" {
 		body = map[bool]string{true: "Open it to see what it asks.", false: "Open it to see what it did."}[urgent]
 	}
-	return Note{Title: now.name + " " + verb, Body: body + " · " + machine}, urgent, done, true
+	return Note{Title: noteText(now.name+" "+verb, 100), Body: noteText(body, 200) + " · " + noteText(machine, 40)}, urgent, done, true
+}
+
+// said is what a push service said with its refusal, for the log.
+func said(err error) string {
+	var se *serviceError
+	if errors.As(err, &se) {
+		return se.body
+	}
+	return ""
+}
+
+// noteText bounds a notification's text, so a long question or error
+// still fits one push.
+func noteText(s string, max int) string {
+	if r := []rune(s); len(r) > max {
+		return strings.TrimSpace(string(r[:max-1])) + "…"
+	}
+	return s
 }
 
 // notify follows the core's sessions and pushes what is news to every
@@ -474,7 +523,7 @@ func (s *Server) pushAll(ctx context.Context, n Note, urgent, done bool) {
 				s.log.Info("notify: subscription gone", "device", d.ID)
 				s.store.SetPush(d.ID, nil)
 			case err != nil:
-				s.log.Warn("notify", "device", d.ID, "err", err)
+				s.log.Warn("notify", "device", d.ID, "err", err, "said", said(err))
 			default:
 				s.log.Info("notified", "device", d.ID, "title", n.Title)
 			}
@@ -522,7 +571,7 @@ func (s *Server) push(w http.ResponseWriter, r *http.Request, d Device) {
 	n := Note{Title: "Notifications from " + s.opt.Name + " are on", Body: "You'll hear when a session needs you" + map[bool]string{true: " or finishes.", false: "."}[p.Done],
 		Tag: s.id + ":hello", URL: "#/"}
 	if err := s.pusher.send(ctx, p, n, false); err != nil {
-		s.log.Warn("push: first notification", "device", d.ID, "err", err)
+		s.log.Warn("push: first notification", "device", d.ID, "err", err, "said", said(err))
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": ipc.Errorf("push_failed", "%s couldn't reach your phone's push service: %v", s.opt.Name, err)})
 		return
 	}

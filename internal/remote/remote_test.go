@@ -228,6 +228,7 @@ func gateway(t *testing.T) (*httptest.Server, *Server, *fakeCore) {
 func post(t *testing.T, url, token, body string) (*http.Response, map[string]any) {
 	t.Helper()
 	req, _ := http.NewRequest("POST", url, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -287,8 +288,19 @@ func TestThePhoneCallsOnlyItsOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pre.StatusCode != http.StatusNoContent || pre.Header.Get("Access-Control-Allow-Origin") != "*" || !strings.Contains(pre.Header.Get("Access-Control-Allow-Headers"), "Authorization") {
+	if pre.StatusCode != http.StatusNoContent || pre.Header.Get("Access-Control-Allow-Origin") != "https://10.0.0.7:7387" || !strings.Contains(pre.Header.Get("Access-Control-Allow-Headers"), "Authorization") {
 		t.Errorf("preflight: %s %v", pre.Status, pre.Header)
+	}
+	// A page on the internet may not.
+	req, _ = http.NewRequest("OPTIONS", ts.URL+"/api/pair", nil)
+	req.Header.Set("Origin", "https://example.com")
+	if pre, err := http.DefaultClient.Do(req); err != nil || pre.Header.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("preflight from the internet: %v %v", pre.Header, err)
+	}
+	// Nor can it post without asking first: a POST that isn't JSON is refused.
+	plain, err := http.Post(ts.URL+"/api/pair", "text/plain", strings.NewReader(`{"code":"000000"}`))
+	if err != nil || plain.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("a text/plain pair: %v %v", plain, err)
 	}
 
 	// The phone forgets itself.
@@ -312,6 +324,7 @@ func TestASubscriptionStreamsTheCoresFrames(t *testing.T) {
 	f.frames <- ipc.Frame{T: ipc.FrameSnapshot, Sessions: []ipc.Session{{ID: "s1", Name: "parser", State: ipc.StateWorking}}}
 	req, _ := http.NewRequest("POST", ts.URL+"/api/subscribe", strings.NewReader(`{"session":"s1","conversation":true,"view":"app","events":true}`))
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -382,6 +395,21 @@ func TestTheAppsFilesAreServed(t *testing.T) {
 	}
 	if res, _ := http.Get(ts.URL + "/../../etc/passwd"); res != nil && res.StatusCode == http.StatusOK {
 		t.Error("a path out of the app's files was served")
+	}
+	// The setup port serves its page and nothing of the app's.
+	_, srv, _ := gateway(t)
+	setup := httptest.NewServer(srv.Setup())
+	defer setup.Close()
+	for path, want := range map[string]int{"/": 200, "/setup.js": 200, "/icon-180.png": 200, "/irie.mobileconfig": 200, "/setup.json": 200,
+		"/index.html": 404, "/app.js": 404, "/js/net.js": 404, "/api/info": 404} {
+		res, err := http.Get(setup.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != want {
+			t.Errorf("setup port %s: %d, want %d", path, res.StatusCode, want)
+		}
 	}
 	if _, err := QRSVG("http://studio.local:7386/"); err != nil {
 		t.Error(err)
@@ -461,6 +489,7 @@ func TestAForgottenPhonesStreamEnds(t *testing.T) {
 	f.frames <- ipc.Frame{T: ipc.FrameSnapshot}
 	req, _ := http.NewRequest("POST", ts.URL+"/api/subscribe", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
