@@ -32,6 +32,9 @@ type PeerInfo struct {
 	Sessions int       `json:"sessions"`
 	Load     *Load     `json:"load,omitempty"`
 	Memory   *Memory   `json:"memory,omitempty"`
+	// Refuses says why no task starts there now, by ^name or by auto,
+	// such as hooks it lacks; empty when it takes them.
+	Refuses string `json:"refuses,omitempty"`
 }
 
 // Machine is what a core says of its machine that another core needs
