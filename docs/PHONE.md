@@ -57,7 +57,7 @@ Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unkno
 - **A session**: its conversation, as the Mac app draws it; a message box (`send`); while it waits on you, a red card with what it asks and its choices as buttons (`screen`, `keys`), or a key pad and its terminal's text.
 - **Actions**: park, freeze, promote, rate, rename, stop the turn, close, with undo.
 - **A task bar** that starts a task on the machine you pick, with its repo and profile, and takes every word of the task bar's language (`input`, CORE.md §3).
-- **Machines**: each paired machine, whether it answers, and Add a machine (its address and a code from that machine). A machine with `vpn.on` shows its Mullvad VPN in a line, with **Connect** or **Disconnect**, which send `:vpn on` or `:vpn off` to it ([extensions.md](proposals/extensions.md) §4.1); the native app doesn't show it yet.
+- **Machines**: each paired machine, whether it answers, and Add a machine (its address and a code from that machine). A machine with `vpn.on` shows its Mullvad VPN in a line, with **Connect** or **Disconnect**, which send `:vpn on` or `:vpn off` to it ([extensions.md](proposals/extensions.md) §4.1), in the web app and the native one alike.
 
 It keeps the paired machines in the browser's storage on the phone, and a service worker keeps the app's files, so it opens even while the machine that served it sleeps.
 

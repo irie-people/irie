@@ -228,6 +228,64 @@ and read their branches before you merge them.</code></pre>
     <li>The helper’s result coming back to the first agent as a note. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
   </ul>
 
+  <h2 id="dead-mans-switch">Set up a dead man’s switch</h2>
+  <p>If something happens to you, the people you love need to know what to do, and how to get into the accounts that matter. Irie walks you through setting that up, one step at a time. If you stop checking in, you get a reminder first; much later, the people you chose get an email that says what has happened and what to do.</p>
+  <ol class="rules">
+    <li>Type <code>:setup switch</code> in the task bar, or in the Mac app choose File › Set Up a Dead Man’s Switch….</li>
+    <li>The first time, Claude Code asks whether to trust the guide’s folder. It’s Irie’s own: choose <strong>Yes, I trust this folder</strong>.</li>
+    <li>Answer the guide’s questions: who should be told, which password manager you use, which phone you have, and how often you want to check in. It suggests every 14 days: a reminder 2 days after a missed check-in, and the email to your people 16 days after that.</li>
+    <li>Write the letter with it: READ ME FIRST, which says where things are and what to do first. You keep it in your password manager. It never holds a password.</li>
+    <li>Give your people emergency access in your password manager. The guide tells you where to click; the clicks are yours.</li>
+    <li>Make a free account at Healthchecks.io and a key for it. Copy the key, then type this, and Irie keeps it where only you can read it:
+<pre><code>! "$IRIE_BIN" dms key --paste</code></pre></li>
+    <li>The guide makes two checks: a reminder for you, and an alarm for your people. You add their email addresses in Healthchecks, and tick who hears what.</li>
+    <li>Pick how to check in: an “I’m OK” shortcut on an iPhone, or an “I’m OK” contact on any phone, or both. A calendar file reminds you every other Sunday, and once a year to look it all over.</li>
+  </ol>
+  <p>What you tell the guide goes to your agent’s AI company, like any conversation. It never asks for a password, and you can stop after any step and come back.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>The guide, with steps for Bitwarden, 1Password, Proton Pass, KeePassXC, Apple Passwords, Google Password Manager, LastPass and Dashlane, and for Google’s and Apple’s own backups.</li>
+    <li><code>irie dms</code>: the checks, their state, a check-in from your computer, pausing them, the phone’s shortcut and contact, and the calendar file.</li>
+  </ul>
+
+  <h2 id="vpn">Mullvad VPN in Irie</h2>
+  <p>If you use Mullvad VPN, Irie can show it where you already look, and change it from any task bar, your phone’s included.</p>
+  <ol class="rules">
+    <li>Turn it on in the Mac app’s Settings › General › Mullvad VPN, or in <code>config.toml</code>:
+<pre><code>[vpn]
+on = true</code></pre></li>
+    <li>Type <code>:vpn</code> to see it, <code>:vpn on</code> or <code>:vpn off</code> to connect or disconnect, <code>:vpn se got</code> to go through Gothenburg, <code>:vpn lockdown on</code> to block the network while it is off, and <code>:vpn time</code> for your account’s time left.</li>
+    <li>Watch its mark: green while connected, yellow while it connects, red when something is wrong. In the Mac app it is a shield in the title bar, and File › VPN changes it.</li>
+  </ol>
+  <p>Irie reads your VPN through Mullvad’s own <code>mullvad</code> command. It never reads your account number, and never keeps your own address. Agents can’t change the VPN through Irie: it’s yours.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>The words in every task bar; the mark in the sidebar, the Mac app and the phone app’s machine cards, with Connect and Disconnect.</li>
+  </ul>
+
+  <h2 id="mullvad-browser">Let an agent browse in Mullvad Browser</h2>
+  <p>Mullvad Browser is made so that everyone who uses it looks the same to websites. An agent can drive it, but a browser under remote control says so: sites can tell it is automated, so it no longer looks like everyone else. It keeps no logins either. If what you want is your agents’ browsing kept away from your own address, Mullvad VPN does that for every browser. If you want Mullvad Browser itself:</p>
+  <ol class="rules">
+    <li>Give it a profile folder of its own, so your own browsing stays apart, and keep its own settings:
+<pre><code>mkdir -p ~/agent-browser
+echo 'user_pref("remote.prefs.recommended", false);' &gt; ~/agent-browser/user.js</code></pre></li>
+    <li>Start it with remote control on. It listens on your own computer only:
+<pre><code>"/Applications/Mullvad Browser.app/Contents/MacOS/mullvadbrowser" --no-remote --new-instance \
+  --profile ~/agent-browser --marionette --remote-debugging-port 9222</code></pre></li>
+    <li>Hand Claude Code Mozilla’s browser server, <code>@mozilla/firefox-devtools-mcp</code>, attached to it, in a file such as <code>~/.config/irie/agent-browser.json</code>:
+<pre><code>{"mcpServers": {"browser": {"command": "npx", "args": ["-y",
+  "@mozilla/firefox-devtools-mcp@0.10.6", "--connect-existing"]}}}</code></pre></li>
+    <li>Make a profile that loads it, and start a task on it with <code>+private-web</code>:
+<pre><code>[profiles.private-web]
+args = ["--mcp-config", "/home/alice/.config/irie/agent-browser.json"]</code></pre></li>
+    <li>Turn Mullvad VPN on: the browser alone doesn’t hide your address.</li>
+  </ol>
+  <p>Any program on your computer can drive the browser while it runs this way, so close it when the task is done.</p>
+  <h3>What works today</h3>
+  <ul class="rules">
+    <li>Driving Mullvad Browser 16 over WebDriver BiDi and Marionette, checked on a Mac. Mozilla’s server attaching to a running browser is from Mozilla’s own docs; Irie doesn’t start the browser for you yet.</li>
+  </ul>
+
   <nav class="docs-nav" aria-label="Docs">
     <p class="next">Next: <a href="work.html">Irie at work</a></p>
     <ol>

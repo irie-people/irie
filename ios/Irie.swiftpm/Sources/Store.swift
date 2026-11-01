@@ -408,6 +408,17 @@ final class AppModel {
         UserDefaults.standard.set(draft, forKey: "irie.draft")
     }
 
+    /// Sends a :vpn word to the machine, as its task bar would, and says
+    /// what it answered.
+    func vpnSay(_ c: Conn, _ words: String) async {
+        do {
+            let r = try await c.call("input", ["text": words], timeout: 60, as: InputResult.self)
+            toast((r.text ?? "").isEmpty ? "Done." : r.text!)
+        } catch {
+            fail(c, error)
+        }
+    }
+
     func submitTask() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !taskBusy else { return }

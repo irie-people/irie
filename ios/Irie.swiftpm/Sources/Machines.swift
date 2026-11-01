@@ -70,6 +70,20 @@ import SwiftUI
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Claude plan use")
             }
+            if let v = c.header?.vpn {
+                let on = v.state == "connected" || v.state == "connecting"
+                HStack(spacing: 8) {
+                    Text(v.text).font(.system(size: 13.5))
+                        .foregroundStyle(v.state == "error" || v.blocked == true ? Theme.needs : on ? Theme.done : Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button(on ? "Disconnect" : "Connect") {
+                        Task { await app.vpnSay(c, on ? ":vpn off" : ":vpn on") }
+                    }
+                    .buttonStyle(SecondaryButton(small: true))
+                }
+                .padding(.leading, 17)
+            }
             if c.status == .unpaired {
                 Banner(text: "It no longer knows this phone.", loud: true) {
                     Button("Pair again") { app.sheet = .again(c.m) }.buttonStyle(PrimaryButton(small: true))
