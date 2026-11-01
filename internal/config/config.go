@@ -86,6 +86,9 @@ type Peer struct {
 	// with no @ goes too. You keep these repos cloned there, under the
 	// same names in its [repos], with the hooks they need.
 	Repos []string `toml:"repos"`
+	// SSH is its ssh name, which fetches a finished task's branch back;
+	// "" is the one `irie peer add --ssh` paired over.
+	SSH string `toml:"ssh"`
 }
 
 // Skills are the skills that come with Irie (docs/proposals/skills.md):
