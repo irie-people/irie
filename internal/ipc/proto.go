@@ -179,6 +179,14 @@ type Session struct {
 	// hue.go); 0 until the core gives it one.
 	Hue int `json:"hue,omitempty"`
 
+	// Host is the machine it runs on when that is another machine, a core
+	// this one is paired with (docs/proposals/multi-host.md §4.5). Its id
+	// is then the host's name, a slash and that core's own id, which a
+	// client sends back as it is: this core passes the call on.
+	Host string `json:"host,omitempty"`
+	// HostDown is since when its host has not answered, while it does not.
+	HostDown *time.Time `json:"host_down,omitempty"`
+
 	// Loose is what its jot left that has not landed, by the jot dog's
 	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
 	// through or the dog does not watch it.
@@ -368,6 +376,8 @@ type Header struct {
 	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
 	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
 	Load        *Load   `json:"load,omitempty"`   // how busy the machine is
+	// Peers are the cores this one is paired with, and how each is.
+	Peers []PeerInfo `json:"peers,omitempty"`
 	// Trod is the trod bot while it is in its hours (DESIGN §4.10).
 	Trod *TrodShift `json:"trod,omitempty"`
 }

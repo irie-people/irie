@@ -246,6 +246,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `screen` | `session` | `lines[]`: what its terminal shows now, as plain text, without the blank lines under the last; `options[]`, each `key`, `label` and `selected`: while it waits on you, the numbered choices of the prompt at the bottom, as Claude Code draws a permission, a question or a plan, and none otherwise | The phone app ([PHONE.md](PHONE.md)) |
 | `keys` | `session`, `keys[]`, `text?` | none. Presses each key in its terminal, a letter or digit or one of Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, PageUp, PageDown, Home and End, never Ctrl+C, then types `text`, with no control character, without Enter. Takes its turn with `send`; refuses with `busy` once the session has ended or while it is frozen | The phone app ([PHONE.md](PHONE.md)) |
 | `pair` | `minutes?`, 10 by default, a week at most | `on`, `name`, `urls[]`, `code`, `until`: opens a six-digit code that pairs a phone with this machine, as `irie remote pair` does, and the setup page's addresses, the Bonjour name first. The gateway takes the code from the state folder; a phone can't open one | The Mac app ([PHONE.md](PHONE.md)) |
+| `peers` | `reload?` | `name`, this machine's, and `peers[]`, each `name`, `url`, `up`, `since`, `problem?`, `version?`, `sessions`, `load?`, `memory?`: the other machines' cores this one is paired with, as it last heard from each; `reload` first reads `peers.json` again, as `irie peer add` and `remove` ask (§2.8) | `irie peer` ([multi-host](proposals/multi-host.md)) |
 
 ### 2.5 Observation
 
@@ -308,6 +309,12 @@ curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 | Not yet | A signed and notarized app, and so a direct download of it that opens without a warning; Ghostty in the Intel slice; a Homebrew tap; and a tmux of Irie's own for a Mac without Homebrew, which needs a terminfo of its own, as macOS's lacks `tmux-256color` |
 
 ---
+
+### 2.8 Peers: Irie on more than one machine
+
+A core can be paired with another machine's, which then is its peer ([multi-host](proposals/multi-host.md)). `irie peer add` pairs through that machine's phone gateway ([PHONE.md](PHONE.md)) as a phone does, with a pairing link that `irie remote pair --link` prints there, and keeps the token and the fingerprint of its Irie authority in `peers.json` (mode 0600), so the core trusts no other certificate for it. The core then follows the peer's sessions over HTTPS and shows them after its own, each as a row of its own: `host` names the machine, and its id is the machine's name, a slash and that core's own id (`Asahi/s38…`). A client sends that id back as it is, and the core passes the call on: `send`, `close`, `rename`, `park`, `unpark`, `priority`, `freeze`, `thaw`, `rate`, `result`, `screen`, `keys` and `conversation`, and a subscription to that session. `reorder` refuses, since a peer's rows keep that machine's order. `show` picks the row and the slot draws its conversation, since its terminal is on its own machine. `^name` among the first line's words starts the task on that machine, which reads its own `@` and `+` words; `^` and a word that names no machine stay in the task as typed.
+
+The peer's sessions run on under its own core whatever happens to this one. When its stream ends, or brings nothing for 40 s (its gateway pings every 15 s), its rows stay with `host_down`, the time it went, and calls about them say `peer_down`. The core follows it again after 1, 2, 4 … 30 s. A phone hears none of the peers' rows: it pairs with each machine itself.
 
 ## 3. Harness support
 

@@ -20,8 +20,14 @@ func (c *Core) input(a ipc.InputArgs) (ipc.InputResult, error) {
 	}
 	home, _ := os.UserHomeDir()
 	c.mu.Lock()
+	// ^name starts the task on that machine (peers.go).
+	p, text, _ := c.placeOn(a.Text)
+	a.Text = text
 	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home}
 	c.mu.Unlock()
+	if p != nil {
+		return c.inputOn(p, a)
+	}
 	st, err := irie.Read(a, v)
 	if err != nil {
 		return ipc.InputResult{}, err

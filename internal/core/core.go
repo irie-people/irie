@@ -95,21 +95,22 @@ type Core struct {
 	llamaMem   int64                    // what Irie's own llama-server takes
 	plan       ipc.Plan                 // the plan's use, from the newest status update
 	planAt     time.Time
-	outcomes   map[string]*outcome // every session's route and outcome, those gone included
-	order      []string            // the list's order from the top, which the user sets (order.go)
-	hues       map[string]int      // the colours the core gave the sessions, the closed ones' too (hue.go)
-	bg         map[int]bgProc      // the processes Irie put in the background, by pid (priority.go)
-	closes     closes              // closed sessions, and agents still ending (close.go)
-	steps      stateFile           // state.json: the undo and redo stacks (undo.go)
-	selected   string              // the session you picked, whose conversation or terminal the slot shows (view.go)
-	raw        bool                // the slot shows the picked session's raw terminal, not its conversation
-	split      string              // the session the Mac app shows beside its teammates, in the view session (view.go)
-	team       *tmux.Runner        // the team server, where sessions' teammates run (team.go)
-	teamSocket string              // its socket path, once known
-	trodNow    trodNow             // the trod bot as its last sweep found it (trod.go)
-	trodReset  time.Time           // when the plan's usage limit last reset, as far as the trod bot saw
-	trodHand   trodHand            // the run of the trod bot you started by hand last (trod.go)
-	last       *lastJot            // the jot sent last from a task bar, which the next may add to (follow.go)
+	outcomes   map[string]*outcome   // every session's route and outcome, those gone included
+	order      []string              // the list's order from the top, which the user sets (order.go)
+	hues       map[string]int        // the colours the core gave the sessions, the closed ones' too (hue.go)
+	bg         map[int]bgProc        // the processes Irie put in the background, by pid (priority.go)
+	closes     closes                // closed sessions, and agents still ending (close.go)
+	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
+	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
+	peers      map[string]*peerState // the other machines' cores this one is paired with, by name (peers.go)
+	raw        bool                  // the slot shows the picked session's raw terminal, not its conversation
+	split      string                // the session the Mac app shows beside its teammates, in the view session (view.go)
+	team       *tmux.Runner          // the team server, where sessions' teammates run (team.go)
+	teamSocket string                // its socket path, once known
+	trodNow    trodNow               // the trod bot as its last sweep found it (trod.go)
+	trodReset  time.Time             // when the plan's usage limit last reset, as far as the trod bot saw
+	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
+	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -263,6 +264,9 @@ func Run(o Options) error {
 	go c.sample()
 	go c.dogSweep()
 	go c.trodSweep()
+	if err := c.loadPeers(); err != nil {
+		c.log.Warn("peers", "err", err)
+	}
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -492,6 +496,7 @@ func (c *Core) list() []ipc.Session {
 		out = append(out, s)
 	}
 	c.sortRows(out)
+	out = append(out, c.peerRows(len(out))...)
 	c.giveHues(out)
 	return out
 }
@@ -516,9 +521,21 @@ func (c *Core) changes() []ipc.Frame {
 	return frames
 }
 
-// Call answers one request (ipc.Handler).
+// Call answers one request (ipc.Handler). A call about one of the peers'
+// sessions goes on to its own core (peers.go).
 func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
+	if op != ipc.OpInput {
+		if r, ok, err := c.forward(op, raw); ok {
+			return r, err
+		}
+	}
 	switch op {
+	case ipc.OpPeers:
+		var a ipc.PeersArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.peersOp(a)
 	case ipc.OpHello:
 		var a ipc.HelloArgs
 		if err := decode(raw, &a); err != nil {
@@ -531,6 +548,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPeers,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
