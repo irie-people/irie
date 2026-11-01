@@ -73,7 +73,7 @@ func (p Paths) Freezes() string               { return filepath.Join(p.State, "f
 func (p Paths) Scratch() string               { return filepath.Join(p.Data, "scratch") }
 func (p Paths) Worktrees() string             { return filepath.Join(p.Data, "worktrees") }
 func (p Paths) Models() string                { return filepath.Join(p.Data, "models") }
-func (p Paths) SkillPlugins() string          { return filepath.Join(p.Data, "skills", "plugins") }
+func (p Paths) Skills() string                { return filepath.Join(p.Data, "skills") }
 func (p Paths) Socket() string                { return filepath.Join(p.Runtime, "core.sock") }
 func (p Paths) CoreLock() string              { return filepath.Join(p.Runtime, "core.lock") }
 func (p Paths) UpLock() string                { return filepath.Join(p.Runtime, "up.lock") }

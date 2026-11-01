@@ -24,7 +24,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second, Preferences: Preferences()}); !reflect.DeepEqual(c.Spawn, want) {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -165,6 +165,7 @@ hide_tmux = false
 teammates = "panes"
 follow_up_window = "0s"
 follow_up_delay = "1s"
+preferences = ["Text me in one line."]
 
 [profiles.claude]
 harness = "claude-code"
@@ -252,7 +253,7 @@ guidelines = []
 	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second, Preferences: []string{"Text me in one line."}}); !reflect.DeepEqual(c.Spawn, want) {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	wantClaude := Profile{
@@ -327,6 +328,16 @@ guidelines = []
 	// The defaults themselves are untouched.
 	if d := Default(); d.Profiles["claude"].Model != "claude-opus-5-5" || len(d.Worktree.Copy) != 2 || len(d.Repos.Aliases) != 0 {
 		t.Error("loading a file changed the defaults")
+	}
+}
+
+func TestAnEmptyPreferencesListTellsNothing(t *testing.T) {
+	c, err := Load(writeFile(t, "[spawn]\npreferences = []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Spawn.Preferences == nil || len(c.Spawn.Preferences) != 0 {
+		t.Errorf("spawn.preferences = %#v, want an empty list", c.Spawn.Preferences)
 	}
 }
 
@@ -468,6 +479,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[journal]\nkeep_days = 0\n", "keep_days"},
 		{"[journal]\ntool_input = \"everything\"\n", "tool_input"},
 		{"[hold]\nmax = \"0s\"\n", "hold.max"},
+		{"[skills]\ndisabled = [\"Present\"]\n", "skills.disabled"},
+		{"[skills]\ndisabled = [\"a--b\"]\n", "skills.disabled"},
 		{"[repos]\nroots = [\"code\"]\n", "repos.roots"},
 		{"[repos.aliases]\nweb = \"code/website\"\n", "repos.aliases.web"},
 		{"[repos.aliases]\n\"we b\" = \"/home/alice/code/website\"\n", "repos.aliases"},
@@ -536,6 +549,10 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[trod]\nguidelines = [\"one\\ntwo\"]\n", "trod.guidelines[0]: must be one line"},
 		{"[trod]\nrules = [\"" + strings.Repeat("x", 401) + "\"]\n", "trod.rules[0]: must be at most 400"},
 		{"[trod]\nrules = [" + strings.Repeat("\"x\", ", 21) + "]\n", "trod.rules: at most 20"},
+		{"[spawn]\npreferences = [\"Be brief.\", \"  \"]\n", "spawn.preferences[1]: is empty"},
+		{"[spawn]\npreferences = [\"one\\ntwo\"]\n", "spawn.preferences[0]: must be one line"},
+		{"[spawn]\npreferences = [\"" + strings.Repeat("x", 401) + "\"]\n", "spawn.preferences[0]: must be at most 400"},
+		{"[spawn]\npreferences = [" + strings.Repeat("\"x\", ", 16) + "]\n", "spawn.preferences: at most 15"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {
@@ -648,21 +665,47 @@ func TestFreezeDogIsADurationAndZeroIsNever(t *testing.T) {
 	}
 }
 
-func TestSkillsSection(t *testing.T) {
-	if s := Default().Skills; !s.Enabled || s.Disabled == nil || len(s.Disabled) != 0 {
-		t.Errorf("default skills = %+v, want on with none left out", s)
+func TestSkillsAreOnUntilTurnedOff(t *testing.T) {
+	d := Default()
+	if !d.Skills.Enabled || len(d.Skills.Disabled) != 0 {
+		t.Errorf("default skills = %+v, want on with none left out", d.Skills)
 	}
-	c, err := Load(writeFile(t, "[skills]\nenabled = false\ndisabled = [\"dead-mans-switch\"]\n"))
+	for name, p := range d.Profiles {
+		if !p.TakesSkills() {
+			t.Errorf("profiles.%s takes no skills by default", name)
+		}
+	}
+	c, err := Load(writeFile(t, `
+[skills]
+disabled = ["present"]
+
+[profiles.local]
+skills = false
+
+[profiles.mine]
+command = "claude"
+`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Skills.Enabled || len(c.Skills.Disabled) != 1 || c.Skills.Disabled[0] != "dead-mans-switch" {
+	if !c.Skills.Enabled || !reflect.DeepEqual(c.Skills.Disabled, []string{"present"}) {
 		t.Errorf("skills = %+v", c.Skills)
 	}
-	for _, bad := range []string{`disabled = ["Dead Man's Switch"]`, `disabled = ["-x"]`, `disabled = [""]`} {
-		if _, err := Load(writeFile(t, "[skills]\n"+bad+"\n")); err == nil || !strings.Contains(err.Error(), "skills.disabled") {
-			t.Errorf("%s: err = %v", bad, err)
-		}
+	if c.Profiles["local"].TakesSkills() {
+		t.Error("profiles.local takes skills after skills = false")
+	}
+	if c.Profiles["local"].Local == nil {
+		t.Error("profiles.local lost its local table")
+	}
+	if !c.Profiles["mine"].TakesSkills() || !c.Profiles["claude"].TakesSkills() {
+		t.Error("a profile that says nothing about skills takes none")
+	}
+	off, err := Load(writeFile(t, "[skills]\nenabled = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.Skills.Enabled || off.Skills.Disabled == nil {
+		t.Errorf("skills = %+v, want off with an empty list", off.Skills)
 	}
 }
 

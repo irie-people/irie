@@ -535,7 +535,7 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s, %s, %s and %s", a.Name, ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch)
 	}
 	p := config.Profile{Harness: "tool", Command: c.bin, Args: args, Env: map[string]string{}}
-	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{}, false)
+	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{})
 }
 
 // saveResult keeps a turn's last message whole, for `irie ctl delegate`.

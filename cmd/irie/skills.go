@@ -1,59 +1,50 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"io"
-	"os"
+	"maps"
 	"slices"
 	"strings"
 
-	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/skills"
+	"github.com/irie-people/irie/internal/version"
 )
 
-// skillsCmd is `irie skills`: each of Irie's own skills, whether it is on
-// and why, and how to start it (docs/proposals/extensions.md §1.2). It reads
-// the config and needs no core.
+// skillsCmd is `irie skills`: the skills that come with Irie, whether
+// sessions get each, and why not (docs/proposals/skills.md §5.2).
 func skillsCmd(args []string) error {
 	if len(args) > 0 {
-		return fmt.Errorf("irie skills takes no arguments; turn one off with [skills] disabled in %s", configPathHint())
+		return errors.New("usage: irie skills")
 	}
 	cfg, _, err := load()
 	if err != nil {
 		return err
 	}
-	all, err := skills.Builtin()
-	if err != nil {
-		return err
+	fmt.Printf("Skills that come with Irie. Each Claude Code session gets them as a plugin\nfor that session only, and runs them as /%s:<name>.\n\n", skills.Plugin)
+	choices := skills.Choose(skills.Bundled(), skills.Settings{Enabled: cfg.Skills.Enabled, Disabled: cfg.Skills.Disabled, Profile: true})
+	width := 0
+	for _, c := range choices {
+		width = max(width, len(skills.Plugin)+len(c.Name)+2)
 	}
-	return listSkills(os.Stdout, all, cfg.Skills, os.Getenv("IRIE_SKILLS"))
-}
-
-func listSkills(w io.Writer, all []skills.Skill, cfg config.Skills, env string) error {
-	for _, s := range all {
+	for _, c := range choices {
 		state := "on"
-		switch {
-		case env == "off":
-			state = "off: IRIE_SKILLS=off"
-		case !cfg.Enabled:
-			state = "off: [skills] enabled = false"
-		case slices.Contains(cfg.Disabled, s.Name):
-			state = "off: [skills] disabled names it"
+		if !c.On {
+			state = "off: " + c.Why
 		}
-		start := s.Command()
-		if s.Name == "dead-mans-switch" {
-			start = ":setup switch, or " + start + " in a guide's session"
-		}
-		desc, _, _ := strings.Cut(s.Description, ". ")
-		fmt.Fprintf(w, "%s (%s)\n  %s.\n  Built into Irie. Start it with %s.\n", s.Name, state, strings.TrimSuffix(desc, "."), start)
+		fmt.Printf("%-*s  %s\n", width, "/"+skills.Plugin+":"+c.Name, state)
+		fmt.Printf("%-*s  %s\n", width, "", c.Description)
+		fmt.Printf("%-*s  %s %s\n", width, "", c.Source, version.String())
 	}
+	var none []string
+	for _, name := range slices.Sorted(maps.Keys(cfg.Profiles)) {
+		if p := cfg.Profiles[name]; p.Harness == "claude-code" && !p.TakesSkills() {
+			none = append(none, name)
+		}
+	}
+	if len(none) > 0 {
+		fmt.Printf("\nProfiles that take none (skills = false): %s.\n", strings.Join(none, ", "))
+	}
+	fmt.Println("\nA session gets them only when its Claude Code loads a plugin passed with\n--plugin-dir; when it does not, the session's warnings say why.")
 	return nil
-}
-
-func configPathHint() string {
-	_, p, err := load()
-	if err != nil {
-		return "config.toml"
-	}
-	return p.ConfigFile()
 }

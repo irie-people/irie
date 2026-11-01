@@ -106,9 +106,12 @@ struct CoreConfig: Decodable, Equatable {
         /// How long after a jot one that reads as more for it goes to its
         /// agent; "0s" never. Nil from a core that does not.
         var followUpWindow: String?
+        /// How you like agents to work, a line each, which every session is
+        /// told as it starts. Nil from a core from before them.
+        var preferences: [String]?
         enum CodingKeys: String, CodingKey {
             case defaultProfile = "default_profile", closeWhenDone = "close_when_done", closeDelay = "close_delay", teammates
-            case followUpWindow = "follow_up_window"
+            case followUpWindow = "follow_up_window", preferences
         }
 
         init(from decoder: Decoder) throws {
@@ -119,6 +122,7 @@ struct CoreConfig: Decodable, Equatable {
             // A core from before agent teams starts none.
             teammates = try c.decodeIfPresent(String.self, forKey: .teammates) ?? "off"
             followUpWindow = try c.decodeIfPresent(String.self, forKey: .followUpWindow)
+            preferences = try c.decodeIfPresent([String].self, forKey: .preferences)
         }
     }
 
@@ -797,6 +801,17 @@ private struct AgentSettings: View {
                     }
                 } footer: {
                     footnote("A +agent word in a task’s text runs that task on another, such as +sonnet.")
+                }
+                if let prefs = c.spawn.preferences {
+                    Section {
+                        LineList(lines: prefs, prompt: "Add a preference, such as “Ask before you push.”") {
+                            model.binding(prefs, "spawn.preferences") { $0.spawn.preferences = $1 }.wrappedValue = $0
+                        }
+                    } header: {
+                        ListHeader(title: "Your preferences", reset: { model.reset("spawn.preferences") })
+                    } footer: {
+                        footnote("Every Claude Code session is told these as it starts, so agents work the way you like, such as how short a text to you should be.")
+                    }
                 }
                 Section {
                     Picker("Agent", selection: $editing) {

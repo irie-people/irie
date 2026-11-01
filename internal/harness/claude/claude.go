@@ -42,8 +42,7 @@ func (Harness) Levels() harness.Levels {
 // The profile's own args come right after the command. A flag whose value is
 // empty in the profile is left out. --name goes only with a name the user
 // chose, and only to a CLI whose --help lists it: without it, Claude Code
-// titles the session itself. --plugin-dir goes only to a session that gets
-// Irie's own skills, and a CLI without it cannot run that session.
+// titles the session itself.
 func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[string][]byte, error) {
 	argv, env, settings, err := base(p, s)
 	if err != nil {
@@ -106,10 +105,9 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, []byt
 		}
 	}
 	argv = append(argv, "--settings", filepath.Join(s.Dir, SettingsFile))
-	if s.PluginDir != "" {
-		if !s.Probe.Flags["--plugin-dir"] {
-			return nil, nil, nil, errors.New("this Claude Code takes no --plugin-dir, which Irie's own skills need: `claude --help` does not list it. Update Claude Code with `claude update`")
-		}
+	// Irie's skills, as a plugin for this session only (internal/skills),
+	// only to a CLI the probe saw load one.
+	if s.PluginDir != "" && s.Probe.Flags["--plugin-dir"] {
 		argv = append(argv, "--plugin-dir", s.PluginDir)
 	}
 	env := maps.Clone(p.Env)

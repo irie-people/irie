@@ -60,8 +60,11 @@
 //	IRIE_FAKE_VERSION      what --version reports (default 2.1.300); a version
 //	                       before 2.1.295 refuses settings that use onFailure
 //	IRIE_FAKE_NO_NAME      when set, --help lists no --name and --name is refused
-//	IRIE_FAKE_NO_PLUGIN_DIR when set, --help lists no --plugin-dir and
-//	                       --plugin-dir is refused
+//	IRIE_FAKE_PLUGINS      when set, --help lists --plugin-dir and
+//	                       `plugin list --json` lists each --plugin-dir's
+//	                       plugin as <name>@inline, as Claude Code does, so
+//	                       the probe hands sessions Irie's skills; unset, the
+//	                       probe finds neither and sessions get none
 //	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
 //	                       agent that hangs
 //	IRIE_FAKE_PACE         a pause before each step, such as 300ms
@@ -101,6 +104,8 @@ type options struct {
 	version, help                                          bool
 	task                                                   string
 	plugins                                                []string // --plugin-dir, repeatable
+	pluginList                                             bool     // plugin list: print them
+	json                                                   bool     // --json
 }
 
 var (
@@ -130,6 +135,9 @@ func parseArgs(args []string) (options, error) {
 		case "-h", "--help":
 			o.help = true
 			continue
+		case "--json":
+			o.json = true
+			continue
 		}
 		var dst *string
 		switch flag {
@@ -150,10 +158,8 @@ func parseArgs(args []string) (options, error) {
 				dst = &o.name
 			}
 		case "--plugin-dir":
-			if os.Getenv("IRIE_FAKE_NO_PLUGIN_DIR") == "" {
-				o.plugins = append(o.plugins, "")
-				dst = &o.plugins[len(o.plugins)-1]
-			}
+			o.plugins = append(o.plugins, "")
+			dst = &o.plugins[len(o.plugins)-1]
 		}
 		if dst == nil {
 			return o, fmt.Errorf("error: unknown option '%s'", flag)
@@ -166,6 +172,11 @@ func parseArgs(args []string) (options, error) {
 			value = args[i]
 		}
 		*dst = value
+	}
+	// `plugin list --json` lists the plugins, as Claude Code does.
+	if len(positional) == 2 && positional[0] == "plugin" && positional[1] == "list" {
+		o.pluginList = true
+		return o, nil
 	}
 	if len(positional) > 1 {
 		return o, fmt.Errorf("error: too many arguments: %q", positional)
@@ -235,11 +246,18 @@ func run(args []string) int {
 		if os.Getenv("IRIE_FAKE_NO_NAME") != "" {
 			h = strings.Replace(h, "  -n, --name <name>          Set a display name for this session\n", "", 1)
 		}
-		if os.Getenv("IRIE_FAKE_NO_PLUGIN_DIR") != "" {
+		if os.Getenv("IRIE_FAKE_PLUGINS") == "" {
 			h = strings.Replace(h, "  --plugin-dir <path>        Load a plugin from a directory for this session only\n", "", 1)
 		}
 		fmt.Print(h)
 		return 0
+	}
+	if o.pluginList {
+		if os.Getenv("IRIE_FAKE_PLUGINS") == "" {
+			fmt.Fprintln(os.Stderr, "error: too many arguments: [\"plugin\" \"list\"]")
+			return 1
+		}
+		return listPlugins(o.plugins)
 	}
 	if err := findSkill(o.task, o.plugins); err != nil {
 		fmt.Fprintln(os.Stderr, "fakeagent:", err)
@@ -251,6 +269,27 @@ func run(args []string) int {
 		return 1
 	}
 	return a.run()
+}
+
+// listPlugins prints `plugin list --json`: each plugin of a --plugin-dir,
+// loaded for this session only, as <name>@inline.
+func listPlugins(dirs []string) int {
+	type entry struct {
+		ID      string `json:"id"`
+		Enabled bool   `json:"enabled"`
+	}
+	list := []entry{}
+	for _, dir := range dirs {
+		var m struct{ Name string }
+		b, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
+		if err != nil || json.Unmarshal(b, &m) != nil || m.Name == "" {
+			continue
+		}
+		list = append(list, entry{ID: m.Name + "@inline", Enabled: true})
+	}
+	b, _ := json.Marshal(list)
+	fmt.Println(string(b))
+	return 0
 }
 
 // findSkill checks a task that runs a plugin's skill, /<plugin>:<skill>, as

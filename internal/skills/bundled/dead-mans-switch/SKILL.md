@@ -2,6 +2,7 @@
 name: dead-mans-switch
 description: A guided setup of a dead man's switch. If the user stops checking in, the people they chose are told what to do, and can reach what they need. Run it only when the user asks.
 disable-model-invocation: true
+license: Apache-2.0
 ---
 
 # Set up a dead man's switch

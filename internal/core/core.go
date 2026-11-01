@@ -259,10 +259,10 @@ func Run(o Options) error {
 	c.loadView()
 	c.mu.Unlock()
 	c.tick()
+	c.pruneSkills()
 	go c.sample()
 	go c.dogSweep()
 	go c.trodSweep()
-	go c.pruneSkills()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())

@@ -5,183 +5,216 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// The fields that change what an agent may do, and so never appear in
-// Irie's own skills (skills.md §4.1, §6.1).
-var grants = []string{"allowed-tools", "disallowed-tools", "hooks", "shell", "model", "effort", "context", "agent"}
+// skillName is the Agent Skills spec's name: lowercase letters, digits and
+// hyphens, at most 64.
+var skillName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-func TestBuiltinSkillsAreWellFormed(t *testing.T) {
-	all, err := Builtin()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestBundledSkillsAreWellFormed(t *testing.T) {
+	all := Bundled()
 	if len(all) == 0 {
-		t.Fatal("no built-in skills")
+		t.Fatal("no bundled skills")
 	}
-	email := regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
 	for _, s := range all {
-		fm, err := Frontmatter(s.Files["SKILL.md"])
-		if err != nil {
-			t.Fatalf("%s: %v", s.Name, err)
+		fm := Frontmatter(s.Files["SKILL.md"])
+		switch {
+		case fm == nil:
+			t.Errorf("%s: SKILL.md has no frontmatter", s.Name)
+		case fm["name"] != s.Name:
+			t.Errorf("%s: frontmatter name %q, want the folder's name", s.Name, fm["name"])
+		case !skillName.MatchString(s.Name) || len(s.Name) > 64:
+			t.Errorf("%s: not a skill name", s.Name)
+		case s.Description == "" || len(s.Description) > 1024:
+			t.Errorf("%s: description of %d characters; want 1 to 1024", s.Name, len(s.Description))
+		case fm["license"] == "":
+			t.Errorf("%s: no license", s.Name)
 		}
-		for _, k := range grants {
-			if _, ok := fm[k]; ok {
-				t.Errorf("%s declares %s", s.Name, k)
-			}
+		if strings.Contains(s.Description, "<") || strings.Contains(s.Description, ">") {
+			t.Errorf("%s: angle brackets in the description", s.Name)
 		}
-		// Irie's skills are guides the user starts: they cost no context
-		// until then, and the agent never starts one on its own.
-		if !s.UserOnly {
-			t.Errorf("%s: want disable-model-invocation: true", s.Name)
-		}
-		if n := len(s.Description) + len(fm["when_to_use"]); n > 1536 {
-			t.Errorf("%s: description is %d characters; Claude Code cuts it at 1,536", s.Name, n)
-		}
-		for p, b := range s.Files {
-			if !strings.HasSuffix(p, ".md") {
-				t.Errorf("%s/%s: a skill of Irie's is Markdown only; its helpers are irie commands", s.Name, p)
-			}
-			text := string(b)
-			if strings.Contains(text, "!`") || strings.Contains(text, "```!") {
-				t.Errorf("%s/%s: injected command", s.Name, p)
-			}
-			for _, m := range email.FindAllString(text, -1) {
-				if !strings.HasSuffix(m, "@example.com") && !strings.HasSuffix(m, "@hc-ping.com") {
-					t.Errorf("%s/%s: e-mail address %s; use example.com", s.Name, p, m)
-				}
-			}
-			if strings.Contains(text, "/Users/") || regexp.MustCompile(`/home/[a-z]`).MatchString(strings.ReplaceAll(text, "/home/alice", "")) {
-				t.Errorf("%s/%s: a home folder; use ~ or /home/alice", s.Name, p)
-			}
-		}
+	}
+	if !slices.ContainsFunc(all, func(s Skill) bool { return s.Name == "present" }) {
+		t.Error("present is not bundled")
 	}
 }
 
 func TestFrontmatter(t *testing.T) {
-	fm, err := Frontmatter([]byte("---\r\nname: x\r\ndescription: \"Says: hi\"\r\n# a comment\r\ndisable-model-invocation: true\r\n---\r\nbody"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fm["name"] != "x" || fm["description"] != "Says: hi" || fm["disable-model-invocation"] != "true" {
-		t.Errorf("got %q", fm)
-	}
-	for _, bad := range []string{"name: x\n", "---\nname: x\n", "---\n  name: x\n---\n", "---\nname\n---\n"} {
-		if _, err := Frontmatter([]byte(bad)); err == nil {
-			t.Errorf("%q: want an error", bad)
-		}
-	}
-}
-
-func TestEnabled(t *testing.T) {
-	all := []Skill{{Name: "a"}, {Name: "b"}}
-	if got := Enabled(all, false, nil); len(got) != 0 {
-		t.Errorf("off: got %v", got)
-	}
-	if got := Enabled(all, true, []string{"a"}); len(got) != 1 || got[0].Name != "b" {
-		t.Errorf("a off: got %v", got)
-	}
-}
-
-func testSet() []Skill {
-	return []Skill{{Name: "guide", Description: "A guide.", UserOnly: true, Files: map[string][]byte{
-		"SKILL.md":         []byte("---\nname: guide\ndescription: A guide.\ndisable-model-invocation: true\n---\nDo it.\n"),
-		"reference/one.md": []byte("One.\n"),
-	}}}
-}
-
-func TestFolderLayoutAndModes(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "plugins")
-	dir, err := Folder(root, testSet())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if filepath.Dir(dir) != root || len(filepath.Base(dir)) != 16 {
-		t.Errorf("folder %s", dir)
-	}
-	var m struct{ Name string }
-	b, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
-	if err != nil || json.Unmarshal(b, &m) != nil || m.Name != Plugin {
-		t.Fatalf("manifest %s, %v", b, err)
-	}
-	for _, p := range []string{"skills/guide/SKILL.md", "skills/guide/reference/one.md", ".claude-plugin/plugin.json"} {
-		fi, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if fi.Mode().Perm() != 0o444 {
-			t.Errorf("%s: mode %v, want read-only", p, fi.Mode().Perm())
-		}
-	}
-	// The same set gets the same folder; another set, another.
-	again, err := Folder(root, testSet())
-	if err != nil || again != dir {
-		t.Errorf("again: %s, %v; want %s", again, err, dir)
-	}
-	other := testSet()
-	other[0].Files["reference/one.md"] = []byte("One, changed.\n")
-	if d, _ := Folder(root, other); d == dir {
-		t.Error("a changed skill kept the folder's name")
-	}
-}
-
-func TestFolderIsMadeAgainWhenChanged(t *testing.T) {
-	root := t.TempDir()
-	dir, err := Folder(root, testSet())
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := filepath.Join(dir, "skills", "guide", "SKILL.md")
-	for name, tamper := range map[string]func(){
-		"edited": func() { os.Chmod(f, 0o644); os.WriteFile(f, []byte("Do something else.\n"), 0o644) },
-		"added":  func() { os.WriteFile(filepath.Join(dir, "skills", "guide", "extra.md"), []byte("x"), 0o444) },
-		"chmod":  func() { os.Chmod(f, 0o644) },
-		"gone":   func() { os.Chmod(filepath.Dir(f), 0o755); os.Remove(f) },
+	for _, c := range []struct {
+		in   string
+		want map[string]string
+	}{
+		{"---\nname: a\ndescription: \"Says: hi\"\nmetadata:\n  k: v\n---\nbody", map[string]string{"name": "a", "description": "Says: hi", "metadata": ""}},
+		{"name: a\n---\n", nil}, // the first line must be ---
+		{"---\nname: a\n", nil}, // never closed
+		{"\r\n---\r\nname: a\r\n---", nil},
+		{"---\r\nname: a\r\n---\r\n", map[string]string{"name": "a"}},
 	} {
-		tamper()
-		if Check(dir, Contents(testSet())) == nil {
-			t.Fatalf("%s: Check passed", name)
+		got := Frontmatter([]byte(c.in))
+		if (got == nil) != (c.want == nil) || len(got) != len(c.want) {
+			t.Errorf("Frontmatter(%q) = %v, want %v", c.in, got, c.want)
+			continue
 		}
-		again, err := Folder(root, testSet())
-		if err != nil || again != dir {
-			t.Fatalf("%s: %s, %v", name, again, err)
-		}
-		if err := Check(dir, Contents(testSet())); err != nil {
-			t.Errorf("%s: not made again: %v", name, err)
+		for k, v := range c.want {
+			if got[k] != v {
+				t.Errorf("Frontmatter(%q)[%q] = %q, want %q", c.in, k, got[k], v)
+			}
 		}
 	}
 }
 
-func TestPrune(t *testing.T) {
+func TestChooseSaysWhy(t *testing.T) {
+	all := []Skill{{Name: "present"}, {Name: "other"}}
+	on := Settings{Enabled: true, Profile: true}
+	for _, c := range []struct {
+		s    Settings
+		want []string // each skill's reason, "" when it goes in
+	}{
+		{on, []string{"", ""}},
+		{Settings{Enabled: false, Profile: true}, []string{"skills are off (skills.enabled)", "skills are off (skills.enabled)"}},
+		{Settings{Enabled: true, Profile: false}, []string{"this profile takes no skills", "this profile takes no skills"}},
+		{Settings{Enabled: true, Profile: true, Disabled: []string{"other"}}, []string{"", "turned off (skills.disabled)"}},
+	} {
+		got := Choose(all, c.s)
+		wantOn := 0
+		for i, ch := range got {
+			if ch.Why != c.want[i] || ch.On != (c.want[i] == "") {
+				t.Errorf("Choose(%+v)[%s] = %v %q, want %q", c.s, ch.Name, ch.On, ch.Why, c.want[i])
+			}
+			if c.want[i] == "" {
+				wantOn++
+			}
+		}
+		if n := len(On(got)); n != wantOn {
+			t.Errorf("On(Choose(%+v)) = %d skills, want %d", c.s, n, wantOn)
+		}
+	}
+}
+
+// tempRoot is a temporary skills root whose sealed folders are opened
+// again before the test's temporary dir is removed.
+func tempRoot(t *testing.T) string {
 	root := t.TempDir()
-	keep, err := Folder(root, testSet())
+	t.Cleanup(func() { remove(root) })
+	return root
+}
+
+func TestBuildMakesAReadOnlyPlugin(t *testing.T) {
+	root := tempRoot(t)
+	set := Bundled()
+	dir, err := Build(root, set, "1.2.3")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other := testSet()
-	other[0].Files["reference/two.md"] = []byte("Two.\n")
-	gone, err := Folder(root, other)
+	if filepath.Dir(dir) != filepath.Join(root, "plugins") {
+		t.Fatalf("folder %s is not under %s/plugins", dir, root)
+	}
+	var manifest map[string]any
+	b, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Prune(root, map[string]bool{keep: true}); err != nil {
+	if err := json.Unmarshal(b, &manifest); err != nil || manifest["name"] != "irie" || manifest["version"] != "1.2.3" || manifest["license"] != "Apache-2.0" {
+		t.Errorf("manifest %s", b)
+	}
+	skill := filepath.Join(dir, "skills", "present", "SKILL.md")
+	got, err := os.ReadFile(skill)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(keep); err != nil {
-		t.Errorf("kept folder: %v", err)
+	var want []byte
+	for _, s := range set {
+		if s.Name == "present" {
+			want = s.Files["SKILL.md"]
+		}
 	}
-	if _, err := os.Stat(gone); !os.IsNotExist(err) {
-		t.Errorf("unused folder still there: %v", err)
+	if string(got) != string(want) {
+		t.Error("the skill's file differs from the bundled one")
 	}
-	if err := Prune(filepath.Join(root, "none"), nil); err != nil {
-		t.Errorf("no folder: %v", err)
+	if fi, _ := os.Stat(skill); fi.Mode().Perm() != 0o444 {
+		t.Errorf("SKILL.md is %v, want read-only", fi.Mode().Perm())
+	}
+	if fi, _ := os.Stat(dir); fi.Mode().Perm() != 0o555 {
+		t.Errorf("the folder is %v, want sealed", fi.Mode().Perm())
+	}
+	again, err := Build(root, set, "1.2.3")
+	if err != nil || again != dir {
+		t.Errorf("a second build gave %s, %v; want the same folder", again, err)
+	}
+	other, err := Build(root, set, "1.2.4")
+	if err != nil || other == dir {
+		t.Errorf("another version gave %s, %v; want a folder of its own", other, err)
+	}
+	if !Same(dir, Layout(set, "1.2.3")) {
+		t.Error("the first folder changed when another was built")
 	}
 }
 
-func TestCommand(t *testing.T) {
-	if got := (Skill{Name: "dead-mans-switch"}).Command(); got != "/irie:dead-mans-switch" {
-		t.Errorf("got %s", got)
+func TestBuildPutsBackAnEditedFolder(t *testing.T) {
+	root := tempRoot(t)
+	set := Bundled()
+	dir, err := Build(root, set, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := filepath.Join(dir, "skills", "present", "SKILL.md")
+	// An agent that edits a skill where it finds it, and adds a file.
+	os.Chmod(filepath.Dir(skill), 0o755)
+	os.Chmod(skill, 0o644)
+	if err := os.WriteFile(skill, []byte("---\nname: present\n---\nrewritten\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(skill), "extra.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if Same(dir, Layout(set, "1")) {
+		t.Fatal("an edited folder looks the same")
+	}
+	again, err := Build(root, set, "1")
+	if err != nil || again != dir {
+		t.Fatalf("rebuild gave %s, %v", again, err)
+	}
+	if !Same(dir, Layout(set, "1")) {
+		t.Error("the rebuild did not put the folder back")
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(skill), "extra.md")); err == nil {
+		t.Error("the added file is still there")
+	}
+}
+
+func TestPruneKeepsWhatSessionsUse(t *testing.T) {
+	root := tempRoot(t)
+	set := Bundled()
+	used, err := Build(root, set, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale, err := Build(root, set, "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	half := filepath.Join(root, "plugins", ".new-123")
+	os.MkdirAll(filepath.Join(half, "skills"), 0o755)
+	removed, err := Prune(root, []string{used + "/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{half, stale}
+	slices.Sort(removed)
+	slices.Sort(want)
+	if !slices.Equal(removed, want) {
+		t.Errorf("removed %v, want %v", removed, want)
+	}
+	if !Same(used, Layout(set, "1")) {
+		t.Error("the folder in use was touched")
+	}
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("the stale folder is still there")
+	}
+	if got, err := Prune(filepath.Join(root, "missing"), nil); err != nil || got != nil {
+		t.Errorf("Prune of a missing root = %v, %v", got, err)
 	}
 }

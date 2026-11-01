@@ -45,10 +45,10 @@ const usage = `usage: irie [command]
                           share the certificate authority (irie remote for help)
   irie dms <command>      the dead man's switch guide's helpers: its checks,
                           check-in and calendar (irie dms for help)
-  irie skills             Irie's own skills, whether each is on, and how to
-                          start it
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
+  irie skills             list the skills that come with Irie, and whether
+                          sessions get each
 
 Used by Irie itself:
   irie core [--supervise]   the core
@@ -114,14 +114,14 @@ func run(args []string) int {
 		err = remoteCmd(args)
 	case "dms":
 		err = dmsCmd(args)
-	case "skills":
-		err = skillsCmd(args)
 	case "setup":
 		err = setup(args)
 	case "version":
 		fmt.Println("irie", version.String())
 	case "config":
 		err = configCmd(args)
+	case "skills":
+		err = skillsCmd(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:

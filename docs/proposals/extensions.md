@@ -45,7 +45,7 @@ M12 fetches third-party skills, each pinned to a commit and checked by hash. Iri
 
 A skill that only runs when the user types it, with `disable-model-invocation: true` in its frontmatter, puts nothing in the agent's context: Claude Code's skills docs give it "Description not in context, full skill loads when invoked". Irie's guides are all of that kind. They cost no tokens in a session that doesn't use them, and the agent never starts one on its own.
 
-This is M12's first slice: the plugin folder, `--plugin-dir` through optional-flag detection (DESIGN §3.3), `[skills] enabled` and `disabled`, and `irie skills` to list what is on. M12's list, fetch and store come after it unchanged, and put their skills in the same folder.
+M12's first slice landed in `live` beside this work (`aa041dd`, from another session): every Claude Code session gets Irie's skills in that plugin, once a probe has seen the CLI load a plugin passed with `--plugin-dir` (`claude --plugin-dir <probe> plugin list --json`), which also catches managed settings that refuse the flag and a plugin of the user's own named `irie`. The dead man's switch skill is one of those skills. It is user-only, so other sessions don't pay for it; `:setup switch` checks first that it will reach the guide's session, and says why when it won't.
 
 ### 1.3 An agent prepares, the user clicks
 
@@ -66,7 +66,7 @@ Irie never argues its way past Claude Code's own checks. It doesn't answer a per
 
 | Extension | Switch | Default |
 |---|---|---|
-| Dead man's switch | `[skills] disabled = ["dead-mans-switch"]`; every skill: `[skills] enabled = false` or `IRIE_SKILLS=off` | On. It does nothing until the user asks for it |
+| Dead man's switch | `[skills] disabled = ["dead-mans-switch"]`; every skill: `[skills] enabled = false`; one profile: `profiles.<name>.skills = false` | On. It does nothing until the user asks for it |
 | Bitwarden for agents | `[vault] on` | Off |
 | Mullvad VPN control | `[vpn] on` | Off. Settings offers it when the `mullvad` CLI is found |
 | Mullvad Browser for agents | A profile the user adds (§5.4) | None |
@@ -184,14 +184,13 @@ An Irie with Claude Code whose `--help` lists `--plugin-dir`; about an hour; a p
 
 ### 2.9 Switching it off
 
-- **In Irie.** `[skills] disabled = ["dead-mans-switch"]` takes the skill out, and `:setup switch` then says why; `[skills] enabled = false` or `IRIE_SKILLS=off` takes out every skill of Irie's.
+- **In Irie.** `[skills] disabled = ["dead-mans-switch"]` takes the skill out, and `:setup switch` then says why; `[skills] enabled = false` takes out every skill of Irie's, and `profiles.claude.skills = false` those of the guide's profile.
 - **The switch itself.** `irie dms pause` stops both checks from emailing anyone until the next check-in. Deleting the checks in Healthchecks ends it; then the emergency contacts in the password manager, the shortcut, the calendar events, and Google's and Apple's settings. `switch.md` lists each, with its page.
 
 ### 2.10 Tests
 
-- `internal/skills`: the embedded skill parses; its name matches its folder; it is user-only and grants nothing; no file holds an injected `` !`command` `` or personal data; the plugin folder's layout, read-only files and digest; a changed, added or deleted file is caught and the folder made again; unused folders are pruned.
-- `internal/harness/claude`: an argv golden with `--plugin-dir`; a CLI without the flag refuses a guide in words, and other sessions get no warning.
-- `internal/core`: `:setup switch` starts the session with the skill's command on `+claude` and the plugin folder, the fake agent finds the skill there as Claude Code would, and a reopen passes the folder again; every way the guide can be off says why.
+- `internal/skills`: every bundled skill grants no tools, holds no injected `` !`command` `` and no personal data, and is Markdown only; the guide is user-only (`content_test.go`). The plugin folder's own tests came with M12's first slice.
+- `internal/core`: `:setup switch` starts the session with the skill's command on `+claude`; the fake agent, which lists its plugins as Claude Code does when `IRIE_FAKE_PLUGINS` is set, finds the skill in Irie's plugin folder, and a reopen passes the folder again; every way the guide can be off says why: skills off, the skill off, a profile without skills, no `+claude`, and a CLI that can't load the plugin.
 - `internal/dms`: against a fake of the Management API, two checks with the right periods and graces, made again by name, never with `channels`; the key never in an error, even when the server echoes it; a read-only key refused in words; pause and ping; the status report; the calendar against RFC 5545 (CRLF, folding at 75 octets outside characters and escapes, TEXT escapes); the shortcut's property list through `plutil -lint` where there is one.
 - **Manual check.** In the live Irie: `:setup switch`, the guide's first questions, `irie dms key --paste` with a test project's key, `irie dms checks`, `irie dms status`, a shortcut signed and opened on an iPhone, and the calendar file opened. Then pause the checks, and delete the test project.
 
@@ -365,11 +364,11 @@ For Irie to offer it, a session option such as a profile's `browser = "mullvad"`
 
 - **DESIGN §2.1, principle 4.** "Hooks, settings, env and skills go in per launch, through `--settings`, `--plugin-dir`, argv and env", as skills.md §7 already proposes.
 - **DESIGN §2.6.** `internal/skills/` (Irie's own skills and the plugin folder), `internal/dms/` (the switch's helpers); later `internal/vpn/` and `internal/vault/`.
-- **DESIGN §3.3.** `--plugin-dir` in the launch line, for a session that gets Irie's skills, found through `claude --help` like `--name`. A CLI without it can't run a guide, and says so; every other session is unchanged.
+- **DESIGN §3.3.** `--plugin-dir` in the launch line of every Claude Code session whose CLI loads it, as M12's first slice has it; `:setup switch` refuses, with the probe's reason, where it doesn't.
 - **DESIGN §4.2 and CORE.md §3.** `:setup switch` among the words; later `:vpn …`.
 - **DESIGN §5.4.** `<data>/skills/plugins/<digest>/`, removed when no session uses it; `<state>/dms/healthchecks.key` and `switch.json`, both 0600.
 - **DESIGN §5.5.** `[skills] enabled` and `disabled`; later `[vpn]` and `[vault]`.
-- **DESIGN §8.** M12's first slice lands with the dead man's switch; M12's list, fetch and store follow. Each later extension is its own step, each with its tests and a manual check.
+- **DESIGN §8.** M12's first slice is in, and the dead man's switch is its second skill; M12's list, fetch and store follow. Each later extension is its own step, each with its tests and a manual check.
 - **DESIGN §9, risks.** A guide that tells people how to give others access to their accounts: it reads each vendor's own page, and says when it can't see what the user sees. A secret broker on a machine where agents run as the user (§3.7). A VPN changed under agents at work (§4.4).
 - **MAC.md.** File › Set Up a Dead Man's Switch…; later the VPN menu and an Extensions tab in Settings.
 - **The site.** A page for the guide, from this proposal, once it ships.
@@ -393,7 +392,7 @@ For Irie to offer it, a session option such as a profile's `browser = "mullvad"`
 **Decided 2026-11-01:**
 - **Decision 1:** a, the dead man's switch first.
 - **Decision 2:** a, then Mullvad VPN control; Bitwarden for agents waits for its approval design.
-- **Decision 3:** a, only a guide's own session gets Irie's plugin.
+- **Decision 3:** a, only a guide's own session gets Irie's plugin. Superseded the same day: M12's first slice, built alongside, hands every Claude Code session the plugin once a probe has seen the CLI load it, which answers the risk behind the decision, so the guide's session gets it that way too.
 - **Decision 4:** the user's choice: the guide offers the iPhone shortcut and the contact card, and each user takes either or both.
 - **Decisions 5 to 9:** the recommendations stand.
 

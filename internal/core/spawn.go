@@ -220,13 +220,12 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 			return ipc.Session{}, err
 		}
 	}
-	return c.spawnProfile(a, named, profileName, profile, warnings, extra, false)
+	return c.spawnProfile(a, named, profileName, profile, warnings, extra)
 }
 
 // spawnProfile spawns a on profile, which is ready to run: routed, its
-// local model checked. extra goes into spawn.requested. withSkills hands the
-// session Irie's own skills, in their plugin folder (guide.go).
-func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, profile config.Profile, warnings []string, extra map[string]any, withSkills bool) (ipc.Session, error) {
+// local model checked. extra goes into spawn.requested.
+func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, profile config.Profile, warnings []string, extra map[string]any) (ipc.Session, error) {
 	h, err := harnessFor(profile.Harness)
 	if err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "profile %s: %v", profileName, err)
@@ -240,14 +239,6 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		probe = p.Probe(profile, c.agentEnv(profile))
 	}
 	probe.Warnings = append(warnings, probe.Warnings...)
-	// The plugin folder is files on disk, made before taking the lock.
-	var plugin string
-	if withSkills {
-		var err error
-		if plugin, err = c.pluginDir(); err != nil {
-			return ipc.Session{}, err
-		}
-	}
 
 	// Spawns run one at a time, so a worktree's slug cannot race another
 	// spawn's name, and one that a promoted session delegates goes first.
@@ -272,7 +263,7 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		class, _ := extra["class"].(string)
 		c.escalate(hash, class, profileName, time.Now())
 	}
-	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, plugin: plugin})
+	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra})
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
 	}
@@ -310,7 +301,6 @@ type job struct {
 	resume  string         // the vendor id of the conversation to carry on
 	data    map[string]any // more data for spawn.requested
 	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
-	plugin  string         // Irie's plugin folder with the skills it gets; "" for none
 }
 
 // launch writes the session's files, creates its window and records the
@@ -352,7 +342,6 @@ func (c *Core) launch(j job) (*session, error) {
 		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
 		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
-		PluginDir: j.plugin,
 	}
 	// Only the user's name goes to the agent: Claude Code titles a session
 	// it gets no name for, and the row follows the title (title.go).
@@ -369,6 +358,10 @@ func (c *Core) launch(j job) (*session, error) {
 		} else {
 			anchor, s.Teams = a, true
 		}
+	}
+	// Irie's skills, for a harness that loads them as a plugin.
+	if j.probe.Flags["--plugin-dir"] {
+		s.PluginDir = c.skillsFolder(profile, x)
 	}
 	launch := h.Launch
 	if j.resume != "" {
@@ -410,7 +403,7 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := host.WriteSpec(spec, host.Spec{
 		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Path: path, Cwd: x.cwd, Warnings: x.warnings,
 		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
-		Model: x.model, Local: x.local, Skills: j.plugin != "",
+		Model: x.model, Local: x.local,
 	}); err != nil {
 		return nil, err
 	}

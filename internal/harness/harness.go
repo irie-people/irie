@@ -85,8 +85,9 @@ type Spawn struct {
 	// on Irie's team server (spawn.teammates).
 	Teams bool
 
-	// PluginDir is Irie's own plugin folder, with the skills this session
-	// gets (internal/skills); "" for none.
+	// PluginDir is the folder of Irie's skills for this session, which a
+	// harness whose probe offers --plugin-dir passes on (internal/skills);
+	// "" = none.
 	PluginDir string
 }
 

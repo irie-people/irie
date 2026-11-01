@@ -1,18 +1,18 @@
 package core
 
 import (
-	"os"
-	"slices"
+	"strings"
 
-	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/skills"
 )
 
 // A guide is a Claude Code session that runs one of Irie's own skills, which
 // the user starts from any task bar: `:setup switch` runs the dead man's
-// switch guide (docs/proposals/extensions.md §2.2). For now a guide is the
-// only session that gets Irie's plugin folder (§1.2); others get none.
+// switch guide (docs/proposals/extensions.md §2.2). It gets Irie's plugin as
+// every Claude Code session does (skills.go); the guide first checks that
+// its skill will be in it, and says why when it won't.
 type guideSpec struct {
 	skill   string // the skill it runs, by name
 	name    string // the session's name
@@ -25,81 +25,41 @@ var guideSwitch = guideSpec{skill: "dead-mans-switch", name: "Dead Man's Switch"
 
 // guide starts g's session, with the skill's command as its task.
 func (c *Core) guide(g guideSpec) (ipc.Session, error) {
-	s, err := c.skill(g.skill)
-	if err != nil {
-		return ipc.Session{}, err
-	}
 	profile, ok := c.profile(g.profile)
 	if !ok || profile.Harness != "claude-code" {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "The %s guide runs on +%s, a Claude Code profile, which your config has not got.", g.name, g.profile)
 	}
-	return c.spawnProfile(ipc.SpawnArgs{Task: s.Command(), Name: g.name}, true, g.profile, profile, nil, map[string]any{"guide": g.skill}, true)
-}
-
-// skillsOn reports whether Irie hands its skills to agents at all, and why
-// not: [skills] enabled, or IRIE_SKILLS=off where the core started.
-func (c *Core) skillsOn() (bool, string) {
+	cfg := c.cfg().Skills
+	var choice *skills.Choice
+	for _, ch := range skills.Choose(skills.Bundled(), skills.Settings{Enabled: cfg.Enabled, Disabled: cfg.Disabled, Profile: profile.TakesSkills()}) {
+		if ch.Name == g.skill {
+			choice = &ch
+		}
+	}
 	switch {
-	case os.Getenv("IRIE_SKILLS") == "off":
-		return false, "IRIE_SKILLS=off was set where the core started"
-	case !c.cfg().Skills.Enabled:
-		return false, "[skills] enabled = false in config.toml"
+	case choice == nil:
+		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "This Irie has no skill called %s.", g.skill)
+	case !choice.On:
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "The %s guide is Irie's skill %s, which is off here: %s.", g.name, g.skill, choice.Why)
 	}
-	return true, ""
-}
-
-// skill returns Irie's own skill called name, when it is on.
-func (c *Core) skill(name string) (skills.Skill, error) {
-	all, err := skills.Builtin()
+	// The CLI must load Irie's plugin, which its probe checks once per
+	// binary; the probe's warning says why not.
+	h, err := harnessFor(profile.Harness)
 	if err != nil {
-		return skills.Skill{}, err
+		return ipc.Session{}, err
 	}
-	s, ok := skills.Find(all, name)
-	if !ok {
-		return skills.Skill{}, ipc.Errorf(ipc.CodeNotFound, "This Irie has no skill called %s.", name)
-	}
-	if on, why := c.skillsOn(); !on {
-		return skills.Skill{}, ipc.Errorf(ipc.CodeBadArgs, "Irie's skills are off: %s.", why)
-	}
-	if slices.Contains(c.cfg().Skills.Disabled, name) {
-		return skills.Skill{}, ipc.Errorf(ipc.CodeBadArgs, "The %s skill is off: [skills] disabled names it in config.toml.", name)
-	}
-	return s, nil
-}
-
-// pluginDir makes the plugin folder that holds every skill that is on, and
-// returns its path.
-func (c *Core) pluginDir() (string, error) {
-	all, err := skills.Builtin()
-	if err != nil {
-		return "", err
-	}
-	on, _ := c.skillsOn()
-	set := skills.Enabled(all, on, c.cfg().Skills.Disabled)
-	return skills.Folder(c.paths.SkillPlugins(), set)
-}
-
-// pruneSkills removes the plugin folders that no session in a pane uses
-// (docs/proposals/skills.md §1.1). A closed guide that comes back gets the
-// folder of the set of the day.
-func (c *Core) pruneSkills() {
-	c.mu.Lock()
-	ids := make([]string, 0, len(c.sessions))
-	for id := range c.sessions {
-		ids = append(ids, id)
-	}
-	c.mu.Unlock()
-	keep := map[string]bool{}
-	for _, id := range ids {
-		spec, err := host.ReadSpec(c.paths.SpecFile(id))
-		if err != nil {
-			continue
-		}
-		if i := slices.Index(spec.Argv, "--plugin-dir"); i >= 0 && i+1 < len(spec.Argv) {
-			keep[spec.Argv[i+1]] = true
+	if p, ok := h.(harness.Prober); ok {
+		probe := p.Probe(profile, c.agentEnv(profile))
+		if !probe.Flags["--plugin-dir"] {
+			why := "this Claude Code takes no --plugin-dir"
+			for _, w := range probe.Warnings {
+				if strings.Contains(w, "skills") || strings.Contains(w, "--plugin-dir") {
+					why = w
+				}
+			}
+			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "The %s guide needs Claude Code to load Irie's skills, and it doesn't here: %s. `claude update` may help.", g.name, why)
 		}
 	}
-	if err := skills.Prune(c.paths.SkillPlugins(), keep); err != nil {
-		c.log.Warn("skills", "err", err)
-	}
+	task := "/" + skills.Plugin + ":" + g.skill
+	return c.spawnProfile(ipc.SpawnArgs{Task: task, Name: g.name}, true, g.profile, profile, nil, map[string]any{"guide": g.skill})
 }

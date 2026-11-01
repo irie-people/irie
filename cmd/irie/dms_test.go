@@ -10,9 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/dms"
-	"github.com/irie-people/irie/internal/skills"
 )
 
 // dmsEnv gives the helpers folders of their own, as a scratch HOME.
@@ -118,29 +116,6 @@ func TestDMSCalendarFile(t *testing.T) {
 	}
 	if err := dmsCmd([]string{"calendar", "--out", path, "--at", "noon"}); err == nil {
 		t.Error("--at noon")
-	}
-}
-
-func TestListSkills(t *testing.T) {
-	all := []skills.Skill{{Name: "dead-mans-switch", Description: "A guided setup of a dead man's switch. More."}}
-	var b strings.Builder
-	listSkills(&b, all, config.Skills{Enabled: true}, "")
-	if got := b.String(); !strings.Contains(got, "dead-mans-switch (on)") || !strings.Contains(got, ":setup switch") || !strings.Contains(got, "A guided setup of a dead man's switch.\n") {
-		t.Errorf("on:\n%s", got)
-	}
-	for want, c := range map[string]struct {
-		cfg config.Skills
-		env string
-	}{
-		"off: IRIE_SKILLS=off":            {config.Skills{Enabled: true}, "off"},
-		"off: [skills] enabled = false":   {config.Skills{}, ""},
-		"off: [skills] disabled names it": {config.Skills{Enabled: true, Disabled: []string{"dead-mans-switch"}}, ""},
-	} {
-		b.Reset()
-		listSkills(&b, all, c.cfg, c.env)
-		if !strings.Contains(b.String(), want) {
-			t.Errorf("want %q:\n%s", want, b.String())
-		}
 	}
 }
 

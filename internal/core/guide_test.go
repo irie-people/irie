@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -34,19 +35,39 @@ func bareCore(t *testing.T, cfg config.Config) *Core {
 	return newCore(Options{Config: cfg, Paths: p, Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}, &tmux.Runner{Bin: filepath.Join(home, "no-tmux")})
 }
 
+// noPlugins is a claude whose --help lists no --plugin-dir.
+func noPlugins(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "claude")
+	script := "#!/bin/sh\ncase \"$1\" in --version) echo '2.1.316 (Claude Code)';; --help) echo '  -n, --name <name>  Set a display name';; esac\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
 func TestTheGuideSaysWhyItIsOff(t *testing.T) {
+	no := false
+	old := noPlugins(t)
 	for name, tc := range map[string]struct {
 		cfg  func(*config.Config)
-		env  string
 		want string
 	}{
-		"all skills off":   {cfg: func(c *config.Config) { c.Skills.Enabled = false }, want: "[skills] enabled = false"},
-		"this one off":     {cfg: func(c *config.Config) { c.Skills.Disabled = []string{"dead-mans-switch"} }, want: "[skills] disabled names it"},
-		"off where it ran": {cfg: func(*config.Config) {}, env: "off", want: "IRIE_SKILLS=off"},
-		"no claude":        {cfg: func(c *config.Config) { delete(c.Profiles, "claude") }, want: "+claude"},
+		"all skills off": {func(c *config.Config) { c.Skills.Enabled = false }, "skills are off (skills.enabled)"},
+		"this one off":   {func(c *config.Config) { c.Skills.Disabled = []string{"dead-mans-switch"} }, "turned off (skills.disabled)"},
+		"profile takes none": {func(c *config.Config) {
+			p := c.Profiles["claude"]
+			p.Skills = &no
+			c.Profiles["claude"] = p
+		}, "this profile takes no skills"},
+		"no claude": {func(c *config.Config) { delete(c.Profiles, "claude") }, "+claude"},
+		"an old claude": {func(c *config.Config) {
+			p := c.Profiles["claude"]
+			p.Command = old
+			c.Profiles["claude"] = p
+		}, "needs Claude Code to load Irie's skills"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("IRIE_SKILLS", tc.env)
 			cfg := config.Default()
 			tc.cfg(&cfg)
 			c := bareCore(t, cfg)
@@ -58,39 +79,22 @@ func TestTheGuideSaysWhyItIsOff(t *testing.T) {
 	}
 }
 
-func TestPruneKeepsTheFoldersSessionsUse(t *testing.T) {
-	c := bareCore(t, config.Default())
-	used, err := c.pluginDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stale := filepath.Join(c.paths.SkillPlugins(), "0000000000000000")
-	if err := os.MkdirAll(filepath.Join(stale, "skills"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	const id = "s0000000000a1"
-	if err := os.MkdirAll(c.paths.Session(id), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := host.WriteSpec(c.paths.SpecFile(id), host.Spec{Session: id, Argv: []string{"claude", "--plugin-dir", used, "/irie:dead-mans-switch"}, Cwd: "/", Skills: true}); err != nil {
-		t.Fatal(err)
-	}
-	c.sessions[id] = &session{id: id}
-	c.pruneSkills()
-	if _, err := os.Stat(used); err != nil {
-		t.Errorf("the folder a session uses is gone: %v", err)
-	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Errorf("a folder no session uses is still there: %v", err)
-	}
-}
-
 // TestTheSwitchGuideRunsIriesSkill: :setup switch starts a Claude Code
 // session on +claude whose task runs the skill from Irie's plugin folder,
-// which the agent finds, and a reopen hands it the folder again.
+// which the agent finds, as Claude Code would; a reopen passes the folder
+// again.
 func TestTheSwitchGuideRunsIriesSkill(t *testing.T) {
 	c := prepare(t, agentConfig{})
-	c.WriteConfig(t, agentConfig{extra: fmt.Sprintf("[profiles.claude]\ncommand = %q\n", c.fake)}.toml(c.fake))
+	c.WriteConfig(t, agentConfig{extra: fmt.Sprintf("[profiles.claude]\ncommand = %q\nenv = { IRIE_FAKE_PLUGINS = \"1\" }\n", c.fake)}.toml(c.fake))
+	// The plugin folders are read-only; the test's folders go when it ends.
+	t.Cleanup(func() {
+		filepath.WalkDir(c.paths.Skills(), func(p string, d fs.DirEntry, err error) error {
+			if err == nil && d.IsDir() {
+				os.Chmod(p, 0o700)
+			}
+			return nil
+		})
+	})
 	c.up()
 
 	var r ipc.InputResult
@@ -101,18 +105,20 @@ func TestTheSwitchGuideRunsIriesSkill(t *testing.T) {
 		t.Fatalf("input = %+v", r)
 	}
 	id := r.Session.ID
-	spec, err := host.ReadSpec(c.paths.SpecFile(id))
-	if err != nil {
-		t.Fatal(err)
+	// The folder a launch passed; first, also that the task is the skill.
+	folder := func(first bool) string {
+		t.Helper()
+		spec, err := host.ReadSpec(c.paths.SpecFile(id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		i := slices.Index(spec.Argv, "--plugin-dir")
+		if spec.Profile != "claude" || i < 0 || first && spec.Argv[len(spec.Argv)-1] != "/irie:dead-mans-switch" {
+			t.Fatalf("spec = %+v", spec)
+		}
+		return spec.Argv[i+1]
 	}
-	i := slices.Index(spec.Argv, "--plugin-dir")
-	if spec.Profile != "claude" || !spec.Skills || i < 0 || spec.Argv[len(spec.Argv)-1] != "/irie:dead-mans-switch" {
-		t.Fatalf("spec = %+v", spec)
-	}
-	dir := spec.Argv[i+1]
-	if filepath.Dir(dir) != c.paths.SkillPlugins() {
-		t.Errorf("plugin folder %s, want one under %s", dir, c.paths.SkillPlugins())
-	}
+	dir := folder(true)
 	if _, err := os.Stat(filepath.Join(dir, "skills", "dead-mans-switch", "SKILL.md")); err != nil {
 		t.Errorf("the skill is not in its folder: %v", err)
 	}
@@ -126,11 +132,7 @@ func TestTheSwitchGuideRunsIriesSkill(t *testing.T) {
 	if err := c.call(ipc.OpReopen, ipc.ReopenArgs{Session: id}, &re); err != nil {
 		t.Fatal(err)
 	}
-	spec, err = host.ReadSpec(c.paths.SpecFile(id))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if i := slices.Index(spec.Argv, "--plugin-dir"); i < 0 || spec.Argv[i+1] != dir || !spec.Skills {
-		t.Errorf("reopened spec = %+v, want --plugin-dir %s", spec, dir)
+	if again := folder(false); again != dir {
+		t.Errorf("reopened with %s, want %s", again, dir)
 	}
 }

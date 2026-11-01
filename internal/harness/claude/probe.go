@@ -2,10 +2,13 @@ package claude
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -25,15 +28,15 @@ import (
 const MinVersion = "2.1.295"
 
 // optional are flags Irie passes only to a CLI whose --help lists them.
-// warn says whether a CLI without one gets a warning on every session; a
-// flag only some sessions need warns when one does, as --plugin-dir does.
-var optional = []struct {
-	flag string
-	warn bool
-}{{"--name", true}, {"--plugin-dir", false}}
+// --plugin-dir also needs the CLI to load a plugin passed with it (plugins).
+var optional = []string{"--name", "--plugin-dir"}
 
-// probeTimeout bounds each run of the CLI.
-var probeTimeout = 5 * time.Second
+// probeTimeout bounds each run of the CLI, and pluginTimeout the run that
+// lists its plugins, which reads every plugin's manifest.
+var (
+	probeTimeout  = 5 * time.Second
+	pluginTimeout = 20 * time.Second
+)
 
 var (
 	probeMu sync.Mutex
@@ -77,20 +80,101 @@ func (Harness) Probe(p config.Profile, env []string) harness.Probe {
 	if err == nil {
 		help, _ := probe(path, append(slices.Clone(p.Args), "--help"), env)
 		for _, f := range optional {
-			if listsFlag(help, f.flag) {
+			if listsFlag(help, f) {
 				if pr.Flags == nil {
 					pr.Flags = map[string]bool{}
 				}
-				pr.Flags[f.flag] = true
-			} else if f.warn {
-				pr.Warnings = append(pr.Warnings, fmt.Sprintf("%s left out: `%s --help` does not list it", f.flag, command))
+				pr.Flags[f] = true
+			} else {
+				pr.Warnings = append(pr.Warnings, fmt.Sprintf("%s left out: `%s --help` does not list it", f, command))
 			}
 		}
 	}
-	probeMu.Lock()
-	probes[key] = pr
-	probeMu.Unlock()
+	again := false
+	if pr.Flags["--plugin-dir"] {
+		if why, retry := plugins(path, p.Args, env); why != "" {
+			delete(pr.Flags, "--plugin-dir")
+			pr.Warnings = append(pr.Warnings, "Irie's skills left out: "+why)
+			again = retry
+		}
+	}
+	// A CLI too slow to list its plugins is asked again at the next launch.
+	if !again {
+		probeMu.Lock()
+		probes[key] = pr
+		probeMu.Unlock()
+	}
 	return clone(pr)
+}
+
+// plugins checks that the CLI loads a plugin passed with --plugin-dir, by
+// listing its plugins with a throwaway one named irie: managed settings may
+// refuse the flag (disableSideloadFlags), which would stop every launch, and
+// Irie's plugin would stand in for one of the user's own named irie. It
+// returns why Irie's skills are left out, "" when they can go in, and whether
+// to look again at the next launch.
+func plugins(path string, args, env []string) (why string, retry bool) {
+	dir, err := os.MkdirTemp("", "irie-plugin-probe-")
+	if err != nil {
+		return "no folder for the plugin probe: " + err.Error(), true
+	}
+	defer os.RemoveAll(dir)
+	manifest := filepath.Join(dir, ".claude-plugin", "plugin.json")
+	if err := os.MkdirAll(filepath.Dir(manifest), 0o700); err != nil {
+		return "no folder for the plugin probe: " + err.Error(), true
+	}
+	if err := os.WriteFile(manifest, []byte(`{"name": "irie", "description": "Irie's probe", "version": "0"}`+"\n"), 0o600); err != nil {
+		return "no folder for the plugin probe: " + err.Error(), true
+	}
+	out, err := probeFor(pluginTimeout, path, append(slices.Clone(args), "--plugin-dir", dir, "plugin", "list", "--json"), env)
+	var exit *exec.ExitError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &exit) && exit.ProcessState != nil && !exit.Exited()):
+		return "Claude Code took too long to list its plugins", true
+	case errors.As(err, &exit):
+		return "Claude Code refused --plugin-dir: " + firstLine(string(exit.Stderr)), false
+	case err != nil:
+		return "Claude Code could not list its plugins: " + err.Error(), true
+	}
+	return pluginList(out), false
+}
+
+// pluginList reads `claude plugin list --json`. Irie's throwaway plugin must
+// be in it, loaded for the session as irie@inline, and no plugin of the
+// user's own may be named irie. It returns why skills are left out, or "".
+func pluginList(out string) string {
+	var list []struct {
+		ID      string `json:"id"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := json.Unmarshal([]byte(out), &list); err != nil {
+		return "Claude Code's list of plugins could not be read"
+	}
+	loaded := false
+	for _, p := range list {
+		name, from, _ := strings.Cut(p.ID, "@")
+		switch {
+		case name != "irie":
+		case from == "inline":
+			loaded = loaded || p.Enabled
+		default:
+			return "a plugin of your own is named irie (" + p.ID + ")"
+		}
+	}
+	if !loaded {
+		return "Claude Code did not load a plugin passed with --plugin-dir"
+	}
+	return ""
+}
+
+// firstLine is the first line of s that says something.
+func firstLine(s string) string {
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "Warning:") {
+			return l
+		}
+	}
+	return "no reason given"
 }
 
 func profileEnv(env map[string]string) []string {
@@ -110,7 +194,13 @@ func clone(p harness.Probe) harness.Probe {
 // probe runs the CLI in its own process group, which is killed when it takes
 // longer than probeTimeout, and returns what it printed.
 func probe(path string, args, env []string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	return probeFor(probeTimeout, path, args, env)
+}
+
+// probeFor is probe with a timeout of its own. A run killed at its timeout
+// returns context.DeadlineExceeded.
+func probeFor(timeout time.Duration, path string, args, env []string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Env = env
@@ -118,6 +208,9 @@ func probe(path string, args, env []string) (string, error) {
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return string(out), ctx.Err()
+	}
 	return string(out), err
 }
 
