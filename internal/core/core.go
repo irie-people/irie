@@ -95,6 +95,7 @@ type Core struct {
 	planAt     time.Time
 	outcomes   map[string]*outcome // every session's route and outcome, those gone included
 	order      []string            // the list's order from the top, which the user sets (order.go)
+	hues       map[string]int      // the colours the core gave the sessions, the closed ones' too (hue.go)
 	bg         map[int]bgProc      // the processes Irie put in the background, by pid (priority.go)
 	closes     closes              // closed sessions, and agents still ending (close.go)
 	steps      stateFile           // state.json: the undo and redo stacks (undo.go)
@@ -150,6 +151,7 @@ type session struct {
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
 	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
+	hue      int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
 	// Jots added to its own, to type to its agent once it can take them,
 	// and whether that is under way (follow.go).
 	followUps []followUp
@@ -161,7 +163,7 @@ func (x *session) wire() ipc.Session {
 		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
-		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory, Team: wireTeam(x.team),
+		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory, Team: wireTeam(x.team), Hue: x.hue,
 	}
 	if s.Model == "" {
 		s.Model = x.usage.Model
@@ -203,7 +205,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 		paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
-		history: map[string][]event.Event{}, outcomes: map[string]*outcome{},
+		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, hues: map[string]int{},
 		fdog: newFreezeDog(),
 	}
 	c.useConfig(o.Config)
@@ -245,6 +247,7 @@ func Run(o Options) error {
 	c.loadLocal()
 	c.loadOutcomes()
 	c.loadOrder()
+	c.loadHues()
 	c.loadClosed()
 	c.loadState()
 	c.loadTrodHand()
@@ -470,8 +473,9 @@ func (c *Core) record(x *session, e event.Event) {
 	}
 }
 
-// list returns the rows in the list's order (order.go), each with what
-// the trod bot did for it in its last shift. The caller holds c.mu.
+// list returns the rows in the list's order (order.go), each with its
+// colour (hue.go) and what the trod bot did for it in its last shift. The
+// caller holds c.mu.
 func (c *Core) list() []ipc.Session {
 	out := make([]ipc.Session, 0, len(c.sessions))
 	var from time.Time
@@ -486,6 +490,7 @@ func (c *Core) list() []ipc.Session {
 		out = append(out, s)
 	}
 	c.sortRows(out)
+	c.giveHues(out)
 	return out
 }
 

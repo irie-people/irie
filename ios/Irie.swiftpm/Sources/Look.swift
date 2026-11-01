@@ -69,10 +69,12 @@ enum Theme {
 
 // MARK: - The agents' own colours
 
-/// A colour for each of six agent slots, worked out once for both modes, as
-/// js/look.js does it from Theme.swift's agentHue: a fan of hues opposite the
-/// accent that skips the needs red, washed into the card so its text keeps
-/// 4.6:1.
+/// A colour for each of six agent slots, worked out once for both modes as
+/// the Mac app's Theme.swift and js/look.js do: six hues round the whole
+/// wheel but the needs red, in OKLCH at one low chroma, so the agents differ
+/// by hue and none glares; a mark and its text start at the lightness of
+/// the palette's own, and a wash keeps the card's lightness and its text at
+/// 4.6:1. The core picks which a session takes (internal/core/hue.go).
 enum AgentColor {
     static let slots = 6
 
@@ -83,7 +85,15 @@ enum AgentColor {
         var ink: Color
     }
 
-    /// The slot for a session, the same one every time: FNV-1a of its id's UTF-8 bytes.
+    /// Which colour a session takes: the one the core gave it (its hue,
+    /// from 1), so cards side by side differ, or for a core that gives
+    /// none, one from its id.
+    static func slot(of s: Session) -> Int {
+        if let n = s.hue, n >= 1 { return (n - 1) % slots }
+        return slot(s.id)
+    }
+
+    /// A slot from a session's id, the same one every time: FNV-1a of its UTF-8 bytes.
     static func slot(_ id: String) -> Int {
         var h: UInt32 = 0x811C_9DC5
         for b in id.utf8 {
@@ -93,14 +103,23 @@ enum AgentColor {
         return Int(h % UInt32(slots))
     }
 
-    static func colors(_ id: String) -> Tints { table[slot(id)] }
+    static func colors(_ s: Session) -> Tints { table[slot(of: s)] }
 
     private struct Swatches {
-        var sidebar, ground, card, panel, selection, muted, accent, needs: UInt32
+        var sidebar, ground, card, panel, selection, muted, needs: UInt32
     }
 
-    private static let light = Swatches(sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, selection: 0xDDE5D3, muted: 0x56635A, accent: 0x2F5D46, needs: 0xB42A1E)
-    private static let dark = Swatches(sidebar: 0x141C17, ground: 0x0E1410, card: 0x1C2620, panel: 0x18221C, selection: 0x2A3D31, muted: 0xB3BFB5, accent: 0x9CC5A1, needs: 0xFF9585)
+    private static let light = Swatches(sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, selection: 0xDDE5D3, muted: 0x56635A, needs: 0xB42A1E)
+    private static let dark = Swatches(sidebar: 0x141C17, ground: 0x0E1410, card: 0x1C2620, panel: 0x18221C, selection: 0x2A3D31, muted: 0xB3BFB5, needs: 0xFF9585)
+
+    // Theme.swift's numbers: the chroma of a mark and its text, the
+    // lightness each starts from (light mode, dark mode), and a wash's
+    // chroma and how far it moves from the card's lightness.
+    private static let markChroma = 0.085
+    private static let markLightness = (light: 0.50, dark: 0.78)
+    private static let inkLightness = (light: 0.47, dark: 0.82)
+    private static let washChroma = (light: 0.03, dark: 0.04)
+    private static let washLift = (light: -0.03, dark: 0.025)
 
     private static let table: [Tints] = (0..<slots).map { i in
         let l = (mark: mark(i, light, false), wash: wash(i, light, false), ink: ink(i, light, false))
@@ -117,83 +136,92 @@ enum AgentColor {
         return m(16) | m(8) | m(0)
     }
 
+    private static func linear(_ v: Double) -> Double {
+        let c = v / 255
+        return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+    }
+
     static func luminance(_ hex: UInt32) -> Double {
-        func lin(_ v: Double) -> Double {
-            let c = v / 255
-            return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * lin(ch(hex, 16)) + 0.7152 * lin(ch(hex, 8)) + 0.0722 * lin(ch(hex, 0))
+        0.2126 * linear(ch(hex, 16)) + 0.7152 * linear(ch(hex, 8)) + 0.0722 * linear(ch(hex, 0))
     }
 
     private static func ratio(_ a: Double, _ b: Double) -> Double { (max(a, b) + 0.05) / (min(a, b) + 0.05) }
 
-    private static func hue(_ hex: UInt32) -> Double {
-        let r = ch(hex, 16) / 255, g = ch(hex, 8) / 255, b = ch(hex, 0) / 255
-        let hi = max(r, g, b), lo = min(r, g, b)
-        if hi == lo { return 0 }
-        var h: Double
-        if hi == r { h = (g - b) / (hi - lo) } else if hi == g { h = 2 + (b - r) / (hi - lo) } else { h = 4 + (r - g) / (hi - lo) }
-        h *= 60
-        return h < 0 ? h + 360 : h
+    /// A colour's OKLCH lightness and hue in degrees (Björn Ottosson's Oklab).
+    private static func oklch(_ hex: UInt32) -> (l: Double, h: Double) {
+        let r = linear(ch(hex, 16)), g = linear(ch(hex, 8)), b = linear(ch(hex, 0))
+        let l1 = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        let m1 = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        let s1 = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        let l = 0.2104542553 * l1 + 0.7936177850 * m1 - 0.0040720468 * s1
+        let a = 1.9779984951 * l1 - 2.4285922050 * m1 + 0.4505937099 * s1
+        let bb = 0.0259040371 * l1 + 0.7827717662 * m1 - 0.8086757660 * s1
+        var h = atan2(bb, a) * 180 / .pi
+        if h < 0 { h += 360 }
+        return (l, h)
     }
 
-    private static func fromHSB(_ hDeg: Double, _ s: Double, _ v: Double) -> UInt32 {
-        let h = ((hDeg.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)) / 60
-        let i = Int(h.rounded(.down)), f = h - Double(i)
-        let p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f))
-        let rgb: [(Double, Double, Double)] = [(v, t, p), (q, v, p), (p, v, t), (p, q, v), (t, p, v), (v, p, q)]
-        let (r, g, b) = rgb[i % 6]
-        func c(_ x: Double) -> UInt32 { UInt32((x * 255).rounded()) }
-        return (c(r) << 16) | (c(g) << 8) | c(b)
+    /// The sRGB colour of an OKLCH lightness, chroma and hue, held to sRGB.
+    private static func hex(l: Double, c: Double, h: Double) -> UInt32 {
+        let a = c * cos(h * .pi / 180), b = c * sin(h * .pi / 180)
+        let l1 = l + 0.3963377774 * a + 0.2158037573 * b
+        let m1 = l - 0.1055613458 * a - 0.0638541728 * b
+        let s1 = l - 0.0894841775 * a - 1.2914855480 * b
+        let l3 = l1 * l1 * l1, m3 = m1 * m1 * m1, s3 = s1 * s1 * s1
+        func enc(_ x: Double) -> UInt32 {
+            var v = min(1, max(0, x))
+            v = v <= 0.0031308 ? v * 12.92 : 1.055 * pow(v, 1 / 2.4) - 0.055
+            return UInt32((v * 255).rounded())
+        }
+        return enc(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3) << 16
+            | enc(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3) << 8
+            | enc(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3)
     }
 
+    /// A slot's hue: six, 50° apart, round the wheel but 30° either side of the needs red.
     private static func agentHue(_ slot: Int, _ s: Swatches) -> Double {
-        let start = hue(s.accent) + 90
-        var red = (hue(s.needs) - start).truncatingRemainder(dividingBy: 360)
-        if red < 0 { red += 360 }
-        if red >= 270 { red -= 360 }
-        let from = max(0, red - 30), gap = max(0, min(180, red + 30) - from)
-        var along = Double(slot % slots) * (180 - gap) / Double(slots - 1)
-        if gap > 0, along >= from { along += gap }
-        return (start + along).truncatingRemainder(dividingBy: 360)
+        let gap = 30.0, step = (360 - 2 * gap) / Double(slots)
+        return (oklch(s.needs).h + gap + step / 2 + Double(slot % slots) * step).truncatingRemainder(dividingBy: 360)
     }
 
     private static func wash(_ slot: Int, _ s: Swatches, _ dark: Bool) -> UInt32 {
-        let h = agentHue(slot, s)
-        let vivid = fromHSB(h, 0.62, dark ? 0.6 : 1)
-        let muted = luminance(s.muted), brightest = luminance(fromHSB(h, 0.62, 1))
-        func fits(_ t: Double) -> Bool {
-            let l = luminance(mix(s.card, vivid, t))
-            return ratio(l, muted) >= 4.6 && (!dark || ratio(l, brightest) >= 3.2)
-        }
-        var lo = 0.0, hi = dark ? 0.45 : 0.2
-        if fits(hi) { return mix(s.card, vivid, hi) }
+        let full = hex(l: oklch(s.card).l + (dark ? washLift.dark : washLift.light),
+                       c: dark ? washChroma.dark : washChroma.light, h: agentHue(slot, s))
+        let muted = luminance(s.muted)
+        func fits(_ t: Double) -> Bool { ratio(luminance(mix(s.card, full, t)), muted) >= 4.6 }
+        if fits(1) { return full }
+        var lo = 0.0, hi = 1.0
         for _ in 0..<14 {
             let mid = (lo + hi) / 2
             if fits(mid) { lo = mid } else { hi = mid }
         }
-        return mix(s.card, vivid, lo)
+        return mix(s.card, full, lo)
     }
 
-    private static func search(_ h: Double, _ grounds: [Double], _ want: Double, _ dark: Bool) -> UInt32 {
-        func at(_ x: Double) -> UInt32 { x <= 1 ? fromHSB(h, 0.62, x) : fromHSB(h, 0.62 * (2 - x), 1) }
-        var lo = 0.0, hi = dark ? 2.0 : 1.0
+    /// The hue at lightness from, or deeper (light mode) or lighter (dark)
+    /// as far as keeps want:1 on every ground, in 14 halvings.
+    private static func search(_ h: Double, _ from: Double, _ grounds: [Double], _ want: Double, _ dark: Bool) -> UInt32 {
+        func ok(_ l: Double) -> Bool {
+            let y = luminance(hex(l: l, c: markChroma, h: h))
+            return grounds.allSatisfy { ratio(y, $0) >= want }
+        }
+        if ok(from) { return hex(l: from, c: markChroma, h: h) }
+        var lo = from, hi = dark ? 1.0 : 0.0
         for _ in 0..<14 {
             let mid = (lo + hi) / 2
-            let l = luminance(at(mid))
-            if grounds.allSatisfy({ ratio(l, $0) >= want }) {
-                if dark { hi = mid } else { lo = mid }
-            } else if dark { lo = mid } else { hi = mid }
+            if ok(mid) { hi = mid } else { lo = mid }
         }
-        return at(dark ? hi : lo)
+        return hex(l: hi, c: markChroma, h: h)
     }
 
     private static func mark(_ slot: Int, _ s: Swatches, _ dark: Bool) -> UInt32 {
-        search(agentHue(slot, s), [wash(slot, s, dark), s.selection].map(luminance), 3.2, dark)
+        search(agentHue(slot, s), dark ? markLightness.dark : markLightness.light,
+               [wash(slot, s, dark), s.selection].map(luminance), 3.2, dark)
     }
 
     private static func ink(_ slot: Int, _ s: Swatches, _ dark: Bool) -> UInt32 {
-        search(agentHue(slot, s), [s.sidebar, s.ground, s.card, s.panel].map(luminance), 4.6, dark)
+        search(agentHue(slot, s), dark ? inkLightness.dark : inkLightness.light,
+               [s.sidebar, s.ground, s.card, s.panel].map(luminance), 4.6, dark)
     }
 }
 
@@ -246,20 +274,20 @@ enum Look: Equatable {
     var ended: Bool { self == .exited || self == .exitedWithError || self == .failed }
 
     /// The mark's colour, by its colour role; a working one takes its agent's.
-    func color(redOnDone: Bool, id: String) -> Color {
+    func color(redOnDone: Bool, session: Session) -> Color {
         switch self {
         case .failed, .needs, .stalled, .exitedWithError: return Theme.needs
         case .frozen: return Theme.frozen
         case .paused, .pausing: return Theme.paused
-        case .working: return AgentColor.colors(id).mark
+        case .working: return AgentColor.colors(session).mark
         case .done: return redOnDone ? Theme.needs : Theme.done
         case .exited, .starting, .idle: return Theme.muted
         }
     }
 
     /// The state's words in its colour, away from its card.
-    func textColor(redOnDone: Bool, id: String) -> Color {
-        self == .working ? AgentColor.colors(id).ink : color(redOnDone: redOnDone, id: id)
+    func textColor(redOnDone: Bool, session: Session) -> Color {
+        self == .working ? AgentColor.colors(session).ink : color(redOnDone: redOnDone, session: session)
     }
 
     /// A session's state in plain words; a parked finished turn is Parked.

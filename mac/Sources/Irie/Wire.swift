@@ -45,10 +45,14 @@ struct Session: Codable, Identifiable, Equatable {
     /// What the trod bot did for it in this night's shift or the last
     /// (DESIGN §4.10); nil when it did nothing.
     var trod: TrodRow?
+    /// Which of the agents' colours it takes while it works, from 1 to
+    /// Theme.agentSlots, the same for as long as it lives; the core picks
+    /// it so that cards side by side differ (internal/core, hue.go).
+    var hue: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
-        case order, parked, frozen, freezing, priority, loose, trod
+        case order, parked, frozen, freezing, priority, loose, trod, hue
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }

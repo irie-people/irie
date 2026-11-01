@@ -329,9 +329,9 @@ extension View {
                     (s.profile ?? "").isEmpty ? (s.model ?? "") : "+" + s.profile!].filter { !$0.isEmpty }.joined(separator: " · ")
         let helpers = Array((s.subagents ?? []).prefix(2))
         let more = (s.subagents ?? []).count - helpers.count
-        let tint = AgentColor.colors(s.id)
+        let tint = AgentColor.colors(s)
         HStack(alignment: .top, spacing: 11) {
-            StateMark(look: look, color: look.color(redOnDone: c.redOnDone, id: s.id), size: 18)
+            StateMark(look: look, color: look.color(redOnDone: c.redOnDone, session: s), size: 18)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
