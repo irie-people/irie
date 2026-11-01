@@ -521,21 +521,34 @@ func (c *Core) record(x *session, e event.Event) {
 // caller holds c.mu.
 func (c *Core) list() []ipc.Session {
 	out := make([]ipc.Session, 0, len(c.sessions))
-	var from time.Time
-	if n := c.cfg().Trod; n.On {
-		from, _, _ = n.Shift(time.Now())
-	}
+	from := c.trodFrom(time.Now())
 	for _, x := range c.sessions {
-		s := x.wire()
-		if !from.IsZero() {
-			s.Trod = trodRow(&x.track, from)
-		}
-		out = append(out, s)
+		out = append(out, c.row(x, from))
 	}
 	c.sortRows(out)
 	out = append(out, c.peerRows(len(out))...)
 	c.giveHues(out)
 	return out
+}
+
+// trodFrom is when the trod bot's shift began, this night's or the last,
+// or zero while the bot is off. The caller holds c.mu.
+func (c *Core) trodFrom(now time.Time) time.Time {
+	if n := c.cfg().Trod; n.On {
+		from, _, _ := n.Shift(now)
+		return from
+	}
+	return time.Time{}
+}
+
+// row is x's row as the list has it, before the list gives it its place
+// and colour. The caller holds c.mu.
+func (c *Core) row(x *session, from time.Time) ipc.Session {
+	s := x.wire()
+	if !from.IsZero() {
+		s.Trod = trodRow(&x.track, from)
+	}
+	return s
 }
 
 // changes returns frames for the rows that changed since the last call.
@@ -557,6 +570,27 @@ func (c *Core) changes() []ipc.Frame {
 	}
 	c.published = now
 	return frames
+}
+
+// changesOf is changes for what only one session can change, such as its
+// status line's figures: a frame for its row when the row changed since
+// subscribers last heard of it, and no diff of the others, which wait for
+// the next tick. A row they never heard of, or one with no colour yet,
+// takes the whole diff, which places it and gives it one. The caller holds
+// c.mu.
+func (c *Core) changesOf(x *session) []ipc.Frame {
+	old, ok := c.published[x.id]
+	if !ok || x.hue == 0 {
+		return c.changes()
+	}
+	defer c.perf.Since("changes.one", time.Now())
+	s := c.row(x, c.trodFrom(time.Now()))
+	s.Order = old.Order
+	if reflect.DeepEqual(old, s) {
+		return nil
+	}
+	c.published[x.id] = s
+	return []ipc.Frame{{T: ipc.FrameUpsert, Session: &s}}
 }
 
 // CallFrom answers one request from the process peer (ipc.PeerCaller): as

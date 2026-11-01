@@ -32,7 +32,8 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 		return nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
 	x.statusN++
-	if !reflect.DeepEqual(x.usage, u) {
+	changed := !reflect.DeepEqual(x.usage, u)
+	if changed {
 		x.usage = u
 		if err := writeJSON(c.paths.StatusFile(x.id), u); err != nil {
 			c.log.Warn("status.json", "session", x.id, "err", err)
@@ -40,17 +41,24 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	} else {
 		c.perf.Add("status.unchanged", 1)
 	}
-	c.takePlan(u.FiveHour, u.SevenDay)
+	plan := c.takePlan(u.FiveHour, u.SevenDay)
 	row := x.wire()
 	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents, Parked: row.Parked}
-	// Its colour is the one its row has, given by the time changes lists it.
-	frames := c.changes()
+	// An update that changed nothing does nothing more: idle sessions send
+	// one every few seconds. One that did can change only its own row. A
+	// row with no colour yet gets one from the diff.
+	var frames []ipc.Frame
+	if changed || x.hue == 0 {
+		frames = c.changesOf(x)
+	}
 	if row.State == ipc.StateWorking {
 		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.hue)
 	}
 	c.mu.Unlock()
 	c.publish(frames)
-	c.publishHeader()
+	if plan {
+		c.publishHeader()
+	}
 	return reply, nil
 }
 
