@@ -49,10 +49,13 @@ struct Session: Codable, Identifiable, Equatable {
     /// Theme.agentSlots, the same for as long as it lives; the core picks
     /// it so that cards side by side differ (internal/core, hue.go).
     var hue: Int?
+    /// Its tutor mode, explain or teach, while it is in one
+    /// (docs/proposals/learning.md).
+    var tutor: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
-        case order, parked, frozen, freezing, priority, loose, trod, hue
+        case order, parked, frozen, freezing, priority, loose, trod, hue, tutor
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -295,11 +298,45 @@ struct InputArgs: Encodable, Equatable {
     /// The session a task typed before was added to, as more for its jot:
     /// the core takes it back and starts it on its own (DESIGN §4.2).
     var apart: String?
+    /// off, explain or teach for a task, when its words do not say; nil
+    /// takes learn.tutor. Only a core whose hello lists spawn-tutor takes it.
+    var tutor: String?
 
     enum CodingKeys: String, CodingKey {
-        case text, session, outside, repo, profile, model, apart
+        case text, session, outside, repo, profile, model, apart, tutor
         case inPlace = "in_place"
     }
+}
+
+/// What the Help menu shows (docs/proposals/learning.md): the user's own
+/// links, then the learning resources, and the glossary.
+struct LearnArgs: Encodable {
+    var session: String?
+}
+
+struct LearnResult: Decodable {
+    var resources: [LearnResource]
+    var glossary: [LearnTerm]
+}
+
+struct LearnResource: Decodable, Identifiable, Hashable {
+    var group: String
+    var title: String
+    var url: String
+    var about: String
+    var note: String?
+    var lang: String?
+    /// One of the user's own links (learn.links).
+    var yours: Bool?
+    /// A tutorial of a language the shown session's project is written in.
+    var here: Bool?
+    var id: String { title }
+}
+
+struct LearnTerm: Decodable, Identifiable, Hashable {
+    var term: String
+    var means: String
+    var id: String { term }
 }
 
 /// What the core made of it: spawned, added, answered, ran or asked, and

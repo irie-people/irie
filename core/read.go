@@ -65,6 +65,9 @@ func Read(in InputArgs, v View) (Step, error) {
 	if a.Profile == "" {
 		a.Profile = in.Profile
 	}
+	if a.Tutor == "" {
+		a.Tutor = in.Tutor
+	}
 	a.Model = in.Model
 	// A typed task is a jot: one that reads as more for the jot sent just
 	// before goes to that jot's agent instead (DESIGN §4.2). Apart starts
