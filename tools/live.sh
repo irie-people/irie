@@ -135,11 +135,12 @@ go vet ./...
 go test ./...
 
 # A change outside the Go code needs no new core, so the running one stays,
-# unless it runs from somewhere else.
+# unless it runs from somewhere else. Nor does one to the tests' helpers in
+# internal/testutil, which no build of irie links.
 gonew=1
 installed=$(rev "$bin")
 if [ -n "$installed" ] && { [ -z "$corebin" ] || [ "$corebin" = "$bin" ]; } &&
-	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal ':(exclude)*_test.go' 2>/dev/null; then
+	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal ':(exclude)*_test.go' ':(exclude)internal/testutil' 2>/dev/null; then
 	gonew=
 fi
 if [ -n "$gonew" ]; then go build -o "$bin.new" ./cmd/irie; fi
