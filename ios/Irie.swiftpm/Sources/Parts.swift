@@ -111,7 +111,7 @@ struct SecondaryButton: ButtonStyle {
                     Label("Thaw", systemImage: "play")
                 }
             } else {
-                Button { Task { await app.op(conn, "freeze", ["session": s.id], undo: "Froze “\(s.name)”") } } label: {
+                Button { Task { await app.op(conn, "freeze", ["session": s.id], done: "Froze “\(s.name)”") } } label: {
                     Label("Freeze", systemImage: "snowflake")
                 }
             }
