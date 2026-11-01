@@ -697,7 +697,7 @@ func TestSubmitSpawnsAndSelectsTheNewRow(t *testing.T) {
 	}
 	m = typeText(m, "@/home/alice/code/website describe this repo")
 	m = send(m, keyMsg("enter"))
-	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website"}}
+	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website", Jot: true}}
 	if !reflect.DeepEqual(b.spawns, want) {
 		t.Fatalf("spawns = %+v, want %+v", b.spawns, want)
 	}
@@ -1096,6 +1096,29 @@ func TestPlaceholderShowsTheMarkWhenThereIsRoom(t *testing.T) {
 	}
 	if short := view(80, 14); strings.Contains(short, "☀") || !strings.Contains(short, "[Tab]") {
 		t.Errorf("80×14 placeholder:\n%s", short)
+	}
+	if strings.Contains(tall, "Welcome") {
+		t.Errorf("a welcome with sessions:\n%s", tall)
+	}
+}
+
+func TestTheSlotWelcomesAFirstRun(t *testing.T) {
+	m := newSlot(nil, SlotOptions{FocusKey: "C-]"})
+	m.Update(tea.WindowSizeMsg{Width: 90, Height: 32})
+	view := func() string { return ansiRE.ReplaceAllString(m.View().Content, "") }
+	if strings.Contains(view(), "Welcome") {
+		t.Errorf("a welcome before the core listed its sessions:\n%s", view())
+	}
+	m.applyFrame(ipc.Frame{T: ipc.FrameSnapshot})
+	got := view()
+	for _, want := range []string{"Welcome.", "To try one, type:", FirstTask, "[Tab]"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("first run lacks %q:\n%s", want, got)
+		}
+	}
+	m.applyFrame(ipc.Frame{T: ipc.FrameUpsert, Session: &ipc.Session{ID: "s1", Name: "write-a-haiku", State: ipc.StateWorking}})
+	if strings.Contains(view(), "Welcome") {
+		t.Errorf("a welcome with a session:\n%s", view())
 	}
 }
 

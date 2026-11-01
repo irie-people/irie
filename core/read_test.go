@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // view is a list as a client would show it: a running session, a frozen
@@ -122,9 +123,9 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 		text string
 		want SpawnArgs
 	}{
-		{"fix the flaky test", SpawnArgs{Task: "fix the flaky test", Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet"}},
-		{"@web fix it", SpawnArgs{Task: "fix it", Repo: "web", Profile: "haiku", Model: "sonnet"}},
-		{"+auto @~/code/x! fix it", SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x", InPlace: true, Profile: "auto", Model: "sonnet"}},
+		{"fix the flaky test", SpawnArgs{Task: "fix the flaky test", Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Jot: true}},
+		{"@web fix it", SpawnArgs{Task: "fix it", Repo: "web", Profile: "haiku", Model: "sonnet", Jot: true}},
+		{"+auto @~/code/x! fix it", SpawnArgs{Task: "fix it", Repo: "/home/alice/code/x", InPlace: true, Profile: "auto", Model: "sonnet", Jot: true}},
 	} {
 		in := menus
 		in.Text = c.text
@@ -133,8 +134,14 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 			t.Errorf("%q: %s %+v, %v; want spawn %+v", c.text, st.Op, st.Args, err, c.want)
 		}
 	}
+	// A task typed again with Apart is taken back from the session it went
+	// to, which the step names for the words.
+	st, err := Read(InputArgs{Text: "also check the docs", Apart: "s1"}, view())
+	if want := (SpawnArgs{Task: "also check the docs", Jot: true, Apart: "s1"}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) || st.Session == nil || st.Session.ID != "s1" {
+		t.Errorf("apart: %+v, %v", st, err)
+	}
 	// A question about an agent answers, and starts nothing.
-	st, err := Read(InputArgs{Text: "how's the login going?"}, view())
+	st, err = Read(InputArgs{Text: "how's the login going?"}, view())
 	if err != nil || st.Op != "" || st.Session == nil || st.Session.ID != "s1" || st.Answer != "fix login: working" {
 		t.Errorf("hows: %+v, %v", st, err)
 	}
@@ -146,6 +153,7 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 	login, parser := &v.Sessions[0], &v.Sessions[1]
 	started := Session{ID: "s9", Name: "flaky test", Branch: "irie/flaky-test", Copied: []string{".env"}, Warnings: []string{"memory is low: 2.1 GB free of 16 GB"}}
 	ask := &Choice{ID: "c1", Question: "Close “fix login” while it works?", Options: []ChoiceOption{{Key: "go", Label: "Close it"}}}
+	until := time.Date(2026, 10, 31, 12, 0, 8, 0, time.UTC)
 	for _, c := range []struct {
 		name   string
 		st     Step
@@ -156,6 +164,10 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 		{"spawn", Step{Op: OpSpawn, Args: SpawnArgs{Task: "x"}}, SpawnResult{Session: started}, nil,
 			InputResult{Did: InputSpawned, Op: OpSpawn, Session: &started,
 				Text: "Started flaky test on irie/flaky-test. Memory is low: 2.1 GB free of 16 GB. Copied .env."}},
+		{"added", Step{Op: OpSpawn, Args: SpawnArgs{Task: "also x", Jot: true}}, SpawnResult{Session: *login, Added: true, Until: until}, nil,
+			InputResult{Did: InputAdded, Op: OpSpawn, Session: login, Until: until, Text: "Added to fix login, the task sent just before."}},
+		{"apart, too late", Step{Op: OpSpawn, Args: SpawnArgs{Task: "also x", Jot: true, Apart: "s1"}, Session: login}, SpawnResult{Session: Session{ID: "s9", Name: "also x"}, Late: true}, nil,
+			InputResult{Did: InputSpawned, Op: OpSpawn, Session: &Session{ID: "s9", Name: "also x"}, Text: "Started also x. fix login has it too."}},
 		{"tool", Step{Op: OpTool}, &SpawnResult{Session: Session{ID: "s8", Name: "setup"}}, nil,
 			InputResult{Did: InputRan, Op: OpTool, Session: &Session{ID: "s8", Name: "setup"}, Show: true, Text: "Started setup."}},
 		{"rename", Step{Op: OpRename, Session: login}, RenameResult{Session: Session{ID: "s1", Name: "login-2"}}, nil,

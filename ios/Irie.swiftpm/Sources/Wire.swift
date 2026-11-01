@@ -41,10 +41,13 @@ struct Session: Decodable, Identifiable, Equatable {
     var frozen: Date?
     var freezing: Bool?
     var loose: Loose?
+    /// Which of the agents' colours it takes while it works, from 1; the
+    /// core picks it so that cards side by side differ.
+    var hue: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name, state, reason, detail, command, warnings, created, cwd, repo, worktree, branch, profile, subagents, tokens
-        case model, context, memory, routed, rated, order, parked, priority, frozen, freezing, loose
+        case model, context, memory, routed, rated, order, parked, priority, frozen, freezing, loose, hue
         case exitCode = "exit_code"
         case costUSD = "cost_usd"
         case taskClass = "class"

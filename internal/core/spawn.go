@@ -344,8 +344,10 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	// A reopened session starts unfrozen (freeze.go).
+	// A reopened session starts unfrozen (freeze.go), with no jots
+	// waiting for it from before it closed (follow.go).
 	os.Remove(c.paths.FreezeFile(id))
+	os.Remove(c.paths.FollowUpFile(id))
 	s := harness.Spawn{
 		Session: id, Task: j.task, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,

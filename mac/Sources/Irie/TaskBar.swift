@@ -5,7 +5,9 @@ import SwiftUI
 /// so the list above never shifts: the hint is the placeholder, and notices
 /// float above the bar. Beside the text, a menu picks the repo a task runs
 /// in; an @repo word in the text wins over it, and +profile still picks the
-/// agent. ⌘N opens the full new-task sheet.
+/// agent. ⌘N opens the full new-task sheet. It empties as a task starts,
+/// so the next can be typed at once; one that reads as more for the task
+/// just sent goes to that task's agent instead (DESIGN §4.2).
 struct TaskBar: View {
     @EnvironmentObject private var store: Store
     /// Kept in the defaults as it is typed, so an unsent task survives the
@@ -23,7 +25,7 @@ struct TaskBar: View {
             // It keeps the keyboard while a task starts and after, since the
             // task starts behind the session on show; submit() refuses a
             // second start until the first is done.
-            TextField(focused ? "@repo +profile, then the task" : "What should we work on?", text: $text, axis: .vertical)
+            TextField(placeholder, text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(Theme.font(13.5))
                 .foregroundStyle(Theme.ink)
@@ -35,6 +37,7 @@ struct TaskBar: View {
                 .onChange(of: text) {
                     if store.notice?.isError == true { store.dismissNotice() }
                 }
+                .onChange(of: store.focusTaskBar) { focused = true }
                 .accessibilityLabel("New task")
                 .accessibilityHint("Start with @repo or +profile to pick where and who. Return starts it.")
             VStack(alignment: .trailing, spacing: 0) {
@@ -61,10 +64,19 @@ struct TaskBar: View {
         .onReceive(NotificationCenter.default.publisher(for: .irieQuickTask)) { _ in focused = true }
     }
 
+    private var blank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// While a task starts, the hint says how to add to it.
+    private var placeholder: String {
+        if store.spawning { return "Starting… “also …” adds to it" }
+        return focused ? "@repo +profile, then the task" : "What should we work on?"
+    }
+
     private var startButton: some View {
             Button(action: submit) {
                 Group {
-                    if store.spawning {
+                    // A task still starting shows until the next is typed.
+                    if store.spawning && blank {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: "arrow.up").font(.system(size: 12, weight: .bold))
@@ -75,7 +87,7 @@ struct TaskBar: View {
                 .foregroundStyle(Theme.onAccent)
             }
             .buttonStyle(.plain)
-            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.spawning)
+            .disabled(blank)
             .help("Start (Return)")
             .accessibilityLabel("Start the task")
     }
@@ -100,6 +112,13 @@ struct TaskBar: View {
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(Theme.accentInk)
                         .help("Take it back (⌘Z)")
+                    }
+                    if let apart = n.apart {
+                        Button("New task") { store.startApart(apart) }
+                            .buttonStyle(.borderless)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(Theme.accentInk)
+                            .help("Take it back and start it as a task of its own")
                     }
                 }
                     .padding(.horizontal, Theme.inset)
@@ -147,17 +166,23 @@ struct TaskBar: View {
 
     private func submit() {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !input.isEmpty, !store.spawning else { return }
+        guard !input.isEmpty else { return }
         store.dismissNotice()
+        // The bar empties at once, so the next can be typed while this one
+        // starts; one that reads as more for it goes to its agent (DESIGN
+        // §4.2). ↑ brings it back.
+        remember(input)
+        text = ""
         Task {
             let shown = store.selection
             if await store.input(input) {
-                remember(input)
-                text = ""
                 // A task starts behind the session on show and the bar keeps
                 // the keyboard for the next one; when nothing was on show, the
                 // store gives the new agent's terminal the keyboard.
-                if store.selection != shown { focused = false }
+                if store.selection != shown, blank { focused = false }
+            } else if blank {
+                // It did not go: its text comes back, to fix.
+                text = input
             }
         }
     }

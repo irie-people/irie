@@ -68,6 +68,10 @@ const (
 	// OpTrod is the trod bot's report: whether it works now, the
 	// rules and guidelines it gives, and what it did (DESIGN §4.10).
 	OpTrod = "trod"
+	// OpReady checks that the computer has what Irie needs, as its agents
+	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
+	// a ready.Report, for the Mac app's welcome.
+	OpReady = "ready"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -169,6 +173,11 @@ type Session struct {
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
+
+	// Hue is which of the agents' colours it takes while it works, from 1
+	// to ui.AgentColors, the same for as long as it lives (internal/core,
+	// hue.go); 0 until the core gives it one.
+	Hue int `json:"hue,omitempty"`
 
 	// Loose is what its jot left that has not landed, by the jot dog's
 	// last look, while its turn is over (DESIGN §4.8); nil when the jot is
@@ -554,10 +563,28 @@ type SpawnArgs struct {
 	Model string `json:"model,omitempty"`
 	// Continues is the session a failover carries the task on from.
 	Continues string `json:"continues,omitempty"`
+	// Jot is a task the user typed in a task bar or the command bar. One
+	// that reads as more for the jot sent just before it, in the same place
+	// and for the same agent, within spawn.follow_up_window, goes to that
+	// jot's agent instead of starting a session (DESIGN §4.2), and the
+	// result says Added.
+	Jot bool `json:"jot,omitempty"`
+	// Apart takes a jot that was added to session Apart back, if its agent
+	// has not had it yet, and starts it as a task of its own.
+	Apart string `json:"apart,omitempty"`
 }
 
 type SpawnResult struct {
 	Session Session `json:"session"`
+	// Added says the task went to Session's agent, as more for its jot,
+	// rather than starting Session. It is typed to the agent once the
+	// agent can take it, and not before Until, so that a spawn with Apart
+	// can still take it back.
+	Added bool      `json:"added,omitempty"`
+	Until time.Time `json:"until,omitzero"`
+	// Late says, for a spawn with Apart, that the agent of the session the
+	// task had been added to has it already.
+	Late bool `json:"late,omitempty"`
 }
 
 // CompleteArgs carry the command bar token to complete, such as "@web" or
@@ -674,7 +701,8 @@ type ResultResult struct {
 }
 
 // ToolArgs start a tool session: setup (`irie setup local`), models
-// (`irie ctl local`) or switch, the dead man's switch guide: a Claude Code
+// (`irie ctl local`), ready (`irie setup`, which fixes what the ready op
+// finds missing) or switch, the dead man's switch guide: a Claude Code
 // session that runs one of Irie's own skills (docs/proposals/extensions.md
 // §2.2).
 type ToolArgs struct {
@@ -685,6 +713,7 @@ type ToolArgs struct {
 const (
 	ToolSetup  = "setup"
 	ToolModels = "models"
+	ToolReady  = "ready"
 	ToolSwitch = "switch"
 )
 

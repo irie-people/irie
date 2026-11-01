@@ -42,10 +42,11 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	}
 	row := x.wire()
 	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents, Parked: row.Parked}
-	if row.State == ipc.StateWorking {
-		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.id)
-	}
+	// Its colour is the one its row has, given by the time changes lists it.
 	frames := c.changes()
+	if row.State == ipc.StateWorking {
+		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.hue)
+	}
 	c.mu.Unlock()
 	c.publish(frames)
 	c.publishHeader()

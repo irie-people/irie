@@ -97,8 +97,12 @@ struct CoreConfig: Decodable, Equatable {
         var closeDelay: String
         /// Agent teams' teammates: panes beside their session, or off.
         var teammates: String
+        /// How long after a jot one that reads as more for it goes to its
+        /// agent; "0s" never. Nil from a core that does not.
+        var followUpWindow: String?
         enum CodingKeys: String, CodingKey {
             case defaultProfile = "default_profile", closeWhenDone = "close_when_done", closeDelay = "close_delay", teammates
+            case followUpWindow = "follow_up_window"
         }
 
         init(from decoder: Decoder) throws {
@@ -108,6 +112,7 @@ struct CoreConfig: Decodable, Equatable {
             closeDelay = try c.decode(String.self, forKey: .closeDelay)
             // A core from before agent teams starts none.
             teammates = try c.decodeIfPresent(String.self, forKey: .teammates) ?? "off"
+            followUpWindow = try c.decodeIfPresent(String.self, forKey: .followUpWindow)
         }
     }
 
@@ -483,6 +488,8 @@ private struct GeneralSettings: View {
 
     /// How long a finished session waits before it closes.
     private static let delays = ["10s", "30s", "1m", "2m", "5m", "10m"]
+    /// How long after a jot one that reads as more for it goes to its agent.
+    private static let windows = ["0s", "1m", "2m", "5m", "10m"]
     /// How long Irie may stop answering before the freeze dog restarts it.
     private static let freezes = ["5s", "10s", "20s", "30s", "1m"]
     private static let defaultFreeze = "10s"
@@ -511,6 +518,19 @@ private struct GeneralSettings: View {
                     Text("Agent teams")
                 } footer: {
                     footnote("Each teammate runs in a terminal of its own, which the terminal view shows beside its session. Teammates are Claude Code sessions too, so a team uses more tokens. Sessions started from now on follow this.")
+                }
+                if let window = c.spawn.followUpWindow {
+                    Section {
+                        Picker("Add a jot to the one just sent", selection: model.binding(window, "spawn.follow_up_window") { $0.spawn.followUpWindow = $1 }) {
+                            ForEach(Self.windows + (Self.windows.contains(window) ? [] : [window]), id: \.self) { w in
+                                Text(w == "0s" ? "Never" : "Within " + Self.spoken(w)).tag(w)
+                            }
+                        }
+                    } header: {
+                        Text("Jots")
+                    } footer: {
+                        footnote("A jot that starts with “also”, “oh and”, “it”, “PS” or the like, or is only a link, a path or an error message, goes to the agent of the jot sent just before, in the same place, instead of starting one. Until it goes in, New task above the bar starts it apart.")
+                    }
                 }
                 Section {
                     Toggle("Watch each jot until its work lands", isOn: model.bind(c, \.dog.watch, "dog.watch"))

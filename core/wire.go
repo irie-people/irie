@@ -122,6 +122,7 @@ const (
 	OpFlip            = ipc.OpFlip
 	OpInput           = ipc.OpInput
 	InputSpawned      = ipc.InputSpawned
+	InputAdded        = ipc.InputAdded
 	InputAnswered     = ipc.InputAnswered
 	InputRan          = ipc.InputRan
 	InputAsked        = ipc.InputAsked
@@ -157,6 +158,7 @@ const (
 	OpDog             = ipc.OpDog
 	OpConfig          = ipc.OpConfig
 	OpTrod            = ipc.OpTrod
+	OpReady           = ipc.OpReady
 	FeatureSpawnModel = ipc.FeatureSpawnModel
 	FeatureWatch      = ipc.FeatureWatch
 	ViewApp           = ipc.ViewApp
@@ -194,6 +196,7 @@ const (
 	Bad               = ipc.Bad
 	ToolSetup         = ipc.ToolSetup
 	ToolModels        = ipc.ToolModels
+	ToolReady         = ipc.ToolReady
 	ToolSwitch        = ipc.ToolSwitch
 	FrameSnapshot     = ipc.FrameSnapshot
 	FrameUpsert       = ipc.FrameUpsert

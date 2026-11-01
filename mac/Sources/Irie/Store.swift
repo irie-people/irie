@@ -68,7 +68,12 @@ final class Store: ObservableObject {
     /// Whether the new-task sheet is open (⌘N).
     @Published var newTaskSheet = false
     @Published var notice: Notice?
-    @Published var spawning = false
+    /// Whether a task is starting. The task bar takes the next one
+    /// meanwhile, so several may be on their way.
+    @Published private(set) var spawning = false
+    private var tasksStarting = 0 {
+        didSet { spawning = tasksStarting > 0 }
+    }
     /// The session whose name its card has open to edit, and the name as
     /// typed so far.
     @Published var renaming: String?
@@ -115,6 +120,21 @@ final class Store: ObservableObject {
     /// (Closing.swift).
     @Published var closed: [ClosedSession] = []
     var outsideProblem = ""
+    /// What this computer still lacks of what Irie needs, from the core's
+    /// ready op, and whether the core has it (Onboarding.swift).
+    @Published var readiness: ReadyReport?
+    var canReady = false
+    var checkingReady = false
+    /// The app starting Irie itself, and why it couldn't (Onboarding.swift).
+    /// It tries once a launch, before it has ever reached a core.
+    @Published var starting = false
+    @Published var startProblem: StartProblem?
+    private var everOnline = false
+    private var triedStart = false
+    /// The walk through a first task, and a bump that gives the task bar
+    /// the keyboard (Onboarding.swift).
+    @Published var coach: Coach?
+    @Published var focusTaskBar = 0
     /// The session the core is to show next, and whether a request is out.
     private var wanted: (id: String, focus: Bool)?
     private var showing = false
@@ -127,6 +147,9 @@ final class Store: ObservableObject {
         var isError: Bool
         /// It offers Undo, which takes back the step it reports.
         var undo = false
+        /// It reports a task added to the one before, and offers New task:
+        /// this input, which takes it back and starts it apart.
+        var apart: InputArgs?
     }
 
     let client: CoreClient
@@ -167,6 +190,11 @@ final class Store: ObservableObject {
                 }
                 attach = try await client.call("attach-info", Optional<Empty>.none, timeout: 2, as: AttachInfo.self)
                 link = .online(version: hello.version)
+                everOnline = true
+                starting = false
+                startProblem = nil
+                canReady = hello.features.contains("ready")
+                checkReady()
                 // A core that restarted asks again.
                 splitShown = nil
                 canPickModel = hello.features.contains("spawn-model")
@@ -183,6 +211,13 @@ final class Store: ObservableObject {
                 link = .offline("The core went away.")
             } catch {
                 link = .offline(Self.describe(error))
+                // Opened from the Finder, the Dock or Spotlight, with no
+                // Irie running: the app starts it (Onboarding.swift).
+                if !everOnline, !triedStart, Self.notRunning(error) {
+                    triedStart = true
+                    await startIrie()
+                    continue
+                }
             }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
@@ -195,10 +230,17 @@ final class Store: ObservableObject {
     }
 
     private static func describe(_ error: Error) -> String {
-        if case let CoreError.system(call, code) = error, call == "connect", code == ENOENT || code == ECONNREFUSED {
+        if notRunning(error) {
             return "Irie isn’t running."
         }
         return error.localizedDescription
+    }
+
+    private static func notRunning(_ error: Error) -> Bool {
+        if case let CoreError.system(call, code) = error, call == "connect", code == ENOENT || code == ECONNREFUSED {
+            return true
+        }
+        return false
     }
 
     private func apply(_ f: Frame) {
@@ -222,6 +264,7 @@ final class Store: ObservableObject {
             sessions = (f.sessions ?? []).sorted(by: Self.before)
         case "upsert":
             guard let s = f.session else { return }
+            noteCoach(s)
             if let i = sessions.firstIndex(where: { $0.id == s.id }) {
                 let moved = sessions[i].order != s.order
                 sessions[i] = s
@@ -233,6 +276,7 @@ final class Store: ObservableObject {
         case "remove":
             sessions.removeAll { $0.id == f.id }
             if let id = f.id { lingering[id] = nil }
+            if let id = f.id, coach?.session == id { coach = nil }
         case "outside":
             applyOutside(f)
             return
@@ -592,21 +636,45 @@ final class Store: ObservableObject {
         }
         args.profile = agent
         if canPickModel { args.model = model }
-        spawning = true
-        defer { spawning = false }
+        return await send(args)
+    }
+
+    /// Takes a task added to the one before back and starts it as a task
+    /// of its own (the notice's New task).
+    func startApart(_ args: InputArgs) {
+        dismissNotice()
+        Task { _ = await send(args) }
+    }
+
+    private func send(_ args: InputArgs) async -> Bool {
+        tasksStarting += 1
+        defer { tasksStarting -= 1 }
         do {
-            // A task in a repo may make a worktree and check out submodules first.
+            // A task in a repo may make a worktree and check out submodules
+            // first; one added to a task still starting waits for it.
             let r = try await client.call("input", args, timeout: 600, as: InputResult.self)
             switch r.did {
             case "asked":
                 if let c = r.choice, let op = r.op { await answer(op, c) }
             case "answered":
                 say(r.text, error: false, seconds: 8)
+            case "added":
+                // It went to the agent of the task just before, which gets
+                // it once the delay is over; until then New task takes it
+                // back and starts it apart.
+                var apart: InputArgs?
+                if let id = r.session?.id {
+                    apart = args
+                    apart?.apart = id
+                }
+                let left = max(3, (r.until?.timeIntervalSinceNow ?? 0).rounded(.up))
+                say(r.text, error: false, seconds: UInt64(left), apart: apart)
             default:
-                say(r.text, error: false)
+                say(r.text, error: false, seconds: args.apart == nil ? 3 : 6)
             }
             if let s = r.session {
                 if r.did == "spawned" {
+                    if coach != nil, coach?.session == nil { coach?.session = s.id }
                     // It starts behind the session on show, so a task typed
                     // mid-work never pulls the view or the keyboard away.
                     // With nothing on show, it comes straight up, ready to
@@ -685,8 +753,8 @@ final class Store: ObservableObject {
         }
     }
 
-    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false) {
-        notice = Notice(text: text, isError: error, undo: undo && canUndo)
+    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false, apart: InputArgs? = nil) {
+        notice = Notice(text: text, isError: error, undo: undo && canUndo, apart: apart)
         AccessibilityNotification.Announcement(text).post()
         guard !error else { return }
         let id = notice?.id

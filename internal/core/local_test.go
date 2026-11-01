@@ -366,16 +366,20 @@ func TestTheStatusLineHearsTheStateAndTheHelpers(t *testing.T) {
 		r := status()
 		return r.State == ipc.StateWorking && len(r.Subagents) == 1 && r.Subagents[0].Type == "Explore"
 	})
-	// While it works it has its card's colour: in ui.theme's palette until
-	// the Mac app says which one it draws in.
-	if r := status(); r.State == ipc.StateWorking && r.Color != ui.AgentColor("rosewater", s.ID) {
-		t.Errorf("working colour %q, want rosewater's %q", r.Color, ui.AgentColor("rosewater", s.ID))
+	// While it works it has its card's colour, the one its row has: in
+	// ui.theme's palette until the Mac app says which one it draws in.
+	row, _ := c.row(s.ID)
+	if row.Hue == 0 {
+		t.Fatalf("the row has no colour: %+v", row)
+	}
+	if r := status(); r.State == ipc.StateWorking && r.Color != ui.AgentColor("rosewater", row.Hue) {
+		t.Errorf("working colour %q, want rosewater's %q", r.Color, ui.AgentColor("rosewater", row.Hue))
 	}
 	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "evergreen"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if r := status(); r.State == ipc.StateWorking && r.Color != ui.AgentColor("evergreen", s.ID) {
-		t.Errorf("after the app's palette, colour %q, want evergreen's %q", r.Color, ui.AgentColor("evergreen", s.ID))
+	if r := status(); r.State == ipc.StateWorking && r.Color != ui.AgentColor("evergreen", row.Hue) {
+		t.Errorf("after the app's palette, colour %q, want evergreen's %q", r.Color, ui.AgentColor("evergreen", row.Hue))
 	}
 	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "plaid"}, nil); code(err) != ipc.CodeBadArgs {
 		t.Errorf("an unknown palette: %v", err)

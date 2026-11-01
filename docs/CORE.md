@@ -20,7 +20,7 @@ The Go package holds no state and starts nothing: the core is what runs. Its wir
 2. **Say hello.** `hello` gives the core's version, the API version and `features`, the ops it serves. Offer only what the features name, so an older core never sees an op it lacks.
 3. **Subscribe and draw.** `subscribe` sends a snapshot, then a frame for each change: `upsert` and `remove` for rows, `header`, `history`, `outside` and `closed` (DESIGN §2.4). Draw the rows in the order they come; the order is the core's (DESIGN §4.1). A client that shows the slot in its own terminal subscribes with `view: "app"`, as the Mac app does ([MAC.md](MAC.md) §2).
 4. **Send what is typed to `input`.** As typed, with the session the person had selected, the selected row outside Irie for `:move`, the client's own menus for where and on what a task runs, and any long paste it shows as a label. Show the reply's `text` as it is. A client never reads the words itself.
-5. **Send gestures to the ops they name.** A click on a card is `show`; a drag is `reorder`; the buttons and keys are `park`, `unpark`, `freeze`, `thaw`, `priority`, `close`, `reopen`, `undo`, `redo`, `rate` and `move`; an inline rename is `rename`; a message box is `send`; a conversation view is `conversation` (or `subscribe` with `conversation: true`); a settings window is `config` and `theme`. A client with no terminal of its own, such as the phone app ([PHONE.md](PHONE.md)), reads what a session's terminal shows with `screen`, whose `options` are the numbered choices of the prompt it waits on you with, and answers it with `keys`. Keys and buttons are the client's own; what they do is the core's.
+5. **Send gestures to the ops they name.** A click on a card is `show`; a drag is `reorder`; the buttons and keys are `park`, `unpark`, `freeze`, `thaw`, `priority`, `close`, `reopen`, `undo`, `redo`, `rate` and `move`; an inline rename is `rename`; a message box is `send`; a conversation view is `conversation` (or `subscribe` with `conversation: true`); a settings window is `config` and `theme`; a first-run welcome is `ready`, what the computer still lacks of what Irie needs, and its fix button is `tool` with `ready`, which runs `irie setup` in a session (DESIGN §2.7). A client with no terminal of its own, such as the phone app ([PHONE.md](PHONE.md)), reads what a session's terminal shows with `screen`, whose `options` are the numbered choices of the prompt it waits on you with, and answers it with `keys`. Keys and buttons are the client's own; what they do is the core's.
 6. **Show a terminal**, if the client has one and runs on the same machine: `attach-info` gives the tmux binary, the socket and the session to attach to, and `tmux -S <socket> attach-session -t <session>` shows the slot.
 7. **Show errors as they are.** A failed request replies `{"ok":false,"error":{"code":…,"msg":…}}`. The message is written for the person; the code (`bad_args`, `not_found`, `busy` and the rest) is for the client to act on.
 8. **Answer the freeze dog**, if the client is a window, when `hello` lists `watch`. On a connection of its own, `subscribe` with `view: "watch"`, the window's `pid` and, for an app, its `bundle`, and answer each `{"t":"ping","ping":N}` from the main loop with `{"pong":N,"front":…,"hidden":…}` on the same connection. A ping left unanswered for `ui.freeze_dog` has the core force quit the window and open the bundle again as it stood (DESIGN §2.4). The Mac app does it in `FreezeDog.swift`, on a thread of its own, so that only a stuck main thread holds an answer up.
@@ -48,7 +48,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 
 | Typed | What the core does | `did` |
 |---|---|---|
-| A task, with `@repo`, `@repo!`, `@path`, `+profile` among its first line's words (DESIGN §4.2) | `spawn`. With no `@` word it runs where `repo` and `in_place` say, the client's menu; with no `+` word on `profile`; on `model` when the client sends one | `spawned`, with `session` |
+| A task, with `@repo`, `@repo!`, `@path`, `+profile` among its first line's words (DESIGN §4.2) | `spawn`. With no `@` word it runs where `repo` and `in_place` say, the client's menu; with no `+` word on `profile`; on `model` when the client sends one. It is a jot: one that reads as more for the task typed just before ("also …", "it's …", a link) goes to that task's agent instead (DESIGN §4.2, "More for the last jot"), and the same text sent with `apart` naming that session takes it back and starts it apart | `spawned`, with `session`; or `added`, with the `session` it went to and `until` |
 | `hows X?`, `how's X going`, `how is X doing` | Answers in one line, from the row whose name, branch, repo, agent, profile or helper best matches every word | `answered` |
 | `:rename NAME`, `:rate good\|bad`, `:close`, `:prio [REASON]`, `:park`, `:unpark`, `:freeze`, `:thaw` | The op of the same name on the selected session (`session`); `:prio` promotes it, or puts a promoted one back | `ran` |
 | `:freeze all`, `:thaw all` | Every session | `ran` |
@@ -64,12 +64,13 @@ The reply:
 
 | Field | Meaning |
 |---|---|
-| `did` | `spawned`, `answered`, `ran` or `asked` |
+| `did` | `spawned`, `added`, `answered`, `ran` or `asked` |
 | `op` | The op it ran, such as `spawn`, `park` or `undo`; none for a question it answered |
 | `text` | What to tell the person, as it is |
 | `session` | The session it started or acted on. A client selects it; after a `spawned`, the Mac app shows it only when nothing else is on show |
 | `show` | Show `session` and give it the keyboard |
 | `choice` | When `asked`: the core's question, with its options, the recommended one first. Answer through `op` (`undo` or `redo`) with `choice_id` and the option's `key` (DESIGN §4.5) |
+| `until` | When `added`: when the task is typed to the agent. Until then, the same input with `apart` set to `session` takes it back and starts it on its own; a client may offer that as a button |
 
 A long paste the client shows as a label goes in `pastes`, each `{label, text}`. The core reads the words around the labels first, then puts each paste back whole in its place, so a paste's own `@` and `+` words stay text.
 

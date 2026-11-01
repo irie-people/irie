@@ -1,5 +1,7 @@
 package ipc
 
+import "time"
+
 // OpInput reads what a person typed in a task bar or command bar, and does
 // it: starts a task, answers a status question or runs a : command (DESIGN
 // §4.2). Every client sends its typing here, so the words mean the same in
@@ -9,6 +11,7 @@ const OpInput = "input"
 // What an input did, InputResult's Did.
 const (
 	InputSpawned  = "spawned"  // it started the task: Session
+	InputAdded    = "added"    // the task went to Session's agent, as more for the jot before it: Until
 	InputAnswered = "answered" // it answered a question and changed nothing
 	InputRan      = "ran"      // it ran a : command
 	InputAsked    = "asked"    // nothing changed yet: Choice asks what to do
@@ -35,6 +38,9 @@ type InputArgs struct {
 	InPlace bool   `json:"in_place,omitempty"`
 	Profile string `json:"profile,omitempty"`
 	Model   string `json:"model,omitempty"`
+	// Apart is the session a task typed before was added to, as more for
+	// its jot: the task is taken back from it and started on its own.
+	Apart string `json:"apart,omitempty"`
 }
 
 // Paste is a long paste that a client shows as Label in what was typed.
@@ -59,4 +65,7 @@ type InputResult struct {
 	// Choice is the question to answer when Did is asked: send Op (undo or
 	// redo) with the choice's id and the key of the option picked.
 	Choice *Choice `json:"choice,omitempty"`
+	// Until is, when Did is added, when the task is typed to the agent;
+	// until then the same text sent with Apart takes it back.
+	Until time.Time `json:"until,omitzero"`
 }

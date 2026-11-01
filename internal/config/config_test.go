@@ -24,7 +24,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off"}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	want := Profile{
@@ -163,6 +163,8 @@ close_when_done = true
 close_delay = "5s"
 hide_tmux = false
 teammates = "panes"
+follow_up_window = "0s"
+follow_up_delay = "1s"
 
 [profiles.claude]
 harness = "claude-code"
@@ -250,7 +252,7 @@ guidelines = []
 	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
-	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes"}); c.Spawn != want {
+	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second}); c.Spawn != want {
 		t.Errorf("spawn = %+v, want %+v", c.Spawn, want)
 	}
 	wantClaude := Profile{
@@ -457,6 +459,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[ui]\nfreeze_dog = \"-10s\"\n", "ui.freeze_dog"},
 		{"[spawn]\nready_timeout = \"-1s\"\n", "ready_timeout"},
 		{"[spawn]\nclose_delay = \"-1s\"\n", "close_delay"},
+		{"[spawn]\nfollow_up_window = \"-1m\"\n", "spawn.follow_up_window"},
+		{"[spawn]\nfollow_up_delay = \"-1s\"\n", "spawn.follow_up_delay"},
 		{"[profiles.claude]\nharness = \"bogus\"\n", "harness"},
 		{"[tmux]\nsocket = \"a/b\"\n", "socket"},
 		{"[tmux]\npath = \"tmux\"\n", "path"},
