@@ -2,6 +2,7 @@ package core
 
 import (
 	"net"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -43,6 +44,10 @@ func (c *Core) pair(a ipc.PairArgs) (ipc.PairResult, error) {
 	}
 	if ip := remote.LANAddr(); ip != nil {
 		r.URLs = append(r.URLs, "http://"+net.JoinHostPort(ip.String(), setup)+"/")
+	}
+	if len(r.URLs) > 0 {
+		u, _ := url.Parse(r.URLs[0])
+		r.Link = remote.PairLink("https://"+net.JoinHostPort(u.Hostname(), strconv.Itoa(cfg.Port)), code, ca.FingerprintHex(), name)
 	}
 	return r, nil
 }
