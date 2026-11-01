@@ -122,7 +122,9 @@ func TestTheAuthorityVouchesOnlyForLocalNames(t *testing.T) {
 	l := &Leaves{
 		CA:    ca,
 		Names: func() []string { return []string{"studio.local", "studio.example.com"} },
-		Addrs: func() []net.IP { return []net.IP{net.ParseIP("192.168.1.20"), net.ParseIP("203.0.113.9"), net.ParseIP("fe80::1")} },
+		Addrs: func() []net.IP {
+			return []net.IP{net.ParseIP("192.168.1.20"), net.ParseIP("203.0.113.9"), net.ParseIP("fe80::1")}
+		},
 	}
 	cert, err := l.get("", net.ParseIP("10.0.0.5"))
 	if err != nil {

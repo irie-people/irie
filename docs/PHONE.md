@@ -36,6 +36,8 @@ The HTTPS port (`remote.port`, 7387) serves the app and its API; the port below 
 | `POST /api/call` `{op, args}` | The core's reply: `{ok, result}` or `{ok:false, error}`, with the core's own words. A machine whose core restarts says `core_down` |
 | `POST /api/subscribe` args | A stream of NDJSON: `{ok}` first, then the core's frames (DESIGN §2.4), and `{"t":"ping"}` every 15 s |
 | `DELETE /api/device` | This phone forgets itself on the machine |
+| `POST /api/push` `{subscription, vapid, done}` | Notifications to this phone: its `PushSubscription`, the key it subscribed with, and whether a finished turn is news too. A first notification goes out at once, so the phone knows they work; a push service that can't be reached is `push_failed` |
+| `DELETE /api/push` | No more notifications to this phone |
 
 Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unknown token is 401 `unpaired`. The API allows any origin, since the app on one machine talks to every other machine's gateway, and a token, never a cookie, says who calls.
 
@@ -56,17 +58,22 @@ Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unkno
 
 It keeps the paired machines in the browser's storage on the phone, and a service worker keeps the app's files, so it opens even while the machine that served it sleeps.
 
-## 5. Next
+## 5. Notifications
 
-- Notifications when a session needs you, through Web Push from each gateway.
+Each gateway follows its core's sessions (a `subscribe` of its own) and tells every phone that asked when one needs you, failed or stalled, and, for a phone that asked for them too, when a turn ends. A first look after the gateway or the core starts is not news, so a restart never sends a flood; a question that changes while the session still needs you is. One kind of news about one session goes out at most every 20 s, with the session's name, what it asks or did, and the machine; a tap opens the session.
+
+They go through the phone's own push service (Apple's, for an iPhone on iOS 16.4 or later with the app on its Home Screen), as Web Push has it: RFC 8030 for the push, RFC 8291 for encrypting each message to the phone, RFC 8292 (VAPID) for signing the request. A subscription is bound to one key, and every machine pushes to it, so the app makes that key itself, a P-256 pair, and gives each machine the subscription and the key. A machine keeps them with the phone in `devices.json`; a subscription the push service no longer has (404, 410) is dropped. Each VAPID token lasts 12 hours and is reused, as Apple asks. Pushes leave the machine for the push service over the internet, a VPN's tunnel included; nothing comes in.
+
+## 6. Next
+
 - Reaching the machines from away from home: a mesh network such as Tailscale joins them, but on iOS only one VPN runs at a time, so it means choosing it over Mullvad on the phone, or Mullvad through it.
 - Helpers' own conversations, and teammates.
 
-## 6. Files
+## 7. Files
 
 | Path | What |
 |---|---|
-| `internal/remote` | The gateway: `remote.go` (server, relay), `certs.go` (authority, certificates, profile), `devices.go` (pairing, tokens), `qr.go` |
+| `internal/remote` | The gateway: `remote.go` (server, relay), `certs.go` (authority, certificates, profile), `devices.go` (pairing, tokens), `push.go` (notifications), `qr.go` |
 | `internal/remote/web` | The app: `index.html`, `app.js`, `app.css`, `js/`, `manifest.webmanifest`, `sw.js`, `setup.html`, and icons that `go run ./tools/mkicon -phone internal/remote/web` draws |
 | `internal/core/remote.go` | The core keeps the gateway's window |
 | `internal/core/screen.go` | `screen` and `keys` |

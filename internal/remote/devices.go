@@ -44,6 +44,8 @@ type Device struct {
 	Hash    string    `json:"hash"` // SHA-256 of its token, in hex
 	Created time.Time `json:"created"`
 	Seen    time.Time `json:"seen,omitzero"`
+	// Push is where it takes notifications; nil when it takes none.
+	Push *Push `json:"push,omitempty"`
 }
 
 // pairing is the code a phone pairs with, while one is open.
@@ -202,6 +204,18 @@ func (s *Store) Saw(d Device) {
 		for i := range ds {
 			if ds[i].ID == d.ID {
 				ds[i].Seen = now.UTC()
+			}
+		}
+		return ds
+	})
+}
+
+// SetPush gives a phone its notifications, or with nil stops them.
+func (s *Store) SetPush(id string, p *Push) error {
+	return s.change(func(ds []Device) []Device {
+		for i := range ds {
+			if ds[i].ID == id {
+				ds[i].Push = p
 			}
 		}
 		return ds

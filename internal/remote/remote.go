@@ -76,6 +76,7 @@ type Server struct {
 	leaves *Leaves
 	web    fs.FS
 	log    *slog.Logger
+	pusher *pusher
 }
 
 // New prepares a gateway: its authority, made on first use, and its
@@ -99,7 +100,7 @@ func New(opt Options) (*Server, error) {
 	return &Server{
 		opt: opt, id: id, store: &Store{Dir: opt.Dir}, ca: ca,
 		leaves: &Leaves{CA: ca, Names: LocalNames, Addrs: Addrs},
-		web:    Web(), log: log,
+		web:    Web(), log: log, pusher: newPusher(),
 	}, nil
 }
 
@@ -126,6 +127,7 @@ func (s *Server) Run(ctx context.Context) error {
 	errs := make(chan error, 2)
 	go func() { errs <- app.ServeTLS(tlsLn, "", "") }()
 	go func() { errs <- setup.Serve(setupLn) }()
+	go s.notify(ctx)
 	s.log.Info("serving", "app", tlsLn.Addr().String(), "setup", setupLn.Addr().String(), "name", s.opt.Name)
 	select {
 	case <-ctx.Done():
@@ -152,6 +154,8 @@ func (s *Server) App() http.Handler {
 	mux.HandleFunc("POST /api/call", s.authed(s.call))
 	mux.HandleFunc("POST /api/subscribe", s.authed(s.subscribe))
 	mux.HandleFunc("DELETE /api/device", s.authed(s.forgetMe))
+	mux.HandleFunc("POST /api/push", s.authed(s.push))
+	mux.HandleFunc("DELETE /api/push", s.authed(s.push))
 	mux.HandleFunc("OPTIONS /api/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": ipc.Errorf(ipc.CodeNotFound, "no such call")})
@@ -214,8 +218,11 @@ func (s *Server) Setup() http.Handler {
 func (s *Server) files(index string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-		if name == "" {
+		switch name {
+		case "":
 			name = index
+		case "favicon.ico":
+			name = "icon-192.png"
 		}
 		data, err := fs.ReadFile(s.web, name)
 		if err != nil {
@@ -257,10 +264,11 @@ type Info struct {
 	Version string `json:"version"`
 	API     int    `json:"api"`
 	OS      string `json:"os"`
+	Push    bool   `json:"push"` // it sends notifications
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, Info{ID: s.id, Name: s.opt.Name, Version: s.opt.Version, API: ipc.API, OS: runtime.GOOS})
+	writeJSON(w, http.StatusOK, Info{ID: s.id, Name: s.opt.Name, Version: s.opt.Version, API: ipc.API, OS: runtime.GOOS, Push: true})
 }
 
 func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
