@@ -279,11 +279,33 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/testutil/` | `BuildIrie`, tmux test server, `ShortDir`; `fakeagent/` from M2; `fakeollama/` and `ollamafake/` from M10 | M1–M2, M10 |
 | `internal/repo/`, `internal/worktree/` | Repo lookup, worktrees | M3 |
 | `internal/transcript/`, `internal/mirror/` | JSONL follower and parser, mirror view | M8 |
-| `internal/ghostty/`, `internal/macapp/`, `internal/loginenv/` | AppleScript driver, Irie.app bundle, login-shell env capture | M9 |
+| `internal/ghostty/`, `internal/macapp/` | AppleScript driver, Irie.app bundle | M9 |
+| `internal/loginenv/` | The login shell's environment, for a server the Mac app starts (§7.2) | §2.7 |
+| `internal/ready/` | What a computer has of what Irie needs, and how to get the rest: `irie setup`, the first `irie`, the `ready` op | §2.7 |
+| `tools/release.sh`, `site/install.sh` | A release's downloads, and the one-line installer | §2.7 |
 | `tools/mkicon/` | Icon generator | M9 |
 | `internal/localmodel/` | Ollama client, memory estimates and the machine's memory, preflight, setup suggestions, `irie runtime` | M10 |
 | `internal/statusline/` | `irie statusline`: cost, context and plan use from Claude Code's status line | M10 |
 | `e2e/` | Opt-in tests against the real Claude Code | M11 |
+
+### 2.7 Install and first run
+
+Getting from nothing to a first finished task takes one line in a terminal, or on a Mac one line and Spotlight, and no knowledge of what Irie needs: Irie says what is missing, in plain words, and offers each fix, which runs only after a yes.
+
+```
+curl -fsSL https://irie-people.github.io/irie/install.sh | sh
+```
+
+| Part | Design |
+|---|---|
+| Downloads | `tools/release.sh` builds them on a Mac: `irie` for darwin and linux on arm64 and amd64 (no cgo, `-trimpath`), each as `irie-<os>-<arch>.tar.gz` with LICENSE; Irie.app for Apple silicon as `Irie-macos-arm64.zip`, its version stamped from the tag, with `irie` inside in `Contents/Helpers` (not `MacOS`, where on a disk that ignores case `irie` and the app's own `Irie` would be one file), signed ad hoc from the inside out; and `SHA256SUMS`. The names carry no version, so `releases/latest/download/<name>` finds the latest without an API call. The release workflow's `downloads` job runs it on macos-15 when release-please publishes a release, and attaches the files to it; run by hand with a tag, it builds them again. A release made with `GITHUB_TOKEN` starts no other workflow, so the job lives in release-please's own |
+| The installer | `site/install.sh`, served as `https://irie-people.github.io/irie/install.sh`. POSIX sh, with everything in `main`, so a download cut short runs nothing. It picks the download from `uname` (a shell under Rosetta counts as arm64), checks its SHA-256 against `SHA256SUMS` before anything moves, puts `irie` in `$XDG_DATA_HOME/irie/bin`, where `tools/live.sh` keeps it too, with one rename, so running processes keep their file, and links `~/.local/bin/irie` to it (an older plain file there becomes `irie.old`). On Apple silicon it replaces `~/Applications/Irie.app`, or `/Applications/Irie.app` when that is where it is and can be written, registers it with Launch Services and Spotlight, and reopens it only when that copy was open. curl marks no download for quarantine, so Gatekeeper never stops the unsigned app. When a release has no download for the system it builds with `go install …@<tag>`, given Go. Last it runs `irie setup` on `/dev/tty`, since its own input is curl's, or `irie setup --check` with no terminal. `IRIE_VERSION`, `IRIE_NO_APP`, `IRIE_NO_SETUP` and `IRIE_DOWNLOADS` (a mirror, and the tests) change it |
+| `irie setup` | `internal/ready` checks five needs, in the order a newcomer meets them: tmux, 3.2 or later (the first with `-N`); Claude Code, the claude profile's command, where a version older than `MinVersion` warns; signed in, from `claude auth status --json`, of which only `loggedIn` and `authMethod` are read, since the rest names the person; git, where on a Mac `xcode-select -p` comes first, because macOS's own `/usr/bin/git` opens Apple's installer when the Command Line Tools are missing; and, from a terminal only, `irie` on the PATH. Each is ok, missing, warn or unknown. tmux, Claude Code and the sign-in block agents; git blocks only tasks in a repo. Each problem carries a fix: a command, run after a yes (Homebrew, or Homebrew's own installer and then Homebrew on a Mac without it; apt, dnf, yum, pacman, zypper or apk; Claude Code's official installer; `claude auth login`; `xcode-select --install`), or a line added once to the shell's startup file, after `# Added by irie setup`. `irie setup` offers the fixes in order and checks again after each, so installing Claude Code brings the offer to sign in. `--check` and `--json` change nothing, and exit 1 while something blocks |
+| The first `irie` | When no core answers, outside tmux, `irie` runs the check first. With something missing it shows the list and, in a terminal, offers the fixes of what blocks. Only a missing tmux stops it: an agent on another profile may need nothing more. The check runs once a server start and takes about 0.3 s |
+| The server's PATH | A new server gets `~/.local/bin` at the end of its PATH when that folder exists and the PATH lacks it (`ready.PathEnv`). The installers of Irie and of Claude Code put their programs there, and a terminal finds them only once a startup file says so, which `irie setup` offers. A running server keeps its environment |
+| From the app | Opened with no Irie running, the app runs `irie up --login-env` (§7.2), once a launch and only before it has ever reached a core, so a core that restarts is left to the supervisor. It asks the core's `ready` op, the same check in the server's environment, which is the agents', every 4 s while something blocks. A fix runs as the `ready` tool: a session running `irie setup`, whose terminal the app shows ([MAC.md](MAC.md)) |
+| A first task | Both sidebars offer `+haiku Write a haiku about my city. Ask me which city first.` with no sessions. It makes the agent ask before it works, so a newcomer sees a session start, ask and finish in about a minute, on Claude's quickest model, in a scratch folder of its own. The Mac app follows it with a card of steps, the walkthrough of [learning.md](proposals/learning.md) §5.1 in brief |
+| Not yet | A signed and notarized app, and so a direct download of it that opens without a warning; Irie.app for Intel Macs; a Homebrew tap; and a tmux of Irie's own for a Mac without Homebrew, which needs a terminfo of its own, as macOS's lacks `tmux-256color` |
 
 ---
 
@@ -1053,7 +1075,7 @@ rules = ["Don't push, publish or send anything off this machine: …", "Don't de
 guidelines = ["When you have to choose, take the option you would recommend, …", …]   # each list replaces the built-in one
 
 [env]
-capture = "login-shell"       # login-shell | none  (used when started from Irie.app)
+capture = "login-shell"       # login-shell | none: the environment of a server `irie up --login-env` starts, as Irie.app does (§2.7)
 
 [remote]                      # the phone app (PHONE.md)
 on = false                    # serve it on this machine's local network; the core keeps the gateway running
@@ -1268,7 +1290,7 @@ From M9, `irie` and Irie.app drive Ghostty through its macOS AppleScript diction
 | Part | Design |
 |---|---|
 | `irie app-launch` | Takes `app.lock` (flock), so a double launch opens one window. Captures the login environment, runs `irie up` with it, then follows §7.1. It usually finishes in under 1 s |
-| Environment | A GUI launch lacks the user's shell PATH and variables, so `claude`, `git` and `node` would not be found. App-launch runs `$SHELL -l -i -c` to print a marker followed by `env -0`, with a 10 s timeout, and parses what follows the marker. The result is cached for 24 h and becomes the tmux server's global environment when app-launch starts the server. `env.capture = "none"` turns this off; `tmux.path` pins tmux |
+| Environment | A GUI launch lacks the user's shell PATH and variables, so `claude`, `git` and `node` would not be found. `irie up --login-env`, which the Mac app runs (§2.7), runs `$SHELL -l -i -c` with no input to print a marker followed by `env -0`, with a 10 s timeout, and parses what follows the marker, without the shell's own variables (`PWD`, `SHLVL`, `_`), a `TMUX` and the app's launch markers; a shell that sets no locale gets the `LC_CTYPE=UTF-8` Terminal sets. It becomes the environment of a server it starts; a running server keeps its own. Nothing is cached: the environment may hold secrets the startup files export, and the capture runs only when a server starts. `env.capture = "none"` turns this off; `tmux.path` pins tmux |
 | Icon | `tools/mkicon` draws a 1024 px master in pure Go (`image`, no fonts, no text): a rounded square with a deep-green ground and a warm sun rising over two calm wave lines. It writes the 10 iconset sizes, and `iconutil -c icns` builds `Irie.icns` at install. The output is deterministic, so it can be tested |
 | Install | `irie install-app [--dir ~/Applications]` is idempotent and replaces an older bundle. It signs ad hoc (`codesign --force --sign -`; a locally built file carries no quarantine flag), then registers the app with Launch Services (`lsregister -f`) and runs `mdimport` on it so Spotlight finds it at once. Check with `mdfind 'kMDItemFSName == "Irie.app"'`. `irie uninstall-app` removes the app |
 

@@ -521,7 +521,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -548,6 +548,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return nil, nil
 	case ipc.OpDog:
 		return c.dogList()
+	case ipc.OpReady:
+		return c.ready(), nil
 	case ipc.OpTrod:
 		var a ipc.TrodArgs
 		if err := decode(raw, &a); err != nil {

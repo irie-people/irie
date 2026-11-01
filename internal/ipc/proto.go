@@ -68,6 +68,10 @@ const (
 	// OpTrod is the trod bot's report: whether it works now, the
 	// rules and guidelines it gives, and what it did (DESIGN §4.10).
 	OpTrod = "trod"
+	// OpReady checks that the computer has what Irie needs, as its agents
+	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
+	// a ready.Report, for the Mac app's welcome.
+	OpReady = "ready"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -678,8 +682,9 @@ type ResultResult struct {
 	Text string `json:"text"`
 }
 
-// ToolArgs start a tool session: setup (`irie setup local`) or models
-// (`irie ctl local`).
+// ToolArgs start a tool session: setup (`irie setup local`), models
+// (`irie ctl local`) or ready (`irie setup`, which fixes what the ready op
+// finds missing).
 type ToolArgs struct {
 	Name string `json:"name"`
 }
@@ -688,6 +693,7 @@ type ToolArgs struct {
 const (
 	ToolSetup  = "setup"
 	ToolModels = "models"
+	ToolReady  = "ready"
 )
 
 // StatusArgs carry one status line update of a Claude Code session: its

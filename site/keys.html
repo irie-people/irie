@@ -137,8 +137,9 @@
     <table>
       <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
       <tbody>
-        <tr><td><code>irie</code></td><td>Start Irie if needed, and open it in this terminal.</td></tr>
-        <tr><td><code>irie up</code></td><td>Start Irie if needed, in the background, without opening it.</td></tr>
+        <tr><td><code>irie</code></td><td>Start Irie if needed, and open it in this terminal. When no Irie is running, it first checks what Irie needs, as <code>irie setup</code> does.</td></tr>
+        <tr><td><code>irie setup [--check] [--json] [--yes]</code></td><td>Check that this computer has what Irie needs, and offer to fix each part that is missing: see <a href="install.html#setup">Install</a>. <code>--check</code> only checks, and changes nothing. <code>--json</code> prints the check as JSON. <code>--yes</code> fixes what is missing without asking.</td></tr>
+        <tr><td><code>irie up [--login-env]</code></td><td>Start Irie if needed, in the background, without opening it. <code>--login-env</code> starts a new server with your login shell’s environment, as the Mac app does.</td></tr>
         <tr><td><code>irie attach [--nested]</code></td><td>Open Irie in this terminal. <code>--nested</code> opens it inside another tmux.</td></tr>
         <tr><td><code>irie ctl &lt;command&gt;</code></td><td>Use Irie from scripts: <a href="#ctl">below</a>.</td></tr>
         <tr><td><code>irie version</code></td><td>Print the version.</td></tr>

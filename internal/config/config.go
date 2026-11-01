@@ -42,6 +42,15 @@ type Config struct {
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
 	Remote   Remote             `toml:"remote"`
+	Env      Env                `toml:"env"`
+}
+
+// Env is the environment of a server that the Mac app starts (DESIGN §7.2).
+type Env struct {
+	// Capture is login-shell, to start it with the environment of the
+	// person's login shell, as a terminal has it; or none, for the app's
+	// own, which lacks the PATH of the shell's startup files.
+	Capture string `toml:"capture"`
 }
 
 // Remote is the phone app (docs/PHONE.md): this machine's Irie, served over
@@ -420,6 +429,7 @@ func Default() Config {
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
+		Env:     Env{Capture: "login-shell"},
 		Trod: Trod{
 			Start: "23:00", End: "07:00", Away: 15 * time.Minute, Questions: true, Nudges: 8,
 			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
@@ -525,7 +535,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
 		Remote   *Remote                   `toml:"remote"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote}
+		Env      *Env                      `toml:"env"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Env: &c.Env}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -832,6 +843,9 @@ func (c Config) Validate() error {
 	}
 	if !socketName.MatchString(c.Tmux.Socket) {
 		bad("tmux.socket = %q: use letters, digits, '.', '_' and '-'", c.Tmux.Socket)
+	}
+	if c.Env.Capture != "login-shell" && c.Env.Capture != "none" {
+		bad("env.capture = %q: must be login-shell or none", c.Env.Capture)
 	}
 	if c.Tmux.Path != "" && !filepath.IsAbs(c.Tmux.Path) {
 		bad("tmux.path = %q: must be an absolute path", c.Tmux.Path)
