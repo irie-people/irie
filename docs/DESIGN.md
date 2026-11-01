@@ -129,6 +129,7 @@ flowchart LR
 | `irie hook` | started by the agent for each hook event | Forwards the event, waits while held, prints the harness's reply | socket, gate file |
 | `irie statusline` | started by Claude Code for each status line update (§6.3) | Forwards the session's cost, context and plan use, then runs the user's own status line | socket |
 | `irie team-tmux` | the `tmux` an agent with agent teams finds first on its PATH (§2.3) | Takes Claude Code's teammate panes to the team server, a tmux session each; sends every other tmux call where it would go without Irie | tmux (exec) |
+| `irie remote serve --supervise` | `irie-agents:irie-remote`, while `remote.on` ([PHONE.md](PHONE.md)) | The phone app's gateway: HTTPS on the local network, a client of the socket that relays a phone's ops and subscriptions. The core starts it, and starts it again after an install or a change of its settings | the core (socket), phones (HTTPS) |
 | `irie runtime -- ollama serve` | `irie-agents:irie-ollama`, started on first need (§6.3) | Irie's own Ollama server, in a process group of its own, so its model runners stop with it | the agents (HTTP on 127.0.0.1) |
 | `irie mirror` | subagent panes (M8) | Read-only live view of one subagent | socket, transcript |
 | `irie ctl` | anywhere | Scripting and tests: `list`, `spawn`, `show`, `watch`, `pause`, and so on | socket |
@@ -191,7 +192,7 @@ The Mac app shows a session that has teammates beside them in its terminal view,
 
 ### 2.4 Socket API
 
-The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in a 0700 directory. There is no TCP listener. Messages are NDJSON, one object per line:
+The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in a 0700 directory. The core has no TCP listener; the phone app reaches it through its own gateway, `irie remote serve`, a client of this socket that lets a phone use only a phone's ops ([PHONE.md](PHONE.md)). Messages are NDJSON, one object per line:
 - Request: `{"id":1,"op":"spawn","args":{…}}`.
 - Reply: `{"id":1,"ok":true,"result":{…}}` or `{"id":1,"ok":false,"error":{"code":"…","msg":"…"}}`.
 - `subscribe` replies once, then streams frames until the client closes:
@@ -240,6 +241,8 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
 | `conversation` | `session`, `agent?`, `limit?` | `session`, `agent?`, `transcript?`, `items[]`, `needs?`, `pending[]`, `more?`: the session's conversation, read from its Claude Code transcript (§4.7), or with `agent: "sub:<id>"` that helper's, read from its own (§4.4) | Conversation view (§4.7) |
 | `send` | `session`, `text` | none. Types the text to the agent as a person would; refuses with `busy` while it waits on you in its terminal, before it is ready, once it has ended, and a message of several lines while the agent takes no bracketed paste (§4.7) | Conversation view (§4.7) |
+| `screen` | `session` | `lines[]`: what its terminal shows now, as plain text, without the blank lines under the last; `options[]`, each `key`, `label` and `selected`: while it waits on you, the numbered choices of the prompt at the bottom, as Claude Code draws a permission, a question or a plan, and none otherwise | The phone app ([PHONE.md](PHONE.md)) |
+| `keys` | `session`, `keys[]`, `text?` | none. Presses each key in its terminal, a letter or digit or one of Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, PageUp, PageDown, Home and End, never Ctrl+C, then types `text`, with no control character, without Enter. Takes its turn with `send`; refuses with `busy` once the session has ended or while it is frozen | The phone app ([PHONE.md](PHONE.md)) |
 
 ### 2.5 Observation
 
@@ -1043,6 +1046,12 @@ guidelines = ["When you have to choose, take the option you would recommend, …
 
 [env]
 capture = "login-shell"       # login-shell | none  (used when started from Irie.app)
+
+[remote]                      # the phone app (PHONE.md)
+on = false                    # serve it on this machine's local network; the core keeps the gateway running
+port = 7387                   # its HTTPS port; the setup page is on the port below, over plain HTTP
+name = ""                     # what the phone calls this machine; "" = its computer name (macOS) or host name
+listen = ""                   # the address to listen on; "" = every address of this machine
 ```
 
 ---

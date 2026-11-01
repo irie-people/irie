@@ -38,6 +38,7 @@ const (
 	RoleMirror      = "mirror"
 	RoleRuntime     = "runtime" // Irie's own Ollama server (DESIGN §6.3), in its own window of irie-agents
 	RoleLlama       = "llama"   // Irie's own llama-server (DESIGN §6.5), in its own window of irie-agents
+	RoleRemote      = "remote"  // the phone app's gateway (docs/PHONE.md), in its own window of irie-agents
 	// RoleClosing is an agent pane of a closed session while its agent
 	// ends. It is out of the slot, alone in its window and in no row.
 	RoleClosing = "closing"

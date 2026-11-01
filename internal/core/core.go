@@ -308,6 +308,7 @@ func (c *Core) tick() {
 	c.countTokens()
 	c.followTitles()
 	c.followConversations()
+	c.keepRemote()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

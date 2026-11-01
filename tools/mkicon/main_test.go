@@ -62,3 +62,38 @@ func TestShape(t *testing.T) {
 		}
 	}
 }
+
+// TestPhoneIcons checks that the phone app's icons in the gateway's files
+// are what -phone draws now: full squares with no transparency, at their
+// sizes (docs/PHONE.md).
+func TestPhoneIcons(t *testing.T) {
+	dir := t.TempDir()
+	if err := writePhone(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range phoneFiles {
+		drawn, err := os.ReadFile(filepath.Join(dir, f.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		img, err := png.Decode(bytes.NewReader(drawn))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r := img.Bounds(); r.Dx() != f.px || r.Dy() != f.px {
+			t.Errorf("%s is %dx%d", f.name, r.Dx(), r.Dy())
+		}
+		for _, p := range [][2]int{{0, 0}, {f.px - 1, 0}, {0, f.px - 1}, {f.px - 1, f.px - 1}} {
+			if _, _, _, a := img.At(p[0], p[1]).RGBA(); a != 0xFFFF {
+				t.Errorf("%s is clear at %v", f.name, p)
+			}
+		}
+		kept, err := os.ReadFile(filepath.Join("..", "..", "internal", "remote", "web", f.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(kept, drawn) {
+			t.Errorf("internal/remote/web/%s is not what mkicon draws: run go run ./tools/mkicon -phone internal/remote/web", f.name)
+		}
+	}
+}

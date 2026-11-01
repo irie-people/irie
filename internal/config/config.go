@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
@@ -39,7 +41,22 @@ type Config struct {
 	Usage    Usage              `toml:"usage"`
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
+	Remote   Remote             `toml:"remote"`
 }
+
+// Remote is the phone app (docs/PHONE.md): this machine's Irie, served over
+// HTTPS on its local network to the phones paired with it. The core keeps
+// `irie remote serve` running while it is on.
+type Remote struct {
+	On     bool   `toml:"on"`     // serve the phone app
+	Port   int    `toml:"port"`   // its HTTPS port; the setup page is on the port below, over plain HTTP
+	Name   string `toml:"name"`   // what the phone calls this machine; "" = its host name
+	Listen string `toml:"listen"` // the address to listen on, such as 192.168.1.20; "" = every address of this machine
+}
+
+// DefaultRemotePort is the phone app's HTTPS port; the setup page is on the
+// port below it.
+const DefaultRemotePort = 7387
 
 // Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
 // on it runs on the profile with the lowest cost per success.
@@ -400,6 +417,7 @@ func Default() Config {
 			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
 			Rules: TrodRules(), Guidelines: TrodGuidelines(),
 		},
+		Remote: Remote{Port: DefaultRemotePort},
 	}
 }
 
@@ -498,7 +516,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Usage    *Usage                    `toml:"usage"`
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod}
+		Remote   *Remote                   `toml:"remote"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -868,6 +887,16 @@ func (c Config) Validate() error {
 				bad("trod.%s[%d]: must be at most %d characters", list.key, i, maxTrodLine)
 			}
 		}
+	}
+	rm := c.Remote
+	if rm.Port < 2 || rm.Port > 65535 {
+		bad("remote.port = %d: must be a port from 2 to 65535, since the setup page takes the one below", rm.Port)
+	}
+	if rm.Listen != "" && net.ParseIP(rm.Listen) == nil {
+		bad("remote.listen = %q: must be an IP address of this machine, or empty for all of them", rm.Listen)
+	}
+	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
+		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
 	}
 	return errors.Join(errs...)
 }

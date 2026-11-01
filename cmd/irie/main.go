@@ -33,6 +33,8 @@ const usage = `usage: irie [command]
   irie setup local [--model MODEL] [--yes]
                           get +local ready: install Ollama if needed, pick a
                           model that fits this machine's memory, pull and check it
+  irie remote <command>   the phone app: pair a phone, list or forget phones,
+                          share the certificate authority (irie remote for help)
   irie version            print the version
   irie config path|print  show the config file's path, or the config in effect
 
@@ -96,6 +98,8 @@ func run(args []string) int {
 		return localmodel.Serve(args)
 	case "ctl":
 		err = ctl(args)
+	case "remote":
+		err = remoteCmd(args)
 	case "setup":
 		err = setup(args)
 	case "version":
