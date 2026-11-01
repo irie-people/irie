@@ -55,9 +55,17 @@ if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
 	mkdir -p "$app/Contents/Helpers"
 	cp "$work/irie-darwin-arm64/irie" "$app/Contents/Helpers/irie"
 	plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
-	# Signed inside out, ad hoc: a signature of the app covers its helper.
-	codesign --force --sign - "$app/Contents/Helpers/irie"
-	codesign --force --sign - "$app"
+	# Signed again from the inside out, so the app's signature covers its
+	# helper, with the identity mac/build.sh signs with: ad hoc unless
+	# IRIE_SIGN_IDENTITY or `git config irie.sign` names one (docs/MAC.md).
+	identity=${IRIE_SIGN_IDENTITY:-$(git config --get irie.sign 2>/dev/null || echo -)}
+	for f in "$app/Contents/Helpers/irie" "$app"; do
+		case "$identity" in
+		-) codesign --force --sign - "$f" ;;
+		"Developer ID"*) codesign --force --options runtime --timestamp --sign "$identity" "$f" ;;
+		*) codesign --force --sign "$identity" "$f" ;;
+		esac
+	done
 	codesign --verify --strict "$app"
 	ditto -c -k --keepParent "$app" "$out/Irie-macos-arm64.zip"
 else
