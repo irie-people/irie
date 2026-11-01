@@ -37,6 +37,10 @@ final class Store: ObservableObject {
     @Published private(set) var canTrod = false
     /// The core gives a boost of Gabriel's (DESIGN §4.11).
     @Published private(set) var canBoost = false
+    /// The core lists its arch agents (op arch).
+    @Published private(set) var canArch = false
+    /// The arch agents, as the core last listed them.
+    @Published private(set) var archAgents: [ArchAgent] = []
     /// While a boost is on, when it ends.
     @Published private(set) var boostUntil: Date?
     /// Cards parked or unparked from under the pointer, each with whether
@@ -208,6 +212,7 @@ final class Store: ObservableObject {
                 canPark = hello.features.contains("park")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
+                canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
@@ -380,6 +385,22 @@ final class Store: ObservableObject {
         canPark = true
         canTrod = true
         canBoost = true
+        canArch = true
+        archAgents = [
+            ArchAgent(name: "mikael", icon: "🛡️🗡️", title: "a helper against evil",
+                      about: "Mikael, the first of Irie's arch agents, stands with the user against evil and for the good they want to see in the world.",
+                      on: true, status: "With every Claude Code session, weighing the calls that can’t be taken back.",
+                      actions: [ArchAction(label: "Talk with Mikael", op: "spawn")],
+                      settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "Mikael goes with every session", value: .bool(true)),
+                                 ArchSetting(key: "arch.mikael.good", kind: "lines", label: "The good you want to see in the world",
+                                             value: .array([.string("Give credit where it’s due.")]))]),
+            ArchAgent(name: "gabriel", icon: "🪽👟", title: "carries your focus to the machine",
+                      about: "Gabriel carries the user's focus to the machine.",
+                      on: true, status: "Holding back 3 sessions and 1 app for Safari.",
+                      actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
+                      settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
+                                 ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
+        ]
         canUndo = true
         taskRepo = "irie"
     }
@@ -761,6 +782,52 @@ final class Store: ObservableObject {
             } catch {
                 say("Couldn’t \(on ? "start" : "stop") the trod bot: \(error.localizedDescription)", error: true)
             }
+        }
+    }
+
+    /// Reads the arch agents again (op arch).
+    func loadArch() async {
+        guard canArch, case .online = link else { return }
+        if let r = try? await client.call("arch", JSONValue.object([:]), timeout: 5, as: ArchResult.self) {
+            archAgents = r.agents
+        }
+    }
+
+    /// Does what an arch agent offers: calls its op with its args as they
+    /// came, says so, and reads the arch agents again.
+    func archAction(_ a: ArchAction) {
+        Task {
+            do {
+                _ = try await client.call(a.op, a.args ?? JSONValue.object([:]), timeout: 20, as: JSONValue.self)
+                say(a.done ?? "\(a.label): done.", error: false, seconds: 5)
+            } catch {
+                say("Couldn’t \(a.label.lowercased()): \(error.localizedDescription)", error: true)
+            }
+            await loadArch()
+        }
+    }
+
+    /// Sets one of an arch agent's settings: shown at once, sent to the
+    /// config op by its key.
+    func setArch(_ agent: String, _ key: String, _ value: JSONValue) {
+        if let i = archAgents.firstIndex(where: { $0.name == agent }),
+           let j = archAgents[i].settings?.firstIndex(where: { $0.key == key }) {
+            archAgents[i].settings?[j].value = value
+            if key == "arch.\(agent).on", let on = value.bool { archAgents[i].on = on }
+        }
+        settings.set(key, value.setting)
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await loadArch()
+        }
+    }
+
+    /// Puts one of an arch agent's settings back to its default.
+    func resetArch(_ key: String) {
+        settings.reset(key)
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await loadArch()
         }
     }
 

@@ -590,7 +590,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers,
 		}}, nil
 	case ipc.OpList:
@@ -736,6 +736,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		c.markWord(a.Session)
 		return nil, nil
+	case ipc.OpArch:
+		return c.archList(), nil
 	case ipc.OpGabriel:
 		var a ipc.GabrielArgs
 		if err := decode(raw, &a); err != nil {

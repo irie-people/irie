@@ -5,8 +5,10 @@
 // Each arch agent is a few markdown files in agents/, which anyone can read
 // and change without knowing Go:
 //
-//   - <name>.md: a few fields, then his charge, the prompt he works by when
-//     an agent calls on him or a session runs as him;
+//   - <name>.md: a few fields (his name, a nickname if he has one, his icon, his rank,
+//     his work in a few words and in a sentence, the tools he may use, and
+//     "call: no" when nobody calls on him), then his charge, the prompt he
+//     works by when an agent calls on him or a session runs as him;
 //   - <name>.word.md: what every session hears from him as it starts, a Go
 //     template of WordData;
 //   - <name>.door.md: the calls he weighs before they run, as permission
@@ -34,6 +36,8 @@ var files embed.FS
 // Agent is one arch agent.
 type Agent struct {
 	Name        string   // such as mikael
+	Nickname    string   // what people may call him for short, such as Raffi; "" for none
+	Icon        string   // his mark, one or two emoji, which every client can draw
 	Rank        int      // the order arch agents come in, Mikael first
 	Title       string   // his work in a few words, such as a helper against evil
 	Description string   // when an agent should call on him, as Claude Code's agent list shows it
@@ -214,7 +218,7 @@ func loadAgent(fsys fs.FS, name string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	a := Agent{Name: fields["name"], Title: fields["title"], Description: fields["description"], Color: fields["color"], Charge: body, Call: fields["call"] != "no"}
+	a := Agent{Name: fields["name"], Nickname: fields["nickname"], Icon: fields["icon"], Title: fields["title"], Description: fields["description"], Color: fields["color"], Charge: body, Call: fields["call"] != "no"}
 	switch {
 	case a.Name != name:
 		return Agent{}, fmt.Errorf("name %q must be the file's name, %q", a.Name, name)
