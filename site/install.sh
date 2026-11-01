@@ -91,7 +91,10 @@ main() {
 
 	asset=irie-$os-$arch.tar.gz
 	step "Downloading Irie for $(pretty "$os") on $arch"
-	if ! fetch "$from/SHA256SUMS" "$tmp/SHA256SUMS" || ! fetch "$from/$asset" "$tmp/$asset"; then
+	# curl's own words are kept for when building from source can't
+	# happen either: a release with no download for this computer is no
+	# error by itself.
+	if ! fetch "$from/SHA256SUMS" "$tmp/SHA256SUMS" 2>"$tmp/why" || ! fetch "$from/$asset" "$tmp/$asset" 2>>"$tmp/why"; then
 		from_source
 	else
 		check "$asset"
@@ -166,7 +169,8 @@ link() {
 # this computer, as before the first release with downloads.
 from_source() {
 	if ! command -v go >/dev/null 2>&1; then
-		fail "there is no download of Irie for $(pretty "$os") on $arch at $from yet, and building it needs Go. Install Go from https://go.dev/dl, then run this again, or see $docs"
+		why=$(tail -n 1 "$tmp/why" 2>/dev/null)
+		fail "Irie for $(pretty "$os") on $arch couldn't be downloaded from $from${why:+ ($why)}, and building it from source needs Go. Install Go from https://go.dev/dl, then run this again, or see $docs"
 	fi
 	at=latest
 	[ -n "${IRIE_VERSION:-}" ] && at=v${IRIE_VERSION#v}
