@@ -182,7 +182,7 @@ enum Fixture {
         "repos": {"aliases": {"irie": "~/code/irie", "notes": "~/notes"}, "roots": ["~/code"]},
         "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
         "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "hide_tmux": true, "ready_timeout": "30s", "teammates": "panes"},
-        "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
+        "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "freeze_dog": "10s", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
         "usage": {"status_line": true},
         "worktree": {"base": "HEAD", "branch_prefix": "irie/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
     }}
@@ -203,9 +203,10 @@ enum Fixture {
                                 Subagent(agent: "sub:a2", type: "Plan", started: ago(2))],
                     tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800)),
             Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
-                    created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "irie/conversation-view", profile: "claude"),
+                    created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "irie/conversation-view", profile: "claude",
+                    trod: TrodRow(sent: 2, last: ago(0.5), reason: "error")),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
-                    repo: irie, branch: "irie/warm-look", profile: "claude"),
+                    repo: irie, branch: "irie/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question")),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude"),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),

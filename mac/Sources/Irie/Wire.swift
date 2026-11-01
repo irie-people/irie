@@ -42,13 +42,24 @@ struct Session: Codable, Identifiable, Equatable {
     /// What its jot left that has not landed, by the jot dog's last look,
     /// while its turn is over (DESIGN §4.8); nil when it is through.
     var loose: Loose?
+    /// What the trod bot did for it in this night's shift or the last
+    /// (DESIGN §4.10); nil when it did nothing.
+    var trod: TrodRow?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
-        case order, parked, frozen, freezing, priority, loose
+        case order, parked, frozen, freezing, priority, loose, trod
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
+}
+
+/// How often the trod bot sent a session on in one shift, when it last
+/// did, and why: question, error, limit or loose.
+struct TrodRow: Codable, Equatable {
+    var sent: Int
+    var last: Date
+    var reason: String
 }
 
 /// What a jot left that has not landed: files not committed, and its own
@@ -176,6 +187,24 @@ struct TrodShift: Decodable, Equatable {
     var away: Bool?
     var awake: Bool?
     var capped: Bool?
+    /// You started it by hand, so it works while you watch.
+    var hand: Bool?
+}
+
+/// Start a run of the trod bot by hand, or stop one.
+struct TrodArgs: Encodable {
+    var start: Bool?
+    var stop: Bool?
+}
+
+/// The trod bot's report, as far as the app reads it: the run you started
+/// by hand last.
+struct TrodResult: Decodable {
+    struct Hand: Decodable {
+        var on: Bool
+        var why: String?
+    }
+    var hand: Hand?
 }
 
 struct HelloArgs: Encodable {

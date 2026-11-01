@@ -48,11 +48,16 @@ const ctlUsage = `usage: irie ctl <command>
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
-  irie ctl trod [on|off] [--json]       the trod bot: whether it works now,
+  irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]
+                                         the trod bot: whether it works now,
                                          the rules and guidelines it gives each
                                          agent it sends on, and what it did
                                          tonight or last night; on and off turn
-                                         it on or off (trod.on)
+                                         it on or off (trod.on); now starts a
+                                         run at once, which goes on while you
+                                         watch until no session has work left
+                                         or the plan is as full as it may get;
+                                         stop ends it
   irie ctl close [SESSION]               close a session, by id or name, or with
                                          none the one this runs in: an agent
                                          closes its own once you approve its

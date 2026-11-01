@@ -108,7 +108,7 @@ func sendable(x *session, text string) error {
 // it.
 func (cv *conversation) sent(text string, at time.Time, queued bool) {
 	cv.pending = append(cv.pending, ipc.Item{ID: "s:" + at.UTC().Format(time.RFC3339Nano), Kind: ipc.ItemUser, Time: at,
-		Text: capText(text, maxItemText), Queued: queued, Pending: true})
+		Text: capText(text, maxItemText), Queued: queued, Pending: true, From: trodFrom(text)})
 	cv.bumpMeta()
 }
 

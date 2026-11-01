@@ -76,13 +76,18 @@ struct CoreConfig: Decodable, Equatable {
         var redOnDone: Bool
         /// How a helper beside its session is drawn: browser or terminal.
         var helperStyle: String
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style" }
+        /// How long the app may leave the freeze dog unanswered before the
+        /// dog restarts it, "0s" for never (FreezeDog.swift); nil from a
+        /// core from before the dog.
+        var freezeDog: String?
+        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", freezeDog = "freeze_dog" }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             redOnDone = try c.decode(Bool.self, forKey: .redOnDone)
             // A core from before helper styles has none: the cards.
             helperStyle = try c.decodeIfPresent(String.self, forKey: .helperStyle) ?? "browser"
+            freezeDog = try c.decodeIfPresent(String.self, forKey: .freezeDog)
         }
     }
 
@@ -478,6 +483,9 @@ private struct GeneralSettings: View {
 
     /// How long a finished session waits before it closes.
     private static let delays = ["10s", "30s", "1m", "2m", "5m", "10m"]
+    /// How long Irie may stop answering before the freeze dog restarts it.
+    private static let freezes = ["5s", "10s", "20s", "30s", "1m"]
+    private static let defaultFreeze = "10s"
 
     var body: some View {
         WithConfig(model: model) { c in
@@ -516,6 +524,25 @@ private struct GeneralSettings: View {
                     Text("Jot dog")
                 } footer: {
                     footnote("When a jot’s turn ends with work uncommitted or not yet in its branch, its card says what is left, and the dog sends it back between two of your prompts.")
+                }
+                if let wait = c.ui.freezeDog {
+                    Section {
+                        let dog = model.binding(wait, "ui.freeze_dog") { $0.ui.freezeDog = $1 }
+                        Toggle("Restart Irie when it stops answering", isOn: Binding(get: { wait != "0s" },
+                                                                                set: { dog.wrappedValue = $0 ? Self.defaultFreeze : "0s" }))
+                        // While the dog is off, the picker shows what turning it on picks.
+                        Picker("Once it has not answered for", selection: Binding(get: { wait == "0s" ? Self.defaultFreeze : wait },
+                                                                                set: { dog.wrappedValue = $0 })) {
+                            ForEach(Self.freezes + (Self.freezes.contains(wait) || wait == "0s" ? [] : [wait]), id: \.self) { d in
+                                Text(Self.spoken(d)).tag(d)
+                            }
+                        }
+                        .disabled(wait == "0s")
+                    } header: {
+                        Text("Freeze dog")
+                    } footer: {
+                        footnote("Irie is force quit and opened again as it was, and your agents keep running. A report of where it was stuck goes in the freezes folder beside core.log.")
+                    }
                 }
                 Section {
                     Toggle("Read cost and plan use from Claude Code’s status line", isOn: model.bind(c, \.usage.statusLine, "usage.status_line"))
@@ -1042,6 +1069,7 @@ private struct RepoSettings: View {
 /// the plan it may use, and the rules and guidelines every agent it keeps
 /// going is given. Setting it up is writing those.
 private struct TrodSettings: View {
+    @EnvironmentObject private var store: Store
     @ObservedObject var model: SettingsModel
 
     private static let aways = ["0s", "5m", "15m", "30m", "1h"]
@@ -1075,10 +1103,14 @@ private struct TrodSettings: View {
                         Text(d == "0s" ? "No wait" : GeneralSettings.spoken(d)).tag(d)
                     }
                 }
+                LabeledContent("Or now, while you watch") {
+                    Button(store.trod?.hand == true ? "Stop" : "Start Now") { store.setTrod(store.trod?.hand != true) }
+                        .disabled(!store.canTrod)
+                }
             } header: {
                 Text("Trod bot")
             } footer: {
-                footnote("While your Mac has had no keyboard or mouse for that long, it tells an agent that asks you something to decide for itself, and sends on a turn an API error stopped and a task that isn’t through. It never answers in your name or approves a permission. A session you park or freeze is left alone.\(t.start == t.end ? " The same time for both is around the clock." : "")")
+                footnote("While your Mac has had no keyboard or mouse for that long, it tells an agent that asks you something to decide for itself, and sends on a turn an API error stopped and a task that isn’t through. It never answers in your name or approves a permission. A session you park or freeze is left alone. Started now, it works while you watch, until no session has work left or your plan is as full as below. Its boot print marks each card it sends on.\(t.start == t.end ? " The same time for both is around the clock." : "")")
             }
             .disabled(false)
             Section {

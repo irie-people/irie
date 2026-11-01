@@ -73,9 +73,20 @@ const (
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
 
+// FeatureWatch is in hello's features when subscribe takes ViewWatch: the
+// freeze dog watches the window that asks (DESIGN §2.4).
+const FeatureWatch = "watch"
+
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
 const ViewApp = "app"
+
+// ViewWatch is the SubscribeArgs.View of a window that asks the freeze dog
+// to watch it (DESIGN §2.4): the stream carries only pings, which the
+// window answers with a Pong from its main loop. A ping left unanswered
+// for ui.freeze_dog has its process force quit and, for the Mac app,
+// opened again.
+const ViewWatch = "watch"
 
 // Error codes.
 const (
@@ -183,6 +194,28 @@ type TrodShift struct {
 	Awake bool       `json:"awake,omitempty"` // it keeps the Mac awake
 	// Capped: the plan is past trod.max_plan_use, so it sends nothing on.
 	Capped bool `json:"capped,omitempty"`
+	// Hand: you started it by hand, so it works while you are at the Mac,
+	// until nothing is left or the plan is as full as it may get.
+	Hand bool `json:"hand,omitempty"`
+}
+
+// TrodArgs start a run of the trod bot by hand, which works at once, until
+// Until if given, until no session has work left, or until the plan is as
+// full as trod.max_plan_use; or stop one. With neither, the op only
+// reports.
+type TrodArgs struct {
+	Start bool       `json:"start,omitempty"`
+	Stop  bool       `json:"stop,omitempty"`
+	Until *time.Time `json:"until,omitempty"`
+}
+
+// TrodHand is the run of the trod bot you started by hand last.
+type TrodHand struct {
+	From  time.Time  `json:"from"`
+	Until *time.Time `json:"until,omitempty"`
+	On    bool       `json:"on"`              // it still works
+	Ended *time.Time `json:"ended,omitempty"` // when it ended
+	Why   string     `json:"why,omitempty"`   // why it ended: nothing was left, the plan, its time, or you
 }
 
 // TrodResult is the trod bot's report (DESIGN §4.10).
@@ -201,6 +234,7 @@ type TrodResult struct {
 	FiveHours   *float64      `json:"five_hours,omitempty"` // how full the plan's five hours and week are, in percent, when the status line said
 	Week        *float64      `json:"week,omitempty"`
 	Capped      bool          `json:"capped,omitempty"` // past max_plan_use, so it sends nothing on
+	Hand        *TrodHand     `json:"hand,omitempty"`   // the run you started by hand last
 	Rules       []string      `json:"rules"`
 	Guidelines  []string      `json:"guidelines"`
 	Sessions    []TrodSession `json:"sessions"` // in the list's order
@@ -456,9 +490,22 @@ type SubscribeArgs struct {
 	// sub:<id>. With Conversation, sub:<id> follows that helper's own
 	// conversation instead of the session's.
 	Agent string `json:"agent,omitempty"`
-	View  string `json:"view,omitempty"` // "" or ViewApp
+	View  string `json:"view,omitempty"` // "", ViewApp or ViewWatch
 	// Conversation adds the session's conversation frames; it needs Session.
 	Conversation bool `json:"conversation,omitempty"`
+	// With ViewWatch: the window's process, which the freeze dog force
+	// quits, and the Mac app it then opens again, if any.
+	PID    int    `json:"pid,omitempty"`
+	Bundle string `json:"bundle,omitempty"`
+}
+
+// Pong answers a FramePing on the same connection. A watched window sends
+// it from its main loop, so it says the window still answers its user, and
+// with how the window stands, so that one opened again stands the same way.
+type Pong struct {
+	Pong   uint64 `json:"pong"`
+	Front  bool   `json:"front,omitempty"`  // the window's app is the active one
+	Hidden bool   `json:"hidden,omitempty"` // its app is hidden
 }
 
 // AttachInfoResult is how to attach a tmux client to the session that holds
@@ -746,6 +793,10 @@ const (
 	// empty when nothing: once after the first snapshot, then whenever they
 	// change. A subscription to one session gets none.
 	FrameHistory = "history"
+	// FramePing is the freeze dog's ping to a window it watches, the only
+	// frame a ViewWatch subscription gets. The window answers it with a
+	// Pong.
+	FramePing = "ping"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
@@ -761,6 +812,7 @@ type Frame struct {
 	Closed   []ClosedSession  `json:"closed,omitempty"`   // closed
 	Undo     string           `json:"undo,omitempty"`     // history
 	Redo     string           `json:"redo,omitempty"`     // history
+	Ping     uint64           `json:"ping,omitempty"`     // ping
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 }
@@ -824,6 +876,11 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			Undo string `json:"undo"`
 			Redo string `json:"redo"`
 		}{f.T, f.Undo, f.Redo})
+	case FramePing:
+		return json.Marshal(struct {
+			T    string `json:"t"`
+			Ping uint64 `json:"ping"`
+		}{f.T, f.Ping})
 	case FrameHeader:
 		h := f.Header
 		if h == nil {
