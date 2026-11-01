@@ -5,7 +5,7 @@
 #
 # It downloads the latest release of irie for this computer from GitHub,
 # checks its SHA-256, and puts it in ~/.local/share/irie/bin, with a link
-# in ~/.local/bin. On a Mac with Apple silicon it puts Irie.app in
+# in ~/.local/bin. On a Mac with macOS 14 or later it puts Irie.app in
 # ~/Applications, where Spotlight finds it. Then `irie setup` checks for
 # tmux, Claude Code and a sign-in, and offers to install each one that is
 # missing; nothing is installed without a yes. Running it again updates
@@ -91,7 +91,10 @@ main() {
 
 	asset=irie-$os-$arch.tar.gz
 	step "Downloading Irie for $(pretty "$os") on $arch"
-	if ! fetch "$from/SHA256SUMS" "$tmp/SHA256SUMS" || ! fetch "$from/$asset" "$tmp/$asset"; then
+	# curl's own words are kept for when building from source can't
+	# happen either: a release with no download for this computer is no
+	# error by itself.
+	if ! fetch "$from/SHA256SUMS" "$tmp/SHA256SUMS" 2>"$tmp/why" || ! fetch "$from/$asset" "$tmp/$asset" 2>>"$tmp/why"; then
 		from_source
 	else
 		check "$asset"
@@ -166,7 +169,8 @@ link() {
 # this computer, as before the first release with downloads.
 from_source() {
 	if ! command -v go >/dev/null 2>&1; then
-		fail "there is no download of Irie for $(pretty "$os") on $arch at $from yet, and building it needs Go. Install Go from https://go.dev/dl, then run this again, or see $docs"
+		why=$(tail -n 1 "$tmp/why" 2>/dev/null)
+		fail "Irie for $(pretty "$os") on $arch couldn't be downloaded from $from${why:+ ($why)}, and building it from source needs Go. Install Go from https://go.dev/dl, then run this again, or see $docs"
 	fi
 	at=latest
 	[ -n "${IRIE_VERSION:-}" ] && at=v${IRIE_VERSION#v}
@@ -178,11 +182,12 @@ from_source() {
 # app puts Irie.app in ~/Applications, or updates it where it is, and
 # reopens it when it was open. Its agents run on without it.
 app() {
-	if [ "$arch" != arm64 ]; then
-		say "Irie.app is for Apple silicon for now; on this Mac, type irie in a terminal."
+	major=$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)
+	if [ "${major:-0}" -lt 14 ]; then
+		say "Irie.app needs macOS 14 or later; on this Mac, type irie in a terminal."
 		return
 	fi
-	zip=Irie-macos-arm64.zip
+	zip=Irie-macos.zip
 	if ! fetch "$from/$zip" "$tmp/$zip"; then
 		say "This release has no Irie.app; type irie in a terminal."
 		return
