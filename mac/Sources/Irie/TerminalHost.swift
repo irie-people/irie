@@ -60,7 +60,7 @@ struct TerminalHost: NSViewRepresentable {
         func attach() {
             var env = Terminal.getEnvironmentVariables(termName: "xterm-256color")
             env.removeAll { $0.hasPrefix("TMUX=") || $0.hasPrefix("TMUX_PANE=") }
-            view?.startProcess(executable: info.tmux, args: ["-S", info.socket, "attach-session", "-t", info.target],
+            view?.startProcess(executable: info.tmux, args: ["-S", info.socket, "attach-session"] + Preview.clientFlags + ["-t", info.target],
                                environment: env, execName: "tmux")
         }
 
@@ -177,7 +177,8 @@ struct SplitTerminal: NSViewRepresentable {
             guard !gone, let view else { return }
             var env = Terminal.getEnvironmentVariables(termName: "xterm-256color")
             env.removeAll { $0.hasPrefix("TMUX=") || $0.hasPrefix("TMUX_PANE=") }
-            view.startProcess(executable: tmux, args: ["-S", socket, "attach-session", "-t", target], environment: env, execName: "tmux")
+            view.startProcess(executable: tmux, args: ["-S", socket, "attach-session"] + Preview.clientFlags + ["-t", target],
+                              environment: env, execName: "tmux")
         }
 
         func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}

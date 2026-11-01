@@ -40,6 +40,12 @@ struct PhraseBar: View {
             .padding(.horizontal, 16)
             .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
                 .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            .overlay(alignment: .leading) {
+                // A preview says so, and how its next build goes.
+                PreviewBadge()
+                    .frame(maxWidth: 340, alignment: .leading)
+                    .padding(.leading, 16)
+            }
             .overlay(alignment: .trailing) {
                 // The core's version, muted, in the bottom right corner.
                 if case let .online(version) = store.link {
