@@ -30,6 +30,7 @@ type fakeBackend struct {
 	shows     []showCall
 	spawnErr  error
 	spawned   *ipc.Session // what Spawn returns, when set
+	added     bool         // and whether a jot went to it, as more for the one before
 	completes []string
 	items     map[string][]string // Complete's answers
 	notes     map[string][]string // and its notes
@@ -68,15 +69,15 @@ func (f *fakeBackend) Route(task string) (route.Choice, error) {
 	return f.choice, nil
 }
 
-func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
+func (f *fakeBackend) Spawn(a ipc.SpawnArgs) (ipc.SpawnResult, error) {
 	f.spawns = append(f.spawns, a)
 	if f.spawnErr != nil {
-		return ipc.Session{}, f.spawnErr
+		return ipc.SpawnResult{}, f.spawnErr
 	}
 	if f.spawned != nil {
-		return *f.spawned, nil
+		return ipc.SpawnResult{Session: *f.spawned, Added: f.added}, nil
 	}
-	return ipc.Session{ID: fmt.Sprintf("snew%08d", len(f.spawns)), Name: "new"}, nil
+	return ipc.SpawnResult{Session: ipc.Session{ID: fmt.Sprintf("snew%08d", len(f.spawns)), Name: "new"}}, nil
 }
 
 func (f *fakeBackend) Show(id string, focus bool) error {
@@ -613,7 +614,7 @@ func TestSubmitSpawnsAndSelectsTheNewRow(t *testing.T) {
 	}
 	m = typeText(m, "@/home/alice/code/website describe this repo")
 	m = send(m, keyMsg("enter"))
-	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website"}}
+	want := []ipc.SpawnArgs{{Task: "describe this repo", Repo: "/home/alice/code/website", Jot: true}}
 	if !reflect.DeepEqual(b.spawns, want) {
 		t.Fatalf("spawns = %+v, want %+v", b.spawns, want)
 	}
@@ -1046,6 +1047,19 @@ func TestTheStatusStripSaysWhereATaskWent(t *testing.T) {
 				t.Errorf("80×%d: status %q lacks %q", h, status, want)
 			}
 		}
+	}
+}
+
+func TestAJotThatWentToTheOneBeforeSaysSo(t *testing.T) {
+	m, b := newModel(t, 80, 24, 0)
+	b.spawned, b.added = &ipc.Session{ID: "s00000000fix1", Name: "Fix It"}, true
+	m = typeText(m, "also the footer")
+	m = send(m, keyMsg("enter"))
+	if len(b.spawns) != 1 || !b.spawns[0].Jot {
+		t.Fatalf("spawns = %+v, want one jot", b.spawns)
+	}
+	if !strings.Contains(m.status, "added to Fix It") || m.statusErr || m.bar.Value() != "" {
+		t.Errorf("status %q, bar %q", m.status, m.bar.Value())
 	}
 }
 

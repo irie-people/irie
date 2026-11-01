@@ -23,7 +23,8 @@ import (
 
 // Backend is what the sidebar asks of the core.
 type Backend interface {
-	Spawn(ipc.SpawnArgs) (ipc.Session, error)
+	// Spawn starts a task, or adds a jot to the one before it (Added).
+	Spawn(ipc.SpawnArgs) (ipc.SpawnResult, error)
 	Show(id string, focus bool) error
 	// Rename gives a session a new name and returns it with the name the
 	// core gave it.
@@ -58,6 +59,7 @@ type OfflineMsg struct{}
 type (
 	spawnedMsg struct {
 		session ipc.Session
+		added   bool // the jot went to session's agent, as more for the jot before
 		err     error
 	}
 	shownMsg     struct{ err error }
@@ -369,7 +371,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bar.Reset()
 		m.chips = nil
 		m.setFocus(focusList)
-		m.setStatus(spawnSummary(msg.session), false)
+		if msg.added {
+			m.setStatus("added to "+msg.session.Name+": it reads as more for the task you sent just before", false)
+		} else {
+			m.setStatus(spawnSummary(msg.session), false)
+		}
 		m.pick(msg.session.ID)
 	case shownMsg:
 		if msg.err != nil {
@@ -581,12 +587,15 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		args.Task = expand(args.Task, m.chips)
+		// A jot that reads as more for the one just sent goes to its agent
+		// instead (DESIGN §4.2).
+		args.Jot = true
 		m.spawning = true
 		m.setStatus("starting…", false)
 		b := m.backend
 		return m, func() tea.Msg {
-			s, err := b.Spawn(args)
-			return spawnedMsg{session: s, err: err}
+			r, err := b.Spawn(args)
+			return spawnedMsg{session: r.Session, added: r.Added, err: err}
 		}
 	case "esc":
 		m.bar.Reset()

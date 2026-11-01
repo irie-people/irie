@@ -210,7 +210,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `hello` | `client`, `api` | `version`, `api`, `features[]`, which name the ops served, `move` among them | M1 |
 | `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
 | `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session`; with `agent: "sub:<id>"` it follows that helper's own conversation (§4.4) | M1 (`view`: Mac app; `conversation`: §4.7) |
-| `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?` (`auto` routes it), `name?` (the user's, §4.2), `force?`, `delegate?`, `parent?`, `permission_mode?`, `continues?` | `session` | M1 (`repo`, `profile` M3; `force`, `delegate`, `parent`, `permission_mode`, `continues` M10) |
+| `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?` (`auto` routes it), `name?` (the user's, §4.2), `force?`, `delegate?`, `parent?`, `permission_mode?`, `continues?`, `jot?` (typed in a task bar: it may add to the jot before), `apart?` (a session a jot was added to, to take it back from and start it apart) | `session`; for a jot added to the one before, `added`, the session it went to and `until`, when it is typed; for `apart`, `late` when that agent had it already | M1 (`repo`, `profile` M3; `force`, `delegate`, `parent`, `permission_mode`, `continues` M10; `jot`, `apart`: "More for the last jot", §4.2) |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
@@ -453,7 +453,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 
 | Input | Meaning |
 |---|---|
-| Plain text | A new task, kept verbatim, with no length cap |
+| Plain text | A new task, kept verbatim, with no length cap; or, when it reads as more for the jot just sent, a message to that jot's agent ("More for the last jot", below) |
 | `@name`, `@path` | Run in a new worktree of that git repo (M3). A path that is not a git repo runs in place. M1 accepts only absolute or `~` paths and runs in place |
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
 | `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10) |
@@ -473,6 +473,16 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 8. The journal records `spawn.requested`, then `session.started` or `spawn.failed`.
 
 `irie ctl spawn` runs `irie up` first, so a script can spawn with no window open.
+
+**More for the last jot.** Context remembered a moment after a task is sent belongs to that task's agent, not to a new one. A task typed in a task bar or the command bar (`jot` in `spawn`) goes to the agent of the jot sent just before it, as a message, when all of these hold:
+- it comes within `spawn.follow_up_window` (2 minutes) of that jot, or of the last jot added to it;
+- it asks for the same place and agent: no `@repo`, folder, `+profile`, model or name of its own, unless the same;
+- that jot is still starting, or its agent is still there: not ended, failed or closed;
+- it reads as more for that jot. It starts with words that go on from it (`also`, `and`, `oh`, `plus`, `btw`, `PS`, `actually`, `I forgot`, `I meant`, `make sure`, `don't`, `one more thing`, `same`, `then`, `more context`, `update:`, `note:` …) or point back at it (`it`, `it's`, `that`, `this`, `these`, `they`, `here's`, `for that`, `^` …), has `also` among its first four words, or is only a link, a path or an error message (`TypeError: …`, `panic: …`, `fatal: …`). A word such as `update` or `note` counts only with its colon, so "update the README" is a task of its own.
+
+Anything else starts a session, as before, and is the jot the next may add to: "deep research X" sent nine seconds after "deep research Y" starts a second agent. The words are read the same way every time and cost no tokens (`internal/jot`). Spawns from scripts, delegation and the Mac app's new-task sheet never add.
+
+The answer says `added`, names the session, and gives `until`: the jot waits `spawn.follow_up_delay` (8 s) before it is typed, so that a spawn with `apart` naming that session can take it back and start it as a task of its own; the Mac app's notice offers that as **New task**, and says so when the agent had it already (`late`). A jot added while the one before is still being spawned waits for that spawn, and fails with it. The core types an added jot as `send` does a message (§4.7), once the agent can take one: not while it starts, waits on you in its terminal, or is frozen; and one of several lines only once it asks for bracketed paste. Claude Code takes what is typed while it works at its next tool call. Jots waiting for an agent are kept in its session folder (`followups.json`), so a core that restarts meanwhile still types them, and are dropped when the session ends; a session that closes and is reopened starts with none.
 
 **Names.** A session's name is what its row shows (`@irie_name`). Its slug, the first five words of the task's first line in lower case joined by `-` (`fix-the-flaky-login-test`), names its scratch dir, worktree and branch.
 - **Titles.** A task given no name is named after its first line: the `@` and `+` tokens that may lead it left out, whitespace made single spaces, in title case and cut at a word's end to 40 characters with `…` (`Fix the Flaky Login Test`). Claude Code then gets no `--name`, so it titles the session itself from the first prompt, and again when a plan is accepted (Claude Code's sessions docs). So the title comes from the task's subject and is not refreshed as the conversation moves on: in local runs of 2.1.310, later prompts on other subjects brought no new title. Each title is an `ai-title` line in the session's own transcript, not a subagent's, which the core reads with the token tally (§4.7); a new one renames the row, numbered when another row has the name. A name that is the title already, numbered or not, stays, so a restarted core, which reads every transcript again, changes nothing. A title is not a rename: nothing is journaled and undo never sees it. Titles that a `custom-title` line follows, from a name given in Claude Code itself, are passed over. Where no titles come, as from another harness, a model that cannot make them or `CLAUDE_CODE_DISABLE_TERMINAL_TITLE`, the first name stays. A session moved in (§4.6) starts with the name Claude Code lists it under.
@@ -862,6 +872,8 @@ hide_tmux = true              # remove TMUX/TMUX_PANE from agent env
 close_when_done = false       # close a session once its turn ends and it stays quiet for close_delay (reopen undoes it; status, report and question sessions are left open)
 close_delay = "30s"           # how long a finished session waits; a new prompt, or anything it needs from you, cancels the close
 teammates = "off"             # panes | off: Claude Code sessions may start agent teams, each teammate in a terminal beside its session (§2.3)
+follow_up_window = "2m"       # a jot that reads as more for the jot sent within this long before goes to its agent instead of a new one (§4.2); "0s" = never
+follow_up_delay = "8s"        # how long such a jot waits before it is typed to the agent, so that New task can take it back
 
 [profiles.claude]             # the strongest: hard work and orchestration
 harness = "claude-code"

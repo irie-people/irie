@@ -20,10 +20,10 @@ const spawnTimeout = 10 * time.Minute
 // socketBackend sends the sidebar's requests to the core.
 type socketBackend struct{ socket string }
 
-func (b socketBackend) Spawn(a ipc.SpawnArgs) (ipc.Session, error) {
+func (b socketBackend) Spawn(a ipc.SpawnArgs) (ipc.SpawnResult, error) {
 	var r ipc.SpawnResult
 	err := ipc.Call(b.socket, spawnTimeout, ipc.OpSpawn, a, &r)
-	return r.Session, err
+	return r, err
 }
 
 func (b socketBackend) Complete(text string) (ipc.CompleteResult, error) {
