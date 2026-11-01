@@ -13,20 +13,23 @@ import (
 // The daemon's TunnelState as mullvad-cli 2026.3 prints it with --json, with
 // documentation addresses (RFC 5737, RFC 3849).
 const (
-	connectedJSON    = `{"state":"connected","details":{"endpoint":{"endpoint":{"address":"192.0.2.10:51820","protocol":"udp"},"tunnel_type":"wireguard","quantum_resistant":true,"proxy":null,"obfuscation":null,"entry_endpoint":null,"tunnel_interface":"utun4","daita":false},"location":{"latitude":57.70887,"longitude":11.97456,"ipv4":"192.0.2.10","ipv6":"2001:db8::10","mullvad_exit_ip":true,"city":"Gothenburg","country":"Sweden","location":{"hostname":["se","got","se-got-wg-001"]},"entry_city":null,"entry_country":null,"entry_location":null},"feature_indicators":["LockdownMode","QuantumResistance"]}}`
-	connectingJSON   = `{"state":"connecting","details":{"endpoint":{},"location":{"latitude":59.3,"longitude":18.0,"ipv4":null,"ipv6":null,"mullvad_exit_ip":false,"city":"Stockholm","country":"Sweden","location":{"city":["se","sto"]}},"feature_indicators":[]}}`
-	disconnectedJSON = `{"state":"disconnected","details":{"location":{"latitude":40.7,"longitude":-74.0,"ipv4":"198.51.100.7","ipv6":"2001:db8::7","mullvad_exit_ip":false,"city":"Somewhere","country":"Elsewhere","location":null},"locked_down":true}}`
-	errorJSON        = `{"state":"error","details":{"cause":{"reason":"is_offline"},"block_failure":null}}`
-	leakyErrorJSON   = `{"state":"error","details":{"cause":{"reason":"set_firewall_policy_error","details":{"reason":"generic"}},"block_failure":{"reason":"generic"}}}`
+	connectedJSON  = `{"state":"connected","details":{"endpoint":{"endpoint":{"address":"192.0.2.10:51820","protocol":"udp"},"tunnel_type":"wireguard","quantum_resistant":true,"proxy":null,"obfuscation":null,"entry_endpoint":null,"tunnel_interface":"utun4","daita":false},"location":{"latitude":57.70887,"longitude":11.97456,"ipv4":"192.0.2.10","ipv6":"2001:db8::10","mullvad_exit_ip":true,"city":"Gothenburg","country":"Sweden","location":{"hostname":["se","got","se-got-wg-001"]},"entry_city":null,"entry_country":null,"entry_location":null},"feature_indicators":["LockdownMode","QuantumResistance"]}}`
+	connectingJSON = `{"state":"connecting","details":{"endpoint":{},"location":{"latitude":59.3,"longitude":18.0,"ipv4":null,"ipv6":null,"mullvad_exit_ip":false,"city":"Stockholm","country":"Sweden","location":{"city":["se","sto"]}},"feature_indicators":[]}}`
+	// mullvad-cli 2026.3 names the relay in a plain hostname.
+	connected2026JSON = `{"state":"connected","details":{"endpoint":{},"location":{"ipv4":"192.0.2.11","ipv6":"2001:db8::11","country":"Sweden","city":"Malmö","latitude":55.6,"longitude":13.0,"mullvad_exit_ip":true,"hostname":"se-mma-wg-002","entry_hostname":"se-got-wg-004","obfuscator_hostname":null},"feature_indicators":[]}}`
+	disconnectedJSON  = `{"state":"disconnected","details":{"location":{"latitude":40.7,"longitude":-74.0,"ipv4":"198.51.100.7","ipv6":"2001:db8::7","mullvad_exit_ip":false,"city":"Somewhere","country":"Elsewhere","location":null},"locked_down":true}}`
+	errorJSON         = `{"state":"error","details":{"cause":{"reason":"is_offline"},"block_failure":null}}`
+	leakyErrorJSON    = `{"state":"error","details":{"cause":{"reason":"set_firewall_policy_error","details":{"reason":"generic"}},"block_failure":{"reason":"generic"}}}`
 )
 
 func TestParse(t *testing.T) {
 	for line, want := range map[string]State{
-		connectedJSON:    {State: Connected, City: "Gothenburg", Country: "Sweden", Host: "se-got-wg-001"},
-		connectingJSON:   {State: Connecting, City: "Stockholm", Country: "Sweden"},
-		disconnectedJSON: {State: Disconnected, Blocked: true},
-		errorJSON:        {State: Error, Cause: "is_offline", Blocking: true},
-		leakyErrorJSON:   {State: Error, Cause: "set_firewall_policy_error"},
+		connectedJSON:     {State: Connected, City: "Gothenburg", Country: "Sweden", Host: "se-got-wg-001"},
+		connectingJSON:    {State: Connecting, City: "Stockholm", Country: "Sweden"},
+		connected2026JSON: {State: Connected, City: "Malmö", Country: "Sweden", Host: "se-mma-wg-002"},
+		disconnectedJSON:  {State: Disconnected, Blocked: true},
+		errorJSON:         {State: Error, Cause: "is_offline", Blocking: true},
+		leakyErrorJSON:    {State: Error, Cause: "set_firewall_policy_error"},
 		`{"state":"disconnecting","details":"nothing"}`: {State: Disconnecting},
 	} {
 		got, ok := Parse([]byte(line))

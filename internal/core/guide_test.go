@@ -101,7 +101,7 @@ func TestTheSwitchGuideRunsIriesSkill(t *testing.T) {
 	if err := c.call(ipc.OpInput, ipc.InputArgs{Text: ":setup switch"}, &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Did != ipc.InputRan || !r.Show || r.Session == nil || r.Text != "Started Dead Man's Switch." {
+	if r.Did != ipc.InputRan || !r.Show || r.Session == nil || !strings.HasPrefix(r.Text, "Started Dead Man's Switch. The first time, Claude Code asks whether to trust") {
 		t.Fatalf("input = %+v", r)
 	}
 	id := r.Session.ID
@@ -113,7 +113,7 @@ func TestTheSwitchGuideRunsIriesSkill(t *testing.T) {
 			t.Fatal(err)
 		}
 		i := slices.Index(spec.Argv, "--plugin-dir")
-		if spec.Profile != "claude" || i < 0 || first && spec.Argv[len(spec.Argv)-1] != "/irie:dead-mans-switch" {
+		if spec.Profile != "claude" || i < 0 || first && spec.Argv[len(spec.Argv)-1] != "/irie:dead-mans-switch" || spec.Cwd != filepath.Join(c.paths.Data, "guides", "dead-mans-switch") {
 			t.Fatalf("spec = %+v", spec)
 		}
 		return spec.Argv[i+1]

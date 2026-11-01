@@ -91,7 +91,7 @@ The rhythm is the user's: 14, 2 and 16 days are what the guide suggests.
 
 ### 2.2 The session
 
-The user types `:setup switch` in any task bar, or picks **File › Set Up a Dead Man's Switch…** in the Mac app. The core starts a Claude Code session called "Dead Man's Switch" on `+claude`, in a new scratch folder, with `/irie:dead-mans-switch` as its task. `+claude` is the most careful profile, and this session decides who can reach everything a person owns. The skill then takes the user through it, a step at a time, and they can stop after any step and reopen the session later:
+The user types `:setup switch` in any task bar, or picks **File › Set Up a Dead Man's Switch…** in the Mac app. The core starts a Claude Code session called "Dead Man's Switch" on `+claude`, in a folder of its own, `<data>/guides/dead-mans-switch`, with `/irie:dead-mans-switch` as its task. The folder is the same every time, so Claude Code asks only once whether to trust it, and the reply says to choose Yes; the guide's files go in the folder the user picks. `+claude` is the most careful profile, and this session decides who can reach everything a person owns. The skill then takes the user through it, a step at a time, and they can stop after any step and reopen the session later:
 
 1. **Ask.** Who should be told, and for each of them an email address and whether they get full access or only a view; any number of people. Which password manager, and its plan. Which phone. Whether they have Google and Apple accounts. The rhythm. Where to keep the files, by default `~/Documents/Dead Man's Switch`.
 2. **Plan.** The agent writes `switch.md`, every step marked *agent* or *you*, and shows it.
