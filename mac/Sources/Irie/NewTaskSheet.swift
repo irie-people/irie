@@ -16,6 +16,8 @@ struct NewTaskSheet: View {
     @State private var agent = ""
     /// A model alias or name; empty for the agent's own.
     @State private var model = ""
+    /// off, explain or teach; empty for learn.tutor's (docs/proposals/learning.md).
+    @State private var tutor = ""
     @FocusState private var textFocused: Bool
 
     /// The aliases Claude Code's `--model` takes for its latest models.
@@ -65,6 +67,20 @@ struct NewTaskSheet: View {
                     .disabled(!modelApplies)
                     .help(modelApplies ? "Runs this task on the latest model of that name" : "This agent picks its own model")
                 }
+                if store.canTutor {
+                    GridRow {
+                        label("Tutor")
+                        Picker("Tutor", selection: $tutor) {
+                            Text("As in Settings").tag("")
+                            Text("Off").tag("off")
+                            Text("Explain as it goes").tag("explain")
+                            Text("Teach me").tag("teach")
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 200)
+                        .help("Explain adds notes on why it does what it does; Teach also leaves parts for you to write. Both make longer replies.")
+                    }
+                }
             }
             .font(Theme.font(13))
             VStack(alignment: .leading, spacing: 6) {
@@ -79,7 +95,7 @@ struct NewTaskSheet: View {
                         .strokeBorder(textFocused ? Theme.accent : Theme.edge, lineWidth: textFocused ? 1.5 : 1))
                     .focused($textFocused)
                     .accessibilityLabel("The task")
-                Text("What should we work on? @repo and +agent words in the text win over the menus.")
+                Text("What should we work on? @repo, +agent, +explain and +teach words in the text win over the menus.")
                     .font(Theme.font(11.5))
                     .foregroundStyle(Theme.muted)
             }
@@ -140,7 +156,8 @@ struct NewTaskSheet: View {
         store.dismissNotice()
         Task {
             let ok = await store.spawn(input, repo: repo.isEmpty ? nil : repo, worktree: worktree,
-                                       agent: agent.isEmpty ? nil : agent, model: modelApplies && !model.isEmpty ? model : nil)
+                                       agent: agent.isEmpty ? nil : agent, model: modelApplies && !model.isEmpty ? model : nil,
+                                       tutor: tutor.isEmpty ? nil : tutor)
             if ok {
                 store.setTaskRepo(repo.isEmpty ? nil : repo)
                 dismiss()

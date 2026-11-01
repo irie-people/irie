@@ -4,7 +4,8 @@ import Foundation
 /// (DESIGN §4.2). Only the first line is read for tokens: @name or @path runs
 /// the task in a new worktree of that git repo, or in place in a directory
 /// git does not know; @name! runs it in the repo's own checkout; +profile
-/// picks the profile. The rest of the input is the task, verbatim.
+/// picks the profile; +explain or +teach picks a tutor mode. The rest of the
+/// input is the task, verbatim.
 enum TaskParser {
     struct Problem: LocalizedError {
         var errorDescription: String?
@@ -59,6 +60,13 @@ enum TaskParser {
     private static func token(_ a: inout SpawnArgs, _ w: String, home: String) throws {
         var v = String(w.dropFirst())
         if w.hasPrefix("+") {
+            // The tutor words set how the task works with you, beside its
+            // profile (docs/proposals/learning.md).
+            if v == "explain" || v == "teach" {
+                if a.tutor != nil { throw Problem(errorDescription: "one of +explain and +teach per task") }
+                a.tutor = v
+                return
+            }
             if a.profile != nil { throw Problem(errorDescription: "only one +profile per task") }
             if v.isEmpty { throw Problem(errorDescription: "+ needs a profile name") }
             a.profile = v

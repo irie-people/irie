@@ -42,6 +42,7 @@ struct IrieApp: App {
         .defaultSize(width: 1200, height: 760)
         .windowToolbarStyle(.unifiedCompact(showsTitle: Self.showsTitle))
         .commands {
+            LearnCommands(store: store)
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("New Task…") { store.newTaskSheet = true }
@@ -119,6 +120,12 @@ struct IrieApp: App {
                     .disabled(store.selection == nil || store.outsideSelection != nil)
             }
         }
+        // Help > Learning Resources and Glossary (Learn.swift).
+        Window("Learn", id: LearnWindow.id) {
+            LearnWindow()
+                .environmentObject(store)
+        }
+        .defaultSize(width: 560, height: 640)
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)

@@ -42,10 +42,13 @@ struct Session: Codable, Identifiable, Equatable {
     /// What its jot left that has not landed, by the jot dog's last look,
     /// while its turn is over (DESIGN §4.8); nil when it is through.
     var loose: Loose?
+    /// Its tutor mode, explain or teach, while it is in one
+    /// (docs/proposals/learning.md).
+    var tutor: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, tokens
-        case order, parked, frozen, freezing, priority, loose
+        case order, parked, frozen, freezing, priority, loose, tutor
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -204,11 +207,45 @@ struct SpawnArgs: Encodable {
     /// A model for this task instead of its profile's; only a core whose
     /// hello lists spawn-model takes it.
     var model: String?
+    /// off, explain or teach for this task; nil takes learn.tutor. Only a
+    /// core whose hello lists spawn-tutor takes it.
+    var tutor: String?
 
     enum CodingKeys: String, CodingKey {
-        case task, repo, profile, model
+        case task, repo, profile, model, tutor
         case inPlace = "in_place"
     }
+}
+
+/// What the Help menu shows (docs/proposals/learning.md): the user's own
+/// links, then the learning resources, and the glossary.
+struct LearnArgs: Encodable {
+    var session: String?
+}
+
+struct LearnResult: Decodable {
+    var resources: [LearnResource]
+    var glossary: [LearnTerm]
+}
+
+struct LearnResource: Decodable, Identifiable, Hashable {
+    var group: String
+    var title: String
+    var url: String
+    var about: String
+    var note: String?
+    var lang: String?
+    /// One of the user's own links (learn.links).
+    var yours: Bool?
+    /// A tutorial of a language the shown session's project is written in.
+    var here: Bool?
+    var id: String { title }
+}
+
+struct LearnTerm: Decodable, Identifiable, Hashable {
+    var term: String
+    var means: String
+    var id: String { term }
 }
 
 /// An @ or + word to complete: "@" lists the repos, "+" the agents.

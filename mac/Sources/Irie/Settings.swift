@@ -69,6 +69,8 @@ struct CoreConfig: Decodable, Equatable {
     var worktree: Worktree
     var usage: Usage
     var dog: Dog
+    /// Nil from a core older than the learning settings.
+    var learn: Learn?
 
     struct UI: Decodable, Equatable {
         var redOnDone: Bool
@@ -169,6 +171,18 @@ struct CoreConfig: Decodable, Equatable {
     struct Dog: Decodable, Equatable {
         var watch: Bool
         var nudges: Int
+    }
+
+    /// What helps you learn while your agents work (docs/proposals/learning.md).
+    struct Learn: Decodable, Equatable {
+        var tutor: String
+        var visual: Bool
+        var agentTips: Bool
+        var links: [String: String]
+        enum CodingKeys: String, CodingKey {
+            case tutor, visual, links
+            case agentTips = "agent_tips"
+        }
     }
 
     /// The profiles by name, the default's first among equals: auto's own
@@ -317,7 +331,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
-        case general, appearance, agents, local, repos
+        case general, appearance, agents, local, repos, learning
 
         var id: String { rawValue }
 
@@ -328,6 +342,7 @@ struct SettingsView: View {
             case .agents: return "Agents"
             case .local: return "Local Models"
             case .repos: return "Repos"
+            case .learning: return "Learning"
             }
         }
 
@@ -338,6 +353,7 @@ struct SettingsView: View {
             case .agents: return "person.2"
             case .local: return "desktopcomputer"
             case .repos: return "folder"
+            case .learning: return "graduationcap"
             }
         }
     }
@@ -374,6 +390,7 @@ struct SettingsView: View {
         case .agents: AgentSettings(model: model)
         case .local: LocalSettings(model: model)
         case .repos: RepoSettings(model: model)
+        case .learning: LearningSettings(model: model)
         }
     }
 }
@@ -913,6 +930,100 @@ private struct LocalSettings: View {
 }
 
 // MARK: Repos
+
+/// What helps you learn while your agents work (docs/proposals/learning.md):
+/// tutor mode and its pictures, Irie's tips, and your own links.
+private struct LearningSettings: View {
+    @ObservedObject var model: SettingsModel
+    @State private var title = ""
+    @State private var url = ""
+
+    var body: some View {
+        WithConfig(model: model) { c in
+            SettingsForm(model: model) {
+                if let l = c.learn {
+                    Section {
+                        Picker("Tutor mode", selection: model.bind(c, \.learn!.tutor, "learn.tutor")) {
+                            Text("Off").tag("off")
+                            Text("Explain as it goes").tag("explain")
+                            Text("Teach me").tag("teach")
+                        }
+                        .pickerStyle(.radioGroup)
+                        Toggle("Draw a picture where it helps", isOn: model.bind(c, \.learn!.visual, "learn.visual"))
+                            .disabled(l.tutor == "off")
+                    } header: {
+                        Text("Tutor mode")
+                    } footer: {
+                        footnote(Self.about(l.tutor) + " Sessions started from now on follow this; +explain or +teach in a task sets it for that task alone.")
+                    }
+                    Section {
+                        Toggle("Show Irie’s tips under Claude Code’s spinner", isOn: model.bind(c, \.learn!.agentTips, "learn.agent_tips"))
+                    } header: {
+                        Text("Tips")
+                    } footer: {
+                        footnote("Now and then, among Claude Code’s own tips, marked “Irie tip”. Claude Code’s own setting to hide tips hides these too.")
+                    }
+                    Section {
+                        ForEach(l.links.keys.sorted(), id: \.self) { name in
+                            HStack {
+                                Image(systemName: "link").foregroundStyle(Theme.muted)
+                                Text(name).fontWeight(.semibold)
+                                Text(l.links[name] ?? "").foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                Button {
+                                    var m = l.links
+                                    m[name] = nil
+                                    model.bind(c, \.learn!.links, "learn.links").wrappedValue = m
+                                } label: { Image(systemName: "minus.circle") }
+                                    .buttonStyle(.borderless)
+                                    .help("Remove")
+                                    .accessibilityLabel("Remove \(name)")
+                            }
+                        }
+                        HStack {
+                            TextField("Title", text: $title).frame(maxWidth: 160)
+                            TextField("https://", text: $url)
+                            Button("Add") {
+                                var m = l.links
+                                m[title.trimmingCharacters(in: .whitespaces)] = url.trimmingCharacters(in: .whitespaces)
+                                model.bind(c, \.learn!.links, "learn.links").wrappedValue = m
+                                title = ""
+                                url = ""
+                            }
+                            .disabled(!addable)
+                        }
+                    } header: {
+                        Text("Your links")
+                    } footer: {
+                        footnote("They come first in Help > Learning Resources, before the free courses Irie links to.")
+                    }
+                } else {
+                    Section {
+                        Text("This Irie’s core is older than the learning settings. Install the new build to set them here.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var addable: Bool {
+        let u = url.trimmingCharacters(in: .whitespaces)
+        return !title.trimmingCharacters(in: .whitespaces).isEmpty && (u.hasPrefix("https://") || u.hasPrefix("http://")) && u.count > 8
+    }
+
+    /// What a tutor mode does, in a sentence or two.
+    static func about(_ tutor: String) -> String {
+        switch tutor {
+        case "explain":
+            return "Claude Code’s Explanatory style: it does the work and adds short notes on why it made its choices. Replies are longer, so tasks use more tokens."
+        case "teach":
+            return "Claude Code’s Learning style: it also leaves small parts for you to write, marked TODO(human), and waits for you. Pick it when you can edit code; otherwise start with Explain."
+        default:
+            return "Agents do the work and say what they did, as usual."
+        }
+    }
+}
 
 private struct RepoSettings: View {
     @ObservedObject var model: SettingsModel
