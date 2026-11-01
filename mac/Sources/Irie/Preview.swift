@@ -15,8 +15,9 @@ import SwiftUI
 /// - The phrase bar says it is a preview, of which checkout, and how the
 ///   next build is going (PreviewBadge).
 /// - A new build keeps its window out of sight until it has drawn, then
-///   puts it over the window of the build before and ends that build, so a
-///   rebuild looks like the window changing in place (PreviewState).
+///   gives it the frame of the window of the build before and ends that
+///   build, so a rebuild looks like the window changing in place
+///   (PreviewState).
 /// - It quits when the hot.sh that runs it ends.
 ///
 /// The installed app gets none of hot.sh's arguments, and none of this.
@@ -91,9 +92,12 @@ final class PreviewState: ObservableObject {
         if kill(pid, 0) != 0, errno == ESRCH { NSApp.terminate(nil) }
     }
 
-    /// Shows the window once it has drawn the sessions, where the window of
-    /// the build before is and just above it, then ends that build. A core
-    /// that does not answer leaves the window to show what it has.
+    /// Shows the window once it has drawn the sessions, in the frame of the
+    /// window of the build before, then ends that build. A core that does
+    /// not answer leaves the window to show what it has. The window keeps
+    /// the place in front or behind that it opened in, behind the app in
+    /// front: ordering it against another app's window would put it in
+    /// front of every window.
     private func takeOver(from old: pid_t, window: NSWindow, store: Store) async {
         var waited = 0
         while store.sessions.isEmpty, waited < 40 {
@@ -103,9 +107,8 @@ final class PreviewState: ObservableObject {
         // The terminal's first frame.
         try? await Task.sleep(nanoseconds: 500_000_000)
         let front = NSRunningApplication(processIdentifier: old)?.isActive ?? false
-        if let (frame, number) = Self.largestWindow(of: old) {
+        if let frame = Self.largestWindow(of: old) {
             window.setFrame(frame, display: true)
-            window.order(.above, relativeTo: number)
         }
         window.alphaValue = 1
         if front {
@@ -115,24 +118,23 @@ final class PreviewState: ObservableObject {
         kill(old, SIGTERM)
     }
 
-    /// The frame, in AppKit's coordinates, and the number of a process's
-    /// largest window on screen. Bounds and owners need no screen-recording
-    /// permission; only titles would.
-    private static func largestWindow(of pid: pid_t) -> (NSRect, Int)? {
+    /// The frame, in AppKit's coordinates, of a process's largest window on
+    /// screen. Bounds and owners need no screen-recording permission; only
+    /// titles would.
+    private static func largestWindow(of pid: pid_t) -> NSRect? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]],
               let main = NSScreen.screens.first else { return nil }
-        var best: (NSRect, Int)?
+        var best: NSRect?
         for w in list {
             guard (w[kCGWindowOwnerPID as String] as? Int) == Int(pid),
                   (w[kCGWindowLayer as String] as? Int) == 0,
-                  let number = w[kCGWindowNumber as String] as? Int,
                   let bounds = w[kCGWindowBounds as String] as? NSDictionary,
                   let r = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { continue }
             // Quartz counts from the top of the main screen, AppKit from its
             // bottom.
             let frame = NSRect(x: r.minX, y: main.frame.maxY - r.maxY, width: r.width, height: r.height)
-            if best.map({ $0.0.width * $0.0.height < frame.width * frame.height }) ?? true {
-                best = (frame, number)
+            if best.map({ $0.width * $0.height < frame.width * frame.height }) ?? true {
+                best = frame
             }
         }
         return best
@@ -158,25 +160,38 @@ final class PreviewState: ObservableObject {
     }
 }
 
-/// The phrase bar's note in a preview: which checkout it shows and how its
-/// next build goes, in red when the build failed, with the whole error on
-/// hover. The installed app shows none.
+/// A preview's line in the phrase bar, where the app has its phrase: how
+/// its next build goes, in red when it failed, with the whole error on
+/// hover; and on the right, where the app has the core's version, the
+/// checkout it shows, unless the line needs the room.
 struct PreviewBadge: View {
     @ObservedObject private var state = PreviewState.shared
 
     var body: some View {
-        if let name = Preview.name {
-            HStack(spacing: 5) {
-                Circle().fill(ink).frame(width: 6, height: 6)
-                Text("Preview of " + name + note)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                status
+                Spacer(minLength: 12)
+                Text(Preview.name ?? "")
+                    .font(Theme.font(10.5))
+                    .foregroundStyle(Theme.muted.opacity(0.7))
             }
-            .font(Theme.font(10.5, .semibold))
-            .foregroundStyle(ink)
-            .padding(.trailing, 6)
-            .background(Theme.card)
-            .help(help)
+            HStack(spacing: 6) {
+                status
+                Spacer(minLength: 0)
+            }
+        }
+        .lineLimit(1)
+        .help(help)
+    }
+
+    private var status: some View {
+        HStack(spacing: 6) {
+            Circle().fill(ink).frame(width: 6, height: 6)
+            Text(note)
+                .font(Theme.font(12, .semibold))
+                .foregroundStyle(ink)
+                .truncationMode(.tail)
         }
     }
 
@@ -187,10 +202,10 @@ struct PreviewBadge: View {
 
     private var note: String {
         switch state.build {
-        case .unknown: return ""
-        case .building: return " · building…"
-        case let .built(at): return at.isEmpty ? "" : " · built " + at
-        case let .failed(why): return " · build failed: " + why
+        case .unknown: return "Preview"
+        case .building: return "Preview · building…"
+        case let .built(at): return at.isEmpty ? "Preview" : "Preview · built " + at
+        case let .failed(why): return "Build failed: " + why
         }
     }
 
