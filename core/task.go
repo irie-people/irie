@@ -10,8 +10,9 @@ import (
 // ParseTask turns what was typed into spawn args (DESIGN §4.2). Only the
 // first line is read for words: @name or @path runs the task in a new
 // worktree of that git repo, or in place in a directory git does not know;
-// @name! runs it in the repo's own checkout; +profile picks the profile.
-// The rest of the input is the task, verbatim. home is what ~ means.
+// @name! runs it in the repo's own checkout; +profile picks the profile;
+// +explain or +teach picks a tutor mode (docs/proposals/learning.md). The
+// rest of the input is the task, verbatim. home is what ~ means.
 func ParseTask(input, home string) (SpawnArgs, error) {
 	var a SpawnArgs
 	first, rest, multi := strings.Cut(input, "\n")
@@ -71,11 +72,26 @@ func SpawnTokens(a *SpawnArgs, words []string, home string) ([]string, error) {
 
 func isToken(w string) bool { return strings.HasPrefix(w, "@") || strings.HasPrefix(w, "+") }
 
+// The tutor words, which are also learn.tutor's modes besides off.
+const (
+	TutorExplain = "explain"
+	TutorTeach   = "teach"
+)
+
 // applyToken applies one @ or + word to a. Paths are made absolute here; names
 // are the core's to resolve.
 func applyToken(a *SpawnArgs, w, home string) error {
 	v := w[1:]
 	if w[0] == '+' {
+		// The tutor words set how the task works with you, beside its
+		// profile (learn.tutor, docs/proposals/learning.md).
+		if v == TutorExplain || v == TutorTeach {
+			if a.Tutor != "" {
+				return errors.New("one of +explain and +teach per task")
+			}
+			a.Tutor = v
+			return nil
+		}
 		switch {
 		case a.Profile != "":
 			return errors.New("only one +profile per task")

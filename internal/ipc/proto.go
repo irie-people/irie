@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/learn"
 )
 
 // API is the protocol version. Additions keep backwards compatibility.
@@ -76,7 +77,13 @@ const (
 	// (docs/proposals/extensions.md §4). A change from inside an agent is
 	// refused.
 	OpVPN = "vpn"
+	// OpLearn gives what the Help menu shows: the learning resources, the
+	// user's own links and the glossary (docs/proposals/learning.md).
+	OpLearn = "learn"
 )
+
+// FeatureTutor is in hello's features when spawn takes SpawnArgs.Tutor.
+const FeatureTutor = "spawn-tutor"
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
@@ -159,6 +166,7 @@ type Session struct {
 	Tokens *Tokens `json:"tokens,omitempty"`
 
 	// What the session runs on and costs (DESIGN §6.3).
+	Tutor   string   `json:"tutor,omitempty"`    // its tutor mode, explain or teach; empty when off (learn.tutor)
 	Model   string   `json:"model,omitempty"`    // the model the agent runs
 	Local   bool     `json:"local,omitempty"`    // a local model, which costs memory rather than tokens
 	CostUSD *float64 `json:"cost_usd,omitempty"` // what it has cost at list price, from its status line
@@ -606,6 +614,10 @@ type SpawnArgs struct {
 	// Apart takes a jot that was added to session Apart back, if its agent
 	// has not had it yet, and starts it as a task of its own.
 	Apart string `json:"apart,omitempty"`
+	// Tutor is how the agent works with the user (learn.tutor): off,
+	// explain or teach; "" takes learn.tutor. A delegated subtask runs off
+	// unless it says otherwise (docs/proposals/learning.md).
+	Tutor string `json:"tutor,omitempty"`
 }
 
 type SpawnResult struct {
@@ -834,6 +846,20 @@ type ConfigResult struct {
 	// not, as after a hand edit gone wrong; the core runs on the config it
 	// loaded last.
 	Problem string `json:"problem,omitempty"`
+}
+
+// LearnArgs ask what the Help menu shows; with Session, the tutorials of the
+// languages its project is written in come first.
+type LearnArgs struct {
+	Session string `json:"session,omitempty"`
+}
+
+// LearnResult is what the Help menu shows (docs/proposals/learning.md): the
+// user's own links (learn.links), then the learning resources, and the
+// glossary of the words Irie and its agents use.
+type LearnResult struct {
+	Resources []learn.Resource `json:"resources"`
+	Glossary  []learn.Term     `json:"glossary"`
 }
 
 type ShowArgs struct {

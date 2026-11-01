@@ -148,6 +148,7 @@ type session struct {
 	tokens   *ipc.Tokens
 	model    string                 // the model the agent runs, as its profile said
 	local    bool                   // a model of a local runtime
+	tutor    string                 // its tutor mode, explain or teach; "" when off (learn.tutor)
 	usage    statusline.Usage       // its last status line update
 	memory   int64                  // what its processes take, last measured
 	out      *outcome               // its route and how it went, shared with Core.outcomes
@@ -171,6 +172,7 @@ func (x *session) wire() ipc.Session {
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
 		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory, Team: wireTeam(x.team), Hue: x.hue,
+		Tutor: x.tutor,
 	}
 	if s.Model == "" {
 		s.Model = x.usage.Model
@@ -419,7 +421,7 @@ func (c *Core) adopt(p tmux.Pane) *session {
 	if spec, err := host.ReadSpec(c.paths.SpecFile(x.id)); err == nil {
 		x.cwd, x.profile, x.harness, x.warnings = spec.Cwd, spec.Profile, spec.Harness, spec.Warnings
 		x.repo, x.worktree, x.branch, x.copied, x.paste = spec.Repo, spec.Worktree, spec.Branch, spec.Copied, spec.Paste
-		x.model, x.local = spec.Model, spec.Local
+		x.model, x.local, x.tutor = spec.Model, spec.Local, spec.Tutor
 	}
 	c.loadStatus(x)
 	if x.harness == "" {
@@ -580,6 +582,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers,
+			ipc.OpLearn, ipc.FeatureTutor,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -614,6 +617,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.trodOp(a)
+	case ipc.OpLearn:
+		var a ipc.LearnArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.learnOp(a)
 	case ipc.OpConfig:
 		var a ipc.ConfigArgs
 		if err := decode(raw, &a); err != nil {

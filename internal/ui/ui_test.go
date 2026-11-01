@@ -1720,6 +1720,17 @@ func TestHeaderShowsPlanUseAndLowMemory(t *testing.T) {
 	}
 }
 
+// TestRoutedSaysTheTutorMode checks that a session in a tutor mode says so in
+// its card's state line and the status strip (docs/proposals/learning.md).
+func TestRoutedSaysTheTutorMode(t *testing.T) {
+	if got := routed(ipc.Session{Tutor: "teach", Routed: true, Class: "small", Profile: "haiku"}); got != "teach mode small→haiku" {
+		t.Errorf("routed = %q", got)
+	}
+	if got := routed(ipc.Session{}); got != "" {
+		t.Errorf("no mode, no route: %q", got)
+	}
+}
+
 // The bar sends what was typed to the core as it is, with the selected
 // session and any long paste, and shows what the core says.
 func TestTheBarSendsWhatWasTypedToTheCore(t *testing.T) {

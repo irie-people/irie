@@ -90,6 +90,13 @@ func (c *Core) completeProfiles(text string) ([]string, []string) {
 		items = append(items, "+"+config.Auto)
 		notes = append(notes, c.autoNote())
 	}
+	// The tutor words set how one task works with you, beside its profile.
+	for _, m := range []string{config.TutorExplain, config.TutorTeach} {
+		if strings.HasPrefix(m, prefix) {
+			items = append(items, "+"+m)
+			notes = append(notes, tutorNotes[m])
+		}
+	}
 	for _, m := range models {
 		if name := localPrefix + m.Name; runnable(m) && strings.HasPrefix(name, prefix) && c.cfg().Profiles[name].Harness == "" {
 			items = append(items, "+"+name)

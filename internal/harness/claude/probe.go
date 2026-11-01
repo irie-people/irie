@@ -32,6 +32,11 @@ const MinVersion = "2.1.295"
 // --agents and --agent bring Irie's arch agents (DESIGN §4.11).
 var optional = []string{"--name", "--plugin-dir", "--agents", "--agent"}
 
+// quietly are optional flags whose lack needs no warning on every spawn, as
+// they serve only some sessions: --append-system-prompt carries tutor mode's
+// ask for diagrams (learn.visual).
+var quietly = []string{"--append-system-prompt"}
+
 // probeTimeout bounds each run of the CLI, and pluginTimeout the run that
 // lists its plugins, which reads every plugin's manifest.
 var (
@@ -88,6 +93,14 @@ func (Harness) Probe(p config.Profile, env []string) harness.Probe {
 				pr.Flags[f] = true
 			} else {
 				pr.Warnings = append(pr.Warnings, fmt.Sprintf("%s left out: `%s --help` does not list it", f, command))
+			}
+		}
+		for _, f := range quietly {
+			if listsFlag(help, f) {
+				if pr.Flags == nil {
+					pr.Flags = map[string]bool{}
+				}
+				pr.Flags[f] = true
 			}
 		}
 	}

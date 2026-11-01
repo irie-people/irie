@@ -407,7 +407,7 @@ func (c *Core) failover(id string) {
 		c.mu.Unlock()
 		return
 	}
-	name, named, cwd, profile := x.name, x.named, x.cwd, x.profile
+	name, named, cwd, profile, tutor := x.name, x.named, x.cwd, x.profile, x.tutor
 	c.mu.Unlock()
 	task, err := os.ReadFile(c.paths.TaskFile(id))
 	if err != nil {
@@ -432,7 +432,10 @@ func (c *Core) failover(id string) {
 	}
 	// The task carries on under its name, which is the user's only when it
 	// was theirs; else Claude Code may title the new session (title.go).
-	s, err := c.spawn(ipc.SpawnArgs{Task: failoverNote(profile) + string(task), Cwd: cwd, Profile: config.Auto, Name: name, Continues: id}, named)
+	if tutor == "" {
+		tutor = config.TutorOff
+	}
+	s, err := c.spawn(ipc.SpawnArgs{Task: failoverNote(profile) + string(task), Cwd: cwd, Profile: config.Auto, Name: name, Continues: id, Tutor: tutor}, named)
 	if err != nil {
 		c.log.Info("no failover", "session", id, "err", err)
 		note(map[string]any{"reason": "it waits for the limit to reset: " + err.Error()})
