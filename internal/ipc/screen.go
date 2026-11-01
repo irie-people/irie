@@ -71,4 +71,7 @@ type PairResult struct {
 	// certificate authority, which the person checks on the phone before
 	// trusting it, so a stranger on the network can't stand in for it.
 	Fingerprint string `json:"fingerprint"`
+	// Link pairs the native iPhone app: irie://pair with the gateway's
+	// address, the code and the whole fingerprint, for a QR code.
+	Link string `json:"link"`
 }

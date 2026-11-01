@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -233,6 +234,7 @@ func pair(on bool, port int, name, dir string, store *remote.Store, life time.Du
 		fmt.Println()
 	}
 	fmt.Printf("Pair a phone with %s\n\n", name)
+	fmt.Println("The web app (Safari, then the Home Screen):")
 	fmt.Println("1. On the phone, on this machine's Wi-Fi, open:")
 	for i, u := range urls {
 		if i == 0 {
@@ -249,13 +251,23 @@ func pair(on bool, port int, name, dir string, store *remote.Store, life time.Du
 	if q, err := terminalQR(urls[0]); err == nil {
 		fmt.Println(q)
 	}
+	link := ""
+	if ca, err := remote.LoadAuthority(dir); err == nil {
+		u, _ := url.Parse(urls[0])
+		link = remote.PairLink("https://"+net.JoinHostPort(u.Hostname(), strconv.Itoa(port)), code, ca.FingerprintHex(), name)
+		fmt.Println("The native app (Irie built in Xcode): scan this with the iPhone's camera, or open")
+		fmt.Printf("  %s\n\n", link)
+		if q, err := terminalQR(link); err == nil {
+			fmt.Println(q)
+		}
+	}
 	if open {
 		page := filepath.Join(dir, "pair.html")
 		fp := ""
 		if ca, err := remote.LoadAuthority(dir); err == nil {
 			fp = ca.FingerprintStart()
 		}
-		html, err := pairPage(name, urls, spaced, until, fp)
+		html, err := pairPage(name, urls, spaced, until, fp, link)
 		if err != nil {
 			return err
 		}
@@ -305,10 +317,18 @@ func terminalQR(text string) (string, error) {
 
 // pairPage is a page that shows the code and a QR code of the setup page,
 // for a phone's camera.
-func pairPage(name string, urls []string, code string, until time.Time, fingerprint string) (string, error) {
+func pairPage(name string, urls []string, code string, until time.Time, fingerprint, link string) (string, error) {
 	svg, err := remote.QRSVG(urls[0])
 	if err != nil {
 		return "", err
+	}
+	native := ""
+	if link != "" {
+		nsvg, err := remote.QRSVG(link)
+		if err != nil {
+			return "", err
+		}
+		native = `<h2 style="font-size:18px;margin:30px 0 6px">Irie built in Xcode</h2><p>Scan this one with the camera instead, and the app pairs itself.</p><div class=qr>` + nsvg + `</div>`
 	}
 	esc := func(s string) string {
 		return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
@@ -338,5 +358,6 @@ small{color:var(--muted)}
 <div class=code>%[5]s</div>
 <small>Enter this code in the app. It works until %[6]s.</small>
 <p style="margin:20px 0 0;font-size:14px">Before you trust Irie's certificate on the phone, check under its More Details that its SHA-256 begins<br><b style="font:600 15px ui-monospace,Menlo,monospace">%[7]s</b></p>
-</main>`, esc(name), svg, esc(urls[0]), more.String(), esc(code), until.Format("15:04"), esc(fingerprint)), nil
+%[8]s
+</main>`, esc(name), svg, esc(urls[0]), more.String(), esc(code), until.Format("15:04"), esc(fingerprint), native), nil
 }

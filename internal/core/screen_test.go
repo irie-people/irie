@@ -168,8 +168,11 @@ func TestPairOpensACodeTheGatewayTakes(t *testing.T) {
 	if err := c.call(ipc.OpPair, ipc.PairArgs{Minutes: 60}, &r); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Code) != 6 || r.Name == "" || r.On || time.Until(r.Until) < 59*time.Minute {
+	if len(r.Code) != 6 || r.Name == "" || r.On || time.Until(r.Until) < 59*time.Minute || len(r.Fingerprint) != 23 {
 		t.Errorf("pair = %+v", r)
+	}
+	if len(r.URLs) > 0 && (!strings.HasPrefix(r.Link, "irie://pair?") || !strings.Contains(r.Link, "c="+r.Code)) {
+		t.Errorf("link %q", r.Link)
 	}
 	for _, u := range r.URLs {
 		if !strings.HasPrefix(u, "http://") || !strings.HasSuffix(u, ":7386/") {
