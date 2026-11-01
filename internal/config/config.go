@@ -36,6 +36,15 @@ type Config struct {
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
 	Dog      Dog                `toml:"dog"`
+	Env      Env                `toml:"env"`
+}
+
+// Env is the environment of a server that the Mac app starts (DESIGN §7.2).
+type Env struct {
+	// Capture is login-shell, to start it with the environment of the
+	// person's login shell, as a terminal has it; or none, for the app's
+	// own, which lacks the PATH of the shell's startup files.
+	Capture string `toml:"capture"`
 }
 
 // Auto is the profile name of Irie's router (DESIGN §6.4): a task spawned
@@ -303,6 +312,7 @@ func Default() Config {
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
+		Env:     Env{Capture: "login-shell"},
 	}
 }
 
@@ -400,7 +410,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
 		Dog      *Dog                      `toml:"dog"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog}
+		Env      *Env                      `toml:"env"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Env: &c.Env}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -698,6 +709,9 @@ func (c Config) Validate() error {
 	}
 	if !socketName.MatchString(c.Tmux.Socket) {
 		bad("tmux.socket = %q: use letters, digits, '.', '_' and '-'", c.Tmux.Socket)
+	}
+	if c.Env.Capture != "login-shell" && c.Env.Capture != "none" {
+		bad("env.capture = %q: must be login-shell or none", c.Env.Capture)
 	}
 	if c.Tmux.Path != "" && !filepath.IsAbs(c.Tmux.Path) {
 		bad("tmux.path = %q: must be an absolute path", c.Tmux.Path)

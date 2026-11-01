@@ -25,8 +25,16 @@ import (
 
 const usage = `usage: irie [command]
 
-  irie                    start Irie if needed and attach to it (same as attach)
-  irie up                 start the server, core and sidebar if needed
+  irie                    start Irie if needed and attach to it (same as attach);
+                          when no Irie is running, it first checks that this
+                          computer has what Irie needs
+  irie setup [--check] [--json] [--yes]
+                          check that this computer has what Irie needs (tmux,
+                          Claude Code, signed in, git, PATH) and offer to fix
+                          each part it lacks
+  irie up [--login-env]   start the server, core and sidebar if needed;
+                          --login-env starts a new server with the login
+                          shell's environment, as the Mac app does
   irie attach [--nested]  attach this terminal to Irie
   irie ctl <command>      script Irie: list, spawn, show, watch, move, local,
                           preflight (irie ctl for help)
@@ -152,8 +160,13 @@ func self() (string, error) {
 }
 
 func up(args []string) error {
-	if len(args) > 0 {
-		return fmt.Errorf("up takes no arguments")
+	fs := flag.NewFlagSet("up", flag.ContinueOnError)
+	loginEnv := fs.Bool("login-env", false, "start a new server with the login shell's environment")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return errors.New("usage: irie up [--login-env]")
 	}
 	cfg, p, err := load()
 	if err != nil {
@@ -163,7 +176,7 @@ func up(args []string) error {
 	if err != nil {
 		return err
 	}
-	return core.Up(cfg, p, bin, version.String())
+	return core.Up(cfg, p, bin, version.String(), core.UpOptions{LoginEnv: *loginEnv})
 }
 
 func attach(args []string) error {
@@ -172,11 +185,18 @@ func attach(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if err := up(nil); err != nil {
+	cfg, p, err := load()
+	if err != nil {
 		return err
 	}
-	cfg, _, err := load()
-	if err != nil {
+	// A first start, or the first since the computer started: check that
+	// Irie has what it needs, and offer to fix what it lacks.
+	if os.Getenv("TMUX") == "" && !coreAnswers(p) {
+		if err := firstRun(cfg, os.Stdin, os.Stdout); err != nil {
+			return err
+		}
+	}
+	if err := up(nil); err != nil {
 		return err
 	}
 	return core.Attach(cfg, *nested)

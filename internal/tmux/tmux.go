@@ -61,8 +61,15 @@ const (
 // ErrNoServer means the server is not running.
 var ErrNoServer = errors.New("tmux: no server running")
 
+// Dirs are where tmux's installers put it, searched after PATH: a GUI launch
+// may lack the user's PATH.
+var Dirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"}
+
+// ErrNotFound means no tmux was found.
+var ErrNotFound = errors.New("tmux not found: `irie setup` installs it, or set tmux.path")
+
 // Find returns the tmux binary: the configured path, else tmux on PATH, else
-// the usual install dirs (a GUI launch may lack the user's PATH).
+// in Dirs.
 func Find(configured string) (string, error) {
 	if configured != "" {
 		if isExec(configured) {
@@ -73,12 +80,12 @@ func Find(configured string) (string, error) {
 	if p, err := exec.LookPath("tmux"); err == nil {
 		return p, nil
 	}
-	for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"} {
+	for _, dir := range Dirs {
 		if p := filepath.Join(dir, "tmux"); isExec(p) {
 			return p, nil
 		}
 	}
-	return "", errors.New("tmux not found: install it or set tmux.path")
+	return "", ErrNotFound
 }
 
 func isExec(p string) bool {
