@@ -142,6 +142,10 @@ final class Store: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        if let seconds = FreezeDog.restartedAfter {
+            say("Irie stopped answering for \(seconds) s, so the freeze dog restarted it. Every agent kept running.",
+                error: false, seconds: 10)
+        }
         Task { await run() }
     }
 

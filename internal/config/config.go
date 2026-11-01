@@ -95,7 +95,15 @@ type UI struct {
 	// HelperStyle is how a view draws a helper beside its session: as
 	// cards and plain words (browser) or as a terminal (terminal).
 	HelperStyle string `toml:"helper_style"`
+	// FreezeDog is how long Irie's window may leave the freeze dog's ping
+	// unanswered before the dog force quits it and opens it again; 0 =
+	// never (DESIGN §2.4).
+	FreezeDog time.Duration `toml:"freeze_dog"`
 }
+
+// MinFreezeDog is the shortest ui.freeze_dog: a window busy for a moment,
+// as when the machine pages, is not frozen.
+const MinFreezeDog = 3 * time.Second
 
 // HelperStyles are the ways ui.helper_style draws a helper.
 var HelperStyles = []string{"browser", "terminal"}
@@ -239,7 +247,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -541,6 +549,9 @@ func (c Config) Validate() error {
 	}
 	if !slices.Contains(Themes, c.UI.Theme) {
 		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))
+	}
+	if c.UI.FreezeDog != 0 && c.UI.FreezeDog < MinFreezeDog {
+		bad("ui.freeze_dog = %v: must be 0s, for never, or at least %v", c.UI.FreezeDog, MinFreezeDog)
 	}
 	if _, ok := c.Profiles[c.Spawn.DefaultProfile]; !ok && c.Spawn.DefaultProfile != Auto {
 		bad("spawn.default_profile = %q: no such profile, and not auto", c.Spawn.DefaultProfile)

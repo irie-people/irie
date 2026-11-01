@@ -21,7 +21,7 @@ func writeFile(t *testing.T, body string) string {
 
 func TestDefaultsMatchDesign(t *testing.T) {
 	c := Default()
-	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater"}); c.UI != want {
+	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off"}); c.Spawn != want {
@@ -147,6 +147,7 @@ red_on_done = true
 ghostty = "off"
 helper_style = "terminal"
 theme = "lilac"
+freeze_dog = "20s"
 
 [spawn]
 default_profile = "fast"
@@ -225,7 +226,7 @@ land = { web = "live", "~/code/api" = "main" }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac"}); c.UI != want {
+	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes"}); c.Spawn != want {
@@ -424,6 +425,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[ui]\nsidebar_width = 2\n", "sidebar_width"},
 		{"[ui]\nfocus_key = \"C-] x\"\n", "focus_key"},
 		{"[ui]\nmax_sub_rows = -1\n", "max_sub_rows"},
+		{"[ui]\nfreeze_dog = \"1s\"\n", "ui.freeze_dog = 1s: must be 0s, for never, or at least 3s"},
+		{"[ui]\nfreeze_dog = \"-10s\"\n", "ui.freeze_dog"},
 		{"[spawn]\nready_timeout = \"-1s\"\n", "ready_timeout"},
 		{"[spawn]\nclose_delay = \"-1s\"\n", "close_delay"},
 		{"[profiles.claude]\nharness = \"bogus\"\n", "harness"},
@@ -530,5 +533,26 @@ func TestPrintRoundTrips(t *testing.T) {
 	}
 	if !reflect.DeepEqual(c, Default()) {
 		t.Errorf("round trip = %+v, want defaults", c)
+	}
+}
+
+func TestFreezeDogIsADurationAndZeroIsNever(t *testing.T) {
+	for body, want := range map[string]time.Duration{
+		"":                            10 * time.Second,
+		"[ui]\nfreeze_dog = \"0s\"\n": 0,
+		"[ui]\nfreeze_dog = \"3s\"\n": 3 * time.Second,
+		"[ui]\nfreeze_dog = \"1m\"\n": time.Minute,
+	} {
+		c, err := Load(writeFile(t, body))
+		if err != nil {
+			t.Errorf("%q: %v", body, err)
+			continue
+		}
+		if c.UI.FreezeDog != want {
+			t.Errorf("%q: freeze_dog = %v, want %v", body, c.UI.FreezeDog, want)
+		}
+	}
+	if got := Tree(Default())["ui"].(map[string]any)["freeze_dog"]; got != "10s" {
+		t.Errorf("the config op shows freeze_dog as %v, want 10s", got)
 	}
 }

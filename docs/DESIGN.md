@@ -122,7 +122,7 @@ flowchart LR
 | `irie` | the user's terminal, or Irie.app | Runs `irie up`, then opens or focuses the Irie window in Ghostty (macOS, from M9) or attaches in the current terminal | tmux, `osascript` |
 | `irie up` | any terminal | Idempotent. Starts the server and the core if the socket does not answer `hello`, and waits up to 5 s for it. If the running core or UI is a different version, respawns those panes (`respawn-pane -k`); agents are untouched | tmux, socket |
 | `irie attach` | any terminal | `exec tmux -L irie attach -t irie`. Inside another tmux it refuses unless given `--nested`. Inside Irie's own server it runs `switch-client` | tmux |
-| `irie core --supervise` | `irie-agents:core` | Holds `core.lock` (flock). Owns the registry, state derivation, gates, notes, undo log, journal, worktrees, spawning, the swap-in and observation. The supervisor restarts it with backoff (1, 2, 4 … 30 s) | socket (server), tmux, hosts (signals), transcripts |
+| `irie core --supervise` | `irie-agents:core` | Holds `core.lock` (flock). Owns the registry, state derivation, gates, notes, undo log, journal, worktrees, spawning, the swap-in and observation, and runs the freeze dog, which restarts a frozen Irie.app (§2.4). The supervisor restarts it with backoff (1, 2, 4 … 30 s) | socket (server), tmux, hosts (signals), transcripts |
 | `irie ui --supervise` | `irie:0.0` | The sidebar, a pure client of the socket. It never calls tmux | socket |
 | `irie host --spec <file>` | the first process of every agent pane | Owns the agent's process group; continues stops it did not cause, but leaves a frozen agent stopped; says who it is in `host.json`; records the exit status | the agent (fork/exec), socket (best effort) |
 | `irie hook` | started by the agent for each hook event | Forwards the event, waits while held, prints the harness's reply | socket, gate file |
@@ -202,14 +202,16 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
   - `{"t":"outside","outside":[…],"problem":"…"}`: the Claude Code sessions outside Irie (§4.6), after the first snapshot and whenever they or the problem change. A subscription to one session gets none.
   - `{"t":"closed","closed":[…]}`: the closed sessions that `reopen` can bring back, the last closed first (§4.5), after the first snapshot and whenever they change. A subscription to one session gets none.
   - `{"t":"conversation","conversation":{…}}`, sent only when `conversation:true` was requested for one session: its whole conversation first (`reset`), then the items that changed and what it waits on you for (§4.7).
+  - `{"t":"ping","ping":N}`: the freeze dog's ping, the only frame of a `view: "watch"` subscription (below).
 - Frames to the UI are coalesced to at most 10 per second.
+- **The freeze dog.** A window of Irie's own, such as the Mac app, asks to be watched with `subscribe`, `view: "watch"`, its `pid` and, for the Mac app, its `bundle`, on a connection of its own. The core pings it once a second, one ping at a time, and the window answers each on the same connection from its main loop, `{"pong":N,"front":…,"hidden":…}`: whether its app is the active one, and whether it is hidden. A ping left unanswered for `ui.freeze_dog` (10 s) means the window no longer answers its user. The core then has `sample` write down where the process is stuck, in a report in `<state>/freezes/` (the newest ten are kept); force quits it with SIGKILL once the stacks are read, about 1.3 s later; waits for it to go; and opens the bundle again as it stood, with `/usr/bin/open`, `open -g` or `open -j` and the arguments `--freeze-dog <seconds>`, which the app says in a notice, and `--background` when it was not in front. Agents are untouched (§2.1, principle 6). The dog's clock waits while the core itself is held up, since a late look restarts every unanswered ping's time; a process under a debugger is left be; and the dog restarts windows three times in ten minutes at most, so an app that freezes as it opens is not opened again and again. The dog has a lock of its own, so a busy core never holds a ping or an answer up. `hello` lists `watch` when the core has the dog.
 - The API version is `1`. Additions keep backwards compatibility.
 
 | Op | Args | Result | From |
 |---|---|---|---|
 | `hello` | `client`, `api` | `version`, `api`, `features[]`, which name the ops served, `move` among them | M1 |
 | `list` | none | `sessions[]`, `outside[]`, `outside_problem?` | M1 (`outside`: §4.6) |
-| `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `conversation` needs `session`; with `agent: "sub:<id>"` it follows that helper's own conversation (§4.4) | M1 (`view`: Mac app; `conversation`: §4.7) |
+| `subscribe` | `events?`, `session?`, `agent?`, `view?`, `conversation?`, `pid?`, `bundle?` | frames (above). `view: "app"` is the Mac app: the slot stays zoomed while it is subscribed. `view: "watch"`, with `pid` and `bundle`, asks the freeze dog to watch a window (above). `conversation` needs `session`; with `agent: "sub:<id>"` it follows that helper's own conversation (§4.4) | M1 (`view`: Mac app; `conversation`: §4.7; `watch`: the freeze dog) |
 | `spawn` | `task`, `cwd?`, `repo?`, `in_place?`, `profile?` (`auto` routes it), `name?` (the user's, §4.2), `force?`, `delegate?`, `parent?`, `permission_mode?`, `continues?` | `session` | M1 (`repo`, `profile` M3; `force`, `delegate`, `parent`, `permission_mode`, `continues` M10) |
 | `show` | `session`, `agent?`, `focus` | none | M1 |
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
@@ -853,6 +855,7 @@ red_on_done = false
 helper_style = "browser"      # browser | terminal: how a view draws a helper beside its session (§4.4)
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
 theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
+freeze_dog = "10s"            # how long Irie's window may stop answering before the freeze dog force quits it and opens it again (§2.4); "0s" = never, else at least 3s
 
 [spawn]
 default_profile = "auto"      # auto = the lowest cost per success among profiles accurate enough (§6.4)
