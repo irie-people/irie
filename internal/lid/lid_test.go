@@ -299,3 +299,15 @@ func TestAgentPlistRunsTheCheck(t *testing.T) {
 		t.Errorf("AgentPath = %q", got)
 	}
 }
+
+func TestParseDarkFindsAWakeWithNoGraphics(t *testing.T) {
+	if ParseDark("Current System Capabilities are: CPU Graphics Audio Network \nCurrent Power State: 4\n") {
+		t.Error("a full wake read as dark")
+	}
+	if !ParseDark("Current System Capabilities are: CPU Network \nCurrent Power State: 4\n") {
+		t.Error("a dark wake read as full")
+	}
+	if ParseDark("") {
+		t.Error("nothing read as dark")
+	}
+}

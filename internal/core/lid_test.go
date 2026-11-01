@@ -35,12 +35,14 @@ func newLidMac(t *testing.T) *lidMac {
 	m.set("batt", "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1)\t80%; charging; present: true\n")
 	m.set("heat", "0")
 	m.set("lid", "No")
+	m.set("systemstate", "Current System Capabilities are: CPU Graphics Audio Network \nCurrent Power State: 4\n")
 	fakeTool(t, bin, "sudo", `echo "$*" >> `+m.path("sudo.log")+`
 [ "$2 $3 $4" = "/usr/bin/pmset -a disablesleep" ] || exit 1
 echo "$5" > `+m.path("off")+"\n")
 	fakeTool(t, bin, "pmset", `case "$*" in
 "-g") [ "$(cat `+m.path("off")+`)" = 1 ] && printf ' SleepDisabled\t\t1\n'; echo ' sleep 1' ;;
 "-g batt") cat `+m.path("batt")+` ;;
+"-g systemstate") cat `+m.path("systemstate")+` ;;
 sleepnow) echo sleepnow >> `+m.path("pmset.log")+` ;;
 *) exit 1 ;;
 esac
@@ -272,5 +274,33 @@ func TestTheLidHoldsAgainWhenSomethingElseTurnedSleepBackOn(t *testing.T) {
 	c.lidSweep()
 	if got := m.sudo(); len(got) != 2 || got[0] != sleepOff || got[1] != sleepOff {
 		t.Errorf("sudo ran %q, want sleep turned off again", got)
+	}
+}
+
+func TestTheLidHoldsNothingInADarkWake(t *testing.T) {
+	m := newLidMac(t)
+	// A sleeping Mac up for a moment on its own: its session still looks
+	// as it did when the Mac slept.
+	m.set("systemstate", "Current System Capabilities are: CPU Network \nCurrent Power State: 4\n")
+	c, _ := lidCore(t, "")
+	c.lidSweep()
+	if got := m.sudo(); len(got) != 0 {
+		t.Errorf("sudo ran %q in a dark wake", got)
+	}
+	// Once it is fully awake, the work holds it.
+	m.set("systemstate", "Current System Capabilities are: CPU Graphics Audio Network \n")
+	c.lidSweep()
+	if got := m.sudo(); len(got) != 1 || got[0] != sleepOff {
+		t.Errorf("sudo ran %q in a full wake", got)
+	}
+}
+
+func TestNoLookHoldsOnceTheCoreLetGo(t *testing.T) {
+	m := newLidMac(t)
+	c, _ := lidCore(t, "")
+	c.lidLetGo()
+	c.lidSweep()
+	if got := m.sudo(); len(got) != 0 {
+		t.Errorf("sudo ran %q after the core let go", got)
 	}
 }

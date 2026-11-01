@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -140,6 +141,28 @@ func ParseIsOff(out string) bool {
 	for _, line := range strings.Split(out, "\n") {
 		if f := strings.Fields(line); len(f) == 2 && f[0] == "SleepDisabled" {
 			return f[1] == "1"
+		}
+	}
+	return false
+}
+
+// Dark reports whether the Mac is in a dark wake, awake for a moment on
+// its own while it sleeps, by `pmset -g systemstate`.
+func (m Mac) Dark() (bool, error) {
+	out, err := m.run(tool("pmset", Pmset), "-g", "systemstate")
+	if err != nil {
+		return false, err
+	}
+	return ParseDark(out), nil
+}
+
+// ParseDark reads `pmset -g systemstate`, whose capabilities lack Graphics
+// in a dark wake: "Current System Capabilities are: CPU Graphics Audio
+// Network" in a full one.
+func ParseDark(out string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if _, caps, ok := strings.Cut(line, "Capabilities are:"); ok {
+			return !slices.Contains(strings.Fields(caps), "Graphics")
 		}
 	}
 	return false

@@ -45,6 +45,7 @@ type lidHold struct {
 	retry    time.Time // when the core may try again to turn sleep off
 	verified time.Time // when it last checked with pmset that sleep is off
 	warned   string    // what it last logged it could not do, logged once
+	stopped  bool      // the core let go as it stops: no look holds again
 }
 
 // lidOff reports whether this core leaves the Mac's sleep alone: a test
@@ -115,6 +116,9 @@ func (c *Core) lidSweep() {
 	c.lidMu.Lock()
 	defer c.lidMu.Unlock()
 	h := &c.lid
+	if h.stopped {
+		return
+	}
 	if work {
 		h.worked = now
 	}
@@ -142,10 +146,16 @@ func (c *Core) lidSweep() {
 
 // lidHoldLocked turns the Mac's sleep off. Sleep that something else
 // turned off, such as the user with pmset, is theirs: the core neither
-// takes it nor turns it back on. The caller holds c.lidMu.
+// takes it nor turns it back on. Nor does it hold in a dark wake, when a
+// sleeping Mac is up for a moment on its own: its sessions still look as
+// they did when it slept, and a hold would keep it from sleeping again.
+// The caller holds c.lidMu.
 func (c *Core) lidHoldLocked(m lid.Mac, now time.Time, why string) {
 	h := &c.lid
 	if now.Before(h.retry) {
+		return
+	}
+	if dark, err := m.Dark(); err == nil && dark {
 		return
 	}
 	if _, err := os.Stat(lidRule); err != nil {
@@ -224,6 +234,7 @@ func (c *Core) lidLetGo() {
 	}
 	c.lidMu.Lock()
 	defer c.lidMu.Unlock()
+	c.lid.stopped = true
 	if c.lid.off {
 		c.lidReleaseLocked(lid.Mac{}, time.Now(), "the core stopped", false)
 	}
