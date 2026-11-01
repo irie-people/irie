@@ -152,7 +152,8 @@ enum Snapshot {
 
 /// Sessions for the snapshot, in /home/alice. The first needs you, so it
 /// marks where the list starts; two are parked, one of them a finished
-/// turn, which says Parked and is not counted to verify.
+/// turn, which says Parked and is not counted to verify; one waits on its
+/// helper and teammates.
 enum Fixture {
     static let selected = "s02docsguide"
 
@@ -203,6 +204,15 @@ enum Fixture {
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "irie/conversation-view", profile: "claude"),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
                     repo: irie, branch: "irie/warm-look", profile: "claude"),
+            // A finished turn whose helper and teammates still work: it waits
+            // on them.
+            Session(id: "s10patents00", name: "patent-research", state: "idle", detail: "Waiting on 1 helper and 2 teammates",
+                    created: ago(18), cwd: irie + "-patent-research", repo: irie, branch: "irie/patent-research", profile: "claude",
+                    subagents: [Subagent(agent: "sub:b1", type: "Explore", started: ago(5), detail: "Searching the web for expired patents")],
+                    team: [Teammate(session: "s10patents00-1", name: "seed-finder", color: "blue", type: "general-purpose", title: "Reading the claims", working: true),
+                           Teammate(session: "s10patents00-2", name: "expand-a", color: "green", type: "general-purpose", title: "Paging the citations", working: true)],
+                    subs: Subs(helpers: 1, teammates: 2),
+                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400)),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude"),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),

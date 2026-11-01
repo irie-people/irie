@@ -1418,6 +1418,40 @@ func TestAParkedSessionIsNotToVerify(t *testing.T) {
 	}
 }
 
+// A finished turn whose helpers or teammates still work waits on them: its
+// own glyph, its name in ink though it was seen, what it waits on in words,
+// and it counts as working rather than to verify.
+func TestASessionWaitingOnItsHelpers(t *testing.T) {
+	m := statesAt(t, Options{}, 100, 80)
+	rows := everyState()
+	for _, i := range []int{7, 8} { // done-row and idle-row
+		rows[i].Subs = &ipc.Subs{Teammates: 3}
+		rows[i].Detail = "Waiting on 3 teammates"
+		m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[i]}})
+	}
+	if header := screen(t, m)[0]; !strings.Contains(header, "◐3 working  ●3 needs you  ✓0 to verify") {
+		t.Errorf("header %q", header)
+	}
+	m = send(m, keyMsg("esc"))
+	for _, name := range []string{"done-row", "idle-row"} {
+		y := lineOf(t, m, name)
+		line := screen(t, m)[y]
+		if !strings.Contains(line, "◉") {
+			t.Errorf("%s's first line is %q, want ◉", name, line)
+		}
+		if row := screen(t, m)[y+1]; !strings.Contains(row, "Waiting on 3 teammates") {
+			t.Errorf("%s's second line is %q", name, row)
+		}
+		x := len([]rune(line[:strings.Index(line, name)]))
+		if fg := cells(strings.Split(m.View().Content, "\n")[y])[x].fg; fg != rgb(m.pal.ink) {
+			t.Errorf("%s's name is %s, want ink", name, fg)
+		}
+	}
+	if got := stateLabel(rows[8]); got != "Waiting" {
+		t.Errorf("state in words = %q", got)
+	}
+}
+
 // A zero count is faint: muted, never its state's colour.
 func TestZeroCountsAreFaint(t *testing.T) {
 	m, _ := newModel(t, 100, 24, 0)

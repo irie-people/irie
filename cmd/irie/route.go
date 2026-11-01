@@ -131,9 +131,9 @@ func ctlDelegate(args []string) error {
 	return waitDone(os.Stdout, p.Socket(), s.ID, *timeout)
 }
 
-// waitDone waits until a session's turn ends and prints what its agent said
-// last. A session that fails or exits is an error; one still at work at the
-// timeout goes on in Irie.
+// waitDone waits until a session's turn ends, with no helper of its still
+// at work, and prints what its agent said last. A session that fails or
+// exits is an error; one still at work at the timeout goes on in Irie.
 func waitDone(w io.Writer, sock, id string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	told := ""
@@ -146,21 +146,24 @@ func waitDone(w io.Writer, sock, id string, timeout time.Duration) error {
 			if s.ID != id {
 				continue
 			}
-			switch s.State {
-			case ipc.StateDone, ipc.StateIdle:
+			switch {
+			case s.Subs != nil:
+				// Its turn is over, but its helpers will wake it with what
+				// they found.
+			case s.State == ipc.StateDone, s.State == ipc.StateIdle:
 				var res ipc.ResultResult
 				if err := ipc.Call(sock, 5*time.Second, ipc.OpResult, ipc.ResultArgs{Session: id}, &res); err != nil {
 					return err
 				}
 				fmt.Fprintln(w, strings.TrimRight(res.Text, "\n"))
 				return nil
-			case ipc.StateFailed, ipc.StateExited:
+			case s.State == ipc.StateFailed, s.State == ipc.StateExited:
 				msg := fmt.Sprintf("%s %s: %s", s.Name, s.State, s.Detail)
 				for _, l := range s.Tail {
 					msg += "\n  " + l
 				}
 				return errors.New(msg)
-			case ipc.StateNeedsYou, ipc.StateStalled:
+			case s.State == ipc.StateNeedsYou, s.State == ipc.StateStalled:
 				if told != s.Detail {
 					fmt.Fprintf(os.Stderr, "irie: %s needs the user in Irie: %s\n", s.Name, s.Detail)
 					told = s.Detail

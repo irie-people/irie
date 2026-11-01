@@ -235,8 +235,8 @@ func (c *Core) reopenable(x *session) closedRecord {
 }
 
 // closeWhenDone closes x once close_delay passes with nothing more from it:
-// no event, no message typed to it, nothing it needs from you, no
-// subagent running and no freeze. A session that gets one more prompt is
+// no event, no message typed to it, nothing it needs from you, no helper or
+// teammate at work and no freeze. A session that gets one more prompt is
 // not done, one the user paused stays, and one whose answer is for you to
 // read, such as a status report or a question, is not closed at all
 // (awaitsLook); nor is one whose work is not over (finished). Turning
@@ -252,7 +252,11 @@ func (c *Core) closeWhenDone(x *session) {
 	time.AfterFunc(c.cfg().Spawn.CloseDelay, func() {
 		c.mu.Lock()
 		x := c.sessions[id]
-		if !c.cfg().Spawn.CloseWhenDone || x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || len(x.track.subs) > 0 || x.track.frozen != nil || !finished(x) {
+		if !c.cfg().Spawn.CloseWhenDone || x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || x.track.frozen != nil || !finished(x) {
+			c.mu.Unlock()
+			return
+		}
+		if _, waits := x.subsAtWork(); waits {
 			c.mu.Unlock()
 			return
 		}
