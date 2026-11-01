@@ -397,6 +397,8 @@ For Irie to offer it, a session option such as a profile's `browser = "mullvad"`
 - **Decision 4:** the user's choice: the guide offers the iPhone shortcut and the contact card, and each user takes either or both.
 - **Decisions 5 to 9:** the recommendations stand.
 
+**Built 2026-11-01:** the dead man's switch (§2) and Mullvad VPN control (§4). For the VPN: the `:vpn` words and the `vpn` op; the header's mark in the terminal sidebar, the Mac app (with File › VPN and a switch in Settings › General) and the phone web app's machine cards; and the core's check that refuses a change from a process whose parents include an agent's host, with the caller's process id read from the socket. The native iPhone app doesn't show the VPN yet.
+
 ## Checks for this proposal
 
 - `mullvad`, `bw` and `claude` were read through their own `--help` only. Nothing read an account, a vault or the VPN's state, and nothing changed a setting.

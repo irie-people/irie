@@ -57,6 +57,8 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 | `:route TASK` | Says where `+auto` would run the task, and why | `answered` |
 | `:setup [local]`, `:models` | Starts a tool session, which waits on its user | `ran`, with `session` and `show` |
 | `:setup switch` | Starts the dead man's switch guide: a Claude Code session on `+claude` with Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2) | `ran`, with `session` and `show` |
+| `:vpn`, `:vpn time` | Says Mullvad VPN's state, or the account's time left, while `vpn.on` | `answered` |
+| `:vpn on`, `:vpn off`, `:vpn lockdown on\|off`, `:vpn PLACE` | The `vpn` op: connects, disconnects, sets lockdown mode, or goes through another country, city or server. Refused when the words come from inside an agent: the core reads the caller's process from the socket (`LOCAL_PEERPID`, `SO_PEERCRED`) and looks for an agent's host among its parents | `ran` |
 
 Every op runs through the core's dispatch as if the client had sent it, so a typed `:park` is a park in every way: its checks, its journal and its step of the history. What the words can't do comes back as an error in plain words, such as `:park takes the selected session, which must be not parked.`, and nothing runs.
 

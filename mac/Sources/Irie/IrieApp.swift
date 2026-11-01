@@ -75,6 +75,18 @@ struct IrieApp: App {
                 // has work left or the plan is as full as it may get.
                 Button(store.trod?.hand == true ? "Stop the Trod Bot" : "Start the Trod Bot Now") { store.setTrod(store.trod?.hand != true) }
                     .disabled(!store.canTrod)
+                // Mullvad VPN, while vpn.on: the same words as :vpn in a
+                // task bar (docs/proposals/extensions.md §4.1).
+                Menu("VPN") {
+                    Button("Connect") { Task { _ = await store.input(":vpn on") } }
+                    Button("Disconnect") { Task { _ = await store.input(":vpn off") } }
+                    Divider()
+                    Button(store.vpn?.lockdown == true ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On") {
+                        Task { _ = await store.input(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on") }
+                    }
+                    Button("Account Time Left") { Task { _ = await store.input(":vpn time") } }
+                }
+                .disabled(store.vpn == nil)
             }
             // Undo and Redo step through the core's history, a park or a
             // close, and name the step; a text field with typing to take

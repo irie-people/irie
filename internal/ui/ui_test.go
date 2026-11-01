@@ -1748,3 +1748,25 @@ func TestTheBarSendsWhatWasTypedToTheCore(t *testing.T) {
 		t.Errorf("no match: status %q, bar %q", m.status, m.bar.Value())
 	}
 }
+
+// TestHeaderShowsTheVPN: with vpn.on the title bar shows Mullvad VPN's
+// mark, coloured by its state (docs/proposals/extensions.md §4.1).
+func TestHeaderShowsTheVPN(t *testing.T) {
+	m, _ := newModel(t, 90, 24, 0)
+	header := func() string { return screen(t, m)[0] }
+	if strings.Contains(header(), "vpn") {
+		t.Fatalf("header %q with the VPN off", header())
+	}
+	for state, want := range map[string]string{"connected": "vpn ◐", "connecting": "vpn… ", "error": "vpn! ", "disconnected": "vpn off "} {
+		h := ipc.Header{VPN: &ipc.VPN{State: state}}
+		m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &h}})
+		if !strings.Contains(header(), want) {
+			t.Errorf("%s: header %q, want %q", state, header(), want)
+		}
+	}
+	h := ipc.Header{VPN: &ipc.VPN{State: "disconnected", Blocked: true}}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: &h}})
+	if !strings.Contains(header(), "vpn⊘") {
+		t.Errorf("blocked: header %q", header())
+	}
+}

@@ -44,6 +44,14 @@ type Config struct {
 	Remote   Remote             `toml:"remote"`
 	Env      Env                `toml:"env"`
 	Skills   Skills             `toml:"skills"`
+	VPN      VPN                `toml:"vpn"`
+}
+
+// VPN is Mullvad VPN control (docs/proposals/extensions.md §4): its state in
+// every client, and the :vpn words to change it.
+type VPN struct {
+	On      bool   `toml:"on"`      // show the VPN in Irie and take the :vpn words
+	Mullvad string `toml:"mullvad"` // the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
 }
 
 // Env is the environment of a server that the Mac app starts (DESIGN §7.2).
@@ -556,7 +564,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Remote   *Remote                   `toml:"remote"`
 		Env      *Env                      `toml:"env"`
 		Skills   *Skills                   `toml:"skills"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Env: &c.Env, Skills: &c.Skills}
+		VPN      *VPN                      `toml:"vpn"`
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Dog: &c.Dog, Trod: &c.Trod, Remote: &c.Remote, Env: &c.Env, Skills: &c.Skills, VPN: &c.VPN}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -952,6 +961,9 @@ func (c Config) Validate() error {
 	}
 	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
 		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
+	}
+	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
+		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
 	}
 	for _, name := range c.Skills.Disabled {
 		if len(name) > 64 || !skillName.MatchString(name) {

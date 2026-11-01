@@ -288,6 +288,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/statusline/` | `irie statusline`: cost, context and plan use from Claude Code's status line | M10 |
 | `internal/skills/` | Irie's own skills, compiled in from `builtin/`, and the plugin folder that hands them to a guide's session ([extensions.md](proposals/extensions.md) §1.2) | M12, first slice |
 | `internal/dms/` | The dead man's switch guide's helpers, `irie dms`: the Healthchecks checks, the phone's check-in and the calendar file ([extensions.md](proposals/extensions.md) §2) | Extensions |
+| `internal/vpn/` | Mullvad VPN through its own CLI: the tunnel's state from `mullvad status --json` and `status listen --json`, lockdown, the account's expiry and the `:vpn` changes ([extensions.md](proposals/extensions.md) §4) | Extensions |
 | `e2e/` | Opt-in tests against the real Claude Code | M11 |
 
 ### 2.7 Install and first run
@@ -494,7 +495,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
 | `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10) |
 | (the Mac app's sheet) | A model for this one task, `model` in `spawn`: an alias Claude Code's `--model` takes (`fable`, `opus`, `sonnet`) or a model's full name. Only a Claude Code profile takes it; a core that does lists `spawn-model` in `hello` |
-| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:setup switch` starts the dead man's switch guide, a Claude Code session on `+claude` that runs Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2); `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
+| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:close`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:setup switch` starts the dead man's switch guide, a Claude Code session on `+claude` that runs Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2); with `vpn.on`, `:vpn` says Mullvad VPN's state, and `:vpn on`, `:vpn off`, `:vpn lockdown on\|off`, `:vpn time` and `:vpn <place>` (`se`, `se got`, `se-got-wg-001`) change it or read the account's time, unless an agent types them (§4.4 of the same proposal); `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
 
@@ -1099,6 +1100,10 @@ on = false                    # serve it on this machine's local network; the co
 port = 7387                   # its HTTPS port; the setup page is on the port below, over plain HTTP
 name = ""                     # what the phone calls this machine; "" = its computer name (macOS) or host name
 listen = ""                   # the address to listen on; "" = every address of this machine
+
+[vpn]                         # Mullvad VPN control (proposals/extensions.md §4)
+on = false                    # show the VPN in every client, and take the :vpn words
+mullvad = ""                  # the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
 
 [skills]                      # Irie's own skills (proposals/skills.md §5.1, proposals/extensions.md §1.2)
 enabled = true                # false = no skill of Irie's for any agent; IRIE_SKILLS=off where the core starts does the same

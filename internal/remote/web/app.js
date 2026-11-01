@@ -1130,7 +1130,7 @@ function openMachines() {
   const body = h('div', { class: 'machines' }, cards, notes.el, addMachineForm());
   const draw = () => {
     notes.draw();
-    const key = JSON.stringify(conns().map((c) => [c.m.id, c.m.name, c.status, c.info, c.version, c.header && c.header.plan, c.confirming]));
+    const key = JSON.stringify(conns().map((c) => [c.m.id, c.m.name, c.status, c.info, c.version, c.header && c.header.plan, c.header && c.header.vpn, c.confirming]));
     if (cards._key === key) return;
     cards._key = key;
     cards.replaceChildren(...conns().map(machineCard));
@@ -1157,6 +1157,15 @@ function machineCard(c) {
     kids.push(h('div', { class: 'meters', 'aria-label': 'Claude plan use' },
       plan.five_hour ? meter('5 hours', plan.five_hour) : null, plan.seven_day ? meter('Week', plan.seven_day) : null));
   }
+  // Mullvad VPN on that machine, while its vpn.on (docs/proposals/extensions.md §4.1).
+  const vpn = c.header && c.header.vpn;
+  if (vpn) {
+    const on = vpn.state === 'connected' || vpn.state === 'connecting';
+    const look = vpn.state === 'error' || vpn.blocked ? 'bad' : on ? 'on' : 'off';
+    kids.push(h('div', { class: 'mc-vpn ' + look },
+      h('span', { class: 'mc-vpn-text', text: vpn.text }),
+      h('button', { class: 'btn small', text: on ? 'Disconnect' : 'Connect', onclick: () => vpnSay(c, on ? ':vpn off' : ':vpn on') })));
+  }
   if (c.status === 'unpaired') {
     kids.push(h('div', { class: 'banner loud' }, h('span', { text: 'It no longer knows this phone.' }),
       h('button', { class: 'btn small primary', text: 'Pair again', onclick: () => pairAgain(c) })));
@@ -1173,6 +1182,17 @@ function machineCard(c) {
       h('button', { class: 'btn small ghost-danger', text: 'Forget', onclick: () => { c.confirming = true; refs.machinesSheet && refs.machinesSheet.render(); } })));
   }
   return h('div', { class: 'mcard' }, kids);
+}
+
+// vpnSay sends a :vpn word to the machine, as its task bar would, and says
+// what it answered.
+async function vpnSay(c, words) {
+  try {
+    const r = await call(c.m, 'input', { text: words }, { timeout: 60000 });
+    toast(r.text || 'Done.');
+  } catch (e) {
+    toast(e.message || String(e), { error: true });
+  }
 }
 
 function meter(label, w) {

@@ -144,6 +144,7 @@ func (c *Core) headerNow() ipc.Header {
 		h.Memory = &m
 	}
 	h.Trod = c.trodHeader(c.awakeNow())
+	h.VPN = c.vpnHeader(time.Now())
 	return h
 }
 

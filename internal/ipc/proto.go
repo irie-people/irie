@@ -72,6 +72,10 @@ const (
 	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
 	// a ready.Report, for the Mac app's welcome.
 	OpReady = "ready"
+	// OpVPN reads or changes Mullvad VPN through its CLI, while vpn.on
+	// (docs/proposals/extensions.md §4). A change from inside an agent is
+	// refused.
+	OpVPN = "vpn"
 )
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
@@ -369,6 +373,8 @@ type Header struct {
 	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
 	// Trod is the trod bot while it is in its hours (DESIGN §4.10).
 	Trod *TrodShift `json:"trod,omitempty"`
+	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
+	VPN *VPN `json:"vpn,omitempty"`
 }
 
 // Window is one window of a plan's use, such as the five hours.
@@ -716,6 +722,42 @@ const (
 	ToolReady  = "ready"
 	ToolSwitch = "switch"
 )
+
+// VPNArgs ask the vpn op for the VPN's state, or for a change.
+type VPNArgs struct {
+	Do   string   `json:"do,omitempty"`   // "" for the state; on, off, lockdown, place or time
+	Args []string `json:"args,omitempty"` // lockdown's on or off; place's country, city or server
+}
+
+// What the vpn op does.
+const (
+	VPNOn       = "on"
+	VPNOff      = "off"
+	VPNLockdown = "lockdown"
+	VPNPlace    = "place"
+	VPNTime     = "time"
+)
+
+// VPNResult is the vpn op's answer: what to tell the person, and the VPN as
+// it is now.
+type VPNResult struct {
+	Text string `json:"text"`
+	VPN  *VPN   `json:"vpn,omitempty"`
+}
+
+// VPN is Mullvad VPN as the header carries it, while vpn.on: never an
+// address, a place on the map or the account's number.
+type VPN struct {
+	State    string     `json:"state"`              // connected, connecting, disconnected, disconnecting or error; "" while unread
+	City     string     `json:"city,omitempty"`     // the relay's, while connected or connecting
+	Country  string     `json:"country,omitempty"`  // the relay's
+	Host     string     `json:"host,omitempty"`     // the relay, such as se-got-wg-001
+	Lockdown bool       `json:"lockdown,omitempty"` // lockdown mode is on: the network is blocked while the VPN is off
+	Blocked  bool       `json:"blocked,omitempty"`  // off, and lockdown blocks the network now
+	Expires  *time.Time `json:"expires,omitempty"`  // when the account's time runs out
+	Text     string     `json:"text"`               // the state in one line
+	Problem  string     `json:"problem,omitempty"`  // why Irie can't read the VPN, such as no mullvad
+}
 
 // StatusArgs carry one status line update of a Claude Code session: its
 // JSON, as Claude Code gave it (DESIGN §6.3).
