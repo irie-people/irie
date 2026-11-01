@@ -161,3 +161,23 @@ func TestKeysRefusesWhatIsNotAKey(t *testing.T) {
 		t.Errorf("screen of no session: err = %v, want not_found", err)
 	}
 }
+
+func TestPairOpensACodeTheGatewayTakes(t *testing.T) {
+	c := setup(t)
+	var r ipc.PairResult
+	if err := c.call(ipc.OpPair, ipc.PairArgs{Minutes: 60}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Code) != 6 || r.Name == "" || r.On || time.Until(r.Until) < 59*time.Minute {
+		t.Errorf("pair = %+v", r)
+	}
+	for _, u := range r.URLs {
+		if !strings.HasPrefix(u, "http://") || !strings.HasSuffix(u, ":7386/") {
+			t.Errorf("setup URL %q", u)
+		}
+	}
+	var e *ipc.Error
+	if err := c.call(ipc.OpPair, ipc.PairArgs{Minutes: -1}, nil); !errors.As(err, &e) || e.Code != ipc.CodeBadArgs {
+		t.Errorf("a negative life: err = %v", err)
+	}
+}

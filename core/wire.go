@@ -92,6 +92,8 @@ type (
 	ScreenResult     = ipc.ScreenResult
 	ScreenOption     = ipc.ScreenOption
 	KeysArgs         = ipc.KeysArgs
+	PairArgs         = ipc.PairArgs
+	PairResult       = ipc.PairResult
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -203,4 +205,5 @@ const (
 	FramePing         = ipc.FramePing
 	OpScreen          = ipc.OpScreen
 	OpKeys            = ipc.OpKeys
+	OpPair            = ipc.OpPair
 )

@@ -1,5 +1,7 @@
 package ipc
 
+import "time"
+
 // Ops for a client that shows no terminal of its own, such as the phone app
 // (docs/PHONE.md): it reads what an agent's terminal shows and answers a
 // prompt there with a key, through the core, the only writer to tmux. They
@@ -46,3 +48,23 @@ type KeysArgs struct {
 // KeyNames are the keys OpKeys presses by name, as tmux names them. Ctrl+C
 // is not among them: twice, it ends Claude Code; Escape stops a turn.
 var KeyNames = []string{"Enter", "Escape", "Up", "Down", "Left", "Right", "Tab", "BTab", "Space", "BSpace", "PageUp", "PageDown", "Home", "End"}
+
+// OpPair opens a code that pairs a phone with this machine's phone app
+// (docs/PHONE.md), for a client to show with the setup page's address,
+// as `irie remote pair` does in a terminal.
+const OpPair = "pair"
+
+// PairArgs say how long the code works, in minutes; 0 is ten.
+type PairArgs struct {
+	Minutes int `json:"minutes,omitempty"`
+}
+
+// PairResult is what a phone needs to set up and pair: the setup page's
+// addresses, best first, the six-digit code, and until when it works.
+type PairResult struct {
+	On    bool      `json:"on"`   // remote.on: the gateway runs
+	Name  string    `json:"name"` // what the phone calls this machine
+	URLs  []string  `json:"urls"`
+	Code  string    `json:"code"`
+	Until time.Time `json:"until"`
+}
