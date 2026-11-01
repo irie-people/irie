@@ -117,3 +117,41 @@ func types(frames []ipc.Frame) []string {
 	}
 	return out
 }
+
+// After the first snapshot a client gets one frame for each row that
+// changed, however many changed at once: removes first, then upserts in the
+// list's order, and never every row again (docs/proposals/optimisation.md,
+// iteration 2).
+func TestChangedRowsComeOneFrameEach(t *testing.T) {
+	c := benchCore(t, 5)
+	c.mu.Lock()
+	c.changes()
+	c.mu.Unlock()
+	ch, cancel, err := c.Subscribe(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	if got := heardUntilQuiet(ch, 300*time.Millisecond); len(got) == 0 || got[0].T != ipc.FrameSnapshot || len(got[0].Sessions) != 5 {
+		t.Fatalf("subscribing gave %v, want a snapshot of the 5 rows first", types(got))
+	}
+	c.mu.Lock()
+	for _, id := range []string{"s000000000003", "s000000000001"} {
+		cost := 9.0
+		c.sessions[id].usage.CostUSD = &cost
+	}
+	delete(c.sessions, "s000000000004")
+	frames := c.changes()
+	c.mu.Unlock()
+	c.publish(frames)
+	got := heardUntilQuiet(ch, 300*time.Millisecond)
+	want := []string{"remove", "upsert s000000000001", "upsert s000000000003"}
+	if g := types(got); !reflect.DeepEqual(g, want) {
+		t.Errorf("three changes sent %v, want %v", g, want)
+	}
+	for _, f := range got {
+		if f.T == ipc.FrameRemove && f.ID != "s000000000004" {
+			t.Errorf("removed %q", f.ID)
+		}
+	}
+}

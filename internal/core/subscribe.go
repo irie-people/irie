@@ -1,7 +1,9 @@
 package core
 
 import (
+	"cmp"
 	"encoding/json"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,10 +20,11 @@ const frameGap = 100 * time.Millisecond
 // later ones are dropped.
 const maxQueue = 10000
 
-// subscriber coalesces changes for one client. Between two frames it only
-// remembers which rows changed; a frame then carries their latest state, as
-// one upsert or remove, or as a snapshot when several rows changed. Event
-// frames, for a client that asked for them, are never coalesced. A client
+// subscriber coalesces changes for one client. Between two rounds of frames
+// it only remembers which rows changed; a round then carries their latest
+// state, an upsert or a remove for each. Only the first round is a
+// snapshot of every row. Event frames, for a client that asked for them,
+// are never coalesced. A client
 // that sees every session also gets the sessions outside Irie, the closed
 // sessions and the history's labels, after its first snapshot and whenever
 // they change. A client that
@@ -285,7 +288,7 @@ func (s *subscriber) loop() {
 		}
 		var frames []ipc.Frame
 		if full || len(dirty) > 0 {
-			frames = append(frames, s.frame(full, dirty))
+			frames = append(frames, s.rows(full, dirty)...)
 		}
 		if outside {
 			frames = append(frames, s.outsideFrame())
@@ -331,16 +334,37 @@ func (s *subscriber) send(f ipc.Frame) bool {
 	}
 }
 
-func (s *subscriber) frame(full bool, dirty map[string]bool) ipc.Frame {
+// rows are the frames for the rows: the first time a snapshot of every
+// row, with the header; then an upsert or a remove for each row that
+// changed, the removes first and the upserts in the list's order. Each
+// row goes once, however many changed: a snapshot for two changes sent
+// every row again, which on a busy machine came every few seconds
+// (docs/proposals/optimisation.md §2.1).
+func (s *subscriber) rows(full bool, dirty map[string]bool) []ipc.Frame {
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
-	if !full && len(dirty) == 1 {
+	if !full {
+		var removes []string
+		var rows []ipc.Session
 		for id := range dirty {
 			if row, ok := s.c.published[id]; ok {
-				return ipc.Frame{T: ipc.FrameUpsert, Session: &row}
+				rows = append(rows, row)
+			} else {
+				removes = append(removes, id)
 			}
-			return ipc.Frame{T: ipc.FrameRemove, ID: id}
 		}
+		slices.Sort(removes)
+		slices.SortFunc(rows, func(a, b ipc.Session) int {
+			return cmp.Or(cmp.Compare(a.Order, b.Order), strings.Compare(a.ID, b.ID))
+		})
+		frames := make([]ipc.Frame, 0, len(dirty))
+		for _, id := range removes {
+			frames = append(frames, ipc.Frame{T: ipc.FrameRemove, ID: id})
+		}
+		for i := range rows {
+			frames = append(frames, ipc.Frame{T: ipc.FrameUpsert, Session: &rows[i]})
+		}
+		return frames
 	}
 	rows := []ipc.Session{}
 	for _, row := range s.c.list() {
@@ -349,7 +373,7 @@ func (s *subscriber) frame(full bool, dirty map[string]bool) ipc.Frame {
 		}
 	}
 	h := s.c.headerNow()
-	return ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &h}
+	return []ipc.Frame{{T: ipc.FrameSnapshot, Sessions: rows, Header: &h}}
 }
 
 // outsideFrame carries the latest sessions outside Irie.
