@@ -30,6 +30,8 @@ type (
 	Session          = ipc.Session
 	TrodRow          = ipc.TrodRow
 	TrodShift        = ipc.TrodShift
+	TrodArgs         = ipc.TrodArgs
+	TrodHand         = ipc.TrodHand
 	TrodResult       = ipc.TrodResult
 	TrodSession      = ipc.TrodSession
 	TrodSend         = ipc.TrodSend
