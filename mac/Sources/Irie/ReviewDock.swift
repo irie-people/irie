@@ -24,8 +24,9 @@ extension Store {
     }
 }
 
+@MainActor
 struct ReviewDock: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// Ids the user dropped or opened, newline-separated.
     @AppStorage("reviewDockSeen") private var seenRaw = ""
     @State private var open = true

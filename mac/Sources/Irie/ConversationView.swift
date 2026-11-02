@@ -8,15 +8,16 @@ import SwiftUI
 /// banner opens the terminal instead. View > Terminal (⌥⌘T) flips to the
 /// live terminal and back. Colours, type and shapes come from Theme and the
 /// system's text styles only, so the view follows the palette.
+@MainActor
 struct ConversationView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @StateObject private var model = ConversationModel()
     /// The palette: a switch draws the view again in its colours.
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     /// How wide the helper pane is beside the conversation (HelperPane.swift).
     @AppStorage("helperPaneWidth") private var paneWidth: Double = 380
 
-    private var selected: Session? { store.sessions.first { $0.id == store.selection } }
+    private var selected: Session? { store.selectedRow }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,8 +74,9 @@ struct ConversationView: View {
 
 /// The conversation, scrolled to its newest turn. It keeps to the bottom
 /// while you are there, and holds still while you read further up.
+@MainActor
 struct ConversationFeed: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: ConversationModel
     let session: Session
     @State private var expanded: Set<String> = []
@@ -335,8 +337,9 @@ private struct YouTurn: View {
 }
 
 /// Claude's replies and calls between two of your messages.
+@MainActor
 private struct ClaudeTurn: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let parts: [Turn.Part]
     let session: Session
     @Binding var expanded: Set<String>
@@ -697,8 +700,9 @@ private struct NoteLine: View {
 }
 
 /// What the session waits on you for, at the end of the conversation.
+@MainActor
 struct NeedsCard: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let item: ConversationItem
     let name: String
 
@@ -744,8 +748,9 @@ struct NeedsCard: View {
 }
 
 /// The message box, or why there is none now, and the way to the terminal.
+@MainActor
 struct Composer: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: ConversationModel
     let session: Session
     @State private var text = ""
@@ -803,7 +808,7 @@ struct Composer: View {
     private var field: some View {
         HStack(alignment: .bottom, spacing: 8) {
             entry
-            Button(action: send) {
+            Button { send() } label: {
                 Group {
                     if model.sending {
                         ProgressView().controlSize(.small)
@@ -883,8 +888,9 @@ struct Composer: View {
 
 /// A quiet page for when there is no conversation to show, with the way to
 /// the terminal when that is where it is.
+@MainActor
 struct ConversationNote: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let title: String
     let text: String?
     var terminal = false

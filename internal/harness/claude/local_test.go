@@ -103,7 +103,7 @@ func TestSettingsMakeIrieTheStatusLine(t *testing.T) {
 	}
 	// Irie's own line re-runs on a timer, to follow the session while it
 	// is idle.
-	if want := (StatusLine{Type: "command", Command: "'" + irieBin + "' statusline", RefreshInterval: 2}); got.StatusLine != want {
+	if want := (StatusLine{Type: "command", Command: "'" + irieBin + "' statusline", RefreshInterval: 5}); got.StatusLine != want {
 		t.Errorf("statusLine = %+v, want %+v", got.StatusLine, want)
 	}
 

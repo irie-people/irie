@@ -3,14 +3,15 @@ import SwiftUI
 /// The right side: the shown agent's live terminal. The core zooms the slot
 /// while the app is open, so a tmux client of the main session shows just
 /// that agent, and showing another session swaps it in place.
+@MainActor
 struct TerminalArea: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// The palette's name: a change draws the ground and the frame again.
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     /// What draws the terminals (GhosttyTerminal.swift).
     @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
 
-    private var selected: Session? { store.sessions.first { $0.id == store.selection } }
+    private var selected: Session? { store.selectedRow }
 
     private var online: Bool {
         if case .online = store.link { return true }
@@ -18,6 +19,10 @@ struct TerminalArea: View {
     }
 
     var body: some View {
+        // The frame's colour for a finished session is Look's, which follows
+        // ui.red_on_done; reading it here draws the frame again when it
+        // changes.
+        let _ = store.redOnDone
         VStack(spacing: 0) {
             main.modifier(FileDrop(session: selected))
             PhraseBar()
@@ -36,7 +41,7 @@ struct TerminalArea: View {
                         .font(.system(size: 13, weight: .semibold))
                     // Its state and the rest, in its agent's colour while it
                     // works, as its card and the terminal's frame.
-                    Text(selected.map(subtitle) ?? "No session")
+                    Text(selected.map { subtitle($0) } ?? "No session")
                         .font(.system(size: 11))
                         .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                 }

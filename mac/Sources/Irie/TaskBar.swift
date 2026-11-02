@@ -8,8 +8,9 @@ import SwiftUI
 /// agent. ⌘N opens the full new-task sheet. It empties as a task starts,
 /// so the next can be typed at once; one that reads as more for the task
 /// just sent goes to that task's agent instead (DESIGN §4.2).
+@MainActor
 struct TaskBar: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// Kept in the defaults as it is typed, so an unsent task survives the
     /// app being stopped and relaunched, as every install does.
     @AppStorage("taskDraft") private var text = ""
@@ -31,7 +32,7 @@ struct TaskBar: View {
                 .foregroundStyle(Theme.ink)
                 .lineLimit(3, reservesSpace: true)
                 .focused($focused)
-                .onSubmit(submit)
+                .onSubmit { submit() }
                 .onKeyPress(.upArrow) { step(-1) }
                 .onKeyPress(.downArrow) { step(1) }
                 .onChange(of: text) {
@@ -191,8 +192,9 @@ struct TaskBar: View {
 /// Where a task runs, beside the task bar's text: a repo the @ words know,
 /// a folder, or no repo at all. An @repo typed in the text wins, and the
 /// menu shows it in the accent.
+@MainActor
 struct RepoMenu: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// The @ word typed in the text, if any.
     let typed: String?
 

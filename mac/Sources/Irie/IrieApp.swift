@@ -17,6 +17,9 @@ enum Launch {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { ConversationSnapshot.run(into: dir) }
         }
+        if args.contains("--bench") {
+            MainActor.assumeIsolated { Bench.run() }
+        }
         if let i = args.firstIndex(of: "--render-onboarding") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { OnboardingSnapshot.run(into: dir) }
@@ -31,7 +34,7 @@ enum Launch {
 
 struct IrieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var store = Store()
+    @State private var store = Store()
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     /// The compact title bar: one short row for the traffic lights, the
@@ -45,7 +48,7 @@ struct IrieApp: App {
     var body: some Scene {
         Window("Irie", id: "main") {
             ContentView()
-                .environmentObject(store)
+                .environment(store)
                 .frame(minWidth: 820, minHeight: 500)
                 .task { store.start() }
         }
@@ -157,13 +160,13 @@ struct IrieApp: App {
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
             LearnWindow()
-                .environmentObject(store)
+                .environment(store)
         }
         .defaultSize(width: 560, height: 640)
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
-                .environmentObject(store)
+                .environment(store)
         }
     }
 }
@@ -235,8 +238,9 @@ extension Notification.Name {
     static let irieQuickTask = Notification.Name("irieQuickTask")
 }
 
+@MainActor
 struct ContentView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @State private var keys = KeyRouter()
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
@@ -248,8 +252,11 @@ struct ContentView: View {
             // At its narrowest the sidebar still fits the title bar's row
             // (sun, name and counts) beside the traffic lights; a row that
             // doesn't fit goes into the toolbar's overflow menu.
+            // Red for done (ui.red_on_done) does the same: the cards draw
+            // again only when their own row changes, and the colour is
+            // Look's, which they don't watch.
             SidebarView()
-                .id(theme)
+                .id("\(theme) \(store.redOnDone)")
                 .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
@@ -264,8 +271,8 @@ struct ContentView: View {
         // The lines from the selected card to the terminal, over both columns.
         .overlayPreferenceValue(TabLinkKey.self) { TabLink(ends: $0) }
         .tint(Theme.accent)
-        .sheet(isPresented: $store.newTaskSheet) {
-            NewTaskSheet().environmentObject(store)
+        .sheet(isPresented: Bindable(store).newTaskSheet) {
+            NewTaskSheet().environment(store)
         }
         .background(WindowReader { window in
             keys.window = window
