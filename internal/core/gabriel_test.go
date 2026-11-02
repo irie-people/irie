@@ -211,6 +211,7 @@ func TestStealsFocus(t *testing.T) {
 		"open":               false,
 		`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --user-data-dir=/tmp/p`: false,
 		"mac/build/Irie.app/Contents/MacOS/Irie --snapshot /tmp/shots":                                         false,
+		"mac/build/Irie.app/Contents/MacOS/Irie --record /tmp/first-look.mp4 --reel docs/demo/first-look.reel": false,
 		`osascript -e 'display notification "done"'`:                                                           false,
 		"go test ./... && git commit -m 'open the door'":                                                       false,
 		"opencode run":   false,

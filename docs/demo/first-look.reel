@@ -1,0 +1,25 @@
+# Irie at a glance, for the site's first recording box (site/index.html,
+# "opening Irie, typing a task and watching its row"). Three agents are at
+# work; a fourth task is typed into the task bar, starts, and goes to work.
+# Film it with docs/demo/record.sh; the steps are in docs/demo/README.md.
+# 16:10, as the site's boxes are, and small enough that the cards still
+# read when the box shows it 672 pixels wide.
+Set Size 1024x640
+Set Appearance light
+Set Palette evergreen
+Set TypingSpeed 55ms
+
+Spawn research rate limiting libraries for Go
+Spawn @acme-api add rate limiting to the login endpoint
+Spawn @acme-web +sonnet fix the flaky checkout test
+
+Sleep 1.5s
+Type "@acme-billing retry failed webhooks"
+Sleep 700ms
+Enter
+Wait working 20s
+Sleep 3s
+Up
+Sleep 2.5s
+Up
+Sleep 2.5s
