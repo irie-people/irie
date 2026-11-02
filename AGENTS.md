@@ -26,6 +26,8 @@ Contributions earn Steak under [irie-people/stake](https://github.com/irie-peopl
 
 Go. The client runs every agent in tmux and draws its UI with Bubble Tea. Test with `go test ./...`.
 
+Read a doc by its sections: `tools/doc.sh DESIGN 4.8` prints §4.8 of DESIGN.md, and `tools/doc.sh DESIGN` its outline, so you read only the part you need.
+
 ## Trying a change
 
 If you run Irie, put a finished change into it at once: commit, then run `tools/live.sh`. It runs `go vet` and `go test`, builds `irie`, and also `Irie.app` when `mac/` changed and the app is installed or running, then swaps the build into the running Irie. While the owner uses Irie.app, the new app waits beside it and swaps in once they look away, so an install never takes their focus. When the Go code changed, the core and the sidebar restart. Restarting any part of Irie must never disturb an agent or anything it started (a hard requirement, DESIGN §2.1 principle 6); the script checks every agent's process afterwards and fails loudly if one changed. Start Irie from that build, `~/.local/share/irie/bin/irie`, and never build over it by hand.
