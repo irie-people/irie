@@ -11,10 +11,11 @@ import SwiftUI
 // session, which shows only its window, so it takes this pane's size while
 // every other agent keeps the slot's (docs/DESIGN.md §2.3).
 
+@MainActor
 struct TeamSplit: View {
     let session: Session
     let team: [Teammate]
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// The lead's share of the width, where the divider was left.
     @AppStorage("teamSplitLead") private var leadShare = 0.5
     @State private var dragStart: Double?

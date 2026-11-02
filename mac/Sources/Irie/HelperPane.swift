@@ -79,8 +79,9 @@ struct HelperRef: Identifiable, Equatable {
 
 /// The helper beside its session's conversation, or in its place when the
 /// window is narrow.
+@MainActor
 struct HelperPane: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
     let agent: String
     /// The session's own conversation, which names its helpers.
@@ -339,8 +340,9 @@ private struct HelperStrip: View {
     }
 }
 
+@MainActor
 private struct HelperPill: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let helper: HelperRef
     let selected: Bool
     let terminal: Bool

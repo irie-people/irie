@@ -10,9 +10,13 @@ import SwiftUI
 /// keys walk the cards and keep the keyboard here, and z parks or unparks
 /// the selected card. The switch between the views, and the selected
 /// session's details, sit above the task bar, on one panel with it.
+///
+/// It reads none of the rows itself, only whether there are any: a frame
+/// about a row redraws the list (SessionList) and the views that show that
+/// row, but never this, its title bar items or the panel under the list.
+@MainActor
 struct SidebarView: View {
-    @EnvironmentObject private var store: Store
-    @FocusState private var listFocused: Bool
+    @Environment(Store.self) private var store
 
     /// The least room the cards keep, however tall the details are dragged:
     /// a group's header and two cards.
@@ -32,19 +36,19 @@ struct SidebarView: View {
             // (Onboarding.swift).
             ReadyBanner()
             CoachCard()
-            content
+            SessionList()
                 .frame(minHeight: Self.cardsLeast)
             ReviewDock()
             // The footer sits lighter than the list, with rounded top
             // corners: the switch between the views, the details and the
             // task bar, on one panel.
             VStack(spacing: 0) {
-                if !store.sessions.isEmpty {
+                if store.hasRows {
                     ModeSwitch()
                 }
                 // The details, once there is a session to pick: small until
                 // their edge is dragged, and the cards have the rest.
-                if !store.sessions.isEmpty || !store.outside.isEmpty {
+                if store.hasRows || !store.outside.isEmpty {
                     DetailsPanel()
                 }
                 TaskBar()
@@ -74,8 +78,17 @@ struct SidebarView: View {
         .toolbar(removing: .sidebarToggle)
         .modifier(OutsideMoveConfirmation())
     }
+}
 
-    @ViewBuilder private var content: some View {
+/// The cards, in their groups, then the sessions outside Irie; or what to do
+/// while there are none. It draws again whenever a row changes, and each card
+/// in it only when its own row does (SessionCard).
+@MainActor
+private struct SessionList: View {
+    @Environment(Store.self) private var store
+    @FocusState private var listFocused: Bool
+
+    var body: some View {
         let groups = store.drawnGroups
         if case let .offline(why) = store.link, store.sessions.isEmpty {
             Offline(why: why, socket: store.socketPath)
@@ -97,10 +110,23 @@ struct SidebarView: View {
                                 // The List view's one list needs no header.
                                 if g.id != SessionGroup.list { GroupHeader(group: g) }
                                 if store.isOpen(g) {
-                                    ForEach(g.sessions) { s in
-                                        SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil, listFocused: listFocused, now: ctx.date)
+                                    // Each card is drawn again only when what
+                                    // it shows changed (SessionCard.==): a
+                                    // frame about one session redraws one
+                                    // card, not the list.
+                                    let last = g.sessions.count - 1
+                                    ForEach(Array(g.sessions.enumerated()), id: \.element.id) { i, s in
+                                        SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil,
+                                                    listFocused: listFocused, now: ctx.date, first: i == 0, last: i == last)
+                                            .equatable()
                                             .id(s.id)
-                                        HelperRows(session: s)
+                                        // Only a session with helpers has the
+                                        // rows: wrapped, empty ones would take
+                                        // the stack's spacing.
+                                        if HelperRows.has(s) {
+                                            HelperRows(session: s)
+                                                .equatable()
+                                        }
                                     }
                                 }
                             }
@@ -175,16 +201,36 @@ struct SidebarView: View {
 /// colour, which two lines carry on to the terminal's frame (TabLink.swift).
 /// A selected working card is a gradient, from the selection by its mark to
 /// the colour round its terminal at the trailing end.
-private struct SessionCard: View {
-    @EnvironmentObject private var store: Store
+///
+/// A card is drawn again only when what it shows changed (==): its row, its
+/// selection, where the keyboard is, its place at a group's ends, or its age
+/// as the label reads it. The list builds every card whenever the rows
+/// change, and drawing all of them, each with its AppKit buttons and menu,
+/// held the main thread for 300–570 ms at a time with 30 sessions.
+@MainActor
+private struct SessionCard: View, Equatable {
+    @Environment(Store.self) private var store
     let session: Session
     let selected: Bool
     let listFocused: Bool
     let now: Date
+    /// First or last in its group: it can't move up, or down.
+    let first: Bool
+    let last: Bool
     @State private var hovering = false
+    /// The pointer's buttons and menu, made while the pointer is on the
+    /// card, and kept while the … menu it opened is open (hideActions()).
+    @State private var actionsShown = false
 
     /// The trailing slot's width: the age and tokens, or the actions.
     private static let slot: CGFloat = 66
+
+    nonisolated static func == (a: SessionCard, b: SessionCard) -> Bool {
+        a.session == b.session && a.selected == b.selected && a.listFocused == b.listFocused &&
+            a.first == b.first && a.last == b.last &&
+            Age.short(a.session.created, now: a.now) == Age.short(b.session.created, now: b.now) &&
+            a.session.trod.map { TrodPrint.bright($0, now: a.now) } == b.session.trod.map { TrodPrint.bright($0, now: b.now) }
+    }
 
     private var look: Look { Look(session) }
     /// Its name drawn muted: idle and the like, and a parked finished turn,
@@ -227,9 +273,13 @@ private struct SessionCard: View {
                 // In ink over a selected working card's deep end.
                 .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
                 .opacity(hovering ? 0 : 1)
-                QuickActions(session: session, ink: deep != nil)
-                    .opacity(hovering ? 1 : 0)
-                    .allowsHitTesting(hovering)
+                // Only the card under the pointer has them: 30 hidden sets
+                // of AppKit buttons and menus cost every drawing.
+                if actionsShown {
+                    QuickActions(session: session, ink: deep != nil, first: first, last: last)
+                        .opacity(hovering ? 1 : 0)
+                        .allowsHitTesting(hovering)
+                }
             }
             .frame(width: Self.slot, alignment: .trailing)
         }
@@ -243,15 +293,16 @@ private struct SessionCard: View {
             }
         }
         .contentShape(shape)
-        .onHover {
-            hovering = $0
-            store.hover(session.id, $0)
+        .onHover { inside in
+            hovering = inside
+            store.hover(session.id, inside)
+            if inside { actionsShown = true } else { hideActions() }
         }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }
         // A double click opens the name to edit; its first click showed it.
         .simultaneousGesture(TapGesture(count: 2).onEnded { store.beginRename(session.id) })
         .modifier(Reorderable(session: session))
-        .contextMenu { Actions(session: session) }
+        .contextMenu { Actions(session: session, first: first, last: last) }
         .help([session.name, session.detail, session.command].compactMap { $0 }.joined(separator: "\n"))
         // While the name is open to edit, VoiceOver reaches the field.
         .accessibilityElement(children: renaming ? AccessibilityChildBehavior.contain : .ignore)
@@ -262,8 +313,8 @@ private struct SessionCard: View {
             Button(session.isFrozen ? "Resume" : "Pause") { store.setFrozen(session, !session.isFrozen) }
             Button(session.isPromoted ? "Stop promoting" : "Promote to the top") { store.setPromoted(session, !session.isPromoted) }
             if store.canPark { Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) } }
-            if store.canMove(session, by: -1) { Button("Move up") { store.move(session, by: -1) } }
-            if store.canMove(session, by: 1) { Button("Move down") { store.move(session, by: 1) } }
+            if !first { Button("Move up") { store.move(session, by: -1) } }
+            if !last { Button("Move down") { store.move(session, by: 1) } }
             Button("Rename") { store.beginRename(session.id) }
             if let cwd = session.cwd {
                 Button("Show the folder in Finder") { store.reveal(cwd) }
@@ -278,6 +329,23 @@ private struct SessionCard: View {
             }
             Button("Copy the session ID") { store.copy(session.id, what: "session ID") }
             Button("Close the session") { store.close(session) }
+        }
+    }
+
+    /// Drops the card's buttons and menu once the pointer has left it, but
+    /// not while the … menu they opened is open: an open menu tracks in its
+    /// own run loop mode, and taking its button away would close it under
+    /// the pointer. They go once the menu closes, if the pointer is not back.
+    private func hideActions() {
+        guard RunLoop.current.currentMode == .eventTracking else {
+            actionsShown = false
+            return
+        }
+        let card = self
+        RunLoop.main.perform(inModes: [.default]) {
+            MainActor.assumeIsolated {
+                if !card.hovering { card.actionsShown = false }
+            }
         }
     }
 
@@ -364,8 +432,9 @@ private struct SessionCard: View {
 /// card keeps its height. Return renames the session, Esc keeps the name,
 /// and clicking elsewhere renames it, as in Finder. What is typed lives in
 /// the store, which renames it when another session is shown.
+@MainActor
 private struct RenameField: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
     @FocusState private var focused: Bool
 
@@ -373,7 +442,7 @@ private struct RenameField: View {
         let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
         // A frame like the find field's, just outside the text, so the name
         // stays where it was drawn.
-        TextField("Name", text: $store.renameText)
+        TextField("Name", text: Bindable(store).renameText)
             .textFieldStyle(.plain)
             .font(Theme.font(13.5, .semibold))
             .foregroundStyle(Theme.ink)
@@ -403,8 +472,9 @@ private struct RenameField: View {
 /// A group's header: its name and count, and a chevron that folds it. A
 /// folded group says how many of its sessions need you, in red, and the
 /// Parked header turns red while any parked session needs you.
+@MainActor
 private struct GroupHeader: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let group: SessionGroup
 
     var body: some View {
@@ -447,9 +517,15 @@ private struct GroupHeader: View {
 /// A session's helpers, its running subagents, under its card: each one's
 /// kind and what it is doing, in red when it needs you. Three at most, then
 /// how many more.
-private struct HelperRows: View {
-    @EnvironmentObject private var store: Store
+@MainActor
+private struct HelperRows: View, Equatable {
+    @Environment(Store.self) private var store
     let session: Session
+
+    nonisolated static func == (a: HelperRows, b: HelperRows) -> Bool { a.session == b.session }
+
+    /// Whether the session has any helper or teammate to show.
+    static func has(_ s: Session) -> Bool { !(s.subagents ?? []).isEmpty || !(s.team ?? []).isEmpty }
 
     var body: some View {
         let helpers = session.subagents ?? []
@@ -518,8 +594,9 @@ private struct HelperRows: View {
 }
 
 /// The switch between the List and Repo views, above the details.
+@MainActor
 private struct ModeSwitch: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     var body: some View {
         HStack(spacing: 2) {
@@ -554,11 +631,15 @@ private struct ModeSwitch: View {
 /// What a hovered card offers. They sit in the card's fixed trailing slot,
 /// three icons 16 points wide and the menu 18, so the name keeps its room;
 /// VoiceOver gets them, and more, as the card's actions.
+@MainActor
 private struct QuickActions: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
     /// All in ink, over a selected working card's deep end.
     let ink: Bool
+    /// First or last in its group (SessionCard).
+    let first: Bool
+    let last: Bool
 
     var body: some View {
         HStack(spacing: 0) {
@@ -567,7 +648,7 @@ private struct QuickActions: View {
             PromoteButton(session: session, ink: ink)
             if store.canPark { ParkButton(session: session, onCard: true) }
             Menu {
-                Actions(session: session)
+                Actions(session: session, first: first, last: last)
             } label: {
                 Image(systemName: "ellipsis")
             }
@@ -591,8 +672,9 @@ private struct QuickActions: View {
 /// cards their room, or shorter. The chevron, a double click on the edge or
 /// a drag to the bottom minimizes it to one line of what the agent is
 /// doing. The app keeps its height and whether it is minimized.
+@MainActor
 struct DetailsPanel: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// Its height while open, in points.
     @AppStorage(DetailsPanel.heightKey) private var height = DetailsPanel.compact
     @AppStorage(DetailsPanel.minimizedKey) private var minimized = false
@@ -613,7 +695,7 @@ struct DetailsPanel: View {
     private static let least: CGFloat = 58
     private static let fold: CGFloat = 44
 
-    private var selected: Session? { store.sessions.first { $0.id == store.selection } }
+    private var selected: Session? { store.selectedRow }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
@@ -858,9 +940,13 @@ struct DetailsFold: View {
 }
 
 /// The right-click menu.
+@MainActor
 private struct Actions: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
+    /// First or last in its group (SessionCard).
+    let first: Bool
+    let last: Bool
 
     var body: some View {
         Button("Show and Type to It") { store.show(session.id, focus: true) }
@@ -870,7 +956,7 @@ private struct Actions: View {
         }
         Button("Rename…") { store.beginRename(session.id) }
         Divider()
-        ControlItems(session: session)
+        ControlItems(session: session, canUp: !first, canDown: !last)
         Divider()
         if let cwd = session.cwd {
             Button("Show Folder in Finder") { store.reveal(cwd) }
@@ -905,23 +991,28 @@ private struct TitleName: View {
 /// A count per state, in the title bar after Irie's name. A count shows the
 /// first session, in list order, in that state. A parked session is out of
 /// the way, so To verify leaves it out; it still counts when it needs you.
+@MainActor
 private struct Counts: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     var body: some View {
         HStack(spacing: 6) {
             switch store.link {
             case .online:
-                count([.failed, .needs, .stalled], mark: .needs, color: Theme.needs, label: "need you")
-                count([.working], mark: .working, color: Theme.ink, label: "working")
+                // The store works the counts out once a change (RowCounts),
+                // so a row's news redraws the title bar only when a count
+                // moves: each redraw lays its items out again.
+                let c = store.counts
+                count(c.needs, mark: .needs, color: Theme.needs, label: "need you")
+                count(c.working, mark: .working, color: Theme.ink, label: "working")
                 if !store.closeWhenDone {
-                    count([.done], mark: .done, color: Look.doneColor, label: "to verify, not yet seen", parked: false)
+                    count(c.done, mark: .done, color: Look.doneColor, label: "to verify, not yet seen")
                 }
-                if store.sessions.contains(where: { [.paused, .pausing].contains(Look($0)) }) {
-                    count([.paused, .pausing], mark: .paused, color: Theme.paused, label: "paused")
+                if c.paused.count > 0 {
+                    count(c.paused, mark: .paused, color: Theme.paused, label: "paused")
                 }
-                if store.sessions.contains(where: { Look($0) == .frozen }) {
-                    count([.frozen], mark: .frozen, color: Theme.frozen, label: "frozen")
+                if c.frozen.count > 0 {
+                    count(c.frozen, mark: .frozen, color: Theme.frozen, label: "frozen")
                 }
                 if let t = store.trod {
                     trod(t)
@@ -994,38 +1085,37 @@ private struct Counts: View {
         .accessibilityLabel(v.text)
     }
 
-    /// A count of the sessions in these states, with the first state's mark,
-    /// which shows the first such session; without parked, the parked ones
-    /// are left out. It is drawn as a chip rather than a button, so the title
-    /// bar puts no bezel round it; VoiceOver still finds a button.
-    private func count(_ looks: [Look], mark: Look, color: Color, label: String, parked: Bool = true) -> some View {
-        let rows = store.sessions.filter { looks.contains(Look($0)) && (parked || !$0.isParked) }
-        let go = { if let first = rows.first { store.show(first.id) } }
+    /// A count of the sessions in some states, with their mark, which shows
+    /// the first such session. It is drawn as a chip rather than a button, so
+    /// the title bar puts no bezel round it; VoiceOver still finds a button.
+    private func count(_ tally: RowCounts.Tally, mark: Look, color: Color, label: String) -> some View {
+        let go = { if let first = tally.first { store.show(first) } }
         return HStack(spacing: 3) {
             StateMark(look: mark, size: 10)
             // Two digits' width, so a tenth session doesn't push the others.
-            Text("\(rows.count)").font(Theme.font(10.5, .bold)).monospacedDigit()
+            Text("\(tally.count)").font(Theme.font(10.5, .bold)).monospacedDigit()
                 .frame(minWidth: 12)
         }
         .foregroundStyle(color)
         .padding(.horizontal, 4)
         .padding(.vertical, 1.5)
-        .background(Capsule().fill(color.opacity(rows.isEmpty ? 0.05 : 0.12)))
-        .overlay(Capsule().strokeBorder(color.opacity(rows.isEmpty ? 0.15 : 0.4), lineWidth: 1))
-        .opacity(rows.isEmpty ? 0.5 : 1)
+        .background(Capsule().fill(color.opacity(tally.count == 0 ? 0.05 : 0.12)))
+        .overlay(Capsule().strokeBorder(color.opacity(tally.count == 0 ? 0.15 : 0.4), lineWidth: 1))
+        .opacity(tally.count == 0 ? 0.5 : 1)
         .contentShape(Capsule())
         .onTapGesture { go() }
-        .help("\(rows.count) \(label)")
+        .help("\(tally.count) \(label)")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(rows.count) \(label)")
+        .accessibilityLabel("\(tally.count) \(label)")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { go() }
     }
 }
 
 /// "Find a session". ⌘F comes here; Esc clears it and goes back to the list.
+@MainActor
 private struct FindField: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -1034,7 +1124,7 @@ private struct FindField: View {
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.muted)
                 .accessibilityHidden(true)
-            TextField("Find a session", text: $store.filter)
+            TextField("Find a session", text: Bindable(store).filter)
                 .textFieldStyle(.plain)
                 .font(Theme.font(12.5))
                 .focused($focused)
@@ -1087,10 +1177,16 @@ enum Age {
 
     /// "3 minutes ago", for VoiceOver: "3m" would be read as metres.
     static func spoken(_ d: Date, now: Date) -> String {
+        relative.localizedString(for: d, relativeTo: now)
+    }
+
+    /// Made once: a formatter is slow to make, and every card's drawing
+    /// asked for one.
+    private static let relative: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .full
-        return f.localizedString(for: d, relativeTo: now)
-    }
+        return f
+    }()
 
     static func tilde(_ path: String) -> String {
         let home = NSHomeDirectory()

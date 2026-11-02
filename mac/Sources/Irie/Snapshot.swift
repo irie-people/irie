@@ -48,7 +48,7 @@ enum Snapshot {
                 domain.merge(details[base] ?? [:]) { $1 }
                 UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
                 Theme.use(palette)
-                let (rep, titlebar) = window(ContentView().environmentObject(store), dark: dark, width: width, height: 720)
+                let (rep, titlebar) = window(ContentView().environment(store), dark: dark, width: width, height: 720)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 let top = firstCardTop(rep, below: titlebar)
@@ -65,7 +65,7 @@ enum Snapshot {
             Theme.use(Palette.standard.id)
             for (base, width, dark) in [("team-split", 1100.0, false), ("team-split-dark", 1100.0, true), ("team-split-wide", 1500.0, false), ("team-split-narrow", 820.0, false)] {
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
-                let (rep, _) = window(ContentView().environmentObject(store), dark: dark, width: CGFloat(width), height: 720)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: CGFloat(width), height: 720)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
@@ -75,7 +75,7 @@ enum Snapshot {
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
             for dark in [false, true] {
-                let (rep, _) = window(NewTaskSheet().environmentObject(store), dark: dark, width: 560, height: 470)
+                let (rep, _) = window(NewTaskSheet().environment(store), dark: dark, width: 560, height: 470)
                 let name = "sheet-\(dark ? "dark" : "light").png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
@@ -84,7 +84,7 @@ enum Snapshot {
             store.settings.loadFixture(try Wire.decoder.decode(ConfigResult.self, from: Data(Fixture.config.utf8)))
             for tab in SettingsView.Tab.allCases {
                 for dark in [false, true] {
-                    let page = SettingsView.page(tab, model: store.settings).environmentObject(store).tint(Theme.accent)
+                    let page = SettingsView.page(tab, model: store.settings).environment(store).tint(Theme.accent)
                     let (rep, _) = window(page, dark: dark, width: SettingsView.size.width, height: SettingsView.size.height)
                     let name = "settings-\(tab.rawValue)-\(dark ? "dark" : "light").png"
                     try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))

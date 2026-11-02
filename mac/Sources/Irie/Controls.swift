@@ -243,8 +243,9 @@ extension Store {
 }
 
 /// Pause or Resume, as an icon: on a hovered card and in the details panel.
+@MainActor
 struct PauseButton: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
 
     var body: some View {
@@ -260,8 +261,9 @@ struct PauseButton: View {
 
 /// Promote, or put back, as an icon: on a hovered card and in the details
 /// panel.
+@MainActor
 struct PromoteButton: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
     /// In ink, where the accent's text colour falls short of 3:1, such as a
     /// selected working card's deep end; the filled arrow still shows it on.
@@ -279,8 +281,9 @@ struct PromoteButton: View {
 }
 
 /// Park, or Unpark, as an icon: on a hovered card and in the details panel.
+@MainActor
 struct ParkButton: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
     /// Sized as the hovered card's other buttons are.
     var onCard = false
@@ -297,9 +300,14 @@ struct ParkButton: View {
 }
 
 /// The right-click menu's items for these.
+@MainActor
 struct ControlItems: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
+    /// Whether it can move up, or down, in its group: the card knows its
+    /// place, and asking the store would read every row.
+    let canUp: Bool
+    let canDown: Bool
 
     var body: some View {
         if session.isFrozen {
@@ -311,8 +319,8 @@ struct ControlItems: View {
         if store.canPark {
             Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked, fromPointer: true) }
         }
-        Button("Move Up") { store.move(session, by: -1) }.disabled(!store.canMove(session, by: -1))
-        Button("Move Down") { store.move(session, by: 1) }.disabled(!store.canMove(session, by: 1))
+        Button("Move Up") { store.move(session, by: -1) }.disabled(!canUp)
+        Button("Move Down") { store.move(session, by: 1) }.disabled(!canDown)
     }
 }
 
@@ -337,7 +345,10 @@ struct TrodPrint: View {
     /// How long a boot print stays bright after the bot sent the session on.
     static let fresh: TimeInterval = 120
 
-    private var bright: Bool { now.timeIntervalSince(trod.last) < Self.fresh }
+    private var bright: Bool { Self.bright(trod, now: now) }
+
+    /// Whether the print is bright: the bot sent the session on lately.
+    nonisolated static func bright(_ trod: TrodRow, now: Date) -> Bool { now.timeIntervalSince(trod.last) < fresh }
 
     var body: some View {
         HStack(spacing: 1) {
@@ -408,8 +419,9 @@ struct ControlLines: View {
 
 /// Lets a card be dragged to another place in its group, or across the
 /// Parked group's edge, with a line where it would land.
+@MainActor
 struct Reorderable: ViewModifier {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
 
     func body(content: Content) -> some View {

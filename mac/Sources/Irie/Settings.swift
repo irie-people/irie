@@ -376,8 +376,9 @@ enum AppearanceChoice: String, CaseIterable, Identifiable {
 
 // MARK: Window
 
+@MainActor
 struct SettingsView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -486,8 +487,9 @@ private struct SettingsForm<Content: View>: View {
 
 /// The core's settings once it has said what they are, or why they can't
 /// show.
+@MainActor
 private struct WithConfig<Content: View>: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     @ViewBuilder var content: (CoreConfig) -> Content
 
@@ -673,8 +675,9 @@ private struct ConfigFileSection: View {
 
 // MARK: Appearance
 
+@MainActor
 private struct AppearanceSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     @AppStorage(AppearanceChoice.defaultsKey) private var appearance = AppearanceChoice.system.rawValue
@@ -697,7 +700,7 @@ private struct AppearanceSettings: View {
                 footnote("Each palette has a light and a dark set; Irie’s status line in the terminal follows it too.")
             }
             Section {
-                Picker("On the right", selection: $store.showTerminal) {
+                Picker("On the right", selection: Bindable(store).showTerminal) {
                     Text("Conversation").tag(false)
                     Text("Terminal").tag(true)
                 }
@@ -811,8 +814,9 @@ private struct PalettePicker: View {
 
 // MARK: Agents
 
+@MainActor
 private struct AgentSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     /// The profile open to edit.
     @State private var editing = "claude"
@@ -1239,8 +1243,9 @@ private struct RepoSettings: View {
 /// one's icon, name and work, what he does now, what you can do with him,
 /// and his settings, drawn by their kind. The app knows none of them by
 /// name, so a new arch agent shows here with no change to the app.
+@MainActor
 private struct ArchSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
 
     var body: some View {
@@ -1324,8 +1329,9 @@ private struct ArchSettings: View {
 /// The trod bot (DESIGN §4.10): when it works, how far it goes, how much of
 /// the plan it may use, and the rules and guidelines every agent it keeps
 /// going is given. Setting it up is writing those.
+@MainActor
 private struct TrodSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
 
     private static let aways = ["0s", "5m", "15m", "30m", "1h"]

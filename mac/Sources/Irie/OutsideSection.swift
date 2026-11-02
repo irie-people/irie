@@ -182,8 +182,9 @@ extension Store {
 
 /// The section after Irie's cards: a header with the count, then a row per
 /// session.
+@MainActor
 struct OutsideSection: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let now: Date
     let listFocused: Bool
 
@@ -215,8 +216,9 @@ struct OutsideSection: View {
 /// One session outside Irie, always one line: its mark, name and age. While
 /// it is selected or hovered, Move into Irie takes the age's fixed slot, off
 /// while the session can't move, so the row never grows.
+@MainActor
 private struct OutsideRow: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let outside: OutsideSession
     let selected: Bool
     let listFocused: Bool
@@ -300,8 +302,9 @@ private struct OutsideRow: View {
 }
 
 /// The outside row's right-click menu.
+@MainActor
 private struct OutsideActions: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let outside: OutsideSession
 
     var body: some View {
@@ -321,8 +324,9 @@ private struct OutsideActions: View {
 /// The selected outside session in the details panel: what it is doing,
 /// where it runs, Move into Irie, off with the reason while it can't move,
 /// and Copy Session ID.
+@MainActor
 struct OutsideDetails: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let outside: OutsideSession
 
     var body: some View {
@@ -365,8 +369,9 @@ struct OutsideDetails: View {
 }
 
 /// Asks before a move, with what it ends.
+@MainActor
 struct OutsideMoveConfirmation: ViewModifier {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     func body(content: Content) -> some View {
         content.confirmationDialog(

@@ -84,7 +84,7 @@ enum OnboardingSnapshot {
         }
         .frame(width: 300)
         .background(Theme.sidebar)
-        .environmentObject(s)
+        .environment(s)
     }
 
     private static func render(_ view: some View, dark: Bool, to url: URL) throws {

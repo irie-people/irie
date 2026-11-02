@@ -3,6 +3,7 @@ import SwiftUI
 /// The strip under the agent's terminal, the counterpart of the title bar:
 /// lighter than the ground, rounded top corners, and one muted phrase that
 /// gives way to the next every half minute.
+@MainActor
 struct PhraseBar: View {
     static let phrases = [
         "Be the change you want to see in the world. 🌍",
@@ -25,7 +26,7 @@ struct PhraseBar: View {
         "Have faith. 🙏",
     ]
 
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @State private var index = Int.random(in: 0..<Self.phrases.count)
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
