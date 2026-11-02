@@ -250,6 +250,14 @@ func Run(o Options) error {
 		return fmt.Errorf("core.lock: %w", err)
 	}
 	defer lock.Close()
+	// A core that an older `irie up` started from an agent's shell has the
+	// agent's PATH, with its tmux shim first. Its agents and everything it
+	// runs take the PATH without Irie's shims (tmux.ShimMark).
+	if p, ok := os.LookupEnv("PATH"); ok {
+		if clean := tmux.CleanPath(p); clean != p {
+			os.Setenv("PATH", clean)
+		}
+	}
 	bin, err := tmux.Find(o.Config.Tmux.Path)
 	if err != nil {
 		return err

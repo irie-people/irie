@@ -22,12 +22,16 @@ import (
 // upWait is how long `irie up` waits for a core to answer.
 const upWait = 5 * time.Second
 
+// runner is the tmux of `irie up`. Its calls go without Irie's tmux shims
+// on their PATH: tmux starts a pane with the PATH of the client that asks,
+// and a core given an agent's PATH would run tmux through that agent's shim
+// (tmux.ShimMark).
 func runner(cfg config.Config) (*tmux.Runner, error) {
 	bin, err := tmux.Find(cfg.Tmux.Path)
 	if err != nil {
 		return nil, err
 	}
-	return &tmux.Runner{Bin: bin, Socket: cfg.Tmux.Socket}, nil
+	return &tmux.Runner{Bin: bin, Socket: cfg.Tmux.Socket, Env: tmux.WithoutShims(os.Environ())}, nil
 }
 
 func hello(p paths.Paths, timeout time.Duration) (string, error) {
@@ -56,7 +60,7 @@ func ServerEnv(cfg config.Config, o UpOptions, env []string, goos string) []stri
 			home = v
 		}
 	}
-	return ready.PathEnv(env, home)
+	return ready.PathEnv(tmux.WithoutShims(env), home)
 }
 
 // Up is `irie up`. It is idempotent: it starts the server and the core when
