@@ -41,7 +41,14 @@ down() {
 		# TMUX_TMPDIR points into the sandbox, so this reaches its own server only.
 		tmux -L "$DEMO_SOCKET" kill-server 2>/dev/null || true
 	)
-	# Irie seals the folders of its skills read-only, which rm cannot empty.
+	# Irie seals the folders of its skills read-only, which rm cannot empty,
+	# and the agents' hosts still write their exits as their server goes, so
+	# it unseals and tries again until the last of them is done.
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		chmod -R u+w "$root" 2>/dev/null || true
+		if rm -rf "$root" 2>/dev/null; then return 0; fi
+		sleep 1
+	done
 	chmod -R u+w "$root" 2>/dev/null || true
 	rm -rf "$root"
 }
