@@ -19,8 +19,12 @@ import (
 	"github.com/irie-people/irie/internal/tmux"
 )
 
-// upWait is how long `irie up` waits for a core to answer.
-const upWait = 5 * time.Second
+// upWait is how long `irie up` waits for a core to answer. A new core loads
+// every session and repairs the layout before it answers: with forty
+// sessions on a busy Mac that took 24 s (2026-11-02), and while upWait was
+// 5 s every install of a new core gave up on it and put the old one back.
+// A core that answers sooner ends the wait at once.
+const upWait = 60 * time.Second
 
 func runner(cfg config.Config) (*tmux.Runner, error) {
 	bin, err := tmux.Find(cfg.Tmux.Path)
