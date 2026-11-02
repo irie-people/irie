@@ -104,7 +104,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	}
 	wantTree := Worktree{
 		Root:         "",
-		Base:         "HEAD",
+		Base:         "",
 		BranchPrefix: "irie/",
 		Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
 		Submodules:   true,
@@ -508,7 +508,7 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[repos.aliases]\n\"we b\" = \"/home/alice/code/website\"\n", "repos.aliases"},
 		{"[repos.aliases]\n\"web!\" = \"/home/alice/code/website\"\n", "repos.aliases"},
 		{"[worktree]\nroot = \"trees\"\n", "worktree.root"},
-		{"[worktree]\nbase = \"\"\n", "worktree.base"},
+		{"[worktree]\nbase = \" \"\n", "worktree.base"},
 		{"[worktree]\nbase = \"-x\"\n", "worktree.base"},
 		{"[worktree]\nbranch_prefix = \"a b/\"\n", "worktree.branch_prefix"},
 		{"[worktree]\nbranch_prefix = \"a..b/\"\n", "worktree.branch_prefix"},

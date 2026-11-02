@@ -348,7 +348,7 @@ func TestHooksFailOpenWhileTheCoreIsStopped(t *testing.T) {
 		if r["exit"] != 0.0 || r["stdout"] != "" || r["blocked"] != false {
 			t.Errorf("hook reply while the core was stopped: %v", r)
 		}
-		if ms, _ := r["ms"].(float64); ms >= 300 && !demoted(t) {
+		if ms, _ := r["ms"].(float64); ms >= 300 && !slow(t) {
 			t.Errorf("%s took %v ms, want under 300", r["event"], ms)
 		}
 	}

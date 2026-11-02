@@ -504,7 +504,7 @@ type Repos struct {
 // Worktree is how an @repo task gets its own checkout.
 type Worktree struct {
 	Root         string   `toml:"root"` // "" = $XDG_DATA_HOME/irie/worktrees
-	Base         string   `toml:"base"` // what a new branch starts from
+	Base         string   `toml:"base"` // what a new branch starts from; "" for the repo's dog.land branch when it has one, else HEAD
 	BranchPrefix string   `toml:"branch_prefix"`
 	Copy         []string `toml:"copy"` // untracked files copied in, besides those of the repo's .worktreeinclude
 	Submodules   bool     `toml:"submodules"`
@@ -610,7 +610,7 @@ func Default() Config {
 		Route: DefaultRoute(),
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
-			Base:         "HEAD",
+			Base:         "",
 			BranchPrefix: "irie/",
 			Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
 			Submodules:   true,
@@ -1083,7 +1083,7 @@ func (c Config) Validate() error {
 	if c.Worktree.Root != "" && !pathLike(c.Worktree.Root) {
 		bad("worktree.root = %q: must be an absolute or ~/ path", c.Worktree.Root)
 	}
-	if strings.TrimSpace(c.Worktree.Base) == "" || strings.HasPrefix(c.Worktree.Base, "-") {
+	if b := c.Worktree.Base; b != "" && (strings.TrimSpace(b) == "" || strings.HasPrefix(b, "-")) {
 		bad("worktree.base = %q: must name a commit, such as HEAD", c.Worktree.Base)
 	}
 	if !branchPrefix(c.Worktree.BranchPrefix) {

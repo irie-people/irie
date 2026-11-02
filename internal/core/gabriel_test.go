@@ -271,3 +271,27 @@ func TestAppSwapWaitsUntilTheUserLooksAway(t *testing.T) {
 		t.Errorf("with nothing waiting: %v, %v", err, opened)
 	}
 }
+
+func TestAnInstallIsNeverHeldBack(t *testing.T) {
+	ps := `  100 -zsh
+  200 sh tools/live.sh
+  201 go test ./...
+  300 sh /tmp/scratch/install-loop.sh
+  301 /bin/sh tools/live.sh --rollback
+  400 grep live.sh
+`
+	if got := installPIDs(ps); !slices.Equal(got, []int{200, 301}) {
+		t.Errorf("installs = %v, want 200 and 301", got)
+	}
+	// Session s1's pane is 10; the install runs two levels under it. s2's
+	// pane is 20, with nothing installing.
+	tbl := proc.NewTable([]proc.Proc{
+		{PID: 10, PPID: 1}, {PID: 11, PPID: 10}, {PID: 200, PPID: 11},
+		{PID: 20, PPID: 1}, {PID: 21, PPID: 20},
+		{PID: 301, PPID: 1},
+	})
+	got := sessionsOf([]int{200, 301}, tbl, map[int]string{10: "s1", 20: "s2"})
+	if want := map[string]bool{"s1": true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("sessions installing = %v, want %v", got, want)
+	}
+}

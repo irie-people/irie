@@ -1182,7 +1182,7 @@ private struct RepoSettings: View {
                 }
                 Section {
                     CommitField(title: "Branch names start with", prompt: "irie/", value: model.bind(c, \.worktree.branchPrefix, "worktree.branch_prefix"))
-                    CommitField(title: "New branches start from", prompt: "HEAD", value: model.bind(c, \.worktree.base, "worktree.base"))
+                    CommitField(title: "New branches start from", prompt: "the land branch, else HEAD", value: model.bind(c, \.worktree.base, "worktree.base"))
                     Toggle("Check out submodules", isOn: model.bind(c, \.worktree.submodules, "worktree.submodules"))
                 } header: {
                     Text("Worktrees")

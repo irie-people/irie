@@ -4,7 +4,8 @@
 #
 # An install only moves forward. The checkout must be committed and must
 # contain the build that is live, which the branch `live` records, so an
-# install never drops another finished change. Everything is vetted, tested
+# install never drops another finished change: when it lacks that build, the
+# install merges it in and starts again, and a merge that conflicts stops it. Everything is vetted, tested
 # and built before the running Irie is touched. The new irie is renamed into
 # place and its `irie up` replaces the core, the sidebar and the placeholder.
 # Agents keep running, and each agent's host keeps the build it started with.
@@ -65,25 +66,113 @@ mkdir -p "$data/bin"
 # running install's lock: two at once would leave `live` with the later one,
 # dropping the other's change.
 lock=$data/bin/live.lock
-if ! mkdir "$lock" 2>/dev/null; then
-	pid=$(cat "$lock/pid" 2>/dev/null || true)
-	if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
-		say "the install that took the lock, pid $pid, is gone; rm -r $lock, then run this again"
-	elif [ -n "$pid" ] && ps -o stat= -p "$pid" 2>/dev/null | grep -q '^T'; then
-		# A stopped install, as when Irie freezes the session that ran it,
-		# holds the lock until it is let go on.
-		say "the install that holds the lock, pid $pid, is stopped, as when its session is frozen;"
-		say "it goes on when that session is thawed, and no other install can run until it ends"
-	else
-		say "another install is running${pid:+, pid $pid}; wait for it to finish, then run this again"
+locked=
+slot=
+tmpbin=
+macpid=
+work=$(mktemp -d "${TMPDIR:-/tmp}/irie-live.XXXXXX")
+cleanup() {
+	if [ -n "$locked" ]; then
+		rm -f "$lock/pid"
+		rmdir "$lock" 2>/dev/null || true
 	fi
-	exit 1
-fi
-echo $$ >"$lock/pid"
-trap 'rm -f "$lock/pid"; rmdir "$lock"' EXIT
+	if [ -n "$slot" ]; then
+		rm -f "$slot/pid"
+		rmdir "$slot" 2>/dev/null || true
+	fi
+	if [ -n "$macpid" ]; then kill "$macpid" 2>/dev/null || true; fi
+	if [ -n "$tmpbin" ]; then rm -f "$tmpbin"; fi
+	rm -rf "$work"
+}
+trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
+# take_lock waits up to $1 seconds for the lock. Only the swap holds it, a
+# minute or so, so installs test side by side and queue only to swap.
+take_lock() {
+	waited=0
+	while ! mkdir "$lock" 2>/dev/null; do
+		pid=$(cat "$lock/pid" 2>/dev/null || true)
+		if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+			say "the install that took the lock, pid $pid, is gone; rm -r $lock, then run this again"
+			exit 1
+		elif [ -n "$pid" ] && ps -o stat= -p "$pid" 2>/dev/null | grep -q '^T'; then
+			# A stopped install, as when Irie freezes the session that ran
+			# it, holds the lock until it is let go on.
+			say "the install that holds the lock, pid $pid, is stopped, as when its session is frozen;"
+			say "it goes on when that session is thawed, and no other install can run until it ends"
+			exit 1
+		elif [ "$waited" -ge "$1" ]; then
+			say "another install is running${pid:+, pid $pid}; wait for it to finish, then run this again"
+			exit 1
+		fi
+		if [ "$waited" = 0 ]; then say "another install is swapping its build in${pid:+, pid $pid}; waiting for it"; fi
+		sleep 2
+		waited=$((waited + 2))
+	done
+	echo $$ >"$lock/pid"
+	locked=1
+}
+
+# take_slot waits for one of IRIE_LIVE_TEST_SLOTS (2) places to test and
+# build in: each install's tests start test cores, tmux servers and agents,
+# and more at once than the machine has memory for fail on time alone. A
+# place whose install is gone is taken over.
+take_slot() {
+	n=${IRIE_LIVE_TEST_SLOTS:-2}
+	said=
+	while :; do
+		i=1
+		while [ "$i" -le "$n" ]; do
+			s=$data/bin/live.test.$i
+			if mkdir "$s" 2>/dev/null; then
+				echo $$ >"$s/pid"
+				slot=$s
+				return
+			fi
+			pid=$(cat "$s/pid" 2>/dev/null || true)
+			if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+				rm -f "$s/pid"
+				rmdir "$s" 2>/dev/null || true
+				continue
+			fi
+			i=$((i + 1))
+		done
+		if [ -z "$said" ]; then
+			say "$n other installs are testing; waiting for a place"
+			said=1
+		fi
+		sleep 5
+	done
+}
+
+# catch_up REV WHAT merges REV, the live build or the running core's, into
+# the checkout when the checkout lacks it, then starts the install again on
+# the merged checkout, whose tests are cached for every package the merge
+# left alone. A conflict stops the install, for whoever ran it to merge by
+# hand. git writes a merged file anew rather than over the old one, so this
+# script reads on undisturbed until the exec runs the merged copy.
+catch_up() {
+	if git merge-base --is-ancestor "$1" HEAD; then return; fi
+	n=${IRIE_LIVE_MERGES:-0}
+	if [ "$n" -ge 5 ]; then
+		say "$2 moved five times during this install; run it again"
+		exit 1
+	fi
+	say "this checkout lacks $2, $(git log -1 --format='%h %s' "$1" 2>/dev/null || echo "$1"); merging it"
+	if ! TZ=UTC git merge --quiet --signoff --no-edit "$3" >&2; then
+		files=$(git diff --name-only --diff-filter=U | paste -sd ' ' -)
+		git merge --abort 2>/dev/null || true
+		say "the merge conflicts${files:+ in $files}; merge it by hand, resolving each conflict against what you merge now, then run this again: TZ=UTC git merge --signoff $3"
+		exit 1
+	fi
+	cleanup
+	trap - EXIT
+	IRIE_LIVE_MERGES=$((n + 1)) exec sh tools/live.sh
+}
+
 if [ "${1:-}" = --rollback ]; then
+	take_lock 600
 	if [ ! -e "$bin.prev" ]; then
 		say "there is no previous install"
 		exit 1
@@ -107,11 +196,7 @@ if [ -z "$live" ] && [ -e "$bin" ]; then
 	live=$(rev "$bin")
 	if [ -n "$live" ]; then git update-ref refs/heads/live "$live"; fi
 fi
-if [ -n "$live" ] && ! git merge-base --is-ancestor "$live" HEAD; then
-	say "this checkout lacks the live build, $(git log -1 --format='%h %s' "$live")"
-	say "merge it, then run this again: git merge live"
-	exit 1
-fi
+if [ -n "$live" ]; then catch_up "$live" "the live build" live; fi
 
 # A build put in by hand skips the branch, so the running core's own build
 # must be in this checkout as well.
@@ -124,23 +209,56 @@ corebin=
 if [ -n "$core" ]; then
 	corebin=$(ps -o command= -p "$core" | cut -d' ' -f1)
 	corerev=$(rev "$corebin")
-	if [ -n "$corerev" ] && ! git merge-base --is-ancestor "$corerev" HEAD; then
-		say "the running Irie was built from $(git log -1 --format='%h %s' "$corerev" 2>/dev/null || echo "$corerev"), which this checkout lacks"
-		say "merge it, then run this again: git merge $corerev"
-		exit 1
+	if [ -n "$corerev" ]; then catch_up "$corerev" "the running Irie's build" "$corerev"; fi
+fi
+
+# Every commit going into live needs a Conventional Commit subject
+# (AGENTS.md, "Commits"): release-please reads them from main, where they
+# never change again. The commits workflow sees pull requests only.
+if [ -n "$live" ]; then
+	for c in $(git rev-list --no-merges "$live..HEAD"); do
+		if ! sh .github/conventional-commit.sh --rev "$c"; then
+			say "reword it as above, then run this again"
+			exit 1
+		fi
+	done
+fi
+
+# Only docs changed since the live build, which passed these checks: the
+# tests and builds would only run again on the same code.
+code=1
+if [ -n "$live" ] && git diff --quiet "$live" HEAD -- . ':(exclude)docs' ':(exclude)site' ':(exclude,glob)*.md' 2>/dev/null; then
+	code=
+fi
+
+if [ -n "$code" ]; then take_slot; fi
+
+# Irie.app builds while the tests run, not after them.
+newapp=
+if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/dev/null; }; then
+	built=$(cat "$appstamp" 2>/dev/null || true)
+	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac tools/mkicon 2>/dev/null; then
+		mac/build.sh >"$work/mac.log" 2>&1 &
+		macpid=$!
+		newapp=mac/build/Irie.app
 	fi
 fi
 
-go vet ./...
-# A session in macOS's background state (another one promoted, or Gabriel
-# holding it back while the user works on something else, DESIGN §4.11)
-# runs the tests slowly: give the slowest package time rather than fail the
-# install. A -timeout of your own in GOFLAGS wins.
-case " ${GOFLAGS:-} " in
-*" -timeout="*) ;;
-*) GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=40m" && export GOFLAGS ;;
-esac
-go test ./...
+if [ -z "$code" ]; then
+	say "only docs changed since the live build, so the tests are skipped"
+	sh tools/provenance.sh check
+else
+	# A session in macOS's background state (another one promoted, or Gabriel
+	# holding it back while the user works on something else, DESIGN §4.11)
+	# runs the tests slowly: give the slowest package time rather than fail the
+	# install. A -timeout of your own in GOFLAGS wins.
+	case " ${GOFLAGS:-} " in
+	*" -timeout="*) ;;
+	*) GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=40m" && export GOFLAGS ;;
+	esac
+	# gofmt, go vet, go test and PROVENANCE.md's rows, as CI runs them.
+	sh tools/check.sh
+fi
 
 # A change outside the Go code needs no new core, so the running one stays,
 # unless it runs from somewhere else. Nor does one to the tests' helpers in
@@ -151,15 +269,40 @@ if [ -n "$installed" ] && { [ -z "$corebin" ] || [ "$corebin" = "$bin" ]; } &&
 	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd internal ':(exclude)*_test.go' ':(exclude)internal/testutil' 2>/dev/null; then
 	gonew=
 fi
-if [ -n "$gonew" ]; then go build -o "$bin.new" ./cmd/irie; fi
-
-newapp=
-if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/dev/null; }; then
-	built=$(cat "$appstamp" 2>/dev/null || true)
-	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac tools/mkicon 2>/dev/null; then
-		mac/build.sh
-		newapp=mac/build/Irie.app
+# Built beside the install, not at $bin.new: other installs build at the same
+# time, and only the swap below holds the lock.
+if [ -n "$gonew" ]; then
+	tmpbin=$bin.new.$$
+	go build -o "$tmpbin" ./cmd/irie
+fi
+if [ -n "$macpid" ]; then
+	if ! wait "$macpid"; then
+		macpid=
+		cat "$work/mac.log" >&2
+		say "Irie.app did not build"
+		exit 1
 	fi
+	macpid=
+fi
+
+if [ -n "$slot" ]; then
+	rm -f "$slot/pid"
+	rmdir "$slot" 2>/dev/null || true
+	slot=
+fi
+take_lock 1800
+# Another install may have landed while this one tested: the swap must not
+# drop it. Its merge leaves the tests it did not touch cached.
+live=$(git rev-parse -q --verify refs/heads/live || true)
+if [ -n "$live" ]; then catch_up "$live" "an install that landed while this one tested" live; fi
+core=$(tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
+if [ -n "$core" ]; then
+	corerev=$(rev "$(ps -o command= -p "$core" | cut -d' ' -f1)")
+	if [ -n "$corerev" ]; then catch_up "$corerev" "the running Irie's build" "$corerev"; fi
+fi
+if [ -n "$gonew" ]; then
+	mv -f "$tmpbin" "$bin.new"
+	tmpbin=
 fi
 
 before=$(agents)

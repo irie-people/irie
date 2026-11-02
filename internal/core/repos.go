@@ -95,7 +95,9 @@ func (c *Core) place(a ipc.SpawnArgs, base string) (place, error) {
 		}
 		return p, nil
 	}
-	res, err := worktree.Create(worktree.Request{Repo: r.Top, Name: filepath.Base(r.Main), Slug: base}, c.worktreeOptions())
+	o := c.worktreeOptions()
+	o.Land = c.landOf(r.Main)
+	res, err := worktree.Create(worktree.Request{Repo: r.Top, Name: filepath.Base(r.Main), Slug: base}, o)
 	if err != nil {
 		return place{}, err
 	}
