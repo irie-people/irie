@@ -396,6 +396,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-02 | gitattributes(5) in git 2.39.3: the built-in `union` merge driver | `PROVENANCE.md merge=union` in .gitattributes, so branches that add sources at the same place keep both sides' rows; `tools/provenance.sh check` finds a row that both added |
 | 2026-11-02 | https://pubs.opengroup.org/onlinepubs/9799919799/utilities/awk.html (assignment operands, ENVIRON) | An awk -v value is read like a string literal, escapes and all, so tools/provenance.sh and tools/doc.sh hand text to awk through ENVIRON |
 | 2026-11-02 | `swiftc --help` (Apple Swift 5.9) | `-Onone`, compile without any optimization: `mac/build.sh --quick` for `mac/snapshot.sh` (docs/MAC.md) |
+| 2026-11-02 | https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/checking-out-pull-requests-locally | `git fetch origin pull/ID/head` fetches a pull request's head by its number: tools/land-pr.sh |
 
 ## Third-party code
 
