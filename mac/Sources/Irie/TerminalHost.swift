@@ -24,6 +24,7 @@ struct TerminalHost: NSViewRepresentable {
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.nativeBackgroundColor = Theme.terminalBackground
         view.nativeForegroundColor = Theme.terminalForeground
+        view.selectedTextBackgroundColor = Theme.terminalSelection
         store.terminalView = view
         view.takesKeysOnStart = store.showTerminal
         context.coordinator.view = view
@@ -101,19 +102,137 @@ final class IrieTerminalView: LocalProcessTerminalView {
         return hit is MTKView ? self : hit
     }
 
-    /// With tmux's mouse mode on, SwiftTerm hands the click to tmux and never
-    /// takes the keyboard, so a click claims it here.
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-        super.mouseDown(with: event)
+    // A drag selects in the terminal itself, as in the Ghostty terminal
+    // (TerminalSelection.swift): SwiftTerm's mouse reporting is off while
+    // the button is down, so it selects and tmux hears nothing. A click
+    // still goes to tmux, and to the program in the terminal if it asks.
+
+    /// The press that waits to be known as a click or a drag.
+    private var pressed: NSEvent?
+    /// The press is selecting, with mouse reporting off until it ends.
+    private var selecting = false
+    /// A finished selection holds with mouse reporting still off: SwiftTerm
+    /// drops its selection at any output while it reports the mouse, and
+    /// tmux draws all the time. The next click, key or wheel lets it go,
+    /// with reporting on again first, so each goes on as before; this
+    /// watches for the key and the wheel, which SwiftTerm keeps to itself.
+    private var holding: Any?
+
+    deinit {
+        if let holding { NSEvent.removeMonitor(holding) }
     }
 
-    /// A mouse selection is tmux's, and tmux already put it on the pasteboard
-    /// (OSC 52). Copying SwiftTerm's empty selection would wipe that, so ⌘C
-    /// copies only a selection SwiftTerm made itself (Shift-drag).
+    /// With tmux's mouse mode on, SwiftTerm hands a click to tmux and never
+    /// takes the keyboard, so a press claims it here. A second or third
+    /// click selects a word or a line at once, and a Shift-click extends
+    /// the selection at once; a plain press waits.
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        pressed = nil
+        if selecting { finishSelecting(event) } // its button-up went astray
+        letGo()
+        if event.clickCount > 1 || event.modifierFlags.contains(.shift) {
+            selecting = true
+            allowMouseReporting = false
+            super.mouseDown(with: event)
+        } else {
+            pressed = event
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if let down = pressed, TerminalSelection.isDrag(from: down, to: event) {
+            pressed = nil
+            selecting = true
+            allowMouseReporting = false
+            super.mouseDown(with: down)
+            // SwiftTerm starts a drag's selection where its first move is,
+            // so the first move given it is where the button went down.
+            if let start = NSEvent.mouseEvent(with: .leftMouseDragged, location: down.locationInWindow,
+                                              modifierFlags: down.modifierFlags, timestamp: event.timestamp,
+                                              windowNumber: event.windowNumber, context: nil, eventNumber: 0,
+                                              clickCount: 1, pressure: 1) {
+                super.mouseDragged(with: start)
+            }
+        }
+        if selecting { super.mouseDragged(with: event) }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if let down = pressed {
+            // A click: tmux has it where the button went down, and the
+            // program in the terminal too, if it asks. The selection goes,
+            // as the Ghostty terminal's does.
+            pressed = nil
+            selection.active = false
+            super.mouseDown(with: down)
+            super.mouseUp(with: event)
+        } else if selecting {
+            finishSelecting(event)
+        }
+    }
+
+    /// Ends a selection where the button came up: the selection is copied
+    /// as Settings says, and holds until the next click, key or wheel.
+    private func finishSelecting(_ event: NSEvent) {
+        super.mouseUp(with: event)
+        selecting = false
+        copySelection(asked: false)
+        if selection.active { hold() } else { allowMouseReporting = true }
+    }
+
+    private func hold() {
+        guard holding == nil else { return }
+        holding = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .scrollWheel]) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            let mine = event.type == .keyDown
+                ? self.window?.firstResponder === self && !event.modifierFlags.contains(.command) // ⌘C keeps it
+                : self.bounds.contains(self.convert(event.locationInWindow, from: nil))
+            if mine { self.letGo() }
+            return event
+        }
+    }
+
+    /// Turns mouse reporting back on, as tmux wants it, once nothing holds.
+    private func letGo() {
+        if let holding { NSEvent.removeMonitor(holding) }
+        holding = nil
+        if !selecting { allowMouseReporting = true }
+    }
+
+    /// A right-click or a Control-click opens the terminal's own menu
+    /// (TerminalSelection.menu), whose Select All holds as a drag does.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = TerminalSelection.menu(for: event, target: self, canCopy: selection.active)
+        menu?.items.last?.action = #selector(selectAllAndHold(_:))
+        return menu
+    }
+
+    @objc private func selectAllAndHold(_ sender: Any?) {
+        allowMouseReporting = false
+        selectAll(sender)
+        hold()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.rightMouseDown(with: event)
+    }
+
+    /// ⌘C, and Copy in the terminal's menu.
     override func copy(_ sender: Any) {
-        guard selection.active else { return }
-        super.copy(sender)
+        copySelection(asked: true)
+    }
+
+    /// Copies SwiftTerm's selection, and says so: when asked, or when a drag
+    /// or a click made it and Settings keeps copying on. With no selection,
+    /// or only blanks, the pasteboard keeps what it has.
+    private func copySelection(asked: Bool) {
+        guard asked || TerminalSelection.copies, selection.active else { return }
+        let text = selection.getSelectedText()
+        guard TerminalSelection.worthCopying(text) else { return }
+        super.copy(self)
+        TerminalSelection.copied(text)
     }
 }
 
@@ -136,6 +255,7 @@ struct SplitTerminal: NSViewRepresentable {
         view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.nativeBackgroundColor = Theme.terminalBackground
         view.nativeForegroundColor = Theme.terminalForeground
+        view.selectedTextBackgroundColor = Theme.terminalSelection
         view.takesKeysOnStart = takesKeysOnStart
         context.coordinator.view = view
         context.coordinator.focusToken = focusToken
