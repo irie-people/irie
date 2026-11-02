@@ -1,118 +1,135 @@
 import AppKit
 import Foundation
+import Observation
 import SwiftUI
 
 /// The app's state: the core's rows, kept live by one subscription, and the
-/// requests the window makes.
+/// requests the window makes. It is observed property by property
+/// (Observation): a view draws again only when a property it read changed,
+/// so a session's new detail redraws its card, not the window. A set is
+/// news to every view that read the property, even when the value is the
+/// same, so the hot paths set only what changed (apply(_:)).
 @MainActor
-final class Store: ObservableObject {
+@Observable
+final class Store {
     enum Link: Equatable {
         case connecting
         case online(version: String)
         case offline(String)
     }
 
-    @Published private(set) var link: Link = .connecting
-    @Published private(set) var sessions: [Session] = []
-    @Published private(set) var attach: AttachInfo?
-    @Published var selection: String?
+    private(set) var link: Link = .connecting
+    private(set) var sessions: [Session] = [] {
+        didSet { derive() }
+    }
+    private(set) var attach: AttachInfo?
+    var selection: String? {
+        didSet { if selection != oldValue { derive() } }
+    }
+    /// What most views want of the rows, kept apart so that a row's change
+    /// redraws only the views it changes (derive()): the selected session's
+    /// row, the title bar's counts, and whether there is any row. A view
+    /// that read every row would draw again on every frame.
+    private(set) var selectedRow: Session?
+    private(set) var counts = RowCounts()
+    private(set) var hasRows = false
     /// How the sidebar groups the sessions, and the groups folded away. Both
     /// are kept when the user changes them (choose(_:), fold(_:)).
-    @Published var mode: SidebarMode = SidebarMode(saved: UserDefaults.standard.string(forKey: "sidebarMode"))
-    @Published var folded: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "foldedGroups") ?? [])
+    var mode: SidebarMode = SidebarMode(saved: UserDefaults.standard.string(forKey: "sidebarMode"))
+    var folded: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "foldedGroups") ?? [])
     /// Parked is folded until it is opened, so a parked card goes out of
     /// sight at once; the app keeps it open once opened (fold(_:)).
-    @Published var parkedOpen = UserDefaults.standard.bool(forKey: "parkedOpen")
+    var parkedOpen = UserDefaults.standard.bool(forKey: "parkedOpen")
     /// The repos the @ words know and the agents the + words name, with what
     /// each runs: what the task bar's menu and the new-task sheet offer.
-    @Published private(set) var repoNames: [String] = []
-    @Published private(set) var agents: [Agent] = []
+    private(set) var repoNames: [String] = []
+    private(set) var agents: [Agent] = []
     /// Whether the core takes a model for one task.
-    @Published private(set) var canPickModel = false
+    private(set) var canPickModel = false
     /// The core takes a tutor mode for one task, and serves the Help menu
     /// (docs/proposals/learning.md).
-    @Published private(set) var canTutor = false
-    @Published private(set) var canLearn = false
+    private(set) var canTutor = false
+    private(set) var canLearn = false
     /// The Learn window's page (Learn.swift).
-    @Published var learnTab = LearnTab.resources
+    var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
-    @Published private(set) var canConfigure = false
+    private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
-    @Published private(set) var canPark = false
+    private(set) var canPark = false
     /// Whether the core has the trod bot (DESIGN §4.10).
-    @Published private(set) var canTrod = false
+    private(set) var canTrod = false
     /// The core gives a boost of Gabriel's (DESIGN §4.11).
-    @Published private(set) var canBoost = false
+    private(set) var canBoost = false
     /// The core lists its arch agents (op arch).
-    @Published private(set) var canArch = false
+    private(set) var canArch = false
     /// The arch agents, as the core last listed them.
-    @Published private(set) var archAgents: [ArchAgent] = []
+    private(set) var archAgents: [ArchAgent] = []
     /// While a boost is on, when it ends.
-    @Published private(set) var boostUntil: Date?
+    private(set) var boostUntil: Date?
     /// Cards parked or unparked from under the pointer, each with whether
     /// it is drawn parked: it stays where it was until the pointer leaves
     /// it, so a second click on the same spot takes it back (Controls.swift).
-    @Published var lingering: [String: Bool] = [:]
+    var lingering: [String: Bool] = [:]
     /// The card under the pointer.
-    var hovered: String?
+    @ObservationIgnored var hovered: String?
     /// Whether the core keeps a history to undo, and what undo and redo
     /// would take next (Undo.swift).
-    @Published private(set) var canUndo = false
-    @Published private(set) var undoLabel: String?
-    @Published private(set) var redoLabel: String?
+    private(set) var canUndo = false
+    private(set) var undoLabel: String?
+    private(set) var redoLabel: String?
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
-    @Published private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
+    private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
     /// ui.red_on_done, from the core: done sessions are drawn red. Look keeps
     /// it for the marks; this draws the views again when it changes.
-    @Published private(set) var redOnDone = false
+    private(set) var redOnDone = false
     /// ui.helper_style, from the core: a helper beside its session is drawn
     /// as cards ("browser") or as a terminal ("terminal").
-    @Published private(set) var helperStyle = "browser"
+    private(set) var helperStyle = "browser"
     /// The helper shown beside each session's conversation, as sub:<id>, by
     /// session (ConversationView, HelperPane.swift).
-    @Published private(set) var openHelpers: [String: String] = [:]
+    private(set) var openHelpers: [String: String] = [:]
     /// spawn.close_when_done, from the core: a finished session closes
     /// itself, so the title bar keeps no To verify count, and the review dock
     /// lists what closed. It is in history too (`irie ctl history`, ⇧⌘T).
-    @Published private(set) var closeWhenDone = false
+    private(set) var closeWhenDone = false
     /// The trod bot, from the core, while it is within its hours; the title
     /// bar shows it (Counts).
-    @Published private(set) var trod: TrodShift?
+    private(set) var trod: TrodShift?
     /// Mullvad VPN, while vpn.on; the title bar shows its mark.
-    @Published private(set) var vpn: VPNMark?
+    private(set) var vpn: VPNMark?
     /// Whether the new-task sheet is open (⌘N).
-    @Published var newTaskSheet = false
-    @Published var notice: Notice?
+    var newTaskSheet = false
+    var notice: Notice?
     /// Whether a task is starting. The task bar takes the next one
     /// meanwhile, so several may be on their way.
-    @Published private(set) var spawning = false
-    private var tasksStarting = 0 {
+    private(set) var spawning = false
+    @ObservationIgnored private var tasksStarting = 0 {
         didSet { spawning = tasksStarting > 0 }
     }
     /// The session whose name its card has open to edit, and the name as
     /// typed so far.
-    @Published var renaming: String?
-    @Published var renameText = ""
+    var renaming: String?
+    var renameText = ""
     /// The card a drag holds, and where it would land (Controls.swift).
-    @Published var dragging: String?
-    @Published var dropMark: DropMark?
+    var dragging: String?
+    var dropMark: DropMark?
     /// Bumped when the terminal should take keyboard focus.
-    @Published var focusTerminal = 0
+    var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
-    @Published var focusSidebar = 0
-    @Published var focusFind = 0
+    var focusSidebar = 0
+    var focusFind = 0
     /// The sidebar's filter, which the keys that walk the sidebar follow.
-    @Published var filter = ""
-    @Published private(set) var fontSize: CGFloat = Store.savedFontSize()
+    var filter = ""
+    private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
-    weak var terminalView: NSView?
+    @ObservationIgnored weak var terminalView: NSView?
     /// Whether the rows are `--snapshot`'s, which draws the terminal's frame
     /// round an empty terminal, as no core attaches one.
     private(set) var isFixture = false
     /// The right side shows the live terminal instead of the conversation
     /// (View > Terminal, ⌥⌘T); remembered across launches.
-    @Published var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
+    var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
         didSet {
             UserDefaults.standard.set(showTerminal, forKey: "showTerminal")
             if showTerminal { focusTerminal += 1 } else { focusMessage += 1 }
@@ -121,39 +138,39 @@ final class Store: ObservableObject {
     }
     /// The session the core shows beside its teammates, as last asked
     /// (TeamSplit.swift); nil while the slot shows the picked session.
-    @Published private(set) var splitShown: String?
+    private(set) var splitShown: String?
     /// Bumped when the conversation's message box should take the keyboard.
-    @Published var focusMessage = 0
+    var focusMessage = 0
     /// Whether the message box has the keyboard.
-    var messageHasKeys = false
+    @ObservationIgnored var messageHasKeys = false
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
-    @Published var outside: [OutsideSession] = []
-    @Published var outsideSelection: String?
-    @Published var confirmingMove: OutsideSession?
-    @Published var moving: String?
+    var outside: [OutsideSession] = []
+    var outsideSelection: String?
+    var confirmingMove: OutsideSession?
+    var moving: String?
     /// The closed sessions reopen can bring back, the last closed first
     /// (Closing.swift).
-    @Published var closed: [ClosedSession] = []
+    var closed: [ClosedSession] = []
     var outsideProblem = ""
     /// What this computer still lacks of what Irie needs, from the core's
     /// ready op, and whether the core has it (Onboarding.swift).
-    @Published var readiness: ReadyReport?
-    var canReady = false
-    var checkingReady = false
+    var readiness: ReadyReport?
+    @ObservationIgnored var canReady = false
+    @ObservationIgnored var checkingReady = false
     /// The app starting Irie itself, and why it couldn't (Onboarding.swift).
     /// It tries once a launch, before it has ever reached a core.
-    @Published var starting = false
-    @Published var startProblem: StartProblem?
-    private var everOnline = false
-    private var triedStart = false
+    var starting = false
+    var startProblem: StartProblem?
+    @ObservationIgnored private var everOnline = false
+    @ObservationIgnored private var triedStart = false
     /// The walk through a first task, and a bump that gives the task bar
     /// the keyboard (Onboarding.swift).
-    @Published var coach: Coach?
-    @Published var focusTaskBar = 0
+    var coach: Coach?
+    var focusTaskBar = 0
     /// The session the core is to show next, and whether a request is out.
-    private var wanted: (id: String, focus: Bool)?
-    private var showing = false
+    @ObservationIgnored private var wanted: (id: String, focus: Bool)?
+    @ObservationIgnored private var showing = false
 
     static let defaultFontSize: CGFloat = 13
 
@@ -171,7 +188,7 @@ final class Store: ObservableObject {
     let client: CoreClient
     /// The core's config, as the Settings window shows and edits it.
     let settings: SettingsModel
-    private var started = false
+    @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
@@ -224,9 +241,14 @@ final class Store: ObservableObject {
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
-                // The store lives as long as the app.
+                // The store lives as long as the app. Frames wait in the
+                // inbox for the main actor, which takes every one that came
+                // in a single turn.
+                let inbox = FrameInbox()
                 try await client.subscribe { frame in
-                    Task { @MainActor in self.apply(frame) }
+                    if inbox.put(frame) {
+                        Task { @MainActor in self.apply(inbox.take()) }
+                    }
                 }
                 link = .offline("The core went away.")
             } catch {
@@ -265,56 +287,56 @@ final class Store: ObservableObject {
         return false
     }
 
-    private func apply(_ f: Frame) {
-        if let h = f.header, (h.redOnDone ?? false) != Look.redOnDone {
-            Look.redOnDone = h.redOnDone ?? false
-            redOnDone = Look.redOnDone
-        }
-        if let h = f.header, (h.closeWhenDone ?? false) != closeWhenDone {
-            closeWhenDone = h.closeWhenDone ?? false
-        }
-        if let s = f.header?.helperStyle, s != helperStyle {
-            helperStyle = s
-        }
-        // Each header frame is the whole header: one without the bot is
-        // one out of its hours.
-        if let h = f.header, h.trod != trod {
-            trod = h.trod
-        }
-        if let h = f.header, h.vpn != vpn {
-            vpn = h.vpn
-        }
-        switch f.t {
-        case "snapshot":
-            sessions = (f.sessions ?? []).sorted(by: Self.before)
-        case "upsert":
-            guard let s = f.session else { return }
-            noteCoach(s)
-            if let i = sessions.firstIndex(where: { $0.id == s.id }) {
-                let moved = sessions[i].order != s.order
-                sessions[i] = s
-                if moved { sessions.sort(by: Self.before) }
-            } else {
-                sessions.append(s)
-                sessions.sort(by: Self.before)
+    /// Applies the frames that came since the last turn, in order. Every
+    /// view that reads the store draws again whenever one of its published
+    /// values is set, even to what it was, so nothing is set unless it
+    /// changed: an upsert of a row the app already has, such as one whose
+    /// only change is a figure the app doesn't read, or a snapshot of rows
+    /// it has, changes nothing (docs/proposals/optimisation.md §2.1).
+    private func apply(_ frames: [Frame]) {
+        var rows = sessions
+        var touched = false
+        for f in frames {
+            if let h = f.header { applyHeader(h) }
+            switch f.t {
+            case "snapshot":
+                rows = (f.sessions ?? []).sorted(by: Self.before)
+                touched = true
+            case "upsert":
+                guard let s = f.session else { continue }
+                if let i = rows.firstIndex(where: { $0.id == s.id }) {
+                    guard rows[i] != s else { continue }
+                    let moved = rows[i].order != s.order
+                    rows[i] = s
+                    if moved { rows.sort(by: Self.before) }
+                } else {
+                    rows.append(s)
+                    rows.sort(by: Self.before)
+                }
+                noteCoach(s)
+                touched = true
+            case "remove":
+                guard let id = f.id else { continue }
+                rows.removeAll { $0.id == id }
+                if lingering[id] != nil { lingering[id] = nil }
+                if coach?.session == id { coach = nil }
+                touched = true
+            case "outside":
+                applyOutside(f)
+            case "closed":
+                let c = f.closed ?? []
+                if c != closed { closed = c }
+            case "history":
+                let undo = f.undo.flatMap { $0.isEmpty ? nil : $0 }
+                let redo = f.redo.flatMap { $0.isEmpty ? nil : $0 }
+                if undo != undoLabel { undoLabel = undo }
+                if redo != redoLabel { redoLabel = redo }
+            default:
+                continue
             }
-        case "remove":
-            sessions.removeAll { $0.id == f.id }
-            if let id = f.id { lingering[id] = nil }
-            if let id = f.id, coach?.session == id { coach = nil }
-        case "outside":
-            applyOutside(f)
-            return
-        case "closed":
-            closed = f.closed ?? []
-            return
-        case "history":
-            undoLabel = f.undo.flatMap { $0.isEmpty ? nil : $0 }
-            redoLabel = f.redo.flatMap { $0.isEmpty ? nil : $0 }
-            return
-        default:
-            return
         }
+        guard touched else { return }
+        if rows != sessions { sessions = rows }
         if selection == nil, let shown = sessions.first(where: { $0.shown == true }) {
             selection = shown.id
         }
@@ -324,12 +346,43 @@ final class Store: ObservableObject {
         keepSplit()
     }
 
+    /// Takes a header, a snapshot's or a header frame's: each is the whole
+    /// header, so one without the bot is one out of its hours.
+    private func applyHeader(_ h: Header) {
+        if (h.redOnDone ?? false) != Look.redOnDone {
+            Look.redOnDone = h.redOnDone ?? false
+            redOnDone = Look.redOnDone
+        }
+        if (h.closeWhenDone ?? false) != closeWhenDone {
+            closeWhenDone = h.closeWhenDone ?? false
+        }
+        if let s = h.helperStyle, s != helperStyle {
+            helperStyle = s
+        }
+        if h.trod != trod {
+            trod = h.trod
+        }
+        if h.vpn != vpn {
+            vpn = h.vpn
+        }
+    }
+
     /// The picked session while it shows beside its teammates: the terminal
     /// shows, and it has teammates the app can reach.
     var splitSession: Session? {
-        guard showTerminal, outsideSelection == nil, let id = selection, attach?.teams != nil || isFixture,
-              let s = sessions.first(where: { $0.id == id }), !(s.team ?? []).isEmpty else { return nil }
+        guard showTerminal, outsideSelection == nil, attach?.teams != nil || isFixture,
+              let s = selectedRow, !(s.team ?? []).isEmpty else { return nil }
         return s
+    }
+
+    /// Works out what views read instead of the rows, and sets each only
+    /// when it changed: a set is news to every view that read it.
+    private func derive() {
+        let row = selection.flatMap { id in sessions.first { $0.id == id } }
+        if row != selectedRow { selectedRow = row }
+        let c = RowCounts(sessions)
+        if c != counts { counts = c }
+        if hasRows == sessions.isEmpty { hasRows = !sessions.isEmpty }
     }
 
     /// Asks the core again for the picked session when it starts or stops
@@ -599,8 +652,8 @@ final class Store: ObservableObject {
 
     /// The helper each session showed last, and the newest its conversation
     /// names, which View > Show Helpers opens when none runs.
-    private var lastHelpers: [String: String] = [:]
-    private var newestHelpers: [String: String] = [:]
+    @ObservationIgnored private var lastHelpers: [String: String] = [:]
+    @ObservationIgnored private var newestHelpers: [String: String] = [:]
 
     /// Notes the newest helper a session's conversation names.
     func noteHelper(_ agent: String, in session: String) {
@@ -638,8 +691,10 @@ final class Store: ObservableObject {
         // Going to another session renames the one open to edit, as clicking
         // elsewhere does in Finder.
         if renaming != nil && renaming != id { endRename(commit: true) }
-        selection = id
-        outsideSelection = nil
+        // Each set is news to every view that read it, even to the same
+        // value, so only what changes is set.
+        if selection != id { selection = id }
+        if outsideSelection != nil { outsideSelection = nil }
         wanted = (id, focus)
         guard !showing else { return }
         showing = true
@@ -648,7 +703,8 @@ final class Store: ObservableObject {
                 wanted = nil
                 do {
                     let split = splitSession?.id == next.id
-                    splitShown = split ? next.id : nil
+                    let shown = split ? next.id : nil
+                    if splitShown != shown { splitShown = shown }
                     _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus, split: split), as: Empty.self)
                     // The conversation's message box, or the terminal when it
                     // shows; a name open to edit, after a double click's first
@@ -923,6 +979,69 @@ final class Store: ObservableObject {
             try p.run()
         } catch {
             say("Couldn’t open Ghostty: \(error.localizedDescription)", error: true)
+        }
+    }
+}
+
+/// Frames from the core, kept until the main actor takes them. Every frame
+/// that arrives while one turn waits goes in that turn, so a burst of
+/// upserts costs one pass over the store, not one each.
+final class FrameInbox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var frames: [Frame] = []
+    private var waiting = false
+
+    /// Keeps a frame, and says whether to ask the main actor for a turn:
+    /// false while one is already on its way.
+    func put(_ f: Frame) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        frames.append(f)
+        if waiting { return false }
+        waiting = true
+        return true
+    }
+
+    /// Takes every frame kept so far.
+    func take() -> [Frame] {
+        lock.lock()
+        defer { lock.unlock() }
+        let out = frames
+        frames = []
+        waiting = false
+        return out
+    }
+}
+
+/// The title bar's counts (SidebarView's Counts): for each state it counts,
+/// how many sessions are in it and the first of them in list order. A
+/// parked session is out of the way, so To verify leaves it out.
+struct RowCounts: Equatable {
+    struct Tally: Equatable {
+        var count = 0
+        var first: String?
+
+        mutating func add(_ s: Session) {
+            count += 1
+            if first == nil { first = s.id }
+        }
+    }
+
+    var needs = Tally(), working = Tally(), done = Tally(), paused = Tally(), frozen = Tally()
+
+    init() {}
+
+    /// The rows in list order.
+    init(_ rows: [Session]) {
+        for s in rows {
+            switch Look(s) {
+            case .failed, .needs, .stalled: needs.add(s)
+            case .working: working.add(s)
+            case .done where !s.isParked: done.add(s)
+            case .paused, .pausing: paused.add(s)
+            case .frozen: frozen.add(s)
+            default: break
+            }
         }
     }
 }
