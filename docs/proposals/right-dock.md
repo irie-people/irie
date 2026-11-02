@@ -1,6 +1,6 @@
 # Proposal: the right sidebar and its dock
 
-Date: 2026-11-01. Status: research. Nothing is built yet, and the decisions in §10 are the owner's. It answers the owner's jot "deep research a dock right pane for irie". An agent (Claude Code) wrote it, from `live` at `831c1c2`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-01. Status: being built, with the recommendations of §10 taken. Built: the right sidebar with its Dock, Helpers and Review tabs (§7 steps 1 and 2, and Review from step 4). Not yet: Changes, Plan, and the Settings sections of §5.7. It answers the owner's jot "deep research a dock right pane for irie". An agent (Claude Code) wrote it, from `live` at `831c1c2`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 **In short.** The jot most likely means cmux's **Dock**. cmux has a right sidebar, toggled with ⌥⌘B, and its Dock tab holds controls you define: live terminals running commands such as a git view, a log or a dev server, and web pages such as a dashboard. They are listed per repo in a small JSON file. cmux turned the Dock on for everyone on 2026-10-05, and the owner has asked Irie to copy cmux before (§1).
 
@@ -157,7 +157,7 @@ A peek is the same column, drawn over the terminal's right edge on a soft shadow
 cmux's model, kept close enough that cmux's own files work:
 
 - **Controls.** A control is a live terminal running one command, such as `lazygit`, `tail -f log/development.log` or a test watcher, or a web page, such as a dev server's page or a local dashboard. Controls stack top to bottom in the file's order. Each has a header with its title, ⟳ to restart it, ■ to stop it, ⤢ to zoom it, and a fold. Its height comes from the file or shares what is left, and the rules between controls drag.
-- **The files.** A repo lists its controls in `.irie/dock.json`, which the team commits. You list your own in `config.toml` (`[[dock.controls]]`), which Settings edits. When a repo has no `.irie/dock.json` but has cmux's `.cmux/dock.json`, Irie reads that one, so a team's cmux Dock works in Irie unchanged. The repo's controls come first, then yours.
+- **The files.** A repo lists its controls in `.irie/dock.json`, which the team commits. You list your own in `dock.json` in Irie's config folder, as cmux keeps its own in its config folder. When a repo has no `.irie/dock.json` but has cmux's `.cmux/dock.json`, Irie reads that one, so a team's cmux Dock works in Irie unchanged. cmux's own personal file is not read: it holds what you wanted beside cmux's workspaces, which may name another setup's tools. The repo's controls come first, then yours.
 - **The fields** are cmux's: `id`, `title`, `command`, `type` (`terminal` or `browser`), `url`, `chrome`, `cwd`, `height` and `env`. Irie adds one, `scope`, and cmux has no use for it:
   - `session`, the default: one copy per session, run in its worktree;
   - `repo`: one copy in the repo's own folder, such as a dev server;
@@ -165,7 +165,7 @@ cmux's model, kept close enough that cmux's own files work:
 - **Where a control runs.** A `session` control starts in the shown session's worktree (`cwd` is relative to it), so `lazygit` shows the agent's own branch. Each session gets its copy the first time the Dock shows while it is on show, and keeps it until the session closes. So going back and forth between sessions is instant.
 - **How a terminal control runs.** In your login shell, as cmux does, in tmux on a server of Irie's own, `irie-dock`, one tmux session per copy, as the team server holds teammates. The Dock draws each copy as a client of its session, with the engine the terminal uses. So a control never resizes an agent, and it outlives a restart of the app or the core. Gabriel can hold back the copies nobody is looking at, as he holds back sessions (DESIGN §4.11).
 - **How a web control runs.** In a web view with a data store that keeps nothing, which loads only its page's own origin. It has no bridge to Irie, and links to other sites open in the browser. It shows its address bar and reload button unless `chrome` is false. The rules are those of [generative-ui.md](generative-ui.md) §7.4.
-- **Trust.** A repo's file runs commands on your Mac, and agents write files in their worktrees. So Irie runs a repo's controls only after you have trusted that file: it shows each command and asks once, then remembers the file's hash. A changed file asks again and shows what changed, so an agent's edit to it never runs until you have looked. Your own controls in `config.toml` need no asking. cmux also asks before it starts a repo's controls.
+- **Trust.** A repo's file runs commands on your Mac, and agents write files in their worktrees. So Irie runs a repo's controls only after you have trusted that file: it shows each command and asks once, then remembers the file's hash. A changed file asks again and shows what changed, so an agent's edit to it never runs until you have looked. Your own controls in Irie's `dock.json` need no asking. cmux also asks before it starts a repo's controls.
 - **Set Up My Dock…** An empty Dock says what the Dock is for and offers this button. It starts a session with a brief like the one cmux publishes:
   - read the repo's scripts, dev servers, logs and tests;
   - ask what to watch when unsure;
@@ -282,7 +282,7 @@ So the sidebar is a column of the app's own, in `TerminalArea`, as the helper pa
 - DESIGN §2.4: `dock`, `changes`, `diff`, the `changes` frame, and `plan` in conversation frames.
 - DESIGN §4.4: helpers show in the right sidebar, beside the terminal as well as the conversation.
 - DESIGN §4.7: where a session's plan comes from.
-- DESIGN §5.4 and §5.5: `.irie/dock.json`, `[[dock.controls]]` and the trusted hashes.
+- DESIGN §5.4: the user's `dock.json` and the trusted hashes.
 - [MAC.md](../MAC.md) §1: the right sidebar and its tabs. §4: ⌥⌘B, ⌥⌘1 to ⌥⌘5 and ⌥⌘↩.
 
 ## 7. Order of work
@@ -325,7 +325,7 @@ So the sidebar is a column of the app's own, in `TerminalArea`, as the helper pa
 |---|---|---|---|
 | 1 | What it is | a. A right sidebar of tabs inside Irie's window, with cmux's Dock as its first tab. b. Irie itself as a slim window at the screen's edge | **a**; b can come later as a compact window |
 | 2 | How it meets the terminal | a. Peek over it, pin beside it. b. Always beside it, so every open and close resizes every agent. c. Always over it | **a** (§3) |
-| 3 | The Dock's files | a. `.irie/dock.json` in a repo, cmux's `.cmux/dock.json` read when there is none, and your own controls in `config.toml`. b. Irie's own files only | **a**, so a cmux Dock works unchanged |
+| 3 | The Dock's files | a. `.irie/dock.json` in a repo, cmux's `.cmux/dock.json` read when there is none, and your own controls in Irie's own `dock.json`. b. Irie's own files only | **a**, so a cmux Dock works unchanged |
 | 4 | The first tabs | Dock, Changes, Helpers, Plan and Review, or fewer | **All five**, in §7's order |
 | 5 | Task lists on newer models | a. Off: Plan shows plan-mode plans and a note. b. On for every Claude Code session, at a cost in context every turn | **a**, with the setting there for b |
 | 6 | Ready to review | a. In both sidebars. b. The right one only | **a**, so nothing the owner knows moves |

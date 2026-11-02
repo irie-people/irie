@@ -61,9 +61,16 @@ func New(getenv func(string) string, uid int) (Paths, error) {
 	return p, nil
 }
 
-func (p Paths) ConfigFile() string            { return filepath.Join(p.Config, "config.toml") }
-func (p Paths) TmuxConf() string              { return filepath.Join(p.State, "tmux.conf") }
-func (p Paths) TeamConf() string              { return filepath.Join(p.State, "tmux-teams.conf") }
+func (p Paths) ConfigFile() string { return filepath.Join(p.Config, "config.toml") }
+func (p Paths) TmuxConf() string   { return filepath.Join(p.State, "tmux.conf") }
+func (p Paths) TeamConf() string   { return filepath.Join(p.State, "tmux-teams.conf") }
+func (p Paths) DockConf() string   { return filepath.Join(p.State, "tmux-dock.conf") }
+
+// DockTrust holds the hashes of the repo Dock files the user trusted.
+func (p Paths) DockTrust() string { return filepath.Join(p.State, "dock-trust.json") }
+
+// DockFile is the user's own Dock: the controls of every session.
+func (p Paths) DockFile() string              { return filepath.Join(p.Config, "dock.json") }
 func (p Paths) Sessions() string              { return filepath.Join(p.State, "sessions") }
 func (p Paths) Journal() string               { return filepath.Join(p.State, "journal") }
 func (p Paths) Session(id string) string      { return filepath.Join(p.Sessions(), id) }

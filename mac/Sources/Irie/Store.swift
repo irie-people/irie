@@ -33,6 +33,11 @@ final class Store: ObservableObject {
     /// (docs/proposals/learning.md).
     @Published private(set) var canTutor = false
     @Published private(set) var canLearn = false
+    /// The core runs the right sidebar's Dock (op dock, Dock.swift).
+    @Published private(set) var canDock = false
+    /// The Dock controls the user stopped, by session, which the Dock then
+    /// leaves stopped until the user starts them again.
+    var dockStopped: [String: Set<String>] = [:]
     /// The Learn window's page (Learn.swift).
     @Published var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
@@ -224,6 +229,7 @@ final class Store: ObservableObject {
                 canPickModel = hello.features.contains("spawn-model")
                 canTutor = hello.features.contains("spawn-tutor")
                 canLearn = hello.features.contains("learn")
+                canDock = hello.features.contains("dock")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
                 canTrod = hello.features.contains("trod")

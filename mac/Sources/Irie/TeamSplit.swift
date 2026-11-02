@@ -275,7 +275,7 @@ enum TeamInk {
 }
 
 /// A terminal's screen in a snapshot, which attaches no terminal.
-private struct FixtureScreen: View {
+struct FixtureScreen: View {
     let lines: [String]
 
     var body: some View {

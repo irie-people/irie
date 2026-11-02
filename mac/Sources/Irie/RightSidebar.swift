@@ -31,7 +31,7 @@ enum SideTab: String, CaseIterable, Identifiable {
 
     /// The tabs this build has, in their order. The others come with the
     /// core features they need.
-    static let built: [SideTab] = [.helpers, .review]
+    static let built: [SideTab] = [.dock, .helpers, .review]
 
     /// Its key with ⌥⌘, by its place among all the tabs, so a key keeps its
     /// tab as more tabs arrive.
@@ -45,7 +45,7 @@ struct SideState: Equatable {
     var open = false
     var pinned = false
     var width = SideState.startWidth
-    var tab = SideTab.helpers
+    var tab = SideTab.dock
 
     static let startWidth = 340.0
     static let minWidth = 260.0
@@ -282,6 +282,7 @@ struct RightSidebar: View {
 
     @ViewBuilder private var content: some View {
         switch store.side.tab {
+        case .dock: DockTab()
         case .review: ReviewTab()
         default: HelpersTab()
         }

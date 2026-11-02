@@ -111,6 +111,7 @@ type Core struct {
 	raw        bool                  // the slot shows the picked session's raw terminal, not its conversation
 	split      string                // the session the Mac app shows beside its teammates, in the view session (view.go)
 	team       *tmux.Runner          // the team server, where sessions' teammates run (team.go)
+	dock       *tmux.Runner          // the dock server, where the Dock's terminal controls run (dock.go)
 	teamSocket string                // its socket path, once known
 	trodNow    trodNow               // the trod bot as its last sweep found it (trod.go)
 	trodReset  time.Time             // when the plan's usage limit last reset, as far as the trod bot saw
@@ -216,6 +217,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 	c := &Core{
 		paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
+		dock:     &tmux.Runner{Bin: r.Bin, Socket: tmux.DockSocket(r.Socket)},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
 		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, hues: map[string]int{},
 		fdog: newFreezeDog(),
@@ -309,6 +311,7 @@ func Run(o Options) error {
 			}
 			if n%dogEvery == 0 {
 				go c.dogSweep()
+				go c.dockSweep()
 			}
 			if n%trodEvery == 0 {
 				go c.trodSweep()
@@ -594,7 +597,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers,
-			ipc.OpLearn, ipc.FeatureTutor,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpDock,
 		}}, nil
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
@@ -753,6 +756,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.gabrielOp(a)
+	case ipc.OpDock:
+		var a ipc.DockArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.dockOp(a)
 	case ipc.OpScreen:
 		var a ipc.ScreenArgs
 		if err := decode(raw, &a); err != nil {

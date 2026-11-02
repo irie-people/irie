@@ -76,7 +76,8 @@ enum Snapshot {
 
             // The right sidebar (RightSidebar.swift): its Helpers tab peeking
             // over the terminal, then pinned beside it, and its Review tab.
-            for (base, pinned, tab, dark) in [("side-peek", false, SideTab.helpers, false), ("side-pinned", true, SideTab.helpers, false),
+            for (base, pinned, tab, dark) in [("side-dock", true, SideTab.dock, false), ("side-dock-dark", true, SideTab.dock, true),
+                                              ("side-peek", false, SideTab.helpers, false), ("side-pinned", true, SideTab.helpers, false),
                                               ("side-review", true, SideTab.review, false), ("side-pinned-dark", true, SideTab.helpers, true)] {
                 store.side = SideState(open: true, pinned: pinned, width: SideState.startWidth, tab: tab)
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
