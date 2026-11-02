@@ -30,9 +30,18 @@ type contexts struct {
 	st      *ctxgit.Store
 	err     error
 	mu      sync.Mutex
-	queue   []string
-	queued  map[string]bool
+	queue   []string           // session ids, oldest first
+	queued  map[string]ctxSnap // what each queued session was when its turn or its life ended
 	running bool
+}
+
+// ctxSnap is what the store needs of a session, taken when the event that
+// asks for a sync is recorded: a session that closes itself as its turn
+// ends is gone from the list by the time the sync runs.
+type ctxSnap struct {
+	s     ctxgit.Session
+	code  string // the checkout whose commit its turns record
+	ended bool   // its agent has ended or it was closed: forget it after
 }
 
 // contextOps are the ops of contexts in git (ipc/context.go).
@@ -70,34 +79,52 @@ func (c *Core) ctxStore() (*ctxgit.Store, error) {
 	return c.ctxs.st, c.ctxs.err
 }
 
-// ctxOnEvent queues a sync of x when e ends a turn or the session: a
-// commit a turn, made off the hook's path. The caller holds c.mu.
+// ctxOnEvent queues a sync of x when e ends a turn, the agent or the
+// session: a commit a turn, made off the hook's path. The caller holds
+// c.mu.
 func (c *Core) ctxOnEvent(x *session, e event.Event) {
 	if x.harness != "claude-code" {
 		return
 	}
+	ended := false
 	switch {
 	case e.Agent == event.Main && (e.Kind == event.TurnEnded || e.Kind == event.TurnFailed):
-	case e.Kind == event.SessionEnded || e.Kind == event.PaneExited:
+	case e.Kind == event.SessionEnded || e.Kind == event.PaneExited || e.Kind == event.UIClosed:
+		ended = true
 	default:
 		return
 	}
-	c.ctxSoon(x.id)
+	snap := c.ctxSnapOf(x)
+	snap.ended = snap.ended || ended
+	c.ctxSoon(snap)
 }
 
-// ctxSoon queues a sync of session id, once however often it is asked
-// before the sync runs.
-func (c *Core) ctxSoon(id string) {
+// ctxSnapOf is what the store needs of x now. The caller holds c.mu.
+func (c *Core) ctxSnapOf(x *session) ctxSnap {
+	return ctxSnap{
+		s: ctxgit.Session{
+			ID: x.id, Name: x.name, Conversation: x.vendorID, Model: x.model, Profile: x.profile,
+			Working: x.track.live() == ipc.StateWorking, Transcripts: c.transcriptsOf(x),
+		},
+		code:  codeDir(x),
+		ended: x.track.exited != nil || x.track.ended != nil,
+	}
+}
+
+// ctxSoon queues a sync, once a session however often it is asked before
+// the sync runs: the newest snapshot of it is the one synced.
+func (c *Core) ctxSoon(snap ctxSnap) {
 	c.ctxs.mu.Lock()
 	defer c.ctxs.mu.Unlock()
-	if c.ctxs.queued[id] {
-		return
-	}
 	if c.ctxs.queued == nil {
-		c.ctxs.queued = map[string]bool{}
+		c.ctxs.queued = map[string]ctxSnap{}
 	}
-	c.ctxs.queued[id] = true
-	c.ctxs.queue = append(c.ctxs.queue, id)
+	if old, ok := c.ctxs.queued[snap.s.ID]; ok {
+		snap.ended = snap.ended || old.ended
+	} else {
+		c.ctxs.queue = append(c.ctxs.queue, snap.s.ID)
+	}
+	c.ctxs.queued[snap.s.ID] = snap
 	if !c.ctxs.running {
 		c.ctxs.running = true
 		go c.ctxWork()
@@ -122,9 +149,10 @@ func (c *Core) ctxWork() {
 		}
 		id := c.ctxs.queue[0]
 		c.ctxs.queue = c.ctxs.queue[1:]
+		snap := c.ctxs.queued[id]
 		delete(c.ctxs.queued, id)
 		c.ctxs.mu.Unlock()
-		if _, err := c.ctxSync(id); err != nil {
+		if _, err := c.ctxSyncSnap(snap); err != nil {
 			c.log.Warn("context sync", "session", id, "err", err)
 		}
 	}
@@ -134,26 +162,28 @@ func (c *Core) ctxWork() {
 // branch's head. A session that has ended is then forgotten from memory;
 // its branch stays.
 func (c *Core) ctxSync(id string) (string, error) {
-	st, err := c.ctxStore()
-	if err != nil {
-		return "", err
-	}
 	c.mu.Lock()
 	x := c.sessions[id]
 	if x == nil {
 		c.mu.Unlock()
 		return "", ipc.Errorf(ipc.CodeNotFound, "no open session %s", id)
 	}
-	s := ctxgit.Session{
-		ID: x.id, Name: x.name, Conversation: x.vendorID, Model: x.model, Profile: x.profile,
-		Working: x.track.live() == ipc.StateWorking, Transcripts: c.transcriptsOf(x),
-	}
-	code := codeDir(x)
-	ended := x.track.exited != nil || x.track.ended != nil
+	snap := c.ctxSnapOf(x)
 	c.mu.Unlock()
-	s.Code, s.Dirty = codeState(code)
+	return c.ctxSyncSnap(snap)
+}
+
+// ctxSyncSnap stores what is new of a session as a snapshot of it says,
+// open or not, and returns its branch's head.
+func (c *Core) ctxSyncSnap(snap ctxSnap) (string, error) {
+	st, err := c.ctxStore()
+	if err != nil {
+		return "", err
+	}
+	s := snap.s
+	s.Code, s.Dirty = codeState(snap.code)
 	head, err := st.Sync(s)
-	if ended {
+	if snap.ended {
 		st.Forget(s)
 	}
 	return head, err

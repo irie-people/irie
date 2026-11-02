@@ -170,6 +170,48 @@ func TestContextsAreStoredAndForkedAtATurnsCode(t *testing.T) {
 	}
 }
 
+func TestALastTurnIsStoredWhenTheSessionClosesItself(t *testing.T) {
+	c := setupWith(t, agentConfig{spawn: "close_when_done = true\nclose_delay = \"100ms\"\n"})
+	var r ipc.SpawnResult
+	if err := c.call(ipc.OpSpawn, ipc.SpawnArgs{Task: "prompt,sleep:2s,stop"}, &r); err != nil {
+		t.Fatal(err)
+	}
+	s := r.Session
+	tx := &transcriptLines{
+		path:    filepath.Join(c.paths.Session(s.ID), "transcripts", s.VendorID+".jsonl"),
+		session: s.VendorID, cwd: s.Cwd, at: time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC),
+	}
+	os.MkdirAll(filepath.Dir(tx.path), 0o700)
+	tx.turn(t, "tidy the notes", "Tidied.")
+	// The turn ends, the session closes itself at once, and its turn is
+	// stored all the same.
+	repo := c.paths.ContextStore()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		cmd := exec.Command("git", "--git-dir="+repo, "log", "--format=%s", ctxgit.Branch(s.ID))
+		cmd.Env = ctxgit.Env()
+		out, _ := cmd.Output()
+		if strings.TrimSpace(string(out)) == "tidy the notes" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the closed session's turn was not stored: %q", out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for _, listed := c.row(s.ID); listed; _, listed = c.row(s.ID) {
+		if time.Now().After(deadline) {
+			t.Fatal("the session did not close itself")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// A closed session's context still reads by its id.
+	log := c.context(ipc.ContextArgs{Action: ipc.ContextLog, Session: s.ID})
+	if len(log.Turns) != 1 || log.Turns[0].Prompt != "tidy the notes" {
+		t.Fatalf("log: %+v", log)
+	}
+}
+
 // configProfile is a profile whose Claude Code keeps its files in dir.
 func configProfile(dir string) config.Profile {
 	return config.Profile{Env: map[string]string{"CLAUDE_CONFIG_DIR": dir}}
