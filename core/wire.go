@@ -39,6 +39,7 @@ type (
 	PeerFetch        = ipc.PeerFetch
 	PeerInfo         = ipc.PeerInfo
 	Machine          = ipc.Machine
+	PerfResult       = ipc.PerfResult
 	Session          = ipc.Session
 	TrodRow          = ipc.TrodRow
 	TrodShift        = ipc.TrodShift
@@ -165,6 +166,7 @@ const (
 	StatusIdle         = ipc.StatusIdle
 	OpPeers            = ipc.OpPeers
 	CodePeerDown       = ipc.CodePeerDown
+	OpPerf             = ipc.OpPerf
 	API                = ipc.API
 	OpHello            = ipc.OpHello
 	OpList             = ipc.OpList

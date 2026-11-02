@@ -170,8 +170,9 @@ struct ReviewRow: Identifiable, Equatable {
 
 /// The right sidebar: a row of tabs, the pin and a close button, then the
 /// tab that shows.
+@MainActor
 struct RightSidebar: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// Drawn over the terminal rather than beside it.
     let peek: Bool
     /// The width a drag of its edge is asking for, while it lasts.
@@ -292,8 +293,9 @@ struct RightSidebar: View {
 /// The sidebar's leading edge, which a drag moves. A guide line shows where
 /// it would go, and the width applies on release: for a pinned sidebar that
 /// is one resize of the terminal, and of every agent, not one per frame.
+@MainActor
 private struct SideEdge: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @Binding var guide: Double?
 
     var body: some View {
@@ -340,8 +342,9 @@ struct SideNote: View {
 /// The Helpers tab: the shown session's helpers, the open one's work under a
 /// strip of them all (HelperPane.swift), in either view, so a helper shows
 /// beside the terminal as well as the conversation.
+@MainActor
 struct HelpersTab: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// The shown session's conversation, which names its helpers.
     @StateObject private var parent = ConversationModel()
 
@@ -370,8 +373,9 @@ struct HelpersTab: View {
 /// The Review tab: everything ready for the user to look at. A row joins at
 /// the end and leaves only when the user acts on it, so nothing slides under
 /// the pointer.
+@MainActor
 struct ReviewTab: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// The order rows first showed in, newline-separated, so a new row joins
     /// at the end.
     @AppStorage("reviewOrder") private var orderRaw = ""

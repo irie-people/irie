@@ -87,8 +87,9 @@ enum DockFixture {
 }
 
 /// The Dock tab.
+@MainActor
 struct DockTab: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @State private var result: DockResult?
     @State private var shownFor: String?
     @State private var problem: String?
@@ -311,8 +312,9 @@ struct DockTab: View {
 
 /// One control: a header with its title and buttons, over its terminal or
 /// its page.
+@MainActor
 private struct DockControlView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let control: DockControl
     let result: DockResult
     let session: Session

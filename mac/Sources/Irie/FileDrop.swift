@@ -9,8 +9,9 @@ import SwiftTerm
 /// shell, the way Terminal, iTerm2 and Ghostty type a dropped file, and
 /// Claude Code takes the path of an image as the image. Over the conversation
 /// the path waits in the prompt and goes out with the next message.
+@MainActor
 struct FileDrop: ViewModifier {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session?
 
     func body(content: Content) -> some View {

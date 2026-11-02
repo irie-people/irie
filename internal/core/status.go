@@ -15,8 +15,8 @@ import (
 )
 
 // status takes one status line update of a Claude Code session (DESIGN
-// §6.3): what the session has cost, how full its context is, and the
-// plan's use, which is the account's and so the newest update's. The
+// §6.3): what the session has cost, how full its context is, and what it
+// last saw of the plan's use, which is the account's (takePlan). The
 // session's last update is kept in status.json, for a restarted core. It
 // answers with the session's state and running subagents, whether it is
 // parked, and while it works its own colour.
@@ -31,25 +31,34 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 		c.mu.Unlock()
 		return nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
-	if !reflect.DeepEqual(x.usage, u) {
+	x.statusN++
+	changed := !reflect.DeepEqual(x.usage, u)
+	if changed {
 		x.usage = u
 		if err := writeJSON(c.paths.StatusFile(x.id), u); err != nil {
 			c.log.Warn("status.json", "session", x.id, "err", err)
 		}
+	} else {
+		c.perf.Add("status.unchanged", 1)
 	}
-	if u.FiveHour != nil || u.SevenDay != nil {
-		c.plan = ipc.Plan{FiveHour: u.FiveHour, SevenDay: u.SevenDay}
-	}
+	plan := c.takePlan(u.FiveHour, u.SevenDay)
 	row := x.wire()
 	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents, Parked: row.Parked}
-	// Its colour is the one its row has, given by the time changes lists it.
-	frames := c.changes()
+	// An update that changed nothing does nothing more: idle sessions send
+	// one every few seconds. One that did can change only its own row. A
+	// row with no colour yet gets one from the diff.
+	var frames []ipc.Frame
+	if changed || x.hue == 0 {
+		frames = c.changesOf(x)
+	}
 	if row.State == ipc.StateWorking {
 		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.hue)
 	}
 	c.mu.Unlock()
 	c.publish(frames)
-	c.publishHeader()
+	if plan {
+		c.publishHeader()
+	}
 	return reply, nil
 }
 
@@ -65,18 +74,46 @@ func (c *Core) theme(a ipc.ThemeArgs) error {
 	return nil
 }
 
-// loadStatus reads a session's last status update, and takes its plan use
-// when it is the newest the core has seen. The caller holds c.mu.
+// loadStatus reads a session's last status update and folds what it saw of
+// the plan's use into the plan's (takePlan). The caller holds c.mu.
 func (c *Core) loadStatus(x *session) {
-	path := c.paths.StatusFile(x.id)
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(c.paths.StatusFile(x.id))
 	if err != nil {
 		return
 	}
 	if json.Unmarshal(b, &x.usage) != nil {
 		return
 	}
-	if fi, err := os.Stat(path); err == nil && (x.usage.FiveHour != nil || x.usage.SevenDay != nil) && fi.ModTime().After(c.planAt) {
-		c.plan, c.planAt = ipc.Plan{FiveHour: x.usage.FiveHour, SevenDay: x.usage.SevenDay}, fi.ModTime()
+	c.takePlan(x.usage.FiveHour, x.usage.SevenDay)
+}
+
+// takePlan folds what one session saw of the plan's two windows into the
+// plan's use, and says whether that changed it. Each session sends the
+// figures of its own last request, so an idle session goes on sending old
+// ones: a window that has since reset, or a lower use of the window that
+// runs, from before the others' work. So each window keeps the figure of
+// the window that resets last and, within it, the highest use, since a
+// window's use only grows until it resets. A figure that does not say when
+// its window resets is taken as it comes. The caller holds c.mu.
+func (c *Core) takePlan(five, week *ipc.Window) bool {
+	p := ipc.Plan{FiveHour: newerWindow(c.plan.FiveHour, five), SevenDay: newerWindow(c.plan.SevenDay, week)}
+	if reflect.DeepEqual(p, c.plan) {
+		return false
 	}
+	c.plan = p
+	return true
+}
+
+// newerWindow is the newer of what the core has of a window and what a
+// session saw of it, nil when neither says.
+func newerWindow(have, got *ipc.Window) *ipc.Window {
+	switch {
+	case got == nil:
+		return have
+	case have == nil, have.ResetsAt.IsZero(), got.ResetsAt.IsZero(), got.ResetsAt.After(have.ResetsAt):
+		return got
+	case got.ResetsAt.Equal(have.ResetsAt) && got.Used > have.Used:
+		return got
+	}
+	return have
 }
