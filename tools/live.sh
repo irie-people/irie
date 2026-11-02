@@ -245,9 +245,12 @@ if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/d
 	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac tools/mkicon 2>/dev/null; then
 		newapp=mac/build/Irie.app
 		# An install that stopped after building, as at a full lock queue,
-		# leaves the app built from this commit: a run again takes it.
-		if [ "$(cat mac/build/Irie.commit 2>/dev/null)" != "$head" ] || [ ! -d "$newapp" ]; then
-			rm -f mac/build/Irie.commit
+		# leaves the app beside a note of the sources it was built from, the
+		# committed mac/ and tools/mkicon: a run again from the same sources
+		# takes that app.
+		appsrc=$(git rev-parse HEAD:mac HEAD:tools/mkicon 2>/dev/null | paste -sd ' ' -)
+		if [ "$(cat mac/build/Irie.sources 2>/dev/null)" != "$appsrc" ] || [ ! -d "$newapp" ]; then
+			rm -f mac/build/Irie.sources
 			mac/build.sh >"$work/mac.log" 2>&1 &
 			macpid=$!
 		fi
@@ -293,7 +296,7 @@ if [ -n "$macpid" ]; then
 		exit 1
 	fi
 	macpid=
-	echo "$head" >mac/build/Irie.commit
+	echo "$appsrc" >mac/build/Irie.sources
 fi
 
 if [ -n "$slot" ]; then
