@@ -555,7 +555,7 @@ Anything else starts a session, as before, and is the jot the next may add to: "
 | Rule | Detail |
 |---|---|
 | Location | `worktree.root/<repo>/<slug>` (default `$XDG_DATA_HOME/irie/worktrees`). Outside the repo, so tools that scan the repo never see nested checkouts and Claude Code does not load the main checkout's CLAUDE.md a second time from a parent directory |
-| Branch | `worktree.branch_prefix` + slug, e.g. `irie/fix-flaky-test`; `-2`, `-3` on collision. Based on `worktree.base` (default: the main checkout's `HEAD`) |
+| Branch | `worktree.branch_prefix` + slug, e.g. `irie/fix-flaky-test`; `-2`, `-3` on collision. Based on `worktree.base`; when that is unset, on the repo's land branch (`dog.land`, §4.8) if the repo has it, so a task starts from the work that has landed, and else on the main checkout's `HEAD` |
 | Untracked local files | A worktree holds tracked files only, so a repo's untracked local settings never arrive on their own. Irie copies, when present: every path matched by the repo's `.worktreeinclude` (gitignore syntax, the convention Claude Code and others use), plus `worktree.copy` (default `.claude/settings.local.json` and `CLAUDE.local.md`). The status strip lists what was copied |
 | Submodules | `git submodule update --init --recursive` when `.gitmodules` exists (`worktree.submodules`) |
 | Dirty main checkout | Uncommitted changes are not carried over, and the status strip says so |

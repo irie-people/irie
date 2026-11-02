@@ -189,6 +189,50 @@ func TestBaseNamesTheStart(t *testing.T) {
 	gone(t, filepath.Join(res.Dir, "CHANGES.md"))
 }
 
+// With no worktree.base, a task starts from the branch its repo's work lands
+// on, which may be well ahead of the main checkout, and from HEAD when the
+// repo has no such branch.
+func TestNoBaseStartsFromTheLandBranch(t *testing.T) {
+	repo := fixture(t)
+	head := testutil.Git(t, repo, "rev-parse", "HEAD")
+	testutil.Git(t, repo, "checkout", "-q", "-b", "live")
+	testutil.WriteFiles(t, repo, map[string]string{"CHANGES.md": "Landed.\n"})
+	testutil.Git(t, repo, "add", "CHANGES.md")
+	testutil.Git(t, repo, "commit", "-q", "-m", "Landed change")
+	landed := testutil.Git(t, repo, "rev-parse", "HEAD")
+	testutil.Git(t, repo, "checkout", "-q", "-")
+
+	o := options(t)
+	o.Base, o.Land = "", "live"
+	res, err := Create(Request{Repo: repo, Name: "website", Slug: "landed"}, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.Git(t, res.Dir, "rev-parse", "HEAD"); got != landed {
+		t.Errorf("worktree HEAD %s, want the land branch's %s", got, landed)
+	}
+
+	o.Land = "release"
+	res, err = Create(Request{Repo: repo, Name: "website", Slug: "no-land"}, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.Git(t, res.Dir, "rev-parse", "HEAD"); got != head {
+		t.Errorf("with no such branch, worktree HEAD %s, want HEAD's %s", got, head)
+	}
+	gone(t, filepath.Join(res.Dir, "CHANGES.md"))
+
+	o.Base = head
+	o.Land = "live"
+	res, err = Create(Request{Repo: repo, Name: "website", Slug: "based"}, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.Git(t, res.Dir, "rev-parse", "HEAD"); got != head {
+		t.Errorf("worktree.base set: worktree HEAD %s, want %s", got, head)
+	}
+}
+
 func TestARepoWithNoCommitsFailsClearly(t *testing.T) {
 	testutil.IsolateGit(t)
 	testutil.NeedGit(t)

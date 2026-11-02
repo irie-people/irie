@@ -1,6 +1,7 @@
 // Package worktree makes the git worktree that an @repo task runs in (DESIGN
 // §4.2): a new branch, checked out under worktree.root outside the repo, with
-// the repo's tracked files at worktree.base and the untracked local files
+// the repo's tracked files at worktree.base (else the branch its work lands
+// on, else HEAD) and the untracked local files
 // that the repo's .worktreeinclude and worktree.copy name. Uncommitted
 // changes stay in the main checkout. Irie never removes a worktree.
 package worktree
@@ -25,7 +26,8 @@ import (
 // Options are the [worktree] config, with its root resolved.
 type Options struct {
 	Root         string   // worktrees go in Root/<repo>/<slug>
-	Base         string   // what a new branch starts from
+	Base         string   // what a new branch starts from; "" for Land, else HEAD
+	Land         string   // the branch the repo's work lands on (dog.land), if any
 	BranchPrefix string   // a branch is BranchPrefix + slug
 	Copy         []string // untracked paths copied in when present
 	Submodules   bool     // check out the repo's submodules too
@@ -194,6 +196,27 @@ func numbered(slug string, n int) string {
 	return slug + "-" + strconv.Itoa(n)
 }
 
+// startOf is what a new branch starts from: Base when it is set; else the
+// branch the repo's work lands on, when the repo has it, so that a task
+// starts from the work that has landed rather than from wherever the main
+// checkout stands; else HEAD.
+func startOf(repo string, o Options) (string, error) {
+	if o.Base != "" {
+		return o.Base, nil
+	}
+	if o.Land != "" {
+		ref := "refs/heads/" + o.Land
+		_, err := git(gitTimeout, repo, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
+		if err == nil {
+			return ref, nil
+		}
+		if exitCode(err) != 1 {
+			return "", err
+		}
+	}
+	return "HEAD", nil
+}
+
 // Create makes a worktree of r.Repo at Root/Name/<slug> on the branch
 // BranchPrefix + <slug>, taking the first slug that no session, directory,
 // branch or registered worktree holds.
@@ -204,14 +227,18 @@ func Create(r Request, o Options) (Result, error) {
 	if r.Taken == nil {
 		r.Taken = func(string) bool { return false }
 	}
-	if _, err := git(gitTimeout, r.Repo, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", o.Base+"^{commit}"); err != nil {
+	base, err := startOf(r.Repo, o)
+	if err != nil {
+		return Result{}, err
+	}
+	if _, err := git(gitTimeout, r.Repo, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", base+"^{commit}"); err != nil {
 		if exitCode(err) != 1 {
 			return Result{}, err
 		}
-		if o.Base == "HEAD" {
+		if base == "HEAD" {
 			return Result{}, fmt.Errorf("%s has no commits yet: commit once, or add ! to run in the checkout itself", r.Repo)
 		}
-		return Result{}, fmt.Errorf("worktree.base %q is not a commit in %s", o.Base, r.Repo)
+		return Result{}, fmt.Errorf("worktree.base %q is not a commit in %s", base, r.Repo)
 	}
 	registered, err := registered(r.Repo)
 	if err != nil {
@@ -244,7 +271,7 @@ func Create(r Request, o Options) (Result, error) {
 		}
 	}
 	// --no-track: the agent's branch follows no upstream, whatever it starts from.
-	if _, err := git(gitTimeout, r.Repo, nil, "worktree", "add", "--quiet", "--no-track", "-b", res.Branch, res.Dir, o.Base); err != nil {
+	if _, err := git(gitTimeout, r.Repo, nil, "worktree", "add", "--quiet", "--no-track", "-b", res.Branch, res.Dir, base); err != nil {
 		return Result{}, err
 	}
 

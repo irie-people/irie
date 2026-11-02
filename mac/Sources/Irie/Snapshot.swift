@@ -188,7 +188,7 @@ enum Fixture {
             "preferences": ["Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.", "Ask before you push."]},
         "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "freeze_dog": "10s", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
         "usage": {"status_line": true},
-        "worktree": {"base": "HEAD", "branch_prefix": "irie/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
+        "worktree": {"base": "", "branch_prefix": "irie/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
     }}
     """#
 
