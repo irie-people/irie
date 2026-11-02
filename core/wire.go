@@ -7,6 +7,11 @@ import "github.com/irie-people/irie/internal/ipc"
 // The wire's types: the requests and replies, every op's args and result,
 // the frames of a subscription and the rows they carry (DESIGN §2.4).
 type (
+	ContextArgs      = ipc.ContextArgs
+	ContextResult    = ipc.ContextResult
+	ContextTurn      = ipc.ContextTurn
+	ForkArgs         = ipc.ForkArgs
+	ForkResult       = ipc.ForkResult
 	FreezeArgs       = ipc.FreezeArgs
 	FreezeResult     = ipc.FreezeResult
 	PriorityArgs     = ipc.PriorityArgs
@@ -119,6 +124,13 @@ type (
 // The wire's constants: the API version, the op and frame names, the
 // states, the error codes and the other values its fields take.
 const (
+	OpContext         = ipc.OpContext
+	OpFork            = ipc.OpFork
+	ContextLog        = ipc.ContextLog
+	ContextSync       = ipc.ContextSync
+	ContextResolve    = ipc.ContextResolve
+	ContextTag        = ipc.ContextTag
+	ContextWhere      = ipc.ContextWhere
 	OpFreeze          = ipc.OpFreeze
 	OpThaw            = ipc.OpThaw
 	OpPriority        = ipc.OpPriority

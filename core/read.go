@@ -14,7 +14,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch], :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch], :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :fork [@TURN] [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -169,6 +169,23 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return Step{}, Errorf(CodeBadArgs, ":%s takes the selected session, which must be %s.", name, what)
 		}
 		return step(name, ParkArgs{Session: sel.ID}, sel)
+	case name == OpFork:
+		// :fork [@AT] [TASK] carries the selected session's context on
+		// from a point of it, its newest turn by default (DESIGN §4.13).
+		// The task may run on over more lines.
+		s, err := selected()
+		if err != nil {
+			return Step{}, err
+		}
+		at, task := "", arg
+		if strings.HasPrefix(arg, "@") {
+			first, rest, _ := strings.Cut(arg, " ")
+			at, task = strings.TrimPrefix(first, "@"), strings.TrimSpace(rest)
+		}
+		if _, more, ok := strings.Cut(in.Text, "\n"); ok {
+			task = strings.TrimSpace(task + "\n" + more)
+		}
+		return step(OpFork, ForkArgs{Session: s.ID, At: at, Task: Unpaste(task, in.Pastes)}, s)
 	case name == OpMove:
 		o, err := pickOutside(v.Outside, arg, in.Outside)
 		if err != nil {
@@ -293,6 +310,14 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	case OpMove:
 		s := as[MoveResult](result).Session
 		r.Session, r.Text = &s, "Moved "+outsideName(*st.Outside)+" into Irie."
+	case OpFork:
+		f := as[ForkResult](result)
+		s := f.Session
+		r.Did, r.Session, r.Text = InputSpawned, &s, fmt.Sprintf("Forked %s from turn %d as %s", name, f.Turn, s.Name)
+		if s.Worktree != "" {
+			r.Text += ", in a worktree of its own on " + s.Branch
+		}
+		r.Text += "."
 	case OpRoute:
 		r.Did, r.Text = InputAnswered, as[RouteChoice](result).Reason
 	case OpVPN:

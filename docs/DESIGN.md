@@ -523,7 +523,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
 
-The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3), so every client's bar takes the same words and every `:` command the core knows. The words above are the plan; the core reads `:rename`, `:rate`, `:close`, `:reopen`, `:undo`, `:redo`, `:freeze`, `:thaw`, `:prio`, `:park`, `:unpark`, `:move`, `:route`, `:setup` and `:models`, and a status question such as "hows the parser?", which it answers from the rows and which starts nothing.
+The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3), so every client's bar takes the same words and every `:` command the core knows. The words above are the plan; the core reads `:rename`, `:rate`, `:close`, `:reopen`, `:undo`, `:redo`, `:freeze`, `:thaw`, `:prio`, `:park`, `:unpark`, `:move`, `:route`, `:setup`, `:models` and `:fork [@TURN] [TASK]` (§4.13), and a status question such as "hows the parser?", which it answers from the rows and which starts nothing.
 
 **Spawn pipeline.** Reliable headless spawning means the task never travels through tmux and is never typed into a TUI:
 1. Parse the first line: `@…` and `+…` tokens are removed, and the rest is the task.
