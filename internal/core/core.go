@@ -180,7 +180,7 @@ func (x *session) wire() ipc.Session {
 		ID: x.id, Name: x.name, Agent: x.agent, Created: x.created, Warnings: x.warnings,
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
-		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: x.memory, Team: wireTeam(x.team), Hue: x.hue,
+		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: shownMemory(x.memory), Team: wireTeam(x.team), Hue: x.hue,
 		Tutor: x.tutor,
 	}
 	if s.Model == "" {
