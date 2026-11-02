@@ -16,12 +16,24 @@
 # IRIE_SIGN_IDENTITY signs it with your own identity (below).
 # IRIE_MAC_UNIVERSAL=1 on Apple silicon adds an Intel slice, drawn with
 # SwiftTerm, as a release's app has (tools/release.sh).
+#
+# `build.sh --quick` builds build/quick/Irie.app unoptimized, without
+# GhosttyKit or the Intel slice, and signs it ad hoc. It takes a fraction of
+# the time, for drawing the views (snapshot.sh), never for installing.
 set -eu
 cd "$(dirname "$0")"
+
+quick=
+if [ "${1:-}" = --quick ]; then quick=1; fi
 
 target="$(uname -m)-apple-macos14.0"
 sdk=$(xcrun --sdk macosx --show-sdk-path)
 app=build/Irie.app
+opt=-O
+if [ -n "$quick" ]; then
+	app=build/quick/Irie.app
+	opt=-Onone
+fi
 term=1
 [ "${IRIE_MAC_NO_SWIFTTERM:-}" = 1 ] && term=0
 
@@ -86,7 +98,7 @@ fi
 # GhosttyKit, when it builds: a Ghostty that will not build, as without Xcode
 # or a network on the first build, leaves the app on SwiftTerm.
 ghostty=
-if [ "$term" = 1 ] && [ "${IRIE_MAC_NO_GHOSTTY:-}" != 1 ]; then
+if [ "$term" = 1 ] && [ "${IRIE_MAC_NO_GHOSTTY:-}" != 1 ] && [ -z "$quick" ]; then
 	if ! ghostty=$(./ghostty.sh); then
 		ghostty=
 		echo "build.sh: GhosttyKit did not build, so the app's terminals use SwiftTerm" >&2
@@ -104,13 +116,13 @@ if [ "$term" = 1 ]; then
 			-framework Carbon -framework CoreText -framework CoreVideo -framework IOSurface \
 			-framework Metal -framework OpenGL -framework QuartzCore -Xlinker -dead_strip
 	fi
-	swiftc -O -parse-as-library -target "$target" -sdk "$sdk" \
+	swiftc "$opt" -parse-as-library -target "$target" -sdk "$sdk" \
 		-I "$deps" -L "$deps" -lSwiftTerm "$@" \
 		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
 	# The Intel slice draws with SwiftTerm: GhosttyKit builds for this
 	# Mac's own processor only. Without its module, `canImport(GhosttyKit)`
 	# is false in that slice.
-	if [ "${IRIE_MAC_UNIVERSAL:-}" = 1 ] && [ "$(uname -m)" = arm64 ]; then
+	if [ "${IRIE_MAC_UNIVERSAL:-}" = 1 ] && [ "$(uname -m)" = arm64 ] && [ -z "$quick" ]; then
 		native=$deps
 		swiftterm x86_64-apple-macos14.0
 		swiftc -O -parse-as-library -target x86_64-apple-macos14.0 -sdk "$sdk" \
@@ -129,7 +141,7 @@ if [ "$term" = 1 ]; then
 		cp -R "$ghostty/share/ghostty" "$ghostty/share/terminfo" "$app/Contents/Resources/"
 	fi
 else
-	swiftc -O -parse-as-library -target "$target" -sdk "$sdk" \
+	swiftc "$opt" -parse-as-library -target "$target" -sdk "$sdk" \
 		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
 fi
 cp Info.plist "$app/Contents/Info.plist"
@@ -138,10 +150,12 @@ if [ -f "$mermaid/mermaid.min.js" ]; then
 	cp "$mermaid/LICENSE" "$app/Contents/Resources/mermaid-LICENSE.txt"
 fi
 # Irie's icon (DESIGN §7.2): tools/mkicon draws the iconset, iconutil packs it.
-rm -rf build/Irie.iconset
-go run ../tools/mkicon build/Irie.iconset
-iconutil -c icns -o "$app/Contents/Resources/Irie.icns" build/Irie.iconset
-rm -rf build/Irie.iconset
+# The iconset sits beside the app, so a quick build never meets a full one.
+iconset=$(dirname "$app")/Irie.iconset
+rm -rf "$iconset"
+go run ../tools/mkicon "$iconset"
+iconutil -c icns -o "$app/Contents/Resources/Irie.icns" "$iconset"
+rm -rf "$iconset"
 # Signed ad hoc, which runs on this Mac only, unless IRIE_SIGN_IDENTITY
 # names a code signing identity in the keychain: "Apple Development: …",
 # which Xcode makes once you sign in with your Apple ID, or "Developer ID
@@ -151,6 +165,7 @@ rm -rf build/Irie.iconset
 # settings, which ask again for what they had allowed.
 # `git config irie.sign "<identity>"` keeps the choice for every install.
 identity=${IRIE_SIGN_IDENTITY:-$(git config --get irie.sign 2>/dev/null || echo -)}
+if [ -n "$quick" ]; then identity=-; fi
 case "$identity" in
 -) codesign --force --sign - "$app" 2>/dev/null ;;
 "Developer ID"*) codesign --force --options runtime --timestamp --sign "$identity" "$app" ;;

@@ -84,6 +84,8 @@ With no core answering when it opens, the app starts Irie itself, once a launch 
 
 `Irie --render-onboarding DIR` draws what a first run shows, offscreen with ImageRenderer from fixtures, in light and dark mode: the welcome, ready, signed out and with the first task in the task bar; the banner; the first task's card at each step; and the sidebar starting Irie, failing to, with no irie, and offline.
 
+`mac/snapshot.sh DIR` runs all three drawings into DIR from a quick build of the checkout: `mac/build.sh --quick` compiles the app unoptimized (`-Onone`), without GhosttyKit or the Intel slice, into `mac/build/quick`, and signs it ad hoc. That takes a fraction of a full build's time, so a change to the views can be seen before it is committed. It installs nothing and takes no focus; `tools/live.sh` still builds the real app.
+
 ## 4. Keys
 
 The **File**, **Go**, **View** and **Edit** menus list them all.

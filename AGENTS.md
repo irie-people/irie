@@ -34,4 +34,6 @@ If you run Irie, put a finished change into it at once: commit, then run `tools/
 
 The branch `live` records what is installed. The script refuses a checkout that lacks it, or lacks the build the running core came from, so one change never drops another: run the `git merge` it prints and try again. `tools/live.sh --rollback` puts the previous build back.
 
+To see a change to the Mac app's views before you commit it, `mac/snapshot.sh DIR` draws its windows into DIR from a quick build, without installing anything or taking the owner's focus.
+
 A maintainer who publishes Irie can set `git config irie.push origin`. Each install then also moves origin's main to the live build, only as a fast-forward and only after the repository's pre-push hook passes. It refuses a commit whose author or committer is not a GitHub noreply address. A push that fails leaves the install in place and prints why: when origin has commits the live build lacks, fetch and merge `origin/main`, then install again.

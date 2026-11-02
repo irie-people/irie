@@ -395,6 +395,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-01 | The owner's report: agents' automation and tests snatch their focus ; open(1) (macOS 14, local man page: `-g` opens in the background, `-j` hidden) ; `log show` of WindowServer's "Process now frontmost" and `lsappinfo list`'s `(in front)`, sampled locally, which caught an install relaunching Irie.app in front and a session's browser automation opening pages | Gabriel's guard of the user's focus at PreToolUse, his word to every session, and installs that wait until the user looks away (internal/core/gabriel.go, internal/core/appswap.go, tools/live.sh, DESIGN §4.11) |
 | 2026-11-02 | gitattributes(5) in git 2.39.3: the built-in `union` merge driver | `PROVENANCE.md merge=union` in .gitattributes, so branches that add sources at the same place keep both sides' rows; `tools/provenance.sh check` finds a row that both added |
 | 2026-11-02 | https://pubs.opengroup.org/onlinepubs/9799919799/utilities/awk.html (assignment operands, ENVIRON) | An awk -v value is read like a string literal, escapes and all, so tools/provenance.sh and tools/doc.sh hand text to awk through ENVIRON |
+| 2026-11-02 | `swiftc --help` (Apple Swift 5.9) | `-Onone`, compile without any optimization: `mac/build.sh --quick` for `mac/snapshot.sh` (docs/MAC.md) |
 
 ## Third-party code
 
