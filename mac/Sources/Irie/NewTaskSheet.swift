@@ -5,8 +5,9 @@ import SwiftUI
 /// The @repo and +agent words in the text still work, and win over the
 /// menus, as in the task bar (DESIGN §4.2). ⌘Return starts it; the repo
 /// chosen here is the task bar's from then on.
+@MainActor
 struct NewTaskSheet: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     /// A repo's name or a folder's path; empty for a new scratch folder.
@@ -39,7 +40,7 @@ struct NewTaskSheet: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: 200)
-                        Button("Folder…", action: chooseFolder)
+                        Button("Folder…") { chooseFolder() }
                         Toggle("Its own worktree", isOn: $worktree)
                             .disabled(repo.isEmpty)
                             .help("Off runs it in the repo's own checkout, as @repo! does")

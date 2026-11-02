@@ -117,7 +117,7 @@ echo 'warning: [{"pid": 1, "sessionId": "x"}] is not for you' >&2
 echo '[' >&2
 cat '`+list+`'
 `)
-	got, err := listOutside(cli, os.Environ())
+	got, _, err := listOutside(cli, os.Environ())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestListOutsideSaysWhatWentWrong(t *testing.T) {
 	} {
 		outsideTimeout = c.timeout
 		start := time.Now()
-		_, err := listOutside(c.cli, os.Environ())
+		_, _, err := listOutside(c.cli, os.Environ())
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want an error with %q", c.name, err, c.want)
 		}

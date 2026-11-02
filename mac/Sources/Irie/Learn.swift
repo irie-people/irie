@@ -44,17 +44,18 @@ struct LearnCommands: Commands {
 /// the shown session's language first, and the glossary. The core serves
 /// both (the learn op), so the terminal sidebar and the site can say the
 /// same.
+@MainActor
 struct LearnWindow: View {
     static let id = "learn"
 
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @State private var result: LearnResult?
     @State private var loaded = false
     @State private var find = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Page", selection: $store.learnTab) {
+            Picker("Page", selection: Bindable(store).learnTab) {
                 Text("Resources").tag(LearnTab.resources)
                 Text("Glossary").tag(LearnTab.glossary)
             }

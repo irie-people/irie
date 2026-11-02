@@ -70,7 +70,8 @@ var Dirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"}
 var ErrNotFound = errors.New("tmux not found: `irie setup` installs it, or set tmux.path")
 
 // Find returns the tmux binary: the configured path, else tmux on PATH, else
-// in Dirs.
+// in Dirs. A tmux on PATH that is one of Irie's own shims (IsShim) is passed
+// over, as exec.LookPath passes over a relative one.
 func Find(configured string) (string, error) {
 	if configured != "" {
 		if isExec(configured) {
@@ -78,8 +79,13 @@ func Find(configured string) (string, error) {
 		}
 		return "", fmt.Errorf("tmux.path %s is not an executable", configured)
 	}
-	if p, err := exec.LookPath("tmux"); err == nil {
-		return p, nil
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		if p := filepath.Join(dir, "tmux"); isExec(p) && !IsShim(p) {
+			return p, nil
+		}
 	}
 	for _, dir := range Dirs {
 		if p := filepath.Join(dir, "tmux"); isExec(p) {
