@@ -29,6 +29,7 @@ type node struct {
 	off    int64 // the line's start in the file
 	n      int   // the line's length, without its newline
 	prompt bool  // a message from the user that starts a turn
+	msg    bool  // a message, the user's or the assistant's, rather than Claude Code's bookkeeping
 	at     time.Time
 }
 
@@ -106,7 +107,8 @@ func (l line) promptText() string {
 }
 
 // commandText says a slash command or a shell command the way it was
-// typed: "/model opus" for its tags, "! ls" for a shell one.
+// typed: "/model opus" for its tags, "! ls" for a shell one; and a notice
+// that background work finished by its summary.
 func commandText(text string) string {
 	tag := func(name string) string {
 		_, after, ok := strings.Cut(text, "<"+name+">")
@@ -124,6 +126,11 @@ func commandText(text string) string {
 	}
 	if in := tag("bash-input"); in != "" {
 		return "! " + in
+	}
+	if strings.HasPrefix(text, "<task-notification>") {
+		if sum := tag("summary"); sum != "" {
+			return "Background: " + sum
+		}
 	}
 	return text
 }
@@ -185,7 +192,7 @@ func (f *feed) take(b []byte, off int64) {
 		parent = l.LogicalParent
 	}
 	at, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
-	n := &node{id: l.UUID, parent: parent, off: off, n: len(b), prompt: l.promptText() != "", at: at}
+	n := &node{id: l.UUID, parent: parent, off: off, n: len(b), prompt: l.promptText() != "", msg: l.Type == "user" || l.Type == "assistant", at: at}
 	first := len(f.nodes) == 0
 	f.nodes[n.id] = n
 	// The conversation's line goes on only from an entry that links to the

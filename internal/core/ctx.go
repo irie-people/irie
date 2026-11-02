@@ -181,6 +181,7 @@ func (c *Core) ctxSyncSnap(snap ctxSnap) (string, error) {
 		return "", err
 	}
 	s := snap.s
+	s.Final = snap.ended
 	s.Code, s.Dirty = codeState(snap.code)
 	head, err := st.Sync(s)
 	if snap.ended {

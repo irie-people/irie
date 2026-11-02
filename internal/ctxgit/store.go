@@ -34,6 +34,7 @@ type Session struct {
 	Code         string   // the commit its folder's checkout is at; "" outside git
 	Dirty        int      // files not committed in that checkout
 	Working      bool     // its turn is still going
+	Final        bool     // it has ended: what its last turn's bookkeeping holds is stored too
 	Transcripts  []string // its transcripts, oldest first
 }
 
@@ -152,7 +153,7 @@ func (st *Store) Sync(s Session) (string, error) {
 		if !last && slices.ContainsFunc(h.turns, func(t Turn) bool { return t.Leaf == f.leaf.id }) {
 			continue
 		}
-		if err := st.commitLine(s, h, f, f.chain(), last && s.Working); err != nil {
+		if err := st.commitLine(s, h, f, f.chain(), last && s.Working, !last || s.Final); err != nil {
 			return "", err
 		}
 	}
@@ -219,8 +220,14 @@ func (st *Store) Forget(s Session) {
 }
 
 // commitLine stores the turns of chain that the branch lacks. working says
-// the last turn is still going.
-func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working bool) error {
+// the last turn is still going; final, that no more will come.
+//
+// Claude Code writes a turn's bookkeeping, such as how long it took and
+// what its Stop hooks said, after the Stop hook that stores the turn. Such
+// entries alone, with no new message, make no commit of their own: they go
+// into the next turn's commit, or, once the session has ended, a last one.
+// So a turn is one commit.
+func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working, final bool) error {
 	if len(chain) == 0 {
 		return nil
 	}
@@ -238,7 +245,7 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working 
 			break
 		}
 	}
-	start, parent := 0, ""
+	start, parent, fold := 0, "", -1 // fold: a turn whose bookkeeping goes into the next turn's commit
 	var tree []treeEntry
 	if base >= 0 {
 		b := h.turns[base]
@@ -249,6 +256,11 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working 
 		start, parent = t, b.Commit
 		if endsTurn {
 			start = t + 1
+		} else if !grew(ts[t], b.Leaf) {
+			if t == len(ts)-1 && !final {
+				return nil
+			}
+			fold = t
 		}
 		var err error
 		if tree, err = st.treeOf(h, base); err != nil {
@@ -291,6 +303,9 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working 
 			return e.name == turnName(t, "jsonl") || e.name == turnName(t, "md")
 		})
 		tree = append(tree, treeEntry{name: turnName(t, "jsonl"), id: jsonl}, treeEntry{name: turnName(t, "md"), id: md})
+		if t == fold && t < len(ts)-1 {
+			continue
+		}
 		end := ts[t][len(ts[t])-1]
 		turn := Turn{
 			Turn: t, Prompt: prompt, Said: said, Session: s.ID, Name: s.Name,
@@ -333,6 +348,19 @@ func (st *Store) commitTurn(tree []treeEntry, parent string, t Turn) (string, er
 		return "", err
 	}
 	return st.writeCommit(root, []string{parent}, t.Time, message(t))
+}
+
+// grew reports whether a turn has a message after the entry id: more of
+// the conversation, not just Claude Code's bookkeeping.
+func grew(turn []*node, id string) bool {
+	after := false
+	for _, n := range turn {
+		if after && n.msg {
+			return true
+		}
+		after = after || n.id == id
+	}
+	return false
 }
 
 // locate is the turn of ts that holds the entry id, and whether the entry

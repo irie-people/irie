@@ -389,6 +389,48 @@ func TestAnUnlinkedEntryNeverTakesTheLineOver(t *testing.T) {
 // lastLinked is the uuid of the reply before the unlinked entries.
 func (x *tx) lastLinked() string { return fmt.Sprintf("00000000-0000-4000-8000-%012d", x.n-2) }
 
+func TestATurnsBookkeepingMakesNoCommitOfItsOwn(t *testing.T) {
+	st := open(t)
+	x := newTx(t, t.TempDir(), "sess-a")
+	x.prompt("one")
+	x.reply("did one")
+	one, err := st.Sync(session(x))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What Claude Code writes after the Stop hook: no message, no commit.
+	x.add(map[string]any{"type": "system", "subtype": "stop_hook_summary"})
+	x.add(map[string]any{"type": "system", "subtype": "turn_duration"})
+	if again, err := st.Sync(session(x)); err != nil || again != one {
+		t.Fatalf("bookkeeping made a commit: %s %v", again, err)
+	}
+	// The next turn's commit carries it, on turn one's commit.
+	x.prompt("two")
+	x.reply("did two")
+	two, err := st.Sync(session(x))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent := gitIn(t, st.Dir(), "rev-parse", two+"^"); parent != one {
+		t.Fatalf("turn two's parent is %s, want turn one %s", parent, one)
+	}
+	if got := gitIn(t, st.Dir(), "show", two+":turns/0001.jsonl"); !strings.Contains(got, "turn_duration") {
+		t.Fatalf("turn one's file lacks its bookkeeping:\n%s", got)
+	}
+	// Once the session has ended, its last turn's bookkeeping is stored too.
+	x.add(map[string]any{"type": "system", "subtype": "turn_duration"})
+	s := session(x)
+	s.Final = true
+	last, err := st.Sync(s)
+	if err != nil || last == two {
+		t.Fatalf("the final bookkeeping was not stored: %s %v", last, err)
+	}
+	log, _ := st.Log("s0test", 0)
+	if len(log) != 3 || log[0].Turn != 2 || log[1].Turn != 2 || log[2].Turn != 1 {
+		t.Fatalf("log: %+v", log)
+	}
+}
+
 func TestReplacePathStopsAtLongerNames(t *testing.T) {
 	in := `{"a":"/x/app","b":"/x/app/main.go","c":"/x/app-2/main.go","d":"cd /x/app && ls","e":"/x/apps"}`
 	got := string(replacePath([]byte(in), []byte("/x/app"), []byte("/y/fork")))
@@ -410,6 +452,7 @@ func TestPrompts(t *testing.T) {
 		{`{"type":"user","message":{"content":"<command-name>/model</command-name>\n<command-args>opus</command-args>"}}`, "/model opus"},
 		{`{"type":"user","message":{"content":"<local-command-stdout>Set model</local-command-stdout>"}}`, ""},
 		{`{"type":"user","message":{"content":"<bash-input>ls</bash-input>"}}`, "! ls"},
+		{`{"type":"user","message":{"content":"<task-notification> <task-id>b1</task-id> <status>completed</status> <summary>Background command \"Run the tests\" completed (exit code 0)</summary> </task-notification>"}}`, `Background: Background command "Run the tests" completed (exit code 0)`},
 		{`{"type":"assistant","message":{"content":"hello"}}`, ""},
 	} {
 		var l line
