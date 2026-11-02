@@ -92,6 +92,8 @@ With no core answering when it opens, the app starts Irie itself, once a launch 
 
 A preview is a client of the running core, as the app is: its sessions are the real ones, and what you do in it happens to them. A change that needs a new op shows once a core that has it is live. It differs from the app in four ways. Every tmux client it starts attaches with `-f ignore-size`, so while any other client is attached it never sizes a window, the slot and every agent included (DESIGN §2.1, principle 6). It never sends `theme`, so the agents' colours stay the app's. The freeze dog only force quits a stuck preview, since one opened again would lack hot.sh's arguments. And it quits when hot.sh ends, however it ends. It opens behind the app in front and takes no focus (DESIGN §4.11), and a new build keeps the focus the old one had. `tools/hot.sh --snapshot DIR` also draws the fixture after each build, `--no-open` builds without a window, and `--once` builds once. Closing the preview stops hot.sh; one that crashes, or that the freeze dog stops, opens again with the next build. What the preview prints shows in hot.sh's output.
 
+`mac/snapshot.sh DIR` runs all three drawings into DIR from the preview's build: `mac/build.sh --hot`, with its objects kept in `mac/build/snapshot`, so a run after an edit compiles only the files it reaches. It is how to see a change to the views as pictures before it is committed. It installs nothing, opens no window and takes no focus; `tools/live.sh` still builds the real app.
+
 ## 4. Keys
 
 The **File**, **Go**, **View** and **Edit** menus list them all.

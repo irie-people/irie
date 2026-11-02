@@ -1,0 +1,4 @@
+# Nearly every change adds its sources at the end of PROVENANCE.md's Sources
+# table, so two branches almost always meet there. A union merge keeps both
+# sides' rows; `tools/provenance.sh check` finds a row both sides added.
+PROVENANCE.md merge=union
