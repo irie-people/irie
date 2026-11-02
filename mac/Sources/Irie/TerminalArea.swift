@@ -10,6 +10,8 @@ struct TerminalArea: View {
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     /// What draws the terminals (GhosttyTerminal.swift).
     @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
+    /// The right sidebar's width while a drag of its edge asks for another.
+    @State private var sideGuide: Double?
 
     private var selected: Session? { store.selectedRow }
 
@@ -24,7 +26,40 @@ struct TerminalArea: View {
         // changes.
         let _ = store.redOnDone
         VStack(spacing: 0) {
-            main.modifier(FileDrop(session: selected))
+            // The right sidebar (RightSidebar.swift): beside the terminal
+            // while pinned and there is room, else over its right edge. The
+            // frame stays the first child, so SwiftUI never makes the
+            // terminal again, which would restart its tmux client.
+            GeometryReader { geo in
+                let width = CGFloat(store.side.width)
+                let beside = store.side.open && store.side.pinned && geo.size.width - width - 12 >= minTerminal
+                let peek = store.side.open && !beside
+                ZStack(alignment: .trailing) {
+                    HStack(spacing: 0) {
+                        main(conversationInset: peek ? width + 12 : 0).modifier(FileDrop(session: selected))
+                        if beside {
+                            RightSidebar(peek: false, guide: $sideGuide)
+                                .frame(width: width)
+                                .padding([.top, .bottom, .trailing], 12)
+                        }
+                    }
+                    if peek {
+                        RightSidebar(peek: true, guide: $sideGuide)
+                            .frame(width: width)
+                            .padding([.top, .bottom, .trailing], 12)
+                            .background(PeekFrame())
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                    if let g = sideGuide {
+                        Rectangle()
+                            .fill(Theme.accent)
+                            .frame(width: 2)
+                            .padding(.vertical, 12)
+                            .padding(.trailing, CGFloat(g) + 12 + 4)
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
             PhraseBar()
         }
         .background(Theme.ground.ignoresSafeArea())
@@ -49,13 +84,13 @@ struct TerminalArea: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             ToolbarItem(placement: .primaryAction) {
-                // A helper beside the conversation (HelperPane.swift).
+                // The session's helpers, in the right sidebar (RightSidebar.swift).
                 Button {
                     store.toggleHelpers()
                 } label: {
                     Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: "rectangle.split.2x1")
                 }
-                .help(store.helperShown ? "Put the conversation back on its own (⇧⌘H)" : "Show the session’s helpers beside its conversation (⇧⌘H)")
+                .help(store.helperShown ? "Close the helpers (⇧⌘H)" : "Show the session’s helpers in the right sidebar (⇧⌘H)")
                 .disabled(selected == nil)
             }
             ToolbarItem(placement: .primaryAction) {
@@ -67,10 +102,28 @@ struct TerminalArea: View {
                 .help("Open the terminal in a Ghostty window too")
                 .disabled(store.attach == nil)
             }
+            // At the toolbar's trailing end, where the HIG puts a button that
+            // opens an inspector.
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.toggleSide()
+                } label: {
+                    Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: "sidebar.right")
+                }
+                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)" : "Show the right sidebar: helpers and what is ready to review (⌥⌘B)")
+            }
         }
     }
 
-    private var main: some View {
+    /// The narrowest the terminal may get beside a pinned sidebar: about 80
+    /// columns and its frame. A narrower window shows the sidebar over the
+    /// terminal instead, even pinned.
+    private var minTerminal: CGFloat { 80 * store.fontSize * 0.6 + 60 }
+
+    /// The terminal, or the conversation over it. A sidebar over the right
+    /// side insets the conversation only, so it sits beside the sidebar
+    /// while the terminal under it keeps its width.
+    private func main(conversationInset: CGFloat) -> some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
             // restart, so a flap gets a banner, not a reattach.
@@ -95,6 +148,7 @@ struct TerminalArea: View {
             // The conversation needs only the core, not the terminal.
             if !store.showTerminal && (store.attach != nil || online) {
                 ConversationView()
+                    .padding(.trailing, conversationInset)
             } else if store.attach == nil, !store.isFixture {
                 if store.starting {
                     ProgressView("Starting Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -243,5 +297,22 @@ private struct Placeholder: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Tells the store where a peeking right sidebar is, in the window's
+/// top-left points, so a click in the terminal beside it closes it
+/// (KeyRouter), and that none peeks once it goes.
+@MainActor
+private struct PeekFrame: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        GeometryReader { geo in
+            Color.clear
+                .onAppear { store.sidePeekFrame = geo.frame(in: .global) }
+                .onChange(of: geo.frame(in: .global)) { _, f in store.sidePeekFrame = f }
+                .onDisappear { store.sidePeekFrame = .zero }
+        }
     }
 }

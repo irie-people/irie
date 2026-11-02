@@ -15,6 +15,8 @@ enum Snapshot {
         UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)
         let store = Store(socketPath: "/nonexistent/irie-snapshot.sock")
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
+        // Closed, whatever the app has saved; a fixture store saves nothing.
+        store.side = SideState()
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
             // Each palette in both modes at the default size, then the default
@@ -71,6 +73,20 @@ enum Snapshot {
                 print(name)
             }
             store.loadFixture(Fixture.sessions, selection: Fixture.selected)
+
+            // The right sidebar (RightSidebar.swift): its Helpers tab peeking
+            // over the terminal, then pinned beside it, and its Review tab.
+            for (base, pinned, tab, dark) in [("side-dock", true, SideTab.dock, false), ("side-dock-dark", true, SideTab.dock, true),
+                                              ("side-peek", false, SideTab.helpers, false), ("side-pinned", true, SideTab.helpers, false),
+                                              ("side-review", true, SideTab.review, false), ("side-pinned-dark", true, SideTab.helpers, true)] {
+                store.side = SideState(open: true, pinned: pinned, width: SideState.startWidth, tab: tab)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: pinned ? 1500 : 1240, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.side = SideState()
 
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)

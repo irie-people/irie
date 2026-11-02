@@ -88,6 +88,9 @@ struct HelperPane: View {
     @ObservedObject var parent: ConversationModel
     /// In the conversation's place, with a way back, rather than beside it.
     var narrow = false
+    /// In the right sidebar's Helpers tab, which draws the frame round it
+    /// and closes it.
+    var embedded = false
     let style: String
     @StateObject private var model = ConversationModel()
     @State private var expanded: Set<String> = []
@@ -97,11 +100,12 @@ struct HelperPane: View {
     /// A pane for session's helper agent. The snapshots hand it a model
     /// that already holds the helper's conversation.
     init(session: Session, agent: String, parent: ConversationModel, narrow: Bool = false, style: String,
-         model: ConversationModel? = nil) {
+         embedded: Bool = false, model: ConversationModel? = nil) {
         self.session = session
         self.agent = agent
         _parent = ObservedObject(wrappedValue: parent)
         self.narrow = narrow
+        self.embedded = embedded
         self.style = style
         _model = StateObject(wrappedValue: model ?? ConversationModel())
     }
@@ -151,10 +155,8 @@ struct HelperPane: View {
             Rectangle().fill(terminal ? Term.rule : Theme.edge).frame(height: 1)
             foot
         }
-        .background(terminal ? Term.ground : Theme.sidebar)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).strokeBorder(edge, lineWidth: 1.5))
-        .padding(narrow ? 12 : 10)
+        .background(terminal ? Term.ground : (embedded ? Color.clear : Theme.sidebar))
+        .modifier(HelperFrame(on: !embedded, edge: edge, padding: narrow ? 12 : 10))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Helper \(current.kind)")
         .onAppear { model.follow(session.id, agent: agent, client: store.client) }
@@ -182,7 +184,7 @@ struct HelperPane: View {
                         .truncationMode(.tail)
                 }
                 Spacer(minLength: 4)
-                if !narrow {
+                if !narrow && !embedded {
                     Button { store.closeHelper(in: session.id) } label: {
                         Image(systemName: "xmark").font(.caption.weight(.bold))
                             .frame(width: 22, height: 22)
@@ -552,6 +554,25 @@ private struct FootButton: ButtonStyle {
 
 /// The bar between the conversation and the helper pane. Dragging it gives
 /// either more room, and the app keeps where it was left.
+/// The helper pane's own rounded frame, edged in its session's colour,
+/// except in the right sidebar, whose frame it sits in.
+private struct HelperFrame: ViewModifier {
+    let on: Bool
+    let edge: Color
+    let padding: CGFloat
+
+    func body(content: Content) -> some View {
+        if on {
+            content
+                .clipShape(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).strokeBorder(edge, lineWidth: 1.5))
+                .padding(padding)
+        } else {
+            content
+        }
+    }
+}
+
 struct PaneDivider: View {
     @Binding var width: Double
     let total: CGFloat

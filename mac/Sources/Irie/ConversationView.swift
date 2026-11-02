@@ -14,17 +14,15 @@ struct ConversationView: View {
     @StateObject private var model = ConversationModel()
     /// The palette: a switch draws the view again in its colours.
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
-    /// How wide the helper pane is beside the conversation (HelperPane.swift).
-    @AppStorage("helperPaneWidth") private var paneWidth: Double = 380
-
     private var selected: Session? { store.selectedRow }
 
     var body: some View {
         VStack(spacing: 0) {
             if let s = selected {
-                GeometryReader { geo in
-                    split(s, width: geo.size.width)
-                }
+                // A helper shows in the right sidebar's Helpers tab
+                // (RightSidebar.swift), so the conversation stays whole.
+                ConversationFeed(model: model, session: s)
+                Composer(model: model, session: s)
             } else {
                 ConversationNote(title: "Pick a session", text: "Its conversation shows here.")
             }
@@ -41,34 +39,6 @@ struct ConversationView: View {
     private var newestHelper: String? {
         guard let s = selected else { return nil }
         return HelperRef.list(model.items, s).last?.agent
-    }
-
-    /// The conversation, with its open helper beside it when there is room
-    /// for both, or in its place when there is not. The conversation stays
-    /// in place either way, so it keeps its scroll and its draft.
-    @ViewBuilder private func split(_ s: Session, width: CGFloat) -> some View {
-        let agent = store.openHelpers[s.id]
-        let wide = width >= HelperPane.sideBySide
-        let alone = agent != nil && !wide
-        ZStack {
-            HStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    ConversationFeed(model: model, session: s)
-                    Composer(model: model, session: s)
-                }
-                .opacity(alone ? 0 : 1)
-                .allowsHitTesting(!alone)
-                .accessibilityHidden(alone)
-                if let agent, wide {
-                    PaneDivider(width: $paneWidth, total: width)
-                    HelperPane(session: s, agent: agent, parent: model, style: store.helperStyle)
-                        .frame(width: HelperPane.width(paneWidth, in: width))
-                }
-            }
-            if let agent, alone {
-                HelperPane(session: s, agent: agent, parent: model, narrow: true, style: store.helperStyle)
-            }
-        }
     }
 }
 
