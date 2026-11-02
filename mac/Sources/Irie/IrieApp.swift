@@ -6,6 +6,7 @@ import SwiftUI
 @main
 enum Launch {
     static func main() {
+        Preview.boot()
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--snapshot") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
@@ -261,7 +262,11 @@ struct ContentView: View {
         .sheet(isPresented: $store.newTaskSheet) {
             NewTaskSheet().environmentObject(store)
         }
-        .background(WindowReader { keys.window = $0 })
+        .background(WindowReader { window in
+            keys.window = window
+            // A preview takes over the window of the build before (Preview.swift).
+            PreviewState.shared.adopt(window, store: store)
+        })
         .onAppear {
             keys.install(store)
             WindowCloseItem.install()
