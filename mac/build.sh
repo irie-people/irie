@@ -16,12 +16,35 @@
 # IRIE_SIGN_IDENTITY signs it with your own identity (below).
 # IRIE_MAC_UNIVERSAL=1 on Apple silicon adds an Intel slice, drawn with
 # SwiftTerm, as a release's app has (tools/release.sh).
+#
+# `build.sh --hot OBJ APP` builds a preview for tools/hot.sh instead (docs/
+# MAC.md, "Hot loading"): APP, named Irie Preview, with IRIE_MAC_HOT_ID as
+# its bundle identifier, for this Mac's processor only and signed ad hoc.
+# It is unoptimized and incremental: the objects stay in OBJ, and the Swift
+# driver compiles again only the files an edit reaches, so a build after an
+# edit takes seconds where the app's takes minutes.
 set -eu
+obj= hot=
+if [ "${1:-}" = --hot ]; then
+	if [ $# -ne 3 ]; then
+		echo "usage: build.sh [--hot OBJ APP]" >&2
+		exit 2
+	fi
+	obj=$2 hot=$3
+	case $obj in /*) ;; *) obj=$PWD/$obj ;; esac
+	case $hot in /*) ;; *) hot=$PWD/$hot ;; esac
+fi
 cd "$(dirname "$0")"
 
 target="$(uname -m)-apple-macos14.0"
 sdk=$(xcrun --sdk macosx --show-sdk-path)
-app=build/Irie.app
+app=build/Irie.app exe=Irie
+if [ -n "$hot" ]; then app=$hot exe=IriePreview; fi
+# Where the linker writes: into the app, or for a preview beside its
+# objects. The Swift driver starts over whenever its arguments change, and
+# a preview's slot changes with every build.
+out=$app/Contents/MacOS/$exe
+if [ -n "$hot" ]; then out=$obj/$exe; fi
 term=1
 [ "${IRIE_MAC_NO_SWIFTTERM:-}" = 1 ] && term=0
 
@@ -95,22 +118,39 @@ fi
 
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+# Optimized, or for a preview unoptimized and incremental: the output file
+# map names each file's object and dependencies in OBJ, and a file added
+# since the last build gets its entry here.
+if [ -n "$hot" ]; then
+	mkdir -p "$obj"
+	{
+		printf '{"": {"swift-dependencies": "%s/build.swiftdeps"}' "$obj"
+		for f in Sources/Irie/*.swift; do
+			b=$(basename "$f" .swift)
+			printf ',\n"%s": {"object": "%s/%s.o", "swift-dependencies": "%s/%s.swiftdeps", "dependencies": "%s/%s.d"}' \
+				"$f" "$obj" "$b" "$obj" "$b" "$obj" "$b"
+		done
+		echo '}'
+	} >"$obj/map.json"
+	set -- -Onone -incremental -output-file-map "$obj/map.json" -emit-dependencies
+else
+	set -- -O
+fi
 if [ "$term" = 1 ]; then
-	set --
+	set -- "$@" -I "$deps" -L "$deps" -lSwiftTerm
 	if [ -n "$ghostty" ]; then
 		# The module map makes `canImport(GhosttyKit)` true, which compiles
 		# the Ghostty terminal in (GhosttyTerminal.swift).
-		set -- -I "$ghostty/include" -L "$ghostty/lib" -lghostty -lc++ \
+		set -- "$@" -I "$ghostty/include" -L "$ghostty/lib" -lghostty -lc++ \
 			-framework Carbon -framework CoreText -framework CoreVideo -framework IOSurface \
 			-framework Metal -framework OpenGL -framework QuartzCore -Xlinker -dead_strip
 	fi
-	swiftc -O -parse-as-library -target "$target" -sdk "$sdk" \
-		-I "$deps" -L "$deps" -lSwiftTerm "$@" \
-		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
+	swiftc "$@" -parse-as-library -target "$target" -sdk "$sdk" \
+		-o "$out" Sources/Irie/*.swift
 	# The Intel slice draws with SwiftTerm: GhosttyKit builds for this
 	# Mac's own processor only. Without its module, `canImport(GhosttyKit)`
 	# is false in that slice.
-	if [ "${IRIE_MAC_UNIVERSAL:-}" = 1 ] && [ "$(uname -m)" = arm64 ]; then
+	if [ "${IRIE_MAC_UNIVERSAL:-}" = 1 ] && [ "$(uname -m)" = arm64 ] && [ -z "$hot" ]; then
 		native=$deps
 		swiftterm x86_64-apple-macos14.0
 		swiftc -O -parse-as-library -target x86_64-apple-macos14.0 -sdk "$sdk" \
@@ -129,19 +169,41 @@ if [ "$term" = 1 ]; then
 		cp -R "$ghostty/share/ghostty" "$ghostty/share/terminfo" "$app/Contents/Resources/"
 	fi
 else
-	swiftc -O -parse-as-library -target "$target" -sdk "$sdk" \
-		-o "$app/Contents/MacOS/Irie" Sources/Irie/*.swift
+	swiftc "$@" -parse-as-library -target "$target" -sdk "$sdk" \
+		-o "$out" Sources/Irie/*.swift
 fi
 cp Info.plist "$app/Contents/Info.plist"
+if [ -n "$hot" ]; then
+	cp "$out" "$app/Contents/MacOS/$exe"
+	# Its own name and identifier: its own Dock icon and its own saved
+	# window and choices, apart from the app's (tools/hot.sh).
+	for kv in "CFBundleExecutable $exe" "CFBundleIdentifier ${IRIE_MAC_HOT_ID:-io.github.irie-hq.irie.preview}" \
+		"CFBundleName Irie Preview" "CFBundleDisplayName Irie Preview"; do
+		plutil -replace "${kv%% *}" -string "${kv#* }" "$app/Contents/Info.plist"
+	done
+fi
 if [ -f "$mermaid/mermaid.min.js" ]; then
 	cp "$mermaid/mermaid.min.js" "$app/Contents/Resources/"
 	cp "$mermaid/LICENSE" "$app/Contents/Resources/mermaid-LICENSE.txt"
 fi
-# Irie's icon (DESIGN §7.2): tools/mkicon draws the iconset, iconutil packs it.
-rm -rf build/Irie.iconset
-go run ../tools/mkicon build/Irie.iconset
-iconutil -c icns -o "$app/Contents/Resources/Irie.icns" build/Irie.iconset
-rm -rf build/Irie.iconset
+# Irie's icon (DESIGN §7.2): tools/mkicon draws the iconset, iconutil packs
+# it. A preview draws it once and keeps it with its objects.
+if [ -n "$hot" ] && [ -f "$obj/Irie.icns" ]; then
+	cp "$obj/Irie.icns" "$app/Contents/Resources/"
+else
+	iconset=build/Irie.iconset
+	if [ -n "$hot" ]; then iconset=$obj/Irie.iconset; fi
+	rm -rf "$iconset"
+	go run ../tools/mkicon "$iconset"
+	iconutil -c icns -o "$app/Contents/Resources/Irie.icns" "$iconset"
+	rm -rf "$iconset"
+	if [ -n "$hot" ]; then cp "$app/Contents/Resources/Irie.icns" "$obj/"; fi
+fi
+if [ -n "$hot" ]; then
+	codesign --force --sign - "$app" 2>/dev/null
+	echo "built $app"
+	exit 0
+fi
 # Signed ad hoc, which runs on this Mac only, unless IRIE_SIGN_IDENTITY
 # names a code signing identity in the keychain: "Apple Development: …",
 # which Xcode makes once you sign in with your Apple ID, or "Developer ID

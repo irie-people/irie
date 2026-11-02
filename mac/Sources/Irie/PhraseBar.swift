@@ -31,10 +31,7 @@ struct PhraseBar: View {
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Text(Self.phrases[index])
-            .id(index)
-            .font(Theme.font(12))
-            .foregroundStyle(Theme.muted)
+        line
             .lineLimit(1)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
@@ -42,8 +39,9 @@ struct PhraseBar: View {
             .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
                 .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
             .overlay(alignment: .trailing) {
-                // The core's version, muted, in the bottom right corner.
-                if case let .online(version) = store.link {
+                // The core's version, muted, in the bottom right corner;
+                // a preview names its checkout there instead.
+                if !Preview.isOn, case let .online(version) = store.link {
                     Text(version)
                         .font(Theme.font(10.5))
                         .foregroundStyle(Theme.muted.opacity(0.7))
@@ -56,5 +54,17 @@ struct PhraseBar: View {
             .animation(.easeInOut(duration: 0.8), value: index)
             .onReceive(tick) { _ in index = (index + 1) % Self.phrases.count }
             .accessibilityHidden(true)
+    }
+
+    /// The phrase; in a preview, how its next build goes (Preview.swift).
+    @ViewBuilder private var line: some View {
+        if Preview.isOn {
+            PreviewBadge()
+        } else {
+            Text(Self.phrases[index])
+                .id(index)
+                .font(Theme.font(12))
+                .foregroundStyle(Theme.muted)
+        }
     }
 }
