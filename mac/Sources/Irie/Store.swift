@@ -119,6 +119,14 @@ final class Store: ObservableObject {
             keepSplit()
         }
     }
+    /// The right sidebar: whether it is open or pinned, its width and its
+    /// tab, kept across launches but never by `--snapshot` (RightSidebar.swift).
+    @Published var side = SideState.saved() {
+        didSet { if side != oldValue, !isFixture { side.save() } }
+    }
+    /// Where a peeking right sidebar is, in the window's top-left points, or
+    /// zero while none peeks, so a click in the terminal beside it closes it.
+    var sidePeekFrame: CGRect = .zero
     /// The session the core shows beside its teammates, as last asked
     /// (TeamSplit.swift); nil while the slot shows the picked session.
     @Published private(set) var splitShown: String?
@@ -574,13 +582,13 @@ final class Store: ObservableObject {
 
     // MARK: Requests
 
-    /// Shows a helper beside its session's conversation. The terminal never
-    /// splits, so a click on a helper while it shows brings the
-    /// conversation back.
+    /// Shows a helper in the right sidebar's Helpers tab, beside the
+    /// conversation or the terminal, whichever shows. The terminal never
+    /// splits for a helper, which has no terminal of its own.
     func openHelper(_ agent: String, in session: String) {
         if selection != session || outsideSelection != nil { show(session) }
         openHelpers[session] = agent
-        if showTerminal { showTerminal = false }
+        if !side.open || side.tab != .helpers { openSide(.helpers) }
     }
 
     /// Shows a session's terminal beside its teammates'.
@@ -605,25 +613,25 @@ final class Store: ObservableObject {
         newestHelpers[session] = agent
     }
 
-    /// Whether the selected session shows a helper beside its conversation.
+    /// Whether the right sidebar shows the selected session's helpers.
     var helperShown: Bool {
-        guard let id = selection, outsideSelection == nil, !showTerminal else { return false }
-        return openHelpers[id] != nil
+        guard selection != nil, outsideSelection == nil else { return false }
+        return side.open && side.tab == .helpers
     }
 
-    /// View > Show Helpers: opens the selected session's helper beside its
-    /// conversation (the one shown last, else the newest running, else the
-    /// newest), or puts the conversation back on its own.
+    /// View > Show Helpers (⇧⌘H): opens the right sidebar's Helpers tab on
+    /// the selected session's helper (the one shown last, else the newest
+    /// running, else the newest), or closes it.
     func toggleHelpers() {
         guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else { return }
         if helperShown {
-            closeHelper(in: id)
+            closeSide()
             return
         }
         if let a = openHelpers[id] ?? lastHelpers[id] ?? s.subagents?.last?.agent ?? newestHelpers[id] {
             openHelper(a, in: id)
         } else {
-            say("\(s.name) has no helpers yet. They show here once it starts one.", error: false)
+            openSide(.helpers)
         }
     }
 
