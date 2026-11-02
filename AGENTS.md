@@ -5,7 +5,7 @@ These rules apply to every agent and every contributor.
 ## Public sources only
 
 - Build from public documentation, the tools' own `--help`, and public open-source code whose license allows it.
-- Record every source that shapes the code in `PROVENANCE.md` (date, URL, what it was used for) in the same change. Third-party code also gets its origin and license listed there.
+- Record every source that shapes the code in `PROVENANCE.md` (date, URL, what it was used for) in the same change. Third-party code also gets its origin and license listed there. `tools/provenance.sh add SOURCE "USED FOR"` adds the row, dated in UTC, without reading the whole file; `tools/provenance.sh find TEXT` says whether a source is there already.
 - Never open, search or copy from private codebases. If a local guard blocks something, stop and say what you needed. Don't work around it.
 
 ## No personal data
