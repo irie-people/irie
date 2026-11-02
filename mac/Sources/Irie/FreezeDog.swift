@@ -28,8 +28,11 @@ enum FreezeDog {
     static func start(socketPath: String) {
         guard !started else { return }
         started = true
-        // Only an app can be opened again; a bare binary is only force quit.
-        let bundle = Bundle.main.bundlePath.hasSuffix(".app") ? Bundle.main.bundlePath : nil
+        // Only an app can be opened again; a bare binary is only force quit,
+        // and so is a preview, which opened again without hot.sh's
+        // arguments would be no preview (Preview.swift). hot.sh opens the
+        // next build in its place.
+        let bundle = Bundle.main.bundlePath.hasSuffix(".app") && !Preview.isOn ? Bundle.main.bundlePath : nil
         let thread = Thread { answer(socketPath: socketPath, bundle: bundle) }
         thread.name = "Irie freeze dog"
         thread.qualityOfService = .userInteractive

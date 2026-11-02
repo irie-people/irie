@@ -246,6 +246,8 @@ final class Store: ObservableObject {
     /// Tells the core the palette in use: the agents' colours on Irie's
     /// status line follow it, so they match the cards.
     func sendTheme(_ id: String) {
+        // A preview leaves that to the installed app (Preview.swift).
+        guard !Preview.isOn else { return }
         Task { _ = try? await client.call("theme", ThemeArgs(theme: id), timeout: 2, as: Empty.self) }
     }
 
@@ -404,14 +406,14 @@ final class Store: ObservableObject {
         canBoost = true
         canArch = true
         archAgents = [
-            ArchAgent(name: "mikael", icon: "🛡️🗡️", title: "a helper against evil",
+            ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
                       about: "Mikael, the first of Irie's arch agents, stands with the user against evil and for the good they want to see in the world.",
                       on: true, status: "With every Claude Code session, weighing the calls that can’t be taken back.",
                       actions: [ArchAction(label: "Talk with Mikael", op: "spawn")],
                       settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "Mikael goes with every session", value: .bool(true)),
                                  ArchSetting(key: "arch.mikael.good", kind: "lines", label: "The good you want to see in the world",
                                              value: .array([.string("Give credit where it’s due.")]))]),
-            ArchAgent(name: "gabriel", icon: "🪽👟", title: "carries your focus to the machine",
+            ArchAgent(name: "gabriel", icon: "🪽", title: "carries your focus to the machine",
                       about: "Gabriel carries the user's focus to the machine.",
                       on: true, status: "Holding back 3 sessions and 1 app for Safari.",
                       actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],

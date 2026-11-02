@@ -300,10 +300,12 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
     /// first size, before its frame's, would resize the window it shows,
     /// and for the main terminal that is the slot, which every agent
     /// follows. On macOS Ghostty runs it as `exec -l <command>` in bash, so
-    /// it is one command: env, which starts a plain sh for the pause.
+    /// it is one command: env, which starts a plain sh for the pause. A
+    /// preview's client sizes nothing at all (Preview.swift).
     private static func command(_ a: Attach) -> String {
         let q = { (s: String) in "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-        let client = "sleep 0.1; exec \(q(a.tmux)) -S \(q(a.socket)) attach-session -t \(q(a.target))"
+        let attach = (["attach-session"] + Preview.clientFlags).joined(separator: " ")
+        let client = "sleep 0.1; exec \(q(a.tmux)) -S \(q(a.socket)) \(attach) -t \(q(a.target))"
         return "/usr/bin/env -u TMUX -u TMUX_PANE /bin/sh -c \(q(client))"
     }
 
