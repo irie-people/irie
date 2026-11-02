@@ -357,6 +357,38 @@ func TestResolveAndCutAndFork(t *testing.T) {
 	}
 }
 
+func TestAnUnlinkedEntryNeverTakesTheLineOver(t *testing.T) {
+	st := open(t)
+	x := newTx(t, t.TempDir(), "sess-a")
+	x.prompt("one")
+	x.reply("did one")
+	head, err := st.Sync(session(x))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A system entry with no parent, and one whose parent is not in the
+	// file, come last.
+	x.add(map[string]any{"type": "system", "parentUuid": nil, "subtype": "something_new"})
+	x.add(map[string]any{"type": "system", "parentUuid": "99999999-0000-4000-8000-000000000000", "subtype": "something_else"})
+	if again, err := st.Sync(session(x)); err != nil || again != head {
+		t.Fatalf("an unlinked entry made a commit: %s %v", again, err)
+	}
+	// The conversation goes on from its line.
+	x.last = x.lastLinked()
+	x.prompt("two")
+	x.reply("did two")
+	next, err := st.Sync(session(x))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent := gitIn(t, st.Dir(), "rev-parse", next+"^"); parent != head {
+		t.Fatalf("parent %s, want %s", parent, head)
+	}
+}
+
+// lastLinked is the uuid of the reply before the unlinked entries.
+func (x *tx) lastLinked() string { return fmt.Sprintf("00000000-0000-4000-8000-%012d", x.n-2) }
+
 func TestReplacePathStopsAtLongerNames(t *testing.T) {
 	in := `{"a":"/x/app","b":"/x/app/main.go","c":"/x/app-2/main.go","d":"cd /x/app && ls","e":"/x/apps"}`
 	got := string(replacePath([]byte(in), []byte("/x/app"), []byte("/y/fork")))

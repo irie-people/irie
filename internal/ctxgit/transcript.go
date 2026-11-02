@@ -186,8 +186,13 @@ func (f *feed) take(b []byte, off int64) {
 	}
 	at, _ := time.Parse(time.RFC3339Nano, l.Timestamp)
 	n := &node{id: l.UUID, parent: parent, off: off, n: len(b), prompt: l.promptText() != "", at: at}
+	first := len(f.nodes) == 0
 	f.nodes[n.id] = n
-	if leafTypes[l.Type] && !l.IsSidechain {
+	// The conversation's line goes on only from an entry that links to the
+	// line before it; only the first entry of a file stands alone. An
+	// entry with no parent later on, of a kind this reader does not know,
+	// never takes the line over.
+	if leafTypes[l.Type] && !l.IsSidechain && (parent == "" && first || parent != "" && f.nodes[parent] != nil) {
 		f.leaf = n
 	}
 }
