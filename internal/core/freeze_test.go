@@ -15,6 +15,7 @@ import (
 
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
+	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
@@ -125,7 +126,7 @@ func TestFreezeStopsTheWholeTreeAndThawContinuesIt(t *testing.T) {
 	if _, running := stoppedOf(tree(t, host)); len(running) > 0 {
 		t.Errorf("%v after freezing still run %v", time.Since(start), running)
 	}
-	if d := time.Since(start); d > 100*time.Millisecond && !demoted(t) {
+	if d := time.Since(start); d > 100*time.Millisecond && !slowed(t) {
 		t.Errorf("freezing took %v", d)
 	}
 	row, _ := c.row(s.ID)
@@ -416,6 +417,22 @@ func pri(t *testing.T, pid int) string {
 // then, so a bound on time would measure the machine rather than Irie.
 func demoted(t *testing.T) bool {
 	return proc.CanBackground && pri(t, os.Getpid()) == "4"
+}
+
+// slowed reports whether this test's time bounds measure the machine more
+// than Irie: the test runs demoted, or more work waits to run than there
+// are CPUs, as when many sessions install at once. A bound it skips is
+// logged.
+func slowed(t *testing.T) bool {
+	if demoted(t) {
+		return true
+	}
+	l, err := sysload.Read()
+	if err == nil && l.RunQueue > float64(l.CPUs) {
+		t.Logf("the machine is busy, %.0f of %d CPUs' worth of work waiting: a time bound is not held", l.RunQueue, l.CPUs)
+		return true
+	}
+	return false
 }
 
 func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
