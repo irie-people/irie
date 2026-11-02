@@ -216,8 +216,8 @@ fi
 
 if [ -z "$code" ]; then
 	say "only docs changed since the live build, so the tests are skipped"
+	sh tools/provenance.sh check
 else
-	go vet ./...
 	# A session in macOS's background state (another one promoted, or Gabriel
 	# holding it back while the user works on something else, DESIGN §4.11)
 	# runs the tests slowly: give the slowest package time rather than fail the
@@ -226,7 +226,8 @@ else
 	*" -timeout="*) ;;
 	*) GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=40m" && export GOFLAGS ;;
 	esac
-	go test ./...
+	# gofmt, go vet, go test and PROVENANCE.md's rows, as CI runs them.
+	sh tools/check.sh
 fi
 
 # A change outside the Go code needs no new core, so the running one stays,

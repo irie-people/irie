@@ -397,6 +397,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-02 | https://pubs.opengroup.org/onlinepubs/9799919799/utilities/awk.html (assignment operands, ENVIRON) | An awk -v value is read like a string literal, escapes and all, so tools/provenance.sh and tools/doc.sh hand text to awk through ENVIRON |
 | 2026-11-02 | `swiftc --help` (Apple Swift 5.9) | `-Onone`, compile without any optimization: `mac/build.sh --quick` for `mac/snapshot.sh` (docs/MAC.md) |
 | 2026-11-02 | https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/checking-out-pull-requests-locally | `git fetch origin pull/ID/head` fetches a pull request's head by its number: tools/land-pr.sh |
+| 2026-11-02 | `gofmt -h` (Go toolchain): `-l` lists the files whose formatting differs from gofmt's | tools/check.sh fails on a Go file gofmt would change, for tools/live.sh, the test workflow and the CI author agent |
 
 ## Third-party code
 

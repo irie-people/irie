@@ -1,6 +1,6 @@
-# go vet and go test on Linux and macOS, for every push to main and every pull request, as
-# tools/live.sh runs them before an install. The Mac app (mac/) is not built here; mac/build.sh
-# takes about ten minutes and needs Xcode.
+# tools/check.sh (gofmt, go vet, go test and PROVENANCE.md's rows) on Linux and macOS, for every
+# push to main and every pull request, as tools/live.sh runs it before an install. The Mac app
+# (mac/) is not built here; mac/build.sh takes about ten minutes and needs Xcode.
 name: test
 on:
   push:
@@ -31,5 +31,4 @@ jobs:
             fi
           fi
           tmux -V
-      - run: go vet ./...
-      - run: go test ./...
+      - run: sh tools/check.sh
