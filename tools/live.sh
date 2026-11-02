@@ -4,7 +4,8 @@
 #
 # An install only moves forward. The checkout must be committed and must
 # contain the build that is live, which the branch `live` records, so an
-# install never drops another finished change. Everything is vetted, tested
+# install never drops another finished change: when it lacks that build, the
+# install merges it in and starts again, and a merge that conflicts stops it. Everything is vetted, tested
 # and built before the running Irie is touched. The new irie is renamed into
 # place and its `irie up` replaces the core, the sidebar and the placeholder.
 # Agents keep running, and each agent's host keeps the build it started with.
@@ -145,6 +146,31 @@ take_slot() {
 	done
 }
 
+# catch_up REV WHAT merges REV, the live build or the running core's, into
+# the checkout when the checkout lacks it, then starts the install again on
+# the merged checkout, whose tests are cached for every package the merge
+# left alone. A conflict stops the install, for whoever ran it to merge by
+# hand. git writes a merged file anew rather than over the old one, so this
+# script reads on undisturbed until the exec runs the merged copy.
+catch_up() {
+	if git merge-base --is-ancestor "$1" HEAD; then return; fi
+	n=${IRIE_LIVE_MERGES:-0}
+	if [ "$n" -ge 5 ]; then
+		say "$2 moved five times during this install; run it again"
+		exit 1
+	fi
+	say "this checkout lacks $2, $(git log -1 --format='%h %s' "$1" 2>/dev/null || echo "$1"); merging it"
+	if ! TZ=UTC git merge --quiet --signoff --no-edit "$3" >&2; then
+		files=$(git diff --name-only --diff-filter=U | paste -sd ' ' -)
+		git merge --abort 2>/dev/null || true
+		say "the merge conflicts${files:+ in $files}; merge it by hand, resolving each conflict against what you merge now, then run this again: TZ=UTC git merge --signoff $3"
+		exit 1
+	fi
+	cleanup
+	trap - EXIT
+	IRIE_LIVE_MERGES=$((n + 1)) exec sh tools/live.sh
+}
+
 if [ "${1:-}" = --rollback ]; then
 	take_lock 600
 	if [ ! -e "$bin.prev" ]; then
@@ -170,11 +196,7 @@ if [ -z "$live" ] && [ -e "$bin" ]; then
 	live=$(rev "$bin")
 	if [ -n "$live" ]; then git update-ref refs/heads/live "$live"; fi
 fi
-if [ -n "$live" ] && ! git merge-base --is-ancestor "$live" HEAD; then
-	say "this checkout lacks the live build, $(git log -1 --format='%h %s' "$live")"
-	say "merge it, then run this again: git merge live"
-	exit 1
-fi
+if [ -n "$live" ]; then catch_up "$live" "the live build" live; fi
 
 # A build put in by hand skips the branch, so the running core's own build
 # must be in this checkout as well.
@@ -187,11 +209,19 @@ corebin=
 if [ -n "$core" ]; then
 	corebin=$(ps -o command= -p "$core" | cut -d' ' -f1)
 	corerev=$(rev "$corebin")
-	if [ -n "$corerev" ] && ! git merge-base --is-ancestor "$corerev" HEAD; then
-		say "the running Irie was built from $(git log -1 --format='%h %s' "$corerev" 2>/dev/null || echo "$corerev"), which this checkout lacks"
-		say "merge it, then run this again: git merge $corerev"
-		exit 1
-	fi
+	if [ -n "$corerev" ]; then catch_up "$corerev" "the running Irie's build" "$corerev"; fi
+fi
+
+# Every commit going into live needs a Conventional Commit subject
+# (AGENTS.md, "Commits"): release-please reads them from main, where they
+# never change again. The commits workflow sees pull requests only.
+if [ -n "$live" ]; then
+	for c in $(git rev-list --no-merges "$live..HEAD"); do
+		if ! sh .github/conventional-commit.sh --rev "$c"; then
+			say "reword it as above, then run this again"
+			exit 1
+		fi
+	done
 fi
 
 # Only docs changed since the live build, which passed these checks: the
@@ -264,19 +294,11 @@ take_lock 1800
 # Another install may have landed while this one tested: the swap must not
 # drop it. Its merge leaves the tests it did not touch cached.
 live=$(git rev-parse -q --verify refs/heads/live || true)
-if [ -n "$live" ] && ! git merge-base --is-ancestor "$live" HEAD; then
-	say "another install landed while this one tested, $(git log -1 --format='%h %s' "$live")"
-	say "merge it, then run this again: git merge live"
-	exit 1
-fi
+if [ -n "$live" ]; then catch_up "$live" "an install that landed while this one tested" live; fi
 core=$(tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
 if [ -n "$core" ]; then
 	corerev=$(rev "$(ps -o command= -p "$core" | cut -d' ' -f1)")
-	if [ -n "$corerev" ] && ! git merge-base --is-ancestor "$corerev" HEAD; then
-		say "the running Irie was built from $(git log -1 --format='%h %s' "$corerev" 2>/dev/null || echo "$corerev"), which this checkout lacks"
-		say "merge it, then run this again: git merge $corerev"
-		exit 1
-	fi
+	if [ -n "$corerev" ]; then catch_up "$corerev" "the running Irie's build" "$corerev"; fi
 fi
 if [ -n "$gonew" ]; then
 	mv -f "$tmpbin" "$bin.new"
