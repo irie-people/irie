@@ -51,7 +51,7 @@ Irie for Mac is a native app for the people who would never open a terminal, and
 
 The app adds no state of its own to the core. It uses two additions to the socket API (DESIGN §2.4):
 
-- `subscribe` with `view: "app"`. While at least one such subscription is open, the core keeps the slot zoomed (`resize-pane -Z`), so the slot fills `irie:0`. Swaps keep the zoom (`swap-pane -Z`, `select-pane -Z`). Agent windows take the zoomed slot's size, so a swap still never resizes an agent. When the last app view closes, the zoom ends and the sidebar is back.
+- `subscribe` with `view: "app"`. While at least one such subscription is open, the core keeps the slot zoomed (`resize-pane -Z`), so the slot fills `irie:0`. Swaps keep the zoom (`swap-pane -Z`, `select-pane -Z`). Agent windows take the zoomed slot's size, so a swap still never resizes an agent. When the last app view closes, the zoom ends and the sidebar is back. The frames wait in an inbox for the main thread, which applies every one that came in a single turn, and sets nothing in the store that did not change: every view that reads it draws again whenever one of its values is set, even to what it was. So an upsert whose only change is a figure the app does not show, such as a session's memory, draws nothing.
 - `attach-info`, which returns the tmux binary, the server's socket path and the session to attach to.
 
 The app runs `tmux -S <socket> attach-session -t irie` inside its terminal view. Because the slot is zoomed, that client shows only the shown agent, and `show` swaps agents in place.

@@ -224,9 +224,14 @@ final class Store: ObservableObject {
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
-                // The store lives as long as the app.
+                // The store lives as long as the app. Frames wait in the
+                // inbox for the main actor, which takes every one that came
+                // in a single turn.
+                let inbox = FrameInbox()
                 try await client.subscribe { frame in
-                    Task { @MainActor in self.apply(frame) }
+                    if inbox.put(frame) {
+                        Task { @MainActor in self.apply(inbox.take()) }
+                    }
                 }
                 link = .offline("The core went away.")
             } catch {
@@ -263,56 +268,56 @@ final class Store: ObservableObject {
         return false
     }
 
-    private func apply(_ f: Frame) {
-        if let h = f.header, (h.redOnDone ?? false) != Look.redOnDone {
-            Look.redOnDone = h.redOnDone ?? false
-            redOnDone = Look.redOnDone
-        }
-        if let h = f.header, (h.closeWhenDone ?? false) != closeWhenDone {
-            closeWhenDone = h.closeWhenDone ?? false
-        }
-        if let s = f.header?.helperStyle, s != helperStyle {
-            helperStyle = s
-        }
-        // Each header frame is the whole header: one without the bot is
-        // one out of its hours.
-        if let h = f.header, h.trod != trod {
-            trod = h.trod
-        }
-        if let h = f.header, h.vpn != vpn {
-            vpn = h.vpn
-        }
-        switch f.t {
-        case "snapshot":
-            sessions = (f.sessions ?? []).sorted(by: Self.before)
-        case "upsert":
-            guard let s = f.session else { return }
-            noteCoach(s)
-            if let i = sessions.firstIndex(where: { $0.id == s.id }) {
-                let moved = sessions[i].order != s.order
-                sessions[i] = s
-                if moved { sessions.sort(by: Self.before) }
-            } else {
-                sessions.append(s)
-                sessions.sort(by: Self.before)
+    /// Applies the frames that came since the last turn, in order. Every
+    /// view that reads the store draws again whenever one of its published
+    /// values is set, even to what it was, so nothing is set unless it
+    /// changed: an upsert of a row the app already has, such as one whose
+    /// only change is a figure the app doesn't read, or a snapshot of rows
+    /// it has, changes nothing (docs/proposals/optimisation.md §2.1).
+    private func apply(_ frames: [Frame]) {
+        var rows = sessions
+        var touched = false
+        for f in frames {
+            if let h = f.header { applyHeader(h) }
+            switch f.t {
+            case "snapshot":
+                rows = (f.sessions ?? []).sorted(by: Self.before)
+                touched = true
+            case "upsert":
+                guard let s = f.session else { continue }
+                if let i = rows.firstIndex(where: { $0.id == s.id }) {
+                    guard rows[i] != s else { continue }
+                    let moved = rows[i].order != s.order
+                    rows[i] = s
+                    if moved { rows.sort(by: Self.before) }
+                } else {
+                    rows.append(s)
+                    rows.sort(by: Self.before)
+                }
+                noteCoach(s)
+                touched = true
+            case "remove":
+                guard let id = f.id else { continue }
+                rows.removeAll { $0.id == id }
+                if lingering[id] != nil { lingering[id] = nil }
+                if coach?.session == id { coach = nil }
+                touched = true
+            case "outside":
+                applyOutside(f)
+            case "closed":
+                let c = f.closed ?? []
+                if c != closed { closed = c }
+            case "history":
+                let undo = f.undo.flatMap { $0.isEmpty ? nil : $0 }
+                let redo = f.redo.flatMap { $0.isEmpty ? nil : $0 }
+                if undo != undoLabel { undoLabel = undo }
+                if redo != redoLabel { redoLabel = redo }
+            default:
+                continue
             }
-        case "remove":
-            sessions.removeAll { $0.id == f.id }
-            if let id = f.id { lingering[id] = nil }
-            if let id = f.id, coach?.session == id { coach = nil }
-        case "outside":
-            applyOutside(f)
-            return
-        case "closed":
-            closed = f.closed ?? []
-            return
-        case "history":
-            undoLabel = f.undo.flatMap { $0.isEmpty ? nil : $0 }
-            redoLabel = f.redo.flatMap { $0.isEmpty ? nil : $0 }
-            return
-        default:
-            return
         }
+        guard touched else { return }
+        if rows != sessions { sessions = rows }
         if selection == nil, let shown = sessions.first(where: { $0.shown == true }) {
             selection = shown.id
         }
@@ -320,6 +325,27 @@ final class Store: ObservableObject {
             selection = nil
         }
         keepSplit()
+    }
+
+    /// Takes a header, a snapshot's or a header frame's: each is the whole
+    /// header, so one without the bot is one out of its hours.
+    private func applyHeader(_ h: Header) {
+        if (h.redOnDone ?? false) != Look.redOnDone {
+            Look.redOnDone = h.redOnDone ?? false
+            redOnDone = Look.redOnDone
+        }
+        if (h.closeWhenDone ?? false) != closeWhenDone {
+            closeWhenDone = h.closeWhenDone ?? false
+        }
+        if let s = h.helperStyle, s != helperStyle {
+            helperStyle = s
+        }
+        if h.trod != trod {
+            trod = h.trod
+        }
+        if h.vpn != vpn {
+            vpn = h.vpn
+        }
     }
 
     /// The picked session while it shows beside its teammates: the terminal
@@ -922,6 +948,36 @@ final class Store: ObservableObject {
         } catch {
             say("Couldn’t open Ghostty: \(error.localizedDescription)", error: true)
         }
+    }
+}
+
+/// Frames from the core, kept until the main actor takes them. Every frame
+/// that arrives while one turn waits goes in that turn, so a burst of
+/// upserts costs one pass over the store, not one each.
+final class FrameInbox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var frames: [Frame] = []
+    private var waiting = false
+
+    /// Keeps a frame, and says whether to ask the main actor for a turn:
+    /// false while one is already on its way.
+    func put(_ f: Frame) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        frames.append(f)
+        if waiting { return false }
+        waiting = true
+        return true
+    }
+
+    /// Takes every frame kept so far.
+    func take() -> [Frame] {
+        lock.lock()
+        defer { lock.unlock() }
+        let out = frames
+        frames = []
+        waiting = false
+        return out
     }
 }
 

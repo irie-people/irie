@@ -58,7 +58,7 @@ func (c *Core) move(a ipc.MoveArgs) (ipc.Session, error) {
 	// Code says now, not on the last poll.
 	c.spawnMu.Lock()
 	defer c.spawnMu.Unlock()
-	if err := c.refreshOutside(0, true); err != nil {
+	if err := c.refreshOutside("move", 0, true); err != nil {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeInternal, "cannot list the Claude Code sessions: %v", err)
 	}
 	c.mu.Lock()
@@ -201,7 +201,11 @@ func (c *Core) stopCopies(p config.Profile, vendorID string, wait time.Duration)
 		return nil, nil
 	}
 	env := c.agentEnv(p)
-	list, err := listOutside(p.Command, env)
+	start := time.Now()
+	list, cpu, err := listOutside(p.Command, env)
+	c.perf.Since("outside.run", start)
+	c.perf.Add("outside.copies", 1)
+	c.perf.Add("outside.cpu_us", uint64(cpu/time.Microsecond))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errNoList, err)
 	}
@@ -239,6 +243,6 @@ func stopBackground(command string, env []string, id string) error {
 	if err != nil {
 		return fmt.Errorf("%s: command not found", command)
 	}
-	_, err = runCLI(path, []string{"stop", id}, env)
+	_, _, err = runCLI(path, []string{"stop", id}, env)
 	return err
 }
