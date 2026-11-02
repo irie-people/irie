@@ -90,7 +90,8 @@ trap 'exit 1' HUP INT TERM
 # take_lock waits up to $1 seconds for the lock. Only the swap holds it, a
 # minute or so, so installs test side by side and queue only to swap.
 take_lock() {
-	waited=0
+	deadline=$(($(date +%s) + $1))
+	said=
 	while ! mkdir "$lock" 2>/dev/null; do
 		pid=$(cat "$lock/pid" 2>/dev/null || true)
 		if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
@@ -102,13 +103,17 @@ take_lock() {
 			say "the install that holds the lock, pid $pid, is stopped, as when its session is frozen;"
 			say "it goes on when that session is thawed, and no other install can run until it ends"
 			exit 1
-		elif [ "$waited" -ge "$1" ]; then
+		elif [ "$(date +%s)" -ge "$deadline" ]; then
 			say "another install is running${pid:+, pid $pid}; wait for it to finish, then run this again"
 			exit 1
 		fi
-		if [ "$waited" = 0 ]; then say "another install is swapping its build in${pid:+, pid $pid}; waiting for it"; fi
-		sleep 2
-		waited=$((waited + 2))
+		if [ -z "$said" ]; then
+			say "another install is swapping its build in${pid:+, pid $pid}; waiting for it"
+			said=1
+		fi
+		# Every half second: an install that tested first should not lose
+		# the swap to one that polls more often.
+		sleep 0.5
 	done
 	echo $$ >"$lock/pid"
 	locked=1
@@ -238,9 +243,14 @@ newapp=
 if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/dev/null; }; then
 	built=$(cat "$appstamp" 2>/dev/null || true)
 	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac tools/mkicon 2>/dev/null; then
-		mac/build.sh >"$work/mac.log" 2>&1 &
-		macpid=$!
 		newapp=mac/build/Irie.app
+		# An install that stopped after building, as at a full lock queue,
+		# leaves the app built from this commit: a run again takes it.
+		if [ "$(cat mac/build/Irie.commit 2>/dev/null)" != "$head" ] || [ ! -d "$newapp" ]; then
+			rm -f mac/build/Irie.commit
+			mac/build.sh >"$work/mac.log" 2>&1 &
+			macpid=$!
+		fi
 	fi
 fi
 
@@ -283,6 +293,7 @@ if [ -n "$macpid" ]; then
 		exit 1
 	fi
 	macpid=
+	echo "$head" >mac/build/Irie.commit
 fi
 
 if [ -n "$slot" ]; then
@@ -290,7 +301,9 @@ if [ -n "$slot" ]; then
 	rmdir "$slot" 2>/dev/null || true
 	slot=
 fi
-take_lock 1800
+# IRIE_LIVE_WAIT, in seconds, bounds the wait: an hour, as an install that
+# holds the lock for its whole run, as before this script, takes half that.
+take_lock "${IRIE_LIVE_WAIT:-3600}"
 # Another install may have landed while this one tested: the swap must not
 # drop it. Its merge leaves the tests it did not touch cached.
 live=$(git rev-parse -q --verify refs/heads/live || true)
