@@ -15,6 +15,7 @@ import (
 
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
+	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
@@ -125,7 +126,7 @@ func TestFreezeStopsTheWholeTreeAndThawContinuesIt(t *testing.T) {
 	if _, running := stoppedOf(tree(t, host)); len(running) > 0 {
 		t.Errorf("%v after freezing still run %v", time.Since(start), running)
 	}
-	if d := time.Since(start); d > 100*time.Millisecond && !demoted(t) {
+	if d := time.Since(start); d > 100*time.Millisecond && !slow(t) {
 		t.Errorf("freezing took %v", d)
 	}
 	row, _ := c.row(s.ID)
@@ -416,6 +417,23 @@ func pri(t *testing.T, pid int) string {
 // then, so a bound on time would measure the machine rather than Irie.
 func demoted(t *testing.T) bool {
 	return proc.CanBackground && pri(t, os.Getpid()) == "4"
+}
+
+// slow reports whether a time bound cannot hold here, because the scheduler
+// rather than Irie sets the time: the test runs in macOS's background state,
+// or the machine has more work waiting than CPUs to run it. Gabriel never
+// holds back an install (tools/live.sh), so on a busy machine an install's
+// tests meet only the second.
+func slow(t *testing.T) bool {
+	if demoted(t) {
+		return true
+	}
+	l, err := sysload.Read()
+	if err != nil || l.RunQueue <= float64(l.CPUs) {
+		return false
+	}
+	t.Logf("not timed: %.1f CPUs' worth of work waiting on %d CPUs", l.RunQueue, l.CPUs)
+	return true
 }
 
 func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
