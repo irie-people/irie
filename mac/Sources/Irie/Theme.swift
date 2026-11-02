@@ -163,6 +163,16 @@ enum Theme {
 
     static let terminalBackground = NSColor(hex: 0x14110D)
     static let terminalForeground = NSColor(hex: 0xEEE5D5)
+    /// A selection in the terminal: the Mac's own highlight colour, as for
+    /// selected text anywhere, in its dark form, since the terminal's ground
+    /// is always dark. The text on it keeps its own colours.
+    static var terminalSelection: NSColor {
+        var color = NSColor(hex: 0x3F638B)
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            color = NSColor.selectedTextBackgroundColor.usingColorSpace(.sRGB) ?? color
+        }
+        return color
+    }
     /// Corners: cards and fields, and the terminal's frame and the task bar.
     static let radius: CGFloat = 14
     static let frameRadius: CGFloat = 16

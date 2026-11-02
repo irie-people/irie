@@ -246,6 +246,8 @@ final class Store: ObservableObject {
     /// Tells the core the palette in use: the agents' colours on Irie's
     /// status line follow it, so they match the cards.
     func sendTheme(_ id: String) {
+        // A preview leaves that to the installed app (Preview.swift).
+        guard !Preview.isOn else { return }
         Task { _ = try? await client.call("theme", ThemeArgs(theme: id), timeout: 2, as: Empty.self) }
     }
 

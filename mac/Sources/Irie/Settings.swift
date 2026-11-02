@@ -679,6 +679,7 @@ private struct AppearanceSettings: View {
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     @AppStorage(AppearanceChoice.defaultsKey) private var appearance = AppearanceChoice.system.rawValue
     @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
+    @AppStorage(TerminalSelection.copyKey) private var copyOnSelect = true
 
     var body: some View {
         SettingsForm(model: model) {
@@ -713,12 +714,14 @@ private struct AppearanceSettings: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                Toggle("Copy text as you select it", isOn: $copyOnSelect)
             } header: {
                 Text("Window")
             } footer: {
-                footnote(TerminalEngine.built.count > 1
+                footnote((TerminalEngine.built.count > 1
                     ? "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
                     : "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
+                    + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
             }
             Section {
                 switch (store.link, model.config) {

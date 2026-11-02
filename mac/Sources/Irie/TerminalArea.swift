@@ -110,6 +110,39 @@ struct TerminalArea: View {
                     .accessibilityAddTraits(.isStaticText)
             }
         }
+        .overlay(alignment: .bottom) {
+            if let c = copied {
+                Label(c.text, systemImage: "doc.on.doc")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Theme.field).shadow(radius: 3, y: 1))
+                    .overlay(Capsule().strokeBorder(Theme.edge, lineWidth: 1))
+                    .padding(.bottom, 28)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .id(c.id)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: copied)
+        .onReceive(NotificationCenter.default.publisher(for: .irieTerminalCopied)) { note in
+            guard let text = note.userInfo?["note"] as? String else { return }
+            let c = CopiedNote(text: text)
+            copied = c
+            AccessibilityNotification.Announcement(text).post()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                if copied == c { copied = nil }
+            }
+        }
+    }
+
+    /// The note that a selection in a terminal went to the pasteboard, at
+    /// the foot of the terminal for a moment (TerminalSelection.swift).
+    @State private var copied: CopiedNote?
+
+    private struct CopiedNote: Equatable {
+        let id = UUID()
+        let text: String
     }
 
     /// The picked session while it shows beside its teammates.
