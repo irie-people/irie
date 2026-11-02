@@ -533,8 +533,8 @@ var (
 // stealsFocus reports whether a shell command would bring an app, a window
 // or a page to the front: open(1) without -g or -j, AppleScript that
 // activates an app or types into it, or an app's own executable started
-// straight, short of a headless browser, Irie.app's --snapshot and
-// --background, and the like. It reads the command roughly, as a person
+// straight, short of a headless browser, Irie.app's --snapshot, --record
+// and --background, and the like. It reads the command roughly, as a person
 // would, and errs toward letting it run.
 func stealsFocus(cmd string) bool {
 	for _, seg := range shellSplit.Split(cmd, -1) {
@@ -556,7 +556,7 @@ func stealsFocus(cmd string) bool {
 				return true
 			}
 		case strings.Contains(seg, ".app/Contents/MacOS/"):
-			quiet := []string{"--headless", "--snapshot", "--render-conversation", "--background", "--version", "--help"}
+			quiet := []string{"--headless", "--snapshot", "--render-conversation", "--record", "--background", "--version", "--help"}
 			if !slices.ContainsFunc(quiet, func(q string) bool { return strings.Contains(seg, q) }) {
 				return true
 			}
