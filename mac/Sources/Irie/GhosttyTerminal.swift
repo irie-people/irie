@@ -104,9 +104,12 @@ final class GhosttyRuntime {
     }
 
     /// The owner's Ghostty config, then Irie's on top: the terminal's ground
-    /// and ink match the frame round it, which has its own padding; a tmux
-    /// client is no shell, so no shell integration; nothing asks before a
-    /// surface closes; and nothing inside may read the clipboard.
+    /// and ink match the frame round it, which has its own padding, and a
+    /// selection is the Mac's highlight on that ground, its text in its own
+    /// colours; a tmux client is no shell, so no shell integration; nothing
+    /// asks before a surface closes; nothing inside may read the clipboard;
+    /// and Irie copies a selection itself, as Settings says
+    /// (TerminalSelection.swift).
     private static func makeConfig() -> ghostty_config_t? {
         guard let config = ghostty_config_new() else { return nil }
         ghostty_config_load_default_files(config)
@@ -115,12 +118,15 @@ final class GhosttyRuntime {
         let text = """
             background = \(hex(Theme.terminalBackground))
             foreground = \(hex(Theme.terminalForeground))
+            selection-background = \(hex(Theme.terminalSelection))
+            selection-foreground = cell-foreground
             window-padding-x = 0
             window-padding-y = 0
             window-padding-balance = false
             shell-integration = none
             confirm-close-surface = false
             clipboard-read = deny
+            copy-on-select = false
 
             """
         if (try? text.write(to: mine, atomically: true, encoding: .utf8)) != nil {
@@ -210,8 +216,9 @@ final class GhosttySurfaceBox {
         return true
     }
 
-    /// A copy, as tmux's selections arrive (OSC 52). One that would need
-    /// asking first is left out: there is nobody to ask.
+    /// A copy: a selection the view copies (`copy_to_clipboard`), or one
+    /// tmux sends (OSC 52). One that would need asking first is left out:
+    /// there is nobody to ask.
     static func writeClipboard(_ location: ghostty_clipboard_e, _ content: UnsafePointer<ghostty_clipboard_content_s>?,
                                _ count: Int, _ confirm: Bool) {
         guard location == GHOSTTY_CLIPBOARD_STANDARD, !confirm, let content else { return }
@@ -304,6 +311,10 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
     private func start() {
         guard !gone, surface == nil, let window, bounds.width > 0, bounds.height > 0,
               let app = GhosttyRuntime.shared.app else { return }
+        // A new surface reports the mouse, whatever the last one was doing.
+        pressed = nil
+        selecting = false
+        counted = 0
         var config = ghostty_surface_config_new()
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
         config.platform = ghostty_platform_u(macos: ghostty_platform_macos_s(nsview: Unmanaged.passUnretained(self).toOpaque()))
@@ -400,12 +411,26 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
 
     // MARK: Copy and paste
 
-    /// A mouse selection is tmux's, and tmux has already put it on the
-    /// pasteboard (OSC 52). Only a selection Ghostty holds, made with Shift
-    /// held, is copied here, so ⌘C never wipes tmux's.
+    /// ⌘C, and Copy in the terminal's menu.
     @objc func copy(_ sender: Any?) {
-        guard let surface, ghostty_surface_has_selection(surface) else { return }
+        copySelection(asked: true)
+    }
+
+    /// Copies the selection as Ghostty's own ⌘C does, and says so: when
+    /// asked, or when a drag or a click made it and Settings keeps copying
+    /// on. With no selection, or only blanks, the pasteboard keeps what it
+    /// has.
+    private func copySelection(asked: Bool) {
+        guard asked || TerminalSelection.copies, let surface, ghostty_surface_has_selection(surface) else { return }
+        var selected = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &selected) else { return }
+        let text = selected.text.map {
+            String(decoding: UnsafeRawBufferPointer(start: $0, count: Int(selected.text_len)), as: UTF8.self)
+        } ?? ""
+        ghostty_surface_free_text(surface, &selected)
+        guard TerminalSelection.worthCopying(text) else { return }
         _ = binding("copy_to_clipboard")
+        TerminalSelection.copied(text)
     }
 
     @objc func paste(_ sender: Any?) {
@@ -440,25 +465,114 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
 
     // MARK: Mouse
 
-    private func button(_ state: ghostty_input_mouse_state_e, _ button: ghostty_input_mouse_button_e, _ event: NSEvent) {
+    // A drag selects in the terminal itself (TerminalSelection.swift):
+    // while the button is down, Ghostty's mouse reporting is off for this
+    // surface, so it selects as Ghostty's own app does with Shift held, and
+    // tmux hears nothing. A click still goes to tmux, and to the program in
+    // the terminal if it asks, as do the wheel and the pointer's moves.
+
+    /// The press that waits to be known as a click or a drag.
+    private var pressed: NSEvent?
+    /// The press is selecting, with mouse reporting off until it ends.
+    private var selecting = false
+    /// The presses of a double- or triple-click that Ghostty has counted.
+    /// A first click that went to tmux reached it reported, which it does
+    /// not count, so the next press is given what it missed.
+    private var counted = 0
+
+    private func button(_ state: ghostty_input_mouse_state_e, _ button: ghostty_input_mouse_button_e, _ event: NSEvent,
+                        mods flags: NSEvent.ModifierFlags? = nil) {
         guard let surface else { return }
-        _ = ghostty_surface_mouse_button(surface, state, button, Self.mods(event.modifierFlags))
+        _ = ghostty_surface_mouse_button(surface, state, button, Self.mods(flags ?? event.modifierFlags))
     }
 
-    /// A click also claims the keyboard, as with tmux's mouse mode on the
-    /// click itself goes to tmux.
+    /// Tells the engine where the pointer is.
+    private func position(_ event: NSEvent) {
+        guard let surface else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        ghostty_surface_mouse_pos(surface, p.x, frame.height - p.y, Self.mods(event.modifierFlags))
+    }
+
+    /// A press also claims the keyboard, as it did when the click itself
+    /// went to tmux. A second or third click selects a word or a line at
+    /// once, and a Shift-click extends the selection at once; a plain press
+    /// waits to be known as a click or a drag.
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, event)
+        pressed = nil
+        if selecting { finishSelecting(event) } // its button-up went astray
+        guard surface != nil else { return }
+        if event.clickCount == 1 { counted = 0 }
+        if event.clickCount > 3 { return } // a fourth click keeps the line
+        if event.clickCount > 1 || event.modifierFlags.contains(.shift) {
+            select(from: event)
+        } else {
+            pressed = event
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if let down = pressed, TerminalSelection.isDrag(from: down, to: event) {
+            pressed = nil
+            select(from: down)
+        }
+        if selecting { position(event) }
     }
 
     override func mouseUp(with event: NSEvent) {
-        button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, event)
+        if let down = pressed {
+            // A click: tmux has it where the button went down, and the
+            // program in the terminal too, if it asks for the mouse.
+            pressed = nil
+            position(down)
+            button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, down)
+            button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, event)
+            counted = 0
+        } else if selecting {
+            finishSelecting(event)
+        }
         if let surface { ghostty_surface_mouse_pressure(surface, 0, 0) }
     }
 
-    override func rightMouseDown(with event: NSEvent) { button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, event) }
-    override func rightMouseUp(with event: NSEvent) { button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, event) }
+    /// Starts selecting at a press: mouse reporting goes off until the
+    /// button comes up, and Ghostty first gets the presses of a double- or
+    /// triple-click it has not counted, without Shift, which would extend
+    /// the selection instead.
+    private func select(from down: NSEvent) {
+        guard !selecting else { return }
+        guard binding("toggle_mouse_reporting") else { return }
+        selecting = true
+        position(down)
+        let plain = down.modifierFlags.subtracting(.shift)
+        while counted < down.clickCount - 1 {
+            button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, down, mods: plain)
+            button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, down, mods: plain)
+            counted += 1
+        }
+        button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, down)
+        counted += 1
+    }
+
+    /// Ends a selection where the button came up: mouse reporting goes back
+    /// on, and the selection is copied as Settings says.
+    private func finishSelecting(_ event: NSEvent) {
+        position(event)
+        button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, event)
+        selecting = false
+        _ = binding("toggle_mouse_reporting")
+        copySelection(asked: false)
+    }
+
+    /// A right-click or a Control-click opens the terminal's own menu
+    /// (TerminalSelection.menu); AppKit asks for it before either click.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        TerminalSelection.menu(for: event, target: self, canCopy: surface.map { ghostty_surface_has_selection($0) } ?? false)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.rightMouseDown(with: event)
+    }
 
     override func otherMouseDown(with event: NSEvent) {
         if event.buttonNumber == 2 { button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_MIDDLE, event) }
@@ -468,19 +582,14 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
         if event.buttonNumber == 2 { button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_MIDDLE, event) }
     }
 
-    override func mouseMoved(with event: NSEvent) {
-        guard let surface else { return }
-        let p = convert(event.locationInWindow, from: nil)
-        ghostty_surface_mouse_pos(surface, p.x, frame.height - p.y, Self.mods(event.modifierFlags))
-    }
-
-    override func mouseDragged(with event: NSEvent) { mouseMoved(with: event) }
-    override func rightMouseDragged(with event: NSEvent) { mouseMoved(with: event) }
-    override func otherMouseDragged(with event: NSEvent) { mouseMoved(with: event) }
+    override func mouseMoved(with event: NSEvent) { position(event) }
+    override func otherMouseDragged(with event: NSEvent) { position(event) }
 
     override func mouseExited(with event: NSEvent) {
+        // A drag keeps its place past the edge, as its moves still come
+        // here, as in Ghostty's own app.
+        guard let surface, NSEvent.pressedMouseButtons == 0 else { return }
         // Off the view: the engine's way of saying no position.
-        guard let surface else { return }
         ghostty_surface_mouse_pos(surface, -1, -1, Self.mods(event.modifierFlags))
     }
 
