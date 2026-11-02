@@ -15,6 +15,9 @@ enum Launch {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { ConversationSnapshot.run(into: dir) }
         }
+        if args.contains("--bench") {
+            MainActor.assumeIsolated { Bench.run() }
+        }
         if let i = args.firstIndex(of: "--render-onboarding") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { OnboardingSnapshot.run(into: dir) }
