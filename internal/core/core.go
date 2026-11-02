@@ -65,6 +65,7 @@ type Core struct {
 	gabSweeping atomic.Bool  // Gabriel's sweep is running (gabriel.go)
 	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
 	fdog        *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
+	ctxs        contexts     // the context store and the sessions waiting to be synced into it (ctx.go); locks of its own
 
 	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
 	awakeMu      sync.Mutex  // guards awake; taken after mu
@@ -518,6 +519,7 @@ func (c *Core) record(x *session, e event.Event) {
 		c.log.Warn("journal", "kind", e.Kind, "err", err)
 	}
 	x.track.apply(e)
+	c.ctxOnEvent(x, e)
 	if x.out == nil {
 		x.out = c.outcome(x.id)
 	}
@@ -654,7 +656,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpDock,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.OpDock,
 		}}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -895,6 +897,9 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return ipc.SpawnResult{Session: s}, nil
 	}
 	if r, ok, err := c.control(op, raw); ok {
+		return r, err
+	}
+	if r, ok, err := c.contextOp(op, raw); ok {
 		return r, err
 	}
 	return nil, ipc.Errorf(ipc.CodeUnknownOp, "unknown op %q", op)

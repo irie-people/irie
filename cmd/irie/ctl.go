@@ -119,7 +119,7 @@ const ctlUsage = `usage: irie ctl <command>
                                          on its lock, frames sent, ticks, and its
                                          runs of claude agents. go run ./tools/perf
                                          reports one window of them
-` + controlUsage
+` + controlUsage + contextUsage + psUsage + raceUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -181,6 +181,14 @@ func ctl(args []string) error {
 		return ctlReorder(args[1:])
 	case "park", "unpark":
 		return ctlPark(args[1:], args[0] == "park")
+	case "ctx", "context":
+		return ctlContext(args[1:])
+	case "fork":
+		return ctlFork(args[1:])
+	case "ps":
+		return ctlPs(args[1:])
+	case "race":
+		return ctlRace(args[1:])
 	}
 	return fmt.Errorf("unknown ctl command %q\n\n%s", args[0], ctlUsage)
 }
