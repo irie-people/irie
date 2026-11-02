@@ -1,13 +1,14 @@
 # Demo recordings
 
-Scripted, anonymous recordings of Irie in use, made so that short clips can be cut from them later. Each one is rendered from a tape against a throwaway sandbox, never captured from a real desktop. Why and what's next: [the proposal](../proposals/demo-footage.md).
+Scripted, anonymous recordings of Irie in use, made so that short clips can be cut from them later. Each one is rendered from a tape or a reel against a throwaway sandbox, never captured from a real desktop. Why and what's next: [the proposal](../proposals/demo-footage.md).
 
-| Recording | Tape | Frame | Length | Shows |
+| Recording | Script | Frame | Length | Shows |
 |---|---|---|---|---|
 | Walkthrough | `walkthrough.tape` | 1920×1080, 16:9 | about 6 minutes | launch, a task, `@repo` worktrees, `+profile`, many agents, the slot, sessions that need you, a big paste, a failed start, done and idle, closing the window, `irie ctl` |
 | Short | `short.tape` | 1080×1920, 9:16 | about 45 seconds | nine agents in the list, one typed on camera, which needs you and is answered |
+| First look | `first-look.reel` | 2048×1280, 16:10 | about 14 seconds | the Mac app: three agents at work, a fourth task typed into the task bar, starting and going to work, then two cards shown in turn |
 
-Captions are text on screen; there is no voice.
+Tapes film the terminal sidebar with vhs; reels film the Mac app itself ([Mac app recordings](#mac-app-recordings)). Captions are text on screen; there is no voice.
 
 ## Render
 
@@ -66,3 +67,36 @@ From the rehearsal, which runs 6:10 from the first caption to the end. Each rend
 1. Run `docs/demo/rehearse.sh`. A `Wait` that times out means the screen no longer shows what the tape waits for: update its pattern, or the keys before it.
 2. Read each `story.txt`: every caption should still describe the screen under it. Adjust `Sleep`s and captions. A task's script in `cues.txt` runs on its own clock from its spawn, so keep its timing in step with the tape.
 3. Run `docs/demo/render.sh` and watch the result.
+
+## Mac app recordings
+
+```sh
+docs/demo/record.sh                             # every reel
+docs/demo/record.sh docs/demo/first-look.reel   # one reel
+```
+
+Each reel becomes `dist/demo/NAME.mp4`, filmed at 2x (a 1024×640 window gives 2048×1280) at 30 frames a second, and `dist/demo/NAME.events.json`: what the reel did, and when, in milliseconds from the first frame, to place zooms and captions on later. It needs the app built (`mac/build.sh`, or `IRIE_RECORD_APP` naming another `Irie.app`), ffmpeg and ffprobe, swiftc, and what `setup.sh` needs.
+
+A reel reads much as a tape does, one step a line:
+
+| Step | Does |
+|---|---|
+| `Set Size 1024x640` | the window, in points; at least 820×500 |
+| `Set Appearance light` | light or dark |
+| `Set Palette evergreen` | rosewater, terracotta, lilac or evergreen |
+| `Set TypingSpeed 55ms` | the pause between typed keys |
+| `Spawn @acme-web +sonnet fix the flaky checkout test` | a session `record.sh` starts with `irie ctl spawn --wait` before filming, in order |
+| `Sleep 1.5s` | waits; `500ms` works too |
+| `Type "@acme-billing retry failed webhooks"` | types into the task bar |
+| `Enter` | starts what the task bar holds |
+| `Down 2`, `Up` | shows the next or previous card, as many times as asked |
+| `Show 3` | shows the third card in the list |
+| `Wait working 20s` | waits until the newest session, started since the last `Enter`, is in that state |
+
+Tasks follow `cues.txt`, as in the tapes, so a typed task does what its words say there.
+
+How it works:
+
+- **The sandbox and the copy.** `record.sh` makes a sandbox with `setup.sh`, starts its Irie with `irie up` and the reel's sessions with `irie ctl spawn`, all in the sandbox's environment only. It films with a copy of `Irie.app` whose bundle id ends in `.recording`, so the copy's defaults are its own: the reel types through the defaults that hold the task bar's text, and the installed app's hold the user's unsent task. `Irie --record` refuses to run under any other bundle id. The copy's defaults are deleted after each reel.
+- **Filming.** `Irie --record OUT.mp4 --reel FILE --socket PATH` opens the app's window on the sandbox's core, far off any screen as `--snapshot` does, never takes the focus, and plays the reel. Each frame is the window read back from the window server, its terminal and animations included, which macOS allows an app for its own windows without the Screen Recording permission. A frame at 2x takes about 30 ms to read back and convert to sRGB, so the film runs at 30 frames a second; `--fps 60` asks for more, and the line it prints says how many came. `--size`, `--appearance`, `--palette` and `--backdrop RRGGBB`, the colour in the window's rounded corners, override the reel.
+- **Nothing that names anyone.** As with the tapes, the video keeps only the muxer's neutral tags, and its file is scanned for the user's home, `/Users/` and the sandbox's paths. Its frames are scanned too: once a second, Apple's Vision framework reads their text on the Mac (`ocr.swift`), and `record.sh` fails when it shows the user's name, full name or host name, or a path from outside the sandbox's `~`.

@@ -1,6 +1,6 @@
 # Proposal: demo footage
 
-Date: 2026-10-26. Status: proposed, with a first cut in [docs/demo/](../demo/README.md). There is no issue tracker yet, so this file stands in for the issue that AGENTS.md asks for. An agent (Claude Code) wrote this proposal and the first cut.
+Date: 2026-10-26; Mac app recordings added 2026-11-01. Status: proposed, with a first cut in [docs/demo/](../demo/README.md). There is no issue tracker yet, so this file stands in for the issue that AGENTS.md asks for. An agent (Claude Code) wrote this proposal and the first cut.
 
 ## Why
 
@@ -49,6 +49,12 @@ Only partly. The sidebar reads well at a phone-sized font: the rows, glyphs, red
 3. **Font.** Menlo, or DejaVu Sans Mono on Linux, which the rehearsal's size maths assumes. JetBrains Mono, vhs's default, would need the maths changed and the font installed.
 4. **The short's frame.** Captions sit at the top because platforms cover the bottom of a 9:16 frame. Do we want a list-only short, or wait for a stacked layout?
 5. **CI.** Rehearse on every UI change (it needs only tmux), and render on release?
+
+## Mac app recordings
+
+Added on 2026-11-01, as step 1 of the owner's research into AI-made videos for Irie and other products. Irie's face is now the Mac app, which vhs cannot film, so the app films itself: `Irie --record` plays a reel against a sandbox's core and reads its own window back from the window server, off any screen and without the focus or the Screen Recording permission, and `docs/demo/record.sh` makes the sandbox, the sessions and a copy of the app with its own defaults, then scans the video's metadata, bytes and frames (README, "Mac app recordings"). The first reel, `first-look.reel`, is meant for the site's first recording box. The setup's fakeagent now lists `--plugin-dir` (`IRIE_FAKE_PLUGINS`), so no card warns that Irie's skills were left out with a sandbox path in the warning, which the frame scan caught on the first film; the tapes gain the same.
+
+Next for the Mac recordings: reels for the site's other boxes (a first task, needs you, swap-in), a cut that fits each 16:10 box at 1344×840 as MP4 and WebM, narration and captions, and on macOS 14.4 or later ScreenCaptureKit's capture of the app's own windows, which hands frames over without a copy, for 60 frames a second.
 
 ## What's left
 

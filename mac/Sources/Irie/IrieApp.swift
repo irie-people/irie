@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Starts the app, or with `--snapshot DIR` draws its window offscreen from
-/// fixture sessions and exits (Snapshot.swift).
+/// fixture sessions and exits (Snapshot.swift), or with `--record OUT.mp4
+/// --reel FILE` films its window while a reel plays (Recording.swift).
 @main
 enum Launch {
     static func main() {
@@ -22,6 +23,10 @@ enum Launch {
         if let i = args.firstIndex(of: "--render-onboarding") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { OnboardingSnapshot.run(into: dir) }
+        }
+        // Films the window while a reel plays, then exits (Recording.swift).
+        if args.contains("--record") {
+            MainActor.assumeIsolated { Recording.run(args) }
         }
         IrieApp.main()
     }
