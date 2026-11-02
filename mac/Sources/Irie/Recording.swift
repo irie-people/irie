@@ -105,7 +105,7 @@ enum Recording {
         window.appearance = NSAppearance(named: o.dark ? .darkAqua : .aqua)
         window.toolbarStyle = IrieApp.toolbarStyle
         window.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
-        let host = NSHostingView(rootView: ContentView().environmentObject(store))
+        let host = NSHostingView(rootView: ContentView().environment(store))
         host.sceneBridgingOptions = [.toolbars, .title]
         window.contentView = host
         window.setFrame(NSRect(x: -40000, y: -40000, width: o.size.width, height: o.size.height), display: true)
