@@ -211,6 +211,7 @@ func TestStealsFocus(t *testing.T) {
 		"open":               false,
 		`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --user-data-dir=/tmp/p`: false,
 		"mac/build/Irie.app/Contents/MacOS/Irie --snapshot /tmp/shots":                                         false,
+		"mac/build/Irie.app/Contents/MacOS/Irie --record /tmp/first-look.mp4 --reel docs/demo/first-look.reel": false,
 		`osascript -e 'display notification "done"'`:                                                           false,
 		"go test ./... && git commit -m 'open the door'":                                                       false,
 		"opencode run":   false,
@@ -269,5 +270,29 @@ func TestAppSwapWaitsUntilTheUserLooksAway(t *testing.T) {
 	// Nothing waits: nothing happens.
 	if err := s.run(); err != nil || len(opened) != 2 {
 		t.Errorf("with nothing waiting: %v, %v", err, opened)
+	}
+}
+
+func TestAnInstallIsNeverHeldBack(t *testing.T) {
+	ps := `  100 -zsh
+  200 sh tools/live.sh
+  201 go test ./...
+  300 sh /tmp/scratch/install-loop.sh
+  301 /bin/sh tools/live.sh --rollback
+  400 grep live.sh
+`
+	if got := installPIDs(ps); !slices.Equal(got, []int{200, 301}) {
+		t.Errorf("installs = %v, want 200 and 301", got)
+	}
+	// Session s1's pane is 10; the install runs two levels under it. s2's
+	// pane is 20, with nothing installing.
+	tbl := proc.NewTable([]proc.Proc{
+		{PID: 10, PPID: 1}, {PID: 11, PPID: 10}, {PID: 200, PPID: 11},
+		{PID: 20, PPID: 1}, {PID: 21, PPID: 20},
+		{PID: 301, PPID: 1},
+	})
+	got := sessionsOf([]int{200, 301}, tbl, map[int]string{10: "s1", 20: "s2"})
+	if want := map[string]bool{"s1": true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("sessions installing = %v, want %v", got, want)
 	}
 }

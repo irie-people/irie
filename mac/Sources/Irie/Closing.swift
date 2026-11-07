@@ -30,8 +30,7 @@ extension Store {
     /// The session ⌘W closes: the selected card, unless an outside row is
     /// selected.
     var closable: Session? {
-        guard outsideSelection == nil, let id = selection else { return nil }
-        return sessions.first { $0.id == id }
+        outsideSelection == nil ? selectedRow : nil
     }
 
     /// Closes a session at once. When it is the selected one, the next

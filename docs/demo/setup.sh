@@ -41,6 +41,15 @@ down() {
 		# TMUX_TMPDIR points into the sandbox, so this reaches its own server only.
 		tmux -L "$DEMO_SOCKET" kill-server 2>/dev/null || true
 	)
+	# Irie seals the folders of its skills read-only, which rm cannot empty,
+	# and the agents' hosts still write their exits as their server goes, so
+	# it unseals and tries again until the last of them is done.
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		chmod -R u+w "$root" 2>/dev/null || true
+		if rm -rf "$root" 2>/dev/null; then return 0; fi
+		sleep 1
+	done
+	chmod -R u+w "$root" 2>/dev/null || true
 	rm -rf "$root"
 }
 
@@ -212,6 +221,9 @@ export XDG_RUNTIME_DIR='$root/run' TMUX_TMPDIR='$root/run' TMPDIR='$root/tmp'
 export LANG=$locale LC_ALL=$locale TZ=UTC
 export COLORTERM=truecolor
 export GIT_CONFIG_NOSYSTEM=1
+# The fakeagent's --help then lists --plugin-dir, as Claude Code's does, so
+# no card warns that Irie's skills were left out, naming a sandbox path.
+export IRIE_FAKE_PLUGINS=1
 export PS1='alice\$ ' HISTFILE=
 export BASH_SILENCE_DEPRECATION_WARNING=1
 EOF

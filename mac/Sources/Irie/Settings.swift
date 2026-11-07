@@ -371,8 +371,9 @@ enum AppearanceChoice: String, CaseIterable, Identifiable {
 
 // MARK: Window
 
+@MainActor
 struct SettingsView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -481,8 +482,9 @@ private struct SettingsForm<Content: View>: View {
 
 /// The core's settings once it has said what they are, or why they can't
 /// show.
+@MainActor
 private struct WithConfig<Content: View>: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     @ViewBuilder var content: (CoreConfig) -> Content
 
@@ -646,12 +648,14 @@ private struct ConfigFileSection: View {
 
 // MARK: Appearance
 
+@MainActor
 private struct AppearanceSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     @AppStorage(AppearanceChoice.defaultsKey) private var appearance = AppearanceChoice.system.rawValue
     @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
+    @AppStorage(TerminalSelection.copyKey) private var copyOnSelect = true
 
     var body: some View {
         SettingsForm(model: model) {
@@ -670,7 +674,7 @@ private struct AppearanceSettings: View {
                 footnote("Each palette has a light and a dark set; Irie’s status line in the terminal follows it too.")
             }
             Section {
-                Picker("On the right", selection: $store.showTerminal) {
+                Picker("On the right", selection: Bindable(store).showTerminal) {
                     Text("Conversation").tag(false)
                     Text("Terminal").tag(true)
                 }
@@ -686,12 +690,14 @@ private struct AppearanceSettings: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                Toggle("Copy text as you select it", isOn: $copyOnSelect)
             } header: {
                 Text("Window")
             } footer: {
-                footnote(TerminalEngine.built.count > 1
+                footnote((TerminalEngine.built.count > 1
                     ? "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
                     : "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
+                    + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
             }
             Section {
                 switch (store.link, model.config) {
@@ -784,8 +790,9 @@ private struct PalettePicker: View {
 
 // MARK: Agents
 
+@MainActor
 private struct AgentSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     /// The profile open to edit.
     @State private var editing = "claude"
@@ -1155,7 +1162,7 @@ private struct RepoSettings: View {
                 }
                 Section {
                     CommitField(title: "Branch names start with", prompt: "irie/", value: model.bind(c, \.worktree.branchPrefix, "worktree.branch_prefix"))
-                    CommitField(title: "New branches start from", prompt: "HEAD", value: model.bind(c, \.worktree.base, "worktree.base"))
+                    CommitField(title: "New branches start from", prompt: "the land branch, else HEAD", value: model.bind(c, \.worktree.base, "worktree.base"))
                     Toggle("Check out submodules", isOn: model.bind(c, \.worktree.submodules, "worktree.submodules"))
                 } header: {
                     Text("Worktrees")
@@ -1212,8 +1219,9 @@ private struct RepoSettings: View {
 /// one's icon, name and work, what he does now, what you can do with him,
 /// and his settings, drawn by their kind. The app knows none of them by
 /// name, so a new arch agent shows here with no change to the app.
+@MainActor
 private struct ArchSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     /// An action that asks first, waiting for your OK.
     @State private var asking: ArchAction?
@@ -1369,8 +1377,9 @@ private struct ArchItemRow: View {
 /// The trod bot (DESIGN §4.10): when it works, how far it goes, how much of
 /// the plan it may use, and the rules and guidelines every agent it keeps
 /// going is given. Setting it up is writing those.
+@MainActor
 private struct TrodSettings: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
 
     private static let aways = ["0s", "5m", "15m", "30m", "1h"]

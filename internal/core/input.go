@@ -20,7 +20,7 @@ import (
 func (c *Core) input(a ipc.InputArgs, peer int) (ipc.InputResult, error) {
 	// :move names a session outside Irie, so that list must be fresh.
 	if first, _, _ := strings.Cut(strings.TrimSpace(a.Text), "\n"); strings.HasPrefix(first, ":move") {
-		c.refreshOutside(outsideEvery, false)
+		c.refreshOutside("input", outsideEvery, false)
 	}
 	home, _ := os.UserHomeDir()
 	c.mu.Lock()

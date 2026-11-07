@@ -2,10 +2,12 @@ import AppKit
 import SwiftUI
 
 /// Starts the app, or with `--snapshot DIR` draws its window offscreen from
-/// fixture sessions and exits (Snapshot.swift).
+/// fixture sessions and exits (Snapshot.swift), or with `--record OUT.mp4
+/// --reel FILE` films its window while a reel plays (Recording.swift).
 @main
 enum Launch {
     static func main() {
+        Preview.boot()
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--snapshot") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
@@ -15,9 +17,16 @@ enum Launch {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { ConversationSnapshot.run(into: dir) }
         }
+        if args.contains("--bench") {
+            MainActor.assumeIsolated { Bench.run() }
+        }
         if let i = args.firstIndex(of: "--render-onboarding") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { OnboardingSnapshot.run(into: dir) }
+        }
+        // Films the window while a reel plays, then exits (Recording.swift).
+        if args.contains("--record") {
+            MainActor.assumeIsolated { Recording.run(args) }
         }
         IrieApp.main()
     }
@@ -25,7 +34,7 @@ enum Launch {
 
 struct IrieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var store = Store()
+    @State private var store = Store()
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     /// The compact title bar: one short row for the traffic lights, the
@@ -39,7 +48,7 @@ struct IrieApp: App {
     var body: some Scene {
         Window("Irie", id: "main") {
             ContentView()
-                .environmentObject(store)
+                .environment(store)
                 .frame(minWidth: 820, minHeight: 500)
                 .task { store.start() }
         }
@@ -142,22 +151,32 @@ struct IrieApp: App {
                 // The conversation, or the live terminal on the right.
                 Toggle("Terminal", isOn: $store.showTerminal)
                     .keyboardShortcut("t", modifiers: [.command, .option])
-                // A helper beside the conversation (HelperPane.swift).
+                // The session's helpers, in the right sidebar (HelperPane.swift).
                 Button(store.helperShown ? "Hide Helpers" : "Show Helpers") { store.toggleHelpers() }
                     .keyboardShortcut("h", modifiers: [.command, .shift])
                     .disabled(store.selection == nil || store.outsideSelection != nil)
+                Divider()
+                // The right sidebar and its tabs (RightSidebar.swift), with
+                // the key cmux and VS Code give a right side bar.
+                Button(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar") { store.toggleSide() }
+                    .keyboardShortcut("b", modifiers: [.command, .option])
+                ForEach(SideTab.built) { t in
+                    Button(t.title) { store.toggleSideTab(t) }
+                        .keyboardShortcut(t.key, modifiers: [.command, .option])
+                }
+                Button(store.side.pinned ? "Unpin the Right Sidebar" : "Pin the Right Sidebar") { store.pinSide(!store.side.pinned) }
             }
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
             LearnWindow()
-                .environmentObject(store)
+                .environment(store)
         }
         .defaultSize(width: 560, height: 640)
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
-                .environmentObject(store)
+                .environment(store)
         }
     }
 }
@@ -168,11 +187,26 @@ struct IrieApp: App {
 @MainActor
 final class KeyRouter {
     private var monitor: Any?
+    private var clicks: Any?
     /// Irie's own window, where the sessions are (WindowReader).
     weak var window: NSWindow?
 
     func install(_ store: Store) {
         guard monitor == nil else { return }
+        // A click in the terminal beside a peeking right sidebar closes the
+        // sidebar, and the click still reaches the terminal.
+        clicks = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self, weak store] event in
+            guard let self, let store else { return event }
+            MainActor.assumeIsolated {
+                guard store.sidePeeking, let window = event.window, window === self.window,
+                      let terminal = store.terminalView, let content = window.contentView else { return }
+                let inTerminal = terminal.bounds.contains(terminal.convert(event.locationInWindow, from: nil))
+                let p = event.locationInWindow
+                let inSidebar = store.sidePeekFrame.contains(CGPoint(x: p.x, y: content.bounds.height - p.y))
+                if inTerminal && !inSidebar { store.closeSide() }
+            }
+            return event
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak store] event in
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
@@ -229,8 +263,9 @@ extension Notification.Name {
     static let irieQuickTask = Notification.Name("irieQuickTask")
 }
 
+@MainActor
 struct ContentView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @State private var keys = KeyRouter()
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
@@ -242,8 +277,11 @@ struct ContentView: View {
             // At its narrowest the sidebar still fits the title bar's row
             // (sun, name and counts) beside the traffic lights; a row that
             // doesn't fit goes into the toolbar's overflow menu.
+            // Red for done (ui.red_on_done) does the same: the cards draw
+            // again only when their own row changes, and the colour is
+            // Look's, which they don't watch.
             SidebarView()
-                .id(theme)
+                .id("\(theme) \(store.redOnDone)")
                 .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
@@ -258,10 +296,14 @@ struct ContentView: View {
         // The lines from the selected card to the terminal, over both columns.
         .overlayPreferenceValue(TabLinkKey.self) { TabLink(ends: $0) }
         .tint(Theme.accent)
-        .sheet(isPresented: $store.newTaskSheet) {
-            NewTaskSheet().environmentObject(store)
+        .sheet(isPresented: Bindable(store).newTaskSheet) {
+            NewTaskSheet().environment(store)
         }
-        .background(WindowReader { keys.window = $0 })
+        .background(WindowReader { window in
+            keys.window = window
+            // A preview takes over the window of the build before (Preview.swift).
+            PreviewState.shared.adopt(window, store: store)
+        })
         .onAppear {
             keys.install(store)
             WindowCloseItem.install()

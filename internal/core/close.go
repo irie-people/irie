@@ -194,6 +194,8 @@ func (c *Core) closeLocked(id string, auto bool) error {
 	if away := x.track.away; away != "" {
 		go c.endCopy(x.id, x.profile, away)
 	}
+	// Its Dock controls' copies end with it (dock.go).
+	go c.dockEnd(x.id)
 	c.log.Info("closed", "session", x.id, "name", x.name, "resume", r.Resume, "auto", auto)
 	return c.refresh()
 }

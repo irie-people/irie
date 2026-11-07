@@ -90,6 +90,13 @@ type freezeDog struct {
 	open   func(bundle string, front, hidden bool, stuck time.Duration) error
 }
 
+// count is how many windows the dog watches.
+func (d *freezeDog) count() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.watches)
+}
+
 func newFreezeDog() *freezeDog {
 	return &freezeDog{
 		watches: map[<-chan ipc.Frame]*watch{},

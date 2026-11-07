@@ -259,8 +259,9 @@ enum StartProblem: Equatable {
 
 /// What an empty Irie says: its mark and word, what it does, what this
 /// computer still lacks, and a first task to try.
+@MainActor
 struct Welcome: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     var body: some View {
         ScrollView {
@@ -273,8 +274,9 @@ struct Welcome: View {
 
 /// The welcome without its scroll view, which ImageRenderer leaves out
 /// (OnboardingSnapshot.swift).
+@MainActor
 struct WelcomeContent: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     var body: some View {
             VStack(spacing: 12) {
@@ -307,8 +309,9 @@ struct WelcomeContent: View {
 }
 
 /// Each need with its mark, and a button on the first one that blocks.
+@MainActor
 struct ReadyList: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let report: ReadyReport
 
     var body: some View {
@@ -344,11 +347,12 @@ struct ReadyList: View {
 
 /// Above the cards while something keeps agents from starting: what, and
 /// the button that fixes it.
+@MainActor
 struct ReadyBanner: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     var body: some View {
-        if let it = store.readiness?.blocking.first, !store.sessions.isEmpty {
+        if let it = store.readiness?.blocking.first, store.hasRows {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(sentence(it.problem ?? "\(it.name) is missing"))
@@ -378,8 +382,9 @@ struct ReadyBanner: View {
 
 /// The steps of a first task, above the cards, ticked as its card moves on:
 /// it started, it needs you, it is done. Its × ends it.
+@MainActor
 struct CoachCard: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     var body: some View {
         if let c = store.coach, let id = c.session, let s = store.sessions.first(where: { $0.id == id }) {
@@ -449,8 +454,9 @@ struct CoachCard: View {
 
 /// What the sidebar shows while no core answers: Irie starting, why it
 /// can't, or how to get it.
+@MainActor
 struct Offline: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let why: String
     let socket: String
 
