@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"regexp"
@@ -287,6 +288,48 @@ func (g GGUF) Info() Info {
 		info.Capabilities = append(info.Capabilities, "tools")
 	}
 	return info
+}
+
+// InfoWith is Info as llama-server loads the model with args: each
+// --override-kv KEY=TYPE:VALUE,... in them replaces that metadata first,
+// as a looped model's loop count and cache mode (dory.num_loops,
+// dory.recurrent_kv_cache_mode) change what its cache takes. TYPE is int,
+// float, bool or str; the file's own metadata stays as it is.
+func (g GGUF) InfoWith(args []string) Info {
+	var meta map[string]any
+	for i, a := range args {
+		spec, ok := strings.CutPrefix(a, "--override-kv=")
+		if !ok {
+			if a != "--override-kv" || i+1 >= len(args) {
+				continue
+			}
+			spec = args[i+1]
+		}
+		if meta == nil {
+			meta = maps.Clone(g.Meta)
+		}
+		for _, kv := range strings.Split(spec, ",") {
+			key, rest, ok := strings.Cut(kv, "=")
+			typ, val, ok2 := strings.Cut(rest, ":")
+			if !ok || !ok2 {
+				continue
+			}
+			switch typ {
+			case "int", "float":
+				if f, err := strconv.ParseFloat(val, 64); err == nil {
+					meta[key] = f
+				}
+			case "bool":
+				meta[key] = val == "true"
+			case "str":
+				meta[key] = val
+			}
+		}
+	}
+	if meta != nil {
+		g.Meta = meta
+	}
+	return g.Info()
 }
 
 // Prism reports what of PrismML's llama.cpp a model needs: its Hadamard

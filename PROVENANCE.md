@@ -447,6 +447,10 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-01 | AVAssetWriter.h, AVAssetWriterInput.h and AVVideoSettings.h in the macOS 14 SDK (AVFoundation, read locally) | H.264 in an MP4 with BT.709 colour properties, real-time input and the adaptor's pixel buffer pool: the film's writer |
 | 2026-11-01 | NSProcessInfo.h in the macOS 14 SDK (Foundation, read locally), whose notes reserve `NSActivityLatencyCritical` for work such as video recording | An activity, user-initiated and latency-critical, keeps App Nap from slowing the film's timer while the app has no window on screen |
 | 2026-11-01 | VNRecognizeTextRequest.h in the macOS 14 SDK (Vision, read locally) | `docs/demo/ocr.swift`: the frames' text, read on the Mac, for record.sh's scan for names and paths |
+| 2026-11-07 | https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16 (NVIDIA's model card, OpenMDW-1.1) | Dory's layout: looped input, recurrent and output blocks, sliding-window and full attention layers, and the last-loop KV cache, for the memory estimate of looped and sliding-window models (internal/localmodel) |
+| 2026-11-07 | https://github.com/ggml-org/llama.cpp/pull/30306 (Dory support for llama.cpp, MIT; read at the pull request's commit 98a74c9) | The GGUF keys layer_pattern, attention.sliding_window, num_loops, recurrent_kv_cache_mode and the input/recurrent/output layer counts, a sliding-window layer's cache size (n_swa + n_ubatch), and the --override-kv format, for the memory estimate (internal/localmodel) |
+| 2026-11-07 | https://github.com/FlashML-org/FreeToken (README, docs/install.md, docs/models.md, issues 9, 65, 79 and 84) ; https://arxiv.org/abs/2608.16157 | FreeToken's platforms, its expert offload and boundary checkpoints, and why Irie runs no FreeToken (DESIGN §6.5) |
+| 2026-11-07 | https://github.com/ggml-org/llama.cpp/pull/24176 ; https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server-context.cpp | llama-server saves a context checkpoint at each user message (DESIGN §6.5) |
 
 ## Third-party code
 
