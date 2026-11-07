@@ -168,6 +168,10 @@ type Info struct {
 	KVHeads  []int
 	KeyLen   int
 	ValueLen int
+	// Layers that attend to a sliding window keep only its last tokens:
+	// their K/V heads, one entry per such layer, and the window in tokens.
+	SWAHeads []int
+	Window   int
 }
 
 // Tools reports whether the model can call tools, which a coding agent
@@ -211,6 +215,10 @@ func parseModelInfo(mi map[string]any) Info {
 	if info.ValueLen == 0 {
 		info.ValueLen = info.KeyLen
 	}
+	if pattern, ok := mi[arch+".layer_pattern"].(string); ok && len(pattern) == layers {
+		layerPattern(&info, mi, arch, pattern, heads)
+		return info
+	}
 	switch kv := mi[arch+".attention.head_count_kv"].(type) {
 	case []any:
 		for _, h := range kv {
@@ -232,6 +240,52 @@ func parseModelInfo(mi map[string]any) Info {
 		}
 	}
 	return info
+}
+
+// layerPattern fills in the cache shape of a model whose metadata spells
+// out each layer's kind, as NVIDIA's Dory does: '*' attends to the whole
+// context, 'S' to a sliding window of attention.sliding_window tokens and
+// '-' keeps no cache. A looped model runs its recurrent layers num_loops
+// times. With recurrent_kv_cache_mode per_loop, each pass keeps a cache of
+// its own; with last_loop, the passes share one.
+func layerPattern(info *Info, mi map[string]any, arch, pattern string, heads int) {
+	n := func(key string) int { v, _ := mi[arch+"."+key].(float64); return int(v) }
+	headsAt := func(i int) int {
+		switch kv := mi[arch+".attention.head_count_kv"].(type) {
+		case []any:
+			if i < len(kv) {
+				f, _ := kv[i].(float64)
+				return int(f)
+			}
+			return 0
+		case float64:
+			return int(kv)
+		}
+		return heads
+	}
+	in, rec := n("input_layer_count"), n("recurrent_layer_count")
+	loops := 1
+	if mode, _ := mi[arch+".recurrent_kv_cache_mode"].(string); mode != "last_loop" && rec > 0 && in+rec <= len(pattern) {
+		loops = max(n("num_loops"), 1)
+	}
+	info.Window = n("attention.sliding_window")
+	for i, kind := range pattern {
+		h := headsAt(i)
+		if kind == '-' || h <= 0 {
+			continue
+		}
+		copies := 1
+		if i >= in && i < in+rec {
+			copies = loops
+		}
+		for range copies {
+			if kind == 'S' && info.Window > 0 {
+				info.SWAHeads = append(info.SWAHeads, h)
+			} else {
+				info.KVHeads = append(info.KVHeads, h)
+			}
+		}
+	}
 }
 
 // Loaded is a model in memory, from GET /api/ps.
