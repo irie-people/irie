@@ -178,10 +178,11 @@ func splitPart(name string) bool {
 
 // llamaNeed is what a model takes in Irie's llama-server: its weights, its
 // context cache at local.context and local.kv_cache in one slot, and
-// working room.
+// working room. The cache is the one the server loads with local.llama_args,
+// whose --override-kv can change it, as a looped model's loop count does.
 func (c *Core) llamaNeed(m llamaModel) localmodel.Need {
 	l := c.cfg().Local
-	return localmodel.Estimate(m.g.Weights(), m.g.Info(), l.Context, l.KVCache, 1)
+	return localmodel.Estimate(m.g.Weights(), m.g.InfoWith(l.LlamaArgs), l.Context, l.KVCache, 1)
 }
 
 // llamaWhy is why a coding agent cannot run on a model on build b, in a
