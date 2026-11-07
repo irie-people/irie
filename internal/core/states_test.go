@@ -371,7 +371,9 @@ func TestEveryJournalLineIsAnEnvelope(t *testing.T) {
 		t.Errorf("full row = %+v", r)
 	}
 	c.waitState(failed.ID, ipc.StateFailed)
-	c.waitState(stalled.ID, ipc.StateStalled)
+	// The row says stalled only from the ready timeout, 1 s, to the agent's
+	// prompt at 3 s, which a busy machine passes during the waits above, so
+	// the journal, checked below, is what shows the stall.
 	c.waitState(stalled.ID, ipc.StateWorking)
 	c.waitState(ended.ID, ipc.StateDone)
 	c.keys(ended, "C-d")

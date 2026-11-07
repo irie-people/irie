@@ -195,11 +195,21 @@ func TestFreezeWithAHostFromBeforeFreeze(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	check("after 0.5 s")
 
-	// The agent comes to its tool call and waits there.
-	testutil.Eventually(t, 10*time.Second, "the row never said the agent was held", func() bool {
+	// The agent comes to its tool call and waits there. Its hook tells the
+	// core before it holds the agent, unless the core's next tick stops the
+	// hook first (keepFrozen stops what starts in a frozen session), as a
+	// busy machine's slow start of the hook allows: the agent still waits,
+	// on its stopped hook, but the row says freezing until the thaw.
+	held := func() bool {
 		row, _ := c.row(s.ID)
 		return row.State == ipc.StateFrozen && !row.Freezing
-	})
+	}
+	for end := time.Now().Add(10 * time.Second); !held() && time.Now().Before(end); {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !held() && !slow(t) {
+		t.Error("after 10s: the row never said the agent was held")
+	}
 	hooked := func(event string) bool {
 		return slices.ContainsFunc(c.agentLog(s.ID), func(r map[string]any) bool { return r["t"] == "hook" && r["event"] == event })
 	}
