@@ -22,20 +22,44 @@ func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err
 		if a.Session == "" && !a.All {
 			return nil, true, ipc.Errorf(ipc.CodeBadArgs, "%s needs a session, or all", op)
 		}
-		r, err := c.freezeOp(a, op == ipc.OpFreeze)
+		r, changed, err := c.freezeOp(a, op == ipc.OpFreeze)
+		// One session frozen or thawed, when that changed it, is a step of
+		// the history; all of them at once is not yet.
+		if err == nil && !a.All && len(changed) == 1 {
+			kind := actThaw
+			if op == ipc.OpFreeze {
+				kind = actFreeze
+			}
+			c.recordAction(kind, a.Session, nil)
+		}
 		return r, true, err
 	case ipc.OpPriority:
 		var a ipc.PriorityArgs
 		if err := decode(raw, &a); err != nil {
 			return nil, true, err
 		}
-		return nil, true, c.setPriority(a)
+		// Only a change of level is a step of the history.
+		step, err := c.setPriority(a)
+		if err != nil || step == nil {
+			return nil, true, err
+		}
+		kind := actUnpromote
+		if a.Level > 0 {
+			kind = actPromote
+		}
+		c.recordAction(kind, a.Session, step)
+		return nil, true, nil
 	case ipc.OpReorder:
 		var a ipc.ReorderArgs
 		if err := decode(raw, &a); err != nil {
 			return nil, true, err
 		}
-		return nil, true, c.reorder(a)
+		// Only a move that changed the order is a step of the history.
+		step, err := c.reorder(a)
+		if err == nil && step != nil {
+			c.recordAction(actReorder, a.Session, step)
+		}
+		return nil, true, err
 	case ipc.OpPark, ipc.OpUnpark:
 		var a ipc.ParkArgs
 		if err := decode(raw, &a); err != nil {

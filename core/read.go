@@ -388,18 +388,28 @@ func undone(op string, u UndoResult) string {
 }
 
 // Title is a step of the history as a person reads it: the core's label
-// `park "api-fix"` is Park “api-fix”, as the Mac app's Edit menu says it.
+// `park "api-fix"` is Park “api-fix”, and `rename "a" to "b"` is Rename
+// “a” to “b”, as the Mac app's Edit menu says them. Each name is quoted as
+// Go's %q quotes it.
 func Title(label string) string {
-	verb, name, ok := strings.Cut(label, " ")
-	if !ok {
-		return capital(label)
-	}
-	if strings.HasPrefix(name, `"`) {
-		if q, err := strconv.Unquote(name); err == nil {
-			return capital(verb) + " “" + q + "”"
+	var b strings.Builder
+	for rest := label; rest != ""; {
+		i := strings.IndexByte(rest, '"')
+		if i < 0 {
+			b.WriteString(rest)
+			break
 		}
+		b.WriteString(rest[:i])
+		q, err := strconv.QuotedPrefix(rest[i:])
+		if err != nil {
+			b.WriteString(rest[i:])
+			break
+		}
+		name, _ := strconv.Unquote(q)
+		b.WriteString("“" + name + "”")
+		rest = rest[i+len(q):]
 	}
-	return capital(verb) + " " + name
+	return capital(b.String())
 }
 
 // froze says what a freeze or thaw did.

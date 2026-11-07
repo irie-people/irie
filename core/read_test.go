@@ -244,3 +244,21 @@ func TestSaidReadsAResultFromTheWire(t *testing.T) {
 type rawJSON []byte
 
 func (r rawJSON) MarshalJSON() ([]byte, error) { return r, nil }
+
+// A label names each session as Go quotes it, and reads with curly quotes:
+// one name or two, after a verb of one word or more.
+func TestTitleQuotesEachName(t *testing.T) {
+	for label, want := range map[string]string{
+		`park "api-fix"`:             "Park “api-fix”",
+		`rename "alpha" to "beta"`:   "Rename “alpha” to “beta”",
+		`stop promoting "a \"b\" c"`: "Stop promoting “a \"b\" c”",
+		`reorder "back\\slash"`:      "Reorder “back\\slash”",
+		`start "half`:                `Start "half`,
+		"freeze":                     "Freeze",
+		`rename "☀ sun" to "moon ☾"`: "Rename “☀ sun” to “moon ☾”",
+	} {
+		if got := Title(label); got != want {
+			t.Errorf("Title(%s) = %s, want %s", label, got, want)
+		}
+	}
+}
