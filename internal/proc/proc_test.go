@@ -117,6 +117,13 @@ func TestSetBackgroundTakesAProcessInAndOut(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	// While a session is promoted, or Gabriel holds back the sessions out
+	// of the user's focus, the running Irie keeps the session's tree in the
+	// background and puts this child back there each second, so nothing
+	// here could show a difference.
+	if self, _ := exec.Command("ps", "-o", "pri=", "-p", strconv.Itoa(os.Getpid())).Output(); strings.TrimSpace(string(self)) == "4" {
+		t.Skip("the test runs in the background, as a session's processes do while another is promoted or Gabriel holds it back")
+	}
 	// Out of the background first: while a session is promoted, the others'
 	// processes, a test one of them runs too, start their children there.
 	if err := SetBackground(pid, false); err != nil {
@@ -134,5 +141,46 @@ func TestSetBackgroundTakesAProcessInAndOut(t *testing.T) {
 	}
 	if got := pri(); got != before {
 		t.Errorf("out of the background the priority is %s, want %s again", got, before)
+	}
+}
+
+func TestGroupAndOneSeeAStoppedChild(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("no process table here")
+	}
+	cmd := exec.Command("sleep", "30")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+
+	g, err := Group(pid)
+	if err != nil || len(g) != 1 || g[0].PID != pid || g[0].PGID != pid || g[0].Name != "sleep" {
+		t.Fatalf("Group(%d) = %+v, %v; want the child alone", pid, g, err)
+	}
+	syscall.Kill(pid, syscall.SIGSTOP)
+	stopped := func() bool {
+		p, err := One(pid)
+		return err == nil && p.Stopped
+	}
+	for deadline := time.Now().Add(5 * time.Second); !stopped() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !stopped() {
+		t.Fatal("One never saw the child stopped")
+	}
+	syscall.Kill(pid, syscall.SIGCONT)
+	for deadline := time.Now().Add(5 * time.Second); stopped() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if p, err := One(pid); err != nil || p.Stopped || p.PPID != os.Getpid() {
+		t.Errorf("after SIGCONT: %+v, %v", p, err)
+	}
+	cmd.Process.Kill()
+	cmd.Wait()
+	if p, err := One(pid); err == nil {
+		t.Errorf("One of a reaped child = %+v, want an error", p)
 	}
 }
