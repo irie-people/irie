@@ -45,6 +45,12 @@ var (
 	freezeGoneWait = 5 * time.Second
 )
 
+// sidebarWait is the least a sidebar may leave a ping unanswered before
+// Raphael restarts it, whatever ui.freeze_dog says: a terminal's loop can
+// stall longer than an app's on a busy machine, and a restart loses what is
+// typed in its bar and not yet sent.
+var sidebarWait = time.Minute
+
 const (
 	// The dog restarts windows of one kind, the app's or the sidebars',
 	// freezeRestarts times in freezeWindow at most, so that an app that
@@ -192,6 +198,8 @@ func (c *Core) lookAtWindows(now time.Time) {
 			}
 		case held:
 			w.sent = now
+		case w.kind == "sidebar" && (raphaelOff() || now.Sub(w.sent) < sidebarWait):
+			// A test core's sidebars are the test's to drive.
 		case limit > 0 && now.Sub(w.sent) >= limit:
 			w.acting = true
 			go c.restartWindow(w, now.Sub(w.sent))

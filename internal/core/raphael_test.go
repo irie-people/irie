@@ -309,11 +309,20 @@ func TestRaphaelForceQuitsASidebarThatStopsAnswering(t *testing.T) {
 	f.mu.Lock()
 	f.procs[701] = proc.Proc{PID: 701, Start: 7010, Name: "irie"}
 	f.mu.Unlock()
+	t.Setenv("IRIE_RAPHAEL", "")
 	ch := watchFor(t, c, 701, "")
 	t0 := time.Now()
 	c.lookAtWindows(t0)
 	pinged(t, ch)
-	for i := 1; i <= 10; i++ {
+	// A sidebar gets a minute however short ui.freeze_dog is: a busy
+	// machine stalls a terminal's loop longer than an app's.
+	for i := 1; i <= 50; i++ {
+		c.lookAtWindows(t0.Add(time.Duration(i) * time.Second))
+	}
+	if restarting(c) != 0 {
+		t.Fatal("a sidebar was restarted before a minute without an answer")
+	}
+	for i := 51; i <= 61; i++ {
 		c.lookAtWindows(t0.Add(time.Duration(i) * time.Second))
 	}
 	for end := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
@@ -327,6 +336,24 @@ func TestRaphaelForceQuitsASidebarThatStopsAnswering(t *testing.T) {
 	killed, opened, sampled := f.calls()
 	if killed[0] != 701 || len(opened) != 0 || len(sampled) != 1 || !strings.Contains(filepath.Base(sampled[0]), "-sidebar-701") {
 		t.Errorf("killed %v, opened %v, sampled %v: its supervisor starts a sidebar again, not open", killed, opened, sampled)
+	}
+}
+
+func TestATestCoreNeverRestartsASidebar(t *testing.T) {
+	c, f := dogCore(t)
+	t.Setenv("IRIE_RAPHAEL", "off")
+	f.mu.Lock()
+	f.procs[702] = proc.Proc{PID: 702, Start: 7020, Name: "irie"}
+	f.mu.Unlock()
+	ch := watchFor(t, c, 702, "")
+	t0 := time.Now()
+	c.lookAtWindows(t0)
+	pinged(t, ch)
+	for i := 1; i <= 120; i++ {
+		c.lookAtWindows(t0.Add(time.Duration(i) * time.Second))
+	}
+	if restarting(c) != 0 {
+		t.Error("a test core restarted the test's sidebar")
 	}
 }
 

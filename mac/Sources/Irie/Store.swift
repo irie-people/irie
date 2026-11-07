@@ -500,7 +500,7 @@ final class Store {
                                        detail: "If you know it, mark it as yours and Raffi no longer flags it.\nIts program is signed by no one in particular (an ad-hoc signature).\nNot sure: many good programs show these signs too.", level: "note",
                                        actions: [ArchAction(label: "It’s mine", op: "raphael")])],
                       settings: [ArchSetting(key: "arch.raphael.on", kind: "bool", label: "Raffi restarts what stops answering, and looks over your Mac", value: .bool(true)),
-                                 ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app or a sidebar that has not answered for", value: .string("10s"))]),
+                                 ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app when it has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
         taskRepo = "irie"
