@@ -21,6 +21,10 @@ const (
 	workspaceFloor = 512 << 20
 )
 
+// swaSlack is how many tokens past its window llama.cpp keeps in a
+// sliding-window layer's cache: one physical batch (n_ubatch, 512).
+const swaSlack = 512
+
 // Need is what a model takes in memory at a context.
 type Need struct {
 	Weights int64
@@ -43,7 +47,14 @@ func Estimate(size int64, info Info, context int, kv string, parallel int) Need 
 	for _, h := range info.KVHeads {
 		elems += float64(h * (info.KeyLen + info.ValueLen))
 	}
-	n := Need{Weights: size, Cache: int64(math.Ceil(elems * per * float64(context) * float64(max(parallel, 1))))}
+	cells := elems * float64(context)
+	// A sliding-window layer keeps only its window, plus one batch.
+	var swa float64
+	for _, h := range info.SWAHeads {
+		swa += float64(h * (info.KeyLen + info.ValueLen))
+	}
+	cells += swa * float64(min(context, info.Window+swaSlack))
+	n := Need{Weights: size, Cache: int64(math.Ceil(cells * per * float64(max(parallel, 1))))}
 	n.Total = n.Weights + n.Cache + max(int64(float64(size)*workspaceShare), workspaceFloor)
 	return n
 }
