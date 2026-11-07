@@ -553,7 +553,7 @@ func TestStartupFindingsWeighTheSigns(t *testing.T) {
 	if f := by["com.gone.agent"]; f.Level != Note || !strings.Contains(f.Text, "no longer here") || f.Fix == nil {
 		t.Errorf("left over = %+v", f)
 	}
-	if f := by["com.empty"]; f.Level != Note || !strings.Contains(f.Text, "empty") || f.Fix != nil {
+	if f := by["com.empty"]; f.Level != Note || !strings.Contains(f.Text, "empty") || !strings.Contains(f.Advice, "leave it") || f.Fix != nil {
 		t.Errorf("empty = %+v", f)
 	}
 	if len(fine) == 0 || !strings.Contains(fine[0], "6 launch agents and daemons") || !strings.Contains(fine[0], "1 you know") {
@@ -602,7 +602,7 @@ func TestProtectFindings(t *testing.T) {
 	old := time.Now().Add(-90 * 24 * time.Hour)
 	os.Chtimes(meta, old, old)
 	os.MkdirAll(filepath.Join(root, "Library/Preferences"), 0o755)
-	os.WriteFile(filepath.Join(root, "Library/Preferences/com.apple.SoftwareUpdate.plist"), []byte(`<plist><dict><key>ConfigDataInstall</key><false/><key>RecommendedUpdates</key><array><dict><key>Display Name</key><string>macOS Sonoma 14.8</string></dict></array></dict></plist>`), 0o644)
+	os.WriteFile(filepath.Join(root, "Library/Preferences/com.apple.SoftwareUpdate.plist"), []byte(`<plist><dict><key>ConfigDataInstall</key><false/><key>RecommendedUpdates</key><array><dict><key>Display Name</key><string>macOS Sonoma 14.8.9</string><key>Display Version</key><string>14.8.9</string></dict><dict><key>Display Name</key><string>Command Line Tools for Xcode</string><key>Display Version</key><string>15.3</string></dict></array></dict></plist>`), 0o644)
 	r := &fakeRunner{out: map[string]string{
 		"/usr/bin/csrutil status":  "System Integrity Protection status: enabled.\n",
 		"/usr/sbin/spctl --status": "assessments disabled\n",
@@ -614,8 +614,11 @@ func TestProtectFindings(t *testing.T) {
 	for _, f := range fs {
 		by[f.ID] = f
 	}
-	if by["gatekeeper"].Level != Warn || by["xprotect"].Level != Warn || by["autoupdate"].Level != Warn || by["firewall"].Level != Note || !strings.Contains(by["updates"].Text, "macOS Sonoma 14.8") {
+	if by["gatekeeper"].Level != Warn || by["xprotect"].Level != Warn || by["autoupdate"].Level != Warn || by["firewall"].Level != Note {
 		t.Errorf("findings = %+v", fs)
+	}
+	if got, want := by["updates"].Text, "Updates are waiting: macOS Sonoma 14.8.9 and Command Line Tools for Xcode 15.3."; got != want {
+		t.Errorf("updates = %q, want %q", got, want)
 	}
 	if _, ok := by["sip"]; ok {
 		t.Error("SIP is on, yet flagged")

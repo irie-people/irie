@@ -168,7 +168,7 @@ func weighJob(ctx context.Context, r Runner, in startupInput, d launchDir, path 
 	if j.empty {
 		f.Level = Note
 		f.Text = fmt.Sprintf("%s is empty, so it starts nothing.", tildePath(path, in.Home))
-		f.Advice = "It is likely left from an app you removed; you can delete it."
+		f.Advice = "It does no harm. It may be left from an app you removed, or emptied on purpose so that a program cannot put it back and start again: leave it unless you know which."
 		return f, false
 	}
 	prog := resolveProgram(j.program, in.Root)

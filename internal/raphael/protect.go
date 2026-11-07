@@ -148,8 +148,10 @@ func updateFindings(ctx context.Context, r Runner, in protectInput) []Finding {
 		var names []string
 		for _, u := range list {
 			if d, ok := u.(map[string]any); ok {
+				// macOS's own name its version already: "macOS Sonoma
+				// 14.8.9", version "14.8.9".
 				name := plistString(d, "Display Name")
-				if v := plistString(d, "Display Version"); v != "" {
+				if v := plistString(d, "Display Version"); v != "" && !strings.Contains(name, v) {
 					name += " " + v
 				}
 				if name != "" {
