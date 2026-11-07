@@ -594,7 +594,9 @@ func (c *Core) trodSweep() bool {
 	work := false
 	if s.in {
 		working := 0
-		rows := c.list()
+		// Only this machine's sessions: a peer's rows in the list (§2.8)
+		// are its own core's, and its own trod bot sees to them.
+		rows := slices.DeleteFunc(c.list(), func(r ipc.Session) bool { return c.sessions[r.ID] == nil })
 		for _, r := range rows {
 			if r.State == ipc.StateWorking {
 				working++
@@ -908,6 +910,10 @@ func (c *Core) trodReport() ipc.TrodResult {
 	}
 	for _, row := range c.list() {
 		x := c.sessions[row.ID]
+		if x == nil {
+			// A peer's row (§2.8): its own core's trod bot reports on it.
+			continue
+		}
 		var sent []ipc.TrodSend
 		for _, e := range x.track.trod {
 			if !e.at.Before(s.from) {
