@@ -179,12 +179,31 @@ struct Header: Decodable {
     var trod: TrodShift?
     /// Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
     var vpn: VPNMark?
+    /// How busy the machine is, read every 5 s (DESIGN §2.4).
+    var load: MachineLoad?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
-        case trod, vpn
+        case trod, vpn, load
+    }
+}
+
+/// How busy the core's machine is: its CPUs, the work waiting to run over
+/// the last minute and the kernel's memory pressure (1, 2 or 4).
+struct MachineLoad: Decodable, Equatable {
+    var cpus: Int
+    var runQueue: Double
+    var pressure: Int?
+
+    /// Busy as Gabriel counts it: the work waiting leaves less than a CPU
+    /// free, or memory is under pressure (DESIGN §4.11).
+    var busy: Bool { cpus > 0 && (runQueue >= Double(cpus - 1) || (pressure ?? 0) >= 2) }
+
+    enum CodingKeys: String, CodingKey {
+        case cpus, pressure
+        case runQueue = "run_queue"
     }
 }
 

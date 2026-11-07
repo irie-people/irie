@@ -76,6 +76,12 @@ type Core struct {
 	lidMu       sync.Mutex  // guards lid; taken after mu and awakeMu
 	lid         lidHold     // what the core did to the Mac's sleep, for a closed lid
 
+	// What the freeze dog knows of Irie's own processes, to keep them
+	// running (steady.go): the tmux server's pid, which only the dog reads
+	// and writes, and the sidebar's process group, which each tick sets.
+	server       int
+	sidebarGroup atomic.Int64
+
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
 
@@ -289,6 +295,11 @@ func Run(o Options) error {
 	c.loadTrodHand()
 	c.loadRaphael()
 
+	// The freeze dog, Irie's one watchdog, runs first: the first tick
+	// waits for tmux, and a stopped server would hold it until the dog
+	// continues it (steady.go). Windows subscribe to its watch later.
+	go c.watchFreezes()
+
 	// The layout, the registry and the rows' states are in place before the
 	// first hello. Every tree comes out of the background once, since only
 	// the core that put one there knows, so an install never leaves an agent
@@ -320,7 +331,6 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
-	go c.watchFreezes()
 	go c.watchCore()
 
 	stop := make(chan os.Signal, 1)
@@ -381,6 +391,7 @@ func (c *Core) tick() {
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.noteSidebar()
 	c.keepView()
 	c.followTeams()
 	c.reap()
@@ -984,6 +995,9 @@ func (c *Core) show(a ipc.ShowArgs) error {
 		c.split = a.Session
 	}
 	err := c.swapIn(a.Session, a.Focus)
+	// While Gabriel holds back, the session now on show comes out of the
+	// background before this returns (gabriel.go).
+	c.refocus()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

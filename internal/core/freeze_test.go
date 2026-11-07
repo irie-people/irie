@@ -436,6 +436,18 @@ func slow(t *testing.T) bool {
 	return true
 }
 
+// skipIfDemoted skips a test that looks for processes out of the
+// background once the test itself went there, as when the machine got busy
+// meanwhile and Gabriel put the test's session in the background (an
+// agent's own go test; an install's never is): what it starts from then on
+// starts there too.
+func skipIfDemoted(t *testing.T) {
+	t.Helper()
+	if demoted(t) {
+		t.Skip("the test went into the background, as a session's processes do while another is promoted or Gabriel holds it back")
+	}
+}
+
 func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	c := setup(t)
 	var all []ipc.Session
@@ -480,6 +492,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 			t.Errorf("%s: %v not in the background", s.Name, out)
 		}
 	}
+	skipIfDemoted(t)
 	if in, _ := inBackground(gamma); len(in) > 0 {
 		t.Errorf("the promoted session's %v are in the background", in)
 	}
@@ -494,6 +507,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 0}, nil); err != nil {
 		t.Fatal(err)
 	}
+	skipIfDemoted(t)
 	for _, s := range append(all, delta) {
 		if in, _ := inBackground(s); len(in) > 0 {
 			t.Errorf("%s: %v still in the background", s.Name, in)

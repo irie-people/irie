@@ -33,6 +33,7 @@ import (
 //
 // The dog takes no lock but its own, so neither a ping nor its answer waits
 // for a busy core, and a core that was itself held up blames no window.
+// The same dog keeps Irie's own processes running (steady.go).
 
 var (
 	// freezeTick is how often the dog pings and looks.
@@ -162,12 +163,24 @@ func (c *Core) Hear(frames <-chan ipc.Frame, line []byte) {
 	}
 }
 
-// watchFreezes runs the freeze dog until the core stops.
+// watchFreezes runs the freeze dog until the core stops. It is Irie's one
+// watchdog: every freezeTick it looks at the windows, and every
+// steadyEvery it keeps Irie's own processes running and out of the
+// background (steady.go). Neither look waits on the other for long: a
+// restart runs on its own, and steady takes no lock and starts nothing.
 func (c *Core) watchFreezes() {
-	t := time.NewTicker(freezeTick)
-	defer t.Stop()
-	for range t.C {
-		c.lookAtWindows(time.Now())
+	windows := time.NewTicker(freezeTick)
+	defer windows.Stop()
+	own := time.NewTicker(steadyEvery)
+	defer own.Stop()
+	c.steady()
+	for {
+		select {
+		case <-windows.C:
+			c.lookAtWindows(time.Now())
+		case <-own.C:
+			c.steady()
+		}
 	}
 }
 
