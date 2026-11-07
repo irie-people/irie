@@ -438,6 +438,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-01 | AVAssetWriter.h, AVAssetWriterInput.h and AVVideoSettings.h in the macOS 14 SDK (AVFoundation, read locally) | H.264 in an MP4 with BT.709 colour properties, real-time input and the adaptor's pixel buffer pool: the film's writer |
 | 2026-11-01 | NSProcessInfo.h in the macOS 14 SDK (Foundation, read locally), whose notes reserve `NSActivityLatencyCritical` for work such as video recording | An activity, user-initiated and latency-critical, keeps App Nap from slowing the film's timer while the app has no window on screen |
 | 2026-11-01 | VNRecognizeTextRequest.h in the macOS 14 SDK (Vision, read locally) | `docs/demo/ocr.swift`: the frames' text, read on the Mac, for record.sh's scan for names and paths |
+| 2026-11-07 | C. H. Bennett, "Logical Reversibility of Computation", IBM J. Res. Dev. 17(6), 1973, https://doi.org/10.1147/rd.176.0525 ; T. Toffoli, "Reversible Computing", MIT/LCS/TM-151, 1980 ; https://pkg.go.dev/strconv (`QuotedPrefix`) | Undo (DESIGN §4.5): an action's inverse puts back all it changed, so undoing a promotion also puts back the session's place and park, and rename, reorder, freeze, thaw and priority became steps of the history; core.Title and the Mac app's Edit menu curl each quoted name of a label |
 
 ## Third-party code
 

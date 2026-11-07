@@ -72,6 +72,29 @@ func (a action) str(k string) string {
 	return s
 }
 
+func (a action) flag(k string) bool {
+	b, _ := a.Data[k].(bool)
+	return b
+}
+
+// strs is a list of strings in a's data, as kept in memory or as read back
+// from state.json.
+func (a action) strs(k string) []string {
+	switch v := a.Data[k].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, e := range v {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 // history is the undo and redo stacks, the next step to take last in each.
 type history struct {
 	Undo []action `json:"undo"`
@@ -230,10 +253,20 @@ func (c *Core) saveState() {
 }
 
 // actionKind is one kind of undoable action: the verb of its label, and
-// what its undo and its redo do.
+// what its undo and its redo do. A kind whose label needs more than the
+// verb and the session's name, such as rename's two names, gives label.
 type actionKind struct {
 	verb       string
+	label      func(a action) string
 	undo, redo effect
+}
+
+// labelOf is what the header shows for step a of kind k.
+func (k actionKind) labelOf(a action) string {
+	if k.label != nil {
+		return k.label(a)
+	}
+	return label(k.verb, a.Name)
 }
 
 // effect is what one direction of an action does.
@@ -258,10 +291,9 @@ type problem struct {
 // actionKinds are the kinds of action the history knows, by name.
 var actionKinds = map[string]actionKind{}
 
-// registerAction adds a kind of undoable action. A later action, such as
-// rename, registers its kind here, as park does (order.go), and calls
-// recordAction once it has been done; undo, redo, questions, state.json
-// and the header follow.
+// registerAction adds a kind of undoable action. An action registers its
+// kind here, as park does (order.go), and calls recordAction once it has
+// been done; undo, redo, questions, state.json and the header follow.
 func registerAction(kind string, k actionKind) {
 	if _, dup := actionKinds[kind]; dup {
 		panic("core: action kind registered twice: " + kind)
@@ -306,7 +338,7 @@ func (c *Core) recordAction(kind, id string, data map[string]any) {
 	if r, ok := c.closedRecord(id); ok && c.sessions[id] == nil {
 		a = a.with("closed", r.Closed.Format(time.RFC3339Nano))
 	}
-	a.Label = label(k.verb, a.Name)
+	a.Label = k.labelOf(a)
 	c.steps.hist.push(a)
 	c.saveState()
 	c.mu.Unlock()
@@ -530,7 +562,7 @@ func (c *Core) undo(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 		return res, err
 	}
 	c.mu.Lock()
-	done.Label = label(kind.verb, done.Name)
+	done.Label = kind.labelOf(done)
 	c.steps.hist.finish(dir, top.ID, done)
 	c.saveState()
 	c.journalStep(dir, done, before, c.whereIs(top.Session), a.Choice)
@@ -627,6 +659,25 @@ func checkClose(c *Core, a action) []problem {
 
 func gone(a action) problem {
 	return problem{code: "gone", question: fmt.Sprintf("%q is gone: Irie no longer has it, open or closed.", a.Name), recommend: ipc.ChoiceSkip}
+}
+
+// notOpen is what makes a step about an open session uncertain when its
+// session is not open: closed, so there is nothing to verb, or gone. The
+// caller holds c.mu.
+func notOpen(c *Core, a action, verb string) []problem {
+	if _, ok := c.closedRecord(a.Session); ok {
+		return []problem{{code: "closed", question: fmt.Sprintf("%q is closed, so there is nothing to %s.", c.nameOf(a.Session), verb), recommend: ipc.ChoiceSkip}}
+	}
+	return []problem{gone(a)}
+}
+
+// alreadyDone is the problem of a step whose session is already as the
+// step would leave it: settling moves the history on.
+func alreadyDone(question string) problem {
+	return problem{code: "already", question: question,
+		options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
+			Detail: "Nothing needs doing, so the history moves on as if Irie had done it."}},
+		recommend: ipc.ChoiceSettle}
 }
 
 // doClose closes a's session the way the close op does, and notes when.

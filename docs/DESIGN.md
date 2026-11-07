@@ -673,11 +673,12 @@ Anything else starts a session, as before, and is the jot the next may add to: "
 
 | Action | Inverse | Notes |
 |---|---|---|
-| Rename | Rename back | The name before comes back as it was: the user's, or one Claude Code's titles change (`before_named`) |
+| Rename | Rename back | The name before comes back as it was: the user's, or one Claude Code's titles change (`before_named`). Its label names both names, `rename "a" to "b"`. Asks when the session was renamed since or another took the name |
 | Park / unpark | Unpark / park | Asks when the session is closed or gone (skip), or is that way already (settle). A park that changed nothing, and promote's unpark, record no step |
-| Priority on / off | Off / on | Cancels a note that has not been delivered. If it was delivered, sends `notes.priority_cleared` |
+| Reorder | Back to its place | The step keeps the three sessions that came after it, before the move and after; it goes back just before the first of them still in the order, or last |
+| Priority on / off | Off / on | Undoing a promotion puts the session back where it was in the list, parked again if it was; undoing "stop promoting" promotes it where it stands. Cancels a note that has not been delivered. If it was delivered, sends `notes.priority_cleared` |
 | Pause / resume | Resume / pause | Releasing still sends the "held for" note |
-| Freeze / thaw | Thaw / freeze | |
+| Freeze / thaw | Thaw / freeze | One session at a time; freezing or thawing them all (`F`), and what the trod bot freezes, record no step |
 | Close | Reopen (`claude --resume <uuid>` in the same cwd) | Closing keeps the worktree. A session that never started is spawned again with its original task. Details below |
 | Spawn | Close | Redo reopens it |
 | Note | Cancel | Only while undelivered; delivered notes are shown as such |
@@ -689,7 +690,9 @@ Anything else starts a session, as before, and is the jot the next may add to: "
 - Not undoable: the agents' own edits (use the agent's own rewind) and worktree contents.
 - Steps name sessions by id, never by row. A step that fails changes nothing, the history included. A step whose undo or redo finishes after a new action came in leaves the history, which stays linear.
 
-**Wired now.** Spawn (its label `start "name"`), close and reopen, the last two whether done with `x x`, `:close`, `:reopen` or the socket, and park and unpark (`park "name"`), however they were done. The Mac app's Edit > Undo and Redo (⌘Z, ⇧⌘Z) take the same steps and ask the same questions, in an alert. A subtask an agent delegates (§6.4) is the agent's doing and not recorded; nor are moves (§4.6), tool sessions, or the closes `spawn.close_when_done` makes, which `reopen` and the review dock bring back. Rename, freeze, priority and reorder are not recorded yet; they, pause and note plug in as below.
+**Wired now.** Spawn (its label `start "name"`), close and reopen, the last two whether done with `x x`, `:close`, `:reopen` or the socket, park and unpark (`park "name"`), rename (`rename "a" to "b"`), reorder (`reorder "name"`), the freeze and thaw of one session (`freeze "name"`), and promote and stop promoting (`promote "name"`, `stop promoting "name"`), however they were done. An action that changed nothing, such as a second freeze or a drag back to the same place, records no step. The Mac app's Edit > Undo and Redo (⌘Z, ⇧⌘Z) take the same steps and ask the same questions, in an alert; it and the core's `Title` read each quoted name in a label with curly quotes. A subtask an agent delegates (§6.4) is the agent's doing and not recorded; nor are moves (§4.6), tool sessions, or the closes `spawn.close_when_done` makes, which `reopen` and the review dock bring back. Pause, note, and freezing or thawing them all are not recorded yet; they plug in as below.
+
+**An inverse puts back all the action changed.** A step keeps what its undo needs to leave the session exactly as it was, not only the field the action names: promote also moved the session to the top and unparked it, so undoing it puts back the place and the park too. What left Irie can't come back: undoing a thaw freezes the session again, but its agent keeps the "frozen for" note the thaw gave it.
 
 **Adding an action.** A kind registers once (`registerAction` in `internal/core/undo.go`) with the verb of its label and two effects, undo and redo. An effect is a check, which lists what makes it uncertain now, and a do, which reuses the op's own path. The op records a step once it has succeeded (`recordAction`); the history, `state.json`, the questions, the journal and the header follow. A step keeps what its kind needs in `data`, such as when a close happened.
 
