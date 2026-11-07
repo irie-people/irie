@@ -44,19 +44,38 @@ struct UndoOption: Decodable {
 
 enum UndoText {
     /// A step's label as a menu says it: the core's `park "api-fix"` reads
-    /// Park “api-fix”.
+    /// Park “api-fix”, and `rename "a" to "b"` reads Rename “a” to “b”.
+    /// Each name is quoted as Go's %q quotes it; `core.Title` reads labels
+    /// the same way.
     static func title(_ label: String) -> String {
-        guard let sp = label.firstIndex(of: " ") else { return label.capitalizedFirst }
-        let verb = String(label[..<sp]).capitalizedFirst
-        var name = String(label[label.index(after: sp)...])
-        // The name is quoted as Go's %q quotes it.
-        if name.count >= 2, name.hasPrefix("\""), name.hasSuffix("\"") {
-            name = String(name.dropFirst().dropLast())
-                .replacingOccurrences(of: "\\\"", with: "\"")
-                .replacingOccurrences(of: "\\\\", with: "\\")
-            return "\(verb) “\(name)”"
+        var out = ""
+        var rest = Substring(label)
+        while let open = rest.firstIndex(of: "\"") {
+            out += rest[..<open]
+            var name = ""
+            var i = rest.index(after: open)
+            var closed = false
+            while i < rest.endIndex {
+                let c = rest[i]
+                if c == "\"" {
+                    closed = true
+                    break
+                }
+                if c == "\\", rest.index(after: i) < rest.endIndex {
+                    i = rest.index(after: i)
+                }
+                name.append(rest[i])
+                i = rest.index(after: i)
+            }
+            guard closed else {
+                out += rest[open...]
+                return out.capitalizedFirst
+            }
+            out += "“\(name)”"
+            rest = rest[rest.index(after: i)...]
         }
-        return "\(verb) \(name)"
+        out += rest
+        return out.capitalizedFirst
     }
 }
 

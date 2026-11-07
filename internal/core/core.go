@@ -781,9 +781,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		s, err := c.rename(a)
+		s, step, err := c.rename(a)
 		if err != nil {
 			return nil, err
+		}
+		if step != nil {
+			c.recordAction(actRename, a.Session, step)
 		}
 		return ipc.RenameResult{Session: s}, nil
 	case ipc.OpHook:

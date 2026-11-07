@@ -105,6 +105,17 @@ func New(opt Options) (*Server, error) {
 	}, nil
 }
 
+// AppTLS is the TLS of the app's port: a certificate from leaves for the
+// address the client dialed, and Go's own choice of key exchange. That puts
+// the hybrid post-quantum X25519MLKEM768 first, so what a phone or a peer
+// sends today can't be read later by a quantum computer that breaks X25519,
+// and still lets a client without it in on X25519. Naming CurvePreferences
+// here would drop that default, and so would a go line below 1.24 in go.mod
+// (GODEBUG tlsmlkem); the peer package's tests check both ends agree on it.
+func AppTLS(leaves *Leaves) *tls.Config {
+	return &tls.Config{GetCertificate: leaves.GetCertificate, MinVersion: tls.VersionTLS12}
+}
+
 // Run serves until ctx ends: the app over HTTPS on the port, and the setup
 // page over HTTP on the port below.
 func (s *Server) Run(ctx context.Context) error {
@@ -119,7 +130,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	app := &http.Server{
 		Handler:           s.App(),
-		TLSConfig:         &tls.Config{GetCertificate: s.leaves.GetCertificate, MinVersion: tls.VersionTLS12},
+		TLSConfig:         AppTLS(s.leaves),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		ErrorLog:          slog.NewLogLogger(s.log.Handler(), slog.LevelDebug),

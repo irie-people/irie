@@ -3,8 +3,12 @@ package peer
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,5 +139,52 @@ func TestPeersAreKeptPrivately(t *testing.T) {
 		if CheckName(bad) == nil {
 			t.Errorf("CheckName(%q) passed", bad)
 		}
+	}
+}
+
+// The link between machines, as a phone's, agrees its keys with the hybrid
+// post-quantum X25519MLKEM768, so what it carries today stays sealed once a
+// quantum computer can break X25519. A client that offers only X25519, as
+// a phone from before iOS 26 does, still gets in.
+func TestTheLinkAgreesItsKeysPostQuantum(t *testing.T) {
+	ca, err := remote.LoadAuthority(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaves := &remote.Leaves{CA: ca, Names: func() []string { return nil }, Addrs: func() []net.IP { return nil }}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{
+		Handler:   http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, r.TLS.CurveID.String()) }),
+		TLSConfig: remote.AppTLS(leaves),
+	}
+	go srv.ServeTLS(ln, "", "")
+	t.Cleanup(func() { srv.Close() })
+
+	c, err := New("https://"+ln.Addr().String(), "", ca.FingerprintHex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	agreed := func(hc *http.Client) (tls.CurveID, string) {
+		t.Helper()
+		res, err := hc.Get(c.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.TLS.CurveID, string(b)
+	}
+	if got, server := agreed(c.http); got != tls.X25519MLKEM768 || server != tls.X25519MLKEM768.String() {
+		t.Errorf("the link agreed on %v (the gateway saw %s), not the post-quantum X25519MLKEM768", got, server)
+	}
+
+	want, _ := hex.DecodeString(ca.FingerprintHex())
+	classical := pinnedTLS(want, "127.0.0.1")
+	classical.CurvePreferences = []tls.CurveID{tls.X25519}
+	if got, _ := agreed(&http.Client{Transport: &http.Transport{TLSClientConfig: classical}}); got != tls.X25519 {
+		t.Errorf("a client with X25519 alone agreed on %v", got)
 	}
 }
