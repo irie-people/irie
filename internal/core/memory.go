@@ -150,9 +150,11 @@ func (c *Core) memoryNow() ipc.Memory {
 	for _, x := range c.sessions {
 		out.Agents += x.memory
 	}
-	// Rounded as the free memory is: the agents' pages change with every
-	// sample, and the header with them would be sent again each time.
-	out.Agents = out.Agents / availableStep * availableStep
+	// Rounded to a step, as the free memory is: the agents' pages change
+	// with every sample, and the header with them would be sent again each
+	// time. Up, so the agents never take less than the rows say, nor
+	// nothing while some run.
+	out.Agents = (out.Agents + availableStep - 1) / availableStep * availableStep
 	return out
 }
 
