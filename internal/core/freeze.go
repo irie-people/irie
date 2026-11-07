@@ -53,13 +53,16 @@ type freezeMark struct {
 }
 
 // freezeOp freezes (on) or thaws the sessions a names, and says which it
-// froze or thawed.
-func (c *Core) freezeOp(a ipc.FreezeArgs, on bool) (ipc.FreezeResult, error) {
+// froze or thawed. changed are those of them that were not frozen (on) or
+// were: freezing a frozen session again only stops what started in it
+// since.
+func (c *Core) freezeOp(a ipc.FreezeArgs, on bool) (r ipc.FreezeResult, changed []string, err error) {
 	c.mu.Lock()
 	ids, err := c.freezeTargets(a, on)
 	done := []string{}
 	for _, id := range ids {
 		x := c.sessions[id]
+		was := x.track.frozen != nil
 		var err1 error
 		if on {
 			err1 = c.freezeLocked(x, "")
@@ -74,11 +77,66 @@ func (c *Core) freezeOp(a ipc.FreezeArgs, on bool) (ipc.FreezeResult, error) {
 			continue
 		}
 		done = append(done, id)
+		if was != on {
+			changed = append(changed, id)
+		}
 	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	return ipc.FreezeResult{Sessions: done}, err
+	return ipc.FreezeResult{Sessions: done}, changed, err
+}
+
+// Action kinds of freeze (undo.go): one session frozen or thawed by the
+// user. Freezing or thawing them all at once is no step yet, nor is what
+// the trod bot does.
+const (
+	actFreeze = "freeze"
+	actThaw   = "thaw"
+)
+
+func init() {
+	freezeEff := effect{check: checkFreeze(true), do: doFreeze(true)}
+	thawEff := effect{check: checkFreeze(false), do: doFreeze(false)}
+	registerAction(actFreeze, actionKind{verb: "freeze", undo: thawEff, redo: freezeEff})
+	registerAction(actThaw, actionKind{verb: "thaw", undo: freezeEff, redo: thawEff})
+}
+
+// checkFreeze is what makes freezing a's session (on), or thawing it,
+// uncertain: that it is closed or gone, that it is that way already, or,
+// to freeze it, that its agent has ended.
+func checkFreeze(on bool) func(c *Core, a action) []problem {
+	verb, already := "thaw", "is not frozen any more"
+	if on {
+		verb, already = "freeze", "is frozen already"
+	}
+	return func(c *Core, a action) []problem {
+		x := c.sessions[a.Session]
+		if x == nil {
+			return notOpen(c, a, verb)
+		}
+		if (x.track.frozen != nil) == on {
+			return []problem{alreadyDone(fmt.Sprintf("%q %s.", x.name, already))}
+		}
+		if st := x.track.state(x.dead); on && (st == ipc.StateExited || st == ipc.StateFailed) {
+			return []problem{{code: "ended", question: fmt.Sprintf("%q has ended, so there is nothing to freeze.", x.name), recommend: ipc.ChoiceSkip}}
+		}
+		return nil
+	}
+}
+
+// doFreeze freezes a's session (on) or thaws it the way the op does, with
+// no step of its own, and takes the name it has now.
+func doFreeze(on bool) func(c *Core, a action) (action, error) {
+	return func(c *Core, a action) (action, error) {
+		if _, _, err := c.freezeOp(ipc.FreezeArgs{Session: a.Session}, on); err != nil {
+			return a, err
+		}
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		a.Name = c.nameOf(a.Session)
+		return a, nil
+	}
 }
 
 // freezeTargets are the sessions a names: one, or with All every live

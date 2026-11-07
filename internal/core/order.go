@@ -102,14 +102,113 @@ func (c *Core) setOrder(ids []string) {
 	}
 }
 
-// reorder puts a session just before another in the list, or last.
-func (c *Core) reorder(a ipc.ReorderArgs) error {
+// reorder puts a session just before another in the list, or last. When
+// that moved it, step is what undoing it needs (§4.5): the sessions that
+// came after it before, and those that do now.
+func (c *Core) reorder(a ipc.ReorderArgs) (step map[string]any, err error) {
 	c.mu.Lock()
-	err := c.putBefore(a.Session, a.Before)
+	from, was := c.nextOf(a.Session), c.fullOrder()
+	err = c.putBefore(a.Session, a.Before)
+	if err == nil && !slices.Equal(was, c.fullOrder()) {
+		step = map[string]any{"from": from, "to": c.nextOf(a.Session)}
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	return err
+	return step, err
+}
+
+// placeAnchors is how many of the sessions after one a step keeps to find
+// its place again by: should some of them go, the first still there will do.
+const placeAnchors = 3
+
+// nextOf are the sessions that follow session id in the order, the nearest
+// first, placeAnchors of them at most. The caller holds c.mu.
+func (c *Core) nextOf(id string) []string {
+	ids := c.fullOrder()
+	i := slices.Index(ids, id)
+	if i < 0 {
+		return []string{}
+	}
+	return slices.Clone(ids[i+1 : min(len(ids), i+1+placeAnchors)])
+}
+
+// placeFor is where putting id back by next puts it: in the order without
+// it, rest, just before the first of next that rest has, or last.
+func placeFor(ids []string, id string, next []string) (rest []string, at int) {
+	rest = slices.DeleteFunc(slices.Clone(ids), func(s string) bool { return s == id })
+	for _, n := range next {
+		if i := slices.Index(rest, n); i >= 0 {
+			return rest, i
+		}
+	}
+	return rest, len(rest)
+}
+
+// placed reports whether session id is where putting it back by next would
+// put it. The caller holds c.mu.
+func (c *Core) placed(id string, next []string) bool {
+	ids := c.fullOrder()
+	_, at := placeFor(ids, id, next)
+	return slices.Index(ids, id) == at
+}
+
+// putBack puts session id back in the place next names (placeFor), and
+// records it as reordered by the user, as undo and redo are the user's.
+// The caller holds c.mu.
+func (c *Core) putBack(id string, next []string) {
+	rest, at := placeFor(c.fullOrder(), id, next)
+	c.setOrder(slices.Insert(rest, at, id))
+	if x := c.sessions[id]; x != nil {
+		before := ""
+		if at < len(rest) {
+			before = rest[at]
+		}
+		c.record(x, event.Event{Source: event.SourceUser, Kind: event.UIReordered, Data: map[string]any{"before": before}})
+	}
+}
+
+// Action kind of reorder (undo.go): undo puts the session back where it
+// was, and redo where the user put it.
+const actReorder = "reorder"
+
+func init() {
+	registerAction(actReorder, actionKind{verb: "reorder",
+		undo: effect{check: checkPlace("from"), do: doPlace("from")},
+		redo: effect{check: checkPlace("to"), do: doPlace("to")}})
+}
+
+// checkPlace is what makes putting a's session in the place its data keeps
+// as k uncertain: that it is closed or gone, or is in that place already.
+func checkPlace(k string) func(c *Core, a action) []problem {
+	return func(c *Core, a action) []problem {
+		x := c.sessions[a.Session]
+		if x == nil {
+			return notOpen(c, a, "reorder")
+		}
+		if c.placed(x.id, a.strs(k)) {
+			return []problem{alreadyDone(fmt.Sprintf("%q is in that place already.", x.name))}
+		}
+		return nil
+	}
+}
+
+// doPlace puts a's session in the place its data keeps as k.
+func doPlace(k string) func(c *Core, a action) (action, error) {
+	return func(c *Core, a action) (action, error) {
+		c.mu.Lock()
+		x := c.sessions[a.Session]
+		if x == nil {
+			c.mu.Unlock()
+			return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		}
+		c.putBack(x.id, a.strs(k))
+		a.Name = x.name
+		frames := c.changes()
+		c.mu.Unlock()
+		c.publish(frames)
+		return a, nil
+	}
 }
 
 // putBefore puts session id just before session before, or last when

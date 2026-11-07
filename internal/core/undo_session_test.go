@@ -261,7 +261,10 @@ func TestUndoAsksBeforeStoppingAFrozenAgent(t *testing.T) {
 	c := setup(t)
 	a := c.spawn("prompt")
 	c.waitState(a.ID, ipc.StateWorking)
-	c.freeze(a.ID, true)
+	// Freezing them all is no step, so the start is next.
+	if err := c.call(ipc.OpFreeze, ipc.FreezeArgs{All: true}, nil); err != nil {
+		t.Fatal(err)
+	}
 	c.waitState(a.ID, ipc.StateFrozen)
 	ch := c.ask(dirUndo)
 	if ch.Question != `"Prompt" is frozen in the middle of its work.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceCancel, ipc.ChoiceApply, ipc.ChoiceSkip}) {
@@ -459,10 +462,13 @@ func TestUndoAndRedoOfAParkAndAnUnpark(t *testing.T) {
 		t.Errorf("after undoing the unpark, parked = %v", got)
 	}
 
-	// A new name is no matter, and the step takes it.
+	// A new name is no matter, and the step takes it. Leave the rename out
+	// of the history, so the unpark is still there to redo.
+	redo := c.history().Redo
 	if _, err := c.rename(a.ID, "beta"); err != nil {
 		t.Fatal(err)
 	}
+	c.dropLast(redo)
 	if r := c.step(dirRedo); r.Label != `unpark "beta"` {
 		t.Errorf("redo after a rename %+v", r)
 	}
@@ -490,6 +496,9 @@ func TestUndoOfAParkAsksWhenItIsUnparkedOrClosed(t *testing.T) {
 	if got := parked(c.list()); len(got) != 0 {
 		t.Fatalf("after promoting it, parked = %v", got)
 	}
+	// Leave the promotion out of the history, so the park is next while
+	// the session is unparked.
+	c.dropLast(nil)
 	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `park "alpha"`}) {
 		t.Errorf("history after promoting it %v", labels(h.Undo))
 	}
@@ -503,9 +512,11 @@ func TestUndoOfAParkAsksWhenItIsUnparkedOrClosed(t *testing.T) {
 	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`}) || !slices.Equal(labels(h.Redo), []string{`park "alpha"`}) {
 		t.Errorf("history after settle %v / %v", labels(h.Undo), labels(h.Redo))
 	}
+	redo := c.history().Redo
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: a.ID, Level: 0}, nil); err != nil {
 		t.Fatal(err)
 	}
+	c.dropLast(redo)
 
 	// Redo parks it again. Leave its close out of the history, so the park
 	// is next while it is closed.
