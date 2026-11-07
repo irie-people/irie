@@ -1435,6 +1435,7 @@ So Irie runs whichever llama.cpp build the user names, beside its Ollama server,
 **Not done, and why.**
 - **Streaming with stock llama.cpp** (`--cpu-moe` and memory-mapped layers): it fails on Apple silicon as measured above, and untested settings would only fail later. A streaming fork goes in `local.llama_server`, with its own flags in `local.llama_args`; Irie's memory check counts its whole model, so such a profile sets `enforce = false`.
 - **Fetching PrismML's build or a model file.** Irie runs a llama.cpp the user installed, as it runs their Ollama.
+- **FreeToken** (FlashML, a Berkeley-led team, Apache-2.0, August 2026; research of 2026-11-07). It runs mixture-of-experts models larger than the GPU: the experts stay in RAM, and the ones used lately are kept on an NVIDIA GPU. It also saves a hybrid model's running state at message, thinking and tool-call boundaries, so after an agent edits its history only the part from the edit on is read again. It runs only on Linux and Windows PCs with an NVIDIA RTX 30-series or later GPU; a macOS engine is on its roadmap but has not shipped. On Apple silicon the CPU and GPU share one memory, so the expert offload has nothing to move, and FreeToken's own guide keeps experts resident by default on unified-memory GPUs. llama-server already saves a checkpoint at each user message (since 2026-06). A FreeToken server on another machine speaks Anthropic's API, so a user with such a PC adds it as a profile with `ANTHROPIC_BASE_URL`, as for a free cloud tier (§6.3).
 
 ---
 
