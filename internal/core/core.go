@@ -971,6 +971,9 @@ func (c *Core) show(a ipc.ShowArgs) error {
 		c.split = a.Session
 	}
 	err := c.swapIn(a.Session, a.Focus)
+	// While Gabriel holds back, the session now on show comes out of the
+	// background before this returns (gabriel.go).
+	c.refocus()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
