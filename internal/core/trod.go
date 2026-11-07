@@ -48,6 +48,14 @@ import (
 // looks at the stopped sessions.
 const trodEvery = 10
 
+// trodThawGap is how long the trod bot waits between two thaws, so that
+// the sessions it froze for the week's allotment come back one at a time.
+// An agent frozen for a day or more renews its sign-in with its first
+// request, and many renewing at once can sign them all out: twenty-one
+// thawed in the same second all came back "Not logged in". One at a time
+// spreads the load on the Mac too.
+const trodThawGap = 30 * time.Second
+
 // trodTypedFor is how soon a message the shift typed must come in as a
 // prompt for that prompt to be the shift's rather than the user's.
 const trodTypedFor = time.Minute
@@ -503,6 +511,19 @@ func (c *Core) spendsAlone(x *session, now time.Time) bool {
 	return false
 }
 
+// signedOut reports whether a session's turn failed since from because its
+// agent is signed out, with nothing sent on to it since: its failed turn is
+// still what it waits on. The caller holds c.mu.
+func (c *Core) signedOut(from time.Time) bool {
+	for _, x := range c.sessions {
+		e, ok := x.track.needs[event.Main]
+		if ok && e.Kind == event.TurnFailed && e.Str("error") == "authentication_failed" && !e.Time().Before(from) {
+			return true
+		}
+	}
+	return false
+}
+
 // planLimit is when the plan's usage limit resets, by its windows at
 // their limit in the newest status line, and whether that is still to
 // come.
@@ -548,11 +569,24 @@ func (c *Core) trodSweep() bool {
 				working++
 			}
 		}
+		hold := c.signedOut(s.from)
+		if hold && !c.trodHeld {
+			c.log.Info("trod bot: an agent is signed out, so it thaws nothing more this shift until you sign in again")
+		}
+		c.trodHeld = hold
 		for _, r := range rows {
 			x := c.sessions[r.ID]
 			if f := x.track.frozen; f != nil && f.Str("by") == trodBy && !overWeek {
+				// One at a time, trodThawGap apart, and none while an agent
+				// is signed out: they would only wake into the same failure,
+				// while frozen they carry on where they were later.
+				if hold || now.Sub(c.trodThawed) < trodThawGap {
+					continue
+				}
 				if err := c.thawLocked(x, "the week's plan use is back under the most it may use"); err != nil {
 					c.log.Warn("trod bot: thaw", "session", x.id, "err", err)
+				} else {
+					c.trodThawed = now
 				}
 				continue
 			}

@@ -122,6 +122,8 @@ type Core struct {
 	trodNow    trodNow               // the trod bot as its last sweep found it (trod.go)
 	trodReset  time.Time             // when the plan's usage limit last reset, as far as the trod bot saw
 	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
+	trodThawed time.Time             // when the trod bot last thawed a session it froze (trod.go)
+	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 }
