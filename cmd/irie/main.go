@@ -41,6 +41,11 @@ const usage = `usage: irie [command]
   irie setup local [--model MODEL] [--yes]
                           get +local ready: install Ollama if needed, pick a
                           model that fits this machine's memory, pull and check it
+  irie setup lid [--remove]
+                          let Irie keep this Mac awake with its lid closed
+                          while sessions work; asks for your password once
+  irie lid                whether Irie keeps this Mac awake with its lid
+                          closed now, and why
   irie remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (irie remote for help)
   irie dms <command>      the dead man's switch guide's helpers: its checks,
@@ -118,6 +123,8 @@ func run(args []string) int {
 		err = dmsCmd(args)
 	case "peer":
 		err = peerCmd(args)
+	case "lid":
+		err = lidCmd(args)
 	case "setup":
 		err = setup(args)
 	case "version":
