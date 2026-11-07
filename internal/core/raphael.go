@@ -572,30 +572,23 @@ func restartWhat(what string) string {
 // beat says the core's loop went round (watchCore).
 func (c *Core) beat() { c.raph.beat.Store(time.Now().UnixNano()) }
 
-// watchCore has the core leave when its own loop has stood still for
-// arch.raphael.core: a lock held for ever, or a call that never returns.
-// Its supervisor starts it again, and the agents never notice (§2.1,
-// principle 6). Before it leaves it writes where every goroutine was, in
-// a report in the freezes folder.
-func (c *Core) watchCore() {
-	c.beat()
-	t := time.NewTicker(coreWatchTick)
-	defer t.Stop()
-	last := time.Now()
-	for now := range t.C {
-		// A late look means the whole core was held up, or the machine
-		// asleep: the loop's time starts again.
-		held := now.Sub(last) > 3*coreWatchTick
-		last = now
-		if c.lookAtCore(now, held) {
-			exit := c.raph.exit
-			if exit == nil {
-				exit = os.Exit
-			}
-			exit(3)
-			return
-		}
+// watchCore is the freeze dog's look at the core's own loop, every
+// coreWatchTick (watchFreezes); last is when it looked before. The core
+// leaves when its loop has stood still for arch.raphael.core: a lock held
+// for ever, or a call that never returns. Its supervisor starts it again,
+// and the agents never notice (§2.1, principle 6). Before it leaves it
+// writes where every goroutine was, in a report in the freezes folder.
+func (c *Core) watchCore(now, last time.Time) {
+	// A late look means the whole core was held up, or the machine asleep:
+	// the loop's time starts again.
+	if !c.lookAtCore(now, now.Sub(last) > 3*coreWatchTick) {
+		return
 	}
+	exit := c.raph.exit
+	if exit == nil {
+		exit = os.Exit
+	}
+	exit(3)
 }
 
 // lookAtCore reports whether the core must leave now, its loop having
@@ -603,6 +596,9 @@ func (c *Core) watchCore() {
 // that stuck coreRestarts times in coreWindow is left be, and said so once.
 func (c *Core) lookAtCore(now time.Time, held bool) bool {
 	r := &c.raph
+	if r.beat.Load() == 0 {
+		return false // the loop has not started: the core is starting
+	}
 	cfg := c.cfg().Arch.Raphael
 	if held || !cfg.On || cfg.Core <= 0 || raphaelOff() {
 		c.beat()

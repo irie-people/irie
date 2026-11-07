@@ -331,7 +331,8 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
-	go c.watchCore()
+	// Raphael's look at the core's own loop (watchCore) counts from here.
+	c.beat()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)

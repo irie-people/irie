@@ -242,6 +242,9 @@ func TestRaphaelRestartsACoreWhoseLoopStandsStill(t *testing.T) {
 	cfg.Arch.Raphael.Core = time.Minute
 	c.useConfig(cfg)
 	now := time.Now()
+	if c.lookAtCore(now, false) {
+		t.Fatal("restarted a core whose loop has not started")
+	}
 	c.raph.beat.Store(now.Add(-30 * time.Second).UnixNano())
 	if c.lookAtCore(now, false) {
 		t.Fatal("restarted a core whose loop went round 30 s ago")
@@ -265,6 +268,20 @@ func TestRaphaelRestartsACoreWhoseLoopStandsStill(t *testing.T) {
 	b, _ := os.ReadFile(reports[0])
 	if !strings.Contains(string(b), "stood still for 2m0s") || !strings.Contains(string(b), "goroutine") {
 		t.Errorf("report:\n%.300s", b)
+	}
+	// The freeze dog's look leaves with code 3, for the supervisor to start
+	// the core again; a late look never.
+	var code int
+	c.raph.exit = func(n int) { code = n }
+	c.raph.beat.Store(now.Add(-2 * time.Minute).UnixNano())
+	c.watchCore(now, now.Add(-time.Minute))
+	if code != 0 {
+		t.Fatal("a late look restarted the core")
+	}
+	c.raph.beat.Store(now.Add(-2 * time.Minute).UnixNano())
+	c.watchCore(now, now.Add(-coreWatchTick))
+	if code != 3 {
+		t.Fatalf("exit code = %d, want 3", code)
 	}
 	// Three restarts in half an hour: he leaves it be.
 	for i := 1; i <= 2; i++ {

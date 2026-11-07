@@ -164,22 +164,30 @@ func (c *Core) Hear(frames <-chan ipc.Frame, line []byte) {
 }
 
 // watchFreezes runs the freeze dog until the core stops. It is Irie's one
-// watchdog: every freezeTick it looks at the windows, and every
-// steadyEvery it keeps Irie's own processes running and out of the
-// background (steady.go). Neither look waits on the other for long: a
-// restart runs on its own, and steady takes no lock and starts nothing.
+// watchdog: every freezeTick it looks at the windows, every steadyEvery it
+// keeps Irie's own processes running and out of the background
+// (steady.go), and every coreWatchTick it looks at the core's own loop
+// (watchCore, raphael.go). No look waits on another for long: a restart
+// runs on its own, and steady and the core's look take no lock and start
+// nothing.
 func (c *Core) watchFreezes() {
 	windows := time.NewTicker(freezeTick)
 	defer windows.Stop()
 	own := time.NewTicker(steadyEvery)
 	defer own.Stop()
+	loop := time.NewTicker(coreWatchTick)
+	defer loop.Stop()
 	c.steady()
+	last := time.Now()
 	for {
 		select {
 		case <-windows.C:
 			c.lookAtWindows(time.Now())
 		case <-own.C:
 			c.steady()
+		case now := <-loop.C:
+			c.watchCore(now, last)
+			last = now
 		}
 	}
 }
