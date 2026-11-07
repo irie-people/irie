@@ -223,6 +223,9 @@ func NewEnv(t *testing.T) *Env {
 	// focus (Gabriel, DESIGN §4.11): it would take the user's own agents for
 	// apps outside it.
 	t.Setenv("IRIE_GABRIEL", "off")
+	// Nor does it turn the Mac's sleep off and on for a closed lid (DESIGN
+	// §4.12): that would be the user's own Mac, and its lid.
+	t.Setenv("IRIE_LID", "off")
 	for _, k := range []string{"TMUX", "TMUX_PANE", "IRIE_BIN"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
