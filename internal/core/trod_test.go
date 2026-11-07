@@ -335,6 +335,55 @@ func TestTheTrodBotKeepsWithinTheWeeksAllotment(t *testing.T) {
 	}
 }
 
+func TestTheTrodBotThawsOneAtATimeAndNotIntoASignedOutAgent(t *testing.T) {
+	// Built before HOME moves, so Go keeps its module cache where it is.
+	testutil.BuildIrie(t)
+	fake := testutil.BuildFakeAgent(t)
+	// No status line of the user's own runs after Irie's.
+	t.Setenv("HOME", t.TempDir())
+	low := fmt.Sprintf("\n[profiles.low]\ncommand = %q\nmodel = \"claude-opus-5-5\"\nenv = { IRIE_FAKE_WEEK = \"10\" }\n", fake)
+	c := setupWith(t, agentConfig{statusLine: true, env: map[string]string{"IRIE_FAKE_WEEK": "95"}, extra: trodSection("retry = \"1s\"\n") + low})
+	// An agent whose turn failed because it is signed out.
+	login := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stopfail:authentication_failed", Name: "login"})
+	c.waitState(login.ID, ipc.StateNeedsYou)
+	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:90s,stop", Name: "a"})
+	b := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:90s,stop", Name: "b"})
+	c.waitState(a.ID, ipc.StateFrozen)
+	c.waitState(b.ID, ipc.StateFrozen)
+
+	// The week is back under the most it may use, but the others would only
+	// wake into the same failure, so they stay frozen.
+	c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.1,stop", Profile: "low", Name: "low"})
+	testutil.Eventually(t, 2*trodEvery*time.Second, "the week never came back under", func() bool {
+		w := c.trodReport().Week
+		return w != nil && *w == 10
+	})
+	time.Sleep(trodEvery*time.Second + 2*time.Second)
+	for _, s := range []ipc.Session{a, b} {
+		if row, _ := c.row(s.ID); row.State != ipc.StateFrozen {
+			t.Errorf("%s: %s while an agent is signed out, want frozen", s.Name, row.State)
+		}
+	}
+
+	// Once nothing waits on a sign-in, they come back one at a time.
+	c.closeSession(login.ID)
+	var at []time.Time
+	testutil.Eventually(t, trodThawGap+4*trodEvery*time.Second, "the trod bot never thawed both", func() bool {
+		at = at[:0]
+		for _, s := range []ipc.Session{a, b} {
+			for _, e := range c.events(s.ID) {
+				if e.Kind == event.FreezeOff && e.Str("by") == "trod" {
+					at = append(at, e.Time())
+				}
+			}
+		}
+		return len(at) == 2
+	})
+	if d := at[1].Sub(at[0]).Abs(); d < trodThawGap {
+		t.Errorf("thawed %v apart, want %v at least", d, trodThawGap)
+	}
+}
+
 // trodNow starts a run of the trod bot by hand, or stops it, and returns
 // the report.
 func (c *coreEnv) trodNow(start bool) ipc.TrodResult {
