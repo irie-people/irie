@@ -72,6 +72,10 @@ type Core struct {
 	awakeMu      sync.Mutex  // guards awake; taken after mu
 	awake        *exec.Cmd   // what keeps the Mac awake for the trod bot, while it does
 
+	lidSweeping atomic.Bool // the lid's look runs (lid.go)
+	lidMu       sync.Mutex  // guards lid; taken after mu and awakeMu
+	lid         lidHold     // what the core did to the Mac's sleep, for a closed lid
+
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
 
@@ -301,6 +305,8 @@ func Run(o Options) error {
 	go c.sample()
 	go c.dogSweep()
 	go c.trodSweep()
+	c.lidAdopt()
+	go c.lidSweep()
 	if err := c.loadPeers(); err != nil {
 		c.log.Warn("peers", "err", err)
 	}
@@ -340,6 +346,9 @@ func Run(o Options) error {
 			if n%trodEvery == 0 {
 				go c.trodSweep()
 			}
+			if n%lidEvery == 0 {
+				go c.lidSweep()
+			}
 			if n%machineEvery == 0 {
 				go c.checkMachine()
 			}
@@ -347,6 +356,9 @@ func Run(o Options) error {
 			c.log.Info("core stopping", "signal", s.String())
 			// Nothing stays slowed after the core is gone: its agents run on.
 			c.letGo()
+			// Nor does the Mac stay awake with its lid closed for a core that
+			// is gone; the next one keeps it awake again if there is work.
+			c.lidLetGo()
 			return nil
 		}
 	}

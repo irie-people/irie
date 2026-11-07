@@ -379,8 +379,12 @@ func TestTheTrodBotThawsOneAtATimeAndNotIntoASignedOutAgent(t *testing.T) {
 		}
 		return len(at) == 2
 	})
-	if d := at[1].Sub(at[0]).Abs(); d < trodThawGap {
-		t.Errorf("thawed %v apart, want %v at least", d, trodThawGap)
+	// The bot spaces its thaws by when its sweeps start, but a thaw's event
+	// is stamped only once its processes go on and its pane takes input
+	// again, which takes longer on a busy Mac: one run measured 29.88s. So
+	// allow half a sweep for that; thaws a sweep or two apart still fail.
+	if d := at[1].Sub(at[0]).Abs(); d < trodThawGap-trodEvery*time.Second/2 {
+		t.Errorf("thawed %v apart, want %v at least, less half a sweep", d, trodThawGap)
 	}
 }
 

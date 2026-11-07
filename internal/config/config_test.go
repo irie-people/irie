@@ -750,6 +750,26 @@ func TestVPNSection(t *testing.T) {
 	}
 }
 
+func TestLidSection(t *testing.T) {
+	if l := Default().Lid; l != (Lid{Awake: LidWork, Grace: 2 * time.Minute, Battery: 10}) {
+		t.Errorf("default lid = %+v, want awake while sessions work, 2m grace, down to 10%%", l)
+	}
+	c, err := Load(writeFile(t, "[lid]\nawake = \"always\"\n"))
+	if err != nil || c.Lid != (Lid{Awake: LidAlways, Grace: 2 * time.Minute, Battery: 10}) {
+		t.Errorf("lid = %+v, %v: one key keeps the others' defaults", c.Lid, err)
+	}
+	for _, c := range []struct{ body, mention string }{
+		{"[lid]\nawake = \"sometimes\"\n", "lid.awake = \"sometimes\": must be work, always or off"},
+		{"[lid]\ngrace = \"-1m\"\n", "lid.grace"},
+		{"[lid]\nbattery = 101\n", "lid.battery"},
+		{"[lid]\nbattery = -1\n", "lid.battery"},
+	} {
+		if _, err := Load(writeFile(t, c.body)); err == nil || !strings.Contains(err.Error(), c.mention) {
+			t.Errorf("%q: %v, want an error that mentions %q", c.body, err, c.mention)
+		}
+	}
+}
+
 func TestArchMikaelFromTheFile(t *testing.T) {
 	c, err := Load(writeFile(t, "[arch.mikael]\ndoor = false\ngood = [\"Give credit where it is due.\", \"Be honest with clients.\"]\n"))
 	if err != nil {

@@ -43,6 +43,7 @@ type Config struct {
 	Skills   Skills             `toml:"skills"`
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
+	Lid      Lid                `toml:"lid"`
 	Arch     Arch               `toml:"arch"`
 	Remote   Remote             `toml:"remote"`
 	Place    Place              `toml:"place"`
@@ -51,6 +52,32 @@ type Config struct {
 	Learn    Learn              `toml:"learn"`
 	VPN      VPN                `toml:"vpn"`
 }
+
+// Lid is a MacBook's lid (DESIGN §4.12). macOS sleeps a MacBook the
+// moment its lid closes, whatever else keeps it awake, so the core turns
+// the Mac's sleep off while sessions work, through the rule `irie setup
+// lid` installs, and back on once they are through: with the lid closed
+// by then, the Mac sleeps at once.
+type Lid struct {
+	// Awake is work, to stay awake with the lid closed while a session
+	// works or waits on background work of its own, or the trod bot keeps
+	// the Mac awake; always, for as long as the core runs; or off, to
+	// sleep when macOS would.
+	Awake string `toml:"awake"`
+	// Grace is how long the Mac stays awake after the last work stops,
+	// for work that comes straight back, such as a jot the dog sends on.
+	Grace time.Duration `toml:"grace"`
+	// Battery is a percent: on battery below it, the Mac may sleep, at
+	// once with the lid closed. 0 = down to empty.
+	Battery int `toml:"battery"`
+}
+
+// The lid's awake modes.
+const (
+	LidWork   = "work"
+	LidAlways = "always"
+	LidOff    = "off"
+)
 
 // VPN is Mullvad VPN control (docs/proposals/extensions.md §4): its state in
 // every client, and the :vpn words to change it.
@@ -645,6 +672,7 @@ func Default() Config {
 			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
 			Rules: TrodRules(), Guidelines: TrodGuidelines(),
 		},
+		Lid: Lid{Awake: LidWork, Grace: 2 * time.Minute, Battery: 10},
 		Arch: Arch{
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
@@ -752,6 +780,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Skills   *Skills                   `toml:"skills"`
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
+		Lid      *Lid                      `toml:"lid"`
 		Arch     *Arch                     `toml:"arch"`
 		Remote   *Remote                   `toml:"remote"`
 		Place    *Place                    `toml:"place"`
@@ -759,7 +788,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Env      *Env                      `toml:"env"`
 		Learn    *Learn                    `toml:"learn"`
 		VPN      *VPN                      `toml:"vpn"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1174,6 +1203,17 @@ func (c Config) Validate() error {
 	}
 	if n.MaxPlanUse <= 0 || n.MaxPlanUse > 100 {
 		bad("trod.max_plan_use = %v: must be a percentage above 0", n.MaxPlanUse)
+	}
+	switch c.Lid.Awake {
+	case LidWork, LidAlways, LidOff:
+	default:
+		bad("lid.awake = %q: must be %s, %s or %s", c.Lid.Awake, LidWork, LidAlways, LidOff)
+	}
+	if c.Lid.Grace < 0 {
+		bad("lid.grace = %v: must not be negative", c.Lid.Grace)
+	}
+	if c.Lid.Battery < 0 || c.Lid.Battery > 100 {
+		bad("lid.battery = %d: must be a percent from 0 to 100", c.Lid.Battery)
 	}
 	checkLines(bad, "trod.rules", n.Rules, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")

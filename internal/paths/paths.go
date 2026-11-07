@@ -93,6 +93,7 @@ func (p Paths) FollowUpFile(id string) string { return filepath.Join(p.Session(i
 func (p Paths) StatusFile(id string) string   { return filepath.Join(p.Session(id), "status.json") }
 func (p Paths) LocalFile() string             { return filepath.Join(p.State, "local.json") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
+func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 
 // ContextStore is the git repository of agents' contexts (DESIGN §4.13).
 func (p Paths) ContextStore() string          { return filepath.Join(p.State, "context.git") }

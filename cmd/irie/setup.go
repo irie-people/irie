@@ -26,6 +26,9 @@ func setup(args []string) error {
 	if len(args) > 0 && args[0] == "local" {
 		return setupLocal(args[1:], os.Stdin, os.Stdout)
 	}
+	if len(args) > 0 && args[0] == "lid" {
+		return setupLid(args[1:], os.Stdin, os.Stdout)
+	}
 	return setupIrie(args, os.Stdin, os.Stdout)
 }
 
