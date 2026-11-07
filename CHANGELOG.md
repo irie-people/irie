@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/irie-people/irie/compare/v0.2.0...v0.3.0) (2026-11-07)
+
+
+### Features
+
+* **core:** make rename, reorder, freeze and promote undoable ([d03b8d1](https://github.com/irie-people/irie/commit/d03b8d1086f9a7ce35c381b6bd0d050ca569d1dd))
+* **localmodel:** estimate sliding-window and looped models' cache ([def1b6f](https://github.com/irie-people/irie/commit/def1b6f079da8b352825878f16c01db14bfe71a3))
+
+
+### Bug Fixes
+
+* **context:** a turn is one commit, its bookkeeping riding with the next ([83efc92](https://github.com/irie-people/irie/commit/83efc92f9f70f7891251d42d79ec84cba8b0ed58))
+* **core:** wait a minute for a new core to answer, not five seconds ([e34c0cf](https://github.com/irie-people/irie/commit/e34c0cf832e6861db9787f48c580ff1880b7515f))
+* **demo:** delete a sandbox once its agents have finished writing ([e1f5e09](https://github.com/irie-people/irie/commit/e1f5e0960ed8a2555540f81c6863022d7f43bc43))
+* **mac:** give the recording's window the store as the views now take it ([95d5245](https://github.com/irie-people/irie/commit/95d5245f42f1817bcb2c22e063f8885d87a916f4))
+* **trod:** thaw one session at a time, and none into a signed-out agent ([fde80f3](https://github.com/irie-people/irie/commit/fde80f3995d42b578de16f3e25c7f0c9a5fdb880))
+
 ## [0.2.0](https://github.com/irie-people/irie/compare/v0.1.0...v0.2.0) (2026-11-02)
 
 
