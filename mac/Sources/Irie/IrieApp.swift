@@ -164,7 +164,6 @@ struct IrieApp: App {
                     Button(t.title) { store.toggleSideTab(t) }
                         .keyboardShortcut(t.key, modifiers: [.command, .option])
                 }
-                Button(store.side.pinned ? "Unpin the Right Sidebar" : "Pin the Right Sidebar") { store.pinSide(!store.side.pinned) }
             }
         }
         // Help > Learning Resources and Glossary (Learn.swift).
@@ -187,26 +186,11 @@ struct IrieApp: App {
 @MainActor
 final class KeyRouter {
     private var monitor: Any?
-    private var clicks: Any?
     /// Irie's own window, where the sessions are (WindowReader).
     weak var window: NSWindow?
 
     func install(_ store: Store) {
         guard monitor == nil else { return }
-        // A click in the terminal beside a peeking right sidebar closes the
-        // sidebar, and the click still reaches the terminal.
-        clicks = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self, weak store] event in
-            guard let self, let store else { return event }
-            MainActor.assumeIsolated {
-                guard store.sidePeeking, let window = event.window, window === self.window,
-                      let terminal = store.terminalView, let content = window.contentView else { return }
-                let inTerminal = terminal.bounds.contains(terminal.convert(event.locationInWindow, from: nil))
-                let p = event.locationInWindow
-                let inSidebar = store.sidePeekFrame.contains(CGPoint(x: p.x, y: content.bounds.height - p.y))
-                if inTerminal && !inSidebar { store.closeSide() }
-            }
-            return event
-        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak store] event in
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])

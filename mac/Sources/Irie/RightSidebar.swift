@@ -2,15 +2,14 @@ import AppKit
 import SwiftUI
 
 // The right sidebar (docs/proposals/right-dock.md): tabs about the session
-// on show, opened and closed as a whole. Over the terminal it opens as a
-// peek, drawn over the terminal's right edge, so the terminal keeps its size.
-// Pinned, it sits beside the terminal, which narrows once, and every agent
-// follows once, as when the window is resized: the terminal's width is the
-// slot's, and every agent window takes the slot's size (DESIGN §2.3). Beside
-// the conversation it always sits alongside, which costs nothing, while the
-// terminal under the conversation keeps its own width. The sidebar keeps its
-// tab and width as the selection changes, and only the user opens it or
-// switches its tab: a helper starting only puts a count on a tab.
+// on show, opened and closed as a whole. It sits inline, at the right of the
+// terminal or the conversation, never over them. The terminal's width is
+// the slot's, and every agent window takes the slot's size (DESIGN §2.3), so
+// opening or closing it, or letting go of its edge, resizes every agent
+// once, as resizing the window does; nothing about it animates, since each
+// step of an animation would resize them again. It keeps its tab and width
+// as the selection changes, and only the user opens it or switches its tab:
+// a helper starting only puts a count on a tab.
 
 /// A tab of the right sidebar, in the order the proposal gives them, which
 /// also gives each its key: ⌥⌘1 to ⌥⌘5.
@@ -43,7 +42,6 @@ enum SideTab: String, CaseIterable, Identifiable {
 /// What the right sidebar shows and how, kept across launches.
 struct SideState: Equatable {
     var open = false
-    var pinned = false
     var width = SideState.startWidth
     var tab = SideTab.dock
 
@@ -54,7 +52,6 @@ struct SideState: Equatable {
     static func clamp(_ w: Double) -> Double { min(max(w, minWidth), maxWidth) }
 
     private static let openKey = "rightSidebarOpen"
-    private static let pinnedKey = "rightSidebarPinned"
     private static let widthKey = "rightSidebarWidth"
     private static let tabKey = "rightSidebarTab"
 
@@ -62,7 +59,6 @@ struct SideState: Equatable {
         let d = UserDefaults.standard
         var s = SideState()
         s.open = d.bool(forKey: openKey)
-        s.pinned = d.bool(forKey: pinnedKey)
         let w = d.double(forKey: widthKey)
         if w > 0 { s.width = clamp(w) }
         if let t = d.string(forKey: tabKey).flatMap(SideTab.init(rawValue:)), SideTab.built.contains(t) { s.tab = t }
@@ -72,7 +68,6 @@ struct SideState: Equatable {
     func save() {
         let d = UserDefaults.standard
         d.set(open, forKey: Self.openKey)
-        d.set(pinned, forKey: Self.pinnedKey)
         d.set(width, forKey: Self.widthKey)
         d.set(tab.rawValue, forKey: Self.tabKey)
     }
@@ -104,36 +99,19 @@ extension Store {
         change(s)
     }
 
-    /// Pinned, the sidebar sits beside the terminal, which narrows; unpinned,
-    /// it lies over the terminal's right edge.
-    func pinSide(_ on: Bool) {
-        var s = side
-        s.pinned = on
-        change(s, slides: false)
-    }
-
     func setSideWidth(_ width: Double) {
         var s = side
         s.width = SideState.clamp(width)
-        change(s, slides: false)
+        change(s)
     }
 
-    /// Whether the right sidebar is open and lies over the terminal, which a
-    /// click in the terminal then closes (KeyRouter).
-    var sidePeeking: Bool { side.open && sidePeekFrame != .zero && showTerminal }
-
-    /// Applies a change. Only a peek slides in and out: anything that changes
-    /// the terminal's width happens in one step, since each step of an
-    /// animation would resize the shown agent, and every agent at each of
-    /// the core's ticks it spanned.
-    private func change(_ s: SideState, slides: Bool = true) {
-        if slides && !s.pinned && !side.pinned {
-            withAnimation(.easeOut(duration: 0.16)) { side = s }
-        } else {
-            var t = Transaction(animation: nil)
-            t.disablesAnimations = true
-            withTransaction(t) { side = s }
-        }
+    /// Applies a change in one step, with no animation: the terminal's width
+    /// follows the sidebar's, and each step of an animation would resize the
+    /// shown agent, and every agent at each of the core's ticks it spanned.
+    private func change(_ s: SideState) {
+        var t = Transaction(animation: nil)
+        t.disablesAnimations = true
+        withTransaction(t) { side = s }
     }
 
     /// Everything ready for the user to look at (the Review tab): the
@@ -173,8 +151,6 @@ struct ReviewRow: Identifiable, Equatable {
 @MainActor
 struct RightSidebar: View {
     @Environment(Store.self) private var store
-    /// Drawn over the terminal rather than beside it.
-    let peek: Bool
     /// The width a drag of its edge is asking for, while it lasts.
     @Binding var guide: Double?
 
@@ -189,19 +165,12 @@ struct RightSidebar: View {
         }
         .clipShape(shape)
         .background(shape.fill(Theme.panel)
-            .shadow(color: .black.opacity(peek ? 0.24 : 0.06), radius: peek ? 14 : 2, x: peek ? -3 : 0, y: peek ? 3 : 0.5))
+            .shadow(color: .black.opacity(0.06), radius: 2, y: 0.5))
         .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1))
         .overlay(alignment: .leading) { SideEdge(guide: $guide).offset(x: -5) }
-        // Esc closes a peek, which changes no size. A pinned sidebar stays,
-        // since closing it would resize every agent: the keyboard goes back.
+        // Esc hands the keyboard back; closing would resize every agent.
         .onExitCommand {
-            if peek {
-                store.closeSide()
-            } else if store.showTerminal {
-                store.focusTerminal += 1
-            } else {
-                store.focusMessage += 1
-            }
+            if store.showTerminal { store.focusTerminal += 1 } else { store.focusMessage += 1 }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Right sidebar, \(store.side.tab.title)")
@@ -211,11 +180,6 @@ struct RightSidebar: View {
         HStack(spacing: 2) {
             ForEach(SideTab.built) { t in tabButton(t) }
             Spacer(minLength: 4)
-            iconButton(store.side.pinned ? "pin.fill" : "pin",
-                       help: store.side.pinned ? "Unpin: lie over the terminal, which then keeps its full width"
-                           : "Pin: stay beside the terminal, which narrows once, and every agent with it",
-                       label: store.side.pinned ? "Unpin the right sidebar" : "Pin the right sidebar",
-                       on: store.side.pinned) { store.pinSide(!store.side.pinned) }
             iconButton("xmark", help: "Close the right sidebar (⌥⌘B)", label: "Close the right sidebar") { store.closeSide() }
         }
         .padding(.horizontal, 8)
@@ -252,12 +216,11 @@ struct RightSidebar: View {
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
-    private func iconButton(_ symbol: String, help: String, label: String, on: Bool = false, action: @escaping () -> Void) -> some View {
+    private func iconButton(_ symbol: String, help: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .semibold))
-                .rotationEffect(.degrees(symbol.hasPrefix("pin") ? 45 : 0))
-                .foregroundStyle(on ? Theme.accentInk : Theme.muted)
+                .foregroundStyle(Theme.muted)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
@@ -291,8 +254,8 @@ struct RightSidebar: View {
 }
 
 /// The sidebar's leading edge, which a drag moves. A guide line shows where
-/// it would go, and the width applies on release: for a pinned sidebar that
-/// is one resize of the terminal, and of every agent, not one per frame.
+/// it would go, and the width applies on release: one resize of the
+/// terminal, and of every agent, not one per frame.
 @MainActor
 private struct SideEdge: View {
     @Environment(Store.self) private var store

@@ -141,14 +141,11 @@ final class Store {
             keepSplit()
         }
     }
-    /// The right sidebar: whether it is open or pinned, its width and its
+    /// The right sidebar: whether it is open, its width and its
     /// tab, kept across launches but never by `--snapshot` (RightSidebar.swift).
     var side = SideState.saved() {
         didSet { if side != oldValue, !isFixture { side.save() } }
     }
-    /// Where a peeking right sidebar is, in the window's top-left points, or
-    /// zero while none peeks, so a click in the terminal beside it closes it.
-    @ObservationIgnored var sidePeekFrame: CGRect = .zero
     /// The session the core shows beside its teammates, as last asked
     /// (TeamSplit.swift); nil while the slot shows the picked session.
     private(set) var splitShown: String?
