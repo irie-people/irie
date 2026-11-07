@@ -99,8 +99,12 @@ func printTrod(w io.Writer, r ipc.TrodResult, now time.Time) error {
 		if h.Until != nil {
 			limit = ", or " + h.Until.Local().Format("15:04")
 		}
+		most := r.MaxPlanUse
+		if r.Line != nil {
+			most = *r.Line
+		}
 		fmt.Fprintf(w, "Trod bot: working, started by hand at %s. It works while you are at the Mac too, until no session has work left or the plan reaches %.0f%%%s; `irie ctl trod stop` stops it.\n",
-			h.From.Local().Format("15:04"), r.MaxPlanUse, limit)
+			h.From.Local().Format("15:04"), most, limit)
 	case !r.On:
 		fmt.Fprintf(w, "Trod bot: off (%s when on). `irie ctl trod on` turns it on; `irie ctl trod now` starts a run at once.\n", hours)
 	case !r.In:
@@ -115,6 +119,14 @@ func printTrod(w io.Writer, r ipc.TrodResult, now time.Time) error {
 	}
 	if r.Awake {
 		fmt.Fprintln(w, "It keeps the Mac awake while sessions have work left.")
+	}
+	if r.Line != nil {
+		at := ""
+		if r.Week != nil {
+			at = fmt.Sprintf("; it is at %.0f%%", *r.Week)
+		}
+		fmt.Fprintf(w, "Day line: today the week may reach %.0f%%%s. Each day of the plan's week adds %.0f%%, up to %.0f%%.\n",
+			*r.Line, at, r.MaxPlanUse/7, r.MaxPlanUse)
 	}
 	list := func(title string, items []string) {
 		fmt.Fprintln(w)
