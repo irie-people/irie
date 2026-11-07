@@ -1325,7 +1325,7 @@ private struct ArchSettings: View {
 /// line, his advice beneath, and what you can do about it.
 private struct ArchItemRow: View {
     let item: ArchItem
-    let act: (ArchAction) -> Void
+    let act: @MainActor (ArchAction) -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
