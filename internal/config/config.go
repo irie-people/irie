@@ -389,7 +389,9 @@ type Dog struct {
 // any of them has work left. Every agent it sends on is told your rules
 // and guidelines. It keeps within the plan: past max_plan_use it sends
 // nothing on, and past it in the week's window it freezes what would
-// still spend the week's allotment.
+// still spend the week's allotment. With pace, the week's most is the day
+// line instead: an even share of max_plan_use for each day of the plan's
+// week so far, so that two busy days can't take the whole week.
 type Trod struct {
 	On         bool          `toml:"on"`           // work the shift every night, from start to end
 	Start      string        `toml:"start"`        // when it starts, in local time, such as "23:00"
@@ -401,6 +403,7 @@ type Trod struct {
 	Within     time.Duration `toml:"within"`       // it sends on only sessions that stopped this recently; 0 = however long ago
 	MaxWorking int           `toml:"max_working"`  // it sends a session on only while fewer than this many work; 0 = no limit
 	MaxPlanUse float64       `toml:"max_plan_use"` // percent: past this in either of the plan's windows it sends nothing on, and past it in the week's it freezes what still spends
+	Pace       bool          `toml:"pace"`         // keep the week to a day line: each day of the plan's week may take max_plan_use/7 more, and what a day leaves carries on
 	KeepAwake  bool          `toml:"keep_awake"`   // keep the Mac from sleeping while sessions have work left
 	Rules      []string      `toml:"rules"`        // what every agent it sends on must, or must not, do
 	Guidelines []string      `toml:"guidelines"`   // how those agents decide while you are away

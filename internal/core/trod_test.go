@@ -335,6 +335,63 @@ func TestTheTrodBotKeepsWithinTheWeeksAllotment(t *testing.T) {
 	}
 }
 
+func TestTheDayLineGivesEachDayOfTheWeekItsShare(t *testing.T) {
+	n := config.Trod{MaxPlanUse: 70, Pace: true}
+	reset := time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
+	week := &ipc.Window{Used: 5, ResetsAt: reset}
+	for _, c := range []struct {
+		left time.Duration // until the week resets
+		want float64
+	}{
+		{7 * planDay, 10}, // the week has just begun: its first day's share
+		{6*planDay + time.Minute, 10},
+		{6 * planDay, 20}, // its second day
+		{3*planDay + 12*time.Hour, 40},
+		{planDay - time.Minute, 70}, // its last day may use all of it
+		{time.Minute, 70},
+	} {
+		if got := weekMost(n, week, reset.Add(-c.left)); got != c.want {
+			t.Errorf("%v before the reset: %v, want %v", c.left, got, c.want)
+		}
+	}
+	// Without trod.pace, or without the week's reset to count from, it is
+	// trod.max_plan_use.
+	now := reset.Add(-6 * planDay)
+	for _, x := range []struct {
+		n config.Trod
+		w *ipc.Window
+	}{
+		{config.Trod{MaxPlanUse: 70}, week},
+		{n, nil},
+		{n, &ipc.Window{Used: 5}},
+		{n, &ipc.Window{Used: 5, ResetsAt: now.Add(-time.Hour)}},
+	} {
+		if got := weekMost(x.n, x.w, now); got != 70 {
+			t.Errorf("weekMost(%+v, %+v) = %v, want 70", x.n, x.w, got)
+		}
+	}
+}
+
+func TestTheTrodBotKeepsToTheDayLine(t *testing.T) {
+	// Built before HOME moves, so Go keeps its module cache where it is.
+	testutil.BuildIrie(t)
+	testutil.BuildFakeAgent(t)
+	// No status line of the user's own runs after Irie's.
+	t.Setenv("HOME", t.TempDir())
+	// The status line says the week is 70% used and resets in three days.
+	// That is under the 90% it may use, but this is the week's fifth day,
+	// whose line is five sevenths of it, 64%.
+	c := setupWith(t, agentConfig{statusLine: true, env: map[string]string{"IRIE_FAKE_WEEK": "70"}, extra: trodSection("retry = \"1s\"\npace = true\n")})
+	working := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:45s,stop", Name: "working"})
+	row := c.waitState(working.ID, ipc.StateFrozen)
+	if !strings.HasPrefix(row.Detail, "Frozen by the trod bot: the week's plan use is at 70%, past today's line of 64%") {
+		t.Errorf("detail = %q", row.Detail)
+	}
+	if r := c.trodReport(); !r.Capped || r.Line == nil || *r.Line < 64 || *r.Line > 65 || r.MaxPlanUse != 90 {
+		t.Errorf("report = %+v", r)
+	}
+}
+
 func TestTheTrodBotThawsOneAtATimeAndNotIntoASignedOutAgent(t *testing.T) {
 	// Built before HOME moves, so Go keeps its module cache where it is.
 	testutil.BuildIrie(t)
@@ -653,17 +710,27 @@ func TestTheTrodBotsChoices(t *testing.T) {
 	// Past the plan's use it may spend, nothing more is sent on; what
 	// would spend on its own is what the week's cap freezes.
 	c.plan = ipc.Plan{FiveHour: &ipc.Window{Used: 95, ResetsAt: now.Add(time.Hour)}}
-	if either, week, _ := c.overPlan(now, 90); !either || week {
+	cap90 := config.Trod{MaxPlanUse: 90}
+	if either, week, _, _ := c.overPlan(now, cap90); !either || week {
 		t.Errorf("five hours at 95%%: over %v, week %v", either, week)
 	}
 	c.plan = ipc.Plan{SevenDay: &ipc.Window{Used: 91, ResetsAt: now.Add(48 * time.Hour)}}
-	if either, week, used := c.overPlan(now, 90); !either || !week || used != 91 {
+	if either, week, used, _ := c.overPlan(now, cap90); !either || !week || used != 91 {
 		t.Errorf("week at 91%%: over %v, week %v, %v", either, week, used)
 	}
 	// A window whose reset has passed is empty.
 	c.plan = ipc.Plan{SevenDay: &ipc.Window{Used: 99, ResetsAt: now.Add(-time.Minute)}}
-	if either, _, _ := c.overPlan(now, 90); either {
+	if either, _, _, _ := c.overPlan(now, cap90); either {
 		t.Error("a week that reset is over")
+	}
+	// With trod.pace, the week's most is the day line: two days before the
+	// reset, its sixth day, six sevenths of 90%.
+	c.plan = ipc.Plan{SevenDay: &ipc.Window{Used: 80, ResetsAt: now.Add(48 * time.Hour)}}
+	if either, week, _, _ := c.overPlan(now, cap90); either || week {
+		t.Errorf("week at 80%% without pace: over %v, week %v", either, week)
+	}
+	if either, week, _, most := c.overPlan(now, config.Trod{MaxPlanUse: 90, Pace: true}); !either || !week || most != 90.0*6/7 {
+		t.Errorf("week at 80%% on the line: over %v, week %v, most %v", either, week, most)
 	}
 	works := stopped("p", now)
 	works.track.apply(event.Event{Kind: event.ToolStarted, TS: event.Stamp(now), Agent: event.Main, Data: map[string]any{"tool": "Bash"}})

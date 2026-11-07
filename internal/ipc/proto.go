@@ -230,7 +230,8 @@ type TrodShift struct {
 	Until *time.Time `json:"until,omitempty"` // when its hours end; nil for a shift around the clock
 	Away  bool       `json:"away,omitempty"`  // you are away, so it steps in
 	Awake bool       `json:"awake,omitempty"` // it keeps the Mac awake
-	// Capped: the plan is past trod.max_plan_use, so it sends nothing on.
+	// Capped: the plan is past trod.max_plan_use, or with trod.pace past
+	// today's line, so it sends nothing on.
 	Capped bool `json:"capped,omitempty"`
 	// Hand: you started it by hand, so it works while you are at the Mac,
 	// until nothing is left or the plan is as full as it may get.
@@ -361,9 +362,10 @@ type TrodResult struct {
 	From        time.Time     `json:"from"` // this night's shift, or the last
 	To          time.Time     `json:"to"`
 	MaxPlanUse  float64       `json:"max_plan_use"`         // trod.max_plan_use, in percent
+	Line        *float64      `json:"line,omitempty"`       // with trod.pace, the day line: the most of the week it may use by now, in percent
 	FiveHours   *float64      `json:"five_hours,omitempty"` // how full the plan's five hours and week are, in percent, when the status line said
 	Week        *float64      `json:"week,omitempty"`
-	Capped      bool          `json:"capped,omitempty"` // past max_plan_use, so it sends nothing on
+	Capped      bool          `json:"capped,omitempty"` // past max_plan_use, or the day line, so it sends nothing on
 	Hand        *TrodHand     `json:"hand,omitempty"`   // the run you started by hand last
 	Rules       []string      `json:"rules"`
 	Guidelines  []string      `json:"guidelines"`

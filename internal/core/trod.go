@@ -198,15 +198,46 @@ func planUsed(w *ipc.Window, now time.Time) (float64, bool) {
 	return w.Used, true
 }
 
-// overPlan reports whether the plan is past trod.max_plan_use: in either
-// of its windows, past which the bot sends nothing on, and in the week's,
-// past which it lets the Mac sleep and freezes what would still spend the
-// week's allotment, with how full the week is. The caller holds c.mu.
-func (c *Core) overPlan(now time.Time, most float64) (either, week bool, weekUsed float64) {
+// planDay is the length of one of the day line's days.
+const planDay = 24 * time.Hour
+
+// weekMost is the most of the week's allotment, in percent, the trod bot
+// lets the plan use by now: trod.max_plan_use, or with trod.pace the day
+// line, an even share of it for each day of the plan's week so far, this
+// one included. The plan's days start at its weekly reset's time of day,
+// and what a day leaves unspent carries on to the next, so the last day
+// may use all of max_plan_use. Without the week's reset to count from, it
+// is max_plan_use.
+func weekMost(n config.Trod, week *ipc.Window, now time.Time) float64 {
+	if !n.Pace || week == nil || week.ResetsAt.IsZero() || !week.ResetsAt.After(now) {
+		return n.MaxPlanUse
+	}
+	day := int((7*planDay-week.ResetsAt.Sub(now))/planDay) + 1
+	return n.MaxPlanUse * float64(min(max(day, 1), 7)) / 7
+}
+
+// overPlan reports whether the plan is past the most the trod bot may use
+// (weekMost): in either of its windows, past which the bot sends nothing
+// on, and in the week's, past which it lets the Mac sleep and freezes what
+// would still spend the week's allotment, with how full the week is and
+// the most it may be now. The five hours' window keeps to
+// trod.max_plan_use. The caller holds c.mu.
+func (c *Core) overPlan(now time.Time, n config.Trod) (either, week bool, weekUsed, most float64) {
 	five, _ := planUsed(c.plan.FiveHour, now)
 	weekUsed, _ = planUsed(c.plan.SevenDay, now)
+	most = weekMost(n, c.plan.SevenDay, now)
 	week = weekUsed >= most
-	return week || five >= most, week, weekUsed
+	return week || five >= n.MaxPlanUse, week, weekUsed, most
+}
+
+// pastMost says how far the week's plan use has come against the most it
+// may use now: the day line's when trod.pace holds it below
+// trod.max_plan_use.
+func pastMost(n config.Trod, weekUsed, most float64) string {
+	if most < n.MaxPlanUse {
+		return fmt.Sprintf("the week's plan use is at %.0f%%, past today's line of %.0f%%", weekUsed, most)
+	}
+	return fmt.Sprintf("the week's plan use is at %.0f%%, the most it may use is %.0f%%", weekUsed, most)
 }
 
 // passing are the API errors that may pass, after which the shift tries
@@ -382,7 +413,7 @@ func (c *Core) trodAtHook(id string, evs []event.Event) trodReply {
 	if x == nil || !c.trodWatches(x) || x.track.trodAnswered || sentSince(x.track.trod, s.from) >= s.n.Nudges {
 		return trodReply{}
 	}
-	if over, _, _ := c.overPlan(time.Now(), s.n.MaxPlanUse); over {
+	if over, _, _, _ := c.overPlan(time.Now(), s.n); over {
 		// Past the plan's use it may spend, its question waits for you.
 		return trodReply{}
 	}
@@ -558,7 +589,7 @@ func (c *Core) trodSweep() bool {
 	if r, _ := planLimit(c.plan, now); r.After(c.trodReset) && !r.After(now) {
 		c.trodReset = r
 	}
-	over, overWeek, weekUsed := c.overPlan(now, s.n.MaxPlanUse)
+	over, overWeek, weekUsed, most := c.overPlan(now, s.n)
 	var dues []trodDue
 	work := false
 	if s.in {
@@ -592,8 +623,7 @@ func (c *Core) trodSweep() bool {
 			}
 			d, w := c.trodNext(x, now, s, c.trodReset)
 			if overWeek && s.away && c.spendsAlone(x, now) {
-				why := fmt.Sprintf("the week's plan use is at %.0f%%, the most it may use is %.0f%%", weekUsed, s.n.MaxPlanUse)
-				if err := c.freezeLocked(x, why); err != nil {
+				if err := c.freezeLocked(x, pastMost(s.n, weekUsed, most)); err != nil {
 					c.log.Warn("trod bot: freeze", "session", x.id, "err", err)
 				}
 				continue
@@ -613,6 +643,8 @@ func (c *Core) trodSweep() bool {
 		switch {
 		case !h.on(now):
 			h.Ended, h.Why = h.Until, "its time was up"
+		case over && overWeek && most < s.n.MaxPlanUse:
+			h.Ended, h.Why = now, fmt.Sprintf("the plan reached today's line of %.0f%%", most)
 		case over:
 			h.Ended, h.Why = now, fmt.Sprintf("the plan reached %.0f%%, the most it may use", s.n.MaxPlanUse)
 		case !work && len(dues) == 0:
@@ -644,7 +676,7 @@ type trodNow struct {
 	until     time.Time
 	idle      time.Duration
 	idleKnown bool
-	capped    bool // past trod.max_plan_use
+	capped    bool // past trod.max_plan_use, or with trod.pace the day line
 	hand      bool // a run you started by hand
 }
 
@@ -861,7 +893,11 @@ func (c *Core) trodReport() ipc.TrodResult {
 		secs := int64(s.idle / time.Second)
 		r.IdleSeconds = &secs
 	}
-	r.Capped, _, _ = c.overPlan(now, n.MaxPlanUse)
+	var most float64
+	r.Capped, _, _, most = c.overPlan(now, n)
+	if n.Pace {
+		r.Line = &most
+	}
 	for _, w := range []struct {
 		w   *ipc.Window
 		out **float64
