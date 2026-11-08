@@ -73,9 +73,18 @@ struct CoreConfig: Decodable, Equatable {
     var trod: Trod?
     /// Mullvad VPN control; nil from a core from before it.
     var vpn: VPN?
+    /// The context store (DESIGN §4.13); nil from a core from before it.
+    var context: Context?
 
     struct VPN: Decodable, Equatable {
         var on: Bool
+    }
+
+    /// How long a closed session's conversation stays in the context store
+    /// after its newest turn, in days; 0 keeps it for good.
+    struct Context: Decodable, Equatable {
+        var keepDays: Int
+        enum CodingKeys: String, CodingKey { case keepDays = "keep_days" }
     }
     /// Nil from a core older than the learning settings.
     var learn: Learn?
@@ -523,6 +532,18 @@ private struct GeneralSettings: View {
     private static let delays = ["10s", "30s", "1m", "2m", "5m", "10m"]
     /// How long after a jot one that reads as more for it goes to its agent.
     private static let windows = ["0s", "1m", "2m", "5m", "10m"]
+    /// How long the context store keeps a closed session's conversation, in
+    /// days; 0 keeps it for good.
+    private static let keeps = [7, 30, 90, 365, 0]
+
+    private static func kept(_ days: Int) -> String {
+        switch days {
+        case 0: return "Forever"
+        case 7: return "For a week"
+        case 365: return "For a year"
+        default: return "For \(days) days"
+        }
+    }
 
     var body: some View {
         WithConfig(model: model) { c in
@@ -574,6 +595,19 @@ private struct GeneralSettings: View {
                     Text("Jot dog")
                 } footer: {
                     footnote("When a jot’s turn ends with work uncommitted or not yet in its branch, its card says what is left, and the dog sends it back between two of your prompts.")
+                }
+                if let keep = c.context?.keepDays {
+                    Section {
+                        Picker("Keep conversations", selection: model.binding(keep, "context.keep_days") { $0.context?.keepDays = $1 }) {
+                            ForEach(Self.keeps + (Self.keeps.contains(keep) ? [] : [keep]), id: \.self) { d in
+                                Text(Self.kept(d)).tag(d)
+                            }
+                        }
+                    } header: {
+                        Text("Conversations")
+                    } footer: {
+                        footnote("Irie keeps each session’s conversation in git, a commit per turn, so you can fork it from any turn. Once a closed session’s last turn is this old, its conversation is deleted. Open sessions and turns you tagged stay.")
+                    }
                 }
                 Section {
                     Toggle("Read cost and plan use from Claude Code’s status line", isOn: model.bind(c, \.usage.statusLine, "usage.status_line"))
