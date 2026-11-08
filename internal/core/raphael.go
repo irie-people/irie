@@ -77,13 +77,13 @@ type raphState struct {
 	checking  bool          // a look is under way
 	looked    chan struct{} // closed when the look under way ends
 	fixing    *raphael.Finding
-	fixed     chan struct{}     // closed when the fix under way ends
-	fixes     []ipc.RaphaelDone // the fixes he ran lately, newest first
-	sweeping  atomic.Bool       // a sample is under way
-	beat      atomic.Int64      // when the core's loop last went round, in unix nanoseconds
-	coreSaid  atomic.Bool       // he said he leaves a stuck core be
-	exit      func(code int)    // how the core leaves for its supervisor to start it again; os.Exit unless a test sets it
-	runner    raphael.Runner    // what runs his tools; raphael.Exec unless a test sets it
+	fixed     chan struct{}             // closed when the fix under way ends
+	fixes     []ipc.RaphaelDone         // the fixes he ran lately, newest first
+	sweeping  atomic.Bool               // a sample is under way
+	beat      atomic.Pointer[time.Time] // when the core's loop last went round, nil before its first round (beat)
+	coreSaid  atomic.Bool               // he said he leaves a stuck core be
+	exit      func(code int)            // how the core leaves for its supervisor to start it again; os.Exit unless a test sets it
+	runner    raphael.Runner            // what runs his tools; raphael.Exec unless a test sets it
 }
 
 // run is what runs Raphael's tools.
@@ -569,8 +569,15 @@ func restartWhat(what string) string {
 	return "the Mac app"
 }
 
-// beat says the core's loop went round (watchCore).
-func (c *Core) beat() { c.raph.beat.Store(time.Now().UnixNano()) }
+// beat says the core's loop went round (watchCore). The time keeps its
+// monotonic clock's reading, which stops while the computer sleeps, as the
+// dog's ticker and its late look do: measured on the wall clock instead, a
+// night's sleep would look like the loop standing still all night, and the
+// core would be restarted as the computer wakes.
+func (c *Core) beat() {
+	now := time.Now()
+	c.raph.beat.Store(&now)
+}
 
 // watchCore is the freeze dog's look at the core's own loop, every
 // coreWatchTick (watchFreezes); last is when it looked before. The core
@@ -596,7 +603,8 @@ func (c *Core) watchCore(now, last time.Time) {
 // that stuck coreRestarts times in coreWindow is left be, and said so once.
 func (c *Core) lookAtCore(now time.Time, held bool) bool {
 	r := &c.raph
-	if r.beat.Load() == 0 {
+	last := r.beat.Load()
+	if last == nil {
 		return false // the loop has not started: the core is starting
 	}
 	cfg := c.cfg().Arch.Raphael
@@ -604,7 +612,7 @@ func (c *Core) lookAtCore(now time.Time, held bool) bool {
 		c.beat()
 		return false
 	}
-	still := now.Sub(time.Unix(0, r.beat.Load()))
+	still := now.Sub(*last)
 	if still < cfg.Core {
 		r.coreSaid.Store(false)
 		return false

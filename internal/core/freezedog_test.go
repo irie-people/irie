@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -271,6 +272,48 @@ func TestTheFreezeDogOpensTheAppAsItStood(t *testing.T) {
 				t.Errorf("opened %+v, want front %v and hidden %v", opened, tc.front, tc.hidden)
 			}
 		})
+	}
+}
+
+// On the owner's Mac, open failed with procNotFound (-600) right after a
+// force quit, and the app stayed closed: Launch Services still took the
+// old app for running. The dog tries again.
+func TestTheFreezeDogTriesAgainToOpenTheApp(t *testing.T) {
+	c, f := dogCore(t)
+	saved := openRetries
+	openRetries = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { openRetries = saved })
+	open, fails := c.fdog.open, 2
+	c.fdog.open = func(bundle string, front, hidden bool, stuck time.Duration) error {
+		open(bundle, front, hidden, stuck)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if fails > 0 {
+			fails--
+			return errors.New("exit status 1: procNotFound: no eligible process with specified descriptor")
+		}
+		return nil
+	}
+	f.add(404)
+	ch := watchFor(t, c, 404, "/Applications/Irie.app")
+	t0 := time.Now()
+	c.lookAtWindows(t0)
+	pinged(t, ch)
+	// A look a second, as the dog's ticker makes them: one 11 s late would
+	// mean the core itself was held up.
+	for i := 1; i <= 11; i++ {
+		c.lookAtWindows(t0.Add(time.Duration(i) * time.Second))
+	}
+	for i := 1; i <= 3; i++ {
+		select {
+		case <-f.done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("open %d never came", i)
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	if _, opened, _ := f.calls(); len(opened) != 3 {
+		t.Errorf("opened %d times, want 3: twice refused, then opened", len(opened))
 	}
 }
 

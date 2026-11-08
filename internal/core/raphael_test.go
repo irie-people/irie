@@ -245,19 +245,19 @@ func TestRaphaelRestartsACoreWhoseLoopStandsStill(t *testing.T) {
 	if c.lookAtCore(now, false) {
 		t.Fatal("restarted a core whose loop has not started")
 	}
-	c.raph.beat.Store(now.Add(-30 * time.Second).UnixNano())
+	beatAt(c, now.Add(-30*time.Second))
 	if c.lookAtCore(now, false) {
 		t.Fatal("restarted a core whose loop went round 30 s ago")
 	}
-	c.raph.beat.Store(now.Add(-2 * time.Minute).UnixNano())
+	beatAt(c, now.Add(-2*time.Minute))
 	// A late look, the core itself held up: its time starts again.
 	if c.lookAtCore(now, true) {
 		t.Fatal("restarted a core that was itself held up")
 	}
-	if still := time.Since(time.Unix(0, c.raph.beat.Load())); still > time.Minute {
+	if still := time.Since(*c.raph.beat.Load()); still > time.Minute {
 		t.Errorf("the loop's time did not start again: %v", still)
 	}
-	c.raph.beat.Store(now.Add(-2 * time.Minute).UnixNano())
+	beatAt(c, now.Add(-2*time.Minute))
 	if !c.lookAtCore(now, false) {
 		t.Fatal("a core whose loop stood still for 2 minutes is left be")
 	}
@@ -273,12 +273,12 @@ func TestRaphaelRestartsACoreWhoseLoopStandsStill(t *testing.T) {
 	// the core again; a late look never.
 	var code int
 	c.raph.exit = func(n int) { code = n }
-	c.raph.beat.Store(now.Add(-2 * time.Minute).UnixNano())
+	beatAt(c, now.Add(-2*time.Minute))
 	c.watchCore(now, now.Add(-time.Minute))
 	if code != 0 {
 		t.Fatal("a late look restarted the core")
 	}
-	c.raph.beat.Store(now.Add(-2 * time.Minute).UnixNano())
+	beatAt(c, now.Add(-2*time.Minute))
 	c.watchCore(now, now.Add(-coreWatchTick))
 	if code != 3 {
 		t.Fatalf("exit code = %d, want 3", code)
@@ -295,9 +295,27 @@ func TestRaphaelRestartsACoreWhoseLoopStandsStill(t *testing.T) {
 	os.RemoveAll(c.paths.Freezes())
 	cfg.Arch.Raphael.Core = 0
 	c.useConfig(cfg)
-	c.raph.beat.Store(now.Add(-time.Hour).UnixNano())
+	beatAt(c, now.Add(-time.Hour))
 	if c.lookAtCore(now, false) {
 		t.Error("restarted with arch.raphael.core = 0s")
+	}
+}
+
+// beatAt says the core's loop last went round at t.
+func beatAt(c *Core, t time.Time) { c.raph.beat.Store(&t) }
+
+// The Mac slept from 17:39 to 05:24, and Raphael restarted the core as it
+// woke: its loop had stood still for 11h44m, by the wall clock. The beat
+// keeps the monotonic clock's reading, which stops while the computer
+// sleeps, as the dog's ticker does, so a sleep no longer counts.
+func TestTheCoresBeatSkipsTheComputersSleep(t *testing.T) {
+	c := testCore(t)
+	c.beat()
+	b := c.raph.beat.Load()
+	// Round(0) strips the monotonic reading, so a time that has one
+	// differs from itself rounded.
+	if b == nil || *b == b.Round(0) {
+		t.Fatalf("beat = %v, with no monotonic clock reading", b)
 	}
 }
 
