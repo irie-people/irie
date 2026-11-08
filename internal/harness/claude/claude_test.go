@@ -591,3 +591,43 @@ func TestResumeKeepsMikael(t *testing.T) {
 		t.Errorf("resume argv = %q, files %v", argv, slices.Sorted(maps.Keys(files)))
 	}
 }
+
+func TestMCPServersGoInAFileOfTheSessions(t *testing.T) {
+	s := spawnOf("x")
+	s.MCP = map[string]harness.MCPServer{"irie-browser": {Command: irieBin, Args: []string{"browser", "--headless=true"}}}
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--name": true, "--mcp-config": true}}
+	argv, _, files := launchSpawn(t, defaultProfile(), s)
+	i := slices.Index(argv, "--mcp-config")
+	if i < 0 || argv[i+1] != sessionDir+"/"+harness.MCPFile {
+		t.Fatalf("argv = %q, want --mcp-config with the session's file", argv)
+	}
+	// The flag takes several files: a flag must follow it, never the task.
+	if !strings.HasPrefix(argv[i+2], "--") {
+		t.Errorf("argv = %q: %q follows --mcp-config's file", argv, argv[i+2])
+	}
+	var f struct {
+		MCPServers map[string]harness.MCPServer `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(files[harness.MCPFile], &f); err != nil || f.MCPServers["irie-browser"].Command != irieBin {
+		t.Fatalf("%s = %s, %v", harness.MCPFile, files[harness.MCPFile], err)
+	}
+	resumed, _, rfiles, err := Harness{}.Resume(defaultProfile(), s)
+	if err != nil || !slices.Contains(resumed, "--mcp-config") || rfiles[harness.MCPFile] == nil {
+		t.Errorf("resume argv = %q, %v: want the same servers", resumed, err)
+	}
+
+	s.Probe = current // a CLI whose --help does not list it
+	if argv, _, files := launchSpawn(t, defaultProfile(), s); slices.Contains(argv, "--mcp-config") || files[harness.MCPFile] != nil {
+		t.Errorf("argv = %q: --mcp-config to a CLI without it", argv)
+	}
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--mcp-config": true}}
+	p := defaultProfile()
+	p.Args = []string{"--mcp-config", "/home/alice/mine.json", "--strict-mcp-config"}
+	if argv, _, _ := launchSpawn(t, p, s); strings.Count(strings.Join(argv, "\x00"), "--mcp-config\x00") != 1 {
+		t.Errorf("argv = %q: a profile with its own --mcp-config keeps to it", argv)
+	}
+	s.MCP = nil
+	if argv, _, _ := launchSpawn(t, defaultProfile(), s); slices.Contains(argv, "--mcp-config") {
+		t.Errorf("argv = %q: --mcp-config with no servers", argv)
+	}
+}

@@ -41,7 +41,7 @@ func (Harness) Levels() harness.Levels {
 //
 //	<command> <args...> --model M --effort E --permission-mode P \
 //	    --settings <dir>/claude-settings.json [--plugin-dir <skills>] \
-//	    --session-id <uuid> [--name <name>] <task>
+//	    [--mcp-config <dir>/mcp.json] --session-id <uuid> [--name <name>] <task>
 //
 // The profile's own args come right after the command. A flag whose value is
 // empty in the profile is left out. --name goes only with a name the user
@@ -134,12 +134,28 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 	if s.PluginDir != "" && s.Probe.Flags["--plugin-dir"] {
 		argv = append(argv, "--plugin-dir", s.PluginDir)
 	}
+	// Irie's MCP servers, such as its browser, for this session only, in a
+	// file of their own beside the user's own servers, which still load. A
+	// profile that passes --mcp-config itself keeps to its own. The flag
+	// takes several files, so a flag always follows it, never the task.
+	var mcp []byte
+	if len(s.MCP) > 0 && s.Probe.Flags["--mcp-config"] && !hasFlag(p.Args, "--mcp-config") {
+		b, err := json.MarshalIndent(map[string]any{"mcpServers": s.MCP}, "", "  ")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		mcp = append(b, '\n')
+		argv = append(argv, "--mcp-config", filepath.Join(s.Dir, harness.MCPFile))
+	}
 	// In a tutor mode, the ask for diagrams goes after Claude Code's own
 	// instructions and its output style, taking nothing away.
 	if s.Visual && s.Tutor != "" && s.Probe.Flags["--append-system-prompt"] {
 		argv = append(argv, "--append-system-prompt", harness.VisualNote)
 	}
 	files := map[string][]byte{SettingsFile: settings}
+	if mcp != nil {
+		files[harness.MCPFile] = mcp
+	}
 	if taken.OnCall {
 		names := taken.With
 		if taken.As != "" && !slices.Contains(names, taken.As) {

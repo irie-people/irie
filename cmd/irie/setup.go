@@ -20,11 +20,14 @@ import (
 	"github.com/irie-people/irie/internal/ready"
 )
 
-const setupUsage = "usage: irie setup [--check] [--json] [--yes] | irie setup local [--model MODEL] [--yes]"
+const setupUsage = "usage: irie setup [--check] [--json] [--yes] | irie setup local [--model MODEL] [--yes] | irie setup browser [--yes] [--page URL]"
 
 func setup(args []string) error {
 	if len(args) > 0 && args[0] == "local" {
 		return setupLocal(args[1:], os.Stdin, os.Stdout)
+	}
+	if len(args) > 0 && args[0] == "browser" {
+		return setupBrowser(args[1:], os.Stdin, os.Stdout)
 	}
 	return setupIrie(args, os.Stdin, os.Stdout)
 }

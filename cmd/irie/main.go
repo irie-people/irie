@@ -60,6 +60,10 @@ Used by Irie itself:
   irie statusline [--then COMMAND]
                             the status line of Claude Code sessions, which runs
                             the user's own
+  irie browser [--path EXE] [--profile DIR] [--template DIR] [--headless=BOOL]
+               [--idle DUR] [--proxy socks5://HOST:PORT] [--search URL] [--check URL]
+                            the browser connector: an MCP server that drives
+                            Mullvad Browser for an agent; --check opens a page
   irie runtime -- COMMAND   Irie's own Ollama server, whose model runners stop
                             with it
   irie placeholder          what the slot shows when no session is shown
@@ -105,6 +109,8 @@ func run(args []string) int {
 		return teamTmux(args)
 	case "statusline":
 		return statusline.Run(args, os.Stdin, os.Stdout, os.Stderr, os.Getenv)
+	case "browser":
+		return browserCmd(args)
 	case "runtime":
 		if len(args) > 0 && args[0] == "--" {
 			args = args[1:]
