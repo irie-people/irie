@@ -83,11 +83,15 @@ func TestLineLeadsWithTheState(t *testing.T) {
 		{ipc.StatusReply{State: ipc.StateDone}, "✓ to verify"},
 		{ipc.StatusReply{State: ipc.StateIdle}, "✓ to verify"},
 		// A turn that ended while its helpers run is not done.
-		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore}}, "◐ waiting on 1 helper: Explore"},
-		{ipc.StatusReply{State: ipc.StateIdle, Subagents: []ipc.Subagent{explore, dev, explore}}, "◐ waiting on 3 helpers: Explore ×2, dev"},
-		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{{Agent: "sub:c3"}}}, "◐ waiting on 1 helper"},
+		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore}}, "◉ waiting on 1 helper: Explore"},
+		{ipc.StatusReply{State: ipc.StateIdle, Subagents: []ipc.Subagent{explore, dev, explore}}, "◉ waiting on 3 helpers: Explore ×2, dev"},
+		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{{Agent: "sub:c3"}}}, "◉ waiting on 1 helper"},
 		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore, dev, {Type: "Plan"}, {Type: "scout"}, {Type: "deep"}}},
-			"◐ waiting on 5 helpers: Explore, dev, Plan and 2 more"},
+			"◉ waiting on 5 helpers: Explore, dev, Plan and 2 more"},
+		// Nor is one whose teammates still work, as the core counts them.
+		{ipc.StatusReply{State: ipc.StateIdle, Subs: &ipc.Subs{Teammates: 3}}, "◉ waiting on 3 teammates"},
+		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore}, Subs: &ipc.Subs{Helpers: 1, Teammates: 1}},
+			"◉ waiting on 1 helper and 1 teammate: Explore"},
 		{ipc.StatusReply{State: ipc.StateNeedsYou, Subagents: []ipc.Subagent{explore, {Type: "dev", NeedsYou: true}}}, "● dev needs you"},
 		{ipc.StatusReply{State: ipc.StateNeedsYou}, "● needs you"},
 		{ipc.StatusReply{State: ipc.StateStalled}, "● stalled"},
@@ -110,7 +114,7 @@ func TestLineOfAParkedSession(t *testing.T) {
 		}
 	}
 	waiting := ipc.StatusReply{State: ipc.StateDone, Parked: true, Subagents: []ipc.Subagent{{Agent: "sub:a1", Type: "Explore"}}}
-	if got := plain(Line(u, &waiting, 0)); got != "◐ waiting on 1 helper: Explore · "+meters {
+	if got := plain(Line(u, &waiting, 0)); got != "◉ waiting on 1 helper: Explore · "+meters {
 		t.Errorf("parked with a helper: line = %q", got)
 	}
 	if got := Line(u, &ipc.StatusReply{State: ipc.StateNeedsYou, Parked: true}, 0); !strings.HasPrefix(got, "\x1b[31m● needs you\x1b[0m") {
@@ -158,6 +162,11 @@ func TestLineTakesTheSessionsColourWhileItWorks(t *testing.T) {
 	hot := 72.0
 	if got := Line(Usage{FiveHour: &Window{Used: hot}}, working, 0); !strings.Contains(got, own+"5h \x1b[0m\x1b[33m72%\x1b[0m") {
 		t.Errorf("hot line = %q", got)
+	}
+	// So does a turn that is over while its teammates work: it waits on them.
+	waiting := &ipc.StatusReply{State: ipc.StateIdle, Subs: &ipc.Subs{Teammates: 2}, Color: "#c2954a"}
+	if got := Line(u, waiting, 0); !strings.HasPrefix(got, own+"◉ waiting on 2 teammates\x1b[0m"+own+" · \x1b[0m"+own+"$1.23\x1b[0m") {
+		t.Errorf("waiting line = %q", got)
 	}
 	// Without a colour it can read, the line is as before.
 	for _, c := range []string{"", "c2954a", "#c2954", "#c2954g"} {

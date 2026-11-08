@@ -112,6 +112,10 @@ func columns(ps []piece) int {
 
 // stateLabel is a state in plain words.
 func stateLabel(s ipc.Session) string {
+	if waiting(s) {
+		// On whom, its detail says.
+		return "Waiting"
+	}
 	switch s.State {
 	case ipc.StateFailed:
 		return "Failed"
