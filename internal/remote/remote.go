@@ -57,6 +57,10 @@ var Ops = []string{
 	ipc.OpReorder, ipc.OpScreen, ipc.OpKeys,
 }
 
+// Features are the features of hello, besides Ops, that a phone may use:
+// the live terminal of the app's Term view.
+var Features = []string{ipc.FeatureScreenLive}
+
 // Options configure the gateway.
 type Options struct {
 	Socket  string // the core's socket
@@ -105,6 +109,17 @@ func New(opt Options) (*Server, error) {
 	}, nil
 }
 
+// AppTLS is the TLS of the app's port: a certificate from leaves for the
+// address the client dialed, and Go's own choice of key exchange. That puts
+// the hybrid post-quantum X25519MLKEM768 first, so what a phone or a peer
+// sends today can't be read later by a quantum computer that breaks X25519,
+// and still lets a client without it in on X25519. Naming CurvePreferences
+// here would drop that default, and so would a go line below 1.24 in go.mod
+// (GODEBUG tlsmlkem); the peer package's tests check both ends agree on it.
+func AppTLS(leaves *Leaves) *tls.Config {
+	return &tls.Config{GetCertificate: leaves.GetCertificate, MinVersion: tls.VersionTLS12}
+}
+
 // Run serves until ctx ends: the app over HTTPS on the port, and the setup
 // page over HTTP on the port below.
 func (s *Server) Run(ctx context.Context) error {
@@ -119,7 +134,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	app := &http.Server{
 		Handler:           s.App(),
-		TLSConfig:         &tls.Config{GetCertificate: s.leaves.GetCertificate, MinVersion: tls.VersionTLS12},
+		TLSConfig:         AppTLS(s.leaves),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		ErrorLog:          slog.NewLogLogger(s.log.Handler(), slog.LevelDebug),
@@ -505,7 +520,7 @@ func (s *Server) hello(raw json.RawMessage) json.RawMessage {
 	if json.Unmarshal(raw, &h) != nil {
 		return raw
 	}
-	h.Features = slices.DeleteFunc(h.Features, func(f string) bool { return !slices.Contains(Ops, f) })
+	h.Features = slices.DeleteFunc(h.Features, func(f string) bool { return !slices.Contains(Ops, f) && !slices.Contains(Features, f) })
 	b, err := json.Marshal(h)
 	if err != nil {
 		return raw
@@ -525,6 +540,7 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request, d Device) {
 		Session      string `json:"session,omitempty"`
 		Agent        string `json:"agent,omitempty"`
 		Conversation bool   `json:"conversation,omitempty"`
+		Screen       bool   `json:"screen,omitempty"`
 	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<10))
 	if len(strings.TrimSpace(string(body))) > 0 {

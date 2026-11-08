@@ -72,5 +72,8 @@ func statusLine(bin string, user StatusLine, ok bool) StatusLine {
 // ownRefresh is how often, in seconds, Claude Code re-runs Irie's own
 // status line. Its updates stop while the session is idle, and so would the
 // line's state while the session waits on helpers or its turn has just
-// ended.
-const ownRefresh = 2
+// ended. Each run starts an irie in every session, about 10 ms of CPU: every
+// 2 s with 30 sessions that was 15 starts a second all day, some 15% of a
+// core, and a status op on the core's lock for each. Every 5 s the line
+// still follows an idle session closely, and the cards follow the hooks.
+const ownRefresh = 5

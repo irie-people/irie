@@ -96,15 +96,23 @@ func New(base, token, fingerprint string) (*Client, error) {
 		DialContext:         (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		TLSHandshakeTimeout: 5 * time.Second,
 		IdleConnTimeout:     90 * time.Second,
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			// The chain is checked below, against the pinned authority
-			// alone, rather than against the system's roots.
-			InsecureSkipVerify:    true,
-			VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error { return verifyPinned(raw, want, host) },
-		},
+		TLSClientConfig:     pinnedTLS(want, host),
 	}
 	return &Client{URL: strings.TrimSuffix(base, "/"), Token: token, http: &http.Client{Transport: tr}}, nil
+}
+
+// pinnedTLS is the TLS of a client of the gateway at host, which trusts
+// only the Irie authority whose SHA-256 is want. It keeps Go's own choice of
+// key exchange, which offers the hybrid post-quantum X25519MLKEM768 first,
+// as the gateway's does (remote.AppTLS).
+func pinnedTLS(want []byte, host string) *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		// The chain is checked below, against the pinned authority alone,
+		// rather than against the system's roots.
+		InsecureSkipVerify:    true,
+		VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error { return verifyPinned(raw, want, host) },
+	}
 }
 
 // verifyPinned checks that the server's certificate is valid for host

@@ -14,7 +14,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch], :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch], :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :fork [@TURN] [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -169,6 +169,23 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return Step{}, Errorf(CodeBadArgs, ":%s takes the selected session, which must be %s.", name, what)
 		}
 		return step(name, ParkArgs{Session: sel.ID}, sel)
+	case name == OpFork:
+		// :fork [@AT] [TASK] carries the selected session's context on
+		// from a point of it, its newest turn by default (DESIGN §4.13).
+		// The task may run on over more lines.
+		s, err := selected()
+		if err != nil {
+			return Step{}, err
+		}
+		at, task := "", arg
+		if strings.HasPrefix(arg, "@") {
+			first, rest, _ := strings.Cut(arg, " ")
+			at, task = strings.TrimPrefix(first, "@"), strings.TrimSpace(rest)
+		}
+		if _, more, ok := strings.Cut(in.Text, "\n"); ok {
+			task = strings.TrimSpace(task + "\n" + more)
+		}
+		return step(OpFork, ForkArgs{Session: s.ID, At: at, Task: Unpaste(task, in.Pastes)}, s)
 	case name == OpMove:
 		o, err := pickOutside(v.Outside, arg, in.Outside)
 		if err != nil {
@@ -293,6 +310,14 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	case OpMove:
 		s := as[MoveResult](result).Session
 		r.Session, r.Text = &s, "Moved "+outsideName(*st.Outside)+" into Irie."
+	case OpFork:
+		f := as[ForkResult](result)
+		s := f.Session
+		r.Did, r.Session, r.Text = InputSpawned, &s, fmt.Sprintf("Forked %s from turn %d as %s", name, f.Turn, s.Name)
+		if s.Worktree != "" {
+			r.Text += ", in a worktree of its own on " + s.Branch
+		}
+		r.Text += "."
 	case OpRoute:
 		r.Did, r.Text = InputAnswered, as[RouteChoice](result).Reason
 	case OpVPN:
@@ -363,18 +388,28 @@ func undone(op string, u UndoResult) string {
 }
 
 // Title is a step of the history as a person reads it: the core's label
-// `park "api-fix"` is Park “api-fix”, as the Mac app's Edit menu says it.
+// `park "api-fix"` is Park “api-fix”, and `rename "a" to "b"` is Rename
+// “a” to “b”, as the Mac app's Edit menu says them. Each name is quoted as
+// Go's %q quotes it.
 func Title(label string) string {
-	verb, name, ok := strings.Cut(label, " ")
-	if !ok {
-		return capital(label)
-	}
-	if strings.HasPrefix(name, `"`) {
-		if q, err := strconv.Unquote(name); err == nil {
-			return capital(verb) + " “" + q + "”"
+	var b strings.Builder
+	for rest := label; rest != ""; {
+		i := strings.IndexByte(rest, '"')
+		if i < 0 {
+			b.WriteString(rest)
+			break
 		}
+		b.WriteString(rest[:i])
+		q, err := strconv.QuotedPrefix(rest[i:])
+		if err != nil {
+			b.WriteString(rest[i:])
+			break
+		}
+		name, _ := strconv.Unquote(q)
+		b.WriteString("“" + name + "”")
+		rest = rest[i+len(q):]
 	}
-	return capital(verb) + " " + name
+	return capital(b.String())
 }
 
 // froze says what a freeze or thaw did.

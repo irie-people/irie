@@ -1,7 +1,9 @@
 package core
 
 import (
+	"cmp"
 	"encoding/json"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,20 +20,23 @@ const frameGap = 100 * time.Millisecond
 // later ones are dropped.
 const maxQueue = 10000
 
-// subscriber coalesces changes for one client. Between two frames it only
-// remembers which rows changed; a frame then carries their latest state, as
-// one upsert or remove, or as a snapshot when several rows changed. Event
-// frames, for a client that asked for them, are never coalesced. A client
+// subscriber coalesces changes for one client. Between two rounds of frames
+// it only remembers which rows changed; a round then carries their latest
+// state, an upsert or a remove for each. Only the first round is a
+// snapshot of every row. Event frames, for a client that asked for them,
+// are never coalesced. A client
 // that sees every session also gets the sessions outside Irie, the closed
 // sessions and the history's labels, after its first snapshot and whenever
 // they change. A client that
 // follows one session's conversation gets all of it, then what changed.
 type subscriber struct {
 	c            *Core
-	session      string // only this session, when set
-	agent        string // only this agent's events, when set
-	events       bool   // event frames too
-	conversation bool   // the session's conversation frames too
+	session      string      // only this session, when set
+	agent        string      // only this agent's events, when set
+	events       bool        // event frames too
+	conversation bool        // the session's conversation frames too
+	feed         *screenFeed // the terminal it watches, for screen frames too
+	view         string      // which it is, for perf: ipc.ViewApp, "session" or "all"
 	out          chan ipc.Frame
 	wake         chan struct{}
 	done         chan struct{}
@@ -45,9 +50,17 @@ type subscriber struct {
 	closed  bool        // a closed frame is due
 	hist    bool        // a history frame is due
 	talk    bool        // a conversation frame may be due
+	scr     bool        // a screen frame may be due
 
 	talkSent bool   // the conversation's first frame went out; only loop uses it
 	talkSeen uint64 // the conversation's version the client has; only loop uses it
+
+	// What the client has of the terminal, for the screen frames; only
+	// loop uses them, under s.c.mu.
+	scrSent  bool
+	scrSeen  uint64   // the feed's version
+	scrCols  int      // the width it has
+	scrLines []string // the lines it has
 }
 
 // Subscribe starts a stream of frames for one client (ipc.Handler).
@@ -65,6 +78,9 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	if a.Conversation && a.Session == "" {
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "a conversation needs a session")
 	}
+	if a.Screen && a.Session == "" {
+		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "a screen needs a session")
+	}
 	if strings.Contains(a.Session, "/") {
 		return c.subscribePeer(a) // one of the peers' sessions (peers.go)
 	}
@@ -72,23 +88,34 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 		return nil, nil, ipc.Errorf(ipc.CodeBadArgs, "no helper %q", a.Agent)
 	}
 	app := a.View == ipc.ViewApp
+	view := "all"
+	switch {
+	case app:
+		view = ipc.ViewApp
+	case a.Session != "":
+		view = "session"
+	}
+	c.perf.Add("subscribe."+view, 1)
 	sub := &subscriber{
-		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation,
+		c: c, session: a.Session, agent: a.Agent, events: a.Events, conversation: a.Conversation, view: view,
 		out: make(chan ipc.Frame), wake: make(chan struct{}, 1), done: make(chan struct{}),
 		full: true, dirty: map[string]bool{}, outside: a.Session == "", closed: a.Session == "", hist: a.Session == "", talk: a.Conversation,
 	}
 	c.mu.Lock()
-	if a.Conversation {
+	if a.Conversation || a.Screen {
 		x := c.sessions[a.Session]
 		if x == nil {
 			c.mu.Unlock()
 			return nil, nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 		}
-		if isHelper(a.Agent) {
+		if a.Conversation && isHelper(a.Agent) {
 			c.followHelper(x, a.Agent)
-		} else {
+		} else if a.Conversation {
 			x.convSubs++
 			c.conversationOf(x)
+		}
+		if a.Screen {
+			sub.feed = c.watchScreen(x)
 		}
 	}
 	c.subs[sub] = true
@@ -97,8 +124,8 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	}
 	c.mu.Unlock()
 	if app {
-		go c.tick()                              // zoom the slot now, not at the next tick
-		go c.refreshOutside(outsideEvery, false) // someone looks now
+		go c.tick()                                      // zoom the slot now, not at the next tick
+		go c.refreshOutside("look", outsideEvery, false) // someone looks now
 	}
 	sub.wake <- struct{}{}
 	go sub.loop()
@@ -116,6 +143,9 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 				} else {
 					x.convSubs--
 				}
+			}
+			if x := c.sessions[sub.session]; x != nil && sub.feed != nil {
+				c.unwatchScreen(x, sub.feed)
 			}
 			c.mu.Unlock()
 			close(sub.done)
@@ -231,6 +261,17 @@ func (s *subscriber) noteConversation() {
 	}
 }
 
+// noteScreen marks a screen frame due.
+func (s *subscriber) noteScreen() {
+	s.mu.Lock()
+	s.scr = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
 // event queues an event frame for a client that wants it. The caller holds
 // s.c.mu.
 func (s *subscriber) event(e event.Event) {
@@ -257,13 +298,11 @@ func (s *subscriber) loop() {
 			return
 		}
 		s.mu.Lock()
-		full, dirty, header, queue, outside, closed, hist, talk := s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.hist, s.talk
-		s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.hist, s.talk = false, map[string]bool{}, false, nil, false, false, false, false
+		full, dirty, header, queue, outside, closed, hist, talk, scr := s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.hist, s.talk, s.scr
+		s.full, s.dirty, s.header, s.queue, s.outside, s.closed, s.hist, s.talk, s.scr = false, map[string]bool{}, false, nil, false, false, false, false, false
 		s.mu.Unlock()
 		for _, f := range queue {
-			select {
-			case s.out <- f:
-			case <-s.done:
+			if !s.send(f) {
 				return
 			}
 		}
@@ -272,15 +311,13 @@ func (s *subscriber) loop() {
 			s.c.mu.Lock()
 			h := s.c.headerNow()
 			s.c.mu.Unlock()
-			select {
-			case s.out <- ipc.Frame{T: ipc.FrameHeader, Header: &h}:
-			case <-s.done:
+			if !s.send(ipc.Frame{T: ipc.FrameHeader, Header: &h}) {
 				return
 			}
 		}
 		var frames []ipc.Frame
 		if full || len(dirty) > 0 {
-			frames = append(frames, s.frame(full, dirty))
+			frames = append(frames, s.rows(full, dirty)...)
 		}
 		if outside {
 			frames = append(frames, s.outsideFrame())
@@ -298,13 +335,16 @@ func (s *subscriber) loop() {
 				frames = append(frames, f)
 			}
 		}
+		if scr {
+			if f, ok := s.screenFrame(); ok {
+				frames = append(frames, f)
+			}
+		}
 		if len(frames) == 0 {
 			continue
 		}
 		for _, f := range frames {
-			select {
-			case s.out <- f:
-			case <-s.done:
+			if !s.send(f) {
 				return
 			}
 		}
@@ -316,16 +356,49 @@ func (s *subscriber) loop() {
 	}
 }
 
-func (s *subscriber) frame(full bool, dirty map[string]bool) ipc.Frame {
+// send hands the client one frame, and counts it by type; false when the
+// client has gone.
+func (s *subscriber) send(f ipc.Frame) bool {
+	select {
+	case s.out <- f:
+		s.c.perf.Add("frame."+f.T, 1)
+		return true
+	case <-s.done:
+		return false
+	}
+}
+
+// rows are the frames for the rows: the first time a snapshot of every
+// row, with the header; then an upsert or a remove for each row that
+// changed, the removes first and the upserts in the list's order. Each
+// row goes once, however many changed: a snapshot for two changes sent
+// every row again, which on a busy machine came every few seconds
+// (docs/proposals/optimisation.md §2.1).
+func (s *subscriber) rows(full bool, dirty map[string]bool) []ipc.Frame {
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
-	if !full && len(dirty) == 1 {
+	if !full {
+		var removes []string
+		var rows []ipc.Session
 		for id := range dirty {
 			if row, ok := s.c.published[id]; ok {
-				return ipc.Frame{T: ipc.FrameUpsert, Session: &row}
+				rows = append(rows, row)
+			} else {
+				removes = append(removes, id)
 			}
-			return ipc.Frame{T: ipc.FrameRemove, ID: id}
 		}
+		slices.Sort(removes)
+		slices.SortFunc(rows, func(a, b ipc.Session) int {
+			return cmp.Or(cmp.Compare(a.Order, b.Order), strings.Compare(a.ID, b.ID))
+		})
+		frames := make([]ipc.Frame, 0, len(dirty))
+		for _, id := range removes {
+			frames = append(frames, ipc.Frame{T: ipc.FrameRemove, ID: id})
+		}
+		for i := range rows {
+			frames = append(frames, ipc.Frame{T: ipc.FrameUpsert, Session: &rows[i]})
+		}
+		return frames
 	}
 	rows := []ipc.Session{}
 	for _, row := range s.c.list() {
@@ -334,7 +407,7 @@ func (s *subscriber) frame(full bool, dirty map[string]bool) ipc.Frame {
 		}
 	}
 	h := s.c.headerNow()
-	return ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: &h}
+	return []ipc.Frame{{T: ipc.FrameSnapshot, Sessions: rows, Header: &h}}
 }
 
 // outsideFrame carries the latest sessions outside Irie.
@@ -383,4 +456,32 @@ func (s *subscriber) conversationFrame() (ipc.Frame, bool) {
 		cv.Agent = s.agent
 	}
 	return ipc.Frame{T: ipc.FrameConversation, Conversation: &cv}, ok
+}
+
+// screenFrame carries what the session's terminal shows: every line the
+// first time and whenever its size changes, then only the lines that
+// changed since the client's last frame, however many reads ago.
+func (s *subscriber) screenFrame() (ipc.Frame, bool) {
+	s.c.mu.Lock()
+	defer s.c.mu.Unlock()
+	x := s.c.sessions[s.session]
+	if x == nil || x.screen != s.feed || s.feed.ver == 0 || s.feed.ver == s.scrSeen {
+		return ipc.Frame{}, false
+	}
+	f := s.feed
+	s.scrSeen = f.ver
+	sc := f.cur
+	sc.Session = x.id
+	if !s.scrSent || sc.Cols != s.scrCols || len(sc.Lines) != len(s.scrLines) {
+		sc.Reset = true
+	} else {
+		sc.Lines = nil
+		for i, l := range f.cur.Lines {
+			if l != s.scrLines[i] {
+				sc.Set = append(sc.Set, ipc.ScreenLine{N: i, Text: l})
+			}
+		}
+	}
+	s.scrSent, s.scrCols, s.scrLines = true, f.cur.Cols, f.cur.Lines
+	return ipc.Frame{T: ipc.FrameScreen, Screen: &sc}, true
 }

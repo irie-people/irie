@@ -2,6 +2,29 @@
 
 Date: 2026-10-31. Status: proposed, for the owner to decide. There is no issue tracker yet, so this file stands in for the issue that [AGENTS.md](../../AGENTS.md) asks for. An agent (Claude Code) wrote it from `live` at `7035eaf`, after measuring the Irie running on the owner's machine. It is the plan only and builds no code. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
+## Status, 2026-11-02
+
+A responsiveness audit on the owner's Irie (23–30 sessions, load 15–30) measured the window and the core with a browser's yardsticks: no main-thread task over 50 ms, and a click drawn within 100 ms. It found what this plan predicted, and one cause it missed. Built so far:
+
+- **Iteration 1, the yardstick, and iteration 2, stop the churn:** built as planned (0dbc3c0, 018f4ee, 74aee57, 1475677, 4a62735).
+- **Iteration 6, the app draws only what changed (b644658).** The store is `@Observable`, and session cards are `Equatable`. The selected row and the title bar's counts are worked out once a change. A card's buttons exist only under the pointer. `Irie --bench` (5ff5e94) measures it. Main-thread CPU with 30 sessions:
+  - one session's update: 32 ms → 9 ms;
+  - a click on a card: 64 ms → 26 ms.
+
+  Before, `sample` found the main thread 96% busy, and xctrace five hangs of 320–570 ms in 8 s.
+- **Not in the plan: the core's tmux was a chain of five agents' team shims (dc6d0c7).** tmux gives a new pane the PATH of the client that asks, so every `irie up` from an agent's shell handed the core that agent's PATH. Each tmux command then cost 57 ms instead of 7, under the core's lock. `tmux.Find` now passes over Irie's shims.
+- **Smaller churn fixes:**
+  - a row's memory moves only when its first two figures do (8d284e7);
+  - Irie's status line re-runs every 5 s, not 2 (102749a), which is part of iteration 3.
+
+Next, in order:
+1. Measure all this live with `tools/perf` and `irie ctl perf`.
+2. Run tmux through one control-mode client instead of a process per command (iteration 10.1), about 7 ms to about 1 ms a command under the lock.
+3. Trim the app's remaining ~9 ms per change, mostly AppKit's display cycle.
+4. The rest of iteration 3.
+
+The installs themselves are the bottleneck for landing all of this. On busy days the lock is held almost continuously, and each install runs every package's tests under it.
+
 ## Goal
 
 Irie should cost next to nothing while nothing happens and add no delay an agent can feel when something does. Its memory should stay flat, it should spend no token it does not need, and a change should reach the running Irie quickly. Here "the ceiling" means meeting a fixed target for each of these, measured the same way every time, rather than being faster than before.

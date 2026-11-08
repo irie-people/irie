@@ -61,6 +61,8 @@ The website has the docs, from installing Irie to a merged change. Its pages are
 
 [SUPPORT.md](SUPPORT.md) says where to ask, and [SECURITY.md](SECURITY.md) how to report a vulnerability privately. Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md), and [GOVERNANCE.md](GOVERNANCE.md) says how decisions are made.
 
+Chat happens on the [Irie People Discord](https://discord.gg/XrP63ujbPH), and help still happens on GitHub. Irie People is also on [Instagram](https://www.instagram.com/irie_people/) and [Threads](https://www.threads.com/@irie_people).
+
 ## License
 
 [Apache-2.0](LICENSE). Built from public documentation; every source is listed in [PROVENANCE.md](PROVENANCE.md).

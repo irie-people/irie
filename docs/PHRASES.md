@@ -37,7 +37,7 @@ The README's. Used in: `README.md`, under the tagline.
 
 > Irie runs your AI coding agents side by side, in one calm view.
 
-The site's hero. Used in: `site/index.html`, as the headline and as the page's description for search engines.
+The site's hero. Used in: `site/index.html`, as the headline and as the page's description for search engines and link previews. The preview picture, `site/preview.png`, drawn from `docs/preview.html`, and its alt text in the preview tags of every page in `site/`.
 
 ## Why
 

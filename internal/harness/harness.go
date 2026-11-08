@@ -67,6 +67,7 @@ type Spawn struct {
 	Session  string        // Irie session id
 	Name     string        // the name the user chose for the session; "" lets the agent title it
 	Task     string        // the task, verbatim
+	Next     string        // a resumed conversation's next prompt, as a fork's task; "" waits for input
 	Cwd      string        // working directory
 	Repo     string        // the main checkout of the task's repo, when it runs in one
 	Dir      string        // the session's state dir, sessions/<id>

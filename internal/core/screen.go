@@ -171,6 +171,7 @@ func (c *Core) keys(a ipc.KeysArgs) error {
 		return err
 	}
 	x.quiet++
+	pokeScreen(x)
 	return nil
 }
 

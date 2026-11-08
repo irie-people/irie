@@ -22,9 +22,23 @@ import (
 // take, and what the machine has free, every sampleEvery ticks.
 const sampleEvery = 5
 
-// availableStep rounds the free memory the header carries, so it changes
-// when the free memory does and not with every page.
+// availableStep rounds the free memory the header carries, and what the
+// agents take, so it changes when they do and not with every page.
 const availableStep = 100 << 20
+
+// shownMemory is a session's memory as its row carries it: two significant
+// figures, rounded down, about as a sidebar shows it. A process tree's
+// resident size moves by a few pages every sample, and each move sent every
+// client a frame for the row: on 2026-11-01, 96 of 168 rows that changed in
+// 20 s had changed only in memory (docs/proposals/optimisation.md §2.1).
+// Rounded down, a row never says more than the header's total.
+func shownMemory(n int64) int64 {
+	step := int64(1)
+	for n/step >= 100 {
+		step *= 10
+	}
+	return n / step * step
+}
 
 // sample measures memory and tells subscribers what changed. One runs at a
 // time; the caller holds no lock.
@@ -33,6 +47,7 @@ func (c *Core) sample() {
 		return
 	}
 	defer c.sampling.Store(false)
+	defer c.perf.Since("sample", time.Now())
 	c.mu.Lock()
 	roots := map[string]int{}
 	for id, x := range c.sessions {
@@ -135,6 +150,11 @@ func (c *Core) memoryNow() ipc.Memory {
 	for _, x := range c.sessions {
 		out.Agents += x.memory
 	}
+	// Rounded to a step, as the free memory is: the agents' pages change
+	// with every sample, and the header with them would be sent again each
+	// time. Up, so the agents never take less than the rows say, nor
+	// nothing while some run.
+	out.Agents = (out.Agents + availableStep - 1) / availableStep * availableStep
 	return out
 }
 
@@ -176,6 +196,9 @@ func (c *Core) publishHeader() {
 	h := c.headerNow()
 	changed := !reflect.DeepEqual(h, c.lastHeader)
 	c.lastHeader = h
+	if changed {
+		c.perf.Add("header.changed", 1)
+	}
 	subs := make([]*subscriber, 0, len(c.subs))
 	for s := range c.subs {
 		subs = append(subs, s)

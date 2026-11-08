@@ -7,9 +7,11 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,6 +70,7 @@ type gabState struct {
 	frontOK   bool            // whether front is known
 	irieFront bool            // Irie, or a terminal it may be in, is in front
 	focus     map[string]bool // the sessions in the user's focus
+	installs  map[string]bool // the sessions that ran an install at the last sweep, in the focus too
 	outside   map[int]outProc // the apps outside Irie it slowed, by pid
 	// boostUntil is when the boost on ends: until then the user's focus
 	// gets the machine first whether it is busy or not.
@@ -129,6 +132,30 @@ func (c *Core) inFocus(irieFront bool, word time.Duration, now time.Time) map[st
 	return f
 }
 
+// refocus takes the session now on show into the user's focus at once
+// while Gabriel holds back, and moves the trees before it returns: a show
+// never waits for his next sweep, up to sampleEvery ticks away, with the
+// session the user turned to still in the background. The caller holds
+// c.mu.
+func (c *Core) refocus() {
+	if !c.gab.holding {
+		return
+	}
+	c.gab.focus = c.focusNow(c.gab.irieFront, c.gab.installs, c.cfg().Arch.Gabriel.Word, time.Now())
+	c.background()
+}
+
+// focusNow is the user's focus (inFocus), and every session that runs an
+// install, which is everyone's and never steps back. The caller holds
+// c.mu.
+func (c *Core) focusNow(irieFront bool, installs map[string]bool, word time.Duration, now time.Time) map[string]bool {
+	f := c.inFocus(irieFront, word, now)
+	for id := range installs {
+		f[id] = true
+	}
+	return f
+}
+
 // markWord notes that the user just messaged or started session id: it
 // stays in their focus for arch.gabriel.word.
 func (c *Core) markWord(id string) {
@@ -184,8 +211,12 @@ func (c *Core) gabrielSweep() {
 		}
 	}
 
+	// An install in progress is everyone's: it never steps back.
+	st.installs = nil
+	if st.holding {
+		st.installs = c.installing()
+	}
 	c.mu.Lock()
-	st.focus = c.inFocus(st.irieFront, g.Word, now)
 	trees := c.sessionRoots()
 	held := maps.Clone(c.gab.outside)
 	c.mu.Unlock()
@@ -193,6 +224,9 @@ func (c *Core) gabrielSweep() {
 	outside := c.slowOutside(held, st, g, trees)
 
 	c.mu.Lock()
+	// The focus is read last, so a show made during the sweep keeps the
+	// session it brought into the focus (refocus).
+	st.focus = c.focusNow(st.irieFront, st.installs, g.Word, now)
 	st.outside = outside
 	// A boost started or stopped meanwhile wins; one whose time is up ends.
 	st.boostUntil = c.gab.boostUntil
@@ -533,8 +567,8 @@ var (
 // stealsFocus reports whether a shell command would bring an app, a window
 // or a page to the front: open(1) without -g or -j, AppleScript that
 // activates an app or types into it, or an app's own executable started
-// straight, short of a headless browser, Irie.app's --snapshot and
-// --background, and the like. It reads the command roughly, as a person
+// straight, short of a headless browser, Irie.app's --snapshot, --record
+// and --background, and the like. It reads the command roughly, as a person
 // would, and errs toward letting it run.
 func stealsFocus(cmd string) bool {
 	for _, seg := range shellSplit.Split(cmd, -1) {
@@ -556,7 +590,7 @@ func stealsFocus(cmd string) bool {
 				return true
 			}
 		case strings.Contains(seg, ".app/Contents/MacOS/"):
-			quiet := []string{"--headless", "--snapshot", "--render-conversation", "--background", "--version", "--help"}
+			quiet := []string{"--headless", "--snapshot", "--render-conversation", "--record", "--background", "--version", "--help"}
 			if !slices.ContainsFunc(quiet, func(q string) bool { return strings.Contains(seg, q) }) {
 				return true
 			}
@@ -617,4 +651,66 @@ func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Ev
 		}
 	}
 	return focusNote
+}
+
+// installing is the sessions that run tools/live.sh: every session's work
+// waits on an install, so Gabriel never holds one back. It reads ps once,
+// and only while he holds back. It holds no lock when it is called.
+func (c *Core) installing() map[string]bool {
+	out, err := exec.Command("/bin/ps", "-Ao", "pid=,command=").Output()
+	if err != nil {
+		return nil
+	}
+	pids := installPIDs(string(out))
+	if len(pids) == 0 {
+		return nil
+	}
+	t, err := proc.Read()
+	if err != nil {
+		return nil
+	}
+	c.mu.Lock()
+	roots := map[int]string{}
+	for id, x := range c.sessions {
+		if p := c.snap.Pane(x.pane); p != nil && !p.Dead && p.PID > 1 {
+			roots[p.PID] = id
+		}
+	}
+	c.mu.Unlock()
+	return sessionsOf(pids, t, roots)
+}
+
+// installPIDs are the processes in ps output that run tools/live.sh.
+func installPIDs(ps string) []int {
+	var pids []int
+	for _, line := range strings.Split(ps, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 || !strings.Contains(line, "tools/live.sh") {
+			continue
+		}
+		if pid, err := strconv.Atoi(f[0]); err == nil {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
+}
+
+// sessionsOf are the sessions whose trees hold pids: each pid's ancestors,
+// up to a session's pane.
+func sessionsOf(pids []int, t proc.Table, roots map[int]string) map[string]bool {
+	found := map[string]bool{}
+	for _, pid := range pids {
+		q, ok := t.Get(pid)
+		for i := 0; ok && i < 64; i++ {
+			if id, root := roots[q.PID]; root {
+				found[id] = true
+				break
+			}
+			if q.PPID <= 1 {
+				break
+			}
+			q, ok = t.Get(q.PPID)
+		}
+	}
+	return found
 }

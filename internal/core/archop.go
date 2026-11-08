@@ -24,6 +24,7 @@ type archNow struct {
 	on      bool
 	status  string
 	actions []ipc.ArchAction
+	items   []ipc.ArchItem
 }
 
 // archEntry is an arch agent's row: his settings, in the order to show
@@ -57,6 +58,16 @@ var archTable = map[string]archEntry{
 		},
 		now: (*Core).gabrielNow,
 	},
+	"raphael": {
+		settings: []ipc.ArchSetting{
+			{Key: "arch.raphael.on", Kind: ipc.ArchBool, Label: "Raffi restarts what stops answering, and looks over your Mac", Help: "Agents keep running through every restart. He fixes a thing only once you say OK to what he will run."},
+			{Key: "ui.freeze_dog", Kind: ipc.ArchDuration, Label: "Restart the Mac app when it has not answered for", Help: "0s for never; a sidebar gets a minute at least. A report of where it was stuck goes in the freezes folder beside core.log."},
+			{Key: "arch.raphael.core", Kind: ipc.ArchDuration, Label: "Restart the core when its loop has stood still for", Help: "0s for never. Its supervisor starts it again at once."},
+			{Key: "arch.raphael.every", Kind: ipc.ArchDuration, Label: "Look over your Mac every", Help: "0s for only when you ask. He looks in the background, so your work comes first."},
+			{Key: "arch.raphael.known", Kind: ipc.ArchLines, Label: "Startup items you know", Help: "By label, plist or program: Raffi no longer flags them. It's mine adds one."},
+		},
+		now: (*Core).raphaelNow,
+	},
 }
 
 // archList is the arch op: every arch agent, by rank.
@@ -67,7 +78,7 @@ func (c *Core) archList() ipc.ArchResult {
 		ag := ipc.ArchAgent{Name: a.Name, Nickname: a.Nickname, Icon: a.Icon, Title: a.Title, About: a.Description}
 		if e, ok := archTable[a.Name]; ok {
 			n := e.now(c)
-			ag.On, ag.Status, ag.Actions = n.on, n.status, n.actions
+			ag.On, ag.Status, ag.Actions, ag.Items = n.on, n.status, n.actions, n.items
 			for _, s := range e.settings {
 				s.Value = settingValue(tree, s.Key)
 				ag.Settings = append(ag.Settings, s)

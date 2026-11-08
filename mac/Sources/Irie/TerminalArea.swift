@@ -3,14 +3,17 @@ import SwiftUI
 /// The right side: the shown agent's live terminal. The core zooms the slot
 /// while the app is open, so a tmux client of the main session shows just
 /// that agent, and showing another session swaps it in place.
+@MainActor
 struct TerminalArea: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     /// The palette's name: a change draws the ground and the frame again.
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     /// What draws the terminals (GhosttyTerminal.swift).
     @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
+    /// The right sidebar's width while a drag of its edge asks for another.
+    @State private var sideGuide: Double?
 
-    private var selected: Session? { store.sessions.first { $0.id == store.selection } }
+    private var selected: Session? { store.selectedRow }
 
     private var online: Bool {
         if case .online = store.link { return true }
@@ -18,8 +21,37 @@ struct TerminalArea: View {
     }
 
     var body: some View {
+        // The frame's colour for a finished session is Look's, which follows
+        // ui.red_on_done; reading it here draws the frame again when it
+        // changes.
+        let _ = store.redOnDone
         VStack(spacing: 0) {
-            main.modifier(FileDrop(session: selected))
+            // The right sidebar (RightSidebar.swift), inline after the
+            // terminal or the conversation. The frame stays the first child,
+            // so SwiftUI never makes the terminal again, which would restart
+            // its tmux client. In a narrow window the sidebar gives up width
+            // first, down to its narrowest, so the terminal keeps some room.
+            GeometryReader { geo in
+                let width = min(CGFloat(store.side.width), max(CGFloat(SideState.minWidth), geo.size.width - 12 - minTerminal))
+                ZStack(alignment: .trailing) {
+                    HStack(spacing: 0) {
+                        main.modifier(FileDrop(session: selected))
+                        if store.side.open {
+                            RightSidebar(guide: $sideGuide)
+                                .frame(width: width)
+                                .padding([.top, .bottom, .trailing], 12)
+                        }
+                    }
+                    if let g = sideGuide {
+                        Rectangle()
+                            .fill(Theme.accent)
+                            .frame(width: 2)
+                            .padding(.vertical, 12)
+                            .padding(.trailing, CGFloat(g) + 12 + 4)
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
             PhraseBar()
         }
         .background(Theme.ground.ignoresSafeArea())
@@ -36,7 +68,7 @@ struct TerminalArea: View {
                         .font(.system(size: 13, weight: .semibold))
                     // Its state and the rest, in its agent's colour while it
                     // works, as its card and the terminal's frame.
-                    Text(selected.map(subtitle) ?? "No session")
+                    Text(selected.map { subtitle($0) } ?? "No session")
                         .font(.system(size: 11))
                         .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                 }
@@ -44,13 +76,13 @@ struct TerminalArea: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             ToolbarItem(placement: .primaryAction) {
-                // A helper beside the conversation (HelperPane.swift).
+                // The session's helpers, in the right sidebar (RightSidebar.swift).
                 Button {
                     store.toggleHelpers()
                 } label: {
                     Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: "rectangle.split.2x1")
                 }
-                .help(store.helperShown ? "Put the conversation back on its own (⇧⌘H)" : "Show the session’s helpers beside its conversation (⇧⌘H)")
+                .help(store.helperShown ? "Close the helpers (⇧⌘H)" : "Show the session’s helpers in the right sidebar (⇧⌘H)")
                 .disabled(selected == nil)
             }
             ToolbarItem(placement: .primaryAction) {
@@ -62,8 +94,22 @@ struct TerminalArea: View {
                 .help("Open the terminal in a Ghostty window too")
                 .disabled(store.attach == nil)
             }
+            // At the toolbar's trailing end, where the HIG puts a button that
+            // opens an inspector.
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.toggleSide()
+                } label: {
+                    Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: "sidebar.right")
+                }
+                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)" : "Show the right sidebar: helpers and what is ready to review (⌥⌘B)")
+            }
         }
     }
+
+    /// What the terminal keeps beside the sidebar before the sidebar gives up
+    /// width: about 80 columns and the frame round them.
+    private var minTerminal: CGFloat { 80 * store.fontSize * 0.6 + 60 }
 
     private var main: some View {
         ZStack(alignment: .top) {
@@ -110,6 +156,39 @@ struct TerminalArea: View {
                     .accessibilityAddTraits(.isStaticText)
             }
         }
+        .overlay(alignment: .bottom) {
+            if let c = copied {
+                Label(c.text, systemImage: "doc.on.doc")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Theme.field).shadow(radius: 3, y: 1))
+                    .overlay(Capsule().strokeBorder(Theme.edge, lineWidth: 1))
+                    .padding(.bottom, 28)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .id(c.id)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: copied)
+        .onReceive(NotificationCenter.default.publisher(for: .irieTerminalCopied)) { note in
+            guard let text = note.userInfo?["note"] as? String else { return }
+            let c = CopiedNote(text: text)
+            copied = c
+            AccessibilityNotification.Announcement(text).post()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                if copied == c { copied = nil }
+            }
+        }
+    }
+
+    /// The note that a selection in a terminal went to the pasteboard, at
+    /// the foot of the terminal for a moment (TerminalSelection.swift).
+    @State private var copied: CopiedNote?
+
+    private struct CopiedNote: Equatable {
+        let id = UUID()
+        let text: String
     }
 
     /// The picked session while it shows beside its teammates.

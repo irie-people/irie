@@ -60,6 +60,18 @@ const ctlUsage = `usage: irie ctl <command>
                                          the machine first for a while (an hour,
                                          arch.gabriel.boost) busy or not, and frees
                                          idle local models; boost off ends it
+  irie ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]
+                                         Raphael (Raffi): what his last look over
+                                         your Mac found, with his advice: what runs
+                                         hot, memory and swap, the disk and the
+                                         caches safe to clear, startup items with
+                                         warning signs, macOS's protections, and
+                                         what he restarted when it stopped
+                                         answering. look has him look again; fix N
+                                         shows what finding N's fix runs and runs
+                                         it on your OK; mine N tells him a startup
+                                         item is yours; on and off turn him on or
+                                         off (arch.raphael.on)
   irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
@@ -114,7 +126,12 @@ const ctlUsage = `usage: irie ctl <command>
                                          is still running at the timeout
   irie ctl rate SESSION good|bad         rate a session's work; the router learns
                                          each profile's accuracy from it
-` + controlUsage
+  irie ctl perf [--json]                 the core's own counters since it started:
+                                         each request and how long it took, waits
+                                         on its lock, frames sent, ticks, and its
+                                         runs of claude agents. go run ./tools/perf
+                                         reports one window of them
+` + controlUsage + contextUsage + psUsage + raceUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -140,6 +157,8 @@ func ctl(args []string) error {
 		return ctlTrod(args[1:])
 	case "gabriel":
 		return ctlGabriel(args[1:])
+	case "raphael", "raffi":
+		return ctlRaphael(args[1:])
 	case "arch":
 		return ctlArch(args[1:])
 	case "show":
@@ -166,6 +185,8 @@ func ctl(args []string) error {
 		return ctlDelegate(args[1:])
 	case "rate":
 		return ctlRate(args[1:])
+	case "perf":
+		return ctlPerf(args[1:])
 	case "freeze", "thaw":
 		return ctlFreeze(args[1:], args[0] == "freeze")
 	case "promote", "unpromote":
@@ -174,6 +195,14 @@ func ctl(args []string) error {
 		return ctlReorder(args[1:])
 	case "park", "unpark":
 		return ctlPark(args[1:], args[0] == "park")
+	case "ctx", "context":
+		return ctlContext(args[1:])
+	case "fork":
+		return ctlFork(args[1:])
+	case "ps":
+		return ctlPs(args[1:])
+	case "race":
+		return ctlRace(args[1:])
 	}
 	return fmt.Errorf("unknown ctl command %q\n\n%s", args[0], ctlUsage)
 }

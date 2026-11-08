@@ -8,22 +8,21 @@ import SwiftUI
 /// banner opens the terminal instead. View > Terminal (⌥⌘T) flips to the
 /// live terminal and back. Colours, type and shapes come from Theme and the
 /// system's text styles only, so the view follows the palette.
+@MainActor
 struct ConversationView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @StateObject private var model = ConversationModel()
     /// The palette: a switch draws the view again in its colours.
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
-    /// How wide the helper pane is beside the conversation (HelperPane.swift).
-    @AppStorage("helperPaneWidth") private var paneWidth: Double = 380
-
-    private var selected: Session? { store.sessions.first { $0.id == store.selection } }
+    private var selected: Session? { store.selectedRow }
 
     var body: some View {
         VStack(spacing: 0) {
             if let s = selected {
-                GeometryReader { geo in
-                    split(s, width: geo.size.width)
-                }
+                // A helper shows in the right sidebar's Helpers tab
+                // (RightSidebar.swift), so the conversation stays whole.
+                ConversationFeed(model: model, session: s)
+                Composer(model: model, session: s)
             } else {
                 ConversationNote(title: "Pick a session", text: "Its conversation shows here.")
             }
@@ -41,40 +40,13 @@ struct ConversationView: View {
         guard let s = selected else { return nil }
         return HelperRef.list(model.items, s).last?.agent
     }
-
-    /// The conversation, with its open helper beside it when there is room
-    /// for both, or in its place when there is not. The conversation stays
-    /// in place either way, so it keeps its scroll and its draft.
-    @ViewBuilder private func split(_ s: Session, width: CGFloat) -> some View {
-        let agent = store.openHelpers[s.id]
-        let wide = width >= HelperPane.sideBySide
-        let alone = agent != nil && !wide
-        ZStack {
-            HStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    ConversationFeed(model: model, session: s)
-                    Composer(model: model, session: s)
-                }
-                .opacity(alone ? 0 : 1)
-                .allowsHitTesting(!alone)
-                .accessibilityHidden(alone)
-                if let agent, wide {
-                    PaneDivider(width: $paneWidth, total: width)
-                    HelperPane(session: s, agent: agent, parent: model, style: store.helperStyle)
-                        .frame(width: HelperPane.width(paneWidth, in: width))
-                }
-            }
-            if let agent, alone {
-                HelperPane(session: s, agent: agent, parent: model, narrow: true, style: store.helperStyle)
-            }
-        }
-    }
 }
 
 /// The conversation, scrolled to its newest turn. It keeps to the bottom
 /// while you are there, and holds still while you read further up.
+@MainActor
 struct ConversationFeed: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: ConversationModel
     let session: Session
     @State private var expanded: Set<String> = []
@@ -335,8 +307,9 @@ private struct YouTurn: View {
 }
 
 /// Claude's replies and calls between two of your messages.
+@MainActor
 private struct ClaudeTurn: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let parts: [Turn.Part]
     let session: Session
     @Binding var expanded: Set<String>
@@ -697,8 +670,9 @@ private struct NoteLine: View {
 }
 
 /// What the session waits on you for, at the end of the conversation.
+@MainActor
 struct NeedsCard: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let item: ConversationItem
     let name: String
 
@@ -744,8 +718,9 @@ struct NeedsCard: View {
 }
 
 /// The message box, or why there is none now, and the way to the terminal.
+@MainActor
 struct Composer: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @ObservedObject var model: ConversationModel
     let session: Session
     @State private var text = ""
@@ -803,7 +778,7 @@ struct Composer: View {
     private var field: some View {
         HStack(alignment: .bottom, spacing: 8) {
             entry
-            Button(action: send) {
+            Button { send() } label: {
                 Group {
                     if model.sending {
                         ProgressView().controlSize(.small)
@@ -836,12 +811,14 @@ struct Composer: View {
             Text(prompt).font(.body).foregroundStyle(Theme.muted).padding(.vertical, 3)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
+            // It takes the keyboard while the agent starts, too, so ⌃] and a
+            // click on the session always have somewhere to put it; send()
+            // waits for the agent.
             TextField(prompt, text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .lineLimit(1...8)
                 .focused($focused)
-                .disabled(early)
                 .onSubmit(send)
                 .onChange(of: text) { if problem != nil { problem = nil } }
                 .padding(.vertical, 3)
@@ -850,6 +827,11 @@ struct Composer: View {
         }
     }
 
+    /// Stands where the message box would, and takes the keyboard as it
+    /// does, from ⌃] and a click on the session; Return or Space then opens
+    /// the terminal. Only while it has the keyboard: a Return shortcut on
+    /// its button was the window's, and took Return from the task bar, the
+    /// find field and the session list whenever a session waited.
     private func banner(_ text: String, button: String) -> some View {
         HStack(spacing: 10) {
             Text(text)
@@ -858,18 +840,36 @@ struct Composer: View {
             Spacer(minLength: 8)
             Button(button) { store.showTerminal = true }
                 .buttonStyle(SoftButton(prominent: waits))
-                .keyboardShortcut(.return, modifiers: [])
+                .help("Return opens it while this has the keyboard")
         }
         .padding(.horizontal, Theme.inset)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(waits ? Theme.needsTint : Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
-            .strokeBorder(waits ? Theme.needs.opacity(0.45) : Theme.edge, lineWidth: 1))
+            .strokeBorder(focused ? Theme.sunEdge : waits ? Theme.needs.opacity(0.45) : Theme.edge, lineWidth: focused ? 1.5 : 1))
+        .focusable()
+        .focusEffectDisabled()
+        .focused($focused)
+        .onKeyPress(.return) {
+            store.showTerminal = true
+            return .handled
+        }
+        .onKeyPress(.space) {
+            store.showTerminal = true
+            return .handled
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { store.showTerminal = true }
     }
 
     private func send() {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty, !model.sending, !early else { return }
+        if early, !message.isEmpty {
+            problem = "\(session.name) is still starting. Send it once it’s ready."
+            return
+        }
+        guard !message.isEmpty, !model.sending else { return }
         problem = nil
         Task {
             if let why = await model.send(message) {
@@ -883,8 +883,9 @@ struct Composer: View {
 
 /// A quiet page for when there is no conversation to show, with the way to
 /// the terminal when that is where it is.
+@MainActor
 struct ConversationNote: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let title: String
     let text: String?
     var terminal = false

@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/proc"
+	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/testutil"
 )
 
@@ -336,8 +339,29 @@ func TestStoppedCoreCostsUnder300ms(t *testing.T) {
 		if stdout.Len() != 0 {
 			t.Errorf("%s: printed %q", sock, stdout.String())
 		}
-		if d > 300*time.Millisecond {
+		if d > 300*time.Millisecond && !slow(t) {
 			t.Errorf("%s: irie hook took %v, want under 300 ms", sock, d)
 		}
 	}
+}
+
+// slow reports whether a time bound cannot hold here, because the scheduler
+// rather than Irie sets the time: the test runs in macOS's background state,
+// or the machine has more work waiting than CPUs to run it, as during a busy
+// install (tools/live.sh). It is internal/core's slow (freeze_test.go).
+func slow(t *testing.T) bool {
+	t.Helper()
+	if proc.CanBackground {
+		out, _ := exec.Command("ps", "-o", "pri=", "-p", strconv.Itoa(os.Getpid())).Output()
+		if strings.TrimSpace(string(out)) == "4" {
+			t.Log("not timed: the test runs in macOS's background state")
+			return true
+		}
+	}
+	l, err := sysload.Read()
+	if err != nil || l.RunQueue <= float64(l.CPUs) {
+		return false
+	}
+	t.Logf("not timed: %.1f CPUs' worth of work waiting on %d CPUs", l.RunQueue, l.CPUs)
+	return true
 }

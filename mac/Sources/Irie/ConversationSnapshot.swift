@@ -67,7 +67,7 @@ enum ConversationSnapshot {
         }
         .frame(width: 760)
         .background(Theme.ground)
-        .environmentObject(store)
+        .environment(store)
     }
 
     /// The conversation with its running Explore helper beside it.
@@ -90,7 +90,7 @@ enum ConversationSnapshot {
         }
         .frame(width: 980)
         .background(Theme.ground)
-        .environmentObject(store)
+        .environment(store)
     }
 
     private static func render(_ view: some View, dark: Bool, to url: URL, width: CGFloat = 760) throws {

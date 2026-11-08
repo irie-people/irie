@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/testutil"
 	"github.com/irie-people/irie/internal/worktree"
 )
@@ -335,6 +338,142 @@ func TestTheTrodBotKeepsWithinTheWeeksAllotment(t *testing.T) {
 	}
 }
 
+func TestTheTrodBotLeavesAPeersRowsToItsOwnCore(t *testing.T) {
+	// As newPeerCore, but with no cleanup that takes the core's lock, so a
+	// panic under it fails the test at once rather than hanging it.
+	c := &Core{
+		version: "test", paths: paths.Paths{State: t.TempDir()}, log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{}, hues: map[string]int{},
+	}
+	cfg := config.Default()
+	cfg.Remote.Name = "Mac"
+	cfg.Trod.On, cfg.Trod.Start, cfg.Trod.End, cfg.Trod.Away, cfg.Trod.KeepAwake = true, "00:00", "00:00", 0, false
+	c.useConfig(cfg)
+	c.mach = &ipc.Machine{Name: "Mac"}
+	c.peers = map[string]*peerState{"Asahi": {name: "Asahi", stop: func() {}, rows: map[string]ipc.Session{
+		"s1": {ID: "s1", Name: "on the Asahi", State: ipc.StateWorking},
+	}}}
+	// The list carries the peer's row, which is no session of this core's:
+	// the report and the sweep, which once took every row for one, stopped
+	// the core on it.
+	if !c.trodSweep() {
+		t.Fatal("another sweep was under way")
+	}
+	for _, s := range c.trodReport().Sessions {
+		t.Errorf("reported %+v", s)
+	}
+}
+
+func TestTheDayLineGivesEachDayOfTheWeekItsShare(t *testing.T) {
+	n := config.Trod{MaxPlanUse: 70, Pace: true}
+	reset := time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
+	week := &ipc.Window{Used: 5, ResetsAt: reset}
+	for _, c := range []struct {
+		left time.Duration // until the week resets
+		want float64
+	}{
+		{7 * planDay, 10}, // the week has just begun: its first day's share
+		{6*planDay + time.Minute, 10},
+		{6 * planDay, 20}, // its second day
+		{3*planDay + 12*time.Hour, 40},
+		{planDay - time.Minute, 70}, // its last day may use all of it
+		{time.Minute, 70},
+	} {
+		if got := weekMost(n, week, reset.Add(-c.left)); got != c.want {
+			t.Errorf("%v before the reset: %v, want %v", c.left, got, c.want)
+		}
+	}
+	// Without trod.pace, or without the week's reset to count from, it is
+	// trod.max_plan_use.
+	now := reset.Add(-6 * planDay)
+	for _, x := range []struct {
+		n config.Trod
+		w *ipc.Window
+	}{
+		{config.Trod{MaxPlanUse: 70}, week},
+		{n, nil},
+		{n, &ipc.Window{Used: 5}},
+		{n, &ipc.Window{Used: 5, ResetsAt: now.Add(-time.Hour)}},
+	} {
+		if got := weekMost(x.n, x.w, now); got != 70 {
+			t.Errorf("weekMost(%+v, %+v) = %v, want 70", x.n, x.w, got)
+		}
+	}
+}
+
+func TestTheTrodBotKeepsToTheDayLine(t *testing.T) {
+	// Built before HOME moves, so Go keeps its module cache where it is.
+	testutil.BuildIrie(t)
+	testutil.BuildFakeAgent(t)
+	// No status line of the user's own runs after Irie's.
+	t.Setenv("HOME", t.TempDir())
+	// The status line says the week is 70% used and resets in three days.
+	// That is under the 90% it may use, but this is the week's fifth day,
+	// whose line is five sevenths of it, 64%.
+	c := setupWith(t, agentConfig{statusLine: true, env: map[string]string{"IRIE_FAKE_WEEK": "70"}, extra: trodSection("retry = \"1s\"\npace = true\n")})
+	working := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:45s,stop", Name: "working"})
+	row := c.waitState(working.ID, ipc.StateFrozen)
+	if !strings.HasPrefix(row.Detail, "Frozen by the trod bot: the week's plan use is at 70%, past today's line of 64%") {
+		t.Errorf("detail = %q", row.Detail)
+	}
+	if r := c.trodReport(); !r.Capped || r.Line == nil || *r.Line < 64 || *r.Line > 65 || r.MaxPlanUse != 90 {
+		t.Errorf("report = %+v", r)
+	}
+}
+
+func TestTheTrodBotThawsOneAtATimeAndNotIntoASignedOutAgent(t *testing.T) {
+	// Built before HOME moves, so Go keeps its module cache where it is.
+	testutil.BuildIrie(t)
+	fake := testutil.BuildFakeAgent(t)
+	// No status line of the user's own runs after Irie's.
+	t.Setenv("HOME", t.TempDir())
+	low := fmt.Sprintf("\n[profiles.low]\ncommand = %q\nmodel = \"claude-opus-5-5\"\nenv = { IRIE_FAKE_WEEK = \"10\" }\n", fake)
+	c := setupWith(t, agentConfig{statusLine: true, env: map[string]string{"IRIE_FAKE_WEEK": "95"}, extra: trodSection("retry = \"1s\"\n") + low})
+	// An agent whose turn failed because it is signed out.
+	login := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stopfail:authentication_failed", Name: "login"})
+	c.waitState(login.ID, ipc.StateNeedsYou)
+	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:90s,stop", Name: "a"})
+	b := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:90s,stop", Name: "b"})
+	c.waitState(a.ID, ipc.StateFrozen)
+	c.waitState(b.ID, ipc.StateFrozen)
+
+	// The week is back under the most it may use, but the others would only
+	// wake into the same failure, so they stay frozen.
+	c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.1,stop", Profile: "low", Name: "low"})
+	testutil.Eventually(t, 2*trodEvery*time.Second, "the week never came back under", func() bool {
+		w := c.trodReport().Week
+		return w != nil && *w == 10
+	})
+	time.Sleep(trodEvery*time.Second + 2*time.Second)
+	for _, s := range []ipc.Session{a, b} {
+		if row, _ := c.row(s.ID); row.State != ipc.StateFrozen {
+			t.Errorf("%s: %s while an agent is signed out, want frozen", s.Name, row.State)
+		}
+	}
+
+	// Once nothing waits on a sign-in, they come back one at a time.
+	c.closeSession(login.ID)
+	var at []time.Time
+	testutil.Eventually(t, trodThawGap+4*trodEvery*time.Second, "the trod bot never thawed both", func() bool {
+		at = at[:0]
+		for _, s := range []ipc.Session{a, b} {
+			for _, e := range c.events(s.ID) {
+				if e.Kind == event.FreezeOff && e.Str("by") == "trod" {
+					at = append(at, e.Time())
+				}
+			}
+		}
+		return len(at) == 2
+	})
+	// The bot spaces its thaws by when its sweeps start, but a thaw's event
+	// is stamped only once its processes go on and its pane takes input
+	// again, which takes longer on a busy Mac: one run measured 29.88s. So
+	// allow half a sweep for that; thaws a sweep or two apart still fail.
+	if d := at[1].Sub(at[0]).Abs(); d < trodThawGap-trodEvery*time.Second/2 {
+		t.Errorf("thawed %v apart, want %v at least, less half a sweep", d, trodThawGap)
+	}
+}
+
 // trodNow starts a run of the trod bot by hand, or stops it, and returns
 // the report.
 func (c *coreEnv) trodNow(start bool) ipc.TrodResult {
@@ -600,17 +739,27 @@ func TestTheTrodBotsChoices(t *testing.T) {
 	// Past the plan's use it may spend, nothing more is sent on; what
 	// would spend on its own is what the week's cap freezes.
 	c.plan = ipc.Plan{FiveHour: &ipc.Window{Used: 95, ResetsAt: now.Add(time.Hour)}}
-	if either, week, _ := c.overPlan(now, 90); !either || week {
+	cap90 := config.Trod{MaxPlanUse: 90}
+	if either, week, _, _ := c.overPlan(now, cap90); !either || week {
 		t.Errorf("five hours at 95%%: over %v, week %v", either, week)
 	}
 	c.plan = ipc.Plan{SevenDay: &ipc.Window{Used: 91, ResetsAt: now.Add(48 * time.Hour)}}
-	if either, week, used := c.overPlan(now, 90); !either || !week || used != 91 {
+	if either, week, used, _ := c.overPlan(now, cap90); !either || !week || used != 91 {
 		t.Errorf("week at 91%%: over %v, week %v, %v", either, week, used)
 	}
 	// A window whose reset has passed is empty.
 	c.plan = ipc.Plan{SevenDay: &ipc.Window{Used: 99, ResetsAt: now.Add(-time.Minute)}}
-	if either, _, _ := c.overPlan(now, 90); either {
+	if either, _, _, _ := c.overPlan(now, cap90); either {
 		t.Error("a week that reset is over")
+	}
+	// With trod.pace, the week's most is the day line: two days before the
+	// reset, its sixth day, six sevenths of 90%.
+	c.plan = ipc.Plan{SevenDay: &ipc.Window{Used: 80, ResetsAt: now.Add(48 * time.Hour)}}
+	if either, week, _, _ := c.overPlan(now, cap90); either || week {
+		t.Errorf("week at 80%% without pace: over %v, week %v", either, week)
+	}
+	if either, week, _, most := c.overPlan(now, config.Trod{MaxPlanUse: 90, Pace: true}); !either || !week || most != 90.0*6/7 {
+		t.Errorf("week at 80%% on the line: over %v, week %v, most %v", either, week, most)
 	}
 	works := stopped("p", now)
 	works.track.apply(event.Event{Kind: event.ToolStarted, TS: event.Stamp(now), Agent: event.Main, Data: map[string]any{"tool": "Bash"}})

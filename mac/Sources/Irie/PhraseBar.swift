@@ -3,6 +3,7 @@ import SwiftUI
 /// The strip under the agent's terminal, the counterpart of the title bar:
 /// lighter than the ground, rounded top corners, and one muted phrase that
 /// gives way to the next every half minute.
+@MainActor
 struct PhraseBar: View {
     static let phrases = [
         "Be the change you want to see in the world. 🌍",
@@ -25,15 +26,12 @@ struct PhraseBar: View {
         "Have faith. 🙏",
     ]
 
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @State private var index = Int.random(in: 0..<Self.phrases.count)
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Text(Self.phrases[index])
-            .id(index)
-            .font(Theme.font(12))
-            .foregroundStyle(Theme.muted)
+        line
             .lineLimit(1)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
@@ -41,8 +39,9 @@ struct PhraseBar: View {
             .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
                 .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
             .overlay(alignment: .trailing) {
-                // The core's version, muted, in the bottom right corner.
-                if case let .online(version) = store.link {
+                // The core's version, muted, in the bottom right corner;
+                // a preview names its checkout there instead.
+                if !Preview.isOn, case let .online(version) = store.link {
                     Text(version)
                         .font(Theme.font(10.5))
                         .foregroundStyle(Theme.muted.opacity(0.7))
@@ -55,5 +54,17 @@ struct PhraseBar: View {
             .animation(.easeInOut(duration: 0.8), value: index)
             .onReceive(tick) { _ in index = (index + 1) % Self.phrases.count }
             .accessibilityHidden(true)
+    }
+
+    /// The phrase; in a preview, how its next build goes (Preview.swift).
+    @ViewBuilder private var line: some View {
+        if Preview.isOn {
+            PreviewBadge()
+        } else {
+            Text(Self.phrases[index])
+                .id(index)
+                .font(Theme.font(12))
+                .foregroundStyle(Theme.muted)
+        }
     }
 }

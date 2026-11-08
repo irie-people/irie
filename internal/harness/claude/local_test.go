@@ -6,7 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
+
+	"github.com/irie-people/irie/internal/config"
 )
 
 func TestLocalEnvPinsEveryModel(t *testing.T) {
@@ -103,7 +106,7 @@ func TestSettingsMakeIrieTheStatusLine(t *testing.T) {
 	}
 	// Irie's own line re-runs on a timer, to follow the session while it
 	// is idle.
-	if want := (StatusLine{Type: "command", Command: "'" + irieBin + "' statusline", RefreshInterval: 2}); got.StatusLine != want {
+	if want := (StatusLine{Type: "command", Command: "'" + irieBin + "' statusline", RefreshInterval: 5}); got.StatusLine != want {
 		t.Errorf("statusLine = %+v, want %+v", got.StatusLine, want)
 	}
 
@@ -131,5 +134,56 @@ func TestSettingsMakeIrieTheStatusLine(t *testing.T) {
 	json.Unmarshal(files[SettingsFile], &none)
 	if _, ok := none["statusLine"]; ok {
 		t.Error("a status line without usage.status_line")
+	}
+}
+
+func TestALocalModelTakesEditsAndRunsTheSafeCommands(t *testing.T) {
+	local := config.Default().Profiles["big"]
+	local.Model = "dory-4b"
+	mode := func(argv []string) string {
+		if i := slices.Index(argv, "--permission-mode"); i >= 0 && i+1 < len(argv) {
+			return argv[i+1]
+		}
+		return ""
+	}
+	allow := func(files map[string][]byte) []string {
+		var s struct {
+			Permissions *struct {
+				Allow []string `json:"allow"`
+			} `json:"permissions"`
+		}
+		if err := json.Unmarshal(files[SettingsFile], &s); err != nil {
+			t.Fatal(err)
+		}
+		if s.Permissions == nil {
+			return nil
+		}
+		return s.Permissions.Allow
+	}
+	for _, c := range []struct {
+		name, mode, want string
+		allows           bool
+	}{
+		{"no mode, which would be the user's own, auto", "", "acceptEdits", true},
+		{"auto, whose check the model cannot answer", "auto", "acceptEdits", true},
+		{"accept edits, as a reopened session's argv says", "acceptEdits", "acceptEdits", true},
+		{"a mode the user chose", "bypassPermissions", "bypassPermissions", false},
+		{"plan", "plan", "plan", false},
+	} {
+		p := local
+		p.PermissionMode = c.mode
+		argv, _, files := launch(t, p, "fix the tests")
+		got := allow(files)
+		if mode(argv) != c.want || (len(got) > 0) != c.allows {
+			t.Errorf("%s: --permission-mode %q, allowed %q; want %q, a list: %v", c.name, mode(argv), got, c.want, c.allows)
+		}
+		if c.allows && !slices.Contains(got, "Bash(go test *)") {
+			t.Errorf("%s: go test is not allowed: %q", c.name, got)
+		}
+	}
+	// A Claude model's profile keeps auto mode, and asks as the user's rules say.
+	argv, _, files := launch(t, defaultProfile(), "fix the tests")
+	if mode(argv) != "auto" || allow(files) != nil {
+		t.Errorf("Opus: --permission-mode %q, allowed %q", mode(argv), allow(files))
 	}
 }

@@ -21,17 +21,19 @@ import (
 	"github.com/irie-people/irie/internal/proc"
 )
 
-// The freeze dog (DESIGN §2.4, docs/MAC.md) watches Irie's own windows for
-// a freeze. A window that subscribes with view "watch" gets a ping a second
-// on that connection, and answers each from its main loop, so an answer
-// says the window still answers its user. When a ping waits unanswered for
+// The freeze dog (DESIGN §2.4, docs/MAC.md) is Raphael's watch of Irie's
+// own windows (§4.11, raphael.go). A window that subscribes with view
+// "watch" gets a ping a second on that connection, and answers each from
+// its main loop, so an answer says the window still answers its user: the
+// Mac app, and each sidebar. When a ping waits unanswered for
 // ui.freeze_dog, the dog has sample(1) write down where the window's
 // process is stuck, force quits it, and opens the Mac app again as it
-// stood. Agents never notice: a window keeps no state of its own (DESIGN
-// §2.1, principle 6).
+// stood; a sidebar's supervisor starts it again by itself. Agents never
+// notice: a window keeps no state of its own (DESIGN §2.1, principle 6).
 //
 // The dog takes no lock but its own, so neither a ping nor its answer waits
 // for a busy core, and a core that was itself held up blames no window.
+// The same dog keeps Irie's own processes running (steady.go).
 
 var (
 	// freezeTick is how often the dog pings and looks.
@@ -44,10 +46,17 @@ var (
 	freezeGoneWait = 5 * time.Second
 )
 
+// sidebarWait is the least a sidebar may leave a ping unanswered before
+// Raphael restarts it, whatever ui.freeze_dog says: a terminal's loop can
+// stall longer than an app's on a busy machine, and a restart loses what is
+// typed in its bar and not yet sent.
+var sidebarWait = time.Minute
+
 const (
-	// The dog restarts windows freezeRestarts times in freezeWindow at
-	// most, so that an app that freezes as it starts is not opened again
-	// and again; past that, it leaves a frozen window be.
+	// The dog restarts windows of one kind, the app's or the sidebars',
+	// freezeRestarts times in freezeWindow at most, so that an app that
+	// freezes as it starts is not opened again and again; past that, it
+	// leaves a frozen window of that kind be.
 	freezeRestarts = 3
 	freezeWindow   = 10 * time.Minute
 	// freezeReports is how many reports of where a window was stuck the
@@ -60,6 +69,7 @@ type watch struct {
 	pid    int
 	start  int64  // when its process started, so a later one with its pid is never taken for it
 	bundle string // the Mac app to open again; "" for none
+	kind   string // app, or sidebar: one of Irie's own programs, which its supervisor starts again
 	out    chan ipc.Frame
 
 	// The rest is guarded by freezeDog.mu.
@@ -76,15 +86,22 @@ type watch struct {
 type freezeDog struct {
 	mu       sync.Mutex
 	watches  map[<-chan ipc.Frame]*watch
-	next     uint64      // the last ping's number
-	last     time.Time   // the dog's last look
-	restarts []time.Time // its restarts in the last freezeWindow
+	next     uint64                 // the last ping's number
+	last     time.Time              // the dog's last look
+	restarts map[string][]time.Time // its restarts in the last freezeWindow, by the windows' kind
 
 	// What it does to a window, which tests replace.
 	lookup func(pid int) (proc.Proc, bool)
 	sample func(pid int, file string) bool
 	kill   func(pid int) error
 	open   func(bundle string, front, hidden bool, stuck time.Duration) error
+}
+
+// count is how many windows the dog watches.
+func (d *freezeDog) count() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.watches)
 }
 
 func newFreezeDog() *freezeDog {
@@ -108,7 +125,11 @@ func (c *Core) watchWindow(a ipc.SubscribeArgs) (<-chan ipc.Frame, func(), error
 	if !ok || p.Zombie {
 		return nil, nil, ipc.Errorf(ipc.CodeNotFound, "no process %d", a.PID)
 	}
-	w := &watch{pid: a.PID, start: p.Start, bundle: a.Bundle, out: make(chan ipc.Frame, 1), front: true}
+	kind := "app"
+	if p.Name == "irie" {
+		kind = "sidebar"
+	}
+	w := &watch{pid: a.PID, start: p.Start, bundle: a.Bundle, kind: kind, out: make(chan ipc.Frame, 1), front: true}
 	d.mu.Lock()
 	// A window that watches itself again replaces its last watch, whose
 	// connection is on its way out.
@@ -119,7 +140,7 @@ func (c *Core) watchWindow(a ipc.SubscribeArgs) (<-chan ipc.Frame, func(), error
 	}
 	d.watches[w.out] = w
 	d.mu.Unlock()
-	c.log.Info("freeze dog: watching", "pid", w.pid, "bundle", w.bundle)
+	c.log.Info("raphael: watching a window", "pid", w.pid, "kind", w.kind, "bundle", w.bundle)
 	return w.out, func() {
 		d.mu.Lock()
 		delete(d.watches, w.out)
@@ -142,12 +163,32 @@ func (c *Core) Hear(frames <-chan ipc.Frame, line []byte) {
 	}
 }
 
-// watchFreezes runs the freeze dog until the core stops.
+// watchFreezes runs the freeze dog until the core stops. It is Irie's one
+// watchdog: every freezeTick it looks at the windows, every steadyEvery it
+// keeps Irie's own processes running and out of the background
+// (steady.go), and every coreWatchTick it looks at the core's own loop
+// (watchCore, raphael.go). No look waits on another for long: a restart
+// runs on its own, and steady and the core's look take no lock and start
+// nothing.
 func (c *Core) watchFreezes() {
-	t := time.NewTicker(freezeTick)
-	defer t.Stop()
-	for range t.C {
-		c.lookAtWindows(time.Now())
+	windows := time.NewTicker(freezeTick)
+	defer windows.Stop()
+	own := time.NewTicker(steadyEvery)
+	defer own.Stop()
+	loop := time.NewTicker(coreWatchTick)
+	defer loop.Stop()
+	c.steady()
+	last := time.Now()
+	for {
+		select {
+		case <-windows.C:
+			c.lookAtWindows(time.Now())
+		case <-own.C:
+			c.steady()
+		case now := <-loop.C:
+			c.watchCore(now, last)
+			last = now
+		}
 	}
 }
 
@@ -155,6 +196,9 @@ func (c *Core) watchFreezes() {
 // restarts one that has left a ping unanswered for ui.freeze_dog.
 func (c *Core) lookAtWindows(now time.Time) {
 	limit := c.cfg().UI.FreezeDog
+	if !c.cfg().Arch.Raphael.On {
+		limit = 0
+	}
 	d := c.fdog
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -175,6 +219,8 @@ func (c *Core) lookAtWindows(now time.Time) {
 			}
 		case held:
 			w.sent = now
+		case w.kind == "sidebar" && (raphaelOff() || now.Sub(w.sent) < sidebarWait):
+			// A test core's sidebars are the test's to drive.
 		case limit > 0 && now.Sub(w.sent) >= limit:
 			w.acting = true
 			go c.restartWindow(w, now.Sub(w.sent))
@@ -188,15 +234,15 @@ func (c *Core) lookAtWindows(now time.Time) {
 func (c *Core) restartWindow(w *watch, stuck time.Duration) {
 	d := c.fdog
 	d.mu.Lock()
-	pid, start, bundle, front, hidden := w.pid, w.start, w.bundle, w.front, w.hidden
+	pid, start, bundle, kind, front, hidden := w.pid, w.start, w.bundle, w.kind, w.front, w.hidden
 	d.mu.Unlock()
-	log := c.log.With("pid", pid, "stuck", stuck.Round(100*time.Millisecond), "bundle", bundle)
+	log := c.log.With("pid", pid, "kind", kind, "stuck", stuck.Round(100*time.Millisecond), "bundle", bundle)
 	// spare leaves the window be: the dog looks again once another
 	// ui.freeze_dog has passed without an answer.
 	spare := func(why string) {
 		d.mu.Lock()
 		if !w.spared {
-			log.Warn("freeze dog: a window stopped answering, but the dog leaves it be", "why", why)
+			log.Warn("raphael: a window stopped answering, but he leaves it be", "why", why)
 		}
 		w.acting, w.spared, w.sent = false, true, time.Now()
 		d.mu.Unlock()
@@ -208,11 +254,11 @@ func (c *Core) restartWindow(w *watch, stuck time.Duration) {
 	case p.Traced:
 		spare("a debugger holds it")
 		return
-	case !d.allow(time.Now()):
-		spare(fmt.Sprintf("the dog restarted %d windows in the last %v", freezeRestarts, freezeWindow))
+	case !d.allow(kind, time.Now()):
+		spare(fmt.Sprintf("he restarted %d of them in the last %v", freezeRestarts, freezeWindow))
 		return
 	}
-	report := c.freezeReport(pid)
+	report := c.freezeReport(kind, pid)
 	if err := d.kill(pid); err != nil {
 		spare("it could not be force quit: " + err.Error())
 		return
@@ -220,29 +266,34 @@ func (c *Core) restartWindow(w *watch, stuck time.Duration) {
 	// Launch Services would bring back an app that still runs instead of
 	// opening it again.
 	if !d.gone(pid, start) {
-		log.Warn("freeze dog: the window is still there after a force quit")
+		log.Warn("raphael: the window is still there after a force quit")
 	}
 	if bundle == "" {
-		log.Warn("freeze dog: force quit a window that stopped answering", "report", report)
+		// A sidebar's supervisor starts it again.
+		log.Warn("raphael: force quit a window that stopped answering", "report", report)
 		return
 	}
 	if err := d.open(bundle, front, hidden, stuck); err != nil {
-		log.Error("freeze dog: force quit a window that stopped answering, but could not open it again", "report", report, "err", err)
+		log.Error("raphael: force quit a window that stopped answering, but could not open it again", "report", report, "err", err)
 		return
 	}
-	log.Warn("freeze dog: restarted a window that stopped answering", "report", report, "front", front, "hidden", hidden)
+	log.Warn("raphael: restarted a window that stopped answering", "report", report, "front", front, "hidden", hidden)
 }
 
-// allow counts a restart at now, unless the dog has made freezeRestarts in
-// the freezeWindow before it.
-func (d *freezeDog) allow(now time.Time) bool {
+// allow counts a restart of a window of kind at now, unless the dog has
+// made freezeRestarts of that kind in the freezeWindow before it.
+func (d *freezeDog) allow(kind string, now time.Time) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.restarts = slices.DeleteFunc(d.restarts, func(t time.Time) bool { return now.Sub(t) >= freezeWindow })
-	if len(d.restarts) >= freezeRestarts {
+	if d.restarts == nil {
+		d.restarts = map[string][]time.Time{}
+	}
+	r := slices.DeleteFunc(d.restarts[kind], func(t time.Time) bool { return now.Sub(t) >= freezeWindow })
+	if len(r) >= freezeRestarts {
+		d.restarts[kind] = r
 		return false
 	}
-	d.restarts = append(d.restarts, now)
+	d.restarts[kind] = append(r, now)
 	return true
 }
 
@@ -258,16 +309,18 @@ func (d *freezeDog) gone(pid int, start int64) bool {
 	}
 }
 
-// freezeReport has sample write down where pid is stuck, and returns the
-// report's path once the stacks are read, or "" for none. The report itself
-// is written a moment later, which no longer needs pid.
-func (c *Core) freezeReport(pid int) string {
+// freezeReport has sample write down where pid, a window of kind, is
+// stuck, and returns the report's path once the stacks are read, or "" for
+// none. The report itself is written a moment later, which no longer needs
+// pid. Its name is the time, then the kind and the pid
+// (recentRestarts).
+func (c *Core) freezeReport(kind string, pid int) string {
 	dir := c.paths.Freezes()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
 	pruneReports(dir, freezeReports-1)
-	file := filepath.Join(dir, time.Now().UTC().Format("2006-01-02T15-04-05Z")+"-"+strconv.Itoa(pid)+".txt")
+	file := filepath.Join(dir, time.Now().UTC().Format("2006-01-02T15-04-05Z")+"-"+kind+"-"+strconv.Itoa(pid)+".txt")
 	if !c.fdog.sample(pid, file) {
 		return ""
 	}

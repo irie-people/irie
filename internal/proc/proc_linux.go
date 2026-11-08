@@ -2,9 +2,12 @@ package proc
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // CanBackground reports whether this system has a background state that a
@@ -35,6 +38,33 @@ func read() ([]Proc, error) {
 	return out, nil
 }
 
+// readGroup reads the whole table: Linux lists no process group alone.
+func readGroup(pgid int) ([]Proc, error) {
+	all, err := read()
+	if err != nil {
+		return nil, err
+	}
+	var out []Proc
+	for _, p := range all {
+		if p.PGID == pgid {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func readOne(pid int) (Proc, error) {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return Proc{}, err
+	}
+	p, ok := parseStat(pid, string(b))
+	if !ok {
+		return Proc{}, fmt.Errorf("/proc/%d/stat: unreadable", pid)
+	}
+	return p, nil
+}
+
 // parseStat reads /proc/<pid>/stat (proc(5)): pid (comm) state ppid pgrp
 // session tty_nr tpgid flags … with starttime the 22nd field. The command
 // may hold spaces and parentheses, so it ends at the last ')'.
@@ -58,6 +88,47 @@ func parseStat(pid int, s string) (Proc, bool) {
 		PID: pid, PPID: ppid, PGID: pgid, Start: start,
 		Stopped: f[0] == "T", Zombie: f[0] == "Z", Traced: f[0] == "t", Name: s[open+1 : end],
 	}, true
+}
+
+// readArgs reads /proc/<pid>/cmdline and /proc/<pid>/environ (proc(5)).
+func readArgs(pid int) ([]string, []string, error) {
+	dir := "/proc/" + strconv.Itoa(pid) + "/"
+	a, err := os.ReadFile(dir + "cmdline")
+	if err != nil {
+		return nil, nil, err
+	}
+	e, err := os.ReadFile(dir + "environ")
+	if err != nil {
+		return nil, nil, err
+	}
+	return splitNUL(a), splitNUL(e), nil
+}
+
+var boot struct {
+	once sync.Once
+	at   time.Time
+}
+
+// started reads a start in clock ticks since boot (stat's starttime):
+// USER_HZ, which is 100 on every Linux, after /proc/stat's btime.
+func started(start int64) (time.Time, bool) {
+	boot.once.Do(func() {
+		b, err := os.ReadFile("/proc/stat")
+		if err != nil {
+			return
+		}
+		for line := range strings.Lines(string(b)) {
+			if v, ok := strings.CutPrefix(line, "btime "); ok {
+				if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil {
+					boot.at = time.Unix(n, 0)
+				}
+			}
+		}
+	})
+	if boot.at.IsZero() || start <= 0 {
+		return time.Time{}, false
+	}
+	return boot.at.Add(time.Duration(start) * (time.Second / 100)), true
 }
 
 // SetBackground is not available on Linux; see CanBackground.

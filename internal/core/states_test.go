@@ -210,7 +210,9 @@ func TestASubagentIsListedUnderItsSessionUntilItStops(t *testing.T) {
 }
 
 func TestRedUntilAnswered(t *testing.T) {
-	c := setup(t)
+	// The usage limit below would carry its task on, on a cheaper profile:
+	// one of the built-in ones, which run the machine's own claude.
+	c := setupWith(t, agentConfig{extra: "[route]\nfailover = false\n"})
 	permission := c.spawn("prompt,permission,tool:Bash")
 	question := c.spawn("prompt,tool:AskUserQuestion")
 	limited := c.spawn("prompt,stopfail:rate_limit")
@@ -348,7 +350,7 @@ func TestHooksFailOpenWhileTheCoreIsStopped(t *testing.T) {
 		if r["exit"] != 0.0 || r["stdout"] != "" || r["blocked"] != false {
 			t.Errorf("hook reply while the core was stopped: %v", r)
 		}
-		if ms, _ := r["ms"].(float64); ms >= 300 && !demoted(t) {
+		if ms, _ := r["ms"].(float64); ms >= 300 && !slow(t) {
 			t.Errorf("%s took %v ms, want under 300", r["event"], ms)
 		}
 	}
@@ -371,7 +373,9 @@ func TestEveryJournalLineIsAnEnvelope(t *testing.T) {
 		t.Errorf("full row = %+v", r)
 	}
 	c.waitState(failed.ID, ipc.StateFailed)
-	c.waitState(stalled.ID, ipc.StateStalled)
+	// The row says stalled only from the ready timeout, 1 s, to the agent's
+	// prompt at 3 s, which a busy machine passes during the waits above, so
+	// the journal, checked below, is what shows the stall.
 	c.waitState(stalled.ID, ipc.StateWorking)
 	c.waitState(ended.ID, ipc.StateDone)
 	c.keys(ended, "C-d")

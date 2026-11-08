@@ -68,6 +68,10 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":prio", "s3", "", OpPriority, PriorityArgs{Session: "s3", Level: 0}},
 		{":park", "s1", "", OpPark, ParkArgs{Session: "s1"}},
 		{":unpark", "s3", "", OpUnpark, ParkArgs{Session: "s3"}},
+		{":fork", "s1", "", OpFork, ForkArgs{Session: "s1"}},
+		{":fork @3 try a gallery instead", "s1", "", OpFork, ForkArgs{Session: "s1", At: "3", Task: "try a gallery instead"}},
+		{":fork @-1", "s2", "", OpFork, ForkArgs{Session: "s2", At: "-1"}},
+		{":fork the same, in Rust\nand fast", "s1", "", OpFork, ForkArgs{Session: "s1", Task: "the same, in Rust\nand fast"}},
 		{":move api", "", "", OpMove, MoveArgs{VendorID: "v-1"}},
 		{":move v-1", "", "", OpMove, MoveArgs{VendorID: "v-1"}},
 		{":move", "s1", "v-1", OpMove, MoveArgs{VendorID: "v-1"}},
@@ -240,3 +244,21 @@ func TestSaidReadsAResultFromTheWire(t *testing.T) {
 type rawJSON []byte
 
 func (r rawJSON) MarshalJSON() ([]byte, error) { return r, nil }
+
+// A label names each session as Go quotes it, and reads with curly quotes:
+// one name or two, after a verb of one word or more.
+func TestTitleQuotesEachName(t *testing.T) {
+	for label, want := range map[string]string{
+		`park "api-fix"`:             "Park “api-fix”",
+		`rename "alpha" to "beta"`:   "Rename “alpha” to “beta”",
+		`stop promoting "a \"b\" c"`: "Stop promoting “a \"b\" c”",
+		`reorder "back\\slash"`:      "Reorder “back\\slash”",
+		`start "half`:                `Start "half`,
+		"freeze":                     "Freeze",
+		`rename "☀ sun" to "moon ☾"`: "Rename “☀ sun” to “moon ☾”",
+	} {
+		if got := Title(label); got != want {
+			t.Errorf("Title(%s) = %s, want %s", label, got, want)
+		}
+	}
+}
