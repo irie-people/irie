@@ -129,6 +129,9 @@ type (
 	ScreenArgs       = ipc.ScreenArgs
 	ScreenResult     = ipc.ScreenResult
 	ScreenOption     = ipc.ScreenOption
+	Screen           = ipc.Screen
+	ScreenCursor     = ipc.ScreenCursor
+	ScreenLine       = ipc.ScreenLine
 	KeysArgs         = ipc.KeysArgs
 	PairArgs         = ipc.PairArgs
 	PairResult       = ipc.PairResult
@@ -281,5 +284,7 @@ const (
 	FramePing          = ipc.FramePing
 	OpScreen           = ipc.OpScreen
 	OpKeys             = ipc.OpKeys
+	FeatureScreenLive  = ipc.FeatureScreenLive
+	FrameScreen        = ipc.FrameScreen
 	OpPair             = ipc.OpPair
 )

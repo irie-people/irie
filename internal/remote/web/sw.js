@@ -6,10 +6,10 @@
 // session one is about. Bump VERSION whenever this file or the shell's file
 // list changes.
 
-const VERSION = 'irie-shell-4';
+const VERSION = 'irie-shell-5';
 const SHELL = [
   './', 'index.html', 'app.css', 'app.js',
-  'js/ui.js', 'js/look.js', 'js/net.js', 'js/md.js', 'js/conv.js', 'js/push.js',
+  'js/ui.js', 'js/look.js', 'js/net.js', 'js/md.js', 'js/conv.js', 'js/term.js', 'js/push.js',
   'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png',
 ];
 // Only the app's own page and files are kept, by their place in the scope:

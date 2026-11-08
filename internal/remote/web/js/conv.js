@@ -1,14 +1,25 @@
-// One session's screen: its conversation (DESIGN §4.7), drawn from the
-// core's `conversation` frames and patched by item id, and at its foot the
-// message box, or the needs card while the agent waits on you in its
-// terminal, or why it can't take a message now.
+// One session's screen, in either of two views the phone keeps: Browser,
+// its conversation (DESIGN §4.7), drawn from the core's `conversation`
+// frames and patched by item id; or Term, its terminal, live (term.js).
+// At its foot the message box, or the needs card while the agent waits on
+// you in its terminal, or why it can't take a message now; in Term, keys
+// to press there too.
 
 import { h, ICON, actions, toast } from './ui.js';
 import { md, esc } from './md.js';
 import * as L from './look.js';
 import { Stream, call } from './net.js';
+import { TermView } from './term.js';
 
 const GAP = 30 * 60e3; // a time line goes between items this far apart
+const VIEW = 'irie.view'; // browser or term, for every session
+
+// The keys under the Term view: [label, key, what it is called].
+const TERM_KEYS = [
+  ['Esc', 'Escape', 'Escape'], ['Tab', 'Tab', 'Tab'], ['⇧Tab', 'BTab', 'Shift Tab'],
+  ['↑', 'Up', 'Up arrow'], ['↓', 'Down', 'Down arrow'], ['←', 'Left', 'Left arrow'], ['→', 'Right', 'Right arrow'],
+  ['PgUp', 'PageUp', 'Page up'], ['PgDn', 'PageDown', 'Page down'], ['Space', 'Space', 'Space'], ['⌫', 'BSpace', 'Delete'], ['⏎', 'Enter', 'Return'],
+];
 
 export class SessionView {
   constructor(ctx, conn, sid) {
@@ -30,11 +41,20 @@ export class SessionView {
     this.mode = '';
     this.screen = null; // {lines, options} from the screen op
     this.screenProblem = '';
-    this.showTerm = false;
     this.showKeys = false;
     this.busyKey = null;
+    this.keyQueue = Promise.resolve();
     this.sending = false;
     this.scheduled = false;
+    this.view = loadView();
+    this.term = new TermView(conn, sid, {
+      options: () => {
+        this.needsKey = '';
+        this.invalidate();
+      },
+      zoomed: () => this.renderZoom(),
+      unpaired: (msg) => ctx.unpaired(conn, msg),
+    });
     this.el = this.build();
     this.stream = new Stream(conn.m, { session: sid, conversation: true }, {
       frame: (f) => this.onFrame(f),
@@ -51,10 +71,10 @@ export class SessionView {
     });
     this.stream.start();
     this.onVisible = () => {
-      if (document.visibilityState === 'visible' && this.mode === 'needs') this.poll(true);
+      if (document.visibilityState === 'visible' && this.watching()) this.poll(true);
     };
     document.addEventListener('visibilitychange', this.onVisible);
-    this.invalidate();
+    this.setView(this.view, true);
   }
 
   get row() {
@@ -65,6 +85,7 @@ export class SessionView {
     this.destroyed = true;
     if (this.ro) this.ro.disconnect();
     this.stream.stop();
+    this.term.destroy();
     clearTimeout(this.pollTimer);
     this.pollTimer = null;
     document.removeEventListener('visibilitychange', this.onVisible);
@@ -109,8 +130,65 @@ export class SessionView {
     }
     this.bottomEl = h('div', { class: 'bottom session-bottom' });
     this.buildComposer();
-    return h('section', { class: 'screen session', 'aria-label': 'Session' }, header, this.detailsEl,
-      h('div', { class: 'feed-wrap' }, this.scrollEl, this.pill), this.bottomEl);
+    this.buildKeys();
+    this.browserBtn = h('button', { class: 'seg-btn', role: 'tab', text: 'Browser', onclick: () => this.setView('browser') });
+    this.termBtn = h('button', { class: 'seg-btn', role: 'tab', onclick: () => this.setView('term') }, h('span', { class: 'seg-ic', html: ICON.terminal }), 'Term');
+    this.zoomBtn = h('button', { class: 'zoom-btn', hidden: true, onclick: () => this.term.toggleZoom() });
+    const modes = h('div', { class: 'modes on-dark' },
+      h('span', { class: 'modes-side' }),
+      h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Show it as' }, this.browserBtn, this.termBtn),
+      h('span', { class: 'modes-side end' }, this.zoomBtn));
+    return h('section', { class: 'screen session', 'aria-label': 'Session' }, header, modes, this.detailsEl,
+      h('div', { class: 'feed-wrap' }, this.scrollEl, this.pill, this.term.el), this.bottomEl);
+  }
+
+  /** The keys under the Term view, pressed in order, one after another. */
+  buildKeys() {
+    this.keyBtns = new Map();
+    this.keysEl = h('div', { class: 'tkeys', role: 'group', 'aria-label': 'Keys' }, TERM_KEYS.map(([label, key, name]) => {
+      const b = h('button', { class: 'tkey', text: label, 'aria-label': name, onclick: () => this.tap(key) });
+      this.keyBtns.set(key, b);
+      return b;
+    }));
+  }
+
+  // ---- Browser and Term -------------------------------------------------------
+
+  /** Shows the session as its conversation (browser) or its terminal (term); the phone keeps the choice. */
+  setView(view, first = false) {
+    if (view !== 'term') view = 'browser';
+    if (view === this.view && !first) return;
+    this.view = view;
+    if (!first) saveView(view);
+    const term = view === 'term';
+    this.browserBtn.setAttribute('aria-selected', String(!term));
+    this.termBtn.setAttribute('aria-selected', String(term));
+    this.el.classList.toggle('term-mode', term);
+    this.scrollEl.hidden = term;
+    if (term) this.pill.hidden = true;
+    this.zoomBtn.hidden = !term;
+    this.term.shown(term);
+    this.renderZoom();
+    // The foot is drawn again for the view.
+    this.mode = '';
+    this.needsKey = '';
+    this.noteKey = '';
+    this.stopPolling();
+    if (!term) this.stuck = true;
+    this.invalidate();
+  }
+
+  renderZoom() {
+    const fit = this.term.zoom == null;
+    const label = fit ? 'Zoom' : 'Fit';
+    if (this.zoomBtn.textContent !== label) this.zoomBtn.textContent = label;
+    this.zoomBtn.setAttribute('aria-label', fit ? 'Zoom in to read the terminal' : 'Fit the terminal’s width');
+  }
+
+  /** Reconnects now, as when the app comes back to the front. */
+  kick() {
+    this.stream.kick();
+    this.term.kick();
   }
 
   buildComposer() {
@@ -330,7 +408,7 @@ export class SessionView {
       requestAnimationFrame(() => this.convEl.setAttribute('aria-live', 'polite'));
     }
     if (stick) this.pin();
-    else if (grew && blocks.length) this.pill.hidden = false;
+    else if (grew && blocks.length && this.view !== 'term') this.pill.hidden = false;
   }
 
   renderEmpty(s) {
@@ -356,15 +434,14 @@ export class SessionView {
       title = 'Nothing here yet';
       text = 'Messages show here as they come.';
     }
-    const key = title + '|' + text + '|' + term + '|' + this.showTerm + '|' + (this.screen ? this.screen.lines.length : -1);
+    const key = title + '|' + text + '|' + term;
     if (this.emptyKey === key) return;
     this.emptyKey = key;
     this.emptyEl.replaceChildren(
       h('div', { class: 'empty-mark', html: L.sun('sun big') }),
       h('h2', { class: 'empty-title', text: title }),
       text ? h('p', { class: 'empty-text', text }) : null,
-      term ? h('button', { class: 'btn', onclick: () => this.toggleTerminal() }, h('span', { class: 'btn-ic', html: ICON.terminal }), this.showTerm ? 'Hide the terminal' : 'Show the terminal') : null,
-      term && this.showTerm ? this.terminalBlock() : null);
+      term ? h('button', { class: 'btn', onclick: () => this.setView('term') }, h('span', { class: 'btn-ic', html: ICON.terminal }), 'See its terminal') : null);
   }
 
   reconcile(blocks) {
@@ -541,7 +618,7 @@ export class SessionView {
     this.mode = mode;
     if (mode === 'compose') {
       if (changed) {
-        this.bottomEl.replaceChildren(this.composer);
+        this.bottomEl.replaceChildren(...(this.view === 'term' ? [this.keysEl, this.composer] : [this.composer]));
         this.bottomEl.className = 'bottom session-bottom';
       }
       const p = `Message ${s.name}…`;
@@ -555,7 +632,6 @@ export class SessionView {
       if (changed) {
         this.screen = null;
         this.screenProblem = '';
-        this.showTerm = false;
         this.showKeys = false;
         this.needsKey = '';
         this.poll(true);
@@ -580,24 +656,29 @@ export class SessionView {
     const key = mode + '|' + text;
     if (this.noteKey === key && !changed) return;
     this.noteKey = key;
-    this.bottomEl.replaceChildren(h('div', { class: 'composer-note' + (mode === 'ended' && s.state === 'failed' ? ' loud' : '') }, h('span', { text }), button));
+    // A frozen or starting agent still takes keys in Term; an ended one doesn't.
+    const keys = this.view === 'term' && (mode === 'early' || mode === 'frozen') ? this.keysEl : null;
+    this.bottomEl.replaceChildren(...[keys, h('div', { class: 'composer-note' + (mode === 'ended' && s.state === 'failed' ? ' loud' : '') }, h('span', { text }), button)].filter(Boolean));
   }
 
   renderNeeds() {
     const s = this.row;
     const n = this.needs || {};
     const title = n.phrase || n.text || (s && s.detail) || 'It needs you';
-    const detail = n.detail || (s && !this.needs ? s.command : '') || '';
-    const key = JSON.stringify([title, detail, n.options, this.screen, this.screenProblem, this.showTerm, this.showKeys, this.busyKey]);
+    const term = this.view === 'term';
+    // In Term the terminal shows what it asks; the card keeps its title and its choices.
+    const detail = term ? '' : n.detail || (s && !this.needs ? s.command : '') || '';
+    const screen = term ? (this.term.read ? { options: this.term.options } : null) : this.screen;
+    const key = JSON.stringify([title, detail, n.options, screen, this.screenProblem, term, this.showKeys, this.busyKey]);
     if (key === this.needsKey) return;
     this.needsKey = key;
     const plan = detail && (n.tool === 'ExitPlanMode' || (detail.includes('\n') && /(^|\n)(#|[-*] |\d+\. )/.test(detail)));
-    const opts = this.screen && this.screen.options && this.screen.options.length ? this.screen.options : null;
+    const opts = screen && screen.options && screen.options.length ? screen.options : null;
     const parts = [
       h('div', { class: 'needs-title' }, h('span', { class: 'mark r-needs', html: L.glyph('needs') }), h('span', { text: title })),
     ];
     if (detail) parts.push(plan ? h('div', { class: 'needs-detail prose', html: md(detail) }) : h('pre', { class: 'needs-detail mono', text: detail }));
-    if (!opts && n.options && n.options.length) {
+    if (!opts && !term && n.options && n.options.length) {
       parts.push(h('ul', { class: 'needs-choices' }, n.options.map((o) => h('li', { text: o }))));
     }
     if (opts) {
@@ -606,19 +687,21 @@ export class SessionView {
         disabled: this.busyKey != null,
         onclick: () => this.press([o.key]),
       }, h('span', { class: 'k', text: o.key }), h('span', { class: 'l', text: o.label })))));
-    } else if (!this.screen && !this.screenProblem) {
+    } else if (!screen && !(this.screenProblem && !term)) {
       parts.push(h('div', { class: 'hint reading' }, h('span', { class: 'ic', html: ICON.ring }), 'Reading its screen…'));
+    }
+    if (term) {
+      // The keys under the terminal answer anything else it asks.
+      parts.push(this.keysEl);
+      this.bottomEl.replaceChildren(h('div', { class: 'needs-card compact', role: 'region', 'aria-label': 'It needs you' }, parts));
+      return;
     }
     if (!opts || this.showKeys) parts.push(this.keypad());
     if (this.screenProblem) parts.push(h('div', { class: 'hint', text: this.screenProblem }));
     parts.push(h('div', { class: 'needs-foot' },
-      h('button', { class: 'linkish', onclick: () => this.toggleTerminal() }, h('span', { class: 'ic', html: ICON.terminal }), this.showTerm ? 'Hide the terminal' : 'Show the terminal'),
+      h('button', { class: 'linkish', onclick: () => this.setView('term') }, h('span', { class: 'ic', html: ICON.terminal }), 'See its terminal'),
       opts ? h('button', { class: 'linkish', text: this.showKeys ? 'Hide keys' : 'Keys', onclick: () => { this.showKeys = !this.showKeys; this.renderNeeds(); } }) : null));
-    if (this.showTerm) parts.push(this.terminalBlock());
-    const card = h('div', { class: 'needs-card', role: 'region', 'aria-label': 'It needs you' }, parts);
-    this.bottomEl.replaceChildren(card);
-    const term = card.querySelector('.term');
-    if (term) term.scrollTop = term.scrollHeight;
+    this.bottomEl.replaceChildren(h('div', { class: 'needs-card', role: 'region', 'aria-label': 'It needs you' }, parts));
   }
 
   keypad() {
@@ -632,26 +715,14 @@ export class SessionView {
     })));
   }
 
-  terminalBlock() {
-    if (!this.screen) return h('pre', { class: 'term', text: this.screenProblem || 'Reading its screen…' });
-    return h('pre', { class: 'term', 'aria-label': 'Its terminal', text: (this.screen.lines || []).join('\n') || ' ' });
-  }
-
-  toggleTerminal() {
-    this.showTerm = !this.showTerm;
-    if (this.showTerm) this.poll(true);
-    this.needsKey = '';
-    this.emptyKey = '';
-    this.invalidate();
-  }
-
-  /** Whether the agent's screen is on show: the needs card, or its terminal. */
+  /** Whether the needs card reads the agent's screen itself: in Browser, while it waits on you. Term follows it live. */
   watching() {
-    return !this.destroyed && (this.mode === 'needs' || (this.showTerm && !this.emptyEl.hidden));
+    return !this.destroyed && this.view !== 'term' && this.mode === 'needs';
   }
 
-  /** Reads the agent's screen now and every 1.5 s while it is on show. */
+  /** Reads the agent's screen now and every 1.5 s while the needs card shows it. */
   poll(now) {
+    if (!this.watching()) return this.stopPolling();
     clearTimeout(this.pollTimer);
     this.pollTimer = null;
     const gen = (this.pollGen = (this.pollGen || 0) + 1);
@@ -677,7 +748,6 @@ export class SessionView {
   }
 
   stopPolling() {
-    if (this.showTerm && !this.emptyEl.hidden) return;
     clearTimeout(this.pollTimer);
     this.pollTimer = null;
     this.pollGen = (this.pollGen || 0) + 1;
@@ -694,7 +764,22 @@ export class SessionView {
     }
     this.busyKey = null;
     this.needsKey = '';
-    await this.poll(true);
+    if (this.view === 'term') this.invalidate();
+    else await this.poll(true);
+  }
+
+  /** Presses a key under the Term view: in turn after any before it, so ↓ ↓ ⏎ arrive as tapped. */
+  tap(key) {
+    const b = this.keyBtns.get(key);
+    if (b) {
+      b.classList.remove('hit');
+      void b.offsetWidth;
+      b.classList.add('hit');
+    }
+    this.keyQueue = this.keyQueue.then(() => call(this.conn.m, 'keys', { session: this.sid, keys: [key] }, { timeout: 8000 })).catch((e) => {
+      if (e.status === 401) this.ctx.unpaired(this.conn, e.message);
+      else this.ctx.fail(this.conn, e);
+    });
   }
 
   async send() {
@@ -773,3 +858,19 @@ export function grow(t) {
 }
 
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function loadView() {
+  try {
+    return localStorage.getItem(VIEW) === 'term' ? 'term' : 'browser';
+  } catch {
+    return 'browser';
+  }
+}
+
+function saveView(v) {
+  try {
+    localStorage.setItem(VIEW, v);
+  } catch {
+    // Private mode: the view lasts while the app is open.
+  }
+}
