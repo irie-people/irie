@@ -57,6 +57,10 @@ var Ops = []string{
 	ipc.OpReorder, ipc.OpScreen, ipc.OpKeys,
 }
 
+// Features are the features of hello, besides Ops, that a phone may use:
+// the live terminal of the app's Term view.
+var Features = []string{ipc.FeatureScreenLive}
+
 // Options configure the gateway.
 type Options struct {
 	Socket  string // the core's socket
@@ -516,7 +520,7 @@ func (s *Server) hello(raw json.RawMessage) json.RawMessage {
 	if json.Unmarshal(raw, &h) != nil {
 		return raw
 	}
-	h.Features = slices.DeleteFunc(h.Features, func(f string) bool { return !slices.Contains(Ops, f) })
+	h.Features = slices.DeleteFunc(h.Features, func(f string) bool { return !slices.Contains(Ops, f) && !slices.Contains(Features, f) })
 	b, err := json.Marshal(h)
 	if err != nil {
 		return raw
@@ -536,6 +540,7 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request, d Device) {
 		Session      string `json:"session,omitempty"`
 		Agent        string `json:"agent,omitempty"`
 		Conversation bool   `json:"conversation,omitempty"`
+		Screen       bool   `json:"screen,omitempty"`
 	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<10))
 	if len(strings.TrimSpace(string(body))) > 0 {

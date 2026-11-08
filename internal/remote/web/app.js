@@ -1628,7 +1628,7 @@ function kickAll() {
     if (c.stream) c.stream.kick();
     if (!c.info) c.fetchInfo();
   }
-  if (S.view && S.view.conn.status !== 'unpaired') S.view.stream.kick();
+  if (S.view && S.view.conn.status !== 'unpaired') S.view.kick();
 }
 
 document.addEventListener('visibilitychange', () => {

@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/testutil"
 	"github.com/irie-people/irie/internal/worktree"
 )
@@ -332,6 +335,32 @@ func TestTheTrodBotKeepsWithinTheWeeksAllotment(t *testing.T) {
 	}
 	if !slices.Equal(kinds, []string{"freeze.on trod", "freeze.off trod"}) {
 		t.Errorf("freezes = %v", kinds)
+	}
+}
+
+func TestTheTrodBotLeavesAPeersRowsToItsOwnCore(t *testing.T) {
+	// As newPeerCore, but with no cleanup that takes the core's lock, so a
+	// panic under it fails the test at once rather than hanging it.
+	c := &Core{
+		version: "test", paths: paths.Paths{State: t.TempDir()}, log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{}, hues: map[string]int{},
+	}
+	cfg := config.Default()
+	cfg.Remote.Name = "Mac"
+	cfg.Trod.On, cfg.Trod.Start, cfg.Trod.End, cfg.Trod.Away, cfg.Trod.KeepAwake = true, "00:00", "00:00", 0, false
+	c.useConfig(cfg)
+	c.mach = &ipc.Machine{Name: "Mac"}
+	c.peers = map[string]*peerState{"Asahi": {name: "Asahi", stop: func() {}, rows: map[string]ipc.Session{
+		"s1": {ID: "s1", Name: "on the Asahi", State: ipc.StateWorking},
+	}}}
+	// The list carries the peer's row, which is no session of this core's:
+	// the report and the sweep, which once took every row for one, stopped
+	// the core on it.
+	if !c.trodSweep() {
+		t.Fatal("another sweep was under way")
+	}
+	for _, s := range c.trodReport().Sessions {
+		t.Errorf("reported %+v", s)
 	}
 }
 

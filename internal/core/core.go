@@ -76,6 +76,8 @@ type Core struct {
 	lidMu       sync.Mutex  // guards lid; taken after mu and awakeMu
 	lid         lidHold     // what the core did to the Mac's sleep, for a closed lid
 
+	leftSweeping atomic.Bool // the look for Iries whose run is over (leftovers.go)
+
 	// What the freeze dog knows of Irie's own processes, to keep them
 	// running (steady.go): the tmux server's pid, which only the dog reads
 	// and writes, and the sidebar's process group, which each tick sets.
@@ -180,6 +182,7 @@ type session struct {
 	demoted  bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
 	userWord time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
 	convSubs int                    // the subscriptions that follow its conversation
+	screen   *screenFeed            // its terminal, read while clients watch it live (screenfeed.go)
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
 	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
@@ -322,6 +325,7 @@ func Run(o Options) error {
 		c.log.Warn("peers", "err", err)
 	}
 	go c.checkMachine()
+	go c.leftoverSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -362,6 +366,9 @@ func Run(o Options) error {
 			}
 			if n%machineEvery == 0 {
 				go c.checkMachine()
+			}
+			if n%leftoverEvery == 0 {
+				go c.leftoverSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
@@ -693,7 +700,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers, ipc.OpDock,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
 		}}, nil

@@ -527,7 +527,7 @@ func (c *Core) subscribePeer(a ipc.SubscribeArgs) (<-chan ipc.Frame, func(), err
 		return nil, nil, ipc.Errorf(ipc.CodePeerDown, "%s isn't answering just now; its sessions run on there", p.name)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	in, _, err := cl.Subscribe(ctx, ipc.SubscribeArgs{Session: rest, Agent: a.Agent, Conversation: a.Conversation})
+	in, _, err := cl.Subscribe(ctx, ipc.SubscribeArgs{Session: rest, Agent: a.Agent, Conversation: a.Conversation, Screen: a.Screen})
 	if err != nil {
 		cancel()
 		var e *ipc.Error
@@ -603,6 +603,11 @@ func hostFrame(name string, f *ipc.Frame) {
 		cv := *f.Conversation
 		cv.Session = name + "/" + cv.Session
 		f.Conversation = &cv
+	}
+	if f.Screen != nil && f.Screen.Session != "" {
+		sc := *f.Screen
+		sc.Session = name + "/" + sc.Session
+		f.Screen = &sc
 	}
 }
 

@@ -26,29 +26,21 @@ struct TerminalArea: View {
         // changes.
         let _ = store.redOnDone
         VStack(spacing: 0) {
-            // The right sidebar (RightSidebar.swift): beside the terminal
-            // while pinned and there is room, else over its right edge. The
-            // frame stays the first child, so SwiftUI never makes the
-            // terminal again, which would restart its tmux client.
+            // The right sidebar (RightSidebar.swift), inline after the
+            // terminal or the conversation. The frame stays the first child,
+            // so SwiftUI never makes the terminal again, which would restart
+            // its tmux client. In a narrow window the sidebar gives up width
+            // first, down to its narrowest, so the terminal keeps some room.
             GeometryReader { geo in
-                let width = CGFloat(store.side.width)
-                let beside = store.side.open && store.side.pinned && geo.size.width - width - 12 >= minTerminal
-                let peek = store.side.open && !beside
+                let width = min(CGFloat(store.side.width), max(CGFloat(SideState.minWidth), geo.size.width - 12 - minTerminal))
                 ZStack(alignment: .trailing) {
                     HStack(spacing: 0) {
-                        main(conversationInset: peek ? width + 12 : 0).modifier(FileDrop(session: selected))
-                        if beside {
-                            RightSidebar(peek: false, guide: $sideGuide)
+                        main.modifier(FileDrop(session: selected))
+                        if store.side.open {
+                            RightSidebar(guide: $sideGuide)
                                 .frame(width: width)
                                 .padding([.top, .bottom, .trailing], 12)
                         }
-                    }
-                    if peek {
-                        RightSidebar(peek: true, guide: $sideGuide)
-                            .frame(width: width)
-                            .padding([.top, .bottom, .trailing], 12)
-                            .background(PeekFrame())
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                     if let g = sideGuide {
                         Rectangle()
@@ -115,15 +107,11 @@ struct TerminalArea: View {
         }
     }
 
-    /// The narrowest the terminal may get beside a pinned sidebar: about 80
-    /// columns and its frame. A narrower window shows the sidebar over the
-    /// terminal instead, even pinned.
+    /// What the terminal keeps beside the sidebar before the sidebar gives up
+    /// width: about 80 columns and the frame round them.
     private var minTerminal: CGFloat { 80 * store.fontSize * 0.6 + 60 }
 
-    /// The terminal, or the conversation over it. A sidebar over the right
-    /// side insets the conversation only, so it sits beside the sidebar
-    /// while the terminal under it keeps its width.
-    private func main(conversationInset: CGFloat) -> some View {
+    private var main: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
             // restart, so a flap gets a banner, not a reattach.
@@ -148,7 +136,6 @@ struct TerminalArea: View {
             // The conversation needs only the core, not the terminal.
             if !store.showTerminal && (store.attach != nil || online) {
                 ConversationView()
-                    .padding(.trailing, conversationInset)
             } else if store.attach == nil, !store.isFixture {
                 if store.starting {
                     ProgressView("Starting Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -297,22 +284,5 @@ private struct Placeholder: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Tells the store where a peeking right sidebar is, in the window's
-/// top-left points, so a click in the terminal beside it closes it
-/// (KeyRouter), and that none peeks once it goes.
-@MainActor
-private struct PeekFrame: View {
-    @Environment(Store.self) private var store
-
-    var body: some View {
-        GeometryReader { geo in
-            Color.clear
-                .onAppear { store.sidePeekFrame = geo.frame(in: .global) }
-                .onChange(of: geo.frame(in: .global)) { _, f in store.sidePeekFrame = f }
-                .onDisappear { store.sidePeekFrame = .zero }
-        }
     }
 }
