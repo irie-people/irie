@@ -295,7 +295,7 @@ func TestTheTrodBotKeepsWithinTheWeeksAllotment(t *testing.T) {
 	// that of +low's, once the week has reset, 10%.
 	low := fmt.Sprintf("\n[profiles.low]\ncommand = %q\nmodel = \"claude-opus-5-5\"\nenv = { IRIE_FAKE_WEEK = \"10\" }\n", fake)
 	c := setupWith(t, agentConfig{statusLine: true, env: map[string]string{"IRIE_FAKE_WEEK": "95"}, extra: trodSection("retry = \"1s\"\n") + low})
-	working := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:45s,stop", Name: "working"})
+	working := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:10m,stop", Name: "working"})
 	failed := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stopfail:server_error", Name: "failed"})
 	c.waitState(failed.ID, ipc.StateNeedsYou)
 
@@ -412,7 +412,7 @@ func TestTheTrodBotKeepsToTheDayLine(t *testing.T) {
 	// That is under the 90% it may use, but this is the week's fifth day,
 	// whose line is five sevenths of it, 64%.
 	c := setupWith(t, agentConfig{statusLine: true, env: map[string]string{"IRIE_FAKE_WEEK": "70"}, extra: trodSection("retry = \"1s\"\npace = true\n")})
-	working := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:45s,stop", Name: "working"})
+	working := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,status:0.5,sleep:10m,stop", Name: "working"})
 	row := c.waitState(working.ID, ipc.StateFrozen)
 	if !strings.HasPrefix(row.Detail, "Frozen by the trod bot: the week's plan use is at 70%, past today's line of 64%") {
 		t.Errorf("detail = %q", row.Detail)
