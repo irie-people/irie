@@ -210,3 +210,37 @@ func TestWrapKeepsEveryWord(t *testing.T) {
 		}
 	}
 }
+
+// TestNothingShownCanSteerTheTerminal is text from a tool, the model or a
+// paste that holds escape sequences: a colour, a title, a write to the
+// clipboard, a C1 control, a byte that is not UTF-8. None of it reaches
+// the terminal; the words do.
+func TestNothingShownCanSteerTheTerminal(t *testing.T) {
+	evil := "ok \x1b[31mred\x1b[0m \x1b]0;title\x07 \x1b]52;c;aGk=\x1b\\ \x1bPdcs\x1b\\ \u009b6n \x9b6n bell\x07 tab\tend"
+	got := safe(evil)
+	if strings.ContainsAny(got, "\x1b\x07\u009b") || strings.Contains(got, "\x9b") || strings.Contains(got, "aGk=") || strings.Contains(got, "title") {
+		t.Errorf("safe(%q) = %q: a control got through", evil, got)
+	}
+	for _, want := range []string{"ok ", "red", "bell", "tab    end"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("safe(%q) = %q, want it to keep %q", evil, got, want)
+		}
+	}
+	if got := safe("plain text, with ünïcode\nand a new line"); got != "plain text, with ünïcode\nand a new line" {
+		t.Errorf("safe changed plain text: %q", got)
+	}
+
+	v := newView(40)
+	v.add(parse(t, `{"type":"assistant","message":{"id":"m","content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"cat notes.txt"}}]}}`))
+	lines := v.add(parse(t, `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"b1","content":"116:\tcase \"help\": \u001b]52;c;aGk=\u0007done"}]}}`))
+	lines = append(lines, v.feed("the model says \u001b[2Jhi\n")...)
+	for _, l := range lines {
+		plain := strings.TrimSuffix(strings.TrimPrefix(l, dim), reset)
+		if strings.ContainsAny(plain, "\x1b\x07\t") {
+			t.Errorf("%q reached the terminal", l)
+		}
+		if w := lipgloss.Width(plain); w >= 40 {
+			t.Errorf("%q is %d columns wide; the terminal has 40", plain, w)
+		}
+	}
+}

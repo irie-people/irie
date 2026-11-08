@@ -371,7 +371,7 @@ func (u *ui) message(m message) {
 		}
 	case "control_response":
 		if m.Response != nil && m.Response.Subtype == "error" {
-			u.render([]string{"  ! " + m.Response.Error})
+			u.render([]string{u.v.fit("  ! " + m.Response.Error)})
 		}
 	case "result":
 		took := time.Since(u.since)
@@ -572,7 +572,7 @@ func (u *ui) area() ([]string, int) {
 		return append(rows, prompt+dim+hint+reset), lipgloss.Width(hint)
 	}
 	// The end of what is typed, as much as fits.
-	shown := strings.ReplaceAll(u.typed, "\n", "↵ ")
+	shown := safe(strings.ReplaceAll(u.typed, "\n", "↵ "))
 	room := u.v.width - 1 - lipgloss.Width(prompt)
 	for lipgloss.Width(shown) > room {
 		_, n := utf8.DecodeRuneInString(shown)

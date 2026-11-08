@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 )
@@ -191,7 +192,14 @@ func (v *view) result(m message, took time.Duration) []string {
 		}
 	}
 	if m.IsError {
-		return append(out, "  ! "+m.errorText())
+		for i, l := range wrap(m.errorText(), v.width-4) {
+			prefix := "    "
+			if i == 0 {
+				prefix = "  ! "
+			}
+			out = append(out, prefix+l)
+		}
+		return out
 	}
 	s := "  · done in " + took.Round(time.Second).String()
 	if v.stopped {
@@ -208,8 +216,7 @@ func (v *view) result(m message, took time.Duration) []string {
 // would not fit breaks at its last space, so each fits on one row.
 func (v *view) feed(s string) []string {
 	var out []string
-	s = strings.NewReplacer("\r", "", "\t", "    ").Replace(s)
-	for _, r := range s {
+	for _, r := range safe(s) {
 		if r == '\n' {
 			out = append(out, v.line)
 			v.line = ""
@@ -252,8 +259,10 @@ func (v *view) faint(s string) string { return dim + v.fit(s) + reset }
 // fit cuts s to one row of the terminal, marking the cut with "…".
 func (v *view) fit(s string) string { return fitTo(s, v.width-1) }
 
-// fitTo cuts s to room columns, marking the cut with "…".
+// fitTo cuts s to room columns, marking the cut with "…". What could steer
+// the terminal is taken out first (safe).
 func fitTo(s string, room int) string {
+	s = strings.ReplaceAll(safe(s), "\n", " ")
 	if lipgloss.Width(s) <= room {
 		return s
 	}
@@ -368,4 +377,66 @@ func dollars(usd float64) string {
 		return fmt.Sprintf("$%.3f", usd)
 	}
 	return fmt.Sprintf("$%.2f", usd)
+}
+
+// safe is s with what could steer the terminal taken out: escape sequences
+// and other control characters, which the model's text, a tool's output or
+// a paste may hold, such as a sequence that sets the clipboard. A tab
+// becomes four spaces, since the terminal would widen it past what was
+// measured; a new line stays.
+func safe(s string) string {
+	if utf8.ValidString(s) && !strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 && r != '\n' || r >= 0x7f && r <= 0x9f }) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, n := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == 0x1b:
+			n = escapeLen(s[i:])
+		case r == '\t':
+			b.WriteString("    ")
+		case r == '\n':
+			b.WriteByte('\n')
+		case r < 0x20 || r >= 0x7f && r <= 0x9f:
+		case r == utf8.RuneError && n == 1:
+			// A byte that is not UTF-8, which a terminal may take as a
+			// control of its own.
+			b.WriteString("\uFFFD")
+		default:
+			b.WriteString(s[i : i+n])
+		}
+		i += n
+	}
+	return b.String()
+}
+
+// escapeLen is how many bytes the escape sequence at the start of s takes:
+// a CSI to its final byte, an OSC to its BEL or string terminator, a DCS,
+// SOS, PM or APC to its terminator, or an escape and one character.
+func escapeLen(s string) int {
+	if len(s) < 2 {
+		return len(s)
+	}
+	switch s[1] {
+	case '[':
+		for i := 2; i < len(s); i++ {
+			if s[i] >= 0x40 && s[i] <= 0x7e {
+				return i + 1
+			}
+		}
+		return len(s)
+	case ']', 'P', 'X', '^', '_':
+		for i := 2; i < len(s); i++ {
+			switch {
+			case s[i] == 0x07 && s[1] == ']':
+				return i + 1
+			case s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\':
+				return i + 2
+			}
+		}
+		return len(s)
+	}
+	_, n := utf8.DecodeRuneInString(s[1:])
+	return 1 + n
 }
