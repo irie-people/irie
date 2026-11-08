@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -353,6 +354,8 @@ func (c *Core) launch(j job) (*session, error) {
 	os.Remove(c.paths.FollowUpFile(id))
 	// Nor with what the arch agents brought it then (arch.go).
 	os.Remove(filepath.Join(dir, harness.ArchFile))
+	// Nor with the MCP servers it had then.
+	os.Remove(filepath.Join(dir, harness.MCPFile))
 	s := harness.Spawn{
 		Session: id, Task: j.task, Next: j.next, Cwd: x.cwd, Repo: x.repo, Dir: dir, VendorID: x.vendorID,
 		Bin: c.bin, HoldMax: c.cfg().Hold.Max, Probe: j.probe,
@@ -384,6 +387,14 @@ func (c *Core) launch(j job) (*session, error) {
 	// Irie's skills, for a harness that loads them as a plugin.
 	if j.probe.Flags["--plugin-dir"] {
 		s.PluginDir = c.skillsFolder(profile, x)
+	}
+	// Irie's browser, for a harness that takes MCP servers (DESIGN §4.15).
+	if j.probe.Flags["--mcp-config"] {
+		if srv, warn := c.browserServer(id); warn != "" {
+			x.warnings = append(x.warnings, warn)
+		} else if srv != nil {
+			s.MCP = map[string]harness.MCPServer{browser.ServerName: *srv}
+		}
 	}
 	launch := h.Launch
 	if j.resume != "" {

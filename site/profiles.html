@@ -365,6 +365,22 @@ guidelines = ["Prefer the smallest change that finishes the task."]</code></pre>
     </table>
   </div>
 
+  <h3 id="browser">[browser]</h3>
+  <p>A real browser for your agents, for the pages their web fetch can’t read: pages that build themselves with JavaScript, and pages behind a click or a form. Run <code>irie setup browser</code> once: it installs Mullvad Browser if you say yes, checks it on a page, and turns it on for new Claude Code sessions. The browser starts without a window when an agent first asks for a page, on a profile that is thrown away when it closes. Websites can tell it is under remote control, and it has none of your logins.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>connector</code></td><td><code>"off"</code></td><td><code>"on"</code> gives each Claude Code session started from then on the browser, as <code>irie-browser</code>. <code>irie setup browser</code> sets it.</td></tr>
+        <tr><td><code>path</code></td><td><code>""</code></td><td>The browser’s program. Empty finds Mullvad Browser where its installers put it. Another Firefox works too: name the program inside its app, not the app.</td></tr>
+        <tr><td><code>headless</code></td><td><code>true</code></td><td>Run it without a window. With <code>false</code> its window shows, and may come to the front.</td></tr>
+        <tr><td><code>idle</code></td><td><code>"10m"</code></td><td>Close it after this long without a call. The next call starts it again. <code>"0s"</code> keeps it open until its session ends.</td></tr>
+        <tr><td><code>proxy</code></td><td><code>""</code></td><td>Send its traffic, and its DNS lookups, through this SOCKS5 proxy, such as <code>"socks5://nl-ams-wg-socks5-001.relays.mullvad.net:1080"</code>, one of Mullvad’s, so it leaves from another address than the rest of your computer.</td></tr>
+        <tr><td><code>search</code></td><td>DuckDuckGo’s page for browsers without JavaScript</td><td>The page the search tool opens, with <code>%s</code> where the query goes.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <p>Settings for later milestones aren’t accepted yet, and Irie would stop with an unknown-setting error. <code>[notes]</code> comes with milestones 5 and 7, <code>[freeze]</code> with milestone 6 and <code>[subagents]</code> with milestone 8.</p>
 
   <nav class="docs-nav" aria-label="Docs">

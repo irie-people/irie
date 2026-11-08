@@ -25,6 +25,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/irie-people/irie/internal/arch"
+	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/route"
 )
 
@@ -52,6 +53,7 @@ type Config struct {
 	Env      Env                `toml:"env"`
 	Learn    Learn              `toml:"learn"`
 	VPN      VPN                `toml:"vpn"`
+	Browser  Browser            `toml:"browser"`
 }
 
 // Lid is a MacBook's lid (DESIGN §4.12). macOS sleeps a MacBook the
@@ -86,6 +88,22 @@ type VPN struct {
 	On      bool   `toml:"on"`      // show the VPN in Irie and take the :vpn words
 	Mullvad string `toml:"mullvad"` // the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
 }
+
+// Browser is Irie's browser connector (DESIGN §4.15): a real browser,
+// Mullvad Browser by default, that Claude Code sessions drive through
+// Irie's own MCP server, `irie browser`, for pages a plain fetch cannot
+// read. Off until the user turns it on, as `irie setup browser` does.
+type Browser struct {
+	Connector string        `toml:"connector"` // on | off: give Claude Code sessions the browser
+	Path      string        `toml:"path"`      // the browser's executable; "" = Mullvad Browser where its installers put it
+	Headless  bool          `toml:"headless"`  // run it without a window
+	Idle      time.Duration `toml:"idle"`      // close it after this long without a call; 0 = keep it open
+	Proxy     string        `toml:"proxy"`     // send its traffic through this SOCKS5 proxy, socks5://host:port; "" = none
+	Search    string        `toml:"search"`    // the search tool's address, with %s for the query
+}
+
+// BrowserConnectors are the values of browser.connector.
+var BrowserConnectors = []string{"on", "off"}
 
 // Place is where a task typed here starts when its words do not say
 // (docs/proposals/multi-host.md §4.3): ^name always picks the machine.
@@ -696,9 +714,10 @@ func Default() Config {
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
 		},
-		Remote: Remote{Port: DefaultRemotePort},
-		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
-		Learn:  Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
+		Remote:  Remote{Port: DefaultRemotePort},
+		Place:   Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
+		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
+		Browser: Browser{Connector: "off", Headless: true, Idle: browser.DefaultIdle, Search: browser.DefaultSearch},
 	}
 }
 
@@ -807,7 +826,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Env      *Env                      `toml:"env"`
 		Learn    *Learn                    `toml:"learn"`
 		VPN      *VPN                      `toml:"vpn"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+		Browser  *Browser                  `toml:"browser"`
+	}{Browser: &c.Browser, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1293,6 +1313,26 @@ func (c Config) Validate() error {
 	}
 	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
 		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
+	}
+	br := c.Browser
+	if !slices.Contains(BrowserConnectors, br.Connector) {
+		bad("browser.connector = %q: must be on or off", br.Connector)
+	}
+	if br.Path != "" && !pathLike(br.Path) {
+		bad("browser.path = %q: must be an absolute or ~ path to the browser's executable, or empty for Mullvad Browser", br.Path)
+	} else if strings.HasSuffix(strings.TrimSuffix(br.Path, "/"), ".app") {
+		bad("browser.path = %q: names an app; give the executable inside it, such as …/Contents/MacOS/mullvadbrowser", br.Path)
+	}
+	if br.Idle < 0 {
+		bad("browser.idle = %s: must be 0 or more", br.Idle)
+	}
+	if br.Proxy != "" {
+		if _, _, err := browser.ParseProxy(br.Proxy); err != nil {
+			bad("browser.proxy = %q: %v", br.Proxy, err)
+		}
+	}
+	if u, err := url.Parse(br.Search); br.Search != "" && (err != nil || (u.Scheme != "https" && u.Scheme != "http") || !strings.Contains(br.Search, "%s")) {
+		bad("browser.search = %q: must be an http or https address with %%s where the query goes", br.Search)
 	}
 	return errors.Join(errs...)
 }

@@ -92,6 +92,11 @@ type Spawn struct {
 	// "" = none.
 	PluginDir string
 
+	// MCP are MCP servers for this session only, by name, such as Irie's
+	// browser (browser.connector, DESIGN §4.15), which a harness whose probe
+	// offers --mcp-config passes on.
+	MCP map[string]MCPServer
+
 	// Arch is what Irie's arch agents bring to the session (DESIGN §4.11).
 	Arch Arch
 	// Tutor is how the agent works with the user (learn.tutor,
@@ -105,6 +110,17 @@ type Spawn struct {
 	// Code does under its spinner (learn.agent_tips).
 	Tips []learn.Tip
 }
+
+// MCPServer is an MCP server that an agent runs over stdio: its command and
+// arguments, as an entry of an mcpServers config.
+type MCPServer struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+}
+
+// MCPFile is the file in the session dir that holds a session's MCP
+// servers, as {"mcpServers": {name: server}}.
+const MCPFile = "mcp.json"
 
 // TutorNote is what goes before the task of an agent whose harness has no
 // output styles, for a tutor mode: the instruction alone.
