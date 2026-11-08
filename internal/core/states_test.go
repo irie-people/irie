@@ -210,7 +210,9 @@ func TestASubagentIsListedUnderItsSessionUntilItStops(t *testing.T) {
 }
 
 func TestRedUntilAnswered(t *testing.T) {
-	c := setup(t)
+	// The usage limit below would carry its task on, on a cheaper profile:
+	// one of the built-in ones, which run the machine's own claude.
+	c := setupWith(t, agentConfig{extra: "[route]\nfailover = false\n"})
 	permission := c.spawn("prompt,permission,tool:Bash")
 	question := c.spawn("prompt,tool:AskUserQuestion")
 	limited := c.spawn("prompt,stopfail:rate_limit")
