@@ -143,10 +143,10 @@ func Line(u Usage, st *ipc.StatusReply, width int) string {
 }
 
 // state leads the line with the session's state, working in own, the
-// session's colour, when it has one. A turn that ended while its helpers
-// still run is not done: the line says what it waits on. A parked session
-// is out of the way, so its turn that is over is quiet and not to verify,
-// as the sidebars count it.
+// session's colour, when it has one. A turn that ended while its helpers or
+// teammates still work is not done: the line says what it waits on. A
+// parked session is out of the way, so its turn that is over is quiet and
+// not to verify, as the sidebars count it.
 func state(r ipc.StatusReply, own string) seg {
 	var s seg
 	n := len(r.Subagents)
@@ -171,14 +171,22 @@ func state(r ipc.StatusReply, own string) seg {
 			s.add(own, "◐ working + "+helpers(n))
 		}
 	case ipc.StateDone, ipc.StateIdle:
-		if n == 0 && r.Parked {
+		// What it waits on: a core from before Subs sends only the helpers.
+		words := ""
+		if r.Subs != nil {
+			words = r.Subs.Words()
+		} else if n > 0 {
+			words = helpers(n)
+		}
+		switch {
+		case words == "" && r.Parked:
 			s.add(faint, "✓ parked")
-		} else if n == 0 {
+		case words == "":
 			s.add(green, "✓ to verify")
-		} else if k := kinds(r.Subagents); k != "" {
-			s.add("", "◐ waiting on "+helpers(n)+": "+k)
-		} else {
-			s.add("", "◐ waiting on "+helpers(n))
+		case kinds(r.Subagents) != "":
+			s.add("", "◐ waiting on "+words+": "+kinds(r.Subagents))
+		default:
+			s.add("", "◐ waiting on "+words)
 		}
 	}
 	return s

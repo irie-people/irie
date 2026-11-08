@@ -441,11 +441,12 @@ type trodDue struct {
 
 // trodNext is what the trod bot would type session x now and why,
 // when something is due, and whether x still has work, for which the Mac
-// stays awake: it works, it waits for work of its own or for a usage limit
-// to reset, or the shift will send it on once trod.retry has passed. A
-// session the shift sent on trod.nudges times this night is sent on no
-// more, but the Mac stays awake while it works. reset is when the plan's
-// usage limit last reset, as far as Irie knows. The caller holds c.mu.
+// stays awake: it works, it waits for work of its own, for its helpers or
+// teammates still at work or for a usage limit to reset, or the shift will
+// send it on once trod.retry has passed. A session the shift sent on
+// trod.nudges times this night is sent on no more, but the Mac stays awake
+// while it works. reset is when the plan's usage limit last reset, as far
+// as Irie knows. The caller holds c.mu.
 func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d *trodDue, work bool) {
 	t := &x.track
 	if !c.trodWatches(x) {
@@ -457,6 +458,9 @@ func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d 
 		return nil, true
 	case t.waiting > 0:
 		// Work of its own in the background, or a wakeup, will wake it.
+		return nil, true
+	case x.waitsOnSubs():
+		// So will its helpers or teammates, which still work (DESIGN §5.3).
 		return nil, true
 	case s.n.Within > 0 && now.Sub(t.stopped) > s.n.Within:
 		return nil, false
@@ -523,8 +527,9 @@ func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d 
 
 // spendsAlone reports whether session x would spend the plan's use with
 // no one sending it on: it works or starts, or it will wake on its own, by
-// work of its own in the background or, stopped at a usage limit, at the
-// reset, where Claude Code carries its task on. The caller holds c.mu.
+// work of its own in the background, by its helpers or teammates still at
+// work or, stopped at a usage limit, at the reset, where Claude Code carries
+// its task on. The caller holds c.mu.
 func (c *Core) spendsAlone(x *session, now time.Time) bool {
 	t := &x.track
 	if !c.trodWatches(x) {
@@ -534,7 +539,7 @@ func (c *Core) spendsAlone(x *session, now time.Time) bool {
 	case ipc.StateWorking, ipc.StateStarting:
 		return true
 	case ipc.StateDone, ipc.StateIdle:
-		return t.waiting > 0
+		return t.waiting > 0 || x.waitsOnSubs()
 	case ipc.StateNeedsYou:
 		e, ok := t.needs[event.Main]
 		return ok && len(t.needs) == 1 && e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && !c.autoContinueOff(x)
@@ -598,7 +603,7 @@ func (c *Core) trodSweep() bool {
 		// are its own core's, and its own trod bot sees to them.
 		rows := slices.DeleteFunc(c.list(), func(r ipc.Session) bool { return c.sessions[r.ID] == nil })
 		for _, r := range rows {
-			if r.State == ipc.StateWorking {
+			if rowAtWork(r) {
 				working++
 			}
 		}
@@ -942,7 +947,7 @@ func (c *Core) trodLeft(x *session, row ipc.Session, s shift) string {
 	if f := t.frozen; f != nil && f.Str("by") == trodBy {
 		return "frozen by the trod bot: " + f.Str("reason")
 	}
-	if !c.trodWatches(x) || row.State == ipc.StateWorking {
+	if !c.trodWatches(x) || rowAtWork(row) {
 		return ""
 	}
 	if e, ok := t.needs[event.Main]; ok && len(t.needs) == 1 && e.Kind == event.TurnFailed {
@@ -960,3 +965,8 @@ func (c *Core) trodLeft(x *session, row ipc.Session, s shift) string {
 	}
 	return ""
 }
+
+// rowAtWork reports whether a row works, or waits on its helpers or
+// teammates still at work once its own turn is over: the trod bot counts
+// both as working, as the sidebars do (DESIGN §5.3).
+func rowAtWork(r ipc.Session) bool { return r.State == ipc.StateWorking || r.Subs != nil }
