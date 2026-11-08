@@ -1,6 +1,6 @@
 # Proposal: the right sidebar and its dock
 
-Date: 2026-11-01. Status: being built, with the recommendations of §10 taken. Built: the right sidebar with its Dock, Helpers and Review tabs (§7 steps 1 and 2, and Review from step 4). Not yet: Changes, Plan, and the Settings sections of §5.7. On 2026-11-02 the owner chose the sidebar inline, after the terminal, rather than a peek over it (decision 2): the peek and the pin are gone, and the text below says so where it changed. It answers the owner's jot "deep research a dock right pane for irie". An agent (Claude Code) wrote it, from `live` at `831c1c2`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-01. Status: being built, with the recommendations of §10 taken. Built: the right sidebar with its Dock, Helpers and Review tabs (§7 steps 1 and 2, and Review from step 4). Not yet: Changes, Plan, and the Settings sections of §5.7. On 2026-11-02 the owner chose the sidebar inline, after the terminal, rather than a peek over it (decision 2): the peek and the pin are gone, and the text below says so where it changed. On 2026-11-08 they asked for it to slide in as a drawer, which it now does before it settles after the terminal. It answers the owner's jot "deep research a dock right pane for irie". An agent (Claude Code) wrote it, from `live` at `831c1c2`. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 **In short.** The jot most likely means cmux's **Dock**. cmux has a right sidebar, toggled with ⌥⌘B, and its Dock tab holds controls you define: live terminals running commands such as a git view, a log or a dev server, and web pages such as a dashboard. They are listed per repo in a small JSON file. cmux turned the Dock on for everyone on 2026-10-05, and the owner has asked Irie to copy cmux before (§1).
 
@@ -12,7 +12,7 @@ The sidebar opens and closes as a whole. It keeps its tab and width as you go fr
 
 The hard part is the terminal. The app's terminal is a client of the slot, and every agent's window has the slot's size (DESIGN §2.3). So a sidebar that narrows the terminal resizes all 24 agents at once, and each of them redraws. A narrower terminal also changes what Claude Code draws: its own diff panel, which opens inside the terminal from 144 columns, the owner's exact width, stops opening. And under Claude Code's older renderer a resize can copy lines into its history, an open bug (§3).
 
-The research proposed a **peek**, sliding over the terminal's right edge so nothing is resized, and a **pin** to keep it beside the terminal (§3). The owner chose inline instead: "i dont want modal i want inline on right side of terminal (after term)". So the sidebar always sits after the terminal, and opening or closing it resizes every agent once, just as resizing the window does. Nothing about it animates, so that once is never more.
+The research proposed a **peek**, sliding over the terminal's right edge so nothing is resized, and a **pin** to keep it beside the terminal (§3). The owner chose inline instead: "i dont want modal i want inline on right side of terminal (after term)". So the sidebar always sits after the terminal, and opening or closing it resizes every agent once, just as resizing the window does. Later they asked for it to "slide in as a drawer" (2026-11-08): it slides in from the window's right edge, over the terminal's edge, and the terminal makes room only once it is in, so the slide never adds a resize.
 
 | | Today on `live` | Proposed |
 |---|---|---|
@@ -86,7 +86,7 @@ So the sidebar should change the terminal's width only when you mean it to. The 
 
 The proposal is **A by default and C when you pin it**. A peek is free, safe under both renderers, and always at hand. Pinning is a choice about the layout, made now and then, like resizing the window. In the owner's window a pinned sidebar leaves the terminal about 100 columns. Claude Code's own diff panel then stays shut, and Changes takes its place (decision 8). B would make the busiest action in the app, showing a session, the one that resizes, so it is out. D could come later as a setting.
 
-**The owner's choice (2026-11-02): C always.** The sidebar sits inline after the terminal whenever it is open; there is no peek. Each open, close and release of its edge resizes every agent once.
+**The owner's choice (2026-11-02): C always.** The sidebar sits inline after the terminal whenever it is open; there is no peek. Each open, close and release of its edge resizes every agent once. Since 2026-11-08 it comes and goes as a drawer, lying over the terminal's edge only while it slides.
 
 ## 4. What other tools do
 
@@ -143,13 +143,13 @@ Inline, after the terminal, in a window as wide as the owner's:
 ▤ is the sidebar's toolbar button, ⊼ (in this drawing) the close button, and ⟳ and ■ restart and stop a control.
 
 - **Opening it.** The toolbar's button (`sidebar.right`, at the toolbar's trailing end, where the HIG puts buttons that open an inspector), View > Show Right Sidebar (⌥⌘B, as in cmux and VS Code), or a tab's own key: ⌥⌘1 Dock, ⌥⌘2 Changes, ⌥⌘3 Helpers, ⌥⌘4 Plan, ⌥⌘5 Review. A click on a helper's line or chip opens Helpers. A click on a card's "Not through" line, or the details panel's, opens Changes. Nothing else opens it: a helper starting, a file changing or a control printing only marks a tab.
-- **Inline.** It sits after the terminal or the conversation, never over them (the owner's choice; the research proposed a peek over the terminal and a pin). Opening it narrows the terminal once, in one step with no animation, and every agent follows once, as when the window is resized; closing it widens it again, once. In JetBrains' words, it is always Dock Pinned.
+- **A drawer, inline.** It sits after the terminal or the conversation (the owner's choice; the research proposed a peek over the terminal and a pin), and comes and goes as a drawer, the owner's later ask. Opening it slides it in from the window's right edge, over the terminal's edge, and once it is in, the terminal narrows to make room, in one step; closing it widens the terminal first, under the drawer, then slides the drawer out. Every agent follows once each time, as when the window is resized. With Reduce Motion on, it opens and closes in one step. In JetBrains' words, it is always Dock Pinned.
 - **Width.** It starts at 340 points and goes from 260 to 520 by its edge. In a window that would leave the terminal less than about 80 columns, it gives up width first, down to its narrowest. Dragging its edge draws a guide line, and the width applies on release: one resize, not one per frame.
 - **Tabs.** A row of tabs runs across its top, each a short word, in your order; at its narrowest the words give way to icons, as Xcode's inspector bar does. A tab shows a count where it has one, red only when something in it needs you. One tab shows at a time. The tab and the width stay as you go from session to session: open Changes and Ctrl+Tab through your sessions to see each one's changes in turn. Each tab keeps its own state per session, such as its scroll and the file it has open.
 - **Zoom.** A tab can fill the right side for a long read, such as a big diff or a busy log: the ⤢ button in its header, or ⌥⌘↩. A zoom lies over the terminal, so nothing is resized. Esc ends it.
 - **The keyboard.** A click in the sidebar gives it the keyboard, and Esc hands it back to the terminal or the message box. Ctrl+] still moves between the list and the terminal or the message box.
 - **What it keeps.** Whether it is open, its width, its tab and the tabs' order, in the app's defaults beside the right side's choice. A restarted app opens it as it was.
-- **Its look.** It sits on the palette's panel ground, like the details panel, under a 1-point edge. At its top is the shown session's name in that session's colour, as the colour follows the session everywhere ([MAC.md](../MAC.md) §5). It brings no new colours.
+- **Its look.** It sits on the palette's panel ground, like the details panel, under a 1-point edge, square at the window's edge it comes out of and rounded where it faces the terminal. At its top is the shown session's name in that session's colour, as the colour follows the session everywhere ([MAC.md](../MAC.md) §5). It brings no new colours.
 - **Accessibility.** The sidebar is a region, "Right sidebar", and its tabs a tab group with their counts. Each tab announces what changes in it, politely. Every action has a VoiceOver action, and text keeps 4.5:1.
 
 ### 5.2 The Dock: controls you define
@@ -258,7 +258,7 @@ The candidates the Mac offers, on the macOS 14 SDK the app builds with:
 
 So the sidebar is a column of the app's own, in `TerminalArea`, as the helper pane already is:
 - **The terminal keeps its place.** The frame is always the first child, with the sidebar after it in an `HStack`. SwiftUI never makes the terminal view again, which would restart its tmux client ([split-pane.md](split-pane.md) §6.2).
-- **One step.** Opening, closing and a release of the edge apply in a transaction with no animation.
+- **One step for the terminal.** The terminal's room for the sidebar changes in a transaction with no animation: once the drawer is in, as a close starts, and on a release of the edge. Only the drawer animates, by a move transition, which offsets it and never changes the terminal's size.
 - **The edge** works like `PaneDivider`, with a guide line while it is dragged and the width set on release, 1 point wide as the HIG asks of split views.
 - **Under the conversation.** The terminal's layer and the conversation's both take the right side's width less the sidebar's.
 - **Dock terminals** are `GhosttyTerminal` views (or SwiftTerm's), each attached to its copy's session on `irie-dock`, as the team split's panes are attached to theirs.
@@ -323,7 +323,7 @@ So the sidebar is a column of the app's own, in `TerminalArea`, as the helper pa
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
 | 1 | What it is | a. A right sidebar of tabs inside Irie's window, with cmux's Dock as its first tab. b. Irie itself as a slim window at the screen's edge | **a**; b can come later as a compact window |
-| 2 | How it meets the terminal | a. Peek over it, pin beside it. b. Always beside it, so every open and close resizes every agent. c. Always over it | The research recommended **a** (§3); the owner chose **b** on 2026-11-02, inline after the terminal |
+| 2 | How it meets the terminal | a. Peek over it, pin beside it. b. Always beside it, so every open and close resizes every agent. c. Always over it | The research recommended **a** (§3); the owner chose **b** on 2026-11-02, inline after the terminal, and on 2026-11-08 a drawer that slides in before it settles there |
 | 3 | The Dock's files | a. `.irie/dock.json` in a repo, cmux's `.cmux/dock.json` read when there is none, and your own controls in Irie's own `dock.json`. b. Irie's own files only | **a**, so a cmux Dock works unchanged |
 | 4 | The first tabs | Dock, Changes, Helpers, Plan and Review, or fewer | **All five**, in §7's order |
 | 5 | Task lists on newer models | a. Off: Plan shows plan-mode plans and a note. b. On for every Claude Code session, at a cost in context every turn | **a**, with the setting there for b |

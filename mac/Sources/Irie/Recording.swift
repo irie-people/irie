@@ -1,18 +1,21 @@
+import Accelerate
 import AppKit
 import AVFoundation
 import SwiftUI
 
 /// `Irie --record OUT.mp4 --reel FILE` films the app's own window while a
-/// reel types tasks and moves between cards, then exits (docs/demo/README.md).
+/// reel types tasks, moves between cards, answers an agent and closes and
+/// opens the window, then exits (docs/demo/README.md).
 ///
 /// The window stands far off any screen, as --snapshot's does, and the app
 /// never takes the focus. macOS lets an app read its own windows back from
 /// the window server without the Screen Recording permission, so nothing
 /// asks: each frame is the window as the screen would show it, its terminal
-/// and animations included, which --snapshot's drawing leaves out. A frame
-/// at 2x takes about 30 ms to read back and convert to sRGB, so the film
-/// runs at a steady 30 frames a second; --fps asks for more, and the line
-/// it prints says how many it got.
+/// and animations included, which --snapshot's drawing leaves out. On a
+/// quiet Mac a frame at 2x takes about 30 ms to read back, convert to sRGB
+/// and encode, so the film runs at a steady 30 frames a second; --fps asks
+/// for more, and the line it prints says how many it got and what a frame
+/// took.
 ///
 /// A reel types into the task bar through the defaults that hold its text,
 /// so recording refuses to run as the installed app, whose defaults keep
@@ -63,6 +66,7 @@ enum Recording {
             if let s = reel.size { size = s }
             if let a = reel.appearance { dark = a == "dark" }
             if let p = reel.palette { palette = p }
+            if let b = reel.backdrop { backdrop = b }
             if let s = value("--size") {
                 guard let parsed = Reel.size(s) else { throw RecordError("--size wants WIDTHxHEIGHT in points, such as 1280x800") }
                 size = parsed
@@ -97,31 +101,42 @@ enum Recording {
         ], forName: UserDefaults.argumentDomain)
         UserDefaults.standard.set("", forKey: "taskDraft")
         Theme.use(o.palette)
+        // One phrase under the terminal for the whole film, the same on
+        // every run, rather than one picked at random.
+        PhraseBar.fixed = PhraseBar.phrases.firstIndex(of: PhraseBar.filmed)
 
-        let store = Store(socketPath: CorePaths.socket())
         let window = FilmWindow(contentRect: NSRect(x: -40000, y: -40000, width: o.size.width, height: o.size.height),
                                 styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                 backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: o.dark ? .darkAqua : .aqua)
         window.toolbarStyle = IrieApp.toolbarStyle
         window.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
-        let host = NSHostingView(rootView: ContentView().environment(store))
-        host.sceneBridgingOptions = [.toolbars, .title]
-        window.contentView = host
         window.setFrame(NSRect(x: -40000, y: -40000, width: o.size.width, height: o.size.height), display: true)
-        window.orderFrontRegardless()
-        store.start()
+
+        // The window with a store of its own, as the app has after a
+        // launch: what it shows comes from the core alone. It returns once
+        // the core's sessions are in, or nil after 30 s.
+        func openWindow() async -> Store? {
+            let store = Store(socketPath: CorePaths.socket())
+            let host = NSHostingView(rootView: ContentView().environment(store))
+            host.sceneBridgingOptions = [.toolbars, .title]
+            window.contentView = host
+            window.orderFrontRegardless()
+            store.start()
+            let ready = Date().addingTimeInterval(30)
+            while store.sessions.isEmpty || store.link == .connecting {
+                if Date() > ready {
+                    say("the core at \(store.socketPath) showed no sessions in 30 s")
+                    return nil
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            return store
+        }
 
         // The core's sessions, then a moment for the terminal to attach and
         // draw. A reel's Spawn lines started them before the camera rolls.
-        let ready = Date().addingTimeInterval(30)
-        while store.sessions.isEmpty || store.link == .connecting {
-            if Date() > ready {
-                say("the core at \(store.socketPath) showed no sessions in 30 s")
-                return 1
-            }
-            try? await Task.sleep(nanoseconds: 100_000_000)
-        }
+        guard let store = await openWindow() else { return 1 }
         try? await Task.sleep(nanoseconds: 2_000_000_000)
 
         // An app with no window on screen is napped, and its timers slowed;
@@ -129,7 +144,9 @@ enum Recording {
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
                                                           reason: "Filming Irie's window")
         defer { ProcessInfo.processInfo.endActivity(awake) }
-        let film = Film(url: o.out, window: CGWindowID(window.windowNumber), fps: o.fps, backdrop: o.backdrop)
+        let scale = window.backingScaleFactor
+        let film = Film(url: o.out, window: CGWindowID(window.windowNumber), fps: o.fps, backdrop: o.backdrop,
+                        size: (Int((window.frame.width * scale).rounded()), Int((window.frame.height * scale).rounded())))
         do {
             try film.begin()
         } catch {
@@ -139,7 +156,28 @@ enum Recording {
         var events: [[String: Any]] = []
         let status: Int32
         do {
-            try await o.reel.play(store: store) { what, text in
+            // Close and Open: closing Irie's window quits the app
+            // (IrieApp.swift), and its agents run on in the core's tmux.
+            // The window goes, and its views with their store and terminal;
+            // the film shows the backdrop alone, where the desktop would be.
+            // Open makes the window again with a new store, as a fresh
+            // launch does, and films it from its first frame.
+            let stage = Reel.Stage(
+                close: {
+                    film.blank(true)
+                    window.orderOut(nil)
+                    window.contentView = NSView()
+                },
+                open: {
+                    let opening = Task { await openWindow() }
+                    // Its first frames, before the core's sessions are in,
+                    // are filmed too: they are what a launch shows.
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    film.blank(false)
+                    guard let store = await opening.value else { throw RecordError("the window opened again, but the core showed no sessions") }
+                    return store
+                })
+            try await o.reel.play(store: store, stage: stage) { what, text in
                 var e: [String: Any] = ["ms": Int((film.elapsed * 1000).rounded()), "do": what]
                 if let text { e["text"] = text }
                 events.append(e)
@@ -159,7 +197,7 @@ enum Recording {
             try? data.write(to: log)
         }
         let px = film.pixels, seconds = film.elapsed
-        print("\(o.out.lastPathComponent): \(px.width)x\(px.height), \(String(format: "%.1f", seconds)) s, \(frames) frames (\(String(format: "%.1f", Double(frames) / max(seconds, 0.001))) a second), \(dropped) dropped")
+        print("\(o.out.lastPathComponent): \(px.width)x\(px.height), \(String(format: "%.1f", seconds)) s, \(frames) frames (\(String(format: "%.1f", Double(frames) / max(seconds, 0.001))) a second), \(dropped) dropped; a frame took \(Int(film.cost.read.rounded())) ms to read and \(Int(film.cost.encode.rounded())) ms to encode")
         window.orderOut(nil)
         return status
     }
@@ -187,6 +225,8 @@ final class FilmWindow: NSWindow {
 ///     Set Size 1280x800           the window, in points (filmed at 2x)
 ///     Set Appearance light|dark
 ///     Set Palette evergreen
+///     Set Backdrop E9EBDF         the colour round the window, and in its
+///                                 place while it is closed
 ///     Set TypingSpeed 55ms        the pause between typed keys
 ///     Spawn @acme-api add …       a session record.sh starts before filming
 ///     Sleep 1.5s | 500ms
@@ -194,6 +234,10 @@ final class FilmWindow: NSWindow {
 ///     Enter                       starts what the task bar holds
 ///     Down [N] | Up [N]           the next or previous card, N times
 ///     Show N                      the Nth card in the list
+///     Answer "text"               types into the shown session's terminal,
+///                                 then Return
+///     Close                       closes the window, which quits the app
+///     Open                        opens it again, as a fresh launch does
 ///     Wait STATE [TIMEOUT]        until the newest session is in STATE
 ///
 /// Blank lines and lines starting with # are comments.
@@ -204,13 +248,23 @@ struct Reel {
         case enter
         case step(Int)
         case show(Int)
+        case answer(String)
+        case close
+        case open
         case wait(String, Double)
+    }
+
+    /// What Close and Open do to the window: the recording films it.
+    struct Stage {
+        var close: @MainActor () -> Void
+        var open: @MainActor () async throws -> Store
     }
 
     var steps: [Step] = []
     var size: CGSize?
     var appearance: String?
     var palette: String?
+    var backdrop: CGColor?
     var typing = 0.055
 
     init(text: String) throws {
@@ -232,6 +286,9 @@ struct Reel {
                     guard ["light", "dark"].contains(kv[1]) else { throw bad("Appearance is light or dark") }
                     appearance = kv[1]
                 case "Palette": palette = kv[1]
+                case "Backdrop":
+                    guard let c = Recording.Options.color(kv[1]) else { throw bad("Backdrop wants a colour as RRGGBB") }
+                    backdrop = c
                 case "TypingSpeed":
                     guard let d = Self.duration(kv[1]) else { throw bad("TypingSpeed wants a duration") }
                     typing = d
@@ -241,12 +298,14 @@ struct Reel {
             case "Sleep":
                 guard let d = Self.duration(rest) else { throw bad("Sleep wants a duration such as 1.5s or 500ms") }
                 steps.append(.sleep(d))
-            case "Type":
+            case "Type", "Answer":
                 var t = rest
                 if t.count >= 2, t.hasPrefix("\""), t.hasSuffix("\"") { t = String(t.dropFirst().dropLast()) }
-                guard !t.isEmpty else { throw bad("Type wants text") }
-                steps.append(.type(t))
+                guard !t.isEmpty else { throw bad("\(parts[0]) wants text") }
+                steps.append(parts[0] == "Type" ? .type(t) : .answer(t))
             case "Enter": steps.append(.enter)
+            case "Close": steps.append(.close)
+            case "Open": steps.append(.open)
             case "Down", "Up":
                 let count = rest.isEmpty ? 1 : Int(rest) ?? 0
                 guard count > 0 else { throw bad("\(parts[0]) takes a count") }
@@ -279,14 +338,22 @@ struct Reel {
     }
 
     /// Plays the steps against the store, as the user's hands would, and
-    /// reports each one as it starts.
+    /// reports each one as it starts. Close and Open go through the stage,
+    /// and the window that opens again brings a store of its own.
     @MainActor
-    func play(store: Store, log: (String, String?) -> Void) async throws {
+    func play(store first: Store, stage: Stage, log: (String, String?) -> Void) async throws {
         func pause(_ s: Double) async throws { try await Task.sleep(nanoseconds: UInt64(max(0, s) * 1_000_000_000)) }
+        var store = first
+        var closed = false
         // When the last Enter was pressed: Wait looks only at sessions
         // started since, so it never takes an older one for the new task.
         var since: Date?
         for step in steps {
+            switch step {
+            case .sleep, .open: break
+            default:
+                if closed { throw RecordError("the window is closed: Open it before the next step") }
+            }
             switch step {
             case let .sleep(s):
                 try await pause(s)
@@ -308,7 +375,7 @@ struct Reel {
                 // starts behind it.
                 UserDefaults.standard.set("", forKey: "taskDraft")
                 since = Date()
-                if !text.isEmpty { Task { _ = await store.input(text) } }
+                if !text.isEmpty { Task { [store] in _ = await store.input(text) } }
             case let .step(n):
                 for i in 0..<abs(n) {
                     log(n > 0 ? "down" : "up", nil)
@@ -318,6 +385,28 @@ struct Reel {
             case let .show(row):
                 log("show", String(row))
                 store.showRow(row)
+            case let .answer(text):
+                // As a person answers in the agent's own terminal: the keys
+                // go through the core, which alone writes to tmux, at the
+                // reel's typing speed, then Return.
+                guard let id = store.selection else { throw RecordError("Answer types into the shown session: Show one first") }
+                log("answer", text)
+                for (i, ch) in text.enumerated() {
+                    _ = try await store.client.call("keys", FilmKeys(session: id, text: String(ch)), as: Empty.self)
+                    try await pause(typing * (ch == " " ? 1.5 : i % 4 == 3 ? 1.3 : 0.85))
+                }
+                try await pause(typing * 4)
+                _ = try await store.client.call("keys", FilmKeys(session: id, keys: ["Enter"]), as: Empty.self)
+            case .close:
+                log("close", nil)
+                stage.close()
+                closed = true
+            case .open:
+                guard closed else { throw RecordError("Open comes after Close") }
+                log("open", nil)
+                store = try await stage.open()
+                closed = false
+                log("opened", nil)
             case let .wait(state, timeout):
                 let until = Date().addingTimeInterval(timeout)
                 while store.sessions.filter({ s in since.map { s.created >= $0 } ?? true })
@@ -331,25 +420,52 @@ struct Reel {
     }
 }
 
-/// Films one of the app's windows to an H.264 MP4, at a steady rate, from a
-/// queue of its own so the window keeps drawing on time.
+/// The core's keys op (internal/ipc/screen.go): keys pressed by name, or
+/// text typed without Return, in a session's terminal.
+struct FilmKeys: Encodable {
+    var session: String
+    var keys: [String]?
+    var text: String?
+}
+
+/// Films one of the app's windows to an H.264 MP4, at a steady rate, from
+/// queues of its own so the window keeps drawing on time: one reads the
+/// window back on the beat, the other draws and encodes each picture, so a
+/// slow frame on a busy Mac never holds up the next one's reading.
 final class Film: @unchecked Sendable {
     private let url: URL
     private let window: CGWindowID
     private let fps: Int
     private let backdrop: CGColor
     private let queue = DispatchQueue(label: "Irie film", qos: .userInitiated)
+    private let encoder = DispatchQueue(label: "Irie film encoding", qos: .userInitiated)
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var timer: DispatchSourceTimer?
     private var start: CFTimeInterval = 0
+    // On queue: the window's pictures read and on their way to the
+    // encoder, past which a reading is dropped, and the time reading took.
+    private var pending = 0
+    private var skipped = 0
+    private var reads = 0
+    private var reading = 0.0
+    // On encoder: what went into the video, and the time it took.
     private var last = CMTime.negativeInfinity
     private var frames = 0
     private var dropped = 0
+    private var encoding = 0.0
+    /// While the window is closed: each frame is the backdrop alone.
+    private var empty = false
     private(set) var pixels = (width: 0, height: 0)
+    /// The window's size in pixels, which every picture of it must have.
+    private let size: (width: Int, height: Int)
+    /// What one frame took on average, in milliseconds: reading the window
+    /// back, then drawing and encoding it. Set by finish().
+    private(set) var cost = (read: 0.0, encode: 0.0)
 
-    init(url: URL, window: CGWindowID, fps: Int, backdrop: CGColor) {
+    init(url: URL, window: CGWindowID, fps: Int, backdrop: CGColor, size: (width: Int, height: Int)) {
+        self.size = size
         self.url = url
         self.window = window
         self.fps = fps
@@ -378,7 +494,16 @@ final class Film: @unchecked Sendable {
 
     func begin() throws {
         try queue.sync {
-            guard let first = grab() else { throw RecordError("the window server gave no picture of the window") }
+            // The first picture sets the frame; one of the wrong size is
+            // asked for again.
+            var picture = grab()
+            for _ in 0..<20 where picture.map({ $0.width != size.width || $0.height != size.height }) ?? true {
+                Thread.sleep(forTimeInterval: 0.05)
+                picture = grab()
+            }
+            guard let first = picture, first.width == size.width, first.height == size.height else {
+                throw RecordError("the window server gave no picture of the window at its size, \(size.width)x\(size.height)")
+            }
             // H.264 wants even sides.
             pixels = (first.width & ~1, first.height & ~1)
             try? FileManager.default.removeItem(at: url)
@@ -414,8 +539,11 @@ final class Film: @unchecked Sendable {
             self.input = input
             self.adaptor = adaptor
             start = CACurrentMediaTime()
-            append(first, at: 0)
-            let timer = DispatchSource.makeTimerSource(queue: queue)
+            encoder.sync { append(first, bytes: first.dataProvider?.data, at: 0) }
+            // Strict: a busy or idle Mac stretches an ordinary timer's beat
+            // to save power, here from 33 ms to some 150, which held the film
+            // to 7 frames a second. A film lasts a minute or so.
+            let timer = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
             timer.schedule(deadline: .now() + 1.0 / Double(fps), repeating: 1.0 / Double(fps), leeway: .milliseconds(1))
             timer.setEventHandler { [weak self] in self?.tick() }
             self.timer = timer
@@ -423,18 +551,112 @@ final class Film: @unchecked Sendable {
         }
     }
 
-    private func tick() {
-        let t = CACurrentMediaTime() - start
-        guard let image = grab() else {
-            dropped += 1
-            return
-        }
-        append(image, at: t)
+    /// Films the backdrop alone from now on, while the window is closed, or
+    /// the window again.
+    func blank(_ on: Bool) {
+        queue.sync { empty = on }
     }
 
-    /// Draws the picture onto the backdrop, which shows in the window's
-    /// rounded corners, converted to sRGB, and adds it at its time.
-    private func append(_ image: CGImage, at t: Double) {
+    private func tick() {
+        let t = CACurrentMediaTime() - start
+        // Two pictures waiting is as far as the encoder may fall behind.
+        guard pending < 2 else {
+            skipped += 1
+            return
+        }
+        let image: CGImage?
+        let bytes: CFData?
+        if empty {
+            (image, bytes) = (nil, nil)
+        } else {
+            // The window server's picture, and its bytes, which come over
+            // only when asked for.
+            let began = CACurrentMediaTime()
+            guard let read = grab() else {
+                skipped += 1
+                return
+            }
+            // Now and then, as a terminal attaches or a card starts, the
+            // window server hands back a picture wider than the window,
+            // the window shifted right within it. The window keeps its size
+            // through a reel, so such a picture is left out and the film
+            // holds the frame before.
+            guard read.width == size.width, read.height == size.height else {
+                skipped += 1
+                return
+            }
+            image = read
+            bytes = read.dataProvider?.data
+            reading += CACurrentMediaTime() - began
+            reads += 1
+        }
+        pending += 1
+        encoder.async { [self, image, bytes] in
+            append(image, bytes: bytes, at: t)
+            queue.async { self.pending -= 1 }
+        }
+    }
+
+    /// Converts the picture's colours, those of the screen, to sRGB with
+    /// Accelerate: about a quarter of what Core Graphics' drawing takes on
+    /// a frame at 2x, which held the film to 10 frames a second on a busy
+    /// Mac. One converter serves every picture of the same kind.
+    private var converter: (space: CGColorSpace, info: CGBitmapInfo, bits: Int, convert: vImageConverter)?
+    private lazy var sRGBFormat = vImage_CGImageFormat(
+        bitsPerComponent: 8, bitsPerPixel: 32, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue))!
+
+    /// Puts the picture into the frame in sRGB, its top-left corner at the
+    /// frame's, and lays its rounded corners, which are clear, over the
+    /// backdrop. False when the picture is not the frame's size or kind.
+    private func convert(_ image: CGImage, bytes: CFData, into buffer: CVPixelBuffer) -> Bool {
+        guard image.width >= pixels.width, image.height >= pixels.height, let space = image.colorSpace else { return false }
+        if let c = converter, c.space == space, c.info == image.bitmapInfo, c.bits == image.bitsPerPixel {
+            // The same kind of picture as the last.
+        } else {
+            guard let format = vImage_CGImageFormat(cgImage: image),
+                  let made = try? vImageConverter.make(sourceFormat: format, destinationFormat: sRGBFormat) else { return false }
+            converter = (space, image.bitmapInfo, image.bitsPerPixel, made)
+        }
+        let source = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: CFDataGetBytePtr(bytes)),
+                                   height: vImagePixelCount(pixels.height), width: vImagePixelCount(pixels.width),
+                                   rowBytes: image.bytesPerRow)
+        var frame = vImage_Buffer(data: CVPixelBufferGetBaseAddress(buffer), height: vImagePixelCount(pixels.height),
+                                  width: vImagePixelCount(pixels.width), rowBytes: CVPixelBufferGetBytesPerRow(buffer))
+        guard (try? converter!.convert.convert(source: source, destination: &frame)) != nil else { return false }
+        // The corners: what shows through each clear or half-clear pixel
+        // is the backdrop, as when Core Graphics draws over it.
+        let c = backdrop.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?.components ?? [0, 0, 0, 1]
+        let under = (b: Int(c[2] * 255 + 0.5), g: Int(c[1] * 255 + 0.5), r: Int(c[0] * 255 + 0.5))
+        let side = min(48, pixels.width / 2, pixels.height / 2)
+        let row = CVPixelBufferGetBytesPerRow(buffer)
+        let base = CVPixelBufferGetBaseAddress(buffer)!.assumingMemoryBound(to: UInt8.self)
+        for y0 in [0, pixels.height - side] {
+            for x0 in [0, pixels.width - side] {
+                for y in y0..<y0 + side {
+                    var p = base + y * row + x0 * 4
+                    for _ in 0..<side {
+                        let clear = 255 - Int(p[3])
+                        if clear > 0 {
+                            p[0] = UInt8(Int(p[0]) + (under.b * clear + 127) / 255)
+                            p[1] = UInt8(Int(p[1]) + (under.g * clear + 127) / 255)
+                            p[2] = UInt8(Int(p[2]) + (under.r * clear + 127) / 255)
+                            p[3] = 255
+                        }
+                        p += 4
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    /// Puts the picture into a frame in sRGB, over the backdrop, which shows
+    /// in the window's rounded corners, and adds it at its time. With no
+    /// picture the frame is the backdrop alone.
+    private func append(_ image: CGImage?, bytes: CFData?, at t: Double) {
+        let began = CACurrentMediaTime()
+        defer { encoding += CACurrentMediaTime() - began }
         guard let input, let adaptor, input.isReadyForMoreMediaData, let pool = adaptor.pixelBufferPool else {
             dropped += 1
             return
@@ -446,14 +668,18 @@ final class Film: @unchecked Sendable {
             return
         }
         CVPixelBufferLockBaseAddress(buffer, [])
-        if let space = CGColorSpace(name: CGColorSpace.sRGB),
-           let ctx = CGContext(data: CVPixelBufferGetBaseAddress(buffer), width: pixels.width, height: pixels.height,
-                               bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer), space: space,
-                               bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+        if let image, let bytes, convert(image, bytes: bytes, into: buffer) {
+            // Done: the quick way.
+        } else if let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let ctx = CGContext(data: CVPixelBufferGetBaseAddress(buffer), width: pixels.width, height: pixels.height,
+                                      bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer), space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
             ctx.setFillColor(backdrop)
             ctx.fill(CGRect(x: 0, y: 0, width: pixels.width, height: pixels.height))
             // Top-left aligned: the origin is at the bottom.
-            ctx.draw(image, in: CGRect(x: 0, y: pixels.height - image.height, width: image.width, height: image.height))
+            if let image {
+                ctx.draw(image, in: CGRect(x: 0, y: pixels.height - image.height, width: image.width, height: image.height))
+            }
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
         let at = CMTime(seconds: t, preferredTimescale: 60000)
@@ -469,11 +695,16 @@ final class Film: @unchecked Sendable {
     /// Stops filming and closes the file: how many frames went in, how many
     /// were dropped, and why it failed, if it did.
     func finish() async -> (Int, Int, Error?) {
-        let (writer, counts): (AVAssetWriter?, (Int, Int)) = queue.sync {
+        // The beat stops first; the encoder then takes what is on its way.
+        let (missed, read) = queue.sync {
             timer?.cancel()
             timer = nil
+            return (skipped, reads > 0 ? reading / Double(reads) * 1000 : 0)
+        }
+        let (writer, counts): (AVAssetWriter?, (Int, Int)) = encoder.sync {
             input?.markAsFinished()
-            return (self.writer, (frames, dropped))
+            cost = (read, frames > 0 ? encoding / Double(frames) * 1000 : 0)
+            return (self.writer, (frames, dropped + missed))
         }
         guard let writer else { return (counts.0, counts.1, RecordError("it never started")) }
         await writer.finishWriting()

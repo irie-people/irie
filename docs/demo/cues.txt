@@ -55,6 +55,24 @@ write tests for the cart |
 translate the signup page |
 	prompt, sleep:2s, (tool:Glob, sleep:6s, tool:MultiEdit, sleep:6s) * 10, stop
 
+# The Mac app's reels. needs-you's question comes about half a minute
+# after its spawn, once the camera rolls; close-the-window's agents work
+# quickly, so their terminals have moved on by the time the window opens
+# again; local's hard job runs on +claude beside the small one on +local,
+# which is "fix a typo in the readme" above.
+make the signup button stand out |
+	prompt, sleep:2s, (tool:Grep, sleep:4s, tool:Glob, sleep:4s, tool:MultiEdit, sleep:4s) * 2,
+	tool:Grep, sleep:3s, ask, sleep:2s, (tool:MultiEdit, sleep:5s, tool:Grep, sleep:4s) * 10, stop
+document the orders api |
+	prompt, sleep:2s, (tool:Grep, sleep:2s, tool:MultiEdit, sleep:3s, tool:TodoWrite, sleep:2s) * 12, stop
+speed up the product page |
+	prompt, sleep:2s, (tool:Glob, sleep:2s, tool:Grep, sleep:2s, tool:MultiEdit, sleep:3s) * 12, stop
+add receipts to the invoices |
+	prompt, sleep:2s, (tool:Grep, sleep:3s, tool:MultiEdit, sleep:3s) * 14, stop
+redesign the retry queue |
+	prompt, sleep:3s, (tool:Grep, sleep:5s, tool:Glob, sleep:4s, tool:MultiEdit, sleep:6s, tool:TodoWrite, sleep:4s) * 10,
+	stop
+
 # Anything else, such as a task typed by hand into the sandbox.
 * |
 	prompt, sleep:3s, tool:Grep, sleep:5s, tool:MultiEdit, sleep:5s, tool:TodoWrite, sleep:4s, stop
