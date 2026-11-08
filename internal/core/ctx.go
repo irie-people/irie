@@ -262,7 +262,16 @@ func (c *Core) context(a ipc.ContextArgs) (ipc.ContextResult, error) {
 		return ipc.ContextResult{}, ipc.Errorf(ipc.CodeInternal, "the context store: %v", err)
 	}
 	r := ipc.ContextResult{Repo: st.Dir()}
-	if a.Action == ipc.ContextWhere {
+	switch a.Action {
+	case ipc.ContextWhere:
+		return r, nil
+	case ipc.ContextClean:
+		r.KeepDays = c.cfg().Context.KeepDays
+		gone, err := c.ctxExpire()
+		r.Removed = gone
+		if err != nil {
+			return r, ipc.Errorf(ipc.CodeInternal, "%v", err)
+		}
 		return r, nil
 	}
 	if a.Session == "" {
@@ -332,7 +341,54 @@ func (c *Core) context(a ipc.ContextArgs) (ipc.ContextResult, error) {
 		}
 		return r, nil
 	}
-	return r, ipc.Errorf(ipc.CodeBadArgs, "no context action %q: log, sync, resolve, tag or where", a.Action)
+	return r, ipc.Errorf(ipc.CodeBadArgs, "no context action %q: log, sync, resolve, tag, clean or where", a.Action)
+}
+
+// How often the core lets go of old contexts: a little after it starts,
+// then every few hours.
+const (
+	ctxSweepFirst = 2 * time.Minute
+	ctxSweepEvery = 6 * time.Hour
+)
+
+// ctxSweep lets go of the contexts kept past context.keep_days, over and
+// over for as long as the core runs.
+func (c *Core) ctxSweep() {
+	time.Sleep(ctxSweepFirst)
+	for {
+		if _, err := c.ctxExpire(); err != nil {
+			c.log.Warn("contexts", "expire", err)
+		}
+		time.Sleep(ctxSweepEvery)
+	}
+}
+
+// ctxExpire lets go of the contexts kept past context.keep_days: a closed
+// session's once its newest turn is that old (DESIGN §4.13). With 0 every
+// context is kept, and with no store yet there is nothing to do.
+func (c *Core) ctxExpire() ([]string, error) {
+	days := c.cfg().Context.KeepDays
+	if days <= 0 {
+		return nil, nil
+	}
+	if _, err := os.Stat(c.paths.ContextStore()); err != nil {
+		return nil, nil
+	}
+	st, err := c.ctxStore()
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	open := make(map[string]bool, len(c.sessions))
+	for id := range c.sessions {
+		open[id] = true
+	}
+	c.mu.Unlock()
+	gone, err := st.Expire(time.Duration(days)*24*time.Hour, func(id string) bool { return open[id] }, time.Now())
+	if len(gone) > 0 {
+		c.log.Info("contexts let go", "sessions", len(gone), "keep_days", days)
+	}
+	return gone, err
 }
 
 func wireTurn(t ctxgit.Turn) ipc.ContextTurn {

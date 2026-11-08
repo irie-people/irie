@@ -44,6 +44,6 @@ Rebuild Irie on git, for context forking and git operations on the context itsel
 
 ## Decisions for the owner
 
-1. **Retention.** Contexts are kept until `context.git` is deleted. Claude Code's own sweep deletes transcripts after 30 days (`cleanupPeriodDays`). Keep them forever, follow that setting, or add `context.keep_days`?
+1. **Retention.** Settled on 2026-11-02: the owner chose to clean contexts up after a time each user sets. `context.keep_days`, 30 by default, as Claude Code keeps its own transcripts, and 0 for good; the Mac app's Settings window sets it (DESIGN §4.13).
 2. **Forks as jots.** A fork with a task and a worktree is a jot like any other, so the jot dog sees its work through to `live`. A race's forks should probably be exempt: only the winner lands.
 3. **What is published.** Race numbers can go on the site without prompts or code (profile, task class, time, tokens, cost, pass), or with them for tasks that are public.

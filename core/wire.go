@@ -148,6 +148,7 @@ const (
 	ContextResolve     = ipc.ContextResolve
 	ContextTag         = ipc.ContextTag
 	ContextWhere       = ipc.ContextWhere
+	ContextClean       = ipc.ContextClean
 	OpFreeze           = ipc.OpFreeze
 	OpThaw             = ipc.OpThaw
 	OpPriority         = ipc.OpPriority

@@ -500,6 +500,7 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[tmux]\npath = \"tmux\"\n", "path"},
 		{"[ui]\nsidebar_width = \"wide\"\n", "sidebar_width"},
 		{"[journal]\nkeep_days = 0\n", "keep_days"},
+		{"[context]\nkeep_days = -1\n", "context.keep_days"},
 		{"[journal]\ntool_input = \"everything\"\n", "tool_input"},
 		{"[hold]\nmax = \"0s\"\n", "hold.max"},
 		{"[skills]\ndisabled = [\"Present\"]\n", "skills.disabled"},

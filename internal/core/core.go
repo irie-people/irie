@@ -362,6 +362,7 @@ func Run(o Options) error {
 		c.log.Warn("peers", "err", err)
 	}
 	go c.checkMachine()
+	go c.ctxSweep()
 	go c.leftoverSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours

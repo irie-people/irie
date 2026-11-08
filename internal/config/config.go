@@ -39,6 +39,7 @@ type Config struct {
 	Worktree Worktree           `toml:"worktree"`
 	Tmux     Tmux               `toml:"tmux"`
 	Journal  Journal            `toml:"journal"`
+	Context  Context            `toml:"context"`
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
 	Skills   Skills             `toml:"skills"`
@@ -591,6 +592,14 @@ type Journal struct {
 	ToolInput string `toml:"tool_input"` // summary | none
 }
 
+// Context is the context store, where each session's conversation is kept
+// in git, a commit per turn (DESIGN §4.13).
+type Context struct {
+	// KeepDays is how long a closed session's context stays once its newest
+	// turn is that many days old; 0 keeps every context for good.
+	KeepDays int `toml:"keep_days"`
+}
+
 // Hold is how long a paused agent may be held. Hook timeouts are set above
 // it, so a harness never lets a held call through on its own.
 type Hold struct {
@@ -688,6 +697,7 @@ func Default() Config {
 		},
 		Tmux:    Tmux{Socket: "irie"},
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
+		Context: Context{KeepDays: 30},
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true},
 		Skills:  Skills{Enabled: true, Disabled: []string{}},
@@ -802,6 +812,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Worktree *Worktree                 `toml:"worktree"`
 		Tmux     *Tmux                     `toml:"tmux"`
 		Journal  *Journal                  `toml:"journal"`
+		Context  *Context                  `toml:"context"`
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
 		Skills   *Skills                   `toml:"skills"`
@@ -816,7 +827,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Learn    *Learn                    `toml:"learn"`
 		VPN      *VPN                      `toml:"vpn"`
 		Browser  *Browser                  `toml:"browser"`
-	}{Browser: &c.Browser, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Browser: &c.Browser, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1187,6 +1198,9 @@ func (c Config) Validate() error {
 	}
 	if c.Journal.KeepDays < 1 {
 		bad("journal.keep_days = %d: must be at least 1", c.Journal.KeepDays)
+	}
+	if c.Context.KeepDays < 0 {
+		bad("context.keep_days = %d: must be 0, to keep contexts for good, or more", c.Context.KeepDays)
 	}
 	if c.Journal.ToolInput != "summary" && c.Journal.ToolInput != "none" {
 		bad("journal.tool_input = %q: must be summary or none", c.Journal.ToolInput)

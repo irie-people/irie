@@ -431,6 +431,56 @@ func TestATurnsBookkeepingMakesNoCommitOfItsOwn(t *testing.T) {
 	}
 }
 
+func TestExpireLetsGoOfOldContextsButNotOpenOrTaggedOnes(t *testing.T) {
+	st := open(t)
+	dir := t.TempDir()
+	mk := func(id string, at time.Time, words string) string {
+		x := newTx(t, dir, id)
+		x.clock = at
+		x.prompt(words)
+		x.reply("ok")
+		head, err := st.Sync(Session{ID: id, Transcripts: []string{x.path}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return head
+	}
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	old := mk("s0old", now.AddDate(0, 0, -40), "an old task")
+	mk("s0new", now.AddDate(0, 0, -2), "a new task")
+	mk("s0open", now.AddDate(0, 0, -60), "an open task")
+	tagged := mk("s0tagged", now.AddDate(0, 0, -50), "a tagged task")
+	if err := st.Tag("keep-me", tagged); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := st.Expire(30*24*time.Hour, func(id string) bool { return id == "s0open" }, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(gone, " ") != "s0old s0tagged" {
+		t.Fatalf("expired %v", gone)
+	}
+	if got := gitIn(t, st.Dir(), "for-each-ref", "--format=%(refname)"); got != "refs/heads/s0new\nrefs/heads/s0open\nrefs/tags/keep-me" {
+		t.Fatalf("refs left:\n%s", got)
+	}
+	// The old context is gone from the disk; the tagged one's turns stay.
+	cmd := exec.Command("git", "--git-dir="+st.Dir(), "cat-file", "-e", old+"^{commit}")
+	cmd.Env = Env()
+	if cmd.Run() == nil {
+		t.Fatal("the expired context's commit is still there")
+	}
+	gitIn(t, st.Dir(), "cat-file", "-e", tagged+"^{commit}")
+	gitIn(t, st.Dir(), "fsck", "--strict")
+	// Nothing more to let go while it stays open; once it is closed, it goes.
+	isOpen := func(id string) bool { return id == "s0open" }
+	if again, err := st.Expire(30*24*time.Hour, isOpen, now); err != nil || len(again) != 0 {
+		t.Fatalf("expired again %v %v", again, err)
+	}
+	if closed, err := st.Expire(30*24*time.Hour, func(string) bool { return false }, now); err != nil || strings.Join(closed, " ") != "s0open" {
+		t.Fatalf("once closed, expired %v %v", closed, err)
+	}
+}
+
 func TestReplacePathStopsAtLongerNames(t *testing.T) {
 	in := `{"a":"/x/app","b":"/x/app/main.go","c":"/x/app-2/main.go","d":"cd /x/app && ls","e":"/x/apps"}`
 	got := string(replacePath([]byte(in), []byte("/x/app"), []byte("/y/fork")))

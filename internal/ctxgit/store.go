@@ -688,6 +688,58 @@ func lineUUID(b []byte, l *line) string {
 	return l.UUID
 }
 
+// Expire lets go of the contexts kept past keep: the branch of each
+// session whose newest turn is older than keep, unless open says the
+// session is still open, and each rewound line of that age. Git then
+// forgets what no branch or tag holds any more, reflogs included, so what
+// went is gone from the disk too. A tag keeps the turns it names. It
+// returns the sessions whose contexts went.
+func (st *Store) Expire(keep time.Duration, open func(session string) bool, now time.Time) ([]string, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	out, err := st.git(nil, "for-each-ref", "--format=%(refname)%09%(committerdate:unix)", "refs/heads/", "refs/irie/rewound/")
+	if err != nil {
+		return nil, err
+	}
+	cutoff := now.Add(-keep).Unix()
+	var refs, sessions []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		ref, stamp, ok := strings.Cut(line, "\t")
+		when, err := strconv.ParseInt(stamp, 10, 64)
+		if !ok || err != nil || when >= cutoff {
+			continue
+		}
+		if id, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+			if open(id) {
+				continue
+			}
+			sessions = append(sessions, id)
+		}
+		refs = append(refs, ref)
+	}
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	var in bytes.Buffer
+	for _, r := range refs {
+		in.WriteString("delete " + r + "\n")
+	}
+	if _, err := st.git(in.Bytes(), "update-ref", "--stdin"); err != nil {
+		return nil, err
+	}
+	for _, id := range sessions {
+		delete(st.heads, id)
+	}
+	// The core is the store's one writer and holds st.mu, so nothing is
+	// written while git prunes.
+	at := fmt.Sprintf("@%d", cutoff)
+	if _, err := st.git(nil, "reflog", "expire", "--expire="+at, "--expire-unreachable="+at, "--all"); err != nil {
+		return sessions, err
+	}
+	_, err = st.git(nil, "gc", "--quiet", "--prune=now")
+	return sessions, err
+}
+
 // StartBranch makes a session's branch start at commit, as a fork's does. The
 // branch must not exist yet.
 func (st *Store) StartBranch(session, commit string) error {
