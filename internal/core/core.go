@@ -76,6 +76,8 @@ type Core struct {
 	lidMu       sync.Mutex  // guards lid; taken after mu and awakeMu
 	lid         lidHold     // what the core did to the Mac's sleep, for a closed lid
 
+	leftSweeping atomic.Bool // the look for Iries whose run is over (leftovers.go)
+
 	// What the freeze dog knows of Irie's own processes, to keep them
 	// running (steady.go): the tmux server's pid, which only the dog reads
 	// and writes, and the sidebar's process group, which each tick sets.
@@ -322,6 +324,7 @@ func Run(o Options) error {
 		c.log.Warn("peers", "err", err)
 	}
 	go c.checkMachine()
+	go c.leftoverSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -362,6 +365,9 @@ func Run(o Options) error {
 			}
 			if n%machineEvery == 0 {
 				go c.checkMachine()
+			}
+			if n%leftoverEvery == 0 {
+				go c.leftoverSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())

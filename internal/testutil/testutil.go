@@ -229,6 +229,9 @@ func NewEnv(t *testing.T) *Env {
 	// Nor does it turn the Mac's sleep off and on for a closed lid (DESIGN
 	// §4.12): that would be the user's own Mac, and its lid.
 	t.Setenv("IRIE_LID", "off")
+	// Nor does it stop the Iries of other test runs and agents (DESIGN §2.9):
+	// the tests that run beside it are using theirs.
+	t.Setenv("IRIE_LEFTOVERS", "off")
 	for _, k := range []string{"TMUX", "TMUX_PANE", "IRIE_BIN"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
