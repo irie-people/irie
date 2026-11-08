@@ -1,0 +1,49 @@
+# Close the window, and the agents keep working, for the site's box beside
+# "Each agent runs in tmux" (site/how-it-works.html) and a social reel.
+# Three agents are at work; one is shown. The window closes, which quits
+# the app, and opens again with nothing of the old one: the cards come back
+# where they were, still working, and the shown agent's terminal has moved
+# on meanwhile.
+# Film it with docs/demo/record.sh, then cut it with docs/demo/cut.sh;
+# the steps are in docs/demo/README.md.
+#
+# A window's first terminal can hold its drawing up for some seconds on a
+# busy Mac, so each Show is followed by two Sleeps: the first ends when the
+# window draws again, and the second is seen. The window that opens again
+# takes as long to connect and draw its terminal. The cuts keep two seconds
+# of the closed window, then jump to the window as it opens and connects,
+# and over the empty list it shows until the core's sessions are in. The
+# jumps are timed for the film of 8 November 2026; check them against the
+# frames after filming again.
+#
+# The phone cut stays on the cards: they go, the window's place is empty
+# while it is closed, and they come back where they were, still working.
+# cut: jump close+2 open+1.8
+# cut: jump open+2.45 opened-0.25
+# cut: site close-4 end opened+1
+# cut: phone close-3 end
+# cut: shot close-3 540 0 0
+# cut: caption close-0.9 open+1.85 top Close the window. They keep working.
+# cut: caption opened-0.2 end top Open it again: nothing stopped.
+# cut: readme close-2 opened+2
+# cut: sheet close-1.5 close+1.2 opened+0.4 opened+3 down+1.5
+Set Size 1024x640
+Set Appearance light
+Set Palette evergreen
+Set Backdrop E9EBDF
+
+Spawn @acme-api document the orders api
+Spawn @acme-web speed up the product page
+Spawn @acme-billing add receipts to the invoices
+
+Sleep 500ms
+Show 2
+Sleep 1s
+Sleep 5s
+Close
+Sleep 3.5s
+Open
+Sleep 1s
+Sleep 4s
+Down
+Sleep 3.5s

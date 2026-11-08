@@ -12,7 +12,9 @@
 # `source $root/env.sh` and run `irie`.
 #
 # A tape's "# irie-demo:" lines set ui.sidebar_width and where the captions
-# go; its "# chapter:" and "# caption:" lines become the captions.
+# go; its "# chapter:" and "# caption:" lines become the captions. A tape or
+# reel with "# irie-demo: local = ollama" gets a +local that runs: Irie's own
+# Ollama server is then the repo's fakeollama, with one model.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -57,6 +59,14 @@ down() {
 directive() {
 	[ -n "$tape" ] || return 0
 	sed -n "s/^# irie-demo: $1 = //p" "$tape" | tail -n 1
+}
+
+# free_port prints a TCP port on 127.0.0.1 that nothing listens on now, for
+# Irie's own Ollama server, which must not meet the user's.
+free_port() {
+	perl -MIO::Socket::INET -e '
+		my $s = IO::Socket::INET->new(Listen => 1, LocalAddr => "127.0.0.1", LocalPort => 0) or die "no free port: $!\n";
+		print $s->sockport, "\n";'
 }
 
 # utf8_locale prints a UTF-8 locale this machine has. grep reads to the end:
@@ -182,8 +192,10 @@ EOF
 }
 
 make_sandbox() {
-	local root home locale tool width
+	local root home locale tool width runtime port local_env local_profile
 	[ -z "$tape" ] || [ -f "$tape" ] || die "no tape $tape"
+	runtime=$(directive local)
+	case $runtime in "" | ollama) ;; *) die "local = $runtime: the sandbox runs ollama only" ;; esac
 	command -v go >/dev/null || die "go is not installed"
 	command -v tmux >/dev/null || die "tmux is not installed"
 	command -v git >/dev/null || die "git is not installed"
@@ -201,6 +213,28 @@ make_sandbox() {
 	# of any stack trace that could reach the screen.
 	(cd "$repo" && go build -trimpath -o "$root/bin/irie" ./cmd/irie)
 	(cd "$repo" && go build -trimpath -o "$root/bin/fakeagent" ./internal/testutil/fakeagent)
+	# +local, when asked for, on Irie's own Ollama server, which here is the
+	# repo's fakeollama: Irie starts it, checks the model's context and the
+	# memory it takes before the agent starts, and points the agent at it,
+	# as it would a real model (DESIGN §6.1, §6.3). The agent is the
+	# stand-in, as for every profile. The core reads a fixed machine, 16 GiB
+	# with 10 free, so the check comes out the same on every Mac.
+	local_env= local_profile='# A profile whose CLI is not installed, for a spawn that fails.
+[profiles.local]
+command = "local-agent"'
+	if [ "$runtime" = ollama ]; then
+		(cd "$repo" && go build -trimpath -o "$root/bin/fakeollama" ./internal/testutil/fakeollama)
+		printf '[{"name": "qwen3.5:9b", "size": 6600000000, "tools": true}]\n' >"$root/ollama-models.json"
+		port=$(free_port)
+		local_env="export IRIE_FAKE_OLLAMA_MODELS='$root/ollama-models.json' IRIE_FAKE_MEMORY=16/10"
+		local_profile="# +local, on Irie's own Ollama server: the repo's fakeollama.
+[profiles.local]
+command = \"$root/bin/claude\"
+
+[local]
+ollama = \"$root/bin/fakeollama\"
+port = $port"
+	fi
 	cp "$here/claude" "$here/cue" "$root/bin/"
 	cp "$here/cues.txt" "$root/"
 	# Tools join the sandbox's PATH as links, so PATH names no user directory.
@@ -226,6 +260,7 @@ export GIT_CONFIG_NOSYSTEM=1
 export IRIE_FAKE_PLUGINS=1
 export PS1='alice\$ ' HISTFILE=
 export BASH_SILENCE_DEPRECATION_WARNING=1
+$local_env
 EOF
 	# shellcheck source=/dev/null
 	source "$root/env.sh"
@@ -235,7 +270,8 @@ EOF
 # Irie's demo sandbox, written by docs/demo/setup.sh. The profiles run the
 # repo's fakeagent: claude and sonnet through the stand-in, which picks the
 # step script for a task from cues.txt; fake takes the script as its task,
-# as in +fake prompt,ask,stop. local names a CLI that is not installed.
+# as in +fake prompt,ask,stop. local names a CLI that is not installed,
+# unless the tape or reel asks for a local model that runs.
 
 [ui]
 sidebar_width = ${width:-34}
@@ -255,9 +291,7 @@ permission_mode = "auto"
 [profiles.fake]
 command = "$root/bin/fakeagent"
 
-# A profile whose CLI is not installed, for a spawn that fails.
-[profiles.local]
-command = "local-agent"
+$local_profile
 
 [repos]
 roots = ["~/code"]
