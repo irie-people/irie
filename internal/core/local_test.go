@@ -470,3 +470,14 @@ func TestAMoveOntoALocalProfileIsChecked(t *testing.T) {
 		t.Errorf("row = %+v", row)
 	}
 }
+
+func TestFakeMemoryReadsTotalAndAvailable(t *testing.T) {
+	if m, ok := fakeMemory("64/48"); !ok || m.Total != 64<<30 || m.Available != 48<<30 {
+		t.Errorf("fakeMemory(64/48) = %+v, %v", m, ok)
+	}
+	for _, v := range []string{"", "64", "64/", "x/1", "8/16", "0/0", "-1/0", "64/-1"} {
+		if m, ok := fakeMemory(v); ok {
+			t.Errorf("fakeMemory(%q) = %+v, want no reading", v, m)
+		}
+	}
+}
