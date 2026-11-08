@@ -110,12 +110,18 @@
 
   <div class="demos">
     <figure class="demo">
-      <div class="demo-box" role="img" aria-labelledby="rec-first-task" data-recording="first-task"></div>
-      <figcaption id="rec-first-task">Recording to come: typing a first task and watching it start.</figcaption>
+      <video class="demo-box" controls muted loop playsinline preload="none" width="1344" height="840" poster="media/local.jpg" aria-labelledby="rec-first-task" data-recording="local">
+        <source src="media/local.webm" type="video/webm">
+        <source src="media/local.mp4" type="video/mp4">
+      </video>
+      <figcaption id="rec-first-task">A small task typed for a local model with <code>+local</code> starts, works and is done, beside a hard one on <code>+claude</code>.</figcaption>
     </figure>
     <figure class="demo">
-      <div class="demo-box" role="img" aria-labelledby="rec-needs-you" data-recording="needs-you"></div>
-      <figcaption id="rec-needs-you">Recording to come: a row turns red, and you answer its agent.</figcaption>
+      <video class="demo-box" controls muted loop playsinline preload="none" width="1344" height="840" poster="media/needs-you.jpg" aria-labelledby="rec-needs-you" data-recording="needs-you">
+        <source src="media/needs-you.webm" type="video/webm">
+        <source src="media/needs-you.mp4" type="video/mp4">
+      </video>
+      <figcaption id="rec-needs-you">In the Mac app, a card turns red when its agent asks something. It’s answered in the agent’s own screen, and goes back to work while the others carry on.</figcaption>
     </figure>
   </div>
 

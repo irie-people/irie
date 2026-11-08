@@ -1,0 +1,51 @@
+# A small job on a local model beside a hard one on the strongest, for
+# the site's first-task box (site/get-started.html) and a social reel. A
+# hard job is at work on +claude (Opus, max effort); a small one is typed
+# for +local, which runs on Irie's own Ollama server once its preflight
+# has checked the model's context and memory, and finishes.
+# Film it with docs/demo/record.sh, then cut it with docs/demo/cut.sh;
+# the steps are in docs/demo/README.md.
+#
+# In the sandbox the server is the repo's fakeollama and the agents are
+# the stand-in, as for every profile: Irie's local path runs, no model does.
+# irie-demo: local = ollama
+#
+# The first Show is followed by two Sleeps, as in close-the-window.reel:
+# a window's first terminal can hold its drawing up on a busy Mac.
+#
+# The phone cut starts on the task bar as the task is typed, then cuts to
+# the cards and the details of the one shown, which say local, and ends on
+# the hard job, whose details say claude. The cuts leave out most of the
+# small job's run, whose length is the stand-in's script's.
+# cut: jump show:2+3.5 reached:done-1.5
+# cut: site type-1.5 end reached:done+1.5
+# cut: phone type-1.2 end
+# cut: shot type-1.2 540 0 310
+# cut: shot enter+0.5 540 0 160
+# cut: caption type-1 enter+0.45 top Small job. Local model. | $0 per token.
+# cut: caption enter+0.5 show:1#2-0.3 bottom Small job. Local model. | $0 per token.
+# cut: caption show:1#2+0.2 end bottom Hard job: the strongest model.
+# cut: readme show:2-0.3 show:1#2+1.5
+# cut: sheet type+1.6 show:2+1.5 reached:done+0.8 show:1#2+1.2 end-0.4
+Set Size 1024x640
+Set Appearance light
+Set Palette evergreen
+Set Backdrop E9EBDF
+Set TypingSpeed 55ms
+
+Spawn @acme-billing +claude redesign the retry queue
+
+Sleep 500ms
+Show 1
+Sleep 1s
+Sleep 2.5s
+Type "@acme-api +local fix a typo in the readme"
+Sleep 800ms
+Enter
+Wait working 30s
+Sleep 500ms
+Show 2
+Wait done 40s
+Sleep 2.5s
+Show 1
+Sleep 4s

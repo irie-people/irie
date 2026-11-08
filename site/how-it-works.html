@@ -148,14 +148,17 @@
   <h2>Each agent runs in tmux</h2>
   <p>Irie starts every agent inside <dfn>tmux</dfn>, a free program that keeps programs running in the background. Close the window and your agents keep working.</p>
   <p>Irie keeps a tmux of its own, apart from any you already use.</p>
+  <figure class="demo">
+    <video class="demo-box" controls muted loop playsinline preload="none" width="1344" height="840" poster="media/close-the-window.jpg" aria-labelledby="rec-close-the-window" data-recording="close-the-window">
+      <source src="media/close-the-window.webm" type="video/webm">
+      <source src="media/close-the-window.mp4" type="video/mp4">
+    </video>
+    <figcaption id="rec-close-the-window">Irie’s Mac app is closed while three agents work, and opened again. Their cards come back where they were, still working, and the agent on show has moved on.</figcaption>
+  </figure>
 
   <h2>You look in when you want</h2>
   <p>Pick a row with the arrow keys and press Enter. That agent’s live screen moves into the big space on the right, where you can read it and type to it.</p>
   <p>Space shows it but keeps you in the list, and <kbd>Ctrl</kbd>+<kbd>]</kbd> hops between the list and the agent.</p>
-  <figure class="demo">
-    <div class="demo-box" role="img" aria-labelledby="rec-swap-in" data-recording="swap-in"></div>
-    <figcaption id="rec-swap-in">Recording to come: pressing Enter on a row, and that agent’s screen moving into view.</figcaption>
-  </figure>
 
   <h2>Agents tell Irie how they’re doing</h2>
   <p>Agents report through <dfn>hooks</dfn>: small commands an agent runs at set moments, such as just before it runs a command or edits a file. From them, Irie knows who’s busy, who’s done and who’s waiting for you.</p>
