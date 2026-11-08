@@ -18,6 +18,7 @@ import (
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/team"
 	"github.com/irie-people/irie/internal/testutil"
 	"github.com/irie-people/irie/internal/worktree"
 )
@@ -710,6 +711,20 @@ func TestTheTrodBotsChoices(t *testing.T) {
 	// Waiting on work of its own in the background, it will wake.
 	bg := stopped("i", now.Add(-time.Hour), event.Event{Kind: event.TurnEnded, Data: map[string]any{"waiting": 1}})
 	check("background", bg, "", true)
+	// So it will while it waits on its helpers or teammates still at work,
+	// though its Stop named nothing in the background (DESIGN §5.3), and
+	// its question waits for them too.
+	helped := stopped("s", now.Add(-time.Hour), event.Event{Kind: event.SubagentStarted, Agent: "sub:a1", Data: map[string]any{"agent_type": "Explore"}}, asks)
+	check("waiting on a helper", helped, "", true)
+	teamed := stopped("t", now.Add(-time.Hour), asks)
+	teamed.team = []team.Teammate{{Session: "t-1", Name: "seed-finder", Working: true}}
+	check("waiting on a teammate", teamed, "", true)
+	if !rowAtWork(teamed.wire()) || rowAtWork(stopped("u", now, ended).wire()) {
+		t.Error("a session waiting on its teammate is not counted as working, or a finished one is")
+	}
+	teamed.team[0].Working = false
+	check("its teammate waits for a message", teamed, "question", true)
+	teamed.team[0].Working = true
 	// Parked, frozen or delegated: not the shift's.
 	parked := stopped("j", now.Add(-time.Hour), failed("server_error"), event.Event{Kind: event.UIParked})
 	check("parked", parked, "", false)
@@ -767,7 +782,7 @@ func TestTheTrodBotsChoices(t *testing.T) {
 		name  string
 		x     *session
 		spend bool
-	}{{"works", works, true}, {"background", bg, true}, {"limit", limit, false}, {"overloaded", stopped("q", now, failed("overloaded")), false}, {"done", stopped("r", now, ended), false}} {
+	}{{"works", works, true}, {"background", bg, true}, {"helped", helped, true}, {"teamed", teamed, true}, {"limit", limit, false}, {"overloaded", stopped("q", now, failed("overloaded")), false}, {"done", stopped("r", now, ended), false}} {
 		if got := c.spendsAlone(x.x, now); got != x.spend {
 			t.Errorf("%s spends alone: %v", x.name, got)
 		}

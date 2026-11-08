@@ -44,6 +44,29 @@ func (p object) count(key string) int {
 	return len(a)
 }
 
+// listed reports whether key holds an array, even an empty one: Claude Code
+// leaves background_tasks out when its task registry cannot be reached.
+func (p object) listed(key string) bool {
+	var a []json.RawMessage
+	return json.Unmarshal(p[key], &a) == nil && a != nil
+}
+
+// tasksOfType is how many of the background_tasks are of type kind, such as
+// subagent.
+func (p object) tasksOfType(kind string) int {
+	var tasks []struct {
+		Type string `json:"type"`
+	}
+	json.Unmarshal(p["background_tasks"], &tasks)
+	n := 0
+	for _, t := range tasks {
+		if t.Type == kind {
+			n++
+		}
+	}
+	return n
+}
+
 // length is a string's length before the shim cut it, in characters.
 func (p object) length(key string) (int, bool) {
 	var l map[string]float64
@@ -138,6 +161,11 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 			if len(tasks) > 0 && tasks[0].Description != "" {
 				data["waiting_on"] = strings.Join(strings.Fields(tasks[0].Description), " ")
 			}
+		}
+		// The subagents still at work in the background: a helper not
+		// among them has stopped, whether or not its SubagentStop came.
+		if p.listed("background_tasks") {
+			data["subagents"] = p.tasksOfType("subagent")
 		}
 		return []event.Event{ev(event.TurnEnded, data)}, nil
 	case "StopFailure":

@@ -88,6 +88,10 @@ func TestLineLeadsWithTheState(t *testing.T) {
 		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{{Agent: "sub:c3"}}}, "◐ waiting on 1 helper"},
 		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore, dev, {Type: "Plan"}, {Type: "scout"}, {Type: "deep"}}},
 			"◐ waiting on 5 helpers: Explore, dev, Plan and 2 more"},
+		// Nor is one whose teammates still work, as the core counts them.
+		{ipc.StatusReply{State: ipc.StateIdle, Subs: &ipc.Subs{Teammates: 3}}, "◐ waiting on 3 teammates"},
+		{ipc.StatusReply{State: ipc.StateDone, Subagents: []ipc.Subagent{explore}, Subs: &ipc.Subs{Helpers: 1, Teammates: 1}},
+			"◐ waiting on 1 helper and 1 teammate: Explore"},
 		{ipc.StatusReply{State: ipc.StateNeedsYou, Subagents: []ipc.Subagent{explore, {Type: "dev", NeedsYou: true}}}, "● dev needs you"},
 		{ipc.StatusReply{State: ipc.StateNeedsYou}, "● needs you"},
 		{ipc.StatusReply{State: ipc.StateStalled}, "● stalled"},
@@ -158,6 +162,13 @@ func TestLineTakesTheSessionsColourWhileItWorks(t *testing.T) {
 	hot := 72.0
 	if got := Line(Usage{FiveHour: &Window{Used: hot}}, working, 0); !strings.Contains(got, own+"5h \x1b[0m\x1b[33m72%\x1b[0m") {
 		t.Errorf("hot line = %q", got)
+	}
+	// A turn that is over while its teammates work waits on them in the
+	// line's own ink, the rest faint: the core gives the colour only while
+	// the session works itself.
+	waiting := &ipc.StatusReply{State: ipc.StateIdle, Subs: &ipc.Subs{Teammates: 2}}
+	if got := Line(u, waiting, 0); !strings.HasPrefix(got, "◐ waiting on 2 teammates\x1b[2m · \x1b[0m\x1b[2m$1.23") {
+		t.Errorf("waiting line = %q", got)
 	}
 	// Without a colour it can read, the line is as before.
 	for _, c := range []string{"", "c2954a", "#c2954", "#c2954g"} {

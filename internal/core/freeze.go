@@ -199,7 +199,7 @@ func (c *Core) freezeLocked(x *session, why string) error {
 		pids = append(pids, s.PID)
 	}
 	on := event.Event{TS: event.Stamp(now), Source: event.SourceUser, Kind: event.FreezeOn, Data: map[string]any{
-		"whole": whole, "pids": pids, "mark": t.Newest(), "working": x.track.live() == ipc.StateWorking,
+		"whole": whole, "pids": pids, "mark": t.Newest(), "working": x.track.live() == ipc.StateWorking || len(x.track.subs) > 0,
 	}}
 	if why != "" {
 		on.Source, on.Data["by"], on.Data["reason"] = event.SourceIrie, trodBy, why

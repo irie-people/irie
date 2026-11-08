@@ -18,8 +18,8 @@ import (
 // §6.3): what the session has cost, how full its context is, and what it
 // last saw of the plan's use, which is the account's (takePlan). The
 // session's last update is kept in status.json, for a restarted core. It
-// answers with the session's state and running subagents, whether it is
-// parked, and while it works its own colour.
+// answers with the session's state, running subagents and what a turn that
+// is over waits on, whether it is parked, and while it works its own colour.
 func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	u, err := statusline.Parse(a.Payload)
 	if err != nil {
@@ -43,7 +43,7 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	}
 	plan := c.takePlan(u.FiveHour, u.SevenDay)
 	row := x.wire()
-	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents, Parked: row.Parked}
+	reply := &ipc.StatusReply{State: row.State, Subagents: row.Subagents, Subs: row.Subs, Parked: row.Parked}
 	// An update that changed nothing does nothing more: idle sessions send
 	// one every few seconds. One that did can change only its own row. A
 	// row with no colour yet gets one from the diff.
