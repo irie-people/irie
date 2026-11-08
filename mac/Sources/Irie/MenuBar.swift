@@ -28,7 +28,6 @@ final class MenuState {
         var helperShown = false
         var showTerminal = false
         var sideOpen = false
-        var sidePinned = false
     }
 
     private(set) var facts = Facts()
@@ -49,7 +48,7 @@ extension Store {
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
-            sideOpen: side.open, sidePinned: side.pinned)
+            sideOpen: side.open)
     }
 
     /// Keeps the menu's facts up to date: whenever what they are read from
@@ -198,7 +197,6 @@ struct IrieCommands: Commands {
                 Button(t.title, action: run { store.toggleSideTab(t) })
                     .keyboardShortcut(t.key, modifiers: [.command, .option])
             }
-            Button(f.sidePinned ? "Unpin the Right Sidebar" : "Pin the Right Sidebar", action: run { store.pinSide(!store.side.pinned) })
         }
     }
 }
