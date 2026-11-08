@@ -19,8 +19,7 @@ import (
 // last saw of the plan's use, which is the account's (takePlan). The
 // session's last update is kept in status.json, for a restarted core. It
 // answers with the session's state, running subagents and what a turn that
-// is over waits on, whether it is parked, and its own colour while it works
-// or waits on its helpers.
+// is over waits on, whether it is parked, and while it works its own colour.
 func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	u, err := statusline.Parse(a.Payload)
 	if err != nil {
@@ -52,7 +51,7 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	if changed || x.hue == 0 {
 		frames = c.changesOf(x)
 	}
-	if row.State == ipc.StateWorking || row.Subs != nil {
+	if row.State == ipc.StateWorking {
 		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.hue)
 	}
 	c.mu.Unlock()

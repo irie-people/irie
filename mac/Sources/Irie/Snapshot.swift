@@ -230,14 +230,15 @@ enum Fixture {
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
                     repo: irie, branch: "irie/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
             // A finished turn whose helper and teammates still work: it waits
-            // on them.
-            Session(id: "s10patents00", name: "patent-research", state: "idle", detail: "Waiting on 1 helper and 2 teammates",
+            // on them, as its Stop said.
+            Session(id: "s10patents00", name: "patent-research", state: "idle",
+                    detail: "Waiting on its work in the background · Find the seed patents",
                     created: ago(18), cwd: irie + "-patent-research", repo: irie, branch: "irie/patent-research", profile: "claude",
                     subagents: [Subagent(agent: "sub:b1", type: "Explore", started: ago(5), detail: "Searching the web for expired patents")],
                     team: [Teammate(session: "s10patents00-1", name: "seed-finder", color: "blue", type: "general-purpose", title: "Reading the claims", working: true),
                            Teammate(session: "s10patents00-2", name: "expand-a", color: "green", type: "general-purpose", title: "Paging the citations", working: true)],
                     subs: Subs(helpers: 1, teammates: 2),
-                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), hue: 1),
+                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), hue: 4),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude", hue: 3),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),

@@ -11,7 +11,10 @@ import (
 
 // An orchestrator whose own turn is over while its helpers or teammates
 // still work waits on them (DESIGN §5.3): its row stays done or idle, says
-// what it waits on, and carries Subs, which the sidebars draw.
+// what it waits on, and carries Subs, which the sidebars draw. Work in the
+// background that its Stop named keeps live's words for it, "Waiting on
+// its work in the background"; only a row that says nothing else names
+// its helpers and teammates.
 
 func newWaiter() *session { return &session{id: "s0k3j9x2m4a7q", name: "Patents"} }
 
@@ -32,7 +35,8 @@ func TestATurnOverWaitsOnItsHelpersInTheBackground(t *testing.T) {
 		s.sub(event.ToolStarted, "tool", "WebSearch", "summary", "expired patents", "phrase", "Searching the web", "tool_use_id", "t1"),
 	)
 	row := x.wire()
-	if row.State != ipc.StateDone || row.Subs == nil || *row.Subs != (ipc.Subs{Helpers: 1}) || row.Detail != "Waiting on 1 helper" ||
+	if row.State != ipc.StateDone || row.Subs == nil || *row.Subs != (ipc.Subs{Helpers: 1}) ||
+		row.Detail != "Waiting on its work in the background · Find the seed patents" ||
 		len(row.Subagents) != 1 || row.Subagents[0].Detail != "Searching the web" {
 		t.Fatalf("row: state %s, subs %+v, detail %q, helpers %+v", row.State, row.Subs, row.Detail, row.Subagents)
 	}
@@ -128,7 +132,9 @@ func TestAStopWithNoHelperInTheBackgroundDropsTheOnesThatNeverStopped(t *testing
 func TestATurnOverWaitsOnItsTeammatesAtWork(t *testing.T) {
 	s := newScript()
 	x := newWaiter()
-	x.apply(s.hook(event.PromptSubmitted), s.hook(event.TurnEnded, "waiting", 4, "waiting_on", "Find seed patents", "subagents", 0))
+	// Its Stop named nothing in the background, as when the task registry
+	// was out of reach, so the row says on whom it waits.
+	x.apply(s.hook(event.PromptSubmitted), s.hook(event.TurnEnded))
 	x.team = []team.Teammate{
 		{Session: x.id + "-1", Name: "seed-finder", Working: true},
 		{Session: x.id + "-2", Name: "expand-a", Working: true},
@@ -149,24 +155,40 @@ func TestATurnOverWaitsOnItsTeammatesAtWork(t *testing.T) {
 	for i := range x.team {
 		x.team[i].Working = false
 	}
-	if row := x.wire(); row.Subs != nil || row.Detail != "Waiting on its work in the background · Find seed patents" {
+	if row := x.wire(); row.Subs != nil || row.Detail != "" {
 		t.Errorf("all waiting: subs %+v, detail %q", row.Subs, row.Detail)
+	}
+	// A Stop that named its work in the background says so in live's
+	// words, while its teammates work too.
+	x.apply(s.hook(event.PromptSubmitted), s.hook(event.TurnEnded, "waiting", 4, "waiting_on", "Find seed patents", "subagents", 0))
+	x.team[0].Working = true
+	if row := x.wire(); row.State != ipc.StateDone || row.Subs == nil || *row.Subs != (ipc.Subs{Teammates: 1}) ||
+		row.Detail != "Waiting on its work in the background · Find seed patents" {
+		t.Errorf("named work: state %s, subs %+v, detail %q", row.State, row.Subs, row.Detail)
 	}
 }
 
-// What a jot left that has not landed waits until its helpers are through:
-// they may be the ones writing it.
-func TestAJotWaitingOnItsHelpersSaysNothingOfWhatIsLeft(t *testing.T) {
+// What a jot left that has not landed shows while its helpers work, as it
+// does while work of its own runs in the background (DESIGN §4.8).
+func TestAJotWaitingOnItsHelpersSaysWhatIsLeft(t *testing.T) {
 	s := newScript()
 	x := newWaiter()
 	x.dog.loose = []looseIn{{jotTree: jotTree{path: "/home/alice/code/irie"}, land: "live", Loose: worktree.Loose{Dirty: 2}}}
-	x.apply(s.hook(event.PromptSubmitted), s.sub(event.SubagentStarted, "agent_type", "Explore"), s.hook(event.TurnEnded, "subagents", 1))
-	if row := x.wire(); row.Loose != nil || row.Detail != "Waiting on 1 helper" {
-		t.Errorf("waiting: loose %+v, detail %q", row.Loose, row.Detail)
+	x.apply(s.hook(event.PromptSubmitted), s.sub(event.SubagentStarted, "agent_type", "Explore"),
+		s.hook(event.TurnEnded, "waiting", 1, "waiting_on", "Write the notes", "subagents", 1))
+	if row := x.wire(); row.Loose == nil || row.Subs == nil ||
+		row.Detail != "Not through: 2 files not committed · Waiting on its work in the background · Write the notes" {
+		t.Errorf("waiting: loose %+v, subs %+v, detail %q", row.Loose, row.Subs, row.Detail)
 	}
 	x.apply(s.sub(event.SubagentFinished))
-	if row := x.wire(); row.Loose == nil || row.Detail != "Not through: 2 files not committed" {
-		t.Errorf("through waiting: loose %+v, detail %q", row.Loose, row.Detail)
+	if row := x.wire(); row.Loose == nil || row.Subs != nil ||
+		row.Detail != "Not through: 2 files not committed · Waiting on its work in the background · Write the notes" {
+		t.Errorf("through waiting: loose %+v, subs %+v, detail %q", row.Loose, row.Subs, row.Detail)
+	}
+	// A Stop that named nothing: on whom it waits, after what is left.
+	x.apply(s.hook(event.PromptSubmitted), s.sub(event.SubagentStarted, "agent_type", "Explore"), s.hook(event.TurnEnded))
+	if row := x.wire(); row.Loose == nil || row.Detail != "Not through: 2 files not committed · Waiting on 1 helper" {
+		t.Errorf("named nothing: loose %+v, detail %q", row.Loose, row.Detail)
 	}
 }
 

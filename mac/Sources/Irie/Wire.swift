@@ -73,8 +73,9 @@ struct TrodRow: Codable, Equatable {
 }
 
 /// What a session whose own turn is over still waits on: its running
-/// helpers and its teammates at work. The core says it in words in the
-/// session's detail too, as "Waiting on 3 teammates".
+/// helpers and its teammates at work. The session's detail says what it
+/// waits on in words: its work in the background, as its Stop named it, or
+/// else "Waiting on 3 teammates".
 struct Subs: Codable, Equatable {
     var helpers: Int?
     var teammates: Int?

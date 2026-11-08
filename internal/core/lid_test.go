@@ -174,6 +174,16 @@ func TestTheLidWaitsOutTheGraceAndBackgroundWork(t *testing.T) {
 	if got := m2.sudo(); len(got) != 1 || got[0] != sleepOff {
 		t.Errorf("sudo ran %q, want sleep off while background work will wake the session", got)
 	}
+
+	// So does a helper still at work once the turn is over (DESIGN §5.3).
+	m3 := newLidMac(t)
+	c3, x3 := lidCore(t, "[lid]\ngrace = \"0s\"\n")
+	x3.track.apply(event.Event{Kind: event.SubagentStarted, Agent: "sub:a1", TS: event.Stamp(time.Now())})
+	x3.track.apply(event.Event{Kind: event.TurnEnded, Agent: event.Main, TS: event.Stamp(time.Now())})
+	c3.lidSweep()
+	if got := m3.sudo(); len(got) != 1 || got[0] != sleepOff {
+		t.Errorf("sudo ran %q, want sleep off while its helper still works", got)
+	}
 }
 
 func TestTheLidLetsTheMacSleepOnALowBatteryOrWhenHot(t *testing.T) {

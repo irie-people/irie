@@ -366,12 +366,13 @@ private struct SessionCard: View, Equatable {
         }
     }
 
-    /// Red while it needs you; what it waits on in its agent's colour, the
-    /// colour of the helpers under it; what a jot left in the accent.
+    /// Red while it needs you; what a jot left in the accent; what it waits
+    /// on in its agent's colour, the colour of the helpers under it.
     private var statusInk: Color {
         if look.loud { return Theme.needs }
+        if session.loose != nil { return Theme.accentInk }
         if look == .waiting { return Look.agentInk(session) ?? Theme.ink }
-        return session.loose != nil ? Theme.accentInk : Theme.muted
+        return Theme.muted
     }
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.radius, style: .continuous) }

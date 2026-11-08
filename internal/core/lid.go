@@ -75,8 +75,10 @@ func (c *Core) lidAdopt() {
 
 // lidWork reports whether a session has work under way that a closed lid
 // would stop: one that works, starts or is stalled at work, or one whose
-// own background work, or a wakeup, will wake it. A session whose harness
-// reports no turns cannot say, and does not count. The caller holds c.mu.
+// own background work, or a wakeup, will wake it, or whose helpers or
+// teammates still work once its turn is over (DESIGN §5.3). A session
+// whose harness reports no turns cannot say, and does not count. The
+// caller holds c.mu.
 func (c *Core) lidWork() bool {
 	for _, x := range c.sessions {
 		t := &x.track
@@ -87,7 +89,7 @@ func (c *Core) lidWork() bool {
 		case ipc.StateWorking, ipc.StateStarting, ipc.StateStalled:
 			return true
 		case ipc.StateDone, ipc.StateIdle:
-			if t.waiting > 0 {
+			if t.waiting > 0 || x.waitsOnSubs() {
 				return true
 			}
 		}

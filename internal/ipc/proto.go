@@ -1039,9 +1039,8 @@ type StatusReply struct {
 	Subagents []Subagent `json:"subagents,omitempty"`
 	// Subs is what its turn that is over waits on, as on its row.
 	Subs *Subs `json:"subs,omitempty"`
-	// Color is the session's own colour while it works, or waits on its
-	// helpers, as "#rrggbb": its card's mark in the Mac app's dark mode,
-	// which reads on its terminal.
+	// Color is the session's own colour while it works, as "#rrggbb": its
+	// card's mark in the Mac app's dark mode, which reads on its terminal.
 	Color string `json:"color,omitempty"`
 	// Parked is whether the session is in the Parked group, out of the
 	// way: a turn of it that is over is not to verify.
