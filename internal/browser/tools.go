@@ -297,7 +297,11 @@ func (b *Browser) links(ctx context.Context, args json.RawMessage) toolResult {
 			}
 			fmt.Fprintf(&s, "[%v] %s → %v\n", x[0], text, x[2])
 		}
-		fmt.Fprintf(&s, "\n[%d links listed, of %d on the page; click takes n]", len(l.Links), l.Total)
+		listed := num(len(l.Links)) + " links listed"
+		if len(l.Links) == 1 {
+			listed = "1 link listed"
+		}
+		fmt.Fprintf(&s, "\n[%s, of %s on the page; click takes n]", listed, num(l.Total))
 		return textResult(s.String())
 	})
 }
