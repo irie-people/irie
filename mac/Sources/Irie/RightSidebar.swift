@@ -2,14 +2,17 @@ import AppKit
 import SwiftUI
 
 // The right sidebar (docs/proposals/right-dock.md): tabs about the session
-// on show, opened and closed as a whole. It sits inline, at the right of the
-// terminal or the conversation, never over them. The terminal's width is
-// the slot's, and every agent window takes the slot's size (DESIGN §2.3), so
-// opening or closing it, or letting go of its edge, resizes every agent
-// once, as resizing the window does; nothing about it animates, since each
-// step of an animation would resize them again. It keeps its tab and width
-// as the selection changes, and only the user opens it or switches its tab:
-// a helper starting only puts a count on a tab.
+// on show, opened and closed as a whole. It is a drawer at the window's
+// right edge. Opening it slides it in over the edge of the terminal or the
+// conversation, and once it is in, the terminal makes room and sits beside
+// it; closing it gives the room back first, under the drawer, then slides
+// the drawer out. The terminal's width is the slot's, and every agent
+// window takes the slot's size (DESIGN §2.3), so only the drawer moves:
+// the terminal's width changes once for each open, close or release of the
+// drawer's edge, never at each step of a slide, and every agent is resized
+// once, as resizing the window does. It keeps its tab and width as the
+// selection changes, and only the user opens it or switches its tab: a
+// helper starting only puts a count on a tab.
 
 /// A tab of the right sidebar, in the order the proposal gives them, which
 /// also gives each its key: ⌥⌘1 to ⌥⌘5.
@@ -85,18 +88,27 @@ extension Store {
         if side.open && side.tab == tab { closeSide() } else { openSide(tab) }
     }
 
-    /// Opens the right sidebar on a tab.
+    /// How the drawer slides in from the window's edge, and out again.
+    static let sideSlide = Animation.smooth(duration: 0.28)
+
+    /// Whether the terminal makes room for the drawer and sits beside it:
+    /// while it is open and not sliding.
+    var sideDocked: Bool { side.open && !sideSliding }
+
+    /// Opens the right sidebar on a tab: a closed one slides in.
     func openSide(_ tab: SideTab) {
         var s = side
         s.open = true
         s.tab = SideTab.built.contains(tab) ? tab : SideTab.built[0]
-        change(s)
+        if side.open { change(s) } else { slide(to: s) }
     }
 
+    /// Closes the right sidebar: it slides out.
     func closeSide() {
+        guard side.open else { return }
         var s = side
         s.open = false
-        change(s)
+        slide(to: s)
     }
 
     func setSideWidth(_ width: Double) {
@@ -105,13 +117,40 @@ extension Store {
         change(s)
     }
 
-    /// Applies a change in one step, with no animation: the terminal's width
-    /// follows the sidebar's, and each step of an animation would resize the
-    /// shown agent, and every agent at each of the core's ticks it spanned.
+    /// Slides the drawer in or out. While it slides it lies over the
+    /// terminal's edge, and the terminal keeps no room for it, so the
+    /// terminal's width changes once: as a close starts, under the drawer,
+    /// or once the drawer is in. Each step of a slide that moved the
+    /// terminal's edge would resize the shown agent, and every agent at each
+    /// of the core's ticks it spanned. With Reduce Motion on, it opens and
+    /// closes in one step.
+    private func slide(to s: SideState) {
+        sideSlides += 1
+        let n = sideSlides
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            still { sideSliding = false; side = s }
+            return
+        }
+        still { sideSliding = true }
+        withAnimation(Self.sideSlide) { side = s } completion: { [weak self] in
+            // Only the last slide's end: one that another overtook ends
+            // with that one.
+            guard let self, self.sideSlides == n else { return }
+            self.still { self.sideSliding = false }
+        }
+    }
+
+    /// Applies a change in one step, with no animation: a new tab, or a new
+    /// width, which the terminal's follows.
     private func change(_ s: SideState) {
+        still { side = s }
+    }
+
+    /// Runs a change with no animation.
+    private func still(_ work: () -> Void) {
         var t = Transaction(animation: nil)
         t.disablesAnimations = true
-        withTransaction(t) { side = s }
+        withTransaction(t, work)
     }
 
     /// Everything ready for the user to look at (the Review tab): the
@@ -146,15 +185,19 @@ struct ReviewRow: Identifiable, Equatable {
     var closed: ClosedSession?
 }
 
-/// The right sidebar: a row of tabs, the pin and a close button, then the
-/// tab that shows.
+/// The right sidebar, a drawer out of the window's right edge: a row of tabs
+/// and a close button, then the tab that shows.
 @MainActor
 struct RightSidebar: View {
     @Environment(Store.self) private var store
     /// The width a drag of its edge is asking for, while it lasts.
     @Binding var guide: Double?
 
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous) }
+    /// Rounded where it faces the terminal, as the terminal's frame is, and
+    /// square at the window's edge, which it comes out of.
+    private var shape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, bottomLeadingRadius: Theme.frameRadius, style: .continuous)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -164,9 +207,12 @@ struct RightSidebar: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .clipShape(shape)
+        // The shadow it casts on the terminal as it slides over its edge.
         .background(shape.fill(Theme.panel)
-            .shadow(color: .black.opacity(0.06), radius: 2, y: 0.5))
-        .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1))
+            .shadow(color: .black.opacity(0.18), radius: 10, x: -2))
+        // Its edge, on every side but the window's: that one lies just
+        // past the window, out of sight.
+        .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1).padding(.trailing, -1))
         .overlay(alignment: .leading) { SideEdge(guide: $guide).offset(x: -5) }
         // Esc hands the keyboard back; closing would resize every agent.
         .onExitCommand {

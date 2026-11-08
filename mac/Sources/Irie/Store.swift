@@ -146,6 +146,11 @@ final class Store {
     var side = SideState.saved() {
         didSet { if side != oldValue, !isFixture { side.save() } }
     }
+    /// The right sidebar is sliding in or out, over the terminal's edge,
+    /// and the terminal keeps no room for it meanwhile (RightSidebar.swift).
+    var sideSliding = false
+    /// Counts its slides, so that only the last one's end counts.
+    @ObservationIgnored var sideSlides = 0
     /// The session the core shows beside its teammates, as last asked
     /// (TeamSplit.swift); nil while the slot shows the picked session.
     private(set) var splitShown: String?

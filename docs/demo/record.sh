@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # record.sh films Irie's Mac app from reels into dist/demo/
-# (docs/demo/README.md). Each reel gets a fresh sandbox (setup.sh) with a
-# core of its own and the sessions its Spawn lines start, and a copy of
+# (docs/demo/README.md). Each reel gets a fresh sandbox (setup.sh, which
+# reads its "# irie-demo:" lines as a tape's) with a core of its own and
+# the sessions its Spawn lines start, and a copy of
 # Irie.app with a bundle id of its own, so neither the user's Irie nor the
 # app's defaults, which hold their unsent task, are touched. The copy films
 # its own window, which stands off any screen: nothing takes the focus, and
@@ -86,12 +87,30 @@ scan() {
 		echo "record.sh: could not read $(basename "$f")'s frames" >&2
 		return 1
 	fi
-	while IFS=$'\t' read -r frame text; do
-		while IFS= read -r word; do
-			echo "record.sh: $(basename "$f") shows $word in frame $(basename "$frame" .png) of one a second: $text" >&2
-			hits=1
-		done < <(found "$text")
-	done <"$frames/text.tsv"
+	# Every line read against every name, as a whole word, and every path,
+	# anywhere, in one pass, as found does. A shell loop a line, with its
+	# process substitutions, made bash 3.2, macOS's own, abort on a corrupted
+	# heap partway through a film's thousand lines, which left the film
+	# unscanned and its sandbox running.
+	names >"$frames/names.txt"
+	paths >"$frames/paths.txt"
+	local frame text
+	while IFS=$'\t' read -r frame word text; do
+		echo "record.sh: $(basename "$f") shows $word in frame $(basename "$frame" .png) of one a second: $text" >&2
+		hits=1
+	done < <(perl -e '
+		sub list { open my $h, "<", $_[0] or die "record.sh: $_[0]: $!\n"; grep { length } map { chomp; $_ } <$h> }
+		my @names = list($ARGV[0]);
+		my @paths = list($ARGV[1]);
+		open my $t, "<", $ARGV[2] or die "record.sh: $ARGV[2]: $!\n";
+		while (<$t>) {
+			chomp;
+			my ($frame, $text) = split /\t/, $_, 2;
+			next unless defined $text;
+			for my $w (@names) { print "$frame\t$w\t$text\n" if $text =~ /(?<!\w)\Q$w\E(?!\w)/i }
+			for my $w (@paths) { print "$frame\t$w\t$text\n" if index(lc $text, lc $w) >= 0 }
+		}
+	' -- "$frames/names.txt" "$frames/paths.txt" "$frames/text.tsv")
 	return "$hits"
 }
 
@@ -101,7 +120,7 @@ record() {
 	reel=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 	name=$(basename "$reel" .reel)
 	echo "recording $name"
-	root=$("$here/setup.sh")
+	root=$("$here/setup.sh" "$reel")
 	trap cleanup EXIT
 	swiftc -O -o "$root/ocr" "$here/ocr.swift" 2>/dev/null || die "ocr.swift did not build"
 	in_sandbox irie up >/dev/null

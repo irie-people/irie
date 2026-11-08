@@ -26,29 +26,34 @@ struct TerminalArea: View {
         // changes.
         let _ = store.redOnDone
         VStack(spacing: 0) {
-            // The right sidebar (RightSidebar.swift), inline after the
-            // terminal or the conversation. The frame stays the first child,
-            // so SwiftUI never makes the terminal again, which would restart
-            // its tmux client. In a narrow window the sidebar gives up width
-            // first, down to its narrowest, so the terminal keeps some room.
+            // The right sidebar (RightSidebar.swift), a drawer that slides
+            // in from the window's edge, over the terminal's or the
+            // conversation's, and then sits after it: the terminal makes
+            // room once it is in, in one step, and takes the room back as a
+            // close starts. The frame stays the first child, so SwiftUI never
+            // makes the terminal again, which would restart its tmux client.
+            // In a narrow window the sidebar gives up width first, down to
+            // its narrowest, so the terminal keeps some room.
             GeometryReader { geo in
-                let width = min(CGFloat(store.side.width), max(CGFloat(SideState.minWidth), geo.size.width - 12 - minTerminal))
+                let width = min(CGFloat(store.side.width), max(CGFloat(SideState.minWidth), geo.size.width - minTerminal))
                 ZStack(alignment: .trailing) {
-                    HStack(spacing: 0) {
-                        main.modifier(FileDrop(session: selected))
-                        if store.side.open {
-                            RightSidebar(guide: $sideGuide)
-                                .frame(width: width)
-                                .padding([.top, .bottom, .trailing], 12)
-                        }
+                    main.modifier(FileDrop(session: selected))
+                        .padding(.trailing, store.sideDocked ? width : 0)
+                    if store.side.open {
+                        RightSidebar(guide: $sideGuide)
+                            .frame(width: width)
+                            .padding(.vertical, 12)
+                            .transition(.move(edge: .trailing))
+                            .zIndex(1)
                     }
                     if let g = sideGuide {
                         Rectangle()
                             .fill(Theme.accent)
                             .frame(width: 2)
                             .padding(.vertical, 12)
-                            .padding(.trailing, CGFloat(g) + 12 + 4)
+                            .padding(.trailing, CGFloat(g) + 4)
                             .allowsHitTesting(false)
+                            .zIndex(2)
                     }
                 }
             }
