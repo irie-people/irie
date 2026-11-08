@@ -20,6 +20,7 @@ const (
 	ContextResolve = "resolve" // the commit a point names
 	ContextTag     = "tag"     // name a point
 	ContextWhere   = "where"   // the store's path, for git
+	ContextClean   = "clean"   // let go now of the contexts past context.keep_days
 )
 
 // ContextArgs ask about a session's context. Session is an open session's
@@ -42,6 +43,10 @@ type ContextResult struct {
 	Commit  string        `json:"commit,omitempty"` // the point resolved, or the branch's head
 	Cut     string        `json:"cut,omitempty"`    // the entry a point inside a turn ends at
 	Turns   []ContextTurn `json:"turns,omitempty"`
+	// What clean let go of, and the setting it went by: context.keep_days,
+	// 0 when contexts are kept for good.
+	Removed  []string `json:"removed,omitempty"`
+	KeepDays int      `json:"keep_days,omitempty"`
 }
 
 // ContextTurn is one commit of a context: one turn of its conversation.

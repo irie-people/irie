@@ -35,6 +35,11 @@ const contextUsage = `  irie ctl ctx log [--json] [-n N] SESSION[@AT]
   irie ctl ctx sync SESSION              store a session's newest turns now
   irie ctl ctx git ARGS...               run git on the context store, such as
                                          log --graph --all
+  irie ctl ctx clean                     let go now of the contexts of closed
+                                         sessions whose newest turn is older than
+                                         context.keep_days (30 by default; 0
+                                         keeps them for good), as Irie does on its
+                                         own every few hours
   irie ctl fork [--at AT] [--here] [--name NAME] [--model MODEL] [--wait] [+PROFILE] SESSION [TASK...]
                                          carry a session's context on from a
                                          point of it in a new session, in a
@@ -63,6 +68,8 @@ func ctlContext(args []string) error {
 		return ctxSync(args[1:])
 	case "git":
 		return ctxGit(args[1:])
+	case "clean":
+		return ctxClean(args[1:])
 	case "path":
 		p, err := paths.FromEnv()
 		if err != nil {
@@ -71,7 +78,7 @@ func ctlContext(args []string) error {
 		fmt.Println(p.ContextStore())
 		return nil
 	}
-	return fmt.Errorf("irie ctl ctx: no command %q: log, show, diff, tag, sync or git", args[0])
+	return fmt.Errorf("irie ctl ctx: no command %q: log, show, diff, tag, sync, git or clean", args[0])
 }
 
 // splitAt splits SESSION@AT. An @ at the start, or with nothing or a space
@@ -228,6 +235,25 @@ func ctxSync(args []string) error {
 		return err
 	}
 	fmt.Println(r.Commit)
+	return nil
+}
+
+func ctxClean(args []string) error {
+	if len(args) != 0 {
+		return errors.New("usage: irie ctl ctx clean")
+	}
+	r, err := contextCall(ipc.ContextArgs{Action: ipc.ContextClean})
+	if err != nil {
+		return err
+	}
+	switch {
+	case r.KeepDays == 0:
+		fmt.Println("context.keep_days is 0, so every context is kept. Set it in config.toml, or in Irie's Settings, to let old ones go.")
+	case len(r.Removed) == 0:
+		fmt.Printf("No context of a closed session is older than %d days.\n", r.KeepDays)
+	default:
+		fmt.Printf("Let go of %d contexts of closed sessions older than %d days:\n%s\n", len(r.Removed), r.KeepDays, strings.Join(r.Removed, "\n"))
+	}
 	return nil
 }
 
