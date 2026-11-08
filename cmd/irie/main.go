@@ -17,6 +17,7 @@ import (
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/sdk"
 	"github.com/irie-people/irie/internal/statusline"
 	"github.com/irie-people/irie/internal/team"
 	"github.com/irie-people/irie/internal/ui"
@@ -62,6 +63,9 @@ Used by Irie itself:
   irie ui [--supervise]     the sidebar
   irie host --spec <file>   the first process of an agent pane
   irie hook                 the shim an agent runs for each hook event
+  irie sdk [--first FILE] -- CLAUDE [ARGS...]
+                            the pane of a session on the Agent SDK, which runs
+                            claude -p and shows its conversation
   irie statusline [--then COMMAND]
                             the status line of Claude Code sessions, which runs
                             the user's own
@@ -106,6 +110,8 @@ func run(args []string) int {
 		err = ui.Slot(p.Socket(), ui.SlotOptions{FocusKey: cfg.UI.FocusKey, FlipKey: cfg.UI.FlipKey, Theme: cfg.UI.Theme})
 	case "hook":
 		return hook.Run(os.Stdin, os.Stdout, os.Getenv)
+	case "sdk":
+		return sdk.Main(args)
 	case "team-tmux":
 		return teamTmux(args)
 	case "statusline":

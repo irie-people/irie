@@ -56,9 +56,27 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	if s.Probe.Flags["--name"] && s.Name != "" {
 		argv = append(argv, "--name", s.Name)
 	}
-	argv = append(argv, harness.TaskArg(s.Task, s.Dir))
 	files[TaskFile] = []byte(s.Task)
+	if p.SDK {
+		return sdkArgv(s, argv, true), env, files, nil
+	}
+	argv = append(argv, harness.TaskArg(s.Task, s.Dir))
 	return argv, env, files, nil
+}
+
+// sdkArgv is how a session of a profile with sdk runs (DESIGN §3.5):
+//
+//	<irie> sdk [--first <dir>/task.md] -- <claude command line>
+//
+// Irie's own pane program runs the command line as the Agent SDK's CLI and
+// sends the task file's text as the first message. The command line takes
+// no task, since the messages go to it as JSON.
+func sdkArgv(s harness.Spawn, argv []string, first bool) []string {
+	out := []string{s.Bin, "sdk"}
+	if first {
+		out = append(out, "--first", filepath.Join(s.Dir, TaskFile))
+	}
+	return append(append(out, "--"), argv...)
 }
 
 // Resume builds, for a conversation that carries on in an Irie pane:
@@ -83,8 +101,13 @@ func (Harness) Resume(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	// Claude Code takes as the resumed conversation's next. The spawn's
 	// task, which a reopen carries, is never sent again.
 	if s.Next != "" {
-		argv = append(argv, harness.TaskArg(s.Next, s.Dir))
 		files[TaskFile] = []byte(s.Next)
+	}
+	if p.SDK {
+		return sdkArgv(s, argv, s.Next != ""), env, files, nil
+	}
+	if s.Next != "" {
+		argv = append(argv, harness.TaskArg(s.Next, s.Dir))
 	}
 	return argv, env, files, nil
 }

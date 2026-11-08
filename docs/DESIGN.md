@@ -466,6 +466,36 @@ type Harness interface {
 }
 ```
 
+### 3.5 Sessions on the Agent SDK
+
+A Claude plan's monthly API credits pay for the Claude API, Managed Agents and the Agent SDK, but not for Claude Code. A key whose organization holds only those credits gets "Credit balance too low" in every Claude Code session. A profile with `sdk = true` runs its sessions on the Agent SDK instead, which those credits cover. The Agent SDK's CLI is `claude -p`, and its docs say to run it as a subprocess from a language other than Python or TypeScript. Irie does exactly that, with no change to what the CLI says it is.
+
+**Launch.** The adapter builds the same command line as for Claude Code's terminal app, without the task, and puts Irie's own pane program in front:
+
+```
+irie sdk [--first <state>/sessions/<id>/task.md] -- claude --model … --settings … --session-id <uuid>
+```
+
+`irie sdk` (`internal/sdk`) adds `-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio` and runs the CLI as its child. The task file's text is the first message. A resume passes `--resume <uuid>` and sends `--first` only for a fork's next prompt.
+
+**What it does.**
+
+| Part | How |
+|---|---|
+| Messages | Each one goes in as a JSON line `{"type":"user",…}`. One sent while a turn runs reaches the agent within that turn, as a message queued in Claude Code's terminal app does |
+| The terminal | The log scrolls up: the user's messages in bold; the reply as it streams, a whole line at a time, wrapped at spaces; each tool call faint, with its command or file, and its result in a few words; then the turn's time and the session's cost. The bottom row is the line being typed. Raw mode, with bracketed paste, so the core types a message as it does to Claude Code: a paste, then Enter |
+| Keys | Enter sends. Escape stops the turn: a `control_request` of subtype `interrupt`, whose turn ends as an error with the CLI's diagnostic, shown as "stopped". Ctrl+C stops the turn too, clears the line, or, twice, ends the session. Ctrl+D on an empty line ends it: the CLI's input closes and it exits after its turn |
+| Permission prompts | They come as `control_request` `can_use_tool`. The full call shows in the log, then `Allow <tool>: <what>?` with `❯ 1. Yes` and `2. No`, numbered as Claude Code numbers its menus, so the phone app's keys answer it too (§4.7). Yes sends back the call's input; No denies it and ends the turn. The PermissionRequest hook still fires, so the row says "needs you" while it waits |
+| Questions | AskUserQuestion is denied, with a note asking the agent to put its question in its reply |
+| Hooks | `--settings` hooks run under `-p`, so Irie observes, holds and steers the session as any other (§3.3) |
+| Cost and context | Claude Code's status line does not run under `-p`. Each turn's result carries the session's cost; the context is the last request's tokens over the model's window. `irie sdk` sends both to the core as a status line would (§6.3) |
+| Freeze, close | The CLI is the host's grandchild, in the same process group; freeze stops the host's whole tree (§4.3), and a close's signal reaches both |
+| Exit | The pane ends when the CLI does, with its exit code; what it wrote to stderr shows above |
+
+**What it goes without.** The parts of Claude Code's terminal app: its status line, tips under the spinner, slash-command menus, agent teams' panes and the question form. Under `-p` a folder is never asked to be trusted, and a project's hooks and MCP servers run at once; Irie starts sessions only in the user's own repos and folders. The agent loop, tools, skills, subagents, sessions and transcripts are Claude Code's own, so the conversation view and reopen work as for any session.
+
+**Where.** A machine whose Claude Code is signed in to such an organization, with `claude auth login --console`, sets `sdk = true` on its Claude Code profiles. Its Iries run every session there on the credits.
+
 ---
 
 ## 4. v1 must-haves
@@ -1141,6 +1171,7 @@ permission_mode = "auto"
 args = []
 env = {}
 cost = ""                     # what the + list says it costs; "" = Irie's own reading (§6.3)
+sdk = false                   # true: the session runs on the Agent SDK, in Irie's own pane (§3.5), for a key whose credits cover the SDK but not Claude Code
 
 [profiles.sonnet]             # built in: fewer tokens for most coding tasks
 harness = "claude-code"
