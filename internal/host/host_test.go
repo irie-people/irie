@@ -5,17 +5,41 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/testutil"
 	"github.com/irie-people/irie/internal/tmux"
 )
 
 func TestMain(m *testing.M) { testutil.Main(m) }
+
+// bound is how long a wait may take: d, or twelve times d while the
+// scheduler rather than the host sets the time, when the test runs in
+// macOS's background state or the machine has more work waiting than CPUs
+// to run it, as during a busy install (tools/live.sh). It is internal/core's
+// slow (freeze_test.go) as a wait: each wait still tells a host that acts
+// from one that never does.
+func bound(t *testing.T, d time.Duration) time.Duration {
+	t.Helper()
+	if runtime.GOOS == "darwin" {
+		out, _ := exec.Command("ps", "-o", "pri=", "-p", strconv.Itoa(os.Getpid())).Output()
+		if strings.TrimSpace(string(out)) == "4" {
+			t.Logf("waiting up to %s: the test runs in macOS's background state", 12*d)
+			return 12 * d
+		}
+	}
+	if l, err := sysload.Read(); err == nil && l.RunQueue > float64(l.CPUs) {
+		t.Logf("waiting up to %s: %.1f CPUs' worth of work waiting on %d CPUs", 12*d, l.RunQueue, l.CPUs)
+		return 12 * d
+	}
+	return d
+}
 
 type hostEnv struct {
 	*testutil.Env
@@ -91,7 +115,7 @@ func processes(t *testing.T) []proc {
 func (h *hostEnv) child(command string) (host int, c proc) {
 	h.t.Helper()
 	host, _ = strconv.Atoi(h.format("#{pane_pid}"))
-	testutil.Eventually(h.t, 5*time.Second, "agent process did not start", func() bool {
+	testutil.Eventually(h.t, bound(h.t, 5*time.Second), "agent process did not start", func() bool {
 		for _, p := range processes(h.t) {
 			if p.ppid == host && p.command == command {
 				c = p
@@ -125,14 +149,14 @@ func TestAgentRunsInItsOwnForegroundGroup(t *testing.T) {
 	if c.pgid != c.pid {
 		t.Errorf("agent pgid %d, want its own pid %d", c.pgid, c.pid)
 	}
-	testutil.Eventually(t, 5*time.Second, "pane_current_command is not the agent", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "pane_current_command is not the agent", func() bool {
 		return h.format("#{pane_current_command}") == "sleep"
 	})
 }
 
 func TestExitCodeIsRecorded(t *testing.T) {
 	h := startHost(t, "/bin/sh", "-c", "exit 3")
-	testutil.Eventually(t, 5*time.Second, "pane did not die", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "pane did not die", func() bool {
 		return h.format("#{pane_dead}") == "1"
 	})
 	if got := h.format("#{pane_dead_status}"); got != "3" {
@@ -145,7 +169,7 @@ func TestExitCodeIsRecorded(t *testing.T) {
 
 func TestMissingCommandExits127(t *testing.T) {
 	h := startHost(t, "irie-test-no-such-command")
-	testutil.Eventually(t, 5*time.Second, "pane did not die", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "pane did not die", func() bool {
 		return h.format("#{pane_dead}") == "1"
 	})
 	if got := h.format("#{pane_dead_status}"); got != "127" {
@@ -172,7 +196,7 @@ func TestSpecEnvAndCwdReachTheAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	want, _ := filepath.EvalSymlinks(spec.Cwd)
-	testutil.Eventually(t, 5*time.Second, "agent output did not appear", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "agent output did not appear", func() bool {
 		screen := h.Tmux(t, "capture-pane", "-p", "-J", "-t", "h:0.0")
 		got, ok := strings.CutPrefix(strings.TrimSpace(screen), "1|")
 		if !ok {
@@ -191,7 +215,7 @@ func TestStopsTheHostDidNotCauseAreContinued(t *testing.T) {
 	}
 	// Without the host the agent would still be stopped after this pause.
 	time.Sleep(300 * time.Millisecond)
-	testutil.Eventually(t, time.Second, "stopped agent was not continued", func() bool {
+	testutil.Eventually(t, bound(t, time.Second), "stopped agent was not continued", func() bool {
 		for _, p := range processes(t) {
 			if p.pid == c.pid {
 				return !strings.HasPrefix(p.stat, "T")
@@ -205,7 +229,7 @@ func TestTheHostSaysWhoItIsInHostJSON(t *testing.T) {
 	h := startHost(t, "sleep", "600")
 	host, c := h.child("sleep 600")
 	var info Info
-	testutil.Eventually(t, 5*time.Second, "no host.json", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "no host.json", func() bool {
 		var err error
 		info, err = ReadInfo(filepath.Join(h.dir, InfoFile))
 		return err == nil
@@ -242,7 +266,7 @@ func TestAFrozenAgentStaysStopped(t *testing.T) {
 	if err := syscall.Kill(c.pid, syscall.SIGSTOP); err != nil {
 		t.Fatal(err)
 	}
-	testutil.Eventually(t, 2*time.Second, "a stop after the thaw was not continued", func() bool {
+	testutil.Eventually(t, bound(t, 2*time.Second), "a stop after the thaw was not continued", func() bool {
 		for _, p := range processes(t) {
 			if p.pid == c.pid {
 				return !strings.HasPrefix(p.stat, "T")
@@ -255,12 +279,12 @@ func TestAFrozenAgentStaysStopped(t *testing.T) {
 func TestUnsetVariablesNeverReachTheAgent(t *testing.T) {
 	script := `printf '%s|%s|%s\n' "${TMUX-unset}" "${TMUX_PANE-unset}" "$IRIE_TEST_MARK"; sleep 600`
 	h := startHostSpec(t, Spec{Argv: []string{"/bin/sh", "-c", script}, Unset: []string{"TMUX", "TMUX_PANE"}})
-	testutil.Eventually(t, 5*time.Second, "the agent did not print its env", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "the agent did not print its env", func() bool {
 		return strings.Contains(h.Tmux(t, "capture-pane", "-p", "-t", "h:0.0"), "unset|unset|1")
 	})
 	// Without Unset the pane's own tmux variables reach the agent.
 	h = startHostSpec(t, Spec{Argv: []string{"/bin/sh", "-c", script}})
-	testutil.Eventually(t, 5*time.Second, "the agent did not print its env", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "the agent did not print its env", func() bool {
 		screen := h.Tmux(t, "capture-pane", "-p", "-t", "h:0.0")
 		return strings.Contains(screen, "|1") && !strings.Contains(screen, "unset")
 	})
@@ -278,7 +302,7 @@ func TestSIGTERMEndsAStoppedAgent(t *testing.T) {
 	h := startHost(t, "/bin/sh", "-c", `/bin/sh "$0" & trap "" TERM; read line`, inner)
 	host, sh := h.child(`/bin/sh -c /bin/sh "$0" & trap "" TERM; read line ` + inner)
 	var child proc
-	testutil.Eventually(t, 5*time.Second, "the agent's child did not start", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "the agent's child did not start", func() bool {
 		for _, p := range processes(t) {
 			if p.ppid == sh.pid && p.command == "/bin/sh "+inner {
 				child = p
@@ -298,11 +322,11 @@ func TestSIGTERMEndsAStoppedAgent(t *testing.T) {
 	if out, err := exec.Command("kill", "-STOP", strconv.Itoa(child.pid)).CombinedOutput(); err != nil {
 		t.Fatalf("kill -STOP %d: %v: %s", child.pid, err, out)
 	}
-	testutil.Eventually(t, time.Second, "the child did not stop", func() bool { return strings.HasPrefix(state(), "T") })
+	testutil.Eventually(t, bound(t, time.Second), "the child did not stop", func() bool { return strings.HasPrefix(state(), "T") })
 	if out, err := exec.Command("kill", "-TERM", strconv.Itoa(host)).CombinedOutput(); err != nil {
 		t.Fatalf("kill -TERM %d: %v: %s", host, err, out)
 	}
-	testutil.Eventually(t, 5*time.Second, "the stopped child never ran its SIGTERM trap", func() bool {
+	testutil.Eventually(t, bound(t, 5*time.Second), "the stopped child never ran its SIGTERM trap", func() bool {
 		s := state()
 		return s == "gone" || strings.HasPrefix(s, "Z")
 	})

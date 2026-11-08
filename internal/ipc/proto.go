@@ -78,6 +78,12 @@ const (
 	// what a person can do with him, and his settings. It answers an
 	// ArchResult.
 	OpArch = "arch"
+	// OpRaphael is Raphael's report (DESIGN §4.11): what his last look at
+	// the computer found, with his advice, and what he restarted; it starts
+	// a look, runs a fix the person said OK to, or marks a startup item as
+	// theirs. A fix from inside an agent is refused. It answers a
+	// RaphaelResult.
+	OpRaphael = "raphael"
 	// OpReady checks that the computer has what Irie needs, as its agents
 	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
 	// a ready.Report, for the Mac app's welcome.
@@ -274,17 +280,42 @@ type ArchAgent struct {
 	On       bool          `json:"on"`                 // he works now
 	Status   string        `json:"status,omitempty"`   // what he does now, in a line
 	Actions  []ArchAction  `json:"actions,omitempty"`  // what a person can do with him now
+	Items    []ArchItem    `json:"items,omitempty"`    // what he found or holds, a line each, under his status
 	Settings []ArchSetting `json:"settings,omitempty"` // his settings, in the order to show them
 }
 
 // ArchAction is something a person can do with an arch agent: a client
 // shows Label and, when it is used, calls Op with Args as they are.
+//
+// An action with Ask is one the person must say OK to, having read what
+// it will do: a client shows Ask first, such as the commands a fix runs,
+// and only on their OK calls Op, with Args and "ok": true. An op that
+// offers such an action refuses it without "ok", so a client that does not
+// know Ask never runs one unasked.
 type ArchAction struct {
 	Label string          `json:"label"` // such as "Boost for 1 hour"
 	Op    string          `json:"op"`    // such as gabriel
 	Args  json.RawMessage `json:"args,omitempty"`
 	Done  string          `json:"done,omitempty"` // what the client says once it worked
+	Ask   string          `json:"ask,omitempty"`  // what the person reads, and says OK to, before it runs
 }
+
+// ArchItem is one thing an arch agent found or holds, such as a disk
+// nearly full or a cache to clear: a line a client lists under his status,
+// with what a person can do about it.
+type ArchItem struct {
+	Text    string       `json:"text"`              // what it is, in a line
+	Detail  string       `json:"detail,omitempty"`  // his advice and evidence, a few lines
+	Level   string       `json:"level,omitempty"`   // ArchOK, ArchNote or ArchWarn: how a client marks it
+	Actions []ArchAction `json:"actions,omitempty"` // what a person can do about it
+}
+
+// The levels of an ArchItem.
+const (
+	ArchOK   = "ok"   // well
+	ArchNote = "note" // worth a look
+	ArchWarn = "warn" // needs care
+)
 
 // ArchSetting is one of an arch agent's settings: a config key (the config
 // op reads and writes it), how a client edits it, and what to call it.
@@ -305,6 +336,72 @@ const (
 	ArchNumber   = "number"   // a number
 	ArchLines    = "lines"    // a list of one-line texts
 )
+
+// RaphaelArgs asks for Raphael's report (OpRaphael). With Check he looks
+// at the computer again first; with Fix and OK he runs that finding's fix,
+// which the person has read and said OK to; with Mine he no longer flags
+// that startup item, which the person knows. Wait answers once the look or
+// the fix is done, rather than as it starts.
+type RaphaelArgs struct {
+	Check bool   `json:"check,omitempty"`
+	Fix   string `json:"fix,omitempty"` // a finding's id
+	OK    bool   `json:"ok,omitempty"`  // the person said OK to the fix, having read what it runs
+	Mine  string `json:"mine,omitempty"`
+	Wait  bool   `json:"wait,omitempty"`
+}
+
+// RaphaelResult is Raphael's report (OpRaphael).
+type RaphaelResult struct {
+	On       bool             `json:"on"`                // arch.raphael.on: he restarts what stops answering and looks over the computer
+	Checking bool             `json:"checking"`          // a look is under way
+	Checked  *time.Time       `json:"checked,omitempty"` // when he last looked at the caches, startup items and protections; nil before his first look
+	Took     string           `json:"took,omitempty"`    // how long that took, such as "48s"
+	Next     *time.Time       `json:"next,omitempty"`    // when he looks next by himself
+	Findings []RaphaelFinding `json:"findings"`          // what needs care first, then what is worth a look
+	Fine     []string         `json:"fine"`              // what is well, a line each
+	Fixing   string           `json:"fixing,omitempty"`  // the finding whose fix runs now
+	Did      string           `json:"did,omitempty"`     // what the fix asked for did, with Wait
+	Fixes    []RaphaelDone    `json:"fixes,omitempty"`   // the fixes he ran lately, newest first
+	Restarts []RaphaelRestart `json:"restarts,omitempty"`
+}
+
+// RaphaelFinding is one thing Raphael found.
+type RaphaelFinding struct {
+	ID       string      `json:"id"`
+	Area     string      `json:"area"`  // processes, memory, disk, caches, startup or protection
+	Level    string      `json:"level"` // ok, note or warn
+	Text     string      `json:"text"`
+	Advice   string      `json:"advice,omitempty"`
+	Evidence []string    `json:"evidence,omitempty"` // what he saw, for what may have got in
+	Sure     string      `json:"sure,omitempty"`     // how sure he is of it, in words; never certain
+	Size     int64       `json:"size,omitempty"`     // bytes it takes, or a fix frees
+	Fix      *RaphaelFix `json:"fix,omitempty"`
+	Mine     bool        `json:"mine,omitempty"` // the person can mark it as theirs
+}
+
+// RaphaelFix is what Raphael can do about a finding, on the person's OK.
+type RaphaelFix struct {
+	Label string   `json:"label"`
+	Run   []string `json:"run"` // what he will run, a command a line
+	About string   `json:"about"`
+	Undo  string   `json:"undo,omitempty"`
+}
+
+// RaphaelDone is a fix Raphael ran.
+type RaphaelDone struct {
+	At    time.Time `json:"at"`
+	Label string    `json:"label"`
+	Said  string    `json:"said"`            // what came of it, in words
+	Error bool      `json:"error,omitempty"` // it failed, and Said says why
+}
+
+// RaphaelRestart is a part of Irie that stopped answering and Raphael
+// restarted: the Mac app, a sidebar or the core.
+type RaphaelRestart struct {
+	At     time.Time `json:"at"`
+	What   string    `json:"what"`             // app, sidebar or core
+	Report string    `json:"report,omitempty"` // where it was stuck, in the freezes folder
+}
 
 // GabrielArgs starts or stops a boost (OpGabriel): for its time, the user's
 // focus gets the machine first whether it is busy or not. No args asks for

@@ -133,6 +133,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Arch{
 		Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
+		Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}

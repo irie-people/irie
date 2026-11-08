@@ -5,6 +5,7 @@ package tmux
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Sessions and fixed targets of Irie's server.
@@ -69,6 +71,22 @@ var Dirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"}
 // ErrNotFound means no tmux was found.
 var ErrNotFound = errors.New("tmux not found: `irie setup` installs it, or set tmux.path")
 
+// ErrTimeout means a command did not finish by its deadline: the server is
+// stopped, swapped out or wedged.
+var ErrTimeout = errors.New("tmux: timed out")
+
+// Deadlines of one tmux command, unless Runner.Timeout sets another. A
+// client waits for its server, and a server that is stopped, swapped out
+// or wedged would hold the caller, and the core's lock with it, for good.
+// The client is killed at its deadline, which leaves the server as it was:
+// the core goes on answering its clients from what it already knows, and
+// tries again at its next tick. Starting the server also starts the core
+// in it, so it gets longer.
+const (
+	DefaultTimeout = 10 * time.Second
+	StartTimeout   = 30 * time.Second
+)
+
 // Find returns the tmux binary: the configured path, else tmux on PATH, else
 // in Dirs. A tmux on PATH that is one of Irie's own shims (IsShim) is passed
 // over, as exec.LookPath passes over a relative one.
@@ -107,6 +125,9 @@ type Runner struct {
 	// Env is the environment of its tmux calls, which a server that one of
 	// them starts keeps for every pane; nil is the caller's own.
 	Env []string
+	// Timeout bounds each command; zero is DefaultTimeout, or StartTimeout
+	// for a command that may start the server.
+	Timeout time.Duration
 }
 
 // command builds a tmux command. Only start may start the server: every
@@ -115,12 +136,15 @@ type Runner struct {
 // fails instead of bringing a server back without its core. -u: without a
 // UTF-8 locale, as when Irie.app starts the server, tmux would print every
 // non-ASCII character of a session's name, or any option, as "_".
-func (r *Runner) command(start bool, args ...string) *exec.Cmd {
+func (r *Runner) command(ctx context.Context, start bool, args ...string) *exec.Cmd {
 	flags := []string{"-u", "-L", r.Socket}
 	if !start {
 		flags = append(flags, "-N")
 	}
-	cmd := exec.Command(r.Bin, append(flags, args...)...)
+	cmd := exec.CommandContext(ctx, r.Bin, append(flags, args...)...)
+	// A pane process that kept the client's output open would hold Output
+	// past the kill.
+	cmd.WaitDelay = time.Second
 	env := r.Env
 	if env == nil {
 		env = os.Environ()
@@ -135,10 +159,22 @@ func (r *Runner) command(start bool, args ...string) *exec.Cmd {
 func (r *Runner) Run(args ...string) (string, error) { return r.run(false, args...) }
 
 func (r *Runner) run(start bool, args ...string) (string, error) {
-	cmd := r.command(start, args...)
+	limit := r.Timeout
+	if limit <= 0 {
+		limit = DefaultTimeout
+		if start {
+			limit = StartTimeout
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+	cmd := r.command(ctx, start, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("tmux %s: after %s: %w", strings.Join(args, " "), limit, ErrTimeout)
+	}
 	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		// With -N tmux says "Error connecting to"; without, "error

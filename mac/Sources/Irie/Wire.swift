@@ -179,12 +179,31 @@ struct Header: Decodable {
     var trod: TrodShift?
     /// Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
     var vpn: VPNMark?
+    /// How busy the machine is, read every 5 s (DESIGN §2.4).
+    var load: MachineLoad?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
-        case trod, vpn
+        case trod, vpn, load
+    }
+}
+
+/// How busy the core's machine is: its CPUs, the work waiting to run over
+/// the last minute and the kernel's memory pressure (1, 2 or 4).
+struct MachineLoad: Decodable, Equatable {
+    var cpus: Int
+    var runQueue: Double
+    var pressure: Int?
+
+    /// Busy as Gabriel counts it: the work waiting leaves less than a CPU
+    /// free, or memory is under pressure (DESIGN §4.11).
+    var busy: Bool { cpus > 0 && (runQueue >= Double(cpus - 1) || (pressure ?? 0) >= 2) }
+
+    enum CodingKeys: String, CodingKey {
+        case cpus, pressure
+        case runQueue = "run_queue"
     }
 }
 
@@ -297,6 +316,8 @@ struct ArchAgent: Decodable, Identifiable, Equatable {
     var on: Bool
     var status: String?
     var actions: [ArchAction]?
+    /// What he found or holds, a line each, such as a cache to clear.
+    var items: [ArchItem]?
     var settings: [ArchSetting]?
     var id: String { name }
 
@@ -311,12 +332,32 @@ struct ArchAgent: Decodable, Identifiable, Equatable {
 }
 
 /// Something you can do with an arch agent: the app calls op with args as
-/// they came, and says done once it worked.
+/// they came, and says done once it worked. One with ask is yours to say
+/// OK to first: the app shows ask, such as the commands a fix runs, and
+/// only on your OK calls op, with args and "ok": true (argsOK).
 struct ArchAction: Decodable, Equatable {
     var label: String
     var op: String
     var args: JSONValue?
     var done: String?
+    var ask: String?
+
+    /// The args once you said OK to what ask shows.
+    var argsOK: JSONValue {
+        var o: [String: JSONValue] = [:]
+        if case let .object(v) = args { o = v }
+        o["ok"] = .bool(true)
+        return .object(o)
+    }
+}
+
+/// One thing an arch agent found or holds, as a line under his status: how
+/// it stands (ok, note or warn), his advice, and what you can do about it.
+struct ArchItem: Decodable, Equatable {
+    var text: String
+    var detail: String?
+    var level: String?
+    var actions: [ArchAction]?
 }
 
 /// One of an arch agent's settings, with its value now.

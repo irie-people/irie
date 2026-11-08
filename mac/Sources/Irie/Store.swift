@@ -198,12 +198,16 @@ final class Store {
     let client: CoreClient
     /// The core's config, as the Settings window shows and edits it.
     let settings: SettingsModel
+    /// What the menu bar shows, which changes far less often than the
+    /// store does (MenuBar.swift).
+    let menu = MenuState()
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
         settings.changed = { [weak self] in self?.loadChoices() }
+        watchMenu()
     }
 
     var socketPath: String { client.socketPath }
@@ -214,9 +218,15 @@ final class Store {
         guard !started else { return }
         started = true
         if let seconds = FreezeDog.restartedAfter {
-            say("Irie stopped answering for \(seconds) s, so the freeze dog restarted it. Every agent kept running.",
+            say("Irie stopped answering for \(seconds) s, so ❤️‍🩹 Raffi restarted it. Every agent kept running.",
                 error: false, seconds: 10)
         }
+        // Behind another app, the window takes in the core's news less
+        // often (Pace.swift).
+        Pace.shared.set(active: NSApplication.shared.isActive)
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: true) }
+        nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: false) }
         Task { await run() }
     }
 
@@ -252,15 +262,11 @@ final class Store {
                 canUndo = hello.features.contains("undo")
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
-                // The store lives as long as the app. Frames wait in the
-                // inbox for the main actor, which takes every one that came
-                // in a single turn.
-                let inbox = FrameInbox()
-                try await client.subscribe { frame in
-                    if inbox.put(frame) {
-                        Task { @MainActor in self.apply(inbox.take()) }
-                    }
-                }
+                // The store lives as long as the app. The frames go in a
+                // batch at a time (Pace.swift), and wait while a menu is
+                // open (take(_:)).
+                let batcher = Batcher<Frame> { [weak self] frames in self?.take(frames) }
+                try await client.subscribe { frame in batcher.add(frame) }
                 link = .offline("The core went away.")
             } catch {
                 link = .offline(Self.describe(error))
@@ -298,7 +304,41 @@ final class Store {
         return false
     }
 
-    /// Applies the frames that came since the last turn, in order. Every
+    /// Frames that came while the main run loop tracked a menu or a drag,
+    /// in order (take(_:)).
+    @ObservationIgnored private var held: [Frame] = []
+
+    /// Takes in a batch of frames (Pace.swift), or holds it while the main
+    /// run loop tracks: an open menu (the menu bar's, a card's ⋯ or
+    /// right-click menu, the task bar's repo menu), a drag or a live resize.
+    /// A change to the store then would draw the views again under the
+    /// pointer, and SwiftUI would rebuild the open menu, which loses the
+    /// item under the pointer or closes. The held frames go in as soon as
+    /// the tracking ends.
+    private func take(_ frames: [Frame]) {
+        if RunLoop.current.currentMode == .eventTracking {
+            let first = held.isEmpty
+            held.append(contentsOf: frames)
+            if first {
+                RunLoop.main.perform(inModes: [.default]) { [weak self] in
+                    MainActor.assumeIsolated { self?.release() }
+                }
+            }
+            return
+        }
+        let all = held + frames
+        held = []
+        apply(all)
+    }
+
+    private func release() {
+        guard !held.isEmpty else { return }
+        let frames = held
+        held = []
+        apply(frames)
+    }
+
+    /// Applies a batch of frames (take(_:)), in order. Every
     /// view that reads the store draws again whenever one of its published
     /// values is set, even to what it was, so nothing is set unless it
     /// changed: an upsert of a row the app already has, such as one whose
@@ -360,6 +400,9 @@ final class Store {
     /// Takes a header, a snapshot's or a header frame's: each is the whole
     /// header, so one without the bot is one out of its hours.
     private func applyHeader(_ h: Header) {
+        // While the machine is busy, the window takes in the core's news
+        // less often (Pace.swift).
+        Pace.shared.set(busy: h.load?.busy ?? false)
         if (h.redOnDone ?? false) != Look.redOnDone {
             Look.redOnDone = h.redOnDone ?? false
             redOnDone = Look.redOnDone
@@ -483,6 +526,21 @@ final class Store {
                       actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
                       settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
                                  ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
+            ArchAgent(name: "raphael", nickname: "Raffi", icon: "❤️‍🩹", title: "heals Irie and your Mac",
+                      about: "Raphael keeps Irie and the computer it runs on well.",
+                      on: true, status: "Looked at 14:05: 2 things need care, and 1 is worth a look.",
+                      actions: [ArchAction(label: "Look over my Mac now", op: "raphael")],
+                      items: [ArchItem(text: "Your disk is nearly full: 9.9 GB free of 995 GB (1%).",
+                                       detail: "macOS needs room for updates and swap, and slows down without it. Clear the caches below, and empty the Trash.", level: "warn"),
+                              ArchItem(text: "Go’s build cache takes 13.8 GB (~/Library/Caches/go-build).",
+                                       detail: "It is safe to clear: Go builds what it needs again, so the next builds and tests take longer.", level: "warn",
+                                       actions: [ArchAction(label: "Clear Go’s build cache", op: "raphael",
+                                                            ask: "Raffi will run:\n    go clean -cache\n\nFrees about 13.8 GB. Raffi waits until no Go build or test runs, so none of them breaks.")]),
+                              ArchItem(text: "com.example.helper is worth a look: it starts ~/.local/bin/helper as you log in.",
+                                       detail: "If you know it, mark it as yours and Raffi no longer flags it.\nIts program is signed by no one in particular (an ad-hoc signature).\nNot sure: many good programs show these signs too.", level: "note",
+                                       actions: [ArchAction(label: "It’s mine", op: "raphael")])],
+                      settings: [ArchSetting(key: "arch.raphael.on", kind: "bool", label: "Raffi restarts what stops answering, and looks over your Mac", value: .bool(true)),
+                                 ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app when it has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
         taskRepo = "irie"
@@ -888,11 +946,14 @@ final class Store {
     }
 
     /// Does what an arch agent offers: calls its op with its args as they
-    /// came, says so, and reads the arch agents again.
-    func archAction(_ a: ArchAction) {
+    /// came, says so, and reads the arch agents again. ok says you have
+    /// read what an action that asks first does, and said OK to it: only
+    /// then does one with ask run.
+    func archAction(_ a: ArchAction, ok: Bool = false) {
+        if a.ask != nil && !ok { return }
         Task {
             do {
-                _ = try await client.call(a.op, a.args ?? JSONValue.object([:]), timeout: 20, as: JSONValue.self)
+                _ = try await client.call(a.op, ok ? a.argsOK : a.args ?? JSONValue.object([:]), timeout: 20, as: JSONValue.self)
                 say(a.done ?? "\(a.label): done.", error: false, seconds: 5)
             } catch {
                 say("Couldn’t \(a.label.lowercased()): \(error.localizedDescription)", error: true)
@@ -991,36 +1052,6 @@ final class Store {
         } catch {
             say("Couldn’t open Ghostty: \(error.localizedDescription)", error: true)
         }
-    }
-}
-
-/// Frames from the core, kept until the main actor takes them. Every frame
-/// that arrives while one turn waits goes in that turn, so a burst of
-/// upserts costs one pass over the store, not one each.
-final class FrameInbox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var frames: [Frame] = []
-    private var waiting = false
-
-    /// Keeps a frame, and says whether to ask the main actor for a turn:
-    /// false while one is already on its way.
-    func put(_ f: Frame) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        frames.append(f)
-        if waiting { return false }
-        waiting = true
-        return true
-    }
-
-    /// Takes every frame kept so far.
-    func take() -> [Frame] {
-        lock.lock()
-        defer { lock.unlock() }
-        let out = frames
-        frames = []
-        waiting = false
-        return out
     }
 }
 

@@ -73,8 +73,45 @@ func Run(socket string, o Options) error {
 	}
 	p := tea.NewProgram(New(socketBackend{socket}, o))
 	go follow(p, socket)
+	go watch(p, socket)
 	_, err := p.Run()
 	return err
+}
+
+// pingMsg is a ping of Raphael's watch (DESIGN §2.4, §4.11), which the
+// sidebar answers from its own loop.
+type pingMsg struct {
+	n      uint64
+	answer func(n uint64)
+}
+
+// watch asks the core to watch the sidebar, as it watches the Mac app: the
+// core pings it once a second on a connection of its own, and the
+// program's loop answers each, so a sidebar whose loop is stuck goes
+// unanswered, and Raphael force quits it for its supervisor to start it
+// again. When the connection ends it asks again; a core from before the
+// watch refuses, and is asked again now and then.
+func watch(p *tea.Program, socket string) {
+	for {
+		wait := 2 * time.Second
+		if c, err := ipc.Dial(socket, time.Second); err == nil {
+			c.Timeout = 5 * time.Second
+			if frames, err := c.Subscribe(ipc.SubscribeArgs{View: ipc.ViewWatch, PID: os.Getpid()}); err == nil {
+				answer := func(n uint64) { c.Send(ipc.Pong{Pong: n}) }
+				for f := range frames {
+					if f.T == ipc.FramePing && f.Ping > 0 {
+						// Send waits for the loop to take it, as the
+						// answer does.
+						p.Send(pingMsg{n: f.Ping, answer: answer})
+					}
+				}
+			} else {
+				wait = time.Minute
+			}
+			c.Close()
+		}
+		time.Sleep(wait)
+	}
 }
 
 // follow feeds the core's frames to p. While the core cannot be reached

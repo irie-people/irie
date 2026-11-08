@@ -223,6 +223,9 @@ func NewEnv(t *testing.T) *Env {
 	// focus (Gabriel, DESIGN §4.11): it would take the user's own agents for
 	// apps outside it.
 	t.Setenv("IRIE_GABRIEL", "off")
+	// Nor does it look over the machine, or restart itself, for Raphael
+	// (DESIGN §4.11): the user's own core does that once.
+	t.Setenv("IRIE_RAPHAEL", "off")
 	// Nor does it turn the Mac's sleep off and on for a closed lid (DESIGN
 	// §4.12): that would be the user's own Mac, and its lid.
 	t.Setenv("IRIE_LID", "off")

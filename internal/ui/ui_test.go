@@ -1781,3 +1781,24 @@ func TestHeaderShowsTheVPN(t *testing.T) {
 		t.Errorf("blocked: header %q", header())
 	}
 }
+
+func TestTheSidebarAnswersRaphaelsPingFromItsLoop(t *testing.T) {
+	m := New(&fakeBackend{}, Options{})
+	got := make(chan uint64, 1)
+	_, cmd := m.Update(pingMsg{n: 7, answer: func(n uint64) { got <- n }})
+	if cmd == nil {
+		t.Fatal("no answer")
+	}
+	// The answer goes out on a goroutine of its own, once the loop took it.
+	if msg := cmd(); msg != nil {
+		t.Errorf("answering says %v", msg)
+	}
+	select {
+	case n := <-got:
+		if n != 7 {
+			t.Errorf("answered %d, want 7", n)
+		}
+	default:
+		t.Error("the ping went unanswered")
+	}
+}

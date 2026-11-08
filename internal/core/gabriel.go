@@ -70,6 +70,7 @@ type gabState struct {
 	frontOK   bool            // whether front is known
 	irieFront bool            // Irie, or a terminal it may be in, is in front
 	focus     map[string]bool // the sessions in the user's focus
+	installs  map[string]bool // the sessions that ran an install at the last sweep, in the focus too
 	outside   map[int]outProc // the apps outside Irie it slowed, by pid
 	// boostUntil is when the boost on ends: until then the user's focus
 	// gets the machine first whether it is busy or not.
@@ -131,6 +132,30 @@ func (c *Core) inFocus(irieFront bool, word time.Duration, now time.Time) map[st
 	return f
 }
 
+// refocus takes the session now on show into the user's focus at once
+// while Gabriel holds back, and moves the trees before it returns: a show
+// never waits for his next sweep, up to sampleEvery ticks away, with the
+// session the user turned to still in the background. The caller holds
+// c.mu.
+func (c *Core) refocus() {
+	if !c.gab.holding {
+		return
+	}
+	c.gab.focus = c.focusNow(c.gab.irieFront, c.gab.installs, c.cfg().Arch.Gabriel.Word, time.Now())
+	c.background()
+}
+
+// focusNow is the user's focus (inFocus), and every session that runs an
+// install, which is everyone's and never steps back. The caller holds
+// c.mu.
+func (c *Core) focusNow(irieFront bool, installs map[string]bool, word time.Duration, now time.Time) map[string]bool {
+	f := c.inFocus(irieFront, word, now)
+	for id := range installs {
+		f[id] = true
+	}
+	return f
+}
+
 // markWord notes that the user just messaged or started session id: it
 // stays in their focus for arch.gabriel.word.
 func (c *Core) markWord(id string) {
@@ -187,15 +212,11 @@ func (c *Core) gabrielSweep() {
 	}
 
 	// An install in progress is everyone's: it never steps back.
-	var installs map[string]bool
+	st.installs = nil
 	if st.holding {
-		installs = c.installing()
+		st.installs = c.installing()
 	}
 	c.mu.Lock()
-	st.focus = c.inFocus(st.irieFront, g.Word, now)
-	for id := range installs {
-		st.focus[id] = true
-	}
 	trees := c.sessionRoots()
 	held := maps.Clone(c.gab.outside)
 	c.mu.Unlock()
@@ -203,6 +224,9 @@ func (c *Core) gabrielSweep() {
 	outside := c.slowOutside(held, st, g, trees)
 
 	c.mu.Lock()
+	// The focus is read last, so a show made during the sweep keeps the
+	// session it brought into the focus (refocus).
+	st.focus = c.focusNow(st.irieFront, st.installs, g.Word, now)
 	st.outside = outside
 	// A boost started or stopped meanwhile wins; one whose time is up ends.
 	st.boostUntil = c.gab.boostUntil

@@ -50,6 +50,20 @@ func printArch(w io.Writer, r ipc.ArchResult) error {
 		if a.Status != "" {
 			fmt.Fprintf(w, "  %s\n", a.Status)
 		}
+		for i, it := range a.Items {
+			if i == archItemsShown {
+				fmt.Fprintf(w, "  … and %d more: `irie ctl %s` says them all\n", len(a.Items)-i, a.Name)
+				break
+			}
+			mark := "-"
+			switch it.Level {
+			case ipc.ArchWarn:
+				mark = "!"
+			case ipc.ArchOK:
+				mark = "✓"
+			}
+			fmt.Fprintf(w, "  %s %s\n", mark, it.Text)
+		}
 		if len(a.Actions) > 0 {
 			var labels []string
 			for _, x := range a.Actions {
@@ -60,6 +74,9 @@ func printArch(w io.Writer, r ipc.ArchResult) error {
 	}
 	return nil
 }
+
+// archItemsShown is how many of an arch agent's items the list prints.
+const archItemsShown = 5
 
 // archName is how an arch agent is introduced: his icon, his name (and
 // nickname) and his work.

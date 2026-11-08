@@ -201,6 +201,11 @@ func (c *Core) background() {
 	for _, x := range c.sessions {
 		p := c.snap.Pane(x.pane)
 		if p == nil || p.Dead || p.PID <= 1 {
+			// No process to move: what Irie put in the background from its
+			// tree is let go below once it ends or leaves. A dead session
+			// that kept the flag, as every session has from the core's
+			// start, would have each pass read the whole process table.
+			x.demoted = false
 			continue
 		}
 		want := x.track.priority == 0 && (promoted || holding && !c.gab.focus[x.id])
