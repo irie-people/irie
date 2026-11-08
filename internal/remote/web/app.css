@@ -16,6 +16,9 @@
   --shadow: 0 1px 2px rgba(30, 43, 34, .07), 0 0 0 .5px rgba(30, 43, 34, .05);
   --lift: 0 10px 30px rgba(30, 43, 34, .16), 0 1px 3px rgba(30, 43, 34, .08);
   --term-bg: #14110D; --term-fg: #EEE5D5;
+  /* The terminal's 16 colours, calm on its ground in both modes. */
+  --t0: #2B2620; --t1: #E07A6B; --t2: #9CC48A; --t3: #DDB867; --t4: #79A8DA; --t5: #C891C4; --t6: #72C2BF; --t7: #D9D1C3;
+  --t8: #776D60; --t9: #F09486; --t10: #B3D8A3; --t11: #EDCB82; --t12: #97BEEA; --t13: #DDA9D9; --t14: #94D6D3; --t15: #F6F0E5;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
@@ -721,12 +724,105 @@ pre.needs-detail { background: var(--card); white-space: pre-wrap; }
 .key.busy { opacity: .5; }
 .needs-foot { display: flex; justify-content: space-between; align-items: center; margin: -2px -2px 0; }
 .needs-foot .linkish { font-size: 14.5px; }
-.term {
-  margin: 0; max-height: 40vh; overflow: auto; padding: 10px 12px; border-radius: 13px;
-  background: var(--term-bg); color: var(--term-fg); font: 11.5px/1.45 var(--mono); white-space: pre; tab-size: 8;
-  -webkit-overflow-scrolling: touch; -webkit-user-select: text; user-select: text;
+
+/* ---- Browser and Term ---------------------------------------------------- */
+
+/* The switch under the session's bar, in the bar's colour. */
+.session > .nav { border-bottom: 0; }
+.modes {
+  flex: none; position: relative; z-index: 4;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  padding: 0 calc(12px + var(--sar)) 9px calc(12px + var(--sal));
+  background: var(--bar); border-bottom: .5px solid var(--bar-edge);
 }
-.empty .term { width: 100%; text-align: left; margin-top: 10px; }
+.modes-side.end { justify-self: end; }
+.seg { display: inline-flex; padding: 2px; border-radius: 11px; background: rgba(236, 240, 230, .1); }
+.seg-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 96px; height: 32px; padding: 0 14px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--muted); font: 600 14.5px var(--round);
+  transition: background .15s, color .15s;
+}
+.seg-btn[aria-selected="true"] { background: rgba(236, 240, 230, .2); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+.seg-ic svg { width: 16px; height: 16px; }
+.zoom-btn {
+  height: 32px; padding: 0 13px; border: 0; border-radius: 16px;
+  background: rgba(236, 240, 230, .1); color: var(--ink); font: 600 13.5px var(--round);
+}
+.zoom-btn:active, .seg-btn:active { transform: scale(.96); }
+
+/* Term: the terminal as it shows it, cell for cell, on the terminal's ground. */
+.term-mode .feed-wrap { background: var(--term-bg); }
+.termview { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--term-bg); }
+/* Shorter than its room, it sits at the bottom, by the keys and the prompt. */
+.tscroll {
+  flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; align-items: flex-start;
+  -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;
+}
+.tgrid {
+  flex: none; box-sizing: content-box; padding: 8px; margin: auto 0 0;
+  font-family: var(--mono); line-height: 1.2; color: var(--term-fg);
+  white-space: pre; font-variant-ligatures: none; font-kerning: none;
+  -webkit-text-size-adjust: none; text-size-adjust: none;
+  -webkit-user-select: text; user-select: text; cursor: text;
+}
+.trow { height: 1.2em; }
+.tgrid .b { font-weight: 700; }
+.tgrid .d { opacity: .62; }
+.tgrid .i { font-style: italic; }
+.tgrid .u { text-decoration: underline; }
+.tgrid .s { text-decoration: line-through; }
+.tgrid .u.s { text-decoration: underline line-through; }
+.tgrid .h { color: transparent !important; }
+.tgrid .c1, .tgrid .c2 { display: inline-block; text-align: center; }
+.tgrid .c1 { width: 1ch; }
+.tgrid .c2 { width: 2ch; }
+.tgrid .tcur { box-shadow: inset 0 0 0 1px currentColor; }
+.tprobe { position: absolute; left: -9999px; top: 0; visibility: hidden; font: 100px/1 var(--mono); white-space: pre; }
+.tnote {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px);
+  padding: 7px 14px; border-radius: 16px; background: rgba(20, 17, 13, .86); color: var(--term-fg);
+  box-shadow: 0 0 0 .5px rgba(238, 229, 213, .18); font-size: 13.5px; line-height: 1.35; text-align: center;
+  pointer-events: none;
+}
+.tnote.quiet { padding: 5px 12px; font-size: 12.5px; opacity: .85; }
+
+/* The keys under it, in a row that scrolls sideways. */
+.tkeys {
+  display: flex; gap: 6px; overflow-x: auto; margin: 0 calc(-10px - var(--sar)) 8px calc(-10px - var(--sal)); padding: 0 calc(10px + var(--sar)) 0 calc(10px + var(--sal));
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.tkeys::-webkit-scrollbar { display: none; }
+.tkey {
+  flex: none; min-width: 46px; height: 38px; padding: 0 10px; border-radius: 11px;
+  border: 1px solid var(--edge); background: var(--card); color: var(--ink);
+  font: 650 14.5px var(--round); transition: transform .1s, background .12s;
+}
+.tkey:active { transform: scale(.94); background: var(--panel); }
+.tkey.hit { animation: hit .35s ease-out; }
+@keyframes hit { from { background: var(--selection); } to { background: var(--card); } }
+.needs-card.compact { gap: 8px; padding-bottom: 12px; }
+.needs-card.compact .tkeys { margin: 0 -12px; padding: 0 12px; }
+.needs-card.compact .opts { gap: 6px; }
+.needs-card.compact .opt { min-height: 42px; padding: 6px 11px; font-size: 15px; }
+.needs-card.compact .opt .k { width: 26px; height: 26px; }
+
+/* A phone on its side: the switch joins the bar, and the keys the message box, so the terminal keeps the height. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .session > .nav { min-height: calc(var(--sat) + 48px); padding-right: calc(250px + var(--sar)); }
+  .session > .nav .icon-btn:last-child { position: absolute; right: calc(6px + var(--sar)); bottom: 2px; }
+  .modes {
+    position: absolute; z-index: 5; top: var(--sat); right: calc(54px + var(--sar)); height: 48px;
+    display: flex; gap: 8px; padding: 0; background: transparent; border: 0;
+  }
+  .modes-side:first-child { display: none; }
+  .seg-btn { min-width: 78px; height: 30px; padding: 0 10px; font-size: 14px; }
+  .zoom-btn { height: 30px; }
+  .term-mode .session-bottom:not(.needs-bottom) { display: flex; align-items: center; gap: 10px; }
+  .term-mode .session-bottom:not(.needs-bottom) > .tkeys { flex: 1 1 0; min-width: 0; margin: 0; padding: 0; }
+  .term-mode .session-bottom:not(.needs-bottom) > .composer { flex: 1 1 0; min-width: 0; }
+}
 
 /* ---- Increase Contrast and less motion ------------------------------------------- */
 
@@ -738,5 +834,5 @@ pre.needs-detail { background: var(--card); white-space: pre-wrap; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .card.pressed, .call:active, .opt:active, .btn:active, .key:active, .mchip:active { transform: none; }
+  .card.pressed, .call:active, .opt:active, .btn:active, .key:active, .mchip:active, .tkey:active, .seg-btn:active, .zoom-btn:active { transform: none; }
 }

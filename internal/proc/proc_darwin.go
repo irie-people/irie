@@ -1,6 +1,9 @@
 package proc
 
 import (
+	"fmt"
+	"time"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -20,6 +23,22 @@ const (
 const CanBackground = true
 
 func read() ([]Proc, error) { return readKinfo("kern.proc.all") }
+
+// readArgs reads kern.procargs2 (parseProcargs2).
+func readArgs(pid int) ([]string, []string, error) {
+	b, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return nil, nil, err
+	}
+	argv, env, ok := parseProcargs2(b)
+	if !ok {
+		return nil, nil, fmt.Errorf("kern.procargs2 of %d: unreadable", pid)
+	}
+	return argv, env, nil
+}
+
+// started reads a start in microseconds since 1970 (fromKinfo).
+func started(start int64) (time.Time, bool) { return time.UnixMicro(start), start > 0 }
 
 // readGroup reads one process group with a single sysctl (kern.proc.pgrp).
 func readGroup(pgid int) ([]Proc, error) { return readKinfo("kern.proc.pgrp", pgid) }

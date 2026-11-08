@@ -338,6 +338,11 @@ type Profile struct {
 	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
+	// SDK runs the session on the Agent SDK: Irie's own pane program drives
+	// `claude -p`, instead of Claude Code's terminal app (DESIGN §3.5). It is
+	// for an API key whose credits cover the Agent SDK but not Claude Code,
+	// such as a Claude plan's monthly API credits.
+	SDK bool `toml:"sdk"`
 }
 
 // TakesSkills reports whether the profile's sessions get Irie's skills.
@@ -1046,6 +1051,9 @@ func (c Config) Validate() error {
 		}
 		if strings.ContainsAny(p.Cost, "\n\r") {
 			bad("profiles.%s.cost: must be one line", name)
+		}
+		if p.SDK && p.Harness != "claude-code" {
+			bad("profiles.%s.sdk: only the claude-code harness runs on the Agent SDK", name)
 		}
 		if p.Arch != "" {
 			if a, ok := arch.Get(p.Arch); !ok || !a.Call {

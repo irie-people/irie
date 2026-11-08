@@ -8,6 +8,12 @@
 
 Run every coding agent you have, from any supplier, on any model, cloud or local. Run them side by side and keep track of all of them in one calm view.
 
+![Irie's Mac app in four short scenes: a task typed into the task bar gets its own card beside three agents at work; an agent's card turns red when it asks a question, and it goes back to work once answered in its terminal; the window closes and opens again with every agent still working; a small task on a local model finishes beside a hard one on Claude.](docs/media/irie.gif)
+
+![Irie's Mac app: three agents in the sidebar, one of them red because it asks which colour a button should be, and that agent's terminal on the right with the question.](docs/media/irie-mac.png)
+
+Both are filmed in a sandbox whose agents are stand-ins that run no model ([how](docs/demo/README.md)).
+
 ## Why
 
 **Take back your time.** Hand the grind to a crew of agents working in parallel, each in its own git worktree. Spend your hours on the parts only you can do.
@@ -60,6 +66,8 @@ The website has the docs, from installing Irie to a merged change. Its pages are
 ## Help
 
 [SUPPORT.md](SUPPORT.md) says where to ask, and [SECURITY.md](SECURITY.md) how to report a vulnerability privately. Everyone here follows the [Code of Conduct](CODE_OF_CONDUCT.md), and [GOVERNANCE.md](GOVERNANCE.md) says how decisions are made.
+
+Chat happens on the [Irie People Discord](https://discord.gg/XrP63ujbPH), and help still happens on GitHub. Irie People is also on [Instagram](https://www.instagram.com/irie_people/) and [Threads](https://www.threads.com/@irie_people).
 
 ## License
 

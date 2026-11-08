@@ -1,0 +1,41 @@
+# A card turns red when its agent needs you, for the site's needs-you box
+# (site/get-started.html, "a row turns red, and you answer its agent") and
+# a social reel. Three agents are at work; the third asks which colour the
+# signup button should be, and its card turns red. It is shown, answered
+# in its own terminal, and goes back to work, while the other two carry on.
+# Film it with docs/demo/record.sh, then cut it with docs/demo/cut.sh;
+# the steps are in docs/demo/README.md.
+#
+# The phone cut shows the cards, then the terminal below its first line,
+# where the answer is typed, then the cards again. Captions say only what
+# the picture shows.
+# cut: site reached:needs_you-5 end answer-0.3
+# cut: phone reached:needs_you-2.5 end
+# cut: shot reached:needs_you-2.5 540 0 0
+# cut: shot answer-0.7 600 576 158
+# cut: shot answer+2.6 540 0 0
+# cut: caption reached:needs_you-2.3 show:3+0.9 top A card turns red when an agent needs you.
+# cut: caption answer-0.6 end bottom Answer it. The rest stay calm.
+# cut: readme reached:needs_you-0.8 answer+1.6
+# cut: sheet reached:needs_you-1.2 reached:needs_you+1.2 show:3+1.2 answer+1.6 end-1
+Set Size 1024x640
+Set Appearance light
+Set Palette evergreen
+Set Backdrop E9EBDF
+Set TypingSpeed 120ms
+
+Spawn @acme-api add rate limiting to the login endpoint
+Spawn @acme-billing retry failed webhooks
+Spawn @acme-web make the signup button stand out
+
+Sleep 500ms
+Show 1
+# The third's question comes about half a minute after it started
+# (cues.txt).
+Wait needs_you 60s
+Sleep 3s
+Show 3
+Sleep 2s
+Answer "Green"
+Wait working 20s
+Sleep 4s

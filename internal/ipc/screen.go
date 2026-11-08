@@ -37,6 +37,51 @@ type ScreenOption struct {
 	Selected bool   `json:"selected,omitempty"`
 }
 
+// FeatureScreenLive is in hello's features when subscribe takes
+// SubscribeArgs.Screen: what a session's terminal shows, with its colours,
+// as it changes, for a client that draws the terminal itself.
+const FeatureScreenLive = "screen-live"
+
+// FrameScreen carries what a session's terminal shows to a client that
+// subscribed to that session with SubscribeArgs.Screen: every line first,
+// then the lines that changed, as they change.
+const FrameScreen = "screen"
+
+// Screen is what a session's terminal shows, or what changed in it. A line
+// is as tmux's capture-pane -e writes it: its text, with the SGR escapes
+// (ESC [ … m) of its colours and attributes, whose state carries on from
+// one line to the next as on the terminal, and its written trailing spaces.
+type Screen struct {
+	Session string `json:"session"`
+	Cols    int    `json:"cols"` // the terminal's size, in cells
+	Rows    int    `json:"rows"`
+	// Cursor is where the terminal's cursor is, from the top left, 0
+	// based; null while the program hides it.
+	Cursor *ScreenCursor `json:"cursor"`
+	// Reset says Lines holds every line, Rows of them, top to bottom, which
+	// replace all the client has; it comes first, and again when the size
+	// changes. Otherwise Set holds only the lines that changed.
+	Reset bool         `json:"reset,omitempty"`
+	Lines []string     `json:"lines,omitempty"`
+	Set   []ScreenLine `json:"set,omitempty"`
+	// Options are the numbered choices of the prompt at its bottom while
+	// the session waits on you, as ScreenResult's; none otherwise.
+	Options []ScreenOption `json:"options"`
+}
+
+// ScreenCursor is a cell of the terminal.
+type ScreenCursor struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+// ScreenLine is one line of a Screen that changed: its number from the
+// top, 0 based, and what it says now.
+type ScreenLine struct {
+	N    int    `json:"n"`
+	Text string `json:"text"`
+}
+
 // KeysArgs press Keys in a session's terminal, in order, then type Text,
 // if any, without Enter. A key is one letter or digit, or one of KeyNames.
 type KeysArgs struct {

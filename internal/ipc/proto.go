@@ -744,6 +744,9 @@ type SubscribeArgs struct {
 	View  string `json:"view,omitempty"` // "", ViewApp or ViewWatch
 	// Conversation adds the session's conversation frames; it needs Session.
 	Conversation bool `json:"conversation,omitempty"`
+	// Screen adds frames of what the session's terminal shows, as it
+	// changes (FrameScreen); it needs Session.
+	Screen bool `json:"screen,omitempty"`
 	// With ViewWatch: the window's process, which the freeze dog force
 	// quits, and the Mac app it then opens again, if any.
 	PID    int    `json:"pid,omitempty"`
@@ -1143,6 +1146,7 @@ type Frame struct {
 	Ping     uint64           `json:"ping,omitempty"`     // ping
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
+	Screen       *Screen       `json:"screen,omitempty"`       // screen
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
@@ -1232,6 +1236,20 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T            string        `json:"t"`
 			Conversation *Conversation `json:"conversation"`
 		}{f.T, c})
+	case FrameScreen:
+		sc := f.Screen
+		if sc == nil {
+			sc = &Screen{}
+		}
+		if sc.Options == nil {
+			cp := *sc
+			cp.Options = []ScreenOption{}
+			sc = &cp
+		}
+		return json.Marshal(struct {
+			T      string  `json:"t"`
+			Screen *Screen `json:"screen"`
+		}{f.T, sc})
 	}
 	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)
 }

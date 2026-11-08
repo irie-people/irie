@@ -6,6 +6,20 @@
 <meta name="color-scheme" content="light dark">
 <title>Get started · Irie</title>
 <meta name="description" content="Install Irie with one line, then four steps: open it, type a task, watch the colours and look in.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Irie">
+<meta property="og:title" content="Get started · Irie">
+<meta property="og:description" content="Install Irie with one line, then four steps: open it, type a task, watch the colours and look in.">
+<meta property="og:url" content="https://irie-people.github.io/irie/get-started.html">
+<meta property="og:image" content="https://irie-people.github.io/irie/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Irie's mark, a sun rising over two waves, and the words: Irie runs your AI coding agents side by side, in one calm view.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Get started · Irie">
+<meta name="twitter:description" content="Install Irie with one line, then four steps: open it, type a task, watch the colours and look in.">
+<meta name="twitter:image" content="https://irie-people.github.io/irie/preview.png">
+<meta name="twitter:image:alt" content="Irie's mark, a sun rising over two waves, and the words: Irie runs your AI coding agents side by side, in one calm view.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -96,12 +110,18 @@
 
   <div class="demos">
     <figure class="demo">
-      <div class="demo-box" role="img" aria-labelledby="rec-first-task" data-recording="first-task"></div>
-      <figcaption id="rec-first-task">Recording to come: typing a first task and watching it start.</figcaption>
+      <video class="demo-box" controls muted loop playsinline preload="none" width="1344" height="840" poster="media/local.jpg" aria-labelledby="rec-first-task" data-recording="local">
+        <source src="media/local.webm" type="video/webm">
+        <source src="media/local.mp4" type="video/mp4">
+      </video>
+      <figcaption id="rec-first-task">A small task typed for a local model with <code>+local</code> starts, works and is done, beside a hard one on <code>+claude</code>.</figcaption>
     </figure>
     <figure class="demo">
-      <div class="demo-box" role="img" aria-labelledby="rec-needs-you" data-recording="needs-you"></div>
-      <figcaption id="rec-needs-you">Recording to come: a row turns red, and you answer its agent.</figcaption>
+      <video class="demo-box" controls muted loop playsinline preload="none" width="1344" height="840" poster="media/needs-you.jpg" aria-labelledby="rec-needs-you" data-recording="needs-you">
+        <source src="media/needs-you.webm" type="video/webm">
+        <source src="media/needs-you.mp4" type="video/mp4">
+      </video>
+      <figcaption id="rec-needs-you">In the Mac app, a card turns red when its agent asks something. It’s answered in the agent’s own screen, and goes back to work while the others carry on.</figcaption>
     </figure>
   </div>
 
@@ -133,6 +153,7 @@
   <p>Irie is free, and anyone may read, change and share its code under the <a href="https://github.com/irie-people/irie/blob/main/LICENSE">Apache 2.0 license</a>.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. <a href="contribute.html">See how</a>.</p>
   <p>Built from public documentation. Every source is listed in <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a>.</p>
+  <p><a href="https://discord.gg/XrP63ujbPH">Chat on Discord</a> · <a href="https://www.instagram.com/irie_people/">Instagram</a> · <a href="https://www.threads.com/@irie_people">Threads</a></p>
 </footer>
 </body>
 </html>

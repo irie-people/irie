@@ -355,7 +355,8 @@ a.tag:hover { color: var(--ink); border-color: var(--ink); text-decoration: none
 .tag.next { border-color: var(--sun); background: var(--sun); color: #14261D; }
 h2 .tag, h3 .tag { font-size: 0.8rem; margin-left: 0.4rem; }
 
-/* Recording boxes: empty for now, at the size the recordings will be */
+/* Recording boxes: 16:10 films of the Mac app from docs/demo, which play
+   only when asked. A box without its film yet is dashed. */
 
 .demo { margin: 2rem 0 0; }
 .demos {
@@ -370,6 +371,12 @@ h2 .tag, h3 .tag { font-size: 0.8rem; margin-left: 0.4rem; }
   border: 2px dashed var(--line-strong);
   border-radius: var(--radius);
   background: var(--bg-soft);
+}
+video.demo-box {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
 }
 .demo figcaption {
   max-width: 42rem;

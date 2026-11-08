@@ -827,3 +827,24 @@ func TestArchGabrielFromTheFile(t *testing.T) {
 		}
 	}
 }
+
+// TestSDKKeepsTheProfilesOtherDefaults is a machine whose sessions run on
+// the Agent SDK (DESIGN §3.5): one key per profile, the rest as before.
+func TestSDKKeepsTheProfilesOtherDefaults(t *testing.T) {
+	c, err := Load(writeFile(t, "[profiles.claude]\nsdk = true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, want := c.Profiles["claude"], Default().Profiles["claude"]
+	want.SDK = true
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("profiles.claude = %+v, want %+v", got, want)
+	}
+	if c.Profiles["sonnet"].SDK {
+		t.Error("sdk reached a profile the file did not name")
+	}
+	_, err = Load(writeFile(t, "[profiles.g]\nharness = \"generic\"\ncommand = \"aider\"\nsdk = true\n"))
+	if err == nil || !strings.Contains(err.Error(), "profiles.g.sdk: only the claude-code harness") {
+		t.Errorf("sdk on a generic profile: %v", err)
+	}
+}

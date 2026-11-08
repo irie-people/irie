@@ -190,7 +190,7 @@ func (f *fakeCore) Call(op string, args json.RawMessage) (any, error) {
 	f.calls = append(f.calls, op+" "+string(args))
 	switch op {
 	case ipc.OpHello:
-		return ipc.HelloResult{Version: "test", API: ipc.API, Features: []string{ipc.OpHello, ipc.OpSend, ipc.OpConfig, ipc.OpShow}}, nil
+		return ipc.HelloResult{Version: "test", API: ipc.API, Features: []string{ipc.OpHello, ipc.OpSend, ipc.OpConfig, ipc.OpShow, ipc.FeatureScreenLive, ipc.FeatureWatch}}, nil
 	case ipc.OpSend:
 		return nil, ipc.Errorf(ipc.CodeBusy, "parser is waiting for you in its terminal: answer it there")
 	}
@@ -273,7 +273,7 @@ func TestThePhoneCallsOnlyItsOps(t *testing.T) {
 	}
 	_, out = post(t, ts.URL+"/api/call", token, `{"op":"hello","args":{"client":"phone","api":1}}`)
 	features := out["result"].(map[string]any)["features"].([]any)
-	if len(features) != 2 || features[0] != "hello" || features[1] != "send" {
+	if len(features) != 3 || features[0] != "hello" || features[1] != "send" || features[2] != ipc.FeatureScreenLive {
 		t.Errorf("hello offers %v", features)
 	}
 	for _, c := range f.calls {
@@ -323,7 +323,7 @@ func TestASubscriptionStreamsTheCoresFrames(t *testing.T) {
 	token := out["token"].(string)
 
 	f.frames <- ipc.Frame{T: ipc.FrameSnapshot, Sessions: []ipc.Session{{ID: "s1", Name: "parser", State: ipc.StateWorking}}}
-	req, _ := http.NewRequest("POST", ts.URL+"/api/subscribe", strings.NewReader(`{"session":"s1","conversation":true,"view":"app","events":true}`))
+	req, _ := http.NewRequest("POST", ts.URL+"/api/subscribe", strings.NewReader(`{"session":"s1","conversation":true,"screen":true,"view":"app","events":true}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
@@ -366,7 +366,7 @@ func TestASubscriptionStreamsTheCoresFrames(t *testing.T) {
 	}
 	// Only what a phone may ask for reaches the core: not the Mac app's
 	// view, nor every event.
-	if c := f.calls[len(f.calls)-1]; strings.Contains(c, "view") || strings.Contains(c, "events") || !strings.Contains(c, `"conversation":true`) {
+	if c := f.calls[len(f.calls)-1]; strings.Contains(c, "view") || strings.Contains(c, "events") || !strings.Contains(c, `"conversation":true`) || !strings.Contains(c, `"screen":true`) {
 		t.Errorf("the core was asked %s", c)
 	}
 }
