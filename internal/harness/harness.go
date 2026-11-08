@@ -93,7 +93,7 @@ type Spawn struct {
 	PluginDir string
 
 	// MCP are MCP servers for this session only, by name, such as Irie's
-	// browser (browser.connector, DESIGN §4.13), which a harness whose probe
+	// browser (browser.connector, DESIGN §4.15), which a harness whose probe
 	// offers --mcp-config passes on.
 	MCP map[string]MCPServer
 

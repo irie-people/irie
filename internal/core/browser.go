@@ -9,7 +9,7 @@ import (
 	"github.com/irie-people/irie/internal/repo"
 )
 
-// browserServer is the browser connector a session gets (DESIGN §4.13):
+// browserServer is the browser connector a session gets (DESIGN §4.15):
 // Irie's own MCP server, `irie browser`, with its browser's profile in the
 // session's folder, made fresh at each start and removed after. A session
 // gets it while browser.connector is on and the browser is found; on with

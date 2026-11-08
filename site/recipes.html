@@ -278,26 +278,19 @@ on = true</code></pre></li>
   </ul>
 
   <h2 id="mullvad-browser">Let an agent browse in Mullvad Browser</h2>
-  <p>Mullvad Browser is made so that everyone who uses it looks the same to websites. An agent can drive it, but a browser under remote control says so: sites can tell it is automated, so it no longer looks like everyone else. It keeps no logins either. If what you want is your agents’ browsing kept away from your own address, Mullvad VPN does that for every browser. If you want Mullvad Browser itself:</p>
+  <p>Some pages read as almost nothing to an agent’s web fetch: pricing pages and apps that build themselves with JavaScript, and pages behind a click or a form. Irie can hand each Claude Code session a real browser for them, Mullvad Browser. It starts without a window when the agent first needs a page, on a fresh profile that is thrown away when the browser closes. One thing first: a browser under remote control tells websites so, so it no longer looks like every other Mullvad Browser, and it keeps no logins. If what you want is your agents’ traffic away from your own address, Mullvad VPN does that for every browser.</p>
   <ol class="rules">
-    <li>Give it a profile folder of its own, so your own browsing stays apart, and keep its own settings:
-<pre><code>mkdir -p ~/agent-browser
-echo 'user_pref("remote.prefs.recommended", false);' &gt; ~/agent-browser/user.js</code></pre></li>
-    <li>Start it with remote control on. It listens on your own computer only:
-<pre><code>"/Applications/Mullvad Browser.app/Contents/MacOS/mullvadbrowser" --no-remote --new-instance \
-  --profile ~/agent-browser --marionette --remote-debugging-port 9222</code></pre></li>
-    <li>Hand Claude Code Mozilla’s browser server, <code>@mozilla/firefox-devtools-mcp</code>, attached to it, in a file such as <code>~/.config/irie/agent-browser.json</code>:
-<pre><code>{"mcpServers": {"browser": {"command": "npx", "args": ["-y",
-  "@mozilla/firefox-devtools-mcp@0.10.6", "--connect-existing"]}}}</code></pre></li>
-    <li>Make a profile that loads it, and start a task on it with <code>+private-web</code>:
-<pre><code>[profiles.private-web]
-args = ["--mcp-config", "/home/alice/.config/irie/agent-browser.json"]</code></pre></li>
-    <li>Turn Mullvad VPN on: the browser alone doesn’t hide your address.</li>
+    <li>Set it up. This installs Mullvad Browser if you don’t have it (with Homebrew on a Mac, once you say yes), opens a page the way an agent would, and turns the browser on for new sessions:
+<pre><code>irie setup browser</code></pre></li>
+    <li>Start a task. Its agent can open and search, read on through long pages, click, type and take screenshots; each step shows in the conversation.</li>
+    <li>To have the browser leave from another address than the rest of your computer, give it one of Mullvad’s SOCKS5 proxies, from a relay other than your VPN’s, in <code>config.toml</code>:
+<pre><code>[browser]
+proxy = "socks5://nl-ams-wg-socks5-001.relays.mullvad.net:1080"</code></pre></li>
   </ol>
-  <p>Any program on your computer can drive the browser while it runs this way, so close it when the task is done.</p>
+  <p>The browser listens on your own computer only, closes after 10 minutes without a call, and ends with its session. <code>[browser] connector = "off"</code> turns it off again.</p>
   <h3>What works today</h3>
   <ul class="rules">
-    <li>Driving Mullvad Browser 16 over WebDriver BiDi and Marionette, checked on a Mac. Mozilla’s server attaching to a running browser is from Mozilla’s own docs; Irie doesn’t start the browser for you yet.</li>
+    <li>Claude Code sessions with Mullvad Browser 16 on a Mac. Another Firefox works too, with <code>[browser] path</code>. Other agents and the Mac app’s Settings don’t have it yet.</li>
   </ul>
 
   <nav class="docs-nav" aria-label="Docs">

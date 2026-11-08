@@ -60,7 +60,7 @@ func browserCmd(args []string) int {
 }
 
 // setupBrowser is `irie setup browser`: it gets Irie's browser ready
-// (DESIGN §4.13). It finds Mullvad Browser, or installs it by its route
+// (DESIGN §4.15). It finds Mullvad Browser, or installs it by its route
 // here after a yes; makes the clean profile each start copies; opens a page
 // as an agent would; and turns browser.connector on, so Claude Code
 // sessions started from then on get the browser.

@@ -88,7 +88,7 @@ type VPN struct {
 	Mullvad string `toml:"mullvad"` // the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
 }
 
-// Browser is Irie's browser connector (DESIGN §4.13): a real browser,
+// Browser is Irie's browser connector (DESIGN §4.15): a real browser,
 // Mullvad Browser by default, that Claude Code sessions drive through
 // Irie's own MCP server, `irie browser`, for pages a plain fetch cannot
 // read. Off until the user turns it on, as `irie setup browser` does.

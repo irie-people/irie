@@ -388,7 +388,7 @@ func (c *Core) launch(j job) (*session, error) {
 	if j.probe.Flags["--plugin-dir"] {
 		s.PluginDir = c.skillsFolder(profile, x)
 	}
-	// Irie's browser, for a harness that takes MCP servers (DESIGN §4.13).
+	// Irie's browser, for a harness that takes MCP servers (DESIGN §4.15).
 	if j.probe.Flags["--mcp-config"] {
 		if srv, warn := c.browserServer(id); warn != "" {
 			x.warnings = append(x.warnings, warn)

@@ -123,6 +123,7 @@
     <li>Shows an agent’s live screen, or for Claude Code, its conversation in plain words.</li>
     <li>Picks a <dfn>profile</dfn>, the recipe for which agent and AI <dfn>model</dfn> to start, when a task names none. It takes the lowest cost per success among the profiles accurate enough for the task.</li>
     <li>Runs small tasks on a model on your own computer, through Ollama, once you set that up.</li>
+    <li>Gives each Claude Code session a real browser, Mullvad Browser, for the pages its web fetch can’t read, once you turn it on with <code>irie setup browser</code>.</li>
     <li>Freezes an agent and everything it started at once, puts one session ahead of the rest, and renames, closes and reopens sessions. Undo and redo take back a start, a close or a reopen.</li>
     <li>Lists the Claude Code sessions running outside Irie, and moves one in when you ask.</li>
     <li>Checks that your computer has what Irie needs, and offers to install each part that is missing, with <code>irie setup</code>. It runs an installer only after you say yes.</li>
@@ -137,7 +138,7 @@
     <li>It never edits your agents’ settings files or your tmux settings. Your shell’s startup file changes only if you say yes when <code>irie setup</code> offers to add one line to it, so a terminal finds <code>irie</code>.</li>
     <li>It never answers a permission prompt for an agent, so the agent’s own permission rules stand.</li>
     <li>It never deletes a worktree, a branch or a folder an agent worked in. The only files it deletes are its own records, such as event logs past 30 days.</li>
-    <li>It listens on no network port. The Ollama server it runs for local models listens on 127.0.0.1, which only programs on your computer can reach.</li>
+    <li>It listens on no network port. The Ollama server it runs for local models, and the browser it starts for agents once you turn that on, listen on 127.0.0.1, which only programs on your computer can reach.</li>
   </ul>
 
   <h2 id="parts">What it’s made of</h2>
@@ -154,6 +155,7 @@
         <tr><td><code>irie hook</code></td><td>What Claude Code runs at each step, to tell the core. When Irie is down, it lets the agent carry on, unless you froze it.</td></tr>
         <tr><td><code>irie statusline</code></td><td>Claude Code’s status line. It passes the session’s cost to the core, then runs your own status line.</td></tr>
         <tr><td><code>irie runtime</code></td><td>Runs Irie’s own Ollama server for local models, once a task needs one.</td></tr>
+        <tr><td><code>irie browser</code></td><td>The browser for agents, once you turn it on: Claude Code starts it for each session, and it starts Mullvad Browser, without a window, when the agent first asks for a page.</td></tr>
         <tr><td><code>irie placeholder</code></td><td>What the right-hand side shows when no agent is on show.</td></tr>
         <tr><td><code>irie</code>, <code>setup</code>, <code>up</code>, <code>attach</code>, <code>ctl</code>, <code>setup local</code>, <code>config</code>, <code>version</code></td><td>The commands you run. <code>irie help</code> lists them.</td></tr>
       </tbody>
@@ -182,6 +184,7 @@
         <tr><td><code>ps</code></td><td>About every 5 seconds, to measure each session’s memory, and when it closes a session or matches the sessions outside Irie.</td></tr>
         <tr><td>Your status line</td><td>If you made one for Claude Code, Irie’s status line runs it.</td></tr>
         <tr><td>Ollama</td><td>Only for local models, if you installed it. Irie bundles neither Ollama nor any model.</td></tr>
+        <tr><td>Mullvad Browser</td><td>Only once you turn on the browser for agents, and only while an agent uses it: without a window, on a profile of its own that is thrown away when it closes, after 10 minutes without a call or when its session ends. Irie doesn’t bundle it, and never opens your own profile.</td></tr>
       </tbody>
     </table>
   </div>
@@ -203,6 +206,8 @@
         <tr><td><code>~/.local/state/irie/state.json</code></td><td>Your undo and redo history: the starts, closes and reopens you can take back.</td><td>The last 100 steps</td></tr>
         <tr><td><code>~/.local/state/irie/core.log</code>, <code>ui.log</code></td><td>What the core and the list did, with their errors.</td><td>Until you remove them</td></tr>
         <tr><td><code>~/.local/state/irie/local.json</code></td><td>The local model <code>irie setup local</code> chose, and how much memory models took.</td><td>Until you remove it</td></tr>
+        <tr><td><code>~/.local/state/irie/sessions/&lt;id&gt;/mcp.json</code>, <code>browser/</code></td><td>With the browser on, the session’s browser server, and the browser’s profile while it runs. Private browsing is always on in it, so it keeps no history or cookies.</td><td>The profile, until the browser closes</td></tr>
+        <tr><td><code>~/.local/share/irie/browser/template/</code></td><td>A clean profile each browser start copies, which starts faster than an empty one.</td><td>Until you remove it</td></tr>
         <tr><td><code>~/.local/state/irie/tmux.conf</code></td><td>Irie’s tmux settings.</td><td>Written again as needed</td></tr>
         <tr><td><code>~/.local/share/irie/bin/irie</code>, and a link to it, <code>~/.local/bin/irie</code></td><td>The <code>irie</code> program, if you used the one-line installer.</td><td>Until you remove it</td></tr>
         <tr><td><code>~/Applications/Irie.app</code></td><td>The Mac app, if the installer put it there, on a Mac with macOS 14 or later.</td><td>Until you remove it</td></tr>
@@ -221,6 +226,7 @@
     <li><strong><code>irie setup</code></strong>, which you run yourself or start from a button in the Mac app, runs the official installers for what Irie needs, and <code>claude auth login</code>, only after you say yes: Homebrew’s installer, Claude Code’s installer, your package manager and Apple’s Command Line Tools. Those reach the network themselves.</li>
     <li><strong><code>irie setup local</code></strong>, which you also run yourself, installs Ollama the official way after you say yes, with Homebrew on a Mac that has it or Ollama’s install script on Linux, and asks Ollama to download a model.</li>
     <li><strong>Your agents</strong> talk to their AI companies, or your company’s, just as they would without Irie. What each sends is up to that agent.</li>
+    <li><strong>Irie’s browser</strong>, once you turn it on, opens the pages your agents ask for, from your computer, or through the SOCKS5 proxy you name in <code>browser.proxy</code>. Websites can tell it is a browser under remote control. <code>irie setup browser</code>, which you run yourself, installs Mullvad Browser after you say yes, with Homebrew on a Mac, and opens example.com to check it.</li>
     <li><strong>Its parts</strong> talk to each other through a socket file, never over the network.</li>
     <li><strong>Building Irie</strong> downloads the modules above, checked against the fingerprints in its code.</li>
   </ul>
@@ -233,6 +239,7 @@
     <li>Irie’s built-in profiles for Claude’s cloud models, <code>claude</code>, <code>sonnet</code> and <code>haiku</code>, start Claude Code in auto mode, where Claude Code decides which steps it may take without asking you. A profile’s <code>permission_mode</code> picks another.</li>
     <li>Subtasks that a session hands on with <code>irie ctl delegate</code> run in <code>acceptEdits</code> mode, so they edit files without asking, and commands still need you. <code>route.delegate_mode</code> changes it.</li>
     <li>For Claude Code, Irie adds a settings file for that one session, with its <dfn>hooks</dfn>, the small commands Claude Code runs at each step, and its status line. Claude Code adds the hooks to your own, and your settings files stay as they are.</li>
+    <li>With the browser on, it also hands Claude Code an MCP config file for that one session, with <code>irie browser</code> in it. Your own MCP servers still load.</li>
     <li>It adds <code>IRIE_SESSION</code>, <code>IRIE_SOCKET</code> and <code>IRIE_BIN</code> to the agent’s environment, so the hooks can find Irie. It removes <code>TMUX</code> and <code>TMUX_PANE</code>, so the agent’s own tmux commands can’t reach Irie’s, and the marks another Claude Code session or terminal left behind.</li>
     <li>A local profile adds the settings that point Claude Code at the local model, with a placeholder key, so its requests for the model go there and not to Anthropic.</li>
   </ul>
@@ -297,7 +304,7 @@
 <pre><code>ls ~/.local/state/irie/sessions/
 cat ~/.local/state/irie/sessions/&lt;id&gt;/spec.json
 cat ~/.local/state/irie/sessions/&lt;id&gt;/claude-settings.json</code></pre>
-  <p>Every network connection Irie’s parts hold open. Nothing, or only connections to 127.0.0.1:11435 for local models, is what you should see:</p>
+  <p>Every network connection Irie’s parts hold open. Nothing, or only connections to 127.0.0.1: port 11435 for local models, and the port of a browser your agents use, is what you should see:</p>
 <pre><code>lsof -nP -a -i -c irie</code></pre>
   <p>And the code itself, with the <a href="https://github.com/irie-people/irie/blob/main/docs/DESIGN.md">design</a> that explains every part: <a href="https://github.com/irie-people/irie">github.com/irie-people/irie</a>.</p>
 </main>

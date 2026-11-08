@@ -345,6 +345,8 @@ For Irie to offer it, a session option such as a profile's `browser = "mullvad"`
 
 **Recommendation:** not to build it yet. Write it up as a recipe in the docs instead: a user who wants it can run the steps above by hand with Mozilla's server. An automated Mullvad Browser gives up the thing that makes it Mullvad Browser, a fingerprint shared with everyone else, and it can't use the user's logins. What most users want from it, an agent's traffic away from their own address, Mullvad VPN gives every browser (§4). Build `irie browser mcp` when users ask for it.
 
+**Built after all, 2026-11-08** (DESIGN §4.15). The owner's jot of 2026-10-31, "deep research browser connector for irie, can we use mullvad browser", was the ask the recommendation waited for. What was built differs from the sketch above: `irie browser` is the MCP server itself, in Go, speaking WebDriver BiDi through a WebSocket client of its own, so Mozilla's server, Node and Marionette are not needed, and nothing is fetched at run time. It keeps §5.3's costs in view: `browser.connector` is off until `irie setup browser`, every profile has `remote.prefs.recommended = false`, Irie starts the browser itself so its add-ons stay, and the docs say plainly that pages can tell it is automated and that it has no logins. What it gives is not a fingerprint shared with other users but pages a fetch cannot read, a search for agents on local models, and an exit through `browser.proxy`, such as Mullvad's SOCKS5 proxies, away from the user's own address.
+
 ---
 
 ## 6. Which to build first
@@ -387,7 +389,7 @@ For Irie to offer it, a session option such as a profile's `browser = "mullvad"`
 | 6 | The guide's profile | a. `+claude`. b. `spawn.default_profile` | **a**: routing would read `/irie:dead-mans-switch` as a small task |
 | 7 | The VPN extension's default | a. Off, offered in Settings when `mullvad` is found. b. On when found | **a** |
 | 8 | Vault approvals from a phone | a. Deny only, at first. b. Allow, signed by the native iPhone app's own Secure Enclave key after Face ID | **a**, then **b** with the native app |
-| 9 | Mullvad Browser | a. A recipe in the docs, for now (§5.4). b. `irie browser mcp` now | **a** |
+| 9 | Mullvad Browser | a. A recipe in the docs, for now (§5.4). b. `irie browser mcp` now | **a**; built on 2026-11-08 at the owner's ask, off by default (§5.4) |
 
 **Decided 2026-11-01:**
 - **Decision 1:** a, the dead man's switch first.

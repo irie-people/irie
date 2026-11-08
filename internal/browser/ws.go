@@ -95,7 +95,8 @@ func dialWS(addr, path string, timeout time.Duration) (*wsConn, error) {
 	return &wsConn{c: c, r: r}, nil
 }
 
-// write sends one frame. A client masks every frame it sends (§5.3).
+// write sends one frame. A client masks every frame it sends (§5.1), as
+// §5.3 says how.
 func (w *wsConn) write(op byte, p []byte) error {
 	hdr := make([]byte, 0, 14)
 	hdr = append(hdr, 0x80|op) // FIN: never fragmented
@@ -175,7 +176,8 @@ func (w *wsConn) ReadMessage() ([]byte, error) {
 		}
 		switch op {
 		case opClose:
-			// Echo the status code, as §5.5.1 asks.
+			// Answer with a close that echoes the status code, as §5.5.1 says
+			// an endpoint typically does.
 			w.write(opClose, p[:min(len(p), 2)])
 			return nil, io.EOF
 		case opPing:
