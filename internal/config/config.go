@@ -44,6 +44,7 @@ type Config struct {
 	Skills   Skills             `toml:"skills"`
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
+	Lid      Lid                `toml:"lid"`
 	Arch     Arch               `toml:"arch"`
 	Remote   Remote             `toml:"remote"`
 	Place    Place              `toml:"place"`
@@ -52,6 +53,32 @@ type Config struct {
 	Learn    Learn              `toml:"learn"`
 	VPN      VPN                `toml:"vpn"`
 }
+
+// Lid is a MacBook's lid (DESIGN §4.12). macOS sleeps a MacBook the
+// moment its lid closes, whatever else keeps it awake, so the core turns
+// the Mac's sleep off while sessions work, through the rule `irie setup
+// lid` installs, and back on once they are through: with the lid closed
+// by then, the Mac sleeps at once.
+type Lid struct {
+	// Awake is work, to stay awake with the lid closed while a session
+	// works or waits on background work of its own, or the trod bot keeps
+	// the Mac awake; always, for as long as the core runs; or off, to
+	// sleep when macOS would.
+	Awake string `toml:"awake"`
+	// Grace is how long the Mac stays awake after the last work stops,
+	// for work that comes straight back, such as a jot the dog sends on.
+	Grace time.Duration `toml:"grace"`
+	// Battery is a percent: on battery below it, the Mac may sleep, at
+	// once with the lid closed. 0 = down to empty.
+	Battery int `toml:"battery"`
+}
+
+// The lid's awake modes.
+const (
+	LidWork   = "work"
+	LidAlways = "always"
+	LidOff    = "off"
+)
 
 // VPN is Mullvad VPN control (docs/proposals/extensions.md §4): its state in
 // every client, and the :vpn words to change it.
@@ -106,6 +133,7 @@ type Skills struct {
 type Arch struct {
 	Mikael  Mikael  `toml:"mikael"`
 	Gabriel Gabriel `toml:"gabriel"`
+	Raphael Raphael `toml:"raphael"`
 }
 
 // Mikael is the first arch agent: a helper who stands with you against evil
@@ -137,6 +165,23 @@ type Gabriel struct {
 	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
 	Guard   bool          `toml:"guard"`   // turn away an agent's call that would bring an app or a page to the front while you look elsewhere
 }
+
+// Raphael is the arch agent who heals. He restarts a part of Irie that
+// stops answering: the Mac app and the sidebars after ui.freeze_dog, and
+// the core after Core. He looks over the computer every Every, and says in
+// plain words, with advice, what slows it down, fills it up or may have
+// got in; he fixes a thing only on your OK, one at a time, and shows first
+// what he will run.
+type Raphael struct {
+	On    bool          `toml:"on"`    // restart what stops answering, and look over the computer by himself
+	Core  time.Duration `toml:"core"`  // how long the core's own loop may stand still before he restarts the core; 0 = never
+	Every time.Duration `toml:"every"` // how often he looks over the computer by himself; 0 = only when asked
+	Known []string      `toml:"known"` // startup items you know, by label, plist or program, which he no longer flags
+}
+
+// MinRaphaelCore is the shortest arch.raphael.core: a core may be busy for
+// a moment, on a busy machine for many.
+const MinRaphaelCore = 30 * time.Second
 
 // MaxBoost is the longest a boost may last, so none is ever forgotten.
 const MaxBoost = 12 * time.Hour
@@ -294,6 +339,11 @@ type Profile struct {
 	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
+	// SDK runs the session on the Agent SDK: Irie's own pane program drives
+	// `claude -p`, instead of Claude Code's terminal app (DESIGN §3.5). It is
+	// for an API key whose credits cover the Agent SDK but not Claude Code,
+	// such as a Claude plan's monthly API credits.
+	SDK bool `toml:"sdk"`
 }
 
 // TakesSkills reports whether the profile's sessions get Irie's skills.
@@ -363,7 +413,9 @@ type Dog struct {
 // any of them has work left. Every agent it sends on is told your rules
 // and guidelines. It keeps within the plan: past max_plan_use it sends
 // nothing on, and past it in the week's window it freezes what would
-// still spend the week's allotment.
+// still spend the week's allotment. With pace, the week's most is the day
+// line instead: an even share of max_plan_use for each day of the plan's
+// week so far, so that two busy days can't take the whole week.
 type Trod struct {
 	On         bool          `toml:"on"`           // work the shift every night, from start to end
 	Start      string        `toml:"start"`        // when it starts, in local time, such as "23:00"
@@ -375,6 +427,7 @@ type Trod struct {
 	Within     time.Duration `toml:"within"`       // it sends on only sessions that stopped this recently; 0 = however long ago
 	MaxWorking int           `toml:"max_working"`  // it sends a session on only while fewer than this many work; 0 = no limit
 	MaxPlanUse float64       `toml:"max_plan_use"` // percent: past this in either of the plan's windows it sends nothing on, and past it in the week's it freezes what still spends
+	Pace       bool          `toml:"pace"`         // keep the week to a day line: each day of the plan's week may take max_plan_use/7 more, and what a day leaves carries on
 	KeepAwake  bool          `toml:"keep_awake"`   // keep the Mac from sleeping while sessions have work left
 	Rules      []string      `toml:"rules"`        // what every agent it sends on must, or must not, do
 	Guidelines []string      `toml:"guidelines"`   // how those agents decide while you are away
@@ -637,9 +690,11 @@ func Default() Config {
 			Retry: 15 * time.Minute, Within: 24 * time.Hour, MaxWorking: 4, MaxPlanUse: 90, KeepAwake: true,
 			Rules: TrodRules(), Guidelines: TrodGuidelines(),
 		},
+		Lid: Lid{Awake: LidWork, Grace: 2 * time.Minute, Battery: 10},
 		Arch: Arch{
 			Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
+			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
 		},
 		Remote: Remote{Port: DefaultRemotePort},
 		Place:  Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
@@ -744,6 +799,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Skills   *Skills                   `toml:"skills"`
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
+		Lid      *Lid                      `toml:"lid"`
 		Arch     *Arch                     `toml:"arch"`
 		Remote   *Remote                   `toml:"remote"`
 		Place    *Place                    `toml:"place"`
@@ -751,7 +807,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Env      *Env                      `toml:"env"`
 		Learn    *Learn                    `toml:"learn"`
 		VPN      *VPN                      `toml:"vpn"`
-	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -815,6 +871,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Arch.Mikael.Good == nil {
 		c.Arch.Mikael.Good = []string{}
+	}
+	if c.Arch.Raphael.Known == nil {
+		c.Arch.Raphael.Known = []string{}
 	}
 	if c.Arch.Gabriel.Spare == nil {
 		c.Arch.Gabriel.Spare = []string{}
@@ -1004,6 +1063,9 @@ func (c Config) Validate() error {
 		if strings.ContainsAny(p.Cost, "\n\r") {
 			bad("profiles.%s.cost: must be one line", name)
 		}
+		if p.SDK && p.Harness != "claude-code" {
+			bad("profiles.%s.sdk: only the claude-code harness runs on the Agent SDK", name)
+		}
 		if p.Arch != "" {
 			if a, ok := arch.Get(p.Arch); !ok || !a.Call {
 				bad("profiles.%s.arch = %q: the arch agents a session can run as are %s", name, p.Arch, strings.Join(arch.Callable(), ", "))
@@ -1167,6 +1229,17 @@ func (c Config) Validate() error {
 	if n.MaxPlanUse <= 0 || n.MaxPlanUse > 100 {
 		bad("trod.max_plan_use = %v: must be a percentage above 0", n.MaxPlanUse)
 	}
+	switch c.Lid.Awake {
+	case LidWork, LidAlways, LidOff:
+	default:
+		bad("lid.awake = %q: must be %s, %s or %s", c.Lid.Awake, LidWork, LidAlways, LidOff)
+	}
+	if c.Lid.Grace < 0 {
+		bad("lid.grace = %v: must not be negative", c.Lid.Grace)
+	}
+	if c.Lid.Battery < 0 || c.Lid.Battery > 100 {
+		bad("lid.battery = %d: must be a percent from 0 to 100", c.Lid.Battery)
+	}
 	checkLines(bad, "trod.rules", n.Rules, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "trod.guidelines", n.Guidelines, maxTrodLines, "every message the trod bot sends")
 	checkLines(bad, "spawn.preferences", c.Spawn.Preferences, maxPreferences, "what every session is told as it starts")
@@ -1182,6 +1255,14 @@ func (c Config) Validate() error {
 		bad("arch.gabriel.boost = %v: must be from 1m to %v", g.Boost, MaxBoost)
 	}
 	checkLines(bad, "arch.gabriel.spare", g.Spare, 100, "the apps Gabriel never slows")
+	ra := c.Arch.Raphael
+	if ra.Core != 0 && ra.Core < MinRaphaelCore {
+		bad("arch.raphael.core = %v: must be 0s, for never, or at least %v", ra.Core, MinRaphaelCore)
+	}
+	if ra.Every != 0 && ra.Every < 10*time.Minute {
+		bad("arch.raphael.every = %v: must be 0s, for only when asked, or at least 10m", ra.Every)
+	}
+	checkLines(bad, "arch.raphael.known", ra.Known, 200, "the startup items Raphael no longer flags")
 	switch c.Place.Mode {
 	case PlaceLocal, PlaceAuto:
 	default:

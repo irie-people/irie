@@ -223,6 +223,19 @@ func NewEnv(t *testing.T) *Env {
 	// focus (Gabriel, DESIGN §4.11): it would take the user's own agents for
 	// apps outside it.
 	t.Setenv("IRIE_GABRIEL", "off")
+	// Nor does it look over the machine, or restart itself, for Raphael
+	// (DESIGN §4.11): the user's own core does that once.
+	t.Setenv("IRIE_RAPHAEL", "off")
+	// Nor does it turn the Mac's sleep off and on for a closed lid (DESIGN
+	// §4.12): that would be the user's own Mac, and its lid.
+	t.Setenv("IRIE_LID", "off")
+	// Nor does it stop the Iries of other test runs and agents (DESIGN §2.9):
+	// the tests that run beside it are using theirs.
+	t.Setenv("IRIE_LEFTOVERS", "off")
+	// Nor does it read the machine's memory: a local model's spawn would
+	// pass or fail with what the user's other programs take. It sees a
+	// machine with room for the fake models (IRIE_FAKE_MEMORY, in GiB).
+	t.Setenv("IRIE_FAKE_MEMORY", "64/48")
 	for _, k := range []string{"TMUX", "TMUX_PANE", "IRIE_BIN"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)

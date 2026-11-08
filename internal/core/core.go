@@ -64,12 +64,25 @@ type Core struct {
 	sampling    atomic.Bool  // a memory sample is running
 	gabSweeping atomic.Bool  // Gabriel's sweep is running (gabriel.go)
 	sweeping    atomic.Bool  // the jot dog looks at the finished jots (dog.go)
-	fdog        *freezeDog   // the freeze dog, which watches Irie's own windows (freezedog.go); it has a lock of its own
+	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
+	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
 	ctxs        contexts     // the context store and the sessions waiting to be synced into it (ctx.go); locks of its own
 
 	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
 	awakeMu      sync.Mutex  // guards awake; taken after mu
 	awake        *exec.Cmd   // what keeps the Mac awake for the trod bot, while it does
+
+	lidSweeping atomic.Bool // the lid's look runs (lid.go)
+	lidMu       sync.Mutex  // guards lid; taken after mu and awakeMu
+	lid         lidHold     // what the core did to the Mac's sleep, for a closed lid
+
+	leftSweeping atomic.Bool // the look for Iries whose run is over (leftovers.go)
+
+	// What the freeze dog knows of Irie's own processes, to keep them
+	// running (steady.go): the tmux server's pid, which only the dog reads
+	// and writes, and the sidebar's process group, which each tick sets.
+	server       int
+	sidebarGroup atomic.Int64
 
 	modelMu    sync.Mutex // guards modelCache; taken before mu
 	modelCache modelList
@@ -122,6 +135,8 @@ type Core struct {
 	trodNow    trodNow               // the trod bot as its last sweep found it (trod.go)
 	trodReset  time.Time             // when the plan's usage limit last reset, as far as the trod bot saw
 	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
+	trodThawed time.Time             // when the trod bot last thawed a session it froze (trod.go)
+	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 }
@@ -167,6 +182,7 @@ type session struct {
 	demoted  bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
 	userWord time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
 	convSubs int                    // the subscriptions that follow its conversation
+	screen   *screenFeed            // its terminal, read while clients watch it live (screenfeed.go)
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
 	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
@@ -280,6 +296,12 @@ func Run(o Options) error {
 	c.loadClosed()
 	c.loadState()
 	c.loadTrodHand()
+	c.loadRaphael()
+
+	// The freeze dog, Irie's one watchdog, runs first: the first tick
+	// waits for tmux, and a stopped server would hold it until the dog
+	// continues it (steady.go). Windows subscribe to its watch later.
+	go c.watchFreezes()
 
 	// The layout, the registry and the rows' states are in place before the
 	// first hello. Every tree comes out of the background once, since only
@@ -297,11 +319,14 @@ func Run(o Options) error {
 	go c.sample()
 	go c.dogSweep()
 	go c.trodSweep()
+	c.lidAdopt()
+	go c.lidSweep()
 	if err := c.loadPeers(); err != nil {
 		c.log.Warn("peers", "err", err)
 	}
 	go c.checkMachine()
 	go c.ctxSweep()
+	go c.leftoverSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -311,7 +336,8 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
-	go c.watchFreezes()
+	// Raphael's look at the core's own loop (watchCore) counts from here.
+	c.beat()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
@@ -321,6 +347,10 @@ func Run(o Options) error {
 		select {
 		case <-t.C:
 			c.tick()
+			c.beat()
+			if n%raphaelEvery == 0 {
+				go c.raphaelSweep()
+			}
 			if n%sampleEvery == 0 {
 				go c.sample()
 				go c.gabrielSweep()
@@ -332,13 +362,22 @@ func Run(o Options) error {
 			if n%trodEvery == 0 {
 				go c.trodSweep()
 			}
+			if n%lidEvery == 0 {
+				go c.lidSweep()
+			}
 			if n%machineEvery == 0 {
 				go c.checkMachine()
+			}
+			if n%leftoverEvery == 0 {
+				go c.leftoverSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
 			// Nothing stays slowed after the core is gone: its agents run on.
 			c.letGo()
+			// Nor does the Mac stay awake with its lid closed for a core that
+			// is gone; the next one keeps it awake again if there is work.
+			c.lidLetGo()
 			return nil
 		}
 	}
@@ -361,6 +400,7 @@ func (c *Core) tick() {
 	if err := c.refresh(); err != nil {
 		c.log.Warn("poll", "err", err)
 	}
+	c.noteSidebar()
 	c.keepView()
 	c.followTeams()
 	c.reap()
@@ -625,6 +665,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.vpnOp(peer, a)
+	case ipc.OpRaphael:
+		var a ipc.RaphaelArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.raphaelOp(peer, a)
 	}
 	return c.Call(op, raw)
 }
@@ -655,7 +701,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.FeatureWatch, ipc.OpScreen, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpPeers, ipc.OpDock,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
 		}}, nil
@@ -768,9 +814,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		s, err := c.rename(a)
+		s, step, err := c.rename(a)
 		if err != nil {
 			return nil, err
+		}
+		if step != nil {
+			c.recordAction(actRename, a.Session, step)
 		}
 		return ipc.RenameResult{Session: s}, nil
 	case ipc.OpHook:
@@ -812,6 +861,17 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return nil, nil
 	case ipc.OpArch:
 		return c.archList(), nil
+	case ipc.OpRaphael:
+		// Not from a socket, which CallFrom answers: no one to tell from
+		// an agent, so it reports, looks, and fixes nothing.
+		var a ipc.RaphaelArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if a.Fix != "" || a.Mine != "" {
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over Irie's socket.")
+		}
+		return c.raphaelOp(0, a)
 	case ipc.OpGabriel:
 		var a ipc.GabrielArgs
 		if err := decode(raw, &a); err != nil {
@@ -944,6 +1004,9 @@ func (c *Core) show(a ipc.ShowArgs) error {
 		c.split = a.Session
 	}
 	err := c.swapIn(a.Session, a.Focus)
+	// While Gabriel holds back, the session now on show comes out of the
+	// background before this returns (gabriel.go).
+	c.refocus()
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)

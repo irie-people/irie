@@ -22,8 +22,8 @@ import (
 // take, and what the machine has free, every sampleEvery ticks.
 const sampleEvery = 5
 
-// availableStep rounds the free memory the header carries, so it changes
-// when the free memory does and not with every page.
+// availableStep rounds the free memory the header carries, and what the
+// agents take, so it changes when they do and not with every page.
 const availableStep = 100 << 20
 
 // shownMemory is a session's memory as its row carries it: two significant
@@ -150,6 +150,11 @@ func (c *Core) memoryNow() ipc.Memory {
 	for _, x := range c.sessions {
 		out.Agents += x.memory
 	}
+	// Rounded to a step, as the free memory is: the agents' pages change
+	// with every sample, and the header with them would be sent again each
+	// time. Up, so the agents never take less than the rows say, nor
+	// nothing while some run.
+	out.Agents = (out.Agents + availableStep - 1) / availableStep * availableStep
 	return out
 }
 

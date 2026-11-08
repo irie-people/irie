@@ -34,8 +34,11 @@ enum Launch {
 
 struct IrieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    /// Held, not watched: the scene redraws nothing when the store changes,
+    /// which is several times a second while agents work. The window's
+    /// views watch it, and the menus watch only their own facts
+    /// (MenuBar.swift).
     @State private var store = Store()
-    @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
     /// The compact title bar: one short row for the traffic lights, the
     /// sidebar's counts and the shown session's name. The scene's
@@ -56,116 +59,7 @@ struct IrieApp: App {
         .windowToolbarStyle(.unifiedCompact(showsTitle: Self.showsTitle))
         .commands {
             LearnCommands(store: store)
-            SidebarCommands()
-            CommandGroup(replacing: .newItem) {
-                Button("New Task…") { store.newTaskSheet = true }
-                    .keyboardShortcut("n")
-                Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
-                    .keyboardShortcut("n", modifiers: [.command, .option])
-                // A guided session of Irie's own, as :setup switch starts
-                // from any task bar (docs/proposals/extensions.md §2.2).
-                Button("Set Up a Dead Man's Switch…") { Task { _ = await store.input(":setup switch") } }
-                Button("Rename Session…") { if let id = store.selection { store.beginRename(id) } }
-                    .disabled(store.selection == nil || store.outsideSelection != nil)
-            }
-            // Sessions close like tabs (Closing.swift). KeyRouter catches ⌘W
-            // first; the window's own Close moves to ⇧⌘W.
-            CommandGroup(after: .newItem) {
-                Button("Close Session") { if let s = store.closable { store.close(s) } }
-                    .keyboardShortcut("w")
-                    .disabled(store.closable == nil)
-                Button("Reopen Closed Session") { store.reopenLast() }
-                    .keyboardShortcut("t", modifiers: [.command, .shift])
-                    .disabled(store.closed.isEmpty)
-                // The sidebar's z key does it while the list has the keyboard.
-                Button(store.closable?.isParked == true ? "Unpark Session" : "Park Session") { store.toggleParked() }
-                    .disabled(store.closable == nil || !store.canPark)
-                Divider()
-                // A run you start goes on while you watch, until no session
-                // has work left or the plan is as full as it may get.
-                Button(store.trod?.hand == true ? "Stop the Trod Bot" : "Start the Trod Bot Now") { store.setTrod(store.trod?.hand != true) }
-                    .disabled(!store.canTrod)
-                // Gabriel's boost: your focus gets the machine first for a
-                // while, busy or not; it ends by itself (DESIGN §4.11).
-                Button(store.boosting ? "Stop the Boost" : "Boost Your Focus") { store.setBoost(!store.boosting) }
-                    .disabled(!store.canBoost)
-                // Mullvad VPN, while vpn.on: the same words as :vpn in a
-                // task bar (docs/proposals/extensions.md §4.1).
-                Menu("VPN") {
-                    Button("Connect") { Task { _ = await store.input(":vpn on") } }
-                    Button("Disconnect") { Task { _ = await store.input(":vpn off") } }
-                    Divider()
-                    Button(store.vpn?.lockdown == true ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On") {
-                        Task { _ = await store.input(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on") }
-                    }
-                    Button("Account Time Left") { Task { _ = await store.input(":vpn time") } }
-                }
-                .disabled(store.vpn == nil)
-            }
-            // Undo and Redo step through the core's history, a park or a
-            // close, and name the step; a text field with typing to take
-            // back keeps ⌘Z for that (Undo.swift).
-            CommandGroup(replacing: .undoRedo) {
-                Button(store.undoLabel.map { "Undo " + UndoText.title($0) } ?? "Undo") { store.undoKey() }
-                    .keyboardShortcut("z")
-                Button(store.redoLabel.map { "Redo " + UndoText.title($0) } ?? "Redo") { store.undoKey(redo: true) }
-                    .keyboardShortcut("z", modifiers: [.command, .shift])
-            }
-            // KeyRouter catches Ctrl+Tab and Ctrl+] first; the menu shows them.
-            CommandMenu("Go") {
-                Button("Next Session") { store.step(1) }
-                    .keyboardShortcut(.tab, modifiers: .control)
-                Button("Previous Session") { store.step(-1) }
-                    .keyboardShortcut(.tab, modifiers: [.control, .shift])
-                Button("Sidebar or Terminal") { store.toggleFocus() }
-                    .keyboardShortcut("]", modifiers: .control)
-                Divider()
-                ForEach(1..<10) { n in
-                    Button("Session \(n)") { store.showRow(n) }
-                        .keyboardShortcut(KeyEquivalent(Character(String(n))), modifiers: .command)
-                }
-                Divider()
-                Button("Find a Session") { store.focusFind += 1 }
-                    .keyboardShortcut("f")
-                Divider()
-                // Step through the strip of the helper pane (HelperPane.swift).
-                Button("Next Helper") { NotificationCenter.default.post(name: .irieHelperStep, object: 1) }
-                    .keyboardShortcut("]", modifiers: .command)
-                    .disabled(!store.helperShown)
-                Button("Previous Helper") { NotificationCenter.default.post(name: .irieHelperStep, object: -1) }
-                    .keyboardShortcut("[", modifiers: .command)
-                    .disabled(!store.helperShown)
-            }
-            CommandGroup(after: .toolbar) {
-                Picker("Theme", selection: $theme) {
-                    ForEach(Palette.all) { p in Text(p.name).tag(p.id) }
-                }
-                Divider()
-                Button("Bigger Text") { store.setFontSize(store.fontSize + 1) }
-                    .keyboardShortcut("=")
-                Button("Smaller Text") { store.setFontSize(store.fontSize - 1) }
-                    .keyboardShortcut("-")
-                Button("Actual Size") { store.setFontSize(Store.defaultFontSize) }
-                    .keyboardShortcut("0")
-                Divider()
-                // The conversation, or the live terminal on the right.
-                Toggle("Terminal", isOn: $store.showTerminal)
-                    .keyboardShortcut("t", modifiers: [.command, .option])
-                // The session's helpers, in the right sidebar (HelperPane.swift).
-                Button(store.helperShown ? "Hide Helpers" : "Show Helpers") { store.toggleHelpers() }
-                    .keyboardShortcut("h", modifiers: [.command, .shift])
-                    .disabled(store.selection == nil || store.outsideSelection != nil)
-                Divider()
-                // The right sidebar and its tabs (RightSidebar.swift), with
-                // the key cmux and VS Code give a right side bar.
-                Button(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar") { store.toggleSide() }
-                    .keyboardShortcut("b", modifiers: [.command, .option])
-                ForEach(SideTab.built) { t in
-                    Button(t.title) { store.toggleSideTab(t) }
-                        .keyboardShortcut(t.key, modifiers: [.command, .option])
-                }
-                Button(store.side.pinned ? "Unpin the Right Sidebar" : "Pin the Right Sidebar") { store.pinSide(!store.side.pinned) }
-            }
+            IrieCommands(store: store, menu: store.menu)
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
@@ -187,26 +81,11 @@ struct IrieApp: App {
 @MainActor
 final class KeyRouter {
     private var monitor: Any?
-    private var clicks: Any?
     /// Irie's own window, where the sessions are (WindowReader).
     weak var window: NSWindow?
 
     func install(_ store: Store) {
         guard monitor == nil else { return }
-        // A click in the terminal beside a peeking right sidebar closes the
-        // sidebar, and the click still reaches the terminal.
-        clicks = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self, weak store] event in
-            guard let self, let store else { return event }
-            MainActor.assumeIsolated {
-                guard store.sidePeeking, let window = event.window, window === self.window,
-                      let terminal = store.terminalView, let content = window.contentView else { return }
-                let inTerminal = terminal.bounds.contains(terminal.convert(event.locationInWindow, from: nil))
-                let p = event.locationInWindow
-                let inSidebar = store.sidePeekFrame.contains(CGPoint(x: p.x, y: content.bounds.height - p.y))
-                if inTerminal && !inSidebar { store.closeSide() }
-            }
-            return event
-        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak store] event in
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])

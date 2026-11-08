@@ -66,6 +66,7 @@ func (c *Core) typeTo(id, text string, may func(*session, string) error) error {
 		return err
 	}
 	x.quiet++
+	pokeScreen(x)
 	cv, _ := c.conversationOf(x)
 	cv.sent(text, time.Now(), working)
 	c.tellConversation(x)

@@ -6,3 +6,12 @@ contact_links:
   - name: Help using Irie
     url: https://github.com/irie-people/irie/blob/main/SUPPORT.md
     about: The docs, troubleshooting, and where to ask.
+  - name: Chat on Discord
+    url: https://discord.gg/XrP63ujbPH
+    about: "For talk, not for bug reports: those go in an issue, so the answer helps the next person."
+  - name: Instagram
+    url: https://www.instagram.com/irie_people/
+    about: Irie People on Instagram. Bug reports go in an issue.
+  - name: Threads
+    url: https://www.threads.com/@irie_people
+    about: Irie People on Threads. Bug reports go in an issue.

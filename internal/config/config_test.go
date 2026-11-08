@@ -133,6 +133,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Arch{
 		Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
+		Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
@@ -750,6 +751,26 @@ func TestVPNSection(t *testing.T) {
 	}
 }
 
+func TestLidSection(t *testing.T) {
+	if l := Default().Lid; l != (Lid{Awake: LidWork, Grace: 2 * time.Minute, Battery: 10}) {
+		t.Errorf("default lid = %+v, want awake while sessions work, 2m grace, down to 10%%", l)
+	}
+	c, err := Load(writeFile(t, "[lid]\nawake = \"always\"\n"))
+	if err != nil || c.Lid != (Lid{Awake: LidAlways, Grace: 2 * time.Minute, Battery: 10}) {
+		t.Errorf("lid = %+v, %v: one key keeps the others' defaults", c.Lid, err)
+	}
+	for _, c := range []struct{ body, mention string }{
+		{"[lid]\nawake = \"sometimes\"\n", "lid.awake = \"sometimes\": must be work, always or off"},
+		{"[lid]\ngrace = \"-1m\"\n", "lid.grace"},
+		{"[lid]\nbattery = 101\n", "lid.battery"},
+		{"[lid]\nbattery = -1\n", "lid.battery"},
+	} {
+		if _, err := Load(writeFile(t, c.body)); err == nil || !strings.Contains(err.Error(), c.mention) {
+			t.Errorf("%q: %v, want an error that mentions %q", c.body, err, c.mention)
+		}
+	}
+}
+
 func TestArchMikaelFromTheFile(t *testing.T) {
 	c, err := Load(writeFile(t, "[arch.mikael]\ndoor = false\ngood = [\"Give credit where it is due.\", \"Be honest with clients.\"]\n"))
 	if err != nil {
@@ -805,5 +826,26 @@ func TestArchGabrielFromTheFile(t *testing.T) {
 		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: err = %v, want %q", body, err, want)
 		}
+	}
+}
+
+// TestSDKKeepsTheProfilesOtherDefaults is a machine whose sessions run on
+// the Agent SDK (DESIGN §3.5): one key per profile, the rest as before.
+func TestSDKKeepsTheProfilesOtherDefaults(t *testing.T) {
+	c, err := Load(writeFile(t, "[profiles.claude]\nsdk = true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, want := c.Profiles["claude"], Default().Profiles["claude"]
+	want.SDK = true
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("profiles.claude = %+v, want %+v", got, want)
+	}
+	if c.Profiles["sonnet"].SDK {
+		t.Error("sdk reached a profile the file did not name")
+	}
+	_, err = Load(writeFile(t, "[profiles.g]\nharness = \"generic\"\ncommand = \"aider\"\nsdk = true\n"))
+	if err == nil || !strings.Contains(err.Error(), "profiles.g.sdk: only the claude-code harness") {
+		t.Errorf("sdk on a generic profile: %v", err)
 	}
 }

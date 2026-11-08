@@ -288,6 +288,71 @@ func TestEstimate(t *testing.T) {
 	}
 }
 
+// loopedInfo is the metadata of a looped model shaped like NVIDIA's Dory:
+// 72 layers in the pattern S-S-S-*- (three sliding-window attention layers
+// and one full one, each followed by a layer with no cache), the middle 40
+// run four times, each pass with a cache of its own.
+func loopedInfo() map[string]any {
+	return map[string]any{
+		"general.architecture": "dory", "dory.block_count": 72.0, "dory.attention.head_count": 16.0,
+		"dory.attention.head_count_kv": 4.0, "dory.attention.key_length": 256.0, "dory.attention.value_length": 256.0,
+		"dory.attention.sliding_window": 1024.0, "dory.layer_pattern": strings.Repeat("S-S-S-*-", 9),
+		"dory.input_layer_count": 16.0, "dory.recurrent_layer_count": 40.0, "dory.output_layer_count": 16.0,
+		"dory.num_loops": 4.0, "dory.recurrent_kv_cache_mode": "per_loop",
+	}
+}
+
+func TestModelInfoReadsALayerPattern(t *testing.T) {
+	// Per loop: the 16 input and 16 output layers hold 2 full and 6 sliding
+	// ones each, and the 40 recurrent layers' 5 full and 15 sliding ones
+	// count once for each of the 4 passes.
+	info := parseModelInfo(loopedInfo())
+	if len(info.KVHeads) != 2+5*4+2 || len(info.SWAHeads) != 6+15*4+6 || info.Window != 1024 {
+		t.Errorf("per loop: %d full, %d sliding, window %d; want 24, 72, 1024", len(info.KVHeads), len(info.SWAHeads), info.Window)
+	}
+	// Last loop: the passes share one cache.
+	mi := loopedInfo()
+	mi["dory.recurrent_kv_cache_mode"] = "last_loop"
+	info = parseModelInfo(mi)
+	if len(info.KVHeads) != 9 || len(info.SWAHeads) != 27 {
+		t.Errorf("last loop: %d full, %d sliding; want 9, 27", len(info.KVHeads), len(info.SWAHeads))
+	}
+	// The full layers keep the whole context, the sliding ones their 1,024
+	// tokens and a batch of 512; 4 heads × (256 + 256) = 2,048 values a
+	// token each.
+	n := Estimate(3_673_288_864, info, 65536, "q8_0", 1)
+	if want := int64((9*2048*65536 + 27*2048*1536) * 34 / 32); n.Cache != want {
+		t.Errorf("cache = %d, want %d", n.Cache, want)
+	}
+	// A context shorter than the window is all a sliding layer keeps.
+	if short := Estimate(3_673_288_864, info, 1024, "f16", 1); short.Cache != int64((9+27)*2048*1024*2) {
+		t.Errorf("short cache = %d", short.Cache)
+	}
+}
+
+func TestInfoWithAppliesOverrides(t *testing.T) {
+	g := GGUF{Meta: loopedInfo()}
+	for _, args := range [][]string{
+		{"-ot", "(_scale)\\.weight=MTL0", "--override-kv", "dory.num_loops=int:2,dory.recurrent_kv_cache_mode=str:last_loop"},
+		{"--override-kv=dory.recurrent_kv_cache_mode=str:last_loop"},
+	} {
+		if info := g.InfoWith(args); len(info.KVHeads) != 9 || len(info.SWAHeads) != 27 {
+			t.Errorf("%q: %d full, %d sliding; want 9, 27", args, len(info.KVHeads), len(info.SWAHeads))
+		}
+	}
+	// Two loops, a cache each: the recurrent block counts twice.
+	if info := g.InfoWith([]string{"--override-kv", "dory.num_loops=int:2"}); len(info.KVHeads) != 2+5*2+2 {
+		t.Errorf("two loops: %d full layers, want 14", len(info.KVHeads))
+	}
+	// The file's own metadata stays as it was, and no override is no change.
+	if g.Meta["dory.num_loops"] != 4.0 || g.Meta["dory.recurrent_kv_cache_mode"] != "per_loop" {
+		t.Errorf("metadata changed: %v, %v", g.Meta["dory.num_loops"], g.Meta["dory.recurrent_kv_cache_mode"])
+	}
+	if info := g.InfoWith(nil); len(info.KVHeads) != 24 {
+		t.Errorf("no overrides: %d full layers, want 24", len(info.KVHeads))
+	}
+}
+
 func TestBudgetAndReserve(t *testing.T) {
 	m := Machine{Total: 18 * GiB, Available: 10 * GiB}
 	if got := Budget(0, m); got != 12*GiB {

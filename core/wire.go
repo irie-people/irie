@@ -53,7 +53,14 @@ type (
 	ArchResult       = ipc.ArchResult
 	ArchAgent        = ipc.ArchAgent
 	ArchAction       = ipc.ArchAction
+	ArchItem         = ipc.ArchItem
 	ArchSetting      = ipc.ArchSetting
+	RaphaelArgs      = ipc.RaphaelArgs
+	RaphaelResult    = ipc.RaphaelResult
+	RaphaelFinding   = ipc.RaphaelFinding
+	RaphaelFix       = ipc.RaphaelFix
+	RaphaelDone      = ipc.RaphaelDone
+	RaphaelRestart   = ipc.RaphaelRestart
 	GabrielArgs      = ipc.GabrielArgs
 	GabrielResult    = ipc.GabrielResult
 	GabrielSession   = ipc.GabrielSession
@@ -122,6 +129,9 @@ type (
 	ScreenArgs       = ipc.ScreenArgs
 	ScreenResult     = ipc.ScreenResult
 	ScreenOption     = ipc.ScreenOption
+	Screen           = ipc.Screen
+	ScreenCursor     = ipc.ScreenCursor
+	ScreenLine       = ipc.ScreenLine
 	KeysArgs         = ipc.KeysArgs
 	PairArgs         = ipc.PairArgs
 	PairResult       = ipc.PairResult
@@ -208,6 +218,7 @@ const (
 	OpTrod             = ipc.OpTrod
 	OpGabriel          = ipc.OpGabriel
 	OpArch             = ipc.OpArch
+	OpRaphael          = ipc.OpRaphael
 	OpReady            = ipc.OpReady
 	OpVPN              = ipc.OpVPN
 	OpLearn            = ipc.OpLearn
@@ -235,6 +246,9 @@ const (
 	StateIdle          = ipc.StateIdle
 	StatePaused        = ipc.StatePaused
 	StatePausing       = ipc.StatePausing
+	ArchOK             = ipc.ArchOK
+	ArchNote           = ipc.ArchNote
+	ArchWarn           = ipc.ArchWarn
 	ArchBool           = ipc.ArchBool
 	ArchDuration       = ipc.ArchDuration
 	ArchNumber         = ipc.ArchNumber
@@ -271,5 +285,7 @@ const (
 	FramePing          = ipc.FramePing
 	OpScreen           = ipc.OpScreen
 	OpKeys             = ipc.OpKeys
+	FeatureScreenLive  = ipc.FeatureScreenLive
+	FrameScreen        = ipc.FrameScreen
 	OpPair             = ipc.OpPair
 )

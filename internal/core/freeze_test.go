@@ -195,11 +195,21 @@ func TestFreezeWithAHostFromBeforeFreeze(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	check("after 0.5 s")
 
-	// The agent comes to its tool call and waits there.
-	testutil.Eventually(t, 10*time.Second, "the row never said the agent was held", func() bool {
+	// The agent comes to its tool call and waits there. Its hook tells the
+	// core before it holds the agent, unless the core's next tick stops the
+	// hook first (keepFrozen stops what starts in a frozen session), as a
+	// busy machine's slow start of the hook allows: the agent still waits,
+	// on its stopped hook, but the row says freezing until the thaw.
+	held := func() bool {
 		row, _ := c.row(s.ID)
 		return row.State == ipc.StateFrozen && !row.Freezing
-	})
+	}
+	for end := time.Now().Add(10 * time.Second); !held() && time.Now().Before(end); {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !held() && !slow(t) {
+		t.Error("after 10s: the row never said the agent was held")
+	}
 	hooked := func(event string) bool {
 		return slices.ContainsFunc(c.agentLog(s.ID), func(r map[string]any) bool { return r["t"] == "hook" && r["event"] == event })
 	}
@@ -436,6 +446,18 @@ func slow(t *testing.T) bool {
 	return true
 }
 
+// skipIfDemoted skips a test that looks for processes out of the
+// background once the test itself went there, as when the machine got busy
+// meanwhile and Gabriel put the test's session in the background (an
+// agent's own go test; an install's never is): what it starts from then on
+// starts there too.
+func skipIfDemoted(t *testing.T) {
+	t.Helper()
+	if demoted(t) {
+		t.Skip("the test went into the background, as a session's processes do while another is promoted or Gabriel holds it back")
+	}
+}
+
 func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	c := setup(t)
 	var all []ipc.Session
@@ -480,6 +502,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 			t.Errorf("%s: %v not in the background", s.Name, out)
 		}
 	}
+	skipIfDemoted(t)
 	if in, _ := inBackground(gamma); len(in) > 0 {
 		t.Errorf("the promoted session's %v are in the background", in)
 	}
@@ -494,6 +517,7 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 0}, nil); err != nil {
 		t.Fatal(err)
 	}
+	skipIfDemoted(t)
 	for _, s := range append(all, delta) {
 		if in, _ := inBackground(s); len(in) > 0 {
 			t.Errorf("%s: %v still in the background", s.Name, in)

@@ -6,6 +6,8 @@
 
 Help happens in public, on GitHub, so the answers can help the next person too. There is no private support channel.
 
+**Chat:** the [Irie People Discord](https://discord.gg/XrP63ujbPH), with Irie People also on [Instagram](https://www.instagram.com/irie_people/) and [Threads](https://www.threads.com/@irie_people). They are for talk, not a support channel: ask for help in an issue, so the answer helps the next person.
+
 Leave out anything that identifies a person: use `alice`, `/home/alice` and `example.com` in paths, names and logs.
 
 For a security problem, don't open an issue: see [SECURITY.md](SECURITY.md).

@@ -56,9 +56,27 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	if s.Probe.Flags["--name"] && s.Name != "" {
 		argv = append(argv, "--name", s.Name)
 	}
-	argv = append(argv, harness.TaskArg(s.Task, s.Dir))
 	files[TaskFile] = []byte(s.Task)
+	if p.SDK {
+		return sdkArgv(s, argv, true), env, files, nil
+	}
+	argv = append(argv, harness.TaskArg(s.Task, s.Dir))
 	return argv, env, files, nil
+}
+
+// sdkArgv is how a session of a profile with sdk runs (DESIGN §3.5):
+//
+//	<irie> sdk [--first <dir>/task.md] -- <claude command line>
+//
+// Irie's own pane program runs the command line as the Agent SDK's CLI and
+// sends the task file's text as the first message. The command line takes
+// no task, since the messages go to it as JSON.
+func sdkArgv(s harness.Spawn, argv []string, first bool) []string {
+	out := []string{s.Bin, "sdk"}
+	if first {
+		out = append(out, "--first", filepath.Join(s.Dir, TaskFile))
+	}
+	return append(append(out, "--"), argv...)
 }
 
 // Resume builds, for a conversation that carries on in an Irie pane:
@@ -83,8 +101,13 @@ func (Harness) Resume(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	// Claude Code takes as the resumed conversation's next. The spawn's
 	// task, which a reopen carries, is never sent again.
 	if s.Next != "" {
-		argv = append(argv, harness.TaskArg(s.Next, s.Dir))
 		files[TaskFile] = []byte(s.Next)
+	}
+	if p.SDK {
+		return sdkArgv(s, argv, s.Next != ""), env, files, nil
+	}
+	if s.Next != "" {
+		argv = append(argv, harness.TaskArg(s.Next, s.Dir))
 	}
 	return argv, env, files, nil
 }
@@ -100,6 +123,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 	if s.Bin == "" {
 		return nil, nil, nil, errors.New("claude: no irie binary for the hooks")
 	}
+	p, allow := localPermissions(p)
 	taken, err := TakeArch(p, s)
 	if err != nil {
 		return nil, nil, nil, err
@@ -118,7 +142,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 			}
 		}
 	}
-	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors}
+	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow}
 	// Tips as objects, with an id and a cooldown, need 2.1.247.
 	if AtLeast(s.Probe.Version, TipsVersion) {
 		x.Tips = s.Tips
@@ -271,6 +295,43 @@ type Extra struct {
 	Style  string      // the session's output style, such as Explanatory; "" leaves the user's own
 	Tips   []learn.Tip // Irie's tips under the spinner, with Claude Code's own
 	Doors  []arch.Door // the doors of the session's arch agents (DESIGN §4.11)
+	Allow  []string    // what the agent runs without asking, as Claude Code's permission rules
+}
+
+type permissions struct {
+	Allow []string `json:"allow"`
+}
+
+// LocalAllowed are the commands a local model's session runs without
+// asking (localPermissions): building, testing, vetting and formatting, in
+// Go, Python, JavaScript and Rust. Claude Code runs its read-only commands,
+// such as ls, cat and git diff, without asking in every mode.
+var LocalAllowed = []string{
+	"Bash(go build *)", "Bash(go test *)", "Bash(go vet *)", "Bash(go fmt *)", "Bash(gofmt *)",
+	"Bash(pytest *)", "Bash(python -m pytest *)", "Bash(python3 -m pytest *)",
+	"Bash(npm test *)", "Bash(npm run test *)", "Bash(npm run build *)", "Bash(npm run lint *)",
+	"Bash(cargo build *)", "Bash(cargo check *)", "Bash(cargo test *)", "Bash(cargo fmt *)",
+	"Bash(make test *)", "Bash(make check *)",
+}
+
+// localPermissions gives a local model's session a mode it can work in. A
+// local model cannot answer auto mode's check, which Claude Code asks of
+// the session's own model before each command it runs, so every command
+// would be refused (DESIGN §6.1). Such a session takes edits instead and
+// runs LocalAllowed on its own; Claude Code asks for anything else. A mode
+// the profile names other than auto stays, and only acceptEdits gets the
+// list.
+func localPermissions(p config.Profile) (config.Profile, []string) {
+	if p.Local == nil {
+		return p, nil
+	}
+	if p.PermissionMode == "" || p.PermissionMode == "auto" {
+		p.PermissionMode = "acceptEdits"
+	}
+	if p.PermissionMode != "acceptEdits" {
+		return p, nil
+	}
+	return p, LocalAllowed
 }
 
 type spinnerTips struct {
@@ -300,7 +361,11 @@ func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byt
 		TeammateMode string                    `json:"teammateMode,omitempty"`
 		OutputStyle  string                    `json:"outputStyle,omitempty"`
 		Tips         *spinnerTips              `json:"spinnerTipsOverride,omitempty"`
+		Permissions  *permissions              `json:"permissions,omitempty"`
 	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style}
+	if len(x.Allow) > 0 {
+		file.Permissions = &permissions{Allow: x.Allow}
+	}
 	if x.Teams {
 		file.TeammateMode = "tmux"
 	}

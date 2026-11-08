@@ -15,6 +15,8 @@ package core
 // for another, and the background processes are the ones it slows first.
 
 import (
+	"fmt"
+
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
@@ -29,33 +31,143 @@ type bgProc struct {
 // setPriority promotes a session (level 1), which also puts it at the top
 // of the list and unparks it, or puts it back (level 0). It takes effect
 // before it returns. The unpark goes with the promotion, so it is no step
-// of the history.
-func (c *Core) setPriority(a ipc.PriorityArgs) error {
+// of the history of its own: when the level changed, step is what undoing
+// it needs (§4.5), which for a promotion is where the session was and
+// whether it was parked, since undoing it puts both back.
+func (c *Core) setPriority(a ipc.PriorityArgs) (step map[string]any, err error) {
 	if a.Level < 0 || a.Level > 1 {
-		return ipc.Errorf(ipc.CodeBadArgs, "priority level %d: it is 0 or 1", a.Level)
+		return nil, ipc.Errorf(ipc.CodeBadArgs, "priority level %d: it is 0 or 1", a.Level)
 	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]
 	if x == nil {
 		c.mu.Unlock()
-		return ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		return nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+	}
+	if x.track.priority != a.Level {
+		step = map[string]any{}
+		if a.Level > 0 {
+			step["next"] = c.nextOf(x.id)
+			if x.track.parked {
+				step["parked"] = true
+			}
+		}
 	}
 	if a.Level > 0 {
 		c.toTop(x.id)
 		c.setParked(x.id, false)
 	}
-	if x.track.priority != a.Level {
-		data := map[string]any{"level": a.Level}
-		if a.Reason != "" {
-			data["reason"] = a.Reason
+	c.setLevel(x, a.Level, a.Reason)
+	frames := c.changes()
+	c.mu.Unlock()
+	c.publish(frames)
+	return step, nil
+}
+
+// setLevel gives session x the priority level where it is in the list, and
+// the machine to the promoted sessions. The caller holds c.mu.
+func (c *Core) setLevel(x *session, level int, reason string) {
+	if x.track.priority != level {
+		data := map[string]any{"level": level}
+		if reason != "" {
+			data["reason"] = reason
 		}
 		c.record(x, event.Event{Source: event.SourceUser, Kind: event.PrioritySet, Data: data})
 	}
 	c.background()
+}
+
+// Action kinds of priority (undo.go): promoting a session, and putting it
+// back. Undoing a promotion puts the session back where it was in the list,
+// parked again if it was; undoing a putting back promotes it where it is,
+// since putting it back moved nothing.
+const (
+	actPromote   = "promote"
+	actUnpromote = "unpromote"
+)
+
+func init() {
+	registerAction(actPromote, actionKind{verb: "promote",
+		undo: effect{check: checkLevel(0), do: unpromote},
+		redo: effect{check: checkLevel(1), do: promote}})
+	registerAction(actUnpromote, actionKind{verb: "stop promoting",
+		undo: effect{check: checkLevel(1), do: doLevel(1)},
+		redo: effect{check: checkLevel(0), do: doLevel(0)}})
+}
+
+// checkLevel is what makes giving a's session the priority level uncertain:
+// that it is closed or gone, or has that level already.
+func checkLevel(level int) func(c *Core, a action) []problem {
+	verb, already := "stop promoting", "is not promoted any more"
+	if level > 0 {
+		verb, already = "promote", "is promoted already"
+	}
+	return func(c *Core, a action) []problem {
+		x := c.sessions[a.Session]
+		if x == nil {
+			return notOpen(c, a, verb)
+		}
+		if x.track.priority == level {
+			return []problem{alreadyDone(fmt.Sprintf("%q %s.", x.name, already))}
+		}
+		return nil
+	}
+}
+
+// promote promotes a's session again the way the op does, and keeps where
+// it was just now and whether it was parked, for the next undo.
+func promote(c *Core, a action) (action, error) {
+	step, err := c.setPriority(ipc.PriorityArgs{Session: a.Session, Level: 1})
+	if err != nil {
+		return a, err
+	}
+	if step != nil {
+		a = a.with("next", step["next"]).with("parked", step["parked"])
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	a.Name = c.nameOf(a.Session)
+	return a, nil
+}
+
+// unpromote takes a's promotion back: it puts the session back, where it
+// was in the list, and parks it again if it was parked.
+func unpromote(c *Core, a action) (action, error) {
+	c.mu.Lock()
+	x := c.sessions[a.Session]
+	if x == nil {
+		c.mu.Unlock()
+		return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+	}
+	c.setLevel(x, 0, "")
+	c.putBack(x.id, a.strs("next"))
+	if a.flag("parked") {
+		c.setParked(x.id, true)
+	}
+	a.Name = x.name
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	return nil
+	return a, nil
+}
+
+// doLevel gives a's session the priority level where it is, and changes
+// nothing else.
+func doLevel(level int) func(c *Core, a action) (action, error) {
+	return func(c *Core, a action) (action, error) {
+		c.mu.Lock()
+		x := c.sessions[a.Session]
+		if x == nil {
+			c.mu.Unlock()
+			return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		}
+		c.setLevel(x, level, "")
+		a.Name = x.name
+		frames := c.changes()
+		c.mu.Unlock()
+		c.publish(frames)
+		return a, nil
+	}
 }
 
 // background puts each session's process tree in the background, or takes
@@ -89,6 +201,11 @@ func (c *Core) background() {
 	for _, x := range c.sessions {
 		p := c.snap.Pane(x.pane)
 		if p == nil || p.Dead || p.PID <= 1 {
+			// No process to move: what Irie put in the background from its
+			// tree is let go below once it ends or leaves. A dead session
+			// that kept the flag, as every session has from the core's
+			// start, would have each pass read the whole process table.
+			x.demoted = false
 			continue
 		}
 		want := x.track.priority == 0 && (promoted || holding && !c.gab.focus[x.id])

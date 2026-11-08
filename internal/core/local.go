@@ -280,15 +280,35 @@ func (c *Core) startRuntime(o localmodel.Ollama) error {
 }
 
 // machine reads the machine's memory, keeping the last reading when it
-// cannot.
+// cannot. A test core reads FakeMemoryEnv instead (internal/testutil), so
+// that what the user's other programs take never passes or fails its local
+// spawns.
 func (c *Core) readMachine() localmodel.Machine {
 	m, err := localmodel.ReadMachine()
+	if f, ok := fakeMemory(os.Getenv(FakeMemoryEnv)); ok {
+		m, err = f, nil
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err == nil {
 		c.machine = m
 	}
 	return c.machine
+}
+
+// FakeMemoryEnv names the machine's memory for a test core, as
+// "TOTAL/AVAILABLE" in GiB, such as "64/48".
+const FakeMemoryEnv = "IRIE_FAKE_MEMORY"
+
+// fakeMemory reads FakeMemoryEnv's value.
+func fakeMemory(v string) (localmodel.Machine, bool) {
+	total, avail, ok := strings.Cut(v, "/")
+	t, err1 := strconv.ParseInt(total, 10, 64)
+	a, err2 := strconv.ParseInt(avail, 10, 64)
+	if !ok || err1 != nil || err2 != nil || t <= 0 || a < 0 || a > t {
+		return localmodel.Machine{}, false
+	}
+	return localmodel.Machine{Total: t * localmodel.GiB, Available: a * localmodel.GiB}, true
 }
 
 // serverContext is the context the server gives a model, as far as Irie

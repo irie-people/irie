@@ -73,6 +73,30 @@ func TestInFocus(t *testing.T) {
 	}
 }
 
+func TestAShowComesIntoTheFocusAtOnce(t *testing.T) {
+	c := &Core{sessions: map[string]*session{
+		"s-before":  {id: "s-before"},
+		"s-shown":   {id: "s-shown"},
+		"s-install": {id: "s-install"},
+	}, selected: "s-shown", log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	c.useConfig(config.Default())
+	// Not holding back: a show leaves Gabriel's focus be.
+	c.gab.focus = map[string]bool{"s-before": true}
+	c.refocus()
+	if want := map[string]bool{"s-before": true}; !reflect.DeepEqual(c.gab.focus, want) {
+		t.Errorf("not holding back: focus %v, want %v", c.gab.focus, want)
+	}
+	// Holding back with Irie in front: the session now on show is in the
+	// focus, and the one before steps back with the rest, before the show
+	// returns rather than at the next sweep. An install stays in it.
+	c.gab.holding, c.gab.irieFront = true, true
+	c.gab.installs = map[string]bool{"s-install": true}
+	c.refocus()
+	if want := map[string]bool{"s-shown": true, "s-install": true}; !reflect.DeepEqual(c.gab.focus, want) {
+		t.Errorf("holding back: focus %v, want %v", c.gab.focus, want)
+	}
+}
+
 func TestHeavyOutsidePicksOnlyWhatMaySlow(t *testing.T) {
 	me := os.Getuid()
 	c := &Core{bin: "/home/alice/.local/share/irie/bin/irie"}
