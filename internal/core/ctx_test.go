@@ -216,3 +216,34 @@ func TestALastTurnIsStoredWhenTheSessionClosesItself(t *testing.T) {
 func configProfile(dir string) config.Profile {
 	return config.Profile{Env: map[string]string{"CLAUDE_CONFIG_DIR": dir}}
 }
+
+func TestASyncWaitsForTheTranscriptToSettle(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "t.jsonl")
+	if err := os.WriteFile(p, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The reply and the bookkeeping, coming after the Stop hook.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		for range 5 {
+			time.Sleep(50 * time.Millisecond)
+			f.WriteString("{}\n")
+		}
+	}()
+	start := time.Now()
+	settleFile(p, ctxSettle, 20*time.Second)
+	select {
+	case <-done:
+	default:
+		t.Fatal("settled while the transcript still grew")
+	}
+	if waited := time.Since(start); waited < ctxSettle || waited >= 20*time.Second {
+		t.Fatalf("waited %v", waited)
+	}
+}

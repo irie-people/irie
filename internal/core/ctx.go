@@ -96,7 +96,51 @@ func (c *Core) ctxOnEvent(x *session, e event.Event) {
 	}
 	snap := c.ctxSnapOf(x)
 	snap.ended = snap.ended || ended
+	go c.ctxSettled(snap)
+}
+
+// After an event, a sync waits for the session's transcript to settle:
+// Claude Code writes a turn's last reply, and its bookkeeping, once the
+// turn's Stop hooks have run, so a sync at the hook would store the turn
+// without its reply, and store it again once the reply came. It waits
+// until the newest transcript has gone ctxSettle without growing, and
+// ctxSettleMost at most.
+const (
+	ctxSettle     = time.Second
+	ctxSettleMost = 30 * time.Second
+)
+
+// ctxSettled queues a sync of snap once its newest transcript has settled.
+// A session that has closed meanwhile is synced as ended.
+func (c *Core) ctxSettled(snap ctxSnap) {
+	if ts := snap.s.Transcripts; len(ts) > 0 {
+		settleFile(ts[len(ts)-1], ctxSettle, ctxSettleMost)
+	}
+	c.mu.Lock()
+	if c.sessions[snap.s.ID] == nil {
+		snap.ended = true
+	}
+	c.mu.Unlock()
 	c.ctxSoon(snap)
+}
+
+// settleFile returns once the file at path has gone quiet without changing
+// size, or after most.
+func settleFile(path string, quiet, most time.Duration) {
+	end := time.Now().Add(most)
+	size, since := int64(-1), time.Now()
+	for time.Now().Before(end) {
+		n := int64(-1)
+		if fi, err := os.Stat(path); err == nil {
+			n = fi.Size()
+		}
+		if n != size {
+			size, since = n, time.Now()
+		} else if time.Since(since) >= quiet {
+			return
+		}
+		time.Sleep(quiet / 4)
+	}
 }
 
 // ctxSnapOf is what the store needs of x now. The caller holds c.mu.

@@ -234,9 +234,10 @@ func (st *Store) Pack() error {
 	return nil
 }
 
-// lean is a turn with only what syncing needs, which is all a head keeps.
+// lean is a turn with only what syncing needs, which is all a head keeps:
+// the code it recorded too, for a turn committed again in its place.
 func lean(t Turn) Turn {
-	return Turn{Commit: t.Commit, Turn: t.Turn, Leaf: t.Leaf, Partial: t.Partial, Cut: t.Cut, Session: t.Session}
+	return Turn{Commit: t.Commit, Turn: t.Turn, Leaf: t.Leaf, Partial: t.Partial, Cut: t.Cut, Session: t.Session, Code: t.Code, Dirty: t.Dirty}
 }
 
 // Forget drops what the store keeps in memory for a session, such as once
@@ -256,8 +257,11 @@ func (st *Store) Forget(s Session) {
 // Claude Code writes a turn's bookkeeping, such as how long it took and
 // what its Stop hooks said, after the Stop hook that stores the turn. Such
 // entries alone, with no new message, make no commit of their own: they go
-// into the next turn's commit, or, once the session has ended, a last one.
-// So a turn is one commit.
+// into the next turn's commit, or, once the session has ended, the turn's
+// own again. A turn stored again, grown since or with its last bookkeeping,
+// is committed in its old commit's place, which the reflog keeps, with the
+// code that commit recorded unless it is the newest turn. So a turn is one
+// commit.
 func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working, final bool) error {
 	if len(chain) == 0 {
 		return nil
@@ -277,6 +281,7 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working,
 		}
 	}
 	start, parent, fold := 0, "", -1 // fold: a turn whose bookkeeping goes into the next turn's commit
+	var again *Turn                  // the base, when its own turn is committed again in its place
 	var tree []treeEntry
 	if base >= 0 {
 		b := h.turns[base]
@@ -292,6 +297,14 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working,
 				return nil
 			}
 			fold = t
+		}
+		if start == t && (fold != t || t == len(ts)-1) {
+			// The head holds the branch's whole first-parent line, from
+			// its root, so the turn before is the base's parent.
+			again, parent = &b, ""
+			if base > 0 {
+				parent = h.turns[base-1].Commit
+			}
 		}
 		var err error
 		if tree, err = st.treeOf(h, base); err != nil {
@@ -311,6 +324,9 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working,
 			return err
 		}
 		h.turns = h.turns[:base+1]
+	}
+	if again != nil {
+		h.turns = h.turns[:base]
 	}
 	var made []Turn
 	for t := start; t < len(ts); t++ {
@@ -343,8 +359,11 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working,
 			Conversation: s.Conversation, Leaf: end.id, Model: s.Model,
 			Partial: working && t == len(ts)-1, Time: end.at,
 		}
-		if t == len(ts)-1 {
+		switch {
+		case t == len(ts)-1:
 			turn.Code, turn.Dirty = s.Code, s.Dirty
+		case again != nil && t == start:
+			turn.Code, turn.Dirty = again.Code, again.Dirty
 		}
 		if turn.Time.IsZero() {
 			turn.Time = time.Now()

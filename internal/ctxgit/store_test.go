@@ -204,9 +204,14 @@ func TestATurnInProgressGrows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The whole turn takes the partial commit's place, which the reflog
+	// keeps.
 	log, _ := st.Log("s0test", 0)
-	if len(log) != 2 || !log[1].Partial || log[0].Partial || log[0].Turn != 1 || log[1].Turn != 1 || log[0].Commit != done || log[1].Commit != partial {
+	if len(log) != 1 || log[0].Partial || log[0].Turn != 1 || log[0].Commit != done {
 		t.Fatalf("log: %+v", log)
+	}
+	if reflog := gitIn(t, st.Dir(), "reflog", "show", "--format=%H", "refs/heads/s0test"); !strings.Contains(reflog, partial) {
+		t.Fatalf("the partial commit is not in the reflog:\n%s", reflog)
 	}
 	c, cut, err := st.Resolve("s0test", "1")
 	if err != nil || c != done || cut != "" {
@@ -418,7 +423,8 @@ func TestATurnsBookkeepingMakesNoCommitOfItsOwn(t *testing.T) {
 	if got := gitIn(t, st.Dir(), "show", two+":turns/0001.jsonl"); !strings.Contains(got, "turn_duration") {
 		t.Fatalf("turn one's file lacks its bookkeeping:\n%s", got)
 	}
-	// Once the session has ended, its last turn's bookkeeping is stored too.
+	// Once the session has ended, its last turn's bookkeeping is stored too,
+	// in that turn's own commit's place.
 	x.add(map[string]any{"type": "system", "subtype": "turn_duration"})
 	s := session(x)
 	s.Final = true
@@ -427,8 +433,44 @@ func TestATurnsBookkeepingMakesNoCommitOfItsOwn(t *testing.T) {
 		t.Fatalf("the final bookkeeping was not stored: %s %v", last, err)
 	}
 	log, _ := st.Log("s0test", 0)
-	if len(log) != 3 || log[0].Turn != 2 || log[1].Turn != 2 || log[2].Turn != 1 {
+	if len(log) != 2 || log[0].Commit != last || log[0].Turn != 2 || log[1].Commit != one || log[1].Turn != 1 {
 		t.Fatalf("log: %+v", log)
+	}
+}
+
+func TestALateReplyIsStoredInItsTurnsPlace(t *testing.T) {
+	st := open(t)
+	x := newTx(t, t.TempDir(), "sess-a")
+	c1, c2 := strings.Repeat("1", 40), strings.Repeat("2", 40)
+	x.prompt("one")
+	x.tool("Bash", "make")
+	// The Stop hook's sync comes before Claude Code writes the reply.
+	s := session(x)
+	s.Code = c1
+	early, err := st.Sync(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x.reply("did one")
+	x.add(map[string]any{"type": "system", "subtype": "stop_hook_summary"})
+	x.prompt("two")
+	x.reply("did two")
+	s.Code = c2
+	two, err := st.Sync(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Turn one is still one commit, now with its reply, in the early one's
+	// place and with the code that one recorded.
+	log, _ := st.Log("s0test", 0)
+	if len(log) != 2 || log[0].Commit != two || log[0].Turn != 2 || log[0].Code != c2 || log[1].Turn != 1 || log[1].Code != c1 || log[1].Commit == early {
+		t.Fatalf("log: %+v", log)
+	}
+	if got := gitIn(t, st.Dir(), "show", log[1].Commit+":turns/0001.jsonl"); !strings.Contains(got, "did one") {
+		t.Fatalf("turn one lacks its reply:\n%s", got)
+	}
+	if parents := gitIn(t, st.Dir(), "rev-list", "--parents", "-n", "1", log[1].Commit); parents != log[1].Commit {
+		t.Fatalf("turn one has a parent: %s", parents)
 	}
 }
 
