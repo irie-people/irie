@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Preview pictures</title>
+<!--
+  The pictures link previews show (Open Graph and X cards), 1200 x 630 each:
+  Irie's, site/preview.png, and the Irie People home page's, preview.png in
+  irie-people/irie-people.github.io, which is this page with #people. Their
+  words are fixed lines: Irie's hero from docs/PHRASES.md and the home page's
+  headline. Nothing sits near the top or bottom edge, so the 2:1 crop some
+  sites make loses nothing.
+
+  Draw them with Chrome's headless shell, from the top of the checkout:
+
+    headless_shell --headless --hide-scrollbars --force-device-scale-factor=1 --window-size=1200,630 --screenshot="$PWD/site/preview.png" "file://$PWD/docs/preview.html"
+    headless_shell --headless --hide-scrollbars --force-device-scale-factor=1 --window-size=1200,630 --screenshot="$PWD/../irie-people.github.io/preview.png" "file://$PWD/docs/preview.html#people"
+-->
+<style>
+  html, body { margin: 0; }
+  body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  }
+  .card {
+    position: relative;
+    box-sizing: border-box;
+    width: 1200px;
+    height: 630px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 72px;
+    padding: 0 100px 80px;
+  }
+  .mark { width: 236px; height: 236px; flex: none; }
+  .card p { margin: 0; font-size: 64px; line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; }
+  .band { position: absolute; left: 0; bottom: 0; width: 1200px; height: 80px; }
+
+  /* Irie, in its calm palette: deep green, sun, wave and light. */
+  #irie { background: #EAF6EF; color: #1E5A42; }
+
+  /* Irie People, in the home page's colours, with the three projects' marks. */
+  #people { display: none; background: #F1F3EE; color: #161A17; }
+  #people:target { display: flex; }
+  body:has(#people:target) #irie { display: none; }
+  #people { padding-bottom: 112px; }
+  #people .band { height: 112px; }
+</style>
+</head>
+<body>
+
+<section class="card" id="irie">
+  <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+  <p>Irie runs your<br>AI coding agents<br>side by side,<br>in one calm view.</p>
+  <svg class="band" viewBox="0 0 1200 80" aria-hidden="true">
+    <rect width="1200" height="80" fill="#1E5A42"/>
+    <path d="M-48 40q24-14 48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0t48 0" fill="none" stroke="#2E9E77" stroke-width="10" stroke-linecap="round"/>
+  </svg>
+</section>
+
+<section class="card" id="people">
+  <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#161A17"/><circle cx="32" cy="23" r="9" fill="#F2B544"/><circle cx="22" cy="40" r="9" fill="#2E9E77"/><circle cx="42" cy="40" r="9" fill="#C0543B"/></svg>
+  <p>Open tools for<br>building software<br>with AI agents.</p>
+  <svg class="band" viewBox="0 0 1200 112" aria-hidden="true">
+    <rect width="1200" height="112" fill="#161A17"/>
+    <!-- Irie, Riddim and Steak, as the home page draws them; Riddim's ground is
+         lighter on the dark band, as in the family footer's dark theme -->
+    <svg x="500" y="32" width="48" height="48" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1E5A42"/><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="#F2B544" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="#F2B544"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="#2E9E77" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="#EAF6EF" stroke-width="3.2" stroke-linecap="round"/></svg>
+    <svg x="576" y="32" width="48" height="48" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#34343C"/><g fill="#F2B544"><rect x="11.5" y="27" width="5" height="10" rx="2.5"/><rect x="20.5" y="19" width="5" height="26" rx="2.5"/><rect x="29.5" y="12" width="5" height="40" rx="2.5"/><rect x="38.5" y="22" width="5" height="20" rx="2.5"/><rect x="47.5" y="28" width="5" height="8" rx="2.5"/></g></svg>
+    <svg x="652" y="32" width="48" height="48" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#7A2E1F"/><path d="M26.5 11h11v29l-5.5 11-5.5-11z" fill="#F2B544"/><path d="M13 46h38" stroke="#FBEFEA" stroke-width="3.2" stroke-linecap="round"/></svg>
+  </svg>
+</section>
+
+</body>
+</html>

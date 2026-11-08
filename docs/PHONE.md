@@ -22,8 +22,9 @@ flowchart LR
 ```
 
 - **The gateway** is `irie remote serve`, a client of the core's socket like the Mac app (CORE.md §2). It keeps no rules: it relays an op and its reply as the core wrote them, and a subscription's frames as they come. It serves the app's files from the binary (`internal/remote/web`), so every install brings the phone the new app. The core runs it in its own window, `irie-agents:irie-remote`, under the supervisor that restarts the core, while `remote.on` is set, and starts it again after an install or a change of its settings (`internal/core/remote.go`). Restarting it touches no agent (DESIGN §2.1, principle 6).
-- **Only a phone's ops** pass (`remote.Ops`): `hello`, `list`, `input`, `complete`, `conversation`, `send`, `park`, `unpark`, `close`, `reopen`, `undo`, `redo`, `rename`, `priority`, `freeze`, `thaw`, `rate`, `result`, `route`, `dog`, `reorder`, `screen` and `keys`. What acts on the machine's own screen (`show`, `flip`), on Irie's setup (`config`, `theme`, `tool`, `local`, `preflight`, `move`, `trod`) or only agents send (`hook`, `status`) is refused with `unknown_op`, and `hello` names only the features a phone may use. A subscription takes only `session`, `agent` and `conversation`. The gateway leaves out the rows of the core's peers, the other machines' sessions it shows in its own list (DESIGN §2.8): a phone pairs with each machine itself, and a core paired through this gateway hears only this machine's sessions.
+- **Only a phone's ops** pass (`remote.Ops`): `hello`, `list`, `input`, `complete`, `conversation`, `send`, `park`, `unpark`, `close`, `reopen`, `undo`, `redo`, `rename`, `priority`, `freeze`, `thaw`, `rate`, `result`, `route`, `dog`, `reorder`, `screen` and `keys`. What acts on the machine's own screen (`show`, `flip`), on Irie's setup (`config`, `theme`, `tool`, `local`, `preflight`, `move`, `trod`) or only agents send (`hook`, `status`) is refused with `unknown_op`, and `hello` names only the features a phone may use. A subscription takes only `session`, `agent`, `conversation` and `screen`. The gateway leaves out the rows of the core's peers, the other machines' sessions it shows in its own list (DESIGN §2.8): a phone pairs with each machine itself, and a core paired through this gateway hears only this machine's sessions.
 - **Two ops for a client without a terminal** (DESIGN §2.4): `screen` reads what a session's terminal shows, as plain text, and while it waits on you the numbered choices of the prompt at its bottom, as Claude Code draws a permission, a question or a plan (`1. Yes`, `2. Yes, and don't ask again…`). `keys` presses keys there: a digit or letter, or Enter, Escape, the arrows, Tab and the like, never Ctrl+C, and types text without Enter. So a phone answers a prompt with the key a person would press. Both go through the core, the only writer to tmux, and `keys` takes its turn with `send`.
+- **The terminal, live** (DESIGN §2.4): a subscription to one session with `screen: true` streams what its terminal shows, as the app's Term view draws it (§4). Its first `screen` frame has every line, as `capture-pane -e` writes it, with the SGR escapes of its colours and the spaces a line was written with; the next ones have only the lines that changed, and the size, the cursor and a prompt's choices each time. While someone watches, the core reads the terminal four times a second, one read at a time, and at once after a key or a message, and sends a frame only when the screen changed; when the last one stops watching, it stops reading (`internal/core/screenfeed.go`). `hello` names it `screen-live`. Nothing changes the terminal's size for the phone: an agent never sees who watches it.
 
 ### 2.1 The API
 
@@ -34,7 +35,7 @@ The HTTPS port (`remote.port`, 7387) serves the app and its API; the port below 
 | `GET /api/info` | The machine's id, name, version, API and OS. No token |
 | `POST /api/pair` `{code, device}` | A paired phone's token, and the machine. A wrong code is `bad_code`, an expired or used one `expired`, the fifth wrong one `too_many` |
 | `POST /api/call` `{op, args}` | The core's reply: `{ok, result}` or `{ok:false, error}`, with the core's own words. A machine whose core restarts says `core_down` |
-| `POST /api/subscribe` args | A stream of NDJSON: `{ok}` first, then the core's frames (DESIGN §2.4), and `{"t":"ping"}` every 15 s |
+| `POST /api/subscribe` args | A stream of NDJSON: `{ok}` first, then the core's frames (DESIGN §2.4), and `{"t":"ping"}` every 15 s. The args are `session`, `agent`, `conversation` and `screen` |
 | `DELETE /api/device` | This phone forgets itself on the machine |
 | `POST /api/push` `{subscription, vapid, done}` | Notifications to this phone: its `PushSubscription`, the key it subscribed with, and whether a finished turn is news too. A first notification goes out at once, so the phone knows they work; a push service that can't be reached is `push_failed` |
 | `DELETE /api/push` | No more notifications to this phone |
@@ -55,7 +56,9 @@ Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unkno
 ## 4. The app
 
 - **Sessions**: a card per session in the core's order, each machine a section, parked last; a state change never moves a card. Red when it needs you.
-- **A session**: its conversation, as the Mac app draws it; a message box (`send`); while it waits on you, a red card with what it asks and its choices as buttons (`screen`, `keys`), or a key pad and its terminal's text.
+- **A session**, in either of two views, picked at its top under its name; the phone keeps the pick for every session:
+  - **Browser**: its conversation, as the Mac app draws it; a message box (`send`); while it waits on you, a red card with what it asks and its choices as buttons (`screen`, `keys`), or a key pad.
+  - **Term**: its terminal as it is now, live, cell for cell in its own colours and at its own width (`subscribe` with `screen`). It fits the width to the phone, sitting at the bottom by the prompt; a pinch, a double tap or **Zoom** reads it closer, **Fit** goes back, and the phone keeps the zoom. Turned on its side, a phone shows it about twice as large. Under it, keys to press there (Esc, Tab, Shift-Tab, the arrows, Page Up and Down, Space, Delete and Return, in the order tapped) and the message box; while it waits on you, its choices as buttons above the keys. A machine whose Irie is older shows it as plain text, read once a second.
 - **Actions**: park, freeze, promote, rate, rename, stop the turn, close, with undo.
 - **A task bar** that starts a task on the machine you pick, with its repo and profile, and takes every word of the task bar's language (`input`, CORE.md §3).
 - **Machines**: each paired machine, whether it answers, and Add a machine (its address and a code from that machine). A machine with `vpn.on` shows its Mullvad VPN in a line, with **Connect** or **Disconnect**, which send `:vpn on` or `:vpn off` to it ([extensions.md](proposals/extensions.md) §4.1), in the web app and the native one alike.
@@ -64,7 +67,7 @@ It keeps the paired machines in the browser's storage on the phone, and a servic
 
 ### 4.1 The native app
 
-`ios/Irie.swiftpm` is the same app in SwiftUI, an Xcode app package ([ios/README.md](../ios/README.md) says how to build, sign and install it). It shows what the web app shows and sends the same calls (§2.1); it differs where a native app can do better:
+`ios/Irie.swiftpm` is the same app in SwiftUI, an Xcode app package ([ios/README.md](../ios/README.md) says how to build, sign and install it). It shows what the web app shows, but for the Term view, and sends the same calls (§2.1); it differs where a native app can do better:
 
 - **No profile.** It pins Irie's authority for each machine itself. A connection must present a chain that ends in that authority, and the machine's certificate must be valid for the name or address dialed under that authority alone; it trusts no other certificate on the phone, and needs none installed.
 - **Pairing by link.** `irie remote pair`, its `--open` page and the `pair` op also give `irie://pair?u=<gateway>&c=<code>&f=<SHA-256 of the authority>&n=<name>` and a QR code of it. Read from the machine's own screen, it carries the whole fingerprint by a channel the person trusts, so the app pins it at once; the phone's camera opens it in the app, or the app's own scanner reads it. With an address and code typed instead, the app shows the first eight bytes of the fingerprint the machine answered with, and sends the code only after the person says they match what `irie remote pair` printed. Either way the address must be one Irie's authority can vouch for (§3), so a link to anywhere else is refused.
@@ -94,5 +97,7 @@ They go through the phone's own push service (Apple's, for an iPhone on iOS 16.4
 | `ios/Irie.swiftpm` | The native app (§4.1): `Package.swift`, `Sources/` and its icon, which `go run ./tools/mkicon -ios ios/Irie.swiftpm/Sources/Assets.xcassets/AppIcon.appiconset` draws; `ios/README.md` |
 | `internal/core/remote.go` | The core keeps the gateway's window |
 | `internal/core/screen.go` | `screen` and `keys` |
+| `internal/core/screenfeed.go` | The live terminal: `subscribe` with `screen` |
+| `internal/remote/web/js/term.js` | The Term view: the screen frames drawn cell by cell, zoom, the plain-text fallback |
 | `cmd/irie/remote.go` | `irie remote` |
 | `$XDG_STATE_HOME/irie/remote/` | `ca.pem`, `ca-key.pem` (0600), `devices.json`, `pairing.json`, `machine.json`; `remote.log` beside it |

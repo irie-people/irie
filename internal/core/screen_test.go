@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +114,118 @@ func TestAPromptIsReadAndAnsweredWithAKey(t *testing.T) {
 	}
 	if len(r.Options) != 0 || len(r.Lines) == 0 {
 		t.Errorf("after the answer: options %+v, %d lines", r.Options, len(r.Lines))
+	}
+}
+
+func TestTheScreenStreamsWhatTheTerminalShowsAsItChanges(t *testing.T) {
+	c := setup(t)
+	s := c.spawn("prompt,permission,stop")
+	c.waitState(s.ID, ipc.StateNeedsYou)
+
+	cl, err := ipc.Dial(c.paths.Socket(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	frames, err := cl.Subscribe(ipc.SubscribeArgs{Session: s.ID, Screen: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// lines is the terminal as a client keeps it, frame by frame.
+	var lines []string
+	next := func(what string, ok func(ipc.Screen) bool) ipc.Screen {
+		t.Helper()
+		deadline := time.After(10 * time.Second)
+		for {
+			select {
+			case f, open := <-frames:
+				if !open {
+					t.Fatalf("%s: the subscription ended", what)
+				}
+				if f.T != ipc.FrameScreen || f.Screen == nil {
+					continue
+				}
+				sc := *f.Screen
+				if sc.Session != s.ID || sc.Cols == 0 || sc.Rows == 0 {
+					t.Fatalf("%s: frame %+v", what, sc)
+				}
+				switch {
+				case sc.Reset:
+					if len(sc.Lines) != sc.Rows || len(sc.Set) != 0 {
+						t.Fatalf("%s: a reset of %d lines for %d rows: %+v", what, len(sc.Lines), sc.Rows, sc)
+					}
+					lines = slices.Clone(sc.Lines)
+				case lines == nil:
+					t.Fatalf("%s: the first frame was no reset: %+v", what, sc)
+				default:
+					if sc.Lines != nil {
+						t.Fatalf("%s: a later frame carried every line: %+v", what, sc)
+					}
+					for _, l := range sc.Set {
+						lines[l.N] = l.Text
+					}
+				}
+				if ok(sc) {
+					return sc
+				}
+			case <-deadline:
+				t.Fatalf("no screen frame: %s", what)
+			}
+		}
+	}
+	shows := func(text string) bool { return strings.Contains(plainText(strings.Join(lines, "\n")), text) }
+	menu := next("the menu", func(sc ipc.Screen) bool { return len(sc.Options) == 3 && shows("Do you want to proceed?") })
+	if menu.Options[0] != (ipc.ScreenOption{Key: "1", Label: "Yes", Selected: true}) {
+		t.Errorf("options = %+v", menu.Options)
+	}
+
+	// The answer, pressed as keys, shows soon, and the choices go.
+	if err := c.call(ipc.OpKeys, ipc.KeysArgs{Session: s.ID, Keys: []string{"1", "Enter"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	c.waitState(s.ID, ipc.StateDone)
+	if after := next("the answer", func(sc ipc.Screen) bool { return len(sc.Options) == 0 }); after.Reset {
+		t.Errorf("the size never changed, yet the frame was a reset: %+v", after)
+	}
+
+	// Nobody watches once the subscription ends, and nothing reads it.
+	cl.Close()
+	reads := func() uint64 {
+		var p ipc.PerfResult
+		if err := c.call(ipc.OpPerf, nil, &p); err != nil {
+			t.Fatal(err)
+		}
+		return p.Counts["screen.read"]
+	}
+	testutil.Eventually(t, 10*time.Second, "the screen was still read with nobody watching", func() bool {
+		before := reads()
+		time.Sleep(3 * screenEvery)
+		return reads() == before
+	})
+}
+
+func TestParseScreenReadsTheSizeTheCursorAndEveryRow(t *testing.T) {
+	sc, ok := parseScreen("5 3 1 2 1\n\x1b[1mhi\x1b[0m   \nthere\n")
+	if !ok || sc.Cols != 5 || sc.Rows != 3 || sc.Cursor == nil || *sc.Cursor != (ipc.ScreenCursor{X: 1, Y: 2}) {
+		t.Fatalf("parseScreen = %+v, %v", sc, ok)
+	}
+	if want := []string{"\x1b[1mhi\x1b[0m   ", "there", ""}; !reflect.DeepEqual(sc.Lines, want) {
+		t.Errorf("lines = %q, want %q", sc.Lines, want)
+	}
+	if sc, _ := parseScreen("5 2 0 0 0\none\ntwo\nthree\n"); sc.Cursor != nil || len(sc.Lines) != 2 {
+		t.Errorf("a hidden cursor and a line too many: %+v", sc)
+	}
+	for _, out := range []string{"", "5 3\nhi\n", "5 x 0 0 1\nhi\n", "0 3 0 0 1\n"} {
+		if _, ok := parseScreen(out); ok {
+			t.Errorf("parseScreen(%q) took it", out)
+		}
+	}
+}
+
+func TestPlainTextIsWhatAPersonReads(t *testing.T) {
+	in := "\x1b[38;5;174m❯\x1b[39m \x1b[48;2;1;2;3mgo\x1b[0m \x1b]8;;https://example.com\x07link\x1b]8;;\x07 \x1b(Bok"
+	if got := plainText(in); got != "❯ go link ok" {
+		t.Errorf("plainText = %q", got)
 	}
 }
 
