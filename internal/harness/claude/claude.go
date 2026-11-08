@@ -100,6 +100,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 	if s.Bin == "" {
 		return nil, nil, nil, errors.New("claude: no irie binary for the hooks")
 	}
+	p, allow := localPermissions(p)
 	taken, err := TakeArch(p, s)
 	if err != nil {
 		return nil, nil, nil, err
@@ -118,7 +119,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 			}
 		}
 	}
-	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors}
+	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow}
 	// Tips as objects, with an id and a cooldown, need 2.1.247.
 	if AtLeast(s.Probe.Version, TipsVersion) {
 		x.Tips = s.Tips
@@ -271,6 +272,43 @@ type Extra struct {
 	Style  string      // the session's output style, such as Explanatory; "" leaves the user's own
 	Tips   []learn.Tip // Irie's tips under the spinner, with Claude Code's own
 	Doors  []arch.Door // the doors of the session's arch agents (DESIGN §4.11)
+	Allow  []string    // what the agent runs without asking, as Claude Code's permission rules
+}
+
+type permissions struct {
+	Allow []string `json:"allow"`
+}
+
+// LocalAllowed are the commands a local model's session runs without
+// asking (localPermissions): building, testing, vetting and formatting, in
+// Go, Python, JavaScript and Rust. Claude Code runs its read-only commands,
+// such as ls, cat and git diff, without asking in every mode.
+var LocalAllowed = []string{
+	"Bash(go build *)", "Bash(go test *)", "Bash(go vet *)", "Bash(go fmt *)", "Bash(gofmt *)",
+	"Bash(pytest *)", "Bash(python -m pytest *)", "Bash(python3 -m pytest *)",
+	"Bash(npm test *)", "Bash(npm run test *)", "Bash(npm run build *)", "Bash(npm run lint *)",
+	"Bash(cargo build *)", "Bash(cargo check *)", "Bash(cargo test *)", "Bash(cargo fmt *)",
+	"Bash(make test *)", "Bash(make check *)",
+}
+
+// localPermissions gives a local model's session a mode it can work in. A
+// local model cannot answer auto mode's check, which Claude Code asks of
+// the session's own model before each command it runs, so every command
+// would be refused (DESIGN §6.1). Such a session takes edits instead and
+// runs LocalAllowed on its own; Claude Code asks for anything else. A mode
+// the profile names other than auto stays, and only acceptEdits gets the
+// list.
+func localPermissions(p config.Profile) (config.Profile, []string) {
+	if p.Local == nil {
+		return p, nil
+	}
+	if p.PermissionMode == "" || p.PermissionMode == "auto" {
+		p.PermissionMode = "acceptEdits"
+	}
+	if p.PermissionMode != "acceptEdits" {
+		return p, nil
+	}
+	return p, LocalAllowed
 }
 
 type spinnerTips struct {
@@ -300,7 +338,11 @@ func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byt
 		TeammateMode string                    `json:"teammateMode,omitempty"`
 		OutputStyle  string                    `json:"outputStyle,omitempty"`
 		Tips         *spinnerTips              `json:"spinnerTipsOverride,omitempty"`
+		Permissions  *permissions              `json:"permissions,omitempty"`
 	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style}
+	if len(x.Allow) > 0 {
+		file.Permissions = &permissions{Allow: x.Allow}
+	}
 	if x.Teams {
 		file.TeammateMode = "tmux"
 	}
