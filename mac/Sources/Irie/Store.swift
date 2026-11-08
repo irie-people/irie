@@ -1062,7 +1062,9 @@ final class Store {
 
 /// The title bar's counts (SidebarView's Counts): for each state it counts,
 /// how many sessions are in it and the first of them in list order. A
-/// parked session is out of the way, so To verify leaves it out.
+/// parked session is out of the way, so To verify leaves it out. Working
+/// counts the finished turns whose helpers or teammates still work: they
+/// are not to verify yet.
 struct RowCounts: Equatable {
     struct Tally: Equatable {
         var count = 0
@@ -1083,7 +1085,7 @@ struct RowCounts: Equatable {
         for s in rows {
             switch Look(s) {
             case .failed, .needs, .stalled: needs.add(s)
-            case .working: working.add(s)
+            case .working, .waiting: working.add(s)
             case .done where !s.isParked: done.add(s)
             case .paused, .pausing: paused.add(s)
             case .frozen: frozen.add(s)

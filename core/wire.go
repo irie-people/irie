@@ -74,6 +74,7 @@ type (
 	Jot              = ipc.Jot
 	Tokens           = ipc.Tokens
 	Subagent         = ipc.Subagent
+	Subs             = ipc.Subs
 	Teammate         = ipc.Teammate
 	Header           = ipc.Header
 	Load             = ipc.Load

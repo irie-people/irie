@@ -44,6 +44,11 @@ var (
 	// freezeGoneWait is the longest it waits for a window it killed to go
 	// before it opens the app again.
 	freezeGoneWait = 5 * time.Second
+	// openRetries are the waits before the dog tries again to open the
+	// app, when open failed: Launch Services may learn of the force quit
+	// only a moment later, and till then open sends the old app an event,
+	// which fails with procNotFound (-600).
+	openRetries = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
 )
 
 // sidebarWait is the least a sidebar may leave a ping unanswered before
@@ -273,7 +278,16 @@ func (c *Core) restartWindow(w *watch, stuck time.Duration) {
 		log.Warn("raphael: force quit a window that stopped answering", "report", report)
 		return
 	}
-	if err := d.open(bundle, front, hidden, stuck); err != nil {
+	err := d.open(bundle, front, hidden, stuck)
+	for _, wait := range openRetries {
+		if err == nil {
+			break
+		}
+		log.Warn("raphael: could not open the app again yet, so he tries once more", "err", err, "in", wait)
+		time.Sleep(wait)
+		err = d.open(bundle, front, hidden, stuck)
+	}
+	if err != nil {
 		log.Error("raphael: force quit a window that stopped answering, but could not open it again", "report", report, "err", err)
 		return
 	}
