@@ -3,6 +3,7 @@ package ctxgit
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -434,8 +435,10 @@ func TestATurnsBookkeepingMakesNoCommitOfItsOwn(t *testing.T) {
 func TestExpireLetsGoOfOldContextsButNotOpenOrTaggedOnes(t *testing.T) {
 	st := open(t)
 	dir := t.TempDir()
+	txs := map[string]*tx{}
 	mk := func(id string, at time.Time, words string) string {
 		x := newTx(t, dir, id)
+		txs[id] = x
 		x.clock = at
 		x.prompt(words)
 		x.reply("ok")
@@ -453,8 +456,20 @@ func TestExpireLetsGoOfOldContextsButNotOpenOrTaggedOnes(t *testing.T) {
 	if err := st.Tag("keep-me", tagged); err != nil {
 		t.Fatal(err)
 	}
+	// The objects were written weeks ago, as a kept context's are, so gc's
+	// grace for what a sync is writing has passed.
+	then := time.Now().Add(-2 * time.Hour)
+	filepath.WalkDir(filepath.Join(st.Dir(), "objects"), func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			os.Chtimes(p, then, then)
+		}
+		return nil
+	})
 	gone, err := st.Expire(30*24*time.Hour, func(id string) bool { return id == "s0open" }, now)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Pack(); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Join(gone, " ") != "s0old s0tagged" {
@@ -471,6 +486,22 @@ func TestExpireLetsGoOfOldContextsButNotOpenOrTaggedOnes(t *testing.T) {
 	}
 	gitIn(t, st.Dir(), "cat-file", "-e", tagged+"^{commit}")
 	gitIn(t, st.Dir(), "fsck", "--strict")
+	if packed := gitIn(t, st.Dir(), "count-objects", "-v"); !strings.Contains(packed, "packs: 1") {
+		t.Fatalf("not packed:\n%s", packed)
+	}
+	// The open session goes on from its packed turns, and reads whole.
+	x := txs["s0open"]
+	x.clock = now.AddDate(0, 0, -45)
+	x.prompt("a later task")
+	x.reply("done")
+	head, err := st.Sync(Session{ID: "s0open", Transcripts: []string{x.path}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := st.Transcript(head, ""); err != nil || !strings.Contains(string(raw), "an open task") || !strings.Contains(string(raw), "a later task") {
+		t.Fatalf("after packing, transcript %q %v", raw, err)
+	}
+	gitIn(t, st.Dir(), "fsck", "--strict")
 	// Nothing more to let go while it stays open; once it is closed, it goes.
 	isOpen := func(id string) bool { return id == "s0open" }
 	if again, err := st.Expire(30*24*time.Hour, isOpen, now); err != nil || len(again) != 0 {
@@ -478,6 +509,25 @@ func TestExpireLetsGoOfOldContextsButNotOpenOrTaggedOnes(t *testing.T) {
 	}
 	if closed, err := st.Expire(30*24*time.Hour, func(string) bool { return false }, now); err != nil || strings.Join(closed, " ") != "s0open" {
 		t.Fatalf("once closed, expired %v %v", closed, err)
+	}
+}
+
+func TestWriteFreshensAnObjectItHasAlready(t *testing.T) {
+	st := open(t)
+	id, err := st.write("blob", []byte("kept\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(st.Dir(), "objects", id[:2], id[2:])
+	then := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(p, then, then); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := st.write("blob", []byte("kept\n")); err != nil || again != id {
+		t.Fatalf("again %s %v", again, err)
+	}
+	if fi, err := os.Stat(p); err != nil || time.Since(fi.ModTime()) > time.Hour {
+		t.Fatalf("not freshened: %v %v", fi.ModTime(), err)
 	}
 }
 

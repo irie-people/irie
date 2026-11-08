@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -62,7 +63,11 @@ type Store struct {
 	mu    sync.Mutex
 	feeds map[string]*feed // by transcript path
 	heads map[string]*head // by session id
-	syncs int              // syncs so far, for gc
+	// gcMu lets one gc run at a time; dropped says Expire let refs go
+	// since the last gc that rewrote the packs, whose objects only such a
+	// gc deletes.
+	gcMu    sync.Mutex
+	dropped atomic.Bool
 }
 
 // head is what a session's branch holds: its turns, oldest first, along its
@@ -158,7 +163,6 @@ func (st *Store) Sync(s Session) (string, error) {
 		}
 	}
 	st.trim(maxNodes)
-	st.maybeGC()
 	if len(h.turns) == 0 {
 		return "", nil
 	}
@@ -190,17 +194,44 @@ func (st *Store) trim(max int) {
 	}
 }
 
-// gcEvery is how many syncs go by between two looks by git gc --auto,
-// which packs the loose objects the store writes once there are enough.
-const gcEvery = 200
+// packLoose is how many loose objects git gc --auto lets build up before
+// it packs them. Git's own 6,700 suits source files, but a turn's objects
+// run to tens of kilobytes, and that many would leave a few hundred
+// megabytes loose; packed, the store takes about half the room.
+const packLoose = 256
 
-// maybeGC runs git gc --auto every gcEvery syncs, in the background.
-func (st *Store) maybeGC() {
-	st.syncs++
-	if st.syncs%gcEvery != 0 {
-		return
+// pruneAfter is how long an object nothing holds stays before gc deletes
+// it. A sync writes its objects a moment before the ref that holds them,
+// and write freshens one it finds there already, so what a sync is about
+// to hold is always younger than this, and gc can run while syncs go on.
+const pruneAfter = "1.hour.ago"
+
+// Pack has git pack the objects syncs wrote loose, once there are a few
+// hundred of them, and delete what nothing has held for an hour. After
+// Expire has let contexts go, it rewrites the packs, which deletes their
+// objects from the disk. Syncs and reads go on while it runs, on one
+// thread; that can take a minute on a store of some hundreds of megabytes.
+func (st *Store) Pack() error {
+	st.gcMu.Lock()
+	defer st.gcMu.Unlock()
+	full := st.dropped.Swap(false)
+	args := []string{
+		"-c", "gc.auto=" + strconv.Itoa(packLoose),
+		"-c", "gc.autoDetach=false",
+		"-c", "gc.pruneExpire=" + pruneAfter,
+		"-c", "pack.threads=1",
+		"gc", "--quiet",
 	}
-	go st.git(nil, "gc", "--auto", "--quiet")
+	if !full {
+		args = append(args, "--auto")
+	}
+	if _, err := runFor(gcTimeout, st.dir, nil, args...); err != nil {
+		if full {
+			st.dropped.Store(true)
+		}
+		return err
+	}
+	return nil
 }
 
 // lean is a turn with only what syncing needs, which is all a head keeps.
@@ -690,9 +721,9 @@ func lineUUID(b []byte, l *line) string {
 
 // Expire lets go of the contexts kept past keep: the branch of each
 // session whose newest turn is older than keep, unless open says the
-// session is still open, and each rewound line of that age. Git then
-// forgets what no branch or tag holds any more, reflogs included, so what
-// went is gone from the disk too. A tag keeps the turns it names. It
+// session is still open, and each rewound line of that age, with every
+// reflog's entries of that age. A tag keeps the turns it names. The next
+// Pack deletes from the disk what no branch or tag holds any more. It
 // returns the sessions whose contexts went.
 func (st *Store) Expire(keep time.Duration, open func(session string) bool, now time.Time) ([]string, error) {
 	st.mu.Lock()
@@ -730,13 +761,9 @@ func (st *Store) Expire(keep time.Duration, open func(session string) bool, now 
 	for _, id := range sessions {
 		delete(st.heads, id)
 	}
-	// The core is the store's one writer and holds st.mu, so nothing is
-	// written while git prunes.
+	st.dropped.Store(true)
 	at := fmt.Sprintf("@%d", cutoff)
-	if _, err := st.git(nil, "reflog", "expire", "--expire="+at, "--expire-unreachable="+at, "--all"); err != nil {
-		return sessions, err
-	}
-	_, err = st.git(nil, "gc", "--quiet", "--prune=now")
+	_, err = st.git(nil, "reflog", "expire", "--expire="+at, "--expire-unreachable="+at, "--all")
 	return sessions, err
 }
 

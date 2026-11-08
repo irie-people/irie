@@ -272,6 +272,11 @@ func (c *Core) context(a ipc.ContextArgs) (ipc.ContextResult, error) {
 		if err != nil {
 			return r, ipc.Errorf(ipc.CodeInternal, "%v", err)
 		}
+		if len(gone) > 0 {
+			// Deleting their objects can take a minute, so it is left to go
+			// on after the answer.
+			go c.ctxPack()
+		}
 		return r, nil
 	}
 	if a.Session == "" {
@@ -344,22 +349,39 @@ func (c *Core) context(a ipc.ContextArgs) (ipc.ContextResult, error) {
 	return r, ipc.Errorf(ipc.CodeBadArgs, "no context action %q: log, sync, resolve, tag, clean or where", a.Action)
 }
 
-// How often the core lets go of old contexts: a little after it starts,
-// then every few hours.
+// How often the core looks after the store: a little after it starts,
+// then every hour.
 const (
 	ctxSweepFirst = 2 * time.Minute
-	ctxSweepEvery = 6 * time.Hour
+	ctxSweepEvery = time.Hour
 )
 
-// ctxSweep lets go of the contexts kept past context.keep_days, over and
-// over for as long as the core runs.
+// ctxSweep lets go of the contexts kept past context.keep_days and packs
+// what syncs wrote, over and over for as long as the core runs.
 func (c *Core) ctxSweep() {
 	time.Sleep(ctxSweepFirst)
 	for {
 		if _, err := c.ctxExpire(); err != nil {
 			c.log.Warn("contexts", "expire", err)
 		}
+		c.ctxPack()
 		time.Sleep(ctxSweepEvery)
+	}
+}
+
+// ctxPack packs the store's loose objects, and deletes from the disk what
+// the contexts let go of held (ctxgit.Store.Pack). With no store yet there
+// is nothing to pack.
+func (c *Core) ctxPack() {
+	if _, err := os.Stat(c.paths.ContextStore()); err != nil {
+		return
+	}
+	st, err := c.ctxStore()
+	if err == nil {
+		err = st.Pack()
+	}
+	if err != nil {
+		c.log.Warn("contexts", "pack", err)
 	}
 }
 

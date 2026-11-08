@@ -252,7 +252,7 @@ func ctxClean(args []string) error {
 	case len(r.Removed) == 0:
 		fmt.Printf("No context of a closed session is older than %d days.\n", r.KeepDays)
 	default:
-		fmt.Printf("Let go of %d contexts of closed sessions older than %d days:\n%s\n", len(r.Removed), r.KeepDays, strings.Join(r.Removed, "\n"))
+		fmt.Printf("Let go of %d contexts of closed sessions older than %d days; git frees their room on the disk in the background:\n%s\n", len(r.Removed), r.KeepDays, strings.Join(r.Removed, "\n"))
 	}
 	return nil
 }

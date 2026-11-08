@@ -18,8 +18,13 @@ import (
 	"time"
 )
 
-// gitTimeout bounds every git command the store runs.
-const gitTimeout = 30 * time.Second
+// gitTimeout bounds every git command the store runs but gc, which
+// rewrites the store's packs and can take a minute once it holds some
+// hundreds of megabytes; gcTimeout bounds that.
+const (
+	gitTimeout = 30 * time.Second
+	gcTimeout  = time.Hour
+)
 
 // ident is who writes the store's commits and reflogs: Irie, never the
 // user, whose git identity has no place in it.
@@ -80,7 +85,12 @@ func (s *Store) git(stdin []byte, args ...string) ([]byte, error) { return run(s
 // run runs git on the repository gitDir, or on none when it is "", as for
 // init.
 func run(gitDir string, stdin []byte, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	return runFor(gitTimeout, gitDir, stdin, args...)
+}
+
+// runFor is run, given timeout to answer in.
+func runFor(timeout time.Duration, gitDir string, stdin []byte, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	full := []string{"-c", "core.hooksPath=" + os.DevNull}
 	if gitDir != "" {
@@ -106,7 +116,7 @@ func run(gitDir string, stdin []byte, args ...string) ([]byte, error) {
 		msg := strings.TrimSpace(stderr.String())
 		switch {
 		case ctx.Err() != nil:
-			msg = fmt.Sprintf("no answer within %v", gitTimeout)
+			msg = fmt.Sprintf("no answer within %v", timeout)
 		case msg == "":
 			msg = err.Error()
 		}
@@ -118,9 +128,12 @@ func run(gitDir string, stdin []byte, args ...string) ([]byte, error) {
 // write stores one object, as git would loose, and returns its id. The
 // format is git's own: a header of the kind and the body's length, a NUL,
 // the body; the id is the SHA-1 of all of it, and the file under objects/
-// holds it zlib-compressed. An object the store has already is not written
-// again. Writing objects here rather than through git saves a process per
-// object; git reads them, and packs them on gc, like any other.
+// holds it zlib-compressed. An object the store has loose already is not
+// written again but freshened, as git does, so that a gc pruning what has
+// stood unheld for a while leaves it for the commit about to hold it; one
+// it has only in a pack is written loose again, fresh. Writing objects here
+// rather than through git saves a process per object; git reads them, and
+// packs them on gc, like any other.
 func (s *Store) write(kind string, body []byte) (string, error) {
 	header := fmt.Appendf(nil, "%s %d\x00", kind, len(body))
 	h := sha1.New()
@@ -129,7 +142,7 @@ func (s *Store) write(kind string, body []byte) (string, error) {
 	id := hex.EncodeToString(h.Sum(nil))
 	dir := filepath.Join(s.dir, "objects", id[:2])
 	path := filepath.Join(dir, id[2:])
-	if _, err := os.Stat(path); err == nil {
+	if now := time.Now(); os.Chtimes(path, now, now) == nil {
 		return id, nil
 	}
 	var buf bytes.Buffer
