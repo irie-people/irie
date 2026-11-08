@@ -26,8 +26,14 @@ struct PhraseBar: View {
         "Have faith. 🙏",
     ]
 
+    /// The phrase a recording shows throughout (Recording.swift), so a film
+    /// is the same on every run.
+    static let filmed = "Take back your time. ⏳"
+    /// Set, the bar keeps to this phrase rather than one picked at random.
+    static var fixed: Int?
+
     @Environment(Store.self) private var store
-    @State private var index = Int.random(in: 0..<Self.phrases.count)
+    @State private var index = Self.fixed ?? Int.random(in: 0..<Self.phrases.count)
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -52,7 +58,7 @@ struct PhraseBar: View {
             }
             .transition(.opacity)
             .animation(.easeInOut(duration: 0.8), value: index)
-            .onReceive(tick) { _ in index = (index + 1) % Self.phrases.count }
+            .onReceive(tick) { _ in if Self.fixed == nil { index = (index + 1) % Self.phrases.count } }
             .accessibilityHidden(true)
     }
 

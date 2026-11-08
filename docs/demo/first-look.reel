@@ -1,25 +1,45 @@
 # Irie at a glance, for the site's first recording box (site/index.html,
 # "opening Irie, typing a task and watching its row"). Three agents are at
-# work; a fourth task is typed into the task bar, starts, and goes to work.
-# Film it with docs/demo/record.sh; the steps are in docs/demo/README.md.
-# 16:10, as the site's boxes are, and small enough that the cards still
-# read when the box shows it 672 pixels wide.
+# work, one of them shown; a fourth task is typed into the task bar,
+# starts, and goes to work; then the cards below are shown in turn, down
+# to the new one.
+# Film it with docs/demo/record.sh, then cut it with docs/demo/cut.sh;
+# the steps are in docs/demo/README.md. 16:10, as the site's boxes are,
+# and small enough that the cards still read when the box shows it 672
+# pixels wide.
+#
+# The first Show is followed by two Sleeps, as in close-the-window.reel:
+# a window's first terminal can hold its drawing up on a busy Mac.
+#
+# The phone cut starts on the task bar as the task is typed, then rises
+# to the cards as it starts, as the first cut of this reel did.
+# cut: site type-1.5 end reached:working+1.5
+# cut: phone type-2.4 end
+# cut: shot type-2.4 540 0 320 0 0 enter+1.6
+# cut: caption type-2.2 type+1.1 top Irie runs your AI coding agents side by side, in one calm view.
+# cut: caption type+1.4 end top Type a task. It gets its own worktree and card.
+# cut: readme enter-2.5 down+1.5
+# cut: sheet type-1.5 type+1.6 enter+1.9 down#2+1 end-0.4
 Set Size 1024x640
 Set Appearance light
 Set Palette evergreen
+Set Backdrop E9EBDF
 Set TypingSpeed 55ms
 
 Spawn research rate limiting libraries for Go
 Spawn @acme-api add rate limiting to the login endpoint
 Spawn @acme-web +sonnet fix the flaky checkout test
 
-Sleep 1.5s
+Sleep 500ms
+Show 1
+Sleep 1s
+Sleep 2.5s
 Type "@acme-billing retry failed webhooks"
 Sleep 700ms
 Enter
 Wait working 20s
-Sleep 3s
-Up
 Sleep 2.5s
-Up
+Down
+Sleep 2.5s
+Down
 Sleep 2.5s
