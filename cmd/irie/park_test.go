@@ -58,3 +58,41 @@ s3q5r7t9v1w3x  done   old-spike  Ran the tests
 		t.Errorf("with nothing parked:\n%s", b.String())
 	}
 }
+
+// A paired machine's sessions come after Parked, under that machine's own
+// heading, as the sidebars draw them, and before those outside Irie; a
+// parked one is among the parked.
+func TestListPrintsAnotherMachinesSessionsUnderItsName(t *testing.T) {
+	r := ipc.ListResult{
+		Sessions: []ipc.Session{
+			{ID: "s0k3j9x2m4a7q", State: ipc.StateWorking, Name: "api-fix", Detail: "Editing main.go"},
+			{ID: "s1b4c8d2e6f0g", State: ipc.StateDone, Name: "docs", Detail: "Wrote the guide", Parked: true},
+			{ID: "Asahi/s2h5j7k9m1n3p", State: ipc.StateIdle, Name: "kiosk", Detail: "on Asahi · idle", Host: "Asahi"},
+			{ID: "Asahi/s3q5r7t9v1w3x", State: ipc.StateDone, Name: "old-spike", Detail: "on Asahi · done", Host: "Asahi", Parked: true},
+		},
+		Outside: []ipc.OutsideSession{{VendorID: "c04fe21e-5265-4b41-aa88-b5f651e6360d", Status: ipc.StatusIdle, Kind: "interactive", Name: "notes", Cwd: "/home/alice"}},
+	}
+	var b strings.Builder
+	if err := printList(&b, r); err != nil {
+		t.Fatal(err)
+	}
+	want := `SESSION        STATE    NAME     DETAIL
+s0k3j9x2m4a7q  working  api-fix  Editing main.go
+
+PARKED
+SESSION              STATE  NAME       DETAIL
+s1b4c8d2e6f0g        done   docs       Wrote the guide
+Asahi/s3q5r7t9v1w3x  done   old-spike  on Asahi · done
+
+ON ASAHI
+SESSION              STATE  NAME   DETAIL
+Asahi/s2h5j7k9m1n3p  idle   kiosk  on Asahi · idle
+
+OUTSIDE IRIE
+SESSION                               STATUS  KIND         NAME   CWD
+c04fe21e-5265-4b41-aa88-b5f651e6360d  idle    interactive  notes  /home/alice
+`
+	if b.String() != want {
+		t.Errorf("printed\n%s\nwant\n%s", b.String(), want)
+	}
+}

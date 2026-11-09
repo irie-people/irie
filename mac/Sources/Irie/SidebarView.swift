@@ -356,10 +356,20 @@ private struct SessionCard: View, Equatable {
         switch look {
         case .starting: return "Starting…"
         case .frozen where session.freezing == true: return "Freezing…"
-        case .done, .idle, .waiting: return session.detail.flatMap { $0.isEmpty ? nil : $0 } ?? Look.label(session)
+        case .done, .idle, .waiting: return detail.flatMap { $0.isEmpty ? nil : $0 } ?? Look.label(session)
         case .frozen, .paused, .pausing: return look.label
-        default: return session.detail ?? look.label
+        default: return detail ?? look.label
         }
+    }
+
+    /// Its detail as the card says it. The core starts a paired machine's
+    /// detail with where it runs, "on Asahi · ", which a card under that
+    /// machine's own header leaves out; a parked one, among this Mac's,
+    /// keeps it, and so does one whose machine isn't answering.
+    private var detail: String? {
+        guard let d = session.detail, let h = session.peerName, !session.isParked else { return session.detail }
+        let lead = "on \(h) · "
+        return d.hasPrefix(lead) ? String(d.dropFirst(lead.count)) : d
     }
 
     /// Red while it needs you; what a jot left in the accent; what it waits
@@ -513,14 +523,22 @@ private struct GroupHeader: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(group.id == SessionGroup.parked
-              ? "Out of the way, and still running. Unpark one with its P button, z, or a drag out of Parked; ⌘Z takes back the last park."
-              : group.path.map(Age.tilde) ?? group.title)
+        .help(help)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([group.title, "\(group.sessions.count) sessions", note].compactMap { $0 }.joined(separator: ", "))
         .accessibilityHint(open ? "Folds the group" : "Opens the group")
         .accessibilityAddTraits([.isHeader, .isButton])
         .accessibilityAction { store.fold(group) }
+    }
+
+    private var help: String {
+        if group.id == SessionGroup.parked {
+            return "Out of the way, and still running. Unpark one with its P button, z, or a drag out of Parked; ⌘Z takes back the last park."
+        }
+        if let h = group.host {
+            return "Irie’s sessions on \(h), the machine paired with this Mac. They run there, in the order they have there."
+        }
+        return group.path.map(Age.tilde) ?? group.title
     }
 }
 

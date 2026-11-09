@@ -55,10 +55,14 @@ struct Session: Codable, Identifiable, Equatable {
     /// Its tutor mode, explain or teach, while it is in one
     /// (docs/proposals/learning.md).
     var tutor: String?
+    /// The paired machine it runs on, when that is another one (DESIGN
+    /// §2.8): its id is then that machine's name, a slash and its own id
+    /// there, which the core passes on.
+    var host: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, frozen, freezing, priority, loose, trod, hue, tutor
+        case order, parked, frozen, freezing, priority, loose, trod, hue, tutor, host
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }

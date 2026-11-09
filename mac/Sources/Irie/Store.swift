@@ -573,23 +573,31 @@ final class Store {
     /// The sidebar's groups, without the rows the filter hides. In the List
     /// view, one list; in the Repo view, a group per repo in the order its
     /// first session started, then the sessions in no repo. Then the Parked
-    /// group. Within a group the sessions keep the list's one order, which
-    /// only the user changes, so a state change never moves a card (DESIGN
-    /// §4.1).
+    /// group, then a group for each paired machine's sessions, in the order
+    /// the core lists them, so they stand apart from this Mac's (DESIGN
+    /// §2.8); parked, one goes into Parked with the rest. Within a group the
+    /// sessions keep the list's one order, which only the user changes, so a
+    /// state change never moves a card (DESIGN §4.1).
     var drawnGroups: [SessionGroup] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
         let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
         let parked = rows.filter(\.isParked)
+        let here = rows.filter { !$0.isParked && $0.peerName == nil }
+        var hosts: [String] = [], byHost: [String: [Session]] = [:]
+        for s in rows where !s.isParked {
+            guard let h = s.peerName else { continue }
+            if byHost[h] == nil { hosts.append(h) }
+            byHost[h, default: []].append(s)
+        }
         var out: [SessionGroup] = []
         switch mode {
         case .list:
-            let active = rows.filter { !$0.isParked }
-            if !active.isEmpty {
-                out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: active))
+            if !here.isEmpty {
+                out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: here))
             }
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
-            for s in rows where !s.isParked {
+            for s in here {
                 guard let r = s.repo, !r.isEmpty else {
                     none.append(s)
                     continue
@@ -606,13 +614,18 @@ final class Store {
         if !parked.isEmpty {
             out.append(SessionGroup(id: SessionGroup.parked, title: "Parked", path: nil, sessions: parked))
         }
+        for h in hosts {
+            out.append(SessionGroup(id: SessionGroup.hostID(h), title: "On \(h)", path: nil, sessions: byHost[h] ?? [], host: h))
+        }
         return out
     }
 
     /// The id of the group a session is drawn in: Parked while it is
-    /// parked, else the list or its repo's group.
+    /// parked, else its machine's group when another machine runs it, else
+    /// the list or its repo's group.
     func groupID(of s: Session) -> String {
         if s.isParked { return SessionGroup.parked }
+        if let h = s.peerName { return SessionGroup.hostID(h) }
         switch mode {
         case .list: return SessionGroup.list
         case .repo: return "repo:" + (s.repo ?? "")
@@ -1145,18 +1158,23 @@ enum SidebarMode: String, CaseIterable {
     var title: String { self == .list ? "List" : "Repo" }
 }
 
-/// One group of the sidebar: the list, a repo, the sessions in no repo, or
-/// the parked ones.
+/// One group of the sidebar: the list, a repo, the sessions in no repo, the
+/// parked ones, or a paired machine's.
 struct SessionGroup: Identifiable, Equatable {
     let id: String
     let title: String
     /// The repo's main checkout, for a repo's group.
     let path: String?
     let sessions: [Session]
+    /// The paired machine whose sessions it holds, for a machine's group.
+    var host: String? = nil
 
     /// The List view's one group, which has no header, and the Parked group.
     static let list = "list"
     static let parked = "parked"
+
+    /// A paired machine's group.
+    static func hostID(_ name: String) -> String { "host:" + name }
 
     /// A name per repo: its folder's name, with the folder above it when two
     /// repos share a name.
