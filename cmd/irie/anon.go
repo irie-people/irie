@@ -316,10 +316,10 @@ func macExit(cfg config.Config) (string, error) {
 }
 
 // setupAnon is `irie setup anon`: it gets anonymous research ready (DESIGN
-// §4.16). It checks Mullvad VPN, installs Tor with Homebrew and SearXNG
-// from its own repository at a pinned commit, each after a yes, turns
-// anon.on, starts SearXNG through an exit of its own, and searches once as
-// an agent would.
+// §4.16). It checks Mullvad VPN, turns anon.on, installs Tor with Homebrew
+// and SearXNG from its own repository at a pinned commit, each after a
+// yes, starts SearXNG through an exit of its own, and searches once as an
+// agent would.
 func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 	flags := flag.NewFlagSet("setup anon", flag.ContinueOnError)
 	yes := flags.Bool("yes", false, "install Tor and SearXNG without asking")
@@ -341,6 +341,12 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 	fmt.Fprintln(stdout, "Mullvad VPN is connected, and its relay list is here.")
+	// +anon tasks need neither Tor nor SearXNG: they fetch and browse
+	// through their exits. So it goes on now, whatever is installed next.
+	if err := anonOn(p); err != nil {
+		return fmt.Errorf("anon.on could not be turned on: %w", err)
+	}
+	fmt.Fprintln(stdout, "Anonymous research is on: +anon tasks run in compartments of their own.")
 	in := bufio.NewReader(stdin)
 	ask := func(q string) bool {
 		if *yes {
@@ -393,7 +399,8 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "  %s\n", strings.Join(s, " "))
 		}
 		if !ask("Install SearXNG?") {
-			return errors.New("SearXNG is not installed; run `irie setup anon --yes` to install it")
+			fmt.Fprintln(stdout, "Leaving SearXNG out: +anon tasks fetch and browse without it, and have no search tool. `irie setup anon` again installs it.")
+			return nil
 		}
 		os.RemoveAll(d.SearxSrc())
 		for _, s := range steps {
@@ -405,9 +412,6 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "SearXNG is installed.")
 	}
 
-	if err := anonOn(p); err != nil {
-		return fmt.Errorf("anon.on could not be turned on: %w", err)
-	}
 	fmt.Fprintln(stdout, "Starting SearXNG through an exit of its own…")
 	var r ipc.AnonResult
 	if err := ipc.Call(p.Socket(), 3*time.Minute, ipc.OpAnon, ipc.AnonArgs{Up: true}, &r); err != nil {
