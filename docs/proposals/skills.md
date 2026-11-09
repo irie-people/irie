@@ -350,7 +350,7 @@ ECC is the MIT repository formerly called everything-claude-code.
 **Decided 2026-10-27:**
 - **Decision 1:** a larger set than §6.1's five. The default set is every licensed candidate: `frontend-design`, `webapp-testing` and `mcp-builder` (anthropics/skills); `handle-pr-comments` (storybookjs/storybook); `find-docs` (upstash/context7); `ponytail` (DietrichGebert/ponytail); and `codebase-onboarding`, `context-budget` and `agent-harness-construction` (ECC). `vercel-composition-patterns` joins once its repository has a license file. `verification-before-completion` is not in the set. M12 rewrites §6 to match, and keeps §6.2's cautions in the docs and in `irie skills`. `find-docs` runs `npx ctx7@latest` and sends questions to Context7, `ponytail` changes a whole session's working style, and `codebase-onboarding` writes a `CLAUDE.md`, so each can be switched off on its own.
 - **Decision 3:** option a. Fetch by default on first run, with the status-strip notice.
-- **Decision 8:** option a. M12 is queued after the Irie milestone in progress and before the first release. Changed 2026-10-31: the owner released 0.1.0 before M12, so M12 now lands before 1.0.0.
+- **Decision 8:** option a. M12 is queued after the Irie milestone in progress and before the first release. Changed 2026-10-31: the owner released 0.1.0 before M12, so M12 now lands before 1.0.0. Changed 2026-11-09: the maintainer released 1.0.0 before M12 too, so M12 comes in a 1.x release (DESIGN §8.2).
 - **Decisions 2, 4, 5, 6, 7 and 10:** the recommendations stand. **Decision 9** waits until the project account exists.
 
 ## Checks for this proposal

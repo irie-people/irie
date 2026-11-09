@@ -1772,7 +1772,28 @@ An agent can open in its own native Ghostty tab running `tmux -L irie attach` on
   - Take ideas only, never code, from GPL, AGPL, FSL or rider-licensed projects (for example claude-squad, crush, ntm).
   - Do not copy agent-deck's status detector: its header credits an AGPL source.
 - **Commits.** `TZ=UTC git commit`.
-- **Releases.** Irie stays below 1.0.0 until version 1 is done: M1–M11, and M12 (skills). The first release, 0.1.0 on 2026-10-31, came before M12, so [skills decision 8](proposals/skills.md) now puts M12 before 1.0.0. Until then a breaking change bumps the minor version, not the major (`bump-minor-pre-major` in `release-please-config.json`). When the last of them is on main, an empty commit with a `Release-As: 1.0.0` footer makes release-please's next release 1.0.0: `TZ=UTC git commit -s --allow-empty -m "chore: release 1.0.0" -m "Release-As: 1.0.0"`.
+- **Releases.** release-please makes each release from the commits on main (AGENTS.md, "Commits"). The maintainer released 1.0.0 on 2026-11-09, before every milestone of version 1 was done. §8.2 says what each one still lacks, and the rest come in 1.x releases. Since 1.0.0, a `feat` makes the next release a minor one, a `fix` a patch one, and a breaking change (`!`) a major one, 2.0.0. So mark a change breaking only when it breaks a user's setup or scripts.
+
+### 8.2 Where version 1 stands
+
+Version 1 is M1 to M11 and M12, [skills](proposals/skills.md). A milestone is done when everything in its Build, Tests and Manual check is on main, or when this file says what replaced it. A session that finishes a milestone, or part of one, updates its row here in the same change. The rows were checked against the code on 2026-11-09.
+
+| Milestone | State | Left |
+|---|---|---|
+| M1. Launch and look | Done | |
+| M2. Live states | Done | |
+| M3. Repos, worktrees, any task size, profiles | Done | Tab completes `:` commands (§4.2) |
+| M4. Manage the list | Nearly | `/` fuzzy jump and digits 1–9 in the terminal sidebar. A session whose pane vanished while the core was down is listed as closed |
+| M5. Pause at the next tool call | Not started | All of it. Irie.app's Pause and Resume are M6's freeze and thaw |
+| M6. Freeze | Done, with gaps | The long-freeze warning (`freeze.warn_after`). Undo steps for freezing and thawing all |
+| M7. Priority and notes | Priority done | Notes: the `note` op, `n` and `:note`, the `[notes]` templates and their delivery |
+| M8. Subagent panes | Nearly | Helper views that Irie draws replace the mirror windows (§4.4, [split-pane.md](proposals/split-pane.md)), and Irie.app has them. Left: retention, helpers in the terminal sidebar, transcript catch-up, and `p` and `n` on a helper |
+| M9. The Irie window in Ghostty, and Irie.app | Done, as Irie.app | Irie.app replaces the Ghostty window (§7, [MAC.md](MAC.md)). Left: an uninstall, a bundle test, bare `irie` opening the app, and M9's text |
+| M10. Local models, cost and routing | Done | |
+| M11. Control-mode events and real-Claude smoke tests | Not started | All of it |
+| M12. Skills | Half | Irie's own skills reach each session. Left: the tracked list of the nine decided skills, fetching them with hash checks, `irie skills` on, off and show, a Skills section in Irie.app's Settings, and the FAQ answer |
+
+Releases still need three things: the test workflow passing on Linux and macOS, a release installing on a fresh Mac the way §2.7 describes, and Irie.app signed and notarized once there is a Developer ID.
 
 ### M1. Launch and look (the first usable build)
 

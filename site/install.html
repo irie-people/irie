@@ -50,7 +50,7 @@
   <figure class="picture narrow">
     <svg viewBox="0 0 640 340" role="img" aria-labelledby="install-title" aria-describedby="install-desc">
       <title id="install-title">Installing Irie in a terminal with one line, which then checks what else Irie needs.</title>
-      <desc id="install-desc">A terminal window. After a dollar sign, the line curl -fsSL https://irie-people.github.io/irie/install.sh | sh. It answers: Downloading Irie for macOS on arm64. Irie.app is in ~/Applications: open it from Spotlight. Irie 0.2.0 is installed. Then: Checking what Irie needs on this computer, and a checklist: tmux 3.7b and Claude Code 2.1.316 are ticked, Signed in is crossed, with Claude Code isn’t signed in, and git 2.39.5 and irie on your PATH are ticked. Last it says Claude Code isn’t signed in, shows claude auth login, and asks: Sign in to Claude Code in your browser now? Y or n.</desc>
+      <desc id="install-desc">A terminal window. After a dollar sign, the line curl -fsSL https://irie-people.github.io/irie/install.sh | sh. It answers: Downloading Irie for macOS on arm64. Irie.app is in ~/Applications: open it from Spotlight. Irie 1.0.0 is installed. Then: Checking what Irie needs on this computer, and a checklist: tmux 3.7b and Claude Code 2.1.316 are ticked, Signed in is crossed, with Claude Code isn’t signed in, and git 2.39.5 and irie on your PATH are ticked. Last it says Claude Code isn’t signed in, shows claude auth login, and asks: Sign in to Claude Code in your browser now? Y or n.</desc>
       <rect x="0.75" y="0.75" width="638.5" height="338.5" rx="12" class="t-bg t-frame" stroke-width="1.5"/>
       <path d="M0.75 30V12.75a12 12 0 0 1 12-12h614.5a12 12 0 0 1 12 12V30z" class="t-bar"/>
       <circle cx="20" cy="15.5" r="4.5" class="t-dot"/>
@@ -62,7 +62,7 @@
         <text x="32" y="56" class="t-ink">curl -fsSL https://irie-people.github.io/irie/install.sh | sh</text>
         <text x="16" y="78" class="t-faint">Downloading Irie for macOS on arm64</text>
         <text x="16" y="98" class="t-faint">Irie.app is in ~/Applications: open it from Spotlight.</text>
-        <text x="16" y="124" class="t-ink">Irie 0.2.0 is installed.</text>
+        <text x="16" y="124" class="t-ink">Irie 1.0.0 is installed.</text>
         <text x="16" y="146" class="t-faint">Checking what Irie needs on this computer…</text>
         <text x="32" y="172" class="t-ink">✓ tmux 3.7b</text><text x="212" y="172" class="t-faint">keeps your agents running when no window is open</text>
         <text x="32" y="192" class="t-ink">✓ Claude Code 2.1.316</text><text x="212" y="192" class="t-faint">the coding agent Irie starts for you</text>
@@ -82,7 +82,7 @@
 
   <h2 id="one-line">Install it with one line</h2>
 <pre><code>curl -fsSL https://irie-people.github.io/irie/install.sh | sh</code></pre>
-  <p>It works on a Mac or a Linux computer, with an Apple silicon, Intel or ARM processor. Windows isn’t planned for version 1. The line:</p>
+  <p>It works on a Mac or a Linux computer, with an Apple silicon, Intel or ARM processor. Windows isn’t planned yet. The line:</p>
   <ol class="rules">
     <li>downloads the latest release of Irie for your computer from GitHub, and checks the download against the <dfn>SHA-256</dfn>, a fingerprint, that the release lists for it, so a file that was changed is refused;</li>
     <li>puts the <code>irie</code> program in <code>~/.local/share/irie/bin</code>, with a link in <code>~/.local/bin</code>, where Claude Code’s own installer puts <code>claude</code> too;</li>
@@ -140,7 +140,7 @@
 cd irie
 go install ./cmd/irie
 irie setup</code></pre>
-  <p><code>go install</code> puts the <code>irie</code> program in Go’s folder for programs: <code>~/go/bin</code>, unless you changed it. <code>irie version</code> prints a line such as <code>irie 0.2.0+3f2a9c41d07e</code>; the part after the <code>+</code> is different for every build. If the terminal can’t find <code>irie</code>, add Go’s folder to your PATH: put this line in your shell’s startup file, such as <code>~/.zshrc</code> on a Mac or <code>~/.bashrc</code> on Linux, then open a new terminal:</p>
+  <p><code>go install</code> puts the <code>irie</code> program in Go’s folder for programs: <code>~/go/bin</code>, unless you changed it. <code>irie version</code> prints a line such as <code>irie 1.0.0+3f2a9c41d07e</code>; the part after the <code>+</code> is different for every build. If the terminal can’t find <code>irie</code>, add Go’s folder to your PATH: put this line in your shell’s startup file, such as <code>~/.zshrc</code> on a Mac or <code>~/.bashrc</code> on Linux, then open a new terminal:</p>
 <pre><code>export PATH="$PATH:$(go env GOPATH)/bin"</code></pre>
   <p>To update it, run <code>git pull</code> and <code>go install ./cmd/irie</code> again in the same folder. <code>mac/build.sh</code> builds Irie.app, with Apple’s Command Line Tools; <a href="https://github.com/irie-people/irie/blob/main/docs/MAC.md">docs/MAC.md</a> says how.</p>
 
