@@ -187,6 +187,7 @@ type session struct {
 	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog      dogState               // what the jot dog found its jot left (dog.go)
 	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
+	stopped  map[string]bool        // its helpers you stopped, whose tool calls are turned away until they end (sub.go)
 	hue      int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
 	// Jots added to its own, to type to its agent once it can take them,
 	// and whether that is under way (follow.go).
@@ -739,7 +740,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
 		}}, nil
@@ -758,6 +759,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return nil, c.theme(a)
+	case ipc.OpStopSub:
+		var a ipc.StopSubArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.stopSub(a)
 	case ipc.OpClose:
 		var a ipc.CloseArgs
 		if err := decode(raw, &a); err != nil {

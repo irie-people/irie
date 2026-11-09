@@ -93,7 +93,10 @@ extension Store {
     /// them in one `close`, and ⌘Z brings them all back. When the shown one
     /// goes, the next card left takes its place, or the one before it.
     func closeMany(_ list: [Session]) {
-        guard !list.isEmpty else { return }
+        guard !list.isEmpty else {
+            say("Nothing to close there. Pinned and parked cards stay.", error: false)
+            return
+        }
         if list.count == 1 {
             close(list[0])
             return
@@ -227,6 +230,89 @@ extension Store {
     }
 }
 
+extension Store {
+    // MARK: Sub tabs
+
+    /// Hides a helper (its agent, sub:<id>) or a teammate ("team:" and its
+    /// session) from its card: it keeps working, and the card's "hidden"
+    /// line brings it back.
+    func hideSub(_ session: String, _ key: String) {
+        hiddenSubs[session, default: []].insert(key)
+    }
+
+    /// Brings back the helpers and teammates hidden from a card.
+    func showSubs(_ session: String) {
+        hiddenSubs[session] = nil
+    }
+
+    /// Stop on a helper's or teammate's row: the core turns the helper's
+    /// tool calls away with word to end at once, or ends the teammate's
+    /// terminal.
+    func stopSub(_ s: Session, agent: String? = nil, teammate: String? = nil, name: String) {
+        Task {
+            do {
+                _ = try await client.call("stop_sub", StopSubArgs(session: s.id, agent: agent, teammate: teammate), as: Empty.self)
+                say(agent != nil ? "Stopped \(name): it ends at its next step." : "Stopped \(name).", error: false)
+            } catch {
+                say("Couldn’t stop \(name): \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+}
+
+/// The helper or teammate a Stop names.
+struct StopSubArgs: Encodable {
+    var session: String
+    var agent: String?
+    var teammate: String?
+}
+
+/// A helper's or teammate's row under its card: a × on hover hides it from
+/// the card, where it keeps working, and its menu hides it or stops it.
+@MainActor
+struct SubRow<Content: View>: View {
+    @Environment(Store.self) private var store
+    let session: Session
+    /// The helper's agent, sub:<id>, or "team:" and the teammate's session.
+    let key: String
+    let name: String
+    @ViewBuilder var content: Content
+    @State private var hovering = false
+
+    private var teammate: String? { key.hasPrefix("team:") ? String(key.dropFirst(5)) : nil }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            content
+            Button { store.hideSub(session.id, key) } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .heavy))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(hovering ? 1 : 0)
+            .allowsHitTesting(hovering)
+            .help("Hide \(name) from the card. It keeps working; right-click it to stop it.")
+            .accessibilityLabel("Hide \(name)")
+        }
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Hide From the Card") { store.hideSub(session.id, key) }
+            if session.peerName == nil {
+                Button(teammate == nil ? "Stop Helper" : "Stop Teammate") {
+                    if let t = teammate {
+                        store.stopSub(session, teammate: t, name: name)
+                    } else {
+                        store.stopSub(session, agent: key, name: name)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// What a close of several returns: the sessions it closed.
 struct CloseResult: Decodable {
     var sessions: [String]
@@ -289,18 +375,17 @@ struct PickedActions: View {
 }
 
 /// A card's close items: Close Others, Close Below and Close All Finished.
+/// They read the rows only once chosen, so a card's menu never draws again
+/// with every row's news.
 @MainActor
 struct CloseManyItems: View {
     @Environment(Store.self) private var store
     let session: Session
 
     var body: some View {
-        let others = store.others(than: session)
-        let below = store.below(session)
-        Button(others.isEmpty ? "Close Others" : "Close \(others.count) Others") { store.closeMany(others) }
-            .disabled(others.isEmpty)
-        Button(below.isEmpty ? "Close Below" : "Close \(below.count) Below") { store.closeMany(below) }
-            .disabled(below.isEmpty)
+        Button("Close Others") { store.closeMany(store.others(than: session)) }
+        Button("Close Below") { store.closeMany(store.below(session)) }
+            .disabled(session.isPinned || session.peerName != nil)
         Button("Close All Finished") { store.closeFinished() }
     }
 }
