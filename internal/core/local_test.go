@@ -384,6 +384,22 @@ func TestTheStatusLineHearsTheStateAndTheHelpers(t *testing.T) {
 	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "plaid"}, nil); code(err) != ipc.CodeBadArgs {
 		t.Errorf("an unknown palette: %v", err)
 	}
+	// A palette of the user's own brings its dark set, which the colour is
+	// worked out in.
+	own := map[string]string{"needs": "#7FB2FF", "card": "#1F2430", "selection": "#2B3445", "muted": "#AEB6C6"}
+	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "harbour", Dark: own}, nil); err != nil {
+		t.Fatal(err)
+	}
+	p, err := ui.ParseDark(own)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := status(); r.State == ipc.StateWorking && r.Color != ui.AgentColorIn(p, row.Hue) {
+		t.Errorf("in a palette of the user's own, colour %q, want %q", r.Color, ui.AgentColorIn(p, row.Hue))
+	}
+	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "harbour", Dark: map[string]string{"card": "plaid"}}, nil); code(err) != ipc.CodeBadArgs {
+		t.Errorf("a palette of the user's own with a colour that is not #RRGGBB: %v", err)
+	}
 	c.waitState(s.ID, ipc.StateDone)
 	if r := status(); r.State != ipc.StateDone || len(r.Subagents) != 0 || r.Color != "" || r.Parked {
 		t.Errorf("after the stop: %+v", r)

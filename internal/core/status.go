@@ -52,7 +52,7 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 		frames = c.changesOf(x)
 	}
 	if row.State == ipc.StateWorking {
-		reply.Color = ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), x.hue)
+		reply.Color = c.agentColor(x.hue)
 	}
 	c.mu.Unlock()
 	c.publish(frames)
@@ -62,14 +62,38 @@ func (c *Core) status(a ipc.StatusArgs) (*ipc.StatusReply, error) {
 	return reply, nil
 }
 
+// agentColor is the status line's colour for a working session with this
+// hue: in the Mac app's palette, the user's own or one of Irie's, or else
+// in ui.theme's. The caller holds c.mu.
+func (c *Core) agentColor(hue int) string {
+	if c.appPalette != nil {
+		return ui.AgentColorIn(*c.appPalette, hue)
+	}
+	return ui.AgentColor(cmp.Or(c.appTheme, c.cfg().UI.Theme), hue)
+}
+
 // theme takes the Mac app's palette, so the agents' colours on the status
-// line match their cards; until the app says, they follow ui.theme.
+// line match their cards; until the app says, they follow ui.theme. A
+// palette of the user's own brings its dark set, which the colours are
+// worked out in.
 func (c *Core) theme(a ipc.ThemeArgs) error {
-	if !slices.Contains(config.Themes, a.Theme) {
-		return ipc.Errorf(ipc.CodeBadArgs, "theme %q: must be one of %s", a.Theme, strings.Join(config.Themes, ", "))
+	var own *ui.Palette
+	switch {
+	case a.Dark != nil:
+		if a.Theme == "" || len(a.Theme) > 64 {
+			return ipc.Errorf(ipc.CodeBadArgs, "theme %q: a palette of your own needs a name of 1 to 64 bytes", a.Theme)
+		}
+		p, err := ui.ParseDark(a.Dark)
+		if err != nil {
+			return ipc.Errorf(ipc.CodeBadArgs, "theme %q: %v", a.Theme, err)
+		}
+		own = &p
+	case !slices.Contains(config.Themes, a.Theme):
+		return ipc.Errorf(ipc.CodeBadArgs, "theme %q: must be one of %s, or a palette of your own with its dark colours", a.Theme, strings.Join(config.Themes, ", "))
 	}
 	c.mu.Lock()
 	c.appTheme = a.Theme
+	c.appPalette = own
 	c.mu.Unlock()
 	return nil
 }

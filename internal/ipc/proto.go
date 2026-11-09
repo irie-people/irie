@@ -1133,9 +1133,17 @@ type StatusReply struct {
 	Parked bool `json:"parked,omitempty"`
 }
 
-// ThemeArgs name the Mac app's palette, one of config.Themes.
+// ThemeArgs name the Mac app's palette: one of config.Themes, or a
+// palette of the user's own (Make a Theme), which brings its dark set.
 type ThemeArgs struct {
 	Theme string `json:"theme"`
+	// Dark is the dark set of a palette of the user's own: each colour
+	// "#RRGGBB" by its name in a theme file (sidebar, ground, card, panel,
+	// field, edge, hover, selection, needs_tint, ink, muted, accent,
+	// accent_ink, accent_fill, on_accent, needs, done, paused, frozen, sun
+	// and waves). The status line is drawn on the app's dark terminal, so
+	// the dark set is all it needs.
+	Dark map[string]string `json:"dark,omitempty"`
 }
 
 // ConfigArgs are changes to make to the config file, in order. With none,

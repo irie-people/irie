@@ -35,6 +35,7 @@ import (
 	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/team"
 	"github.com/irie-people/irie/internal/tmux"
+	"github.com/irie-people/irie/internal/ui"
 )
 
 // Options configure a core.
@@ -107,6 +108,7 @@ type Core struct {
 	recent     []string                 // repos used recently, newest first
 	appViews   int                      // open subscriptions of the Mac app; while any, the slot is zoomed
 	appTheme   string                   // the Mac app's palette, which the status line's agent colours follow; ui.theme until it says
+	appPalette *ui.Palette              // the app's palette when it is one of the user's own, which appTheme names
 	outside    outside                  // the Claude Code sessions outside Irie (outside.go)
 	local      localState               // local.json
 	machine    localmodel.Machine       // the machine's memory, last read
