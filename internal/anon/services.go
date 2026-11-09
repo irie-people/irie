@@ -1,10 +1,12 @@
 package anon
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // Irie's own Tor and SearXNG live in <data>/anon: tor/ holds Tor's config
@@ -88,6 +91,29 @@ func ReloadTor(d Dirs) bool {
 		return false
 	}
 	return syscall.Kill(pid, syscall.SIGHUP) == nil
+}
+
+// WaitPorts waits until each of ports on 127.0.0.1 takes a connection, as
+// Tor's SocksPorts do a moment after it starts or reads its config again:
+// a request before then is refused.
+func WaitPorts(ctx context.Context, ports []int) error {
+	for _, p := range ports {
+		address := net.JoinHostPort("127.0.0.1", strconv.Itoa(p))
+		for {
+			var d net.Dialer
+			c, err := d.DialContext(ctx, "tcp", address)
+			if err == nil {
+				c.Close()
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("Tor's port %d did not open: %w", p, ctx.Err())
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+	}
+	return nil
 }
 
 // torPlaces are where Homebrew and Linux packages put tor.

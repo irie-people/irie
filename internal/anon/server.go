@@ -199,6 +199,16 @@ func (s *server) fetch(ctx context.Context, args json.RawMessage) mcp.Result {
 		return mcp.Errorf("%v", err)
 	}
 	got, err := Fetch(ctx, client, u.String())
+	// A session's first fetch may come while Irie's Tor is still opening
+	// its port: it waits for it once, then tries again.
+	if err != nil && s.c.Route == Tor && strings.Contains(err.Error(), "connection refused") {
+		wctx, wcancel := context.WithTimeout(ctx, 30*time.Second)
+		werr := WaitPorts(wctx, []int{s.c.TorPort})
+		wcancel()
+		if werr == nil {
+			got, err = Fetch(ctx, client, u.String())
+		}
+	}
 	if err != nil {
 		return mcp.Errorf("%v", err)
 	}

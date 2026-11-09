@@ -401,3 +401,30 @@ func TestVerifyATorExit(t *testing.T) {
 	check(true)
 	check(false)
 }
+
+func TestWaitPortsWaitsForTorToOpenThem(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		if err == nil {
+			defer l.Close()
+			time.Sleep(2 * time.Second)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := WaitPorts(ctx, []int{port}); err != nil {
+		t.Fatalf("WaitPorts: %v", err)
+	}
+	short, cancel2 := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel2()
+	if err := WaitPorts(short, []int{1}); err == nil {
+		t.Error("a port that never opens should time out")
+	}
+}

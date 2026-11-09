@@ -306,19 +306,26 @@ func (c *Core) keepTor(all map[string]anon.Compartment) error {
 	if err != nil {
 		return err
 	}
+	// A check or a fetch through a port Tor has not opened yet would be
+	// refused, so this waits for every port, the new ones of a reload too.
+	ctx, cancel := context.WithTimeout(context.Background(), torOpen)
+	defer cancel()
 	if p := c.servicePane(roleTor); p != nil {
 		if changed && !anon.ReloadTor(d) {
 			c.log.Warn("anon: could not reload tor")
 		}
-		return nil
+		return anon.WaitPorts(ctx, anon.TorPorts(all))
 	}
 	pane, err := c.startService(torWindow, roleTor, d.Tor(), nil, []string{bin, "-f", d.Torrc()})
 	if err != nil {
 		return err
 	}
 	c.log.Info("tor starting", "pane", pane, "ports", anon.TorPorts(all))
-	return nil
+	return anon.WaitPorts(ctx, anon.TorPorts(all))
 }
+
+// torOpen bounds the wait for Tor's ports to open.
+var torOpen = time.Minute
 
 // keepSearx writes SearXNG's settings, with the search compartment's exit,
 // and starts it, again when its settings changed, then waits for it to
