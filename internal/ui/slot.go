@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -155,8 +156,10 @@ type slotModel struct {
 	follow  chan<- string
 	help    placeholder
 	flipKey string
-	theme   theme   // ui.theme's light and dark sets
-	pal     palette // the one in use
+	theme   theme      // ui.theme's light and dark sets, or the Mac app's palette once the header says it
+	pal     palette    // the one in use
+	dark    bool       // the terminal's background is dark, or has not been told
+	app     *ipc.Theme // the Mac app's palette, as the header last said it
 
 	w, h    int
 	rows    []ipc.Session
@@ -200,6 +203,7 @@ func newSlot(b slotBackend, o SlotOptions) *slotModel {
 // setDark draws the slot in its theme's dark or light set, as the sidebar
 // does: dark until the terminal tells its background.
 func (m *slotModel) setDark(dark bool) {
+	m.dark = dark
 	m.pal = m.theme.light
 	if dark {
 		m.pal = m.theme.dark
@@ -284,8 +288,15 @@ func (m *slotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *slotModel) applyFrame(f ipc.Frame) {
 	switch f.T {
+	case ipc.FrameHeader:
+		if f.Header != nil {
+			m.takeTheme(f.Header.Theme)
+		}
 	case ipc.FrameSnapshot:
 		m.rows, m.listed = f.Sessions, true
+		if f.Header != nil {
+			m.takeTheme(f.Header.Theme)
+		}
 	case ipc.FrameUpsert:
 		if f.Session == nil {
 			return
@@ -305,6 +316,21 @@ func (m *slotModel) applyFrame(f ipc.Frame) {
 			}
 		}
 	}
+}
+
+// takeTheme draws the slot in the palette the Mac app draws in, as the
+// sidebar does, once the header says which.
+func (m *slotModel) takeTheme(t *ipc.Theme) {
+	if t == nil || reflect.DeepEqual(t, m.app) {
+		return
+	}
+	th, ok := themeOf(t)
+	if !ok {
+		return
+	}
+	m.app = t
+	m.theme = th
+	m.setDark(m.dark)
 }
 
 // followShown follows the conversation of the session the core marks

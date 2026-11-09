@@ -390,7 +390,7 @@ func TestTheStatusLineHearsTheStateAndTheHelpers(t *testing.T) {
 	if err := cl.Call(ipc.OpTheme, ipc.ThemeArgs{Theme: "harbour", Dark: own}, nil); err != nil {
 		t.Fatal(err)
 	}
-	p, err := ui.ParseDark(own)
+	p, err := ui.ParseTheme(nil, own)
 	if err != nil {
 		t.Fatal(err)
 	}

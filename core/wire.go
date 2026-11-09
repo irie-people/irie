@@ -124,6 +124,7 @@ type (
 	StatusArgs       = ipc.StatusArgs
 	StatusReply      = ipc.StatusReply
 	ThemeArgs        = ipc.ThemeArgs
+	Theme            = ipc.Theme
 	ConfigArgs       = ipc.ConfigArgs
 	ConfigSet        = ipc.ConfigSet
 	ConfigResult     = ipc.ConfigResult

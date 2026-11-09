@@ -106,11 +106,12 @@ type Model struct {
 	home      string
 	redOnDone bool
 
-	theme theme   // ui.theme's light and dark sets
-	pal   palette // the one in use
-	dark  bool    // the terminal's background is dark, or has not been told
-	known bool    // the terminal has told its background
-	asked int     // ticks that asked for it since the last size change
+	theme    theme      // ui.theme's light and dark sets, or the Mac app's palette once the header says it
+	pal      palette    // the one in use
+	appTheme *ipc.Theme // the Mac app's palette, as the header last said it
+	dark     bool       // the terminal's background is dark, or has not been told
+	known    bool       // the terminal has told its background
+	asked    int        // ticks that asked for it since the last size change
 
 	width, height int
 	conn          connState
@@ -230,6 +231,7 @@ func (m *Model) apply(f ipc.Frame) {
 	case ipc.FrameHeader:
 		if f.Header != nil {
 			m.head = *f.Header
+			m.takeTheme(m.head.Theme)
 		}
 		return
 	case ipc.FrameHistory:
@@ -239,6 +241,7 @@ func (m *Model) apply(f ipc.Frame) {
 		m.sessions = slices.Clone(f.Sessions)
 		if f.Header != nil {
 			m.head = *f.Header
+			m.takeTheme(m.head.Theme)
 		}
 		if !m.gotSnapshot && len(m.sessions) > 0 && m.bar.Value() == "" {
 			m.setFocus(focusList)

@@ -134,11 +134,20 @@ struct Header: Decodable, Equatable {
     /// Mullvad VPN on that machine, while its vpn.on
     /// (docs/proposals/extensions.md §4).
     var vpn: VPNMark?
+    /// The palette its Mac app draws in, once it has said.
+    var theme: ThemeColors?
 
     enum CodingKeys: String, CodingKey {
-        case version, plan, vpn
+        case version, plan, vpn, theme
         case redOnDone = "red_on_done"
     }
+}
+
+/// A palette: its name, and each set's colours, "#RRGGBB" by role.
+struct ThemeColors: Decodable, Equatable {
+    var name: String
+    var light: [String: String]?
+    var dark: [String: String]?
 }
 
 /// Mullvad VPN as a machine's core sees it: its state and the state in one

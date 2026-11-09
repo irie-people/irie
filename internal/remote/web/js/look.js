@@ -24,6 +24,58 @@ export const PALETTE = {
   },
 };
 
+// ---- The palette the Mac app draws in --------------------------------------
+// A core whose Mac app has said its palette sends it in the header (the
+// header's theme: each set's colours, "#RRGGBB" by role), one of Irie's or
+// one made with Make a Theme, and the phone takes it, so it looks as the
+// Mac does. Until one comes it is Evergreen, as app.css has it.
+
+/** "needs_tint" → "needsTint": a role as PALETTE names it. */
+const roleKey = (r) => r.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+/** "needsTint" → "--needs-tint": as app.css names its variable. */
+const cssVar = (k) => '--' + k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+
+let paletteKey = '';
+
+/** Takes a header's palette into PALETTE; says whether anything changed. */
+export function usePalette(theme) {
+  if (!theme || !theme.light || !theme.dark) return false;
+  const key = JSON.stringify([theme.light, theme.dark]);
+  if (key === paletteKey) return false;
+  for (const [set, src] of [[PALETTE.light, theme.light], [PALETTE.dark, theme.dark]]) {
+    for (const [role, v] of Object.entries(src)) {
+      const k = roleKey(role);
+      if (k in set && /^#?[0-9a-fA-F]{6}$/.test(v)) set[k] = parseInt(v.replace('#', ''), 16);
+    }
+  }
+  paletteKey = key;
+  return true;
+}
+
+/** The bars, dark in both modes as Evergreen's are: its light accent made deep, and a step above its dark ground. */
+export function barColours() {
+  const [, ac, ah] = oklch(PALETTE.light.accent);
+  const [gl, gc, gh] = oklch(PALETTE.dark.ground);
+  return { light: fromOKLCH(0.33, Math.min(ac, 0.07), ah), dark: fromOKLCH(gl + 0.03, gc, gh) };
+}
+
+/** CSS for the palette in use: app.css's variables in both modes and on the bars, and the toasts, drawn in its inks. */
+export function paletteRules() {
+  const L = PALETTE.light, D = PALETTE.dark, bar = barColours();
+  const vars = (s) => Object.keys(s).map((k) => `${cssVar(k)}:${hex(s[k])}`).join(';');
+  const rgb = (n) => `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  const ink = rgb(L.ink);
+  return [
+    `:root{${vars(L)};--bar:${hex(bar.light)};--shadow:0 1px 2px rgba(${ink}, .07), 0 0 0 .5px rgba(${ink}, .05);--lift:0 10px 30px rgba(${ink}, .16), 0 1px 3px rgba(${ink}, .08)}`,
+    `@media (prefers-color-scheme: dark){:root{${vars(D)};--bar:${hex(bar.dark)};--bar-edge:${hex(mix(D.ground, D.edge, 0.6))}}}`,
+    `.on-dark{${vars(D)}}`,
+    `.toast{background:${hex(L.ink)};color:${hex(D.ink)}}`,
+    `@media (prefers-color-scheme: dark){.toast{background:${hex(D.ink)};color:${hex(L.ink)}}}`,
+    `.toast-action{color:${hex(D.accentInk)}}`,
+    `@media (prefers-color-scheme: dark){.toast-action{background:rgba(${ink}, .1);color:${hex(L.accentInk)}}}`,
+  ];
+}
+
 // ---- States ---------------------------------------------------------------
 
 /** The look of a row's state, as States.swift's Look. */

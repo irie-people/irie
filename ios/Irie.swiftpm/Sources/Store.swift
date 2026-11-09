@@ -155,12 +155,14 @@ final class Conn {
             sessions = Dictionary((f.sessions ?? []).map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
             if let h = f.header { header = h }
             loaded = true
+            takePalette()
         case "upsert":
             if let s = f.session { sessions[s.id] = s }
         case "remove":
             if let id = f.id { sessions[id] = nil }
         case "header":
             header = f.header
+            takePalette()
         case "closed":
             closed = f.closed ?? []
         default:
@@ -208,6 +210,21 @@ final class Conn {
     }
 
     var redOnDone: Bool { header?.redOnDone ?? false }
+}
+
+extension Conn {
+    /// Draws the app in the palette this machine's Mac app draws in, once
+    /// its core says it.
+    fileprivate func takePalette() {
+        if Theme.take(header?.theme) { Palette.shared.revision += 1 }
+    }
+}
+
+/// Counts the palettes taken, so the app draws again in a new one.
+@Observable @MainActor
+final class Palette {
+    static let shared = Palette()
+    var revision = 0
 }
 
 // MARK: - The app

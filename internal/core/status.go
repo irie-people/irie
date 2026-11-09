@@ -74,27 +74,32 @@ func (c *Core) agentColor(hue int) string {
 
 // theme takes the Mac app's palette, so the agents' colours on the status
 // line match their cards; until the app says, they follow ui.theme. A
-// palette of the user's own brings its dark set, which the colours are
-// worked out in.
+// palette of the user's own brings its colours, which the agents' are
+// worked out in. The header then carries the palette's colours, so the
+// terminal sidebar, the slot and the phone app draw in it too.
 func (c *Core) theme(a ipc.ThemeArgs) error {
-	var own *ui.Palette
+	var p ui.Palette
 	switch {
-	case a.Dark != nil:
+	case a.Light != nil || a.Dark != nil:
 		if a.Theme == "" || len(a.Theme) > 64 {
 			return ipc.Errorf(ipc.CodeBadArgs, "theme %q: a palette of your own needs a name of 1 to 64 bytes", a.Theme)
 		}
-		p, err := ui.ParseDark(a.Dark)
-		if err != nil {
+		var err error
+		if p, err = ui.ParseTheme(a.Light, a.Dark); err != nil {
 			return ipc.Errorf(ipc.CodeBadArgs, "theme %q: %v", a.Theme, err)
 		}
-		own = &p
-	case !slices.Contains(config.Themes, a.Theme):
-		return ipc.Errorf(ipc.CodeBadArgs, "theme %q: must be one of %s, or a palette of your own with its dark colours", a.Theme, strings.Join(config.Themes, ", "))
+	case slices.Contains(config.Themes, a.Theme):
+		p, _ = ui.BuiltIn(a.Theme)
+	default:
+		return ipc.Errorf(ipc.CodeBadArgs, "theme %q: must be one of %s, or a palette of your own with its colours", a.Theme, strings.Join(config.Themes, ", "))
 	}
+	light, dark := p.Colors()
 	c.mu.Lock()
 	c.appTheme = a.Theme
-	c.appPalette = own
+	c.appPalette = &p
+	c.appColors = &ipc.Theme{Name: a.Theme, Light: light, Dark: dark}
 	c.mu.Unlock()
+	c.publishHeader()
 	return nil
 }
 

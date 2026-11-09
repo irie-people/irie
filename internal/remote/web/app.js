@@ -32,22 +32,27 @@ if (window.visualViewport) {
 window.addEventListener('resize', fit);
 fit();
 
-// The agents' own colours, worked out once for both modes.
-(function agentColours() {
-  const rules = L.agentRules();
-  const link = document.querySelector('link[href$="app.css"]');
-  const add = () => {
-    try {
-      const sheet = link.sheet;
-      for (const r of rules) sheet.insertRule(r, sheet.cssRules.length);
-    } catch {
-      document.head.append(h('style', { text: rules.join('\n') }));
-    }
-  };
-  if (link && link.sheet) add();
-  else if (link) link.addEventListener('load', add, { once: true });
-  else document.head.append(h('style', { text: rules.join('\n') }));
-})();
+// The agents' own colours for both modes, after app.css so they win, and
+// the palette's own once a core says what its Mac app draws in.
+const look = h('style', { id: 'irie-look' });
+document.head.append(look);
+
+function paint(palette) {
+  look.textContent = [...(palette ? L.paletteRules() : []), ...L.agentRules()].join('\n');
+  if (!palette) return;
+  const bar = L.barColours();
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+    const dark = (m.getAttribute('media') || '').includes('dark');
+    m.setAttribute('content', '#' + (dark ? bar.dark : bar.light).toString(16).padStart(6, '0'));
+  }
+}
+paint(false);
+
+/** The palette of the first machine whose core says one. */
+function takePalette() {
+  const t = conns().map((c) => c.header && c.header.theme).find(Boolean);
+  if (t && L.usePalette(t)) paint(true);
+}
 
 // ---- State ----------------------------------------------------------------
 
@@ -125,6 +130,7 @@ class Conn {
         this.sessions = new Map((f.sessions || []).map((s) => [s.id, s]));
         if (f.header) this.header = f.header;
         this.loaded = true;
+        takePalette();
         break;
       case 'upsert':
         if (f.session) this.sessions.set(f.session.id, f.session);
@@ -134,6 +140,7 @@ class Conn {
         break;
       case 'header':
         this.header = f.header || {};
+        takePalette();
         break;
       case 'history':
         this.history = { undo: f.undo || '', redo: f.redo || '' };

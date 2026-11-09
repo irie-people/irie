@@ -628,6 +628,10 @@ type Header struct {
 	Trod *TrodShift `json:"trod,omitempty"`
 	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
 	VPN *VPN `json:"vpn,omitempty"`
+	// Theme is the palette the Mac app draws in, once it has said (the
+	// theme op), so the terminal sidebar, the slot and the phone app draw
+	// in it too; until then each keeps its own (ui.theme, Evergreen).
+	Theme *Theme `json:"theme,omitempty"`
 }
 
 // Load is how busy the machine is, which a core also advertises to the
@@ -1151,16 +1155,26 @@ type StatusReply struct {
 }
 
 // ThemeArgs name the Mac app's palette: one of config.Themes, or a
-// palette of the user's own (Make a Theme), which brings its dark set.
+// palette of the user's own (Make a Theme), which brings its colours.
 type ThemeArgs struct {
 	Theme string `json:"theme"`
-	// Dark is the dark set of a palette of the user's own: each colour
-	// "#RRGGBB" by its name in a theme file (sidebar, ground, card, panel,
-	// field, edge, hover, selection, needs_tint, ink, muted, accent,
+	// Light and Dark are the sets of a palette of the user's own: each
+	// colour "#RRGGBB" by its name in a theme file (sidebar, ground, card,
+	// panel, field, edge, hover, selection, needs_tint, ink, muted, accent,
 	// accent_ink, accent_fill, on_accent, needs, done, paused, frozen, sun
-	// and waves). The status line is drawn on the app's dark terminal, so
-	// the dark set is all it needs.
-	Dark map[string]string `json:"dark,omitempty"`
+	// and waves). The status line is drawn on the app's dark terminal and
+	// needs only Dark; the other clients draw in both (Header.Theme). A
+	// set left out is rosewater's.
+	Light map[string]string `json:"light,omitempty"`
+	Dark  map[string]string `json:"dark,omitempty"`
+}
+
+// Theme is a palette: its name, and its light and dark colours, each
+// "#RRGGBB" by its role's name in a theme file.
+type Theme struct {
+	Name  string            `json:"name"`
+	Light map[string]string `json:"light"`
+	Dark  map[string]string `json:"dark"`
 }
 
 // ConfigArgs are changes to make to the config file, in order. With none,

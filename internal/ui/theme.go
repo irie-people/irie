@@ -2,9 +2,12 @@ package ui
 
 import (
 	"image/color"
+	"reflect"
 
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/lipgloss/v2"
+
+	"github.com/irie-people/irie/internal/ipc"
 )
 
 // palette is one set of Irie's colours, the same as the Mac app's (DESIGN
@@ -101,6 +104,22 @@ func (m *Model) setDark(dark bool) {
 		m.pal = m.theme.dark
 	}
 	m.bar.SetStyles(barStyles(m.pal))
+}
+
+// takeTheme draws the sidebar in the palette the Mac app draws in, once
+// the header says which, so Irie looks the same wherever it shows; until
+// then, and with no app, it keeps ui.theme.
+func (m *Model) takeTheme(t *ipc.Theme) {
+	if t == nil || reflect.DeepEqual(t, m.appTheme) {
+		return
+	}
+	th, ok := themeOf(t)
+	if !ok {
+		return
+	}
+	m.appTheme = t
+	m.theme = th
+	m.setDark(m.dark)
 }
 
 // askBackground is how many ticks ask again for the terminal's background

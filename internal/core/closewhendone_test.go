@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"maps"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/sysload"
 	"github.com/irie-people/irie/internal/testutil"
+	"github.com/irie-people/irie/internal/ui"
 )
 
 func TestCloseWhenDoneClosesAFinishedSession(t *testing.T) {
@@ -127,5 +129,39 @@ func TestTheHeaderSaysHowBusyTheMachineIs(t *testing.T) {
 	want := ipc.Load{CPUs: 12, RunQueue: 14, Pressure: 2, PTYs: 128, PTYMax: 511}
 	if got == nil || *got != want {
 		t.Errorf("header load = %+v, want %+v", got, want)
+	}
+}
+
+// Once the Mac app names its palette, the header carries its colours, so
+// the terminal sidebar, the slot and the phone app draw in it too; a
+// palette of the user's own comes with them, a set left out rosewater's.
+func TestTheHeaderCarriesTheAppsPalette(t *testing.T) {
+	c := &Core{version: "test"}
+	c.useConfig(config.Default())
+	if c.headerNow().Theme != nil {
+		t.Error("a palette before the app said one")
+	}
+	if err := c.theme(ipc.ThemeArgs{Theme: "lilac"}); err != nil {
+		t.Fatal(err)
+	}
+	lilac, _ := ui.BuiltIn("lilac")
+	light, dark := lilac.Colors()
+	if h := c.headerNow().Theme; h == nil || h.Name != "lilac" || !maps.Equal(h.Light, light) || !maps.Equal(h.Dark, dark) {
+		t.Errorf("lilac: %+v", h)
+	}
+	own := map[string]string{"accent": "#336699"}
+	if err := c.theme(ipc.ThemeArgs{Theme: "harbour", Light: own}); err != nil {
+		t.Fatal(err)
+	}
+	rose, _ := ui.BuiltIn("rosewater")
+	_, roseDark := rose.Colors()
+	if h := c.headerNow().Theme; h == nil || h.Name != "harbour" || h.Light["accent"] != "#336699" || !maps.Equal(h.Dark, roseDark) {
+		t.Errorf("a palette of the user's own: %+v", h)
+	}
+	if err := c.theme(ipc.ThemeArgs{Theme: "harbour", Light: map[string]string{"accent": "blue"}}); err == nil {
+		t.Error("a colour that is not #RRGGBB was taken")
+	}
+	if h := c.headerNow().Theme; h == nil || h.Light["accent"] != "#336699" {
+		t.Errorf("a refused palette changed the header: %+v", h)
 	}
 }

@@ -49,6 +49,8 @@ struct IrieApp: App {
             }
             ToastStack().padding(.bottom, 84)
         }
+        // A new palette from a machine's core draws everything again in it.
+        .id(Palette.shared.revision)
         .sheet(item: $app.sheet) { sheet in
             switch sheet {
             case .machines: MachinesSheet()

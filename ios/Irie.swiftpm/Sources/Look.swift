@@ -1,8 +1,9 @@
 import SwiftUI
 import UIKit
 
-// How things look: the Evergreen palette of the Mac app (Theme.swift) and
-// the web app (js/look.js, app.css), light and dark; each state's name,
+// How things look: the palette the Mac app draws in, as a machine's core
+// says it (Header.theme), and Evergreen until one does, as the web app
+// (js/look.js, app.css), light and dark; each state's name,
 // glyph and colour role (DESIGN §5.3, States.swift); the agents' own
 // colours while they work; Irie's sun; and the short forms of ages,
 // durations and counts.
@@ -21,40 +22,95 @@ enum Theme {
 
     static func fixed(_ hex: UInt32) -> Color { Color(rgb(hex)) }
 
-    static let sidebar = dyn(0xF4F4EC, 0x141C17)
-    static let ground = dyn(0xE9EBDF, 0x0E1410)
-    static let card = dyn(0xFBFBF6, 0x1C2620)
-    static let panel = dyn(0xF1F2E8, 0x18221C)
-    static let field = dyn(0xFDFDF9, 0x202B24)
-    static let edge = dyn(0xD8DCC9, 0x34443A)
-    static let hover = dyn(0xF6F7EF, 0x25322A)
-    static let selection = dyn(0xDDE5D3, 0x2A3D31)
-    static let needsTint = dyn(0xFBE5DC, 0x4A251C)
-    static let ink = dyn(0x1E2B22, 0xECF0E6)
-    static let muted = dyn(0x56635A, 0xB3BFB5)
-    static let accent = dyn(0x2F5D46, 0x9CC5A1)
-    static let accentInk = dyn(0x264D3A, 0xB3D6B8)
-    static let accentFill = dyn(0x9DB8A3, 0x9CC5A1)
-    static let onAccent = dyn(0x1E2B22, 0x12201A)
-    /// Text on a primary button: the card's colour, or on-accent in dark mode.
-    static let onPrimary = dyn(0xFBFBF6, 0x12201A)
-    static let needs = dyn(0xB42A1E, 0xFF9585)
-    static let onNeeds = dyn(0xFFFFFF, 0x2A0E09)
-    static let done = dyn(0x3F6A5F, 0x8FC3B2)
-    static let paused = dyn(0x855700, 0xEFC468)
-    static let frozen = dyn(0x286873, 0x7DC4CE)
-    static let sun = fixed(0xD9A93F)
-    static let waves = dyn(0x5E8A6E, 0x9CC5A1)
-    /// The bars, dark in both modes.
-    static let bar = dyn(0x183F30, 0x0F1712)
+    /// The palette in use, each set's colours by their names in a theme
+    /// file: Evergreen until a machine's core says what its Mac app draws in.
+    static var light: [String: UInt32] = [
+        "sidebar": 0xF4F4EC, "ground": 0xE9EBDF, "card": 0xFBFBF6, "panel": 0xF1F2E8, "field": 0xFDFDF9,
+        "edge": 0xD8DCC9, "hover": 0xF6F7EF, "selection": 0xDDE5D3, "needs_tint": 0xFBE5DC,
+        "ink": 0x1E2B22, "muted": 0x56635A, "accent": 0x2F5D46, "accent_ink": 0x264D3A, "accent_fill": 0x9DB8A3, "on_accent": 0x1E2B22,
+        "needs": 0xB42A1E, "done": 0x3F6A5F, "paused": 0x855700, "frozen": 0x286873, "sun": 0xD9A93F, "waves": 0x5E8A6E,
+    ]
+    static var dark: [String: UInt32] = [
+        "sidebar": 0x141C17, "ground": 0x0E1410, "card": 0x1C2620, "panel": 0x18221C, "field": 0x202B24,
+        "edge": 0x34443A, "hover": 0x25322A, "selection": 0x2A3D31, "needs_tint": 0x4A251C,
+        "ink": 0xECF0E6, "muted": 0xB3BFB5, "accent": 0x9CC5A1, "accent_ink": 0xB3D6B8, "accent_fill": 0x9CC5A1, "on_accent": 0x12201A,
+        "needs": 0xFF9585, "done": 0x8FC3B2, "paused": 0xEFC468, "frozen": 0x7DC4CE, "sun": 0xD9A93F, "waves": 0x9CC5A1,
+    ]
+    /// The bars, dark in both modes: Evergreen's, until a palette comes.
+    private static var bars: (light: UInt32, dark: UInt32, edge: UInt32) = (0x183F30, 0x0F1712, 0x26332B)
 
-    static func bar(_ scheme: ColorScheme) -> Color { fixed(scheme == .dark ? 0x0F1712 : 0x183F30) }
-    static let barEdge = Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(0x26332B) : .clear })
+    /// A colour of the palette in use, light or dark as the screen is,
+    /// worked out each time it is drawn.
+    static func role(_ key: String) -> Color {
+        Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(dark[key] ?? 0) : rgb(light[key] ?? 0) })
+    }
+
+    /// One role in light mode and another in dark mode.
+    private static func roles(_ lightKey: String, _ darkKey: String, darkSet: (Bool, Bool) = (false, true)) -> Color {
+        Color(UIColor {
+            let d = $0.userInterfaceStyle == .dark
+            let set = (d ? darkSet.1 : darkSet.0) ? dark : light
+            return rgb(set[d ? darkKey : lightKey] ?? 0)
+        })
+    }
+
+    /// Takes the palette a core says its Mac app draws in; says whether
+    /// anything changed.
+    static func take(_ t: ThemeColors?) -> Bool {
+        guard let t else { return false }
+        func set(_ m: [String: String]?, into s: inout [String: UInt32]) -> Bool {
+            var changed = false
+            for (k, v) in m ?? [:] {
+                var hex = Substring(v)
+                if hex.hasPrefix("#") { hex = hex.dropFirst() }
+                guard s[k] != nil, hex.count == 6, let n = UInt32(hex, radix: 16), s[k] != n else { continue }
+                s[k] = n
+                changed = true
+            }
+            return changed
+        }
+        let l = set(t.light, into: &light), d = set(t.dark, into: &dark)
+        guard l || d else { return false }
+        bars = AgentColor.bars(accent: light["accent"] ?? 0, darkGround: dark["ground"] ?? 0, darkEdge: dark["edge"] ?? 0)
+        AgentColor.repaint()
+        return true
+    }
+
+    static let sidebar = role("sidebar")
+    static let ground = role("ground")
+    static let card = role("card")
+    static let panel = role("panel")
+    static let field = role("field")
+    static let edge = role("edge")
+    static let hover = role("hover")
+    static let selection = role("selection")
+    static let needsTint = role("needs_tint")
+    static let ink = role("ink")
+    static let muted = role("muted")
+    static let accent = role("accent")
+    static let accentInk = role("accent_ink")
+    static let accentFill = role("accent_fill")
+    static let onAccent = role("on_accent")
+    /// Text on a primary button: the card's colour, or on-accent in dark mode.
+    static let onPrimary = roles("card", "on_accent")
+    static let needs = role("needs")
+    static let onNeeds = dyn(0xFFFFFF, 0x2A0E09)
+    static let done = role("done")
+    static let paused = role("paused")
+    static let frozen = role("frozen")
+    static let sun = role("sun")
+    static let waves = role("waves")
+    /// The bars, dark in both modes.
+    static let bar = Color(UIColor { rgb($0.userInterfaceStyle == .dark ? bars.dark : bars.light) })
+
+    static func bar(_ scheme: ColorScheme) -> Color { fixed(scheme == .dark ? bars.dark : bars.light) }
+    static let barEdge = Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(bars.edge) : .clear })
     static let termBack = fixed(0x14110D)
     static let termInk = fixed(0xEEE5D5)
-    static let toastBack = dyn(0x1E2B22, 0xECF0E6)
-    static let toastInk = dyn(0xECF0E6, 0x1E2B22)
-    static let toastAction = dyn(0xB3D6B8, 0x264D3A)
+    /// The toasts, in the inks: the light set's on the dark one's.
+    static let toastBack = roles("ink", "ink")
+    static let toastInk = roles("ink", "ink", darkSet: (true, false))
+    static let toastAction = roles("accent_ink", "accent_ink", darkSet: (true, false))
     static let toastErrorBack = dyn(0x4A1E16, 0xFFE1DB)
     static let toastErrorInk = dyn(0xFFD9D2, 0x8C1D12)
 
@@ -109,8 +165,8 @@ enum AgentColor {
         var sidebar, ground, card, panel, selection, muted, needs: UInt32
     }
 
-    private static let light = Swatches(sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, selection: 0xDDE5D3, muted: 0x56635A, needs: 0xB42A1E)
-    private static let dark = Swatches(sidebar: 0x141C17, ground: 0x0E1410, card: 0x1C2620, panel: 0x18221C, selection: 0x2A3D31, muted: 0xB3BFB5, needs: 0xFF9585)
+    private static var light = Swatches(sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, selection: 0xDDE5D3, muted: 0x56635A, needs: 0xB42A1E)
+    private static var dark = Swatches(sidebar: 0x141C17, ground: 0x0E1410, card: 0x1C2620, panel: 0x18221C, selection: 0x2A3D31, muted: 0xB3BFB5, needs: 0xFF9585)
 
     // Theme.swift's numbers: the chroma of a mark and its text, the
     // lightness each starts from (light mode, dark mode), and a wash's
@@ -121,12 +177,35 @@ enum AgentColor {
     private static let washChroma = (light: 0.03, dark: 0.04)
     private static let washLift = (light: -0.03, dark: 0.025)
 
-    private static let table: [Tints] = (0..<slots).map { i in
-        let l = (mark: mark(i, light, false), wash: wash(i, light, false), ink: ink(i, light, false))
-        let d = (mark: mark(i, dark, true), wash: wash(i, dark, true), ink: ink(i, dark, true))
-        return Tints(mark: Theme.dyn(l.mark, d.mark), wash: Theme.dyn(l.wash, d.wash),
-                   wash2: Theme.dyn(mix(light.card, l.wash, 0.5), mix(dark.card, d.wash, 0.5)),
-                   ink: Theme.dyn(l.ink, d.ink))
+    private static var table: [Tints] = makeTable()
+
+    /// Works the agents' colours out again, in the palette now in use.
+    static func repaint() {
+        light = swatches(Theme.light)
+        dark = swatches(Theme.dark)
+        table = makeTable()
+    }
+
+    private static func swatches(_ m: [String: UInt32]) -> Swatches {
+        Swatches(sidebar: m["sidebar"] ?? 0, ground: m["ground"] ?? 0, card: m["card"] ?? 0, panel: m["panel"] ?? 0,
+                 selection: m["selection"] ?? 0, muted: m["muted"] ?? 0, needs: m["needs"] ?? 0)
+    }
+
+    private static func makeTable() -> [Tints] {
+        (0..<slots).map { i in
+            let l = (mark: mark(i, light, false), wash: wash(i, light, false), ink: ink(i, light, false))
+            let d = (mark: mark(i, dark, true), wash: wash(i, dark, true), ink: ink(i, dark, true))
+            return Tints(mark: Theme.dyn(l.mark, d.mark), wash: Theme.dyn(l.wash, d.wash),
+                         wash2: Theme.dyn(mix(light.card, l.wash, 0.5), mix(dark.card, d.wash, 0.5)),
+                         ink: Theme.dyn(l.ink, d.ink))
+        }
+    }
+
+    /// The bars for a palette, dark in both modes as Evergreen's are: its
+    /// light accent made deep, and a step above its dark ground.
+    static func bars(accent: UInt32, darkGround: UInt32, darkEdge: UInt32) -> (light: UInt32, dark: UInt32, edge: UInt32) {
+        let a = oklch(accent), g = oklch(darkGround)
+        return (hex(l: 0.33, c: 0.06, h: a.h), hex(l: g.l + 0.03, c: 0.015, h: g.h), mix(darkGround, darkEdge, 0.6))
     }
 
     private static func ch(_ hex: UInt32, _ shift: UInt32) -> Double { Double((hex >> shift) & 0xFF) }

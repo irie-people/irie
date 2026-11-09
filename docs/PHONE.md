@@ -56,6 +56,7 @@ Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unkno
 ## 4. The app
 
 - **Sessions**: a card per session in the core's order, each machine a section, parked last; a state change never moves a card. Red when it needs you.
+- **Its colours**: the palette the Mac app draws in, one of Irie's or one made with Make a Theme, which the first machine whose core says one sends in its header (`theme`), light or dark as the phone is, with the agents' own colours worked out in it; Evergreen until one comes. The native app (§4.1) takes it the same way.
 - **A session**, in either of two views, picked at its top under its name; the phone keeps the pick for every session:
   - **Browser**: its conversation, as the Mac app draws it; a message box (`send`); while it waits on you, a red card with what it asks and its choices as buttons (`screen`, `keys`), or a key pad.
   - **Term**: its terminal as it is now, live, cell for cell in its own colours and at its own width (`subscribe` with `screen`). It fits the width to the phone, sitting at the bottom by the prompt; a pinch, a double tap or **Zoom** reads it closer, **Fit** goes back, and the phone keeps the zoom. Turned on its side, a phone shows it about twice as large. Under it, keys to press there (Esc, Tab, Shift-Tab, the arrows, Page Up and Down, Space, Delete and Return, in the order tapped) and the message box; while it waits on you, its choices as buttons above the keys. A machine whose Irie is older shows it as plain text, read once a second.
