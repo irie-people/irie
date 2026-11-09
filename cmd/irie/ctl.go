@@ -241,8 +241,8 @@ func ctlList(args []string) error {
 }
 
 // printList prints the list as text, in the sidebars' order: the sessions
-// that are not parked, then the parked ones and those that run outside
-// Irie, each under a heading of their own.
+// that are not parked, then the parked ones, each paired machine's and
+// those that run outside Irie, each under a heading of their own.
 func printList(w io.Writer, r ipc.ListResult) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	rows := func(list []ipc.Session) {
@@ -252,10 +252,18 @@ func printList(w io.Writer, r ipc.ListResult) error {
 		}
 	}
 	var rest, parked []ipc.Session
+	var hosts []string
+	byHost := map[string][]ipc.Session{}
 	for _, s := range r.Sessions {
-		if s.Parked {
+		switch {
+		case s.Parked:
 			parked = append(parked, s)
-		} else {
+		case s.Host != "":
+			if _, ok := byHost[s.Host]; !ok {
+				hosts = append(hosts, s.Host)
+			}
+			byHost[s.Host] = append(byHost[s.Host], s)
+		default:
 			rest = append(rest, s)
 		}
 	}
@@ -263,6 +271,11 @@ func printList(w io.Writer, r ipc.ListResult) error {
 	if len(parked) > 0 {
 		fmt.Fprintln(tw, "\nPARKED")
 		rows(parked)
+	}
+	// A paired machine's sessions (DESIGN §2.8), in the order it keeps.
+	for _, h := range hosts {
+		fmt.Fprintln(tw, "\nON "+strings.ToUpper(h))
+		rows(byHost[h])
 	}
 	// Claude Code sessions that run outside Irie, under a heading of their
 	// own; ctl move takes them by id or name.

@@ -168,9 +168,10 @@ func (m Model) parkKey() (tea.Model, tea.Cmd) {
 }
 
 // park parks session s (on), which puts it last in the Parked group at the
-// end of the list, or unparks it, last among the rest, just above Parked,
-// at once, as the core does. The selection goes with it, or to its group's
-// header while that is folded.
+// end of the list, or unparks it, last among the rest, just above Parked
+// (a paired machine's last in that machine's group), at once, as the core
+// does. The selection goes with it, or to its group's header while that is
+// folded.
 func (m Model) park(c Controls, s ipc.Session, on bool) (tea.Model, tea.Cmd) {
 	i := m.index(s.ID)
 	x := m.sessions[i]

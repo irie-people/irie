@@ -1,12 +1,13 @@
 package ui
 
 // The list (DESIGN §4.1): Irie's sessions in one list or a group per repo,
-// then the Parked group and the Outside Irie group. Every group but the List
-// view's one list has a header that folds it. The sessions keep the core's
-// one order, which only the user changes, so a state change never moves
-// one. The arrow keys walk the visible headers and sessions, and the
-// selection and the scroll follow what they are on, not where it is, so what
-// the core sends never moves the list under you.
+// then the Parked group, a group for each paired machine's sessions (§2.8)
+// and the Outside Irie group. Every group but the List view's one list has
+// a header that folds it. The sessions keep the core's one order, which
+// only the user changes, so a state change never moves one. The arrow keys
+// walk the visible headers and sessions, and the selection and the scroll
+// follow what they are on, not where it is, so what the core sends never
+// moves the list under you.
 
 import (
 	"fmt"
@@ -34,7 +35,7 @@ const (
 )
 
 // group is a heading of the list: the List view's one list, a repo,
-// Parked, or Outside Irie.
+// Parked, another machine, or Outside Irie.
 type group struct {
 	key     string
 	title   string
@@ -42,7 +43,8 @@ type group struct {
 	needs   int // how many of them need you
 	folded  bool
 	outside bool
-	bare    bool // drawn without a header: the List view's one list
+	bare    bool   // drawn without a header: the List view's one list
+	host    string // the paired machine whose sessions it holds
 }
 
 // item is one entry of the list.
@@ -69,10 +71,16 @@ func outsideItemKey(o ipc.OutsideSession) string { return "outside:" + o.Key() }
 // notInARepo is the Repo view's group of sessions that run outside any repo.
 const notInARepo = "repo:"
 
-// homeKey is the group a session is in while it is not parked: the List
-// view's one list, or in the Repo view its repo's group.
+// hostKey names the group of a paired machine's sessions (DESIGN §2.8).
+func hostKey(host string) string { return "host:" + host }
+
+// homeKey is the group a session is in while it is not parked: its
+// machine's group when another machine runs it, else the List view's one
+// list, or in the Repo view its repo's group.
 func (m Model) homeKey(s ipc.Session) string {
 	switch {
+	case s.Host != "":
+		return hostKey(s.Host)
 	case m.view == byList:
 		return listKey
 	case s.Repo != "":
@@ -128,20 +136,29 @@ func tail(p string, n int) string {
 
 // groups returns the groups of Irie's sessions in the current view, in
 // order, with the indexes of their sessions in the core's order (control.go):
-// the List view's one list or a group per repo, then Parked. Only the user
-// moves a session, by dragging, promoting or parking it, so a state change
-// never does.
+// the List view's one list or a group per repo, then Parked, then a group
+// for each paired machine's sessions, in the order the core lists them, so
+// they stand apart from this machine's. Parked, a machine's session goes
+// into Parked with the rest. Only the user moves a session, by dragging,
+// promoting or parking it, so a state change never does.
 func (m Model) groups() ([]*group, [][]int) {
-	var keys []string
+	var keys, hosts []string
 	members := map[string][]int{}
+	titles := map[string]string{notInARepo: "Not in a repo", listKey: "Sessions", parkedKey: "Parked"}
 	for i, s := range m.sessions {
 		k := m.groupOf(s)
-		if _, ok := members[k]; !ok && k != parkedKey {
-			keys = append(keys, k)
+		if _, ok := members[k]; !ok {
+			switch {
+			case k == parkedKey:
+			case s.Host != "" && k == hostKey(s.Host):
+				hosts = append(hosts, k)
+				titles[k] = "On " + s.Host
+			default:
+				keys = append(keys, k)
+			}
 		}
 		members[k] = append(members[k], i)
 	}
-	titles := map[string]string{notInARepo: "Not in a repo", listKey: "Sessions", parkedKey: "Parked"}
 	if m.view == byRepo {
 		var repos []string
 		for _, k := range keys {
@@ -177,12 +194,16 @@ func (m Model) groups() ([]*group, [][]int) {
 	if len(members[parkedKey]) > 0 {
 		keys = append(keys, parkedKey)
 	}
+	keys = append(keys, hosts...)
 	groups := make([]*group, len(keys))
 	order := make([][]int, len(keys))
 	for i, k := range keys {
 		// The one list has no header, so it never folds.
 		bare := k == listKey
 		g := &group{key: k, title: titles[k], count: len(members[k]), folded: m.folded[k] && !bare, bare: bare}
+		if slices.Contains(hosts, k) {
+			g.host = m.sessions[members[k][0]].Host
+		}
 		for _, s := range members[k] {
 			if needsYou(m.sessions[s]) {
 				g.needs++
@@ -313,14 +334,15 @@ func (m Model) allItems() []item {
 }
 
 // setView switches between the List and Repo views. The selected session
-// stays selected, and so do Parked's and Outside Irie's headers, which both
-// views have; another header's selection goes to the first session.
+// stays selected, and so do the headers both views have: Parked's, each
+// machine's and Outside Irie's; another header's selection goes to the
+// first session.
 func (m *Model) setView(v listView) {
 	if m.view == v {
 		return
 	}
 	sel := ""
-	if it, ok := m.selected(); ok && (it.kind != itemGroup || it.group.outside || it.key == parkedKey) {
+	if it, ok := m.selected(); ok && (it.kind != itemGroup || it.group.outside || it.group.host != "" || it.key == parkedKey) {
 		sel = it.key
 	}
 	m.view, m.hover = v, ""
