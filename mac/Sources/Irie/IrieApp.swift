@@ -107,6 +107,15 @@ final class KeyRouter {
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
             }
+            // ⌃1–9 shows a space, and ⌃⌥1–9 sends the selected or picked
+            // cards to it (Spaces.swift).
+            if irie, mods == .control || mods == [.control, .option], let c = event.charactersIgnoringModifiers,
+               let n = Int(c), (1...9).contains(n), MainActor.assumeIsolated({ store.canSpaces }) {
+                MainActor.assumeIsolated {
+                    if mods.contains(.option) { store.sendToSpace(number: n) } else { store.showSpace(number: n) }
+                }
+                return nil
+            }
             if mods == .control, event.charactersIgnoringModifiers == "]" {
                 MainActor.assumeIsolated { store.toggleFocus() }
                 return nil

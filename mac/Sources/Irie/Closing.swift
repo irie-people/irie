@@ -20,6 +20,8 @@ struct CloseArgs: Encodable {
     var session: String?
     var sessions: [String]?
     var finished: Bool?
+    /// Finished keeps to this space ("" for the first) (Spaces.swift).
+    var space: String?
 }
 
 struct ReopenArgs: Encodable {

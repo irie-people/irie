@@ -41,6 +41,8 @@ struct Session: Codable, Identifiable, Equatable {
     var parked: Bool?
     /// Whether it is pinned, in the Pinned group at the top (Tabs.swift).
     var pinned: Bool?
+    /// The space it is in; nil or "" for the first (Spaces.swift).
+    var space: String?
     var frozen: Date?
     var freezing: Bool?
     var priority: Int?
@@ -64,7 +66,7 @@ struct Session: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, pinned, frozen, freezing, priority, loose, trod, hue, tutor, host
+        case order, parked, pinned, space, frozen, freezing, priority, loose, trod, hue, tutor, host
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -199,12 +201,14 @@ struct Header: Decodable {
     var vpn: VPNMark?
     /// How busy the machine is, read every 5 s (DESIGN §2.4).
     var load: MachineLoad?
+    /// The spaces, in their order, the first first (Spaces.swift).
+    var spaces: [SpaceInfo]?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
-        case trod, vpn, load
+        case trod, vpn, load, spaces
     }
 }
 
@@ -457,9 +461,11 @@ struct InputArgs: Encodable, Equatable {
     /// off, explain or teach for a task, when its words do not say; nil
     /// takes learn.tutor. Only a core whose hello lists spawn-tutor takes it.
     var tutor: String?
+    /// The space on show, where a task starts (Spaces.swift).
+    var space: String?
 
     enum CodingKeys: String, CodingKey {
-        case text, session, outside, repo, profile, model, apart, tutor
+        case text, session, outside, repo, profile, model, apart, tutor, space
         case inPlace = "in_place"
     }
 }
