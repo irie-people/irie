@@ -320,13 +320,14 @@ final class Store {
     }
 
     /// Tells the core the palette in use: the agents' colours on Irie's
-    /// status line follow it, so they match the cards. A theme of yours
-    /// brings its dark colours, which the status line is drawn from.
+    /// status line follow it, so they match the cards, and the terminal
+    /// sidebar, the slot and the phone app draw in it (Header.Theme). A
+    /// theme of yours brings its colours.
     func sendTheme(_ id: String) {
         // A preview leaves that to the installed app (Preview.swift).
         guard !Preview.isOn else { return }
         let p = Palette.named(id)
-        let args = ThemeArgs(theme: p.id, dark: p.isCustom ? p.dark.hexes : nil)
+        let args = ThemeArgs(theme: p.id, light: p.isCustom ? p.light.hexes : nil, dark: p.isCustom ? p.dark.hexes : nil)
         Task { _ = try? await client.call("theme", args, timeout: 2, as: Empty.self) }
     }
 

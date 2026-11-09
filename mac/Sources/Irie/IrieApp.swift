@@ -202,6 +202,9 @@ struct ContentView: View {
         .background(WindowReader { window in
             keys.window = window
             WindowPanes.window = window
+            // A drag of the sidebar's edge or the window's resizes the
+            // terminal once, as it ends (ResizeHold.swift).
+            ResizeHold.shared.watch(window)
             // A preview takes over the window of the build before (Preview.swift).
             PreviewState.shared.adopt(window, store: store)
         })

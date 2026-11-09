@@ -43,7 +43,8 @@ struct TerminalArea: View {
                     main.modifier(FileDrop(session: selected))
                         .padding(.trailing, store.sideDocked ? width : 0)
                     if store.side.open {
-                        RightSidebar(guide: $sideGuide)
+                        RightSidebar(guide: $sideGuide, drawn: Double(width),
+                                     most: Double(max(CGFloat(SideState.minWidth), geo.size.width - minTerminal)))
                             .frame(width: width)
                             .padding(.vertical, 12)
                             .transition(.move(edge: .trailing))
@@ -240,7 +241,10 @@ struct TerminalArea: View {
         let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
         let ground = Color(nsColor: Theme.terminalBackground)
         let shows = store.showTerminal && anchors
+        // While the sidebar's edge or the window's is dragged, the terminal
+        // keeps its size, and takes the new one as the drag ends.
         return terminal
+            .modifier(HeldSize())
             .padding(.vertical, padded ? 10 : 4)
             .padding(.horizontal, padded ? 18 : 6)
             .background {

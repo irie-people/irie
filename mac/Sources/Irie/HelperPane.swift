@@ -494,10 +494,10 @@ struct HelperTerminalFeed: View {
 /// The terminal look's colours, the same in both appearances, as the
 /// terminal's own are (Theme.terminalBackground and terminalForeground).
 enum Term {
-    static let ground = Color(nsColor: Theme.terminalBackground)
-    static let ink = Color(nsColor: Theme.terminalForeground)
-    static let faint = Color(nsColor: Theme.terminalForeground).opacity(0.58)
-    static let rule = Color(nsColor: Theme.terminalForeground).opacity(0.16)
+    static var ground: Color { Color(nsColor: Theme.terminalBackground) }
+    static var ink: Color { Color(nsColor: Theme.terminalForeground) }
+    static var faint: Color { Color(nsColor: Theme.terminalForeground).opacity(0.58) }
+    static var rule: Color { Color(nsColor: Theme.terminalForeground).opacity(0.16) }
     static let green = Color(red: 0x57 / 255, green: 0xD0 / 255, blue: 0x8C / 255)
     static let red = Color(red: 0xFF / 255, green: 0x6E / 255, blue: 0x64 / 255)
     static let yellow = Color(red: 0xE8 / 255, green: 0xC0 / 255, blue: 0x4F / 255)

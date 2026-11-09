@@ -250,6 +250,9 @@ enum WindowPanes {
         return found.first
     }
 
+    /// The split view whose first item is the sidebar.
+    static var splitView: NSSplitView? { controller()?.splitView }
+
     static var sidebar: (shown: Bool, width: Double)? {
         guard let c = controller() else { return nil }
         let item = c.splitViewItems[0]
@@ -294,9 +297,11 @@ enum LookFiles {
         var basedOn: String?
         var light: [String: String]?
         var dark: [String: String]?
+        /// The terminal's own colours, "ground" and "ink", if the theme sets them.
+        var terminal: [String: String]?
 
         enum CodingKeys: String, CodingKey {
-            case name, light, dark
+            case name, light, dark, terminal
             case basedOn = "based_on"
         }
     }
@@ -331,7 +336,18 @@ enum LookFiles {
             problems += (badLight.map { "light \($0)" } + badDark.map { "dark \($0)" }).map { "\(url.lastPathComponent): \($0)" }
             let given = (f.name ?? "").trimmingCharacters(in: .whitespaces)
             let name = given.isEmpty ? id : given
-            themes.append(CustomTheme(palette: Palette(id: id, name: name, light: light, dark: dark), basedOn: base.id, file: url))
+            var terminal: TerminalColors?
+            if let t = f.terminal {
+                let ground = t["ground"].flatMap(Swatches.parse), ink = t["ink"].flatMap(Swatches.parse)
+                if ground == nil && t["ground"] != nil || ink == nil && t["ink"] != nil {
+                    problems.append("\(url.lastPathComponent): the terminal's colours are not #RRGGBB")
+                }
+                if ground != nil || ink != nil {
+                    terminal = TerminalColors(ground: ground ?? TerminalColors.standard.ground, ink: ink ?? TerminalColors.standard.ink)
+                }
+            }
+            themes.append(CustomTheme(palette: Palette(id: id, name: name, light: light, dark: dark, terminal: terminal),
+                                      basedOn: base.id, file: url))
         }
         return (themes, problems)
     }
@@ -361,8 +377,11 @@ enum LookFiles {
         func set(_ s: Swatches) -> String {
             ColorRole.all.map { "    \"\($0.key)\": \"\(Swatches.hex(s[keyPath: $0.path]))\"" }.joined(separator: ",\n")
         }
+        let terminal = t.palette.terminal.map {
+            ",\n  \"terminal\": {\n    \"ground\": \"\(Swatches.hex($0.ground))\",\n    \"ink\": \"\(Swatches.hex($0.ink))\"\n  }"
+        } ?? ""
         let text = "{\n  \"name\": \(string(t.name)),\n  \"based_on\": \(string(t.basedOn)),\n"
-            + "  \"light\": {\n\(set(t.palette.light))\n  },\n  \"dark\": {\n\(set(t.palette.dark))\n  }\n}\n"
+            + "  \"light\": {\n\(set(t.palette.light))\n  },\n  \"dark\": {\n\(set(t.palette.dark))\n  }\(terminal)\n}\n"
         return Data(text.utf8)
     }
 
@@ -459,7 +478,8 @@ final class LookBook {
         var light = start.light, dark = start.dark
         light.accent = 0x2D5F7A; light.accentInk = 0x234E66; light.accentFill = 0x93B5C9; light.selection = 0xD8E3EA; light.waves = 0x5A8AA6
         dark.accent = 0x96C3DB; dark.accentInk = 0xAFD2E5; dark.accentFill = 0x96C3DB; dark.selection = 0x283A46; dark.waves = 0x96C3DB
-        themes = [CustomTheme(palette: Palette(id: "harbour", name: "Harbour", light: light, dark: dark), basedOn: start.id,
+        themes = [CustomTheme(palette: Palette(id: "harbour", name: "Harbour", light: light, dark: dark,
+                                               terminal: TerminalColors(ground: 0x0F161C, ink: 0xE6EDF2)), basedOn: start.id,
                               file: URL(fileURLWithPath: "/home/alice/.config/irie/themes/harbour.json"))]
         layouts = [
             PaneLayout(id: "pairing", name: "Pairing", view: "terminal", sidebar: .init(shown: true, width: 300),
@@ -540,7 +560,8 @@ final class LookBook {
             Palette.all.contains { $0.id == candidate } || FileManager.default.fileExists(atPath: LookFiles.themes.appendingPathComponent(candidate + ".json").path)
         }
         let url = LookFiles.themes.appendingPathComponent(id + ".json")
-        let theme = CustomTheme(palette: Palette(id: id, name: p.name, light: p.light, dark: p.dark), basedOn: basedOn, file: url)
+        let theme = CustomTheme(palette: Palette(id: id, name: p.name, light: p.light, dark: p.dark, terminal: p.terminal),
+                                basedOn: basedOn, file: url)
         try LookFiles.write(LookFiles.json(theme), to: url)
         read()
         watch()

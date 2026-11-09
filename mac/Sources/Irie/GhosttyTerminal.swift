@@ -97,10 +97,27 @@ final class GhosttyRuntime {
         center.addObserver(forName: NSTextInputContext.keyboardSelectionDidChangeNotification, object: nil, queue: .main) { _ in
             ghostty_app_keyboard_changed(app)
         }
+        center.addObserver(forName: .irieTerminalColors, object: nil, queue: .main) { _ in
+            GhosttyRuntime.shared.useColors()
+        }
     }
 
     private func tick() {
         if let app { ghostty_app_tick(app) }
+    }
+
+    /// Gives every terminal the colours of the palette in use, which a
+    /// theme of yours may set: a config made afresh, as Ghostty's own app
+    /// does when its config changes, to the app and each surface, and the
+    /// old one freed once they have read it.
+    func useColors() {
+        guard let app, let fresh = Self.makeConfig() else { return }
+        ghostty_app_update_config(app, fresh)
+        for box in GhosttySurfaceBox.live.allObjects {
+            if let surface = box.surface { ghostty_surface_update_config(surface, fresh) }
+        }
+        if let old = config { ghostty_config_free(old) }
+        config = fresh
     }
 
     /// The owner's Ghostty config, then Irie's on top: the terminal's ground
@@ -198,6 +215,11 @@ final class GhosttyRuntime {
 final class GhosttySurfaceBox {
     var surface: ghostty_surface_t?
     weak var view: GhosttyTerminalView?
+
+    /// Every box with a view, for a change of colours (GhosttyRuntime.useColors).
+    static let live = NSHashTable<GhosttySurfaceBox>.weakObjects()
+
+    init() { Self.live.add(self) }
 
     static func of(_ surface: ghostty_surface_t) -> GhosttySurfaceBox? {
         from(ghostty_surface_userdata(surface))

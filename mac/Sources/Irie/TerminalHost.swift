@@ -100,8 +100,20 @@ final class IrieTerminalView: LocalProcessTerminalView {
         }
     }
 
+    /// Watches for the palette giving the terminal other colours.
+    private var recolour: NSObjectProtocol?
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if recolour == nil {
+            recolour = NotificationCenter.default.addObserver(forName: .irieTerminalColors, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.nativeBackgroundColor = Theme.terminalBackground
+                    self.nativeForegroundColor = Theme.terminalForeground
+                }
+            }
+        }
         guard let window, !triedMetal else { return }
         triedMetal = true
         try? setUseMetal(true)
@@ -135,6 +147,7 @@ final class IrieTerminalView: LocalProcessTerminalView {
 
     deinit {
         if let holding { NSEvent.removeMonitor(holding) }
+        if let recolour { NotificationCenter.default.removeObserver(recolour) }
     }
 
     /// With tmux's mouse mode on, SwiftTerm hands a click to tmux and never

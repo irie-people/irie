@@ -205,6 +205,10 @@ struct RightSidebar: View {
     @Environment(Store.self) private var store
     /// The width a drag of its edge is asking for, while it lasts.
     @Binding var guide: Double?
+    /// How wide it is drawn, and the most it may be drawn in this window,
+    /// which keeps the terminal some room.
+    var drawn = SideState.startWidth
+    var most = SideState.maxWidth
 
     /// Rounded where it faces the terminal, as the terminal's frame is, and
     /// square at the window's edge, which it comes out of.
@@ -226,7 +230,7 @@ struct RightSidebar: View {
         // Its edge, on every side but the window's: that one lies just
         // past the window, out of sight.
         .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1).padding(.trailing, -1))
-        .overlay(alignment: .leading) { SideEdge(guide: $guide).offset(x: -5) }
+        .overlay(alignment: .leading) { SideEdge(guide: $guide, drawn: drawn, most: most).offset(x: -5) }
         // Esc hands the keyboard back; closing would resize every agent.
         .onExitCommand {
             if store.showTerminal { store.focusTerminal += 1 } else { store.focusMessage += 1 }
@@ -335,11 +339,15 @@ struct RightSidebar: View {
 
 /// The sidebar's leading edge, which a drag moves. A guide line shows where
 /// it would go, and the width applies on release: one resize of the
-/// terminal, and of every agent, not one per frame.
+/// terminal, and of every agent, not one per frame. The drag starts from
+/// the width it is drawn at, which a narrow window can hold below the one
+/// kept, and goes no further than the window lets it be drawn.
 @MainActor
 private struct SideEdge: View {
     @Environment(Store.self) private var store
     @Binding var guide: Double?
+    let drawn: Double
+    let most: Double
 
     var body: some View {
         Color.clear
@@ -349,7 +357,7 @@ private struct SideEdge: View {
                 if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
             }
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { g in guide = SideState.clamp(store.side.width - Double(g.translation.width)) }
+                .onChanged { g in guide = min(SideState.clamp(drawn - Double(g.translation.width)), max(most, SideState.minWidth)) }
                 .onEnded { _ in
                     if let g = guide { store.setSideWidth(g) }
                     guide = nil

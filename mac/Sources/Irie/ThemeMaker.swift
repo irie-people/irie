@@ -276,6 +276,50 @@ struct ThemeMaker: View {
                     ForEach(ColorRole.all.filter { $0.kind == kind }) { role in roleRow(role) }
                 }
             }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("TERMINAL, LIGHT AND DARK")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.secondary)
+                terminalRow("Terminal", key: "ground", \.ground)
+                terminalRow("Terminal text", key: "ink", \.ink)
+                if Theme.luminance(draft.term.ground) > 0.05 {
+                    Text("Agents draw for a dark terminal, so keep its ground dark.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// One of the terminal's two colours, the same in both sets.
+    private func terminalRow(_ title: String, key: String, _ path: WritableKeyPath<TerminalColors, UInt32>) -> some View {
+        let byHand = draft.byHand.contains("terminal.\(key)")
+        let value = Binding<UInt32>(get: { draft.term[keyPath: path] }, set: { v in
+            var t = draft.term
+            t[keyPath: path] = v
+            draft.terminal = t
+            draft.byHand.insert("terminal.\(key)")
+        })
+        return HStack(spacing: 8) {
+            ColorPicker(title, selection: colorBinding(value), supportsOpacity: false)
+                .labelsHidden()
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if byHand {
+                Button {
+                    draft.byHand.remove("terminal.\(key)")
+                    draft.rederive()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .buttonStyle(.borderless)
+                .help("Let the tint set it again")
+            }
+            HexField(value: value)
         }
     }
 
@@ -311,7 +355,7 @@ struct ThemeMaker: View {
     /// Whether each colour drawn on a ground reads on every one: text at
     /// 4.5:1 and the accent at 3:1 (WCAG 2.2), as Irie's own palettes do.
     @ViewBuilder private var contrast: some View {
-        let clashes = ThemeMath.clashes(draft.light, dark: false) + ThemeMath.clashes(draft.dark, dark: true)
+        let clashes = ThemeMath.clashes(draft.light, dark: false) + ThemeMath.clashes(draft.dark, dark: true) + ThemeMath.clashes(draft.term)
         VStack(alignment: .leading, spacing: 8) {
             if clashes.isEmpty {
                 Label("Easy to read: text keeps 4.5:1 and the accent 3:1 on every ground, light and dark.", systemImage: "checkmark.circle.fill")
@@ -335,6 +379,7 @@ struct ThemeMaker: View {
                 Button("Make Them Readable") {
                     draft.light = ThemeMath.fixed(draft.light)
                     draft.dark = ThemeMath.fixed(draft.dark)
+                    if !ThemeMath.clashes(draft.term).isEmpty { draft.terminal = ThemeMath.fixed(draft.term) }
                 }
                 .help("Deepens or lightens each such colour as little as gives it its contrast, keeping its hue")
             }
@@ -734,7 +779,10 @@ struct ThemeDraft: Equatable {
     var picks: Picks
     var light: Swatches
     var dark: Swatches
-    /// The colours set by hand, as "light.accent", which the picks leave be.
+    /// The terminal's own colours, when the theme sets them.
+    var terminal: TerminalColors?
+    /// The colours set by hand, as "light.accent" or "terminal.ink", which
+    /// the picks leave be.
     var byHand: Set<String> = []
 
     struct Picks: Equatable {
@@ -754,6 +802,7 @@ struct ThemeDraft: Equatable {
         picks = Self.picks(of: start)
         light = start.light
         dark = start.dark
+        terminal = start.terminal
     }
 
     init(editing t: CustomTheme) {
@@ -764,14 +813,18 @@ struct ThemeDraft: Equatable {
         picks = Self.picks(of: t.palette)
         light = t.palette.light
         dark = t.palette.dark
+        terminal = t.palette.terminal
     }
 
     var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
-    var palette: Palette { Palette(id: editing ?? "new-theme", name: trimmedName, light: light, dark: dark) }
+    var palette: Palette { Palette(id: editing ?? "new-theme", name: trimmedName, light: light, dark: dark, terminal: terminal) }
 
     /// Whether the colours are still those it started from.
-    var isUnchanged: Bool { light == start.light && dark == start.dark }
+    var isUnchanged: Bool { light == start.light && dark == start.dark && terminal == start.terminal }
+
+    /// The terminal's colours as they show: the theme's, or Irie's.
+    var term: TerminalColors { terminal ?? .standard }
 
     subscript(dark: Bool) -> Swatches {
         get { dark ? self.dark : light }
@@ -783,6 +836,15 @@ struct ThemeDraft: Equatable {
         let from = Self.picks(of: start)
         light = ThemeMath.derive(start.light, dark: false, picks: picks, from: from, keep: kept(dark: false), current: light)
         dark = ThemeMath.derive(start.dark, dark: true, picks: picks, from: from, keep: kept(dark: true), current: dark)
+        let ground = byHand.contains("terminal.ground"), ink = byHand.contains("terminal.ink")
+        if let t = ThemeMath.terminal(start.terminal, picks: picks, from: from) {
+            terminal = TerminalColors(ground: ground ? term.ground : t.ground, ink: ink ? term.ink : t.ink)
+        } else if !ground && !ink {
+            terminal = nil
+        } else {
+            let s = TerminalColors.standard
+            terminal = TerminalColors(ground: ground ? term.ground : s.ground, ink: ink ? term.ink : s.ink)
+        }
     }
 
     private func kept(dark: Bool) -> Set<String> {
@@ -806,13 +868,10 @@ enum ThemeMath {
 
     /// A colour that does not read on a ground.
     struct Clash: Identifiable, Equatable {
-        let dark: Bool
-        let fg: String
-        let bg: String
+        let id: String
+        let title: String
         let ratio: Double
         let want: Double
-        var id: String { "\(dark) \(fg) \(bg)" }
-        var title: String { "\(ThemeMath.role(fg).title) on \(ThemeMath.role(bg).title.lowercased()), \(dark ? "dark" : "light")" }
     }
 
     static func clashes(_ s: Swatches, dark: Bool) -> [Clash] {
@@ -821,10 +880,40 @@ enum ThemeMath {
             let fg = Theme.luminance(s[keyPath: role(key).path])
             for g in grounds {
                 let r = Theme.ratio(fg, Theme.luminance(s[keyPath: role(g).path]))
-                if r < want { out.append(Clash(dark: dark, fg: key, bg: g, ratio: r, want: want)) }
+                if r < want {
+                    out.append(Clash(id: "\(dark) \(key) \(g)", title: "\(role(key).title) on \(role(g).title.lowercased()), \(dark ? "dark" : "light")",
+                                     ratio: r, want: want))
+                }
             }
         }
         return out
+    }
+
+    /// The terminal's text on its ground, which wants 4.5:1 as any text.
+    static func clashes(_ t: TerminalColors) -> [Clash] {
+        let r = Theme.ratio(Theme.luminance(t.ink), Theme.luminance(t.ground))
+        return r < 4.5 ? [Clash(id: "terminal", title: "Terminal text on the terminal", ratio: r, want: 4.5)] : []
+    }
+
+    /// The terminal's text moved lighter on a dark ground, or deeper on a
+    /// light one, as little as gives it a little over 4.5:1.
+    static func fixed(_ t: TerminalColors) -> TerminalColors {
+        let g = Theme.luminance(t.ground)
+        guard Theme.ratio(Theme.luminance(t.ink), g) < 4.5 else { return t }
+        let o = Theme.oklch(t.ink)
+        let l = reach(o.l, g > 0.18 ? 0 : 1) { Theme.ratio(Theme.luminance(Theme.hex(l: $0, c: o.c, h: o.h)), g) >= 4.6 }
+        return TerminalColors(ground: t.ground, ink: Theme.hex(l: l, c: o.c, h: o.h))
+    }
+
+    /// The terminal's colours turned with the tint as the grounds are, at a
+    /// lower chroma still and the same lightness, so it stays dark; nil
+    /// while the tint is the start's and the start sets none.
+    static func terminal(_ start: TerminalColors?, picks: ThemeDraft.Picks, from: ThemeDraft.Picks) -> TerminalColors? {
+        guard picks.tint != from.tint else { return start }
+        let s = start ?? .standard
+        let t = Theme.oklch(picks.tint), t0 = Theme.oklch(from.tint)
+        return TerminalColors(ground: turned(s.ground, pick: t, from: t0, cap: 0.03, unchanged: false),
+                              ink: turned(s.ink, pick: t, from: t0, cap: 0.03, unchanged: false))
     }
 
     /// The set with each colour drawn on the grounds that misses its
@@ -1033,7 +1122,8 @@ struct ThemeSketch: View {
 
     private var terminal: some View {
         let frame = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        let fg = Color(nsColor: Theme.terminalForeground)
+        let term = palette.terminal ?? .standard
+        let fg = c(term.ink)
         return VStack(alignment: .leading, spacing: 4) {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Docs guide")
@@ -1055,7 +1145,7 @@ struct ThemeSketch: View {
             .lineLimit(1)
             .padding(9)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(frame.fill(Color(nsColor: Theme.terminalBackground)))
+            .background(frame.fill(c(term.ground)))
             .overlay(frame.strokeBorder(c(mark(0)), lineWidth: 2))
         }
         .padding(10)

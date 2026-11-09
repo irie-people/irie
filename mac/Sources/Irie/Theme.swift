@@ -14,6 +14,9 @@ struct Palette: Identifiable, Equatable {
     let name: String
     let light: Swatches
     let dark: Swatches
+    /// The terminal's own ground and text, for a theme of yours that sets
+    /// them (Looks.swift); Irie's palettes keep TerminalColors.standard.
+    var terminal: TerminalColors? = nil
 
     static let all: [Palette] = [.rosewater, .terracotta, .lilac, .evergreen]
     static let standard = Palette.rosewater
@@ -23,6 +26,17 @@ struct Palette: Identifiable, Equatable {
     /// The palette with this id: one of Irie's, or one of yours
     /// (Looks.swift); Rosewater for one there is not.
     static func named(_ id: String?) -> Palette { all.first { $0.id == id } ?? custom.first { $0.id == id } ?? standard }
+}
+
+/// The terminal's own colours, its ground and its text, as 0xRRGGBB. The
+/// terminal is dark in every palette and mode, as the agents' own colours
+/// expect.
+struct TerminalColors: Equatable {
+    var ground: UInt32
+    var ink: UInt32
+
+    /// Irie's warm near-black and cream.
+    static let standard = TerminalColors(ground: 0x14110D, ink: 0xEEE5D5)
 }
 
 /// One mode of a palette, as 0xRRGGBB.
@@ -122,6 +136,12 @@ enum Theme {
         didSet {
             colors = Colors(palette)
             paletteRevision &+= 1
+            // The terminals take their colours themselves (TerminalHost,
+            // GhosttyTerminal).
+            // A change can come while the window draws; they take it after.
+            if (oldValue.terminal ?? .standard) != terminalColors {
+                DispatchQueue.main.async { NotificationCenter.default.post(name: .irieTerminalColors, object: nil) }
+            }
         }
     }
 
@@ -176,8 +196,10 @@ enum Theme {
     static var deepGreen: Color { accent }
     static var sea: Color { waves }
 
-    static let terminalBackground = NSColor(hex: 0x14110D)
-    static let terminalForeground = NSColor(hex: 0xEEE5D5)
+    /// The terminal's ground and text: the palette's own, or Irie's.
+    static var terminalColors: TerminalColors { palette.terminal ?? .standard }
+    static var terminalBackground: NSColor { NSColor(hex: terminalColors.ground) }
+    static var terminalForeground: NSColor { NSColor(hex: terminalColors.ink) }
     /// A selection in the terminal: the Mac's own highlight colour, as for
     /// selected text anywhere, in its dark form, since the terminal's ground
     /// is always dark. The text on it keeps its own colours.
@@ -557,4 +579,9 @@ struct SunMark: View {
         }
         .accessibilityHidden(true)
     }
+}
+
+extension Notification.Name {
+    /// The palette in use gave the terminal other colours.
+    static let irieTerminalColors = Notification.Name("irieTerminalColors")
 }
