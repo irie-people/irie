@@ -142,7 +142,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 			}
 		}
 	}
-	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow}
+	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow, Deny: s.Deny}
 	// Tips as objects, with an id and a cooldown, need 2.1.247.
 	if AtLeast(s.Probe.Version, TipsVersion) {
 		x.Tips = s.Tips
@@ -171,6 +171,18 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 	// file of their own beside the user's own servers, which still load. A
 	// profile that passes --mcp-config itself keeps to its own. The flag
 	// takes several files, so a flag always follows it, never the task.
+	// An anonymous research session loads Irie's servers and no other,
+	// or doesn't start (DESIGN §4.16).
+	if s.StrictMCP {
+		switch {
+		case !s.Probe.Flags["--mcp-config"] || !s.Probe.Flags["--strict-mcp-config"]:
+			return nil, nil, nil, errors.New("claude: anonymous research needs a Claude Code whose --help lists --mcp-config and --strict-mcp-config")
+		case hasFlag(p.Args, "--mcp-config") || hasFlag(p.Args, "--strict-mcp-config"):
+			return nil, nil, nil, errors.New("claude: anonymous research can't run on a profile that passes its own --mcp-config")
+		case len(s.MCP) == 0:
+			return nil, nil, nil, errors.New("claude: anonymous research needs Irie's own MCP servers")
+		}
+	}
 	var mcp []byte
 	if len(s.MCP) > 0 && s.Probe.Flags["--mcp-config"] && !hasFlag(p.Args, "--mcp-config") {
 		b, err := json.MarshalIndent(map[string]any{"mcpServers": s.MCP}, "", "  ")
@@ -179,6 +191,9 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		}
 		mcp = append(b, '\n')
 		argv = append(argv, "--mcp-config", filepath.Join(s.Dir, harness.MCPFile))
+		if s.StrictMCP {
+			argv = append(argv, "--strict-mcp-config")
+		}
 	}
 	// In a tutor mode, the ask for diagrams goes after Claude Code's own
 	// instructions and its output style, taking nothing away.
@@ -312,10 +327,12 @@ type Extra struct {
 	Tips   []learn.Tip // Irie's tips under the spinner, with Claude Code's own
 	Doors  []arch.Door // the doors of the session's arch agents (DESIGN §4.11)
 	Allow  []string    // what the agent runs without asking, as Claude Code's permission rules
+	Deny   []string    // what the agent is refused, as Claude Code's permission rules
 }
 
 type permissions struct {
-	Allow []string `json:"allow"`
+	Allow []string `json:"allow,omitempty"`
+	Deny  []string `json:"deny,omitempty"`
 }
 
 // LocalAllowed are the commands a local model's session runs without
@@ -379,8 +396,8 @@ func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byt
 		Tips         *spinnerTips              `json:"spinnerTipsOverride,omitempty"`
 		Permissions  *permissions              `json:"permissions,omitempty"`
 	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style}
-	if len(x.Allow) > 0 {
-		file.Permissions = &permissions{Allow: x.Allow}
+	if len(x.Allow) > 0 || len(x.Deny) > 0 {
+		file.Permissions = &permissions{Allow: x.Allow, Deny: x.Deny}
 	}
 	if x.Teams {
 		file.TeammateMode = "tmux"

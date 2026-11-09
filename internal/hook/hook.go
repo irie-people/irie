@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"time"
@@ -86,6 +87,14 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 		return 0
 	}
 
+	// An anonymous research session's shell commands leave through its
+	// compartment's exit: Claude Code runs CLAUDE_ENV_FILE before each
+	// Bash command, and a SessionStart hook may add to it (DESIGN §4.16).
+	// The shim does it itself, so it holds while the core is down.
+	if hookEvent == "SessionStart" {
+		anonEnv(getenv, session)
+	}
+
 	h := claude.Harness{}
 	wait := replyTimeout
 	if hookEvent == "Stop" {
@@ -100,6 +109,26 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	e := event.Event{Vendor: &event.Vendor{HookEvent: hookEvent}}
 	stdout.Write(h.Respond(e, harness.HookReply{Context: r.Context, Deny: r.Deny, Unfinished: r.Unfinished}))
 	return 0
+}
+
+// anonEnv adds the session's compartment's proxy variables, when it has a
+// compartment, to Claude Code's CLAUDE_ENV_FILE.
+func anonEnv(getenv func(string) string, session string) {
+	dst := getenv("CLAUDE_ENV_FILE")
+	p, err := paths.New(getenv, os.Getuid())
+	if dst == "" || err != nil {
+		return
+	}
+	b, err := os.ReadFile(filepath.Join(p.Session(session), harness.AnonEnvFile))
+	if err != nil || len(b) == 0 {
+		return
+	}
+	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.Write(b)
 }
 
 // teamOf is a session id, as IRIE_TEAM_OF names one.

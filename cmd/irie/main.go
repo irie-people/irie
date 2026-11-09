@@ -51,6 +51,10 @@ const usage = `usage: irie [command]
                           share the certificate authority (irie remote for help)
   irie dms <command>      the dead man's switch guide's helpers: its checks,
                           check-in and calendar (irie dms for help)
+  irie setup anon [--yes] get anonymous research ready: install Tor and
+                          SearXNG, and turn +anon and +tor tasks on
+  irie anon [<command>]   anonymous research's compartments and exits: check,
+                          run a program through one, forget (irie anon help)
   irie peer <command>     your other machines' Irie, shown in this list and
                           started on with ^NAME (irie peer for help)
   irie version            print the version
@@ -73,8 +77,11 @@ Used by Irie itself:
                [--idle DUR] [--proxy socks5://HOST:PORT] [--search URL] [--check URL]
                             the browser connector: an MCP server that drives
                             Mullvad Browser for an agent; --check opens a page
+  irie anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR]
+                            an anonymous research session's tools: search,
+                            fetch and the exit's check through its compartment
   irie runtime -- COMMAND   Irie's own Ollama server, whose model runners stop
-                            with it
+                            with it, and Irie's own Tor and SearXNG
   irie placeholder          what the slot shows when no session is shown
   irie team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS
                             the tmux an agent with teams runs, which takes
@@ -133,6 +140,11 @@ func run(args []string) int {
 		err = remoteCmd(args)
 	case "dms":
 		err = dmsCmd(args)
+	case "anon":
+		if len(args) > 0 && args[0] == "mcp" {
+			return anonServe(args[1:])
+		}
+		err = anonCmd(args)
 	case "peer":
 		err = peerCmd(args)
 	case "lid":

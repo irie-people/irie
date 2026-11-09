@@ -110,6 +110,8 @@ type (
 	ResultArgs       = ipc.ResultArgs
 	ResultResult     = ipc.ResultResult
 	ToolArgs         = ipc.ToolArgs
+	AnonArgs         = ipc.AnonArgs
+	AnonResult       = ipc.AnonResult
 	VPNArgs          = ipc.VPNArgs
 	VPNResult        = ipc.VPNResult
 	VPN              = ipc.VPN
@@ -222,6 +224,7 @@ const (
 	OpRaphael          = ipc.OpRaphael
 	OpReady            = ipc.OpReady
 	OpVPN              = ipc.OpVPN
+	OpAnon             = ipc.OpAnon
 	OpLearn            = ipc.OpLearn
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
@@ -264,6 +267,7 @@ const (
 	ChoiceSettle       = ipc.ChoiceSettle
 	ChoiceSkip         = ipc.ChoiceSkip
 	ChoiceCancel       = ipc.ChoiceCancel
+	AnonNew            = ipc.AnonNew
 	Good               = ipc.Good
 	Bad                = ipc.Bad
 	ToolSetup          = ipc.ToolSetup

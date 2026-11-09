@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/anon"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
@@ -264,6 +265,36 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	if name == "" {
 		name, named, base = title(a.Task), false, slug(a.Task)
 	}
+	// Anonymous research takes its compartment first, and work that an
+	// anonymous session hands on, or a failover carries on, stays in its
+	// compartment (DESIGN §4.16).
+	if a.Anon == "" {
+		c.mu.Lock()
+		for _, from := range []string{a.Parent, a.Continues} {
+			if p := c.sessions[from]; from != "" && p != nil && p.anon != "" {
+				a.Anon = p.anon
+			}
+		}
+		c.mu.Unlock()
+	}
+	var comp *anon.Compartment
+	if a.Anon != "" {
+		an, err := c.anonName(a.Anon, base)
+		if err != nil {
+			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
+		}
+		got, notes, err := c.prepareAnon(an, a.AnonRoute)
+		if err != nil {
+			c.log.Warn("spawn refused", "anon", an, "err", err)
+			return ipc.Session{}, err
+		}
+		comp = &got
+		probe.Warnings = append(probe.Warnings, notes...)
+		if extra == nil {
+			extra = map[string]any{}
+		}
+		extra["anon"] = got.Name
+	}
 	pl, err := c.place(a, base)
 	if err != nil {
 		c.log.Warn("spawn failed", "err", err)
@@ -275,7 +306,7 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		class, _ := extra["class"].(string)
 		c.escalate(hash, class, profileName, time.Now())
 	}
-	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor})
+	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor, anon: comp})
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
 	}
@@ -309,12 +340,13 @@ type job struct {
 	run     config.Profile // the profile as it runs: routed, its local model checked
 	h       harness.Harness
 	probe   harness.Probe
-	task    string         // the task; empty when the job resumes
-	next    string         // a resumed conversation's next prompt, as a fork's task (ctx.go)
-	resume  string         // the vendor id of the conversation to carry on
-	data    map[string]any // more data for spawn.requested
-	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
-	tutor   string         // its tutor mode, explain or teach; "" when off (learn.tutor)
+	task    string            // the task; empty when the job resumes
+	next    string            // a resumed conversation's next prompt, as a fork's task (ctx.go)
+	resume  string            // the vendor id of the conversation to carry on
+	data    map[string]any    // more data for spawn.requested
+	reopen  *closedRecord     // the closed session that comes back, with its id and place in the list
+	tutor   string            // its tutor mode, explain or teach; "" when off (learn.tutor)
+	anon    *anon.Compartment // the compartment it researches in, anonymously; nil when it doesn't (anon.go)
 }
 
 // launch writes the session's files, creates its window and records the
@@ -376,7 +408,7 @@ func (c *Core) launch(j job) (*session, error) {
 	// Agent teams need the session's anchor on the team server first; a
 	// session whose anchor cannot be made starts without them.
 	var anchor teamAnchor
-	if c.teams(h.ID()) {
+	if c.teams(h.ID()) && j.anon == nil {
 		a, err := c.anchor(id)
 		if err != nil {
 			c.log.Warn("teams", "session", id, "err", err)
@@ -388,8 +420,13 @@ func (c *Core) launch(j job) (*session, error) {
 	if j.probe.Flags["--plugin-dir"] {
 		s.PluginDir = c.skillsFolder(profile, x)
 	}
+	// An anonymous session's servers and shut paths (DESIGN §4.16); else
 	// Irie's browser, for a harness that takes MCP servers (DESIGN §4.15).
-	if j.probe.Flags["--mcp-config"] {
+	if j.anon != nil {
+		if err := c.anonLaunch(&s, x, *j.anon); err != nil {
+			return nil, err
+		}
+	} else if j.probe.Flags["--mcp-config"] {
 		if srv, warn := c.browserServer(id); warn != "" {
 			x.warnings = append(x.warnings, warn)
 		} else if srv != nil {
@@ -436,7 +473,7 @@ func (c *Core) launch(j job) (*session, error) {
 	if err := host.WriteSpec(spec, host.Spec{
 		Session: id, Profile: j.profile, Harness: h.ID(), Argv: argv, Env: env, Unset: unset, Path: path, Cwd: x.cwd, Warnings: x.warnings,
 		Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied, Paste: x.paste,
-		Model: x.model, Local: x.local, Tutor: x.tutor,
+		Model: x.model, Local: x.local, Tutor: x.tutor, Anon: x.anon,
 	}); err != nil {
 		return nil, err
 	}

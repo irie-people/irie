@@ -92,6 +92,9 @@ const (
 	// (docs/proposals/extensions.md §4). A change from inside an agent is
 	// refused.
 	OpVPN = "vpn"
+	// OpAnon says how anonymous research stands, and starts Irie's own
+	// Tor and SearXNG (DESIGN §4.16).
+	OpAnon = "anon"
 	// OpLearn gives what the Help menu shows: the learning resources, the
 	// user's own links and the glossary (docs/proposals/learning.md).
 	OpLearn = "learn"
@@ -186,6 +189,7 @@ type Session struct {
 
 	// What the session runs on and costs (DESIGN §6.3).
 	Tutor   string   `json:"tutor,omitempty"`    // its tutor mode, explain or teach; empty when off (learn.tutor)
+	Anon    string   `json:"anon,omitempty"`     // the compartment it researches in, anonymously (DESIGN §4.16)
 	Model   string   `json:"model,omitempty"`    // the model the agent runs
 	Local   bool     `json:"local,omitempty"`    // a local model, which costs memory rather than tokens
 	CostUSD *float64 `json:"cost_usd,omitempty"` // what it has cost at list price, from its status line
@@ -844,7 +848,17 @@ type SpawnArgs struct {
 	// explain or teach; "" takes learn.tutor. A delegated subtask runs off
 	// unless it says otherwise (docs/proposals/learning.md).
 	Tutor string `json:"tutor,omitempty"`
+	// Anon runs the task as anonymous research (DESIGN §4.16), in the
+	// compartment of that name, which tasks share, or with AnonNew in one
+	// of its own. AnonRoute is the route it leaves by, mullvad or tor; ""
+	// takes the compartment's own, or anon.route for a new one. A subtask
+	// that an anonymous session hands on stays in its compartment.
+	Anon      string `json:"anon,omitempty"`
+	AnonRoute string `json:"anon_route,omitempty"`
 }
+
+// AnonNew is SpawnArgs.Anon for a compartment of the task's own.
+const AnonNew = "+"
 
 type SpawnResult struct {
 	Session Session `json:"session"`
@@ -988,6 +1002,20 @@ const (
 	ToolReady  = "ready"
 	ToolSwitch = "switch"
 )
+
+// AnonArgs ask the anon op for the state of anonymous research (DESIGN
+// §4.16); with Up, it first starts Irie's own Tor and SearXNG as the
+// compartments need them.
+type AnonArgs struct {
+	Up bool `json:"up,omitempty"`
+}
+
+// AnonResult is the anon op's answer.
+type AnonResult struct {
+	Search   string   `json:"search,omitempty"`   // the address of Irie's SearXNG, while it runs
+	Tor      bool     `json:"tor,omitempty"`      // Irie's Tor runs
+	Problems []string `json:"problems,omitempty"` // what keeps a part from running, in words
+}
 
 // VPNArgs ask the vpn op for the VPN's state, or for a change.
 type VPNArgs struct {

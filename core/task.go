@@ -11,8 +11,9 @@ import (
 // first line is read for words: @name or @path runs the task in a new
 // worktree of that git repo, or in place in a directory git does not know;
 // @name! runs it in the repo's own checkout; +profile picks the profile;
-// +explain or +teach picks a tutor mode (docs/proposals/learning.md). The
-// rest of the input is the task, verbatim. home is what ~ means.
+// +explain or +teach picks a tutor mode (docs/proposals/learning.md); +anon
+// or +tor runs it as anonymous research (DESIGN §4.16). The rest of the
+// input is the task, verbatim. home is what ~ means.
 func ParseTask(input, home string) (SpawnArgs, error) {
 	var a SpawnArgs
 	first, rest, multi := strings.Cut(input, "\n")
@@ -78,6 +79,12 @@ const (
 	TutorTeach   = "teach"
 )
 
+// The anonymous research words: +anon, on anon.route, and +tor, on Tor.
+const (
+	AnonWord = "anon"
+	TorWord  = "tor"
+)
+
 // applyToken applies one @ or + word to a. Paths are made absolute here; names
 // are the core's to resolve.
 func applyToken(a *SpawnArgs, w, home string) error {
@@ -90,6 +97,24 @@ func applyToken(a *SpawnArgs, w, home string) error {
 				return errors.New("one of +explain and +teach per task")
 			}
 			a.Tutor = v
+			return nil
+		}
+		// +anon and +tor run the task as anonymous research, in a
+		// compartment of its own or, as +anon:name, the named one
+		// (DESIGN §4.16).
+		if word, name, _ := strings.Cut(v, ":"); word == AnonWord || word == TorWord {
+			if a.Anon != "" {
+				return errors.New("one of +anon and +tor per task")
+			}
+			a.Anon = name
+			if !strings.Contains(v, ":") {
+				a.Anon = AnonNew
+			} else if name == "" {
+				return fmt.Errorf("+%s: needs a compartment's name, such as +%s:acme", word, word)
+			}
+			if word == TorWord {
+				a.AnonRoute = "tor"
+			}
 			return nil
 		}
 		switch {

@@ -60,7 +60,7 @@ func (b *Browser) tools() []tool {
 				"new_tab": newTabProp,
 			}, "url"),
 			Annotations: readOnly,
-			call:        b.open,
+			Call:        b.open,
 		},
 		{
 			Name:  "search",
@@ -73,7 +73,7 @@ func (b *Browser) tools() []tool {
 				"new_tab": newTabProp,
 			}, "query"),
 			Annotations: readOnly,
-			call:        b.search,
+			Call:        b.search,
 		},
 		{
 			Name:        "read",
@@ -86,7 +86,7 @@ func (b *Browser) tools() []tool {
 				"whole":  prop("boolean", "Read all of the page, its menus and sidebars too, not only its main part."),
 			}),
 			Annotations: readOnly,
-			call:        b.readTool,
+			Call:        b.readTool,
 		},
 		{
 			Name:        "links",
@@ -97,7 +97,7 @@ func (b *Browser) tools() []tool {
 				"filter": prop("string", "Only links whose text or address holds these words."),
 			}),
 			Annotations: readOnly,
-			call:        b.links,
+			Call:        b.links,
 		},
 		{
 			Name:  "click",
@@ -111,7 +111,7 @@ func (b *Browser) tools() []tool {
 				"selector": prop("string", "A CSS selector."),
 			}),
 			Annotations: acts,
-			call:        b.click,
+			Call:        b.click,
 		},
 		{
 			Name:  "type",
@@ -125,7 +125,7 @@ func (b *Browser) tools() []tool {
 				"submit": prop("boolean", "Press Enter after typing, which sends most forms."),
 			}, "text"),
 			Annotations: acts,
-			call:        b.typeTool,
+			Call:        b.typeTool,
 		},
 		{
 			Name:        "screenshot",
@@ -136,7 +136,7 @@ func (b *Browser) tools() []tool {
 				"full": prop("boolean", "The whole page, not only the part in view."),
 			}),
 			Annotations: readOnly,
-			call:        b.screenshot,
+			Call:        b.screenshot,
 		},
 		{
 			Name:        "back",
@@ -144,7 +144,7 @@ func (b *Browser) tools() []tool {
 			Description: "Go back to the page before in a tab of the browser, and return its text.",
 			InputSchema: obj(map[string]any{"tab": tabProp}),
 			Annotations: readOnly,
-			call:        b.back,
+			Call:        b.back,
 		},
 		{
 			Name:  "eval",
@@ -156,7 +156,7 @@ func (b *Browser) tools() []tool {
 				"script": prop("string", "A JavaScript expression, such as [...document.querySelectorAll('td')].map(td => td.innerText)."),
 			}, "script"),
 			Annotations: acts,
-			call:        b.eval,
+			Call:        b.eval,
 		},
 		{
 			Name:        "tabs",
@@ -166,7 +166,7 @@ func (b *Browser) tools() []tool {
 				"close": prop("integer", "Close this tab."),
 			}),
 			Annotations: acts,
-			call:        b.tabsTool,
+			Call:        b.tabsTool,
 		},
 	}
 }

@@ -41,6 +41,7 @@ type Spec struct {
 	Model    string            `json:"model,omitempty"`  // the model the agent runs
 	Local    bool              `json:"local,omitempty"`  // a model of a local runtime
 	Tutor    string            `json:"tutor,omitempty"`  // its tutor mode, explain or teach (learn.tutor)
+	Anon     string            `json:"anon,omitempty"`   // the compartment it researches in, anonymously (DESIGN §4.16)
 }
 
 // Exit is exit.json, written when the agent exits.

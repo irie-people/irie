@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/irie-people/irie/internal/mcp"
 )
 
 // Options configure the connector.
@@ -89,8 +91,8 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, o Options) error {
 	b := New(o)
 	defer b.Close()
 	go b.closeWhenIdle(ctx)
-	s := &server{name: "irie-browser", version: o.Version, instructions: b.instructions(), tools: b.tools(), out: out}
-	return s.serve(ctx, in)
+	s := mcp.Server{Name: ServerName, Version: o.Version, Instructions: b.instructions(), Tools: b.tools()}
+	return s.Serve(ctx, in, out)
 }
 
 // Close closes the browser, if it runs, and removes its profile.

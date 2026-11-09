@@ -35,7 +35,7 @@ func TestRealBrowser(t *testing.T) {
 	use := func(name string, args map[string]any) toolResult {
 		t.Helper()
 		raw, _ := json.Marshal(args)
-		r := tools[slicesIndex(tools, name)].call(ctx, raw)
+		r := tools[slicesIndex(tools, name)].Call(ctx, raw)
 		t.Logf("%s %s:\n%s", name, raw, r.Content[len(r.Content)-1].Text)
 		if r.IsError {
 			t.Fatalf("%s failed", name)

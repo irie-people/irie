@@ -123,9 +123,13 @@ func (c *Core) addable(a ipc.SpawnArgs, now time.Time) (*lastJot, string, bool) 
 
 // samePlace reports whether jot b asks for the place and agent that jot a
 // did. A jot that names a place, an agent, a model or a name of its own is
-// a task of its own.
+// a task of its own, and so is one that asks for anonymous research the
+// jot before did not, or in another compartment. One that names none goes
+// on in a's: more for an anonymous jot stays in its compartment (DESIGN
+// §4.16).
 func samePlace(a, b ipc.SpawnArgs) bool {
-	return a.Cwd == b.Cwd && a.Repo == b.Repo && a.InPlace == b.InPlace && a.Profile == b.Profile && a.Model == b.Model && b.Name == ""
+	return a.Cwd == b.Cwd && a.Repo == b.Repo && a.InPlace == b.InPlace && a.Profile == b.Profile && a.Model == b.Model && b.Name == "" &&
+		(b.Anon == "" || b.Anon == a.Anon && b.AnonRoute == a.AnonRoute && b.Anon != ipc.AnonNew)
 }
 
 // queueFollowUp adds f to what waits for session x's agent. The caller

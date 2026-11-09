@@ -96,6 +96,13 @@ type Spawn struct {
 	// browser (browser.connector, DESIGN §4.15), which a harness whose probe
 	// offers --mcp-config passes on.
 	MCP map[string]MCPServer
+	// StrictMCP loads only MCP, none of the user's own servers, and Deny
+	// are tools the agent is refused, as Claude Code's permission rules:
+	// an anonymous research session's shut paths (DESIGN §4.16). A
+	// harness that cannot take them fails the launch rather than start
+	// without them.
+	StrictMCP bool
+	Deny      []string
 
 	// Arch is what Irie's arch agents bring to the session (DESIGN §4.11).
 	Arch Arch
@@ -121,6 +128,12 @@ type MCPServer struct {
 // MCPFile is the file in the session dir that holds a session's MCP
 // servers, as {"mcpServers": {name: server}}.
 const MCPFile = "mcp.json"
+
+// AnonEnvFile is the file in an anonymous research session's dir that holds
+// its compartment's proxy variables as a shell's export lines, which `irie
+// hook` adds to Claude Code's CLAUDE_ENV_FILE at SessionStart, so that
+// Claude Code runs them before each Bash command (DESIGN §4.16).
+const AnonEnvFile = "anon.env"
 
 // TutorNote is what goes before the task of an agent whose harness has no
 // output styles, for a tutor mode: the instruction alone.

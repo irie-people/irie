@@ -28,3 +28,31 @@ func TestBrowserSection(t *testing.T) {
 		}
 	}
 }
+
+func TestAnonSection(t *testing.T) {
+	d := Default().Anon
+	if d.On || d.Route != "mullvad" || !d.Owned || !d.Search || d.SearchPort != 8888 || d.SearchRoute != "mullvad" || !d.Browser || d.TorPort != 9150 || d.Countries == nil {
+		t.Errorf("default anon = %+v", d)
+	}
+	c, err := Load(writeFile(t, "[anon]\non = true\nroute = \"tor\"\ncountries = [\"se\", \"ch\"]\nowned = false\n"))
+	if err != nil || !c.Anon.On || c.Anon.Route != "tor" || len(c.Anon.Countries) != 2 || c.Anon.Owned || c.Anon.SearchPort != 8888 {
+		t.Errorf("anon = %+v, %v", c.Anon, err)
+	}
+	if _, err := Load(writeFile(t, "[profiles.tor]\ncommand = \"claude\"\n")); err == nil || !strings.Contains(err.Error(), "anonymous research's word") {
+		t.Errorf("a profile named tor: %v", err)
+	}
+	for body, key := range map[string]string{
+		"route = \"vpn\"\n":         "anon.route",
+		"search_route = \"none\"\n": "anon.search_route",
+		"countries = [\"SE\"]\n":    "anon.countries[0]",
+		"countries = [\"swe\"]\n":   "anon.countries[0]",
+		"search_port = 80\n":        "anon.search_port",
+		"tor_port = 70000\n":        "anon.tor_port",
+		"search_port = 9160\n":      "Tor compartments'",
+		"tor = \"tor\"\n":           "anon.tor",
+	} {
+		if _, err := Load(writeFile(t, "[anon]\n"+body)); err == nil || !strings.Contains(err.Error(), key) {
+			t.Errorf("[anon] %s: %v, want an error about %s", strings.TrimSpace(body), err, key)
+		}
+	}
+}

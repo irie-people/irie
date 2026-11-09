@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irie-people/irie/internal/anon"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ctxgit"
 	"github.com/irie-people/irie/internal/event"
@@ -543,6 +544,16 @@ func (c *Core) fork(a ipc.ForkArgs) (ipc.ForkResult, error) {
 		probe = p.Probe(profile, c.agentEnv(profile))
 	}
 	probe.Warnings = append(warnings, probe.Warnings...)
+	// A fork of an anonymous session stays in its compartment (DESIGN
+	// §4.16).
+	var comp *anon.Compartment
+	if src.anon != "" {
+		got, notes, err := c.prepareAnon(src.anon, "")
+		if err != nil {
+			return ipc.ForkResult{}, err
+		}
+		comp, probe.Warnings = &got, append(probe.Warnings, notes...)
+	}
 
 	name := cleanText(a.Name, maxName)
 	if name == "" {
@@ -575,7 +586,7 @@ func (c *Core) fork(a ipc.ForkArgs) (ipc.ForkResult, error) {
 	c.mu.Lock()
 	pl.name, pl.named = unique(name, c.names(nil)), true
 	nx, err := c.launch(job{
-		place: pl, profile: profileName, run: profile, h: h, probe: probe, next: task, resume: vendor,
+		place: pl, profile: profileName, run: profile, h: h, probe: probe, next: task, resume: vendor, anon: comp,
 		data: map[string]any{"resume": vendor, "kind": "fork", "fork_of": src.id, "fork_at": commit, "fork_turn": at.Turn},
 	})
 	if err == nil {

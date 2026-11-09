@@ -24,6 +24,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/irie-people/irie/internal/anon"
 	"github.com/irie-people/irie/internal/arch"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/route"
@@ -54,6 +55,7 @@ type Config struct {
 	Learn    Learn              `toml:"learn"`
 	VPN      VPN                `toml:"vpn"`
 	Browser  Browser            `toml:"browser"`
+	Anon     Anon               `toml:"anon"`
 }
 
 // Lid is a MacBook's lid (DESIGN §4.12). macOS sleeps a MacBook the
@@ -104,6 +106,23 @@ type Browser struct {
 
 // BrowserConnectors are the values of browser.connector.
 var BrowserConnectors = []string{"on", "off"}
+
+// Anon is anonymous research (DESIGN §4.16): a task typed with +anon or
+// +tor runs in a compartment, a line of inquiry with an exit of its own
+// that nothing else of the user's uses, and gets search and fetch through
+// it, while the paths around it are shut.
+type Anon struct {
+	On          bool     `toml:"on"`           // take +anon and +tor tasks; irie setup anon turns it on
+	Route       string   `toml:"route"`        // mullvad | tor: how a +anon task's new compartment leaves
+	Countries   []string `toml:"countries"`    // Mullvad exits only in these countries, by code such as "se"; [] = any
+	Owned       bool     `toml:"owned"`        // Mullvad exits only on servers Mullvad owns, not rents
+	Search      bool     `toml:"search"`       // run Irie's SearXNG for the search tool, once installed
+	SearchPort  int      `toml:"search_port"`  // SearXNG's port on 127.0.0.1
+	SearchRoute string   `toml:"search_route"` // mullvad | tor: where SearXNG asks the engines from
+	Browser     bool     `toml:"browser"`      // give anonymous tasks Irie's browser through their exit, when Mullvad Browser is installed
+	Tor         string   `toml:"tor"`          // the tor executable; "" = PATH, then Homebrew's and Linux's places
+	TorPort     int      `toml:"tor_port"`     // the first of the Tor compartments' SocksPorts on 127.0.0.1
+}
 
 // Place is where a task typed here starts when its words do not say
 // (docs/proposals/multi-host.md §4.3): ^name always picks the machine.
@@ -718,6 +737,7 @@ func Default() Config {
 		Place:   Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
 		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 		Browser: Browser{Connector: "off", Headless: true, Idle: browser.DefaultIdle, Search: browser.DefaultSearch},
+		Anon:    Anon{Route: anon.Mullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: anon.Mullvad, Browser: true, TorPort: 9150},
 	}
 }
 
@@ -827,7 +847,8 @@ func Parse(data []byte, path string) (Config, error) {
 		Learn    *Learn                    `toml:"learn"`
 		VPN      *VPN                      `toml:"vpn"`
 		Browser  *Browser                  `toml:"browser"`
-	}{Browser: &c.Browser, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+		Anon     *Anon                     `toml:"anon"`
+	}{Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1012,6 +1033,11 @@ func (c Config) Validate() error {
 	for _, m := range []string{TutorExplain, TutorTeach} {
 		if _, ok := c.Profiles[m]; ok {
 			bad("profiles.%s: +%s is tutor mode's word; give the profile another name", m, m)
+		}
+	}
+	for _, m := range []string{"anon", "tor"} {
+		if _, ok := c.Profiles[m]; ok {
+			bad("profiles.%s: +%s is anonymous research's word (§4.16); give the profile another name", m, m)
 		}
 	}
 	for _, title := range slices.Sorted(maps.Keys(c.Learn.Links)) {
@@ -1333,6 +1359,28 @@ func (c Config) Validate() error {
 	}
 	if u, err := url.Parse(br.Search); br.Search != "" && (err != nil || (u.Scheme != "https" && u.Scheme != "http") || !strings.Contains(br.Search, "%s")) {
 		bad("browser.search = %q: must be an http or https address with %%s where the query goes", br.Search)
+	}
+	an := c.Anon
+	for k, v := range map[string]string{"anon.route": an.Route, "anon.search_route": an.SearchRoute} {
+		if !slices.Contains(anon.Routes, v) {
+			bad("%s = %q: must be mullvad or tor", k, v)
+		}
+	}
+	for i, cc := range an.Countries {
+		if len(cc) != 2 || strings.ToLower(cc) != cc || strings.Trim(cc, "abcdefghijklmnopqrstuvwxyz") != "" {
+			bad("anon.countries[%d] = %q: must be a country's two-letter code in lower case, as Mullvad's relays have, such as \"se\"", i, cc)
+		}
+	}
+	for k, v := range map[string]int{"anon.search_port": an.SearchPort, "anon.tor_port": an.TorPort} {
+		if v < 1024 || v > 65000 {
+			bad("%s = %d: must be a port from 1024 to 65000", k, v)
+		}
+	}
+	if an.SearchPort >= an.TorPort && an.SearchPort < an.TorPort+100 {
+		bad("anon.search_port = %d: the hundred ports from anon.tor_port = %d are the Tor compartments'", an.SearchPort, an.TorPort)
+	}
+	if an.Tor != "" && !pathLike(an.Tor) {
+		bad("anon.tor = %q: must be an absolute or ~ path, or empty for the usual places", an.Tor)
 	}
 	return errors.Join(errs...)
 }

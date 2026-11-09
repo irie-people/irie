@@ -592,6 +592,46 @@ func TestResumeKeepsMikael(t *testing.T) {
 	}
 }
 
+// TestAnonymousResearchShutsThePathsRoundIt: an anonymous research
+// session loads Irie's servers and no other, and is refused WebFetch and
+// WebSearch, or doesn't start (DESIGN §4.16).
+func TestAnonymousResearchShutsThePathsRoundIt(t *testing.T) {
+	s := spawnOf("x")
+	s.MCP = map[string]harness.MCPServer{"irie-anon": {Command: irieBin, Args: []string{"anon", "mcp"}}}
+	s.StrictMCP, s.Deny = true, []string{"WebFetch", "WebSearch"}
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--mcp-config": true, "--strict-mcp-config": true}}
+	argv, _, files := launchSpawn(t, defaultProfile(), s)
+	i := slices.Index(argv, "--mcp-config")
+	if i < 0 || argv[i+2] != "--strict-mcp-config" {
+		t.Fatalf("argv = %q, want --strict-mcp-config after --mcp-config's file", argv)
+	}
+	var settings struct {
+		Permissions struct {
+			Allow []string `json:"allow"`
+			Deny  []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal(files[SettingsFile], &settings); err != nil || !slices.Equal(settings.Permissions.Deny, []string{"WebFetch", "WebSearch"}) || settings.Permissions.Allow != nil {
+		t.Fatalf("settings = %s, %v", files[SettingsFile], err)
+	}
+	if resumed, _, _, err := (Harness{}).Resume(defaultProfile(), s); err != nil || !slices.Contains(resumed, "--strict-mcp-config") {
+		t.Errorf("resume argv = %q, %v: a resumed session keeps its shut paths", resumed, err)
+	}
+	for name, change := range map[string]func(*config.Profile, *harness.Spawn){
+		"no --strict-mcp-config": func(p *config.Profile, s *harness.Spawn) {
+			s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--mcp-config": true}}
+		},
+		"a profile's own servers": func(p *config.Profile, s *harness.Spawn) { p.Args = []string{"--mcp-config", "/home/alice/mine.json"} },
+		"no servers":              func(p *config.Profile, s *harness.Spawn) { s.MCP = nil },
+	} {
+		p, s2 := defaultProfile(), s
+		change(&p, &s2)
+		if _, _, _, err := (Harness{}).Launch(p, s2); err == nil || !strings.Contains(err.Error(), "anonymous research") {
+			t.Errorf("%s: %v, want the launch refused", name, err)
+		}
+	}
+}
+
 func TestMCPServersGoInAFileOfTheSessions(t *testing.T) {
 	s := spawnOf("x")
 	s.MCP = map[string]harness.MCPServer{"irie-browser": {Command: irieBin, Args: []string{"browser", "--headless=true"}}}

@@ -34,9 +34,10 @@ var optional = []string{"--name", "--plugin-dir", "--agents", "--agent"}
 
 // quietly are optional flags whose lack needs no warning on every spawn, as
 // they serve only some sessions: --append-system-prompt carries tutor mode's
-// ask for diagrams (learn.visual), and --mcp-config Irie's browser
-// (browser.connector, DESIGN §4.15).
-var quietly = []string{"--append-system-prompt", "--mcp-config"}
+// ask for diagrams (learn.visual), --mcp-config Irie's browser
+// (browser.connector, DESIGN §4.15), and --strict-mcp-config an anonymous
+// research session's servers alone (DESIGN §4.16).
+var quietly = []string{"--append-system-prompt", "--mcp-config", "--strict-mcp-config"}
 
 // probeTimeout bounds each run of the CLI, and pluginTimeout the run that
 // lists its plugins, which reads every plugin's manifest.

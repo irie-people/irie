@@ -174,6 +174,7 @@ type session struct {
 	model    string                 // the model the agent runs, as its profile said
 	local    bool                   // a model of a local runtime
 	tutor    string                 // its tutor mode, explain or teach; "" when off (learn.tutor)
+	anon     string                 // the compartment it researches in, anonymously; "" when it doesn't (anon.go)
 	usage    statusline.Usage       // its last status line update
 	memory   int64                  // what its processes take, last measured
 	out      *outcome               // its route and how it went, shared with Core.outcomes
@@ -199,7 +200,7 @@ func (x *session) wire() ipc.Session {
 		Cwd: x.cwd, Repo: x.repo, Worktree: x.worktree, Branch: x.branch, Copied: x.copied,
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
 		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: shownMemory(x.memory), Team: wireTeam(x.team), Hue: x.hue,
-		Tutor: x.tutor,
+		Tutor: x.tutor, Anon: x.anon,
 	}
 	if s.Model == "" {
 		s.Model = x.usage.Model
@@ -536,7 +537,7 @@ func (c *Core) adopt(p tmux.Pane) *session {
 	if spec, err := host.ReadSpec(c.paths.SpecFile(x.id)); err == nil {
 		x.cwd, x.profile, x.harness, x.warnings = spec.Cwd, spec.Profile, spec.Harness, spec.Warnings
 		x.repo, x.worktree, x.branch, x.copied, x.paste = spec.Repo, spec.Worktree, spec.Branch, spec.Copied, spec.Paste
-		x.model, x.local, x.tutor = spec.Model, spec.Local, spec.Tutor
+		x.model, x.local, x.tutor, x.anon = spec.Model, spec.Local, spec.Tutor, spec.Anon
 	}
 	c.loadStatus(x)
 	if x.harness == "" {
@@ -739,7 +740,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpPeers, ipc.OpDock,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
 		}}, nil
 	case ipc.OpPerf:
@@ -877,6 +878,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.vpnOp(0, a)
+	case ipc.OpAnon:
+		var a ipc.AnonArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.anonOp(a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {

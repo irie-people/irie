@@ -22,7 +22,7 @@ func preferencesNote(prefs []string) string {
 // preferences, so that they hold all along. The caller holds c.mu.
 func (c *Core) startNote(x *session) string {
 	var notes []string
-	for _, n := range []string{c.delegateHint(x), preferencesNote(c.cfg().Spawn.Preferences)} {
+	for _, n := range []string{c.delegateHint(x), anonNote(x), preferencesNote(c.cfg().Spawn.Preferences)} {
 		if n != "" {
 			notes = append(notes, n)
 		}

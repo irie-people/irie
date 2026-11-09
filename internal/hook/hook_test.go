@@ -3,6 +3,7 @@ package hook
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/sysload"
@@ -364,4 +366,35 @@ func slow(t *testing.T) bool {
 	}
 	t.Logf("not timed: %.1f CPUs' worth of work waiting on %d CPUs", l.RunQueue, l.CPUs)
 	return true
+}
+
+// TestAnAnonymousSessionsShellTakesItsExit: at SessionStart the shim adds
+// the session's proxy variables to Claude Code's CLAUDE_ENV_FILE, with the
+// core down too, and leaves every other session's alone (DESIGN §4.16).
+func TestAnAnonymousSessionsShellTakesItsExit(t *testing.T) {
+	state := t.TempDir()
+	dir := filepath.Join(state, "irie", "sessions", session)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	exports := "export ALL_PROXY='socks5h://127.0.0.1:9150'\n"
+	if err := os.WriteFile(filepath.Join(dir, harness.AnonEnvFile), []byte(exports), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(t.TempDir(), "env.sh")
+	os.WriteFile(envFile, []byte("export A=1\n"), 0o600)
+	none := filepath.Join(testutil.ShortDir(t), "none.sock")
+	start := `{"hook_event_name":"SessionStart","session_id":"v","source":"startup"}`
+	vars := env(map[string]string{"IRIE_SOCKET": none, "IRIE_SESSION": session, "HOME": "/home/alice", "XDG_STATE_HOME": state, "CLAUDE_ENV_FILE": envFile})
+	Run(strings.NewReader(start), io.Discard, vars)
+	if b, _ := os.ReadFile(envFile); string(b) != "export A=1\n"+exports {
+		t.Errorf("CLAUDE_ENV_FILE = %q", b)
+	}
+	// Not at another event, and not for a session with no compartment.
+	Run(strings.NewReader(preToolUse), io.Discard, vars)
+	other := env(map[string]string{"IRIE_SOCKET": none, "IRIE_SESSION": "s0000000000ab", "HOME": "/home/alice", "XDG_STATE_HOME": state, "CLAUDE_ENV_FILE": envFile})
+	Run(strings.NewReader(start), io.Discard, other)
+	if b, _ := os.ReadFile(envFile); string(b) != "export A=1\n"+exports {
+		t.Errorf("CLAUDE_ENV_FILE grew: %q", b)
+	}
 }

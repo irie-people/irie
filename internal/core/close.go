@@ -567,6 +567,15 @@ func (c *Core) reopenJob(r closedRecord) (job, error) {
 		place:   place{cwd: spec.Cwd, repo: spec.Repo, worktree: spec.Worktree, branch: spec.Branch, copied: spec.Copied},
 		profile: spec.Profile, run: profile, h: h, probe: probe, reopen: &r, data: map[string]any{"reopen": true}, tutor: spec.Tutor,
 	}
+	// An anonymous session comes back in its compartment, with its shut
+	// paths, or not at all (DESIGN §4.16).
+	if spec.Anon != "" {
+		comp, notes, err := c.prepareAnon(spec.Anon, "")
+		if err != nil {
+			return job{}, err
+		}
+		j.anon, j.probe.Warnings = &comp, append(j.probe.Warnings, notes...)
+	}
 	if _, resumes := h.(harness.Resumer); r.Resume && resumes {
 		j.resume = r.VendorID
 		j.data["resume"] = r.VendorID

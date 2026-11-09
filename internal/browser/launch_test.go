@@ -94,6 +94,11 @@ func TestUserPrefsKeepTheBrowsersOwnSettings(t *testing.T) {
 		`user_pref("network.proxy.socks", "10.64.0.1");`,
 		`user_pref("network.proxy.socks_port", 1080);`,
 		`user_pref("network.proxy.socks_remote_dns", true);`,
+		// Behind a proxy, the ways round it are shut (DESIGN §4.16).
+		`user_pref("network.proxy.failover_direct", false);`,
+		`user_pref("network.proxy.allow_hijacking_localhost", true);`,
+		`user_pref("network.dns.disabled", true);`,
+		`user_pref("media.peerconnection.enabled", false);`,
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("user.js lacks %s:\n%s", want, p)
@@ -252,5 +257,33 @@ func TestHowToInstall(t *testing.T) {
 	}
 	if i := HowToInstall("linux", brew); i.Argv != nil {
 		t.Fatalf("Linux: %+v", i)
+	}
+}
+
+// TestAProxysNameIsLookedUpBeforeTheBrowserStarts: behind a proxy the
+// browser does without DNS of its own, so a proxy named by its host name
+// goes to it as an address (DESIGN §4.16).
+func TestAProxysNameIsLookedUpBeforeTheBrowserStarts(t *testing.T) {
+	defer func(f func(context.Context, string) ([]string, error)) { lookupHost = f }(lookupHost)
+	lookupHost = func(_ context.Context, host string) ([]string, error) {
+		if host == "se-got-wg-socks5-001.relays.mullvad.net" {
+			return []string{"fc00:bbbb::1", "10.124.0.7"}, nil
+		}
+		return nil, errors.New("no such host")
+	}
+	for in, want := range map[string]string{
+		"socks5://se-got-wg-socks5-001.relays.mullvad.net:1080":  "socks5://10.124.0.7:1080",
+		"socks5h://se-got-wg-socks5-001.relays.mullvad.net:1080": "socks5://10.124.0.7:1080",
+		"socks5h://127.0.0.1:9150":                               "socks5h://127.0.0.1:9150",
+	} {
+		if got, err := resolveProxy(context.Background(), in); err != nil || got != want {
+			t.Errorf("resolveProxy(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if _, err := resolveProxy(context.Background(), "socks5://nowhere.example:1080"); err == nil || !strings.Contains(err.Error(), "Mullvad VPN") {
+		t.Errorf("a name that doesn't resolve: %v", err)
+	}
+	if p := userPrefs(Options{Proxy: "socks5://[fc00:bbbb::1]:1080"}); !strings.Contains(p, `user_pref("network.proxy.socks", "fc00:bbbb::1");`) {
+		t.Errorf("an IPv6 proxy:\n%s", p)
 	}
 }

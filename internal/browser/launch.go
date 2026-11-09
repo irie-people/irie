@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -305,12 +306,54 @@ func launch(ctx context.Context, o Options, exe, dir string) (*running, error) {
 			os.MkdirAll(dir, 0o700)
 		}
 	}
+	// A proxy named by its host name is looked up here, at each start, so
+	// that the browser can do without DNS of its own: Mullvad's relays'
+	// proxies have names that resolve only inside its tunnel.
+	if o.Proxy != "" {
+		p, err := resolveProxy(ctx, o.Proxy)
+		if err != nil {
+			return nil, err
+		}
+		o.Proxy = p
+	}
 	if prefs := userPrefs(o); prefs != "" {
 		if err := os.WriteFile(filepath.Join(dir, "user.js"), []byte(prefs), 0o600); err != nil {
 			return nil, err
 		}
 	}
 	return start(ctx, o, exe, dir)
+}
+
+// lookupHost finds a host's addresses; tests replace it.
+var lookupHost = net.DefaultResolver.LookupHost
+
+// resolveProxy is the SOCKS5 proxy address proxy with its host looked up,
+// socks5://ip:port, its IPv4 address first.
+func resolveProxy(ctx context.Context, proxy string) (string, error) {
+	host, port, err := ParseProxy(proxy)
+	if err != nil {
+		return "", err
+	}
+	if net.ParseIP(host) != nil {
+		return proxy, nil
+	}
+	lctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	addrs, err := lookupHost(lctx, host)
+	if err != nil || len(addrs) == 0 {
+		return "", fmt.Errorf("the proxy %s doesn't resolve (is Mullvad VPN connected?): %v", host, err)
+	}
+	slices.SortStableFunc(addrs, func(a, b string) int {
+		return boolInt(strings.Contains(a, ":")) - boolInt(strings.Contains(b, ":"))
+	})
+	return "socks5://" + net.JoinHostPort(addrs[0], strconv.Itoa(port)), nil
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func logf(o Options, format string, args ...any) {
@@ -534,7 +577,11 @@ var hostRE = regexp.MustCompile(`^[A-Za-z0-9.:-]+$`)
 // Firefox's Remote Agent would otherwise apply at start (about 120 of them,
 // tracking protection and the popup blocker among them), so the browser
 // keeps its own settings, and adds the proxy when there is one, with DNS
-// lookups made at the proxy too. Nothing else changes.
+// lookups made at the proxy too. Behind a proxy it also shuts the ways
+// round it (DESIGN §4.16): WebRTC, whose connections don't take the proxy
+// and would tell a page the Mac's own exit; a direct connection when the
+// proxy fails; DNS lookups on the Mac; and pages reaching the Mac's own
+// services, as localhost goes to the proxy too. Nothing else changes.
 func userPrefs(o Options) string {
 	prefs := "user_pref(\"remote.prefs.recommended\", false);\n"
 	if o.Proxy == "" {
@@ -544,11 +591,17 @@ func userPrefs(o Options) string {
 	if err != nil {
 		return prefs
 	}
+	// Firefox takes an IPv6 proxy's address without its brackets.
+	host = strings.Trim(host, "[]")
 	return prefs + fmt.Sprintf(`user_pref("network.proxy.type", 1);
 user_pref("network.proxy.socks", %q);
 user_pref("network.proxy.socks_port", %d);
 user_pref("network.proxy.socks_version", 5);
 user_pref("network.proxy.socks_remote_dns", true);
+user_pref("network.proxy.failover_direct", false);
+user_pref("network.proxy.allow_hijacking_localhost", true);
+user_pref("network.dns.disabled", true);
+user_pref("media.peerconnection.enabled", false);
 `, host, port)
 }
 
