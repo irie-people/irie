@@ -274,6 +274,7 @@ const (
 	ToolModels         = ipc.ToolModels
 	ToolReady          = ipc.ToolReady
 	ToolSwitch         = ipc.ToolSwitch
+	ToolWrite          = ipc.ToolWrite
 	VPNOn              = ipc.VPNOn
 	VPNOff             = ipc.VPNOff
 	VPNLockdown        = ipc.VPNLockdown

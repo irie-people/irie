@@ -50,6 +50,8 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":setup", "", "", OpTool, ToolArgs{Name: ToolSetup}},
 		{":setup local", "", "", OpTool, ToolArgs{Name: ToolSetup}},
 		{":setup switch", "", "", OpTool, ToolArgs{Name: ToolSwitch}},
+		{":write", "", "", OpTool, ToolArgs{Name: ToolWrite}},
+		{":write notes on Chapter 3\nkeep it short", "s1", "", OpTool, ToolArgs{Name: ToolWrite, Task: "notes on Chapter 3\nkeep it short"}},
 		{":vpn", "", "", OpVPN, VPNArgs{}},
 		{":vpn on", "s1", "", OpVPN, VPNArgs{Do: VPNOn}},
 		{":vpn OFF", "", "", OpVPN, VPNArgs{Do: VPNOff}},

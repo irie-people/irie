@@ -13,7 +13,7 @@ var grants = []string{"allowed-tools", "disallowed-tools", "hooks", "shell", "mo
 // TestBundledSkillsGrantNothing: every skill that comes with Irie is
 // Markdown only, grants no tools, runs nothing as it loads (Claude Code runs
 // an exclamation mark and a backtick before the skill reaches the model),
-// and names no one.
+// and names no one but the makers of the tools it credits.
 func TestBundledSkillsGrantNothing(t *testing.T) {
 	email := regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
 	home := regexp.MustCompile(`/home/[a-z]`)
@@ -44,21 +44,23 @@ func TestBundledSkillsGrantNothing(t *testing.T) {
 	}
 }
 
-// TestGuidesAreTheUsers: a guide, such as the dead man's switch, runs only
-// when the person starts it, so it costs no context in other sessions and
-// no agent starts it on its own.
+// TestGuidesAreTheUsers: a guide, such as the dead man's switch or a
+// writing session in Variorum, runs only when the person starts it, so it
+// costs no context in other sessions and no agent starts it on its own.
 func TestGuidesAreTheUsers(t *testing.T) {
-	found := false
+	guides := map[string]bool{"dead-mans-switch": false, "variorum": false}
 	for _, s := range Bundled() {
-		if s.Name != "dead-mans-switch" {
+		if _, ok := guides[s.Name]; !ok {
 			continue
 		}
-		found = true
+		guides[s.Name] = true
 		if Frontmatter(s.Files["SKILL.md"])["disable-model-invocation"] != "true" {
 			t.Errorf("%s: want disable-model-invocation: true", s.Name)
 		}
 	}
-	if !found {
-		t.Error("dead-mans-switch is not bundled")
+	for name, found := range guides {
+		if !found {
+			t.Errorf("%s is not bundled", name)
+		}
 	}
 }

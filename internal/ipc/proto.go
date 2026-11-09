@@ -988,11 +988,13 @@ type ResultResult struct {
 
 // ToolArgs start a tool session: setup (`irie setup local`), models
 // (`irie ctl local`), ready (`irie setup`, which fixes what the ready op
-// finds missing) or switch, the dead man's switch guide: a Claude Code
+// finds missing), switch, the dead man's switch guide: a Claude Code
 // session that runs one of Irie's own skills (docs/proposals/extensions.md
-// §2.2).
+// §2.2), or write, a writing session in Variorum, which takes a task
+// (docs/proposals/writers.md).
 type ToolArgs struct {
 	Name string `json:"name"`
+	Task string `json:"task,omitempty"` // write's: what the writer wants done, if they said
 }
 
 // Tools.
@@ -1001,6 +1003,7 @@ const (
 	ToolModels = "models"
 	ToolReady  = "ready"
 	ToolSwitch = "switch"
+	ToolWrite  = "write"
 )
 
 // AnonArgs ask the anon op for the state of anonymous research (DESIGN

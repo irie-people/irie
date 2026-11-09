@@ -60,6 +60,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 | `:route TASK` | Says where `+auto` would run the task, and why | `answered` |
 | `:setup [local]`, `:models` | Starts a tool session, which waits on its user | `ran`, with `session` and `show` |
 | `:setup switch` | Starts the dead man's switch guide: a Claude Code session on `+claude` with Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2) | `ran`, with `session` and `show` |
+| `:write [TASK]` | Starts a writing session in Variorum: a Claude Code session on `+claude` with Irie's skill `/irie:variorum` and the task after it, which names the session. The task may run on over more lines ([writers.md](proposals/writers.md)) | `ran`, with `session` and `show` |
 | `:vpn`, `:vpn time` | Says Mullvad VPN's state, or the account's time left, while `vpn.on` | `answered` |
 | `:vpn on`, `:vpn off`, `:vpn lockdown on\|off`, `:vpn PLACE` | The `vpn` op: connects, disconnects, sets lockdown mode, or goes through another country, city or server. Refused when the words come from inside an agent: the core reads the caller's process from the socket (`LOCAL_PEERPID`, `SO_PEERCRED`) and looks for an agent's host among its parents | `ran` |
 

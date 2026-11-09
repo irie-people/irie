@@ -533,9 +533,11 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 	case ipc.ToolReady:
 		args, name, title = []string{"setup"}, "setup", "get Irie ready"
 	case ipc.ToolSwitch:
-		return c.guide(guideSwitch)
+		return c.guide(guideSwitch, "")
+	case ipc.ToolWrite:
+		return c.guide(guideWrite, a.Task)
 	default:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s, %s, %s and %s", a.Name, ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s, %s, %s, %s and %s", a.Name, ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch, ipc.ToolWrite)
 	}
 	p := config.Profile{Harness: "tool", Command: c.bin, Args: args, Env: map[string]string{}}
 	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{})
