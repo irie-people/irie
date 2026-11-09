@@ -28,6 +28,51 @@ struct ConfigResult: Decodable {
     var problem: String?
 }
 
+/// The plugins op's arguments: with on, it first turns a plugin, or one
+/// part of it, on or off (DESIGN §4.17). The core knows which key each
+/// takes in config.toml.
+struct PluginsArgs: Encodable {
+    var plugin: String?
+    var part: String?
+    var on: Bool?
+}
+
+struct PluginsResult: Decodable {
+    var plugins: [PluginInfo]
+}
+
+/// One of Irie's plugins: features that go on and off together.
+struct PluginInfo: Decodable, Equatable, Identifiable {
+    var name: String
+    var title: String
+    var summary: String
+    var on: Bool
+    /// The words that set up each part in turn, such as :setup privacy.
+    var setup: String?
+    var parts: [Part]
+
+    var id: String { name }
+
+    /// One feature of a plugin, and how far it is set up on the core's
+    /// machine.
+    struct Part: Decodable, Equatable, Identifiable {
+        var name: String
+        var title: String
+        var summary: String
+        /// The config key that turns it on; nil when it has none of its own.
+        var `switch`: String?
+        /// Its own switch, as config.toml has it.
+        var on: Bool
+        /// ready, off, needs, plugin_off or held.
+        var state: String
+        var detail: String
+        /// The words that set it up, such as :setup anon.
+        var setup: String?
+
+        var id: String { name }
+    }
+}
+
 /// A setting's value, as JSON.
 enum SettingValue: Encodable, Equatable {
     case string(String), bool(Bool), int(Int), number(Double), strings([String]), table([String: String]), null
@@ -264,6 +309,9 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var problem: String?
     /// Why the core refused the last change it refused.
     @Published var error: String?
+    /// Irie's plugins and how far each part is set up (DESIGN §4.17); nil
+    /// from a core from before them.
+    @Published private(set) var plugins: [PluginInfo]?
     /// Called once the core has taken a change: the agents' notes in the
     /// task bar's menu follow their profiles.
     var changed: @MainActor () -> Void = {}
@@ -276,12 +324,37 @@ final class SettingsModel: ObservableObject {
         self.client = client
     }
 
-    /// Reads the config in effect.
+    /// Reads the config in effect, and the plugins.
     func load() async {
         do {
             take(try await client.call("config", ConfigArgs(), timeout: 5, as: ConfigResult.self))
         } catch {
             self.error = "Couldn’t read the settings: \(error.localizedDescription)"
+        }
+        await loadPlugins()
+    }
+
+    /// Reads how the plugins stand. A core from before them leaves them nil.
+    func loadPlugins() async {
+        if let r = try? await client.call("plugins", PluginsArgs(), timeout: 5, as: PluginsResult.self), r.plugins != plugins {
+            plugins = r.plugins
+        }
+    }
+
+    /// Turns a plugin, or one part of it, on or off, then reads the config
+    /// again: its parts' switches show elsewhere too.
+    func setPlugin(_ plugin: String, part: String? = nil, on: Bool) {
+        Task {
+            do {
+                let r = try await client.call("plugins", PluginsArgs(plugin: plugin, part: part, on: on), timeout: 10, as: PluginsResult.self)
+                plugins = r.plugins
+                error = nil
+                changed()
+            } catch {
+                self.error = error.localizedDescription
+                await loadPlugins()
+            }
+            if let r = try? await client.call("config", ConfigArgs(), timeout: 5, as: ConfigResult.self) { take(r) }
         }
     }
 
@@ -330,6 +403,7 @@ final class SettingsModel: ObservableObject {
                     if pending.isEmpty { take(r) }
                     error = nil
                     changed()
+                    await loadPlugins()
                 } catch {
                     self.error = error.localizedDescription
                     if pending.isEmpty { await load() }
@@ -346,8 +420,9 @@ final class SettingsModel: ObservableObject {
     }
 
     /// Fills the model with a config no core sent, for `--snapshot`.
-    func loadFixture(_ r: ConfigResult) {
+    func loadFixture(_ r: ConfigResult, plugins: [PluginInfo]? = nil) {
         take(r)
+        self.plugins = plugins
     }
 }
 
@@ -386,7 +461,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
-        case general, appearance, agents, arch, trod, local, repos, learning
+        case general, appearance, agents, arch, trod, local, repos, plugins, learning
 
         var id: String { rawValue }
 
@@ -399,6 +474,7 @@ struct SettingsView: View {
             case .trod: return "Trod Bot"
             case .local: return "Local Models"
             case .repos: return "Repos"
+            case .plugins: return "Plugins"
             case .learning: return "Learning"
             }
         }
@@ -412,6 +488,7 @@ struct SettingsView: View {
             case .trod: return "moon.stars"
             case .local: return "desktopcomputer"
             case .repos: return "folder"
+            case .plugins: return "puzzlepiece.extension"
             case .learning: return "graduationcap"
             }
         }
@@ -451,6 +528,7 @@ struct SettingsView: View {
         case .trod: TrodSettings(model: model)
         case .local: LocalSettings(model: model)
         case .repos: RepoSettings(model: model)
+        case .plugins: PluginSettings(model: model)
         case .learning: LearningSettings(model: model)
         }
     }
@@ -615,15 +693,6 @@ private struct GeneralSettings: View {
                     Text("Usage")
                 } footer: {
                     footnote("Irie becomes the status line of the sessions it starts from now on, and runs yours inside it.")
-                }
-                if c.vpn != nil {
-                    Section {
-                        Toggle("Show Mullvad VPN in Irie", isOn: model.bind(c, \.vpn!.on, "vpn.on"))
-                    } header: {
-                        Text("Mullvad VPN")
-                    } footer: {
-                        footnote("A shield in the title bar shows the VPN, File > VPN changes it, and every task bar takes :vpn on, :vpn off, :vpn se got or :vpn lockdown on. It needs the Mullvad VPN app. Irie never reads the account number, and agents can't change the VPN through Irie.")
-                    }
                 }
                 ConfigFileSection(path: model.path)
             }
@@ -1629,6 +1698,128 @@ private struct LineField: View {
     /// The text on one line, as each rule must be.
     static func oneLine(_ s: String) -> String {
         s.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+}
+
+// MARK: Plugins
+
+/// Settings › Plugins: Irie's plugins, each with its switch, and each part
+/// with how far it is set up on the core's machine, its own switch and what
+/// sets it up (DESIGN §4.17). The core says how each part stands and which
+/// key a switch takes; this draws it, and sends a set-up's words to the
+/// task bar's core like any other words.
+@MainActor
+private struct PluginSettings: View {
+    @Environment(Store.self) private var store
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        if let all = model.plugins {
+            SettingsForm(model: model) {
+                ForEach(all) { p in
+                    Section {
+                        Toggle(isOn: Binding(get: { p.on }, set: { model.setPlugin(p.name, on: $0) })) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.title).font(.headline)
+                                Text(p.summary).font(.callout).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        ForEach(p.parts) { x in
+                            PluginPartRow(plugin: p, part: x, model: model) { words in
+                                Task { _ = await store.input(words) }
+                            }
+                        }
+                    } header: {
+                        Text("\(p.title) plugin")
+                    } footer: {
+                        HStack(alignment: .firstTextBaseline) {
+                            footnote("Each part has a switch of its own too. With the plugin off, none of its parts runs, whatever its own switch says.")
+                            if p.on, let setup = p.setup {
+                                Button("Set Up Each Part…") { Task { _ = await store.input(setup) } }
+                                    .help("Starts \(setup): a terminal that asks before it installs or changes anything")
+                            }
+                        }
+                    }
+                }
+                ConfigFileSection(path: model.path)
+            }
+        } else if case .online = store.link {
+            ContentUnavailableView("This Irie has no plugins yet", systemImage: "puzzlepiece.extension",
+                                   description: Text("Install a newer build to see them here."))
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+/// One part of a plugin: its state as a glyph and a sentence, its switch,
+/// and Set Up… when words set it up.
+@MainActor
+private struct PluginPartRow: View {
+    let plugin: PluginInfo
+    let part: PluginInfo.Part
+    @ObservedObject var model: SettingsModel
+    let run: (String) -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(Self.glyph(part.state))
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Self.color(part.state))
+                .frame(width: 14)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(part.title)
+                    .foregroundStyle(plugin.on && part.state != "held" ? .primary : .secondary)
+                Text(part.detail)
+                    .font(.callout)
+                    .foregroundStyle(part.state == "needs" ? Theme.needs : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 8)
+            if let setup = part.setup, plugin.on {
+                Button("Set Up…") { run(setup) }
+                    .help("Starts \(setup)")
+            }
+            if part.switch != nil {
+                Toggle(part.title, isOn: Binding(get: { part.on }, set: { model.setPlugin(plugin.name, part: part.name, on: $0) }))
+                    .labelsHidden()
+                    .disabled(!plugin.on)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(part.title): \(Self.spoken(part.state)). \(part.detail)")
+    }
+
+    /// Each state has a glyph of its own, so colour never carries it alone:
+    /// the same marks as irie plugins prints.
+    static func glyph(_ state: String) -> String {
+        switch state {
+        case "ready": return "●"
+        case "needs": return "!"
+        case "held": return "○"
+        default: return "·"
+        }
+    }
+
+    static func color(_ state: String) -> Color {
+        switch state {
+        case "ready": return Theme.done
+        case "needs": return Theme.needs
+        default: return Theme.muted
+        }
+    }
+
+    static func spoken(_ state: String) -> String {
+        switch state {
+        case "ready": return "ready"
+        case "needs": return "needs setting up"
+        case "held": return "not in Irie yet"
+        case "plugin_off": return "off with its plugin"
+        default: return "off"
+        }
     }
 }
 
