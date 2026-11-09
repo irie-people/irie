@@ -592,7 +592,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | `+explain`, `+teach` | Run this one task in that tutor mode, beside any `+profile` (`+sonnet +teach …`): Claude Code's Explanatory or Learning output style. The words are reserved: a profile cannot take either name ([learning.md](proposals/learning.md)) |
 | `+anon`, `+anon:name`, `+tor`, `+tor:name` | Run this one task as anonymous research, beside any `+profile`: in a compartment of its own, or the named one, which tasks share, leaving through a Mullvad exit of its own, or Tor (§4.16). The words are reserved as profile names too |
 | (the Mac app's sheet) | A model for this one task, `model` in `spawn`: an alias Claude Code's `--model` takes (`fable`, `opus`, `sonnet`) or a model's full name. Only a Claude Code profile takes it; a core that does lists `spawn-model` in `hello` |
-| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:pin`, `:unpin`, `:close [others\|below\|finished]`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:setup switch` starts the dead man's switch guide, a Claude Code session on `+claude` in `<data>/guides/dead-mans-switch`, a folder Claude Code then trusts once, that runs Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2); with `vpn.on`, `:vpn` says Mullvad VPN's state, and `:vpn on`, `:vpn off`, `:vpn lockdown on\|off`, `:vpn time` and `:vpn <place>` (`se`, `se got`, `se-got-wg-001`) change it or read the account's time, unless an agent types them (§4.4 of the same proposal); `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
+| `:command args` | `:pause [tree\|all]`, `:resume …`, `:freeze [all]`, `:thaw [all]`, `:prio [reason]`, `:note <text>`, `:rename <name>`, `:park`, `:unpark`, `:pin`, `:unpin`, `:close [others\|below\|finished]`, `:reopen`, `:jump <text>`, `:undo`, `:redo`, `:detach`, `:move [name]` (§4.6). From M10: `:setup [local]` and `:models` open a tool session in the slot; `:setup switch` starts the dead man's switch guide, a Claude Code session on `+claude` in `<data>/guides/dead-mans-switch`, a folder Claude Code then trusts once, that runs Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2); `:write [task]` starts a writing session in Variorum, a Claude Code session on `+claude` in `<data>/guides/variorum` that runs `/irie:variorum` with the task ([writers.md](proposals/writers.md)); with `vpn.on`, `:vpn` says Mullvad VPN's state, and `:vpn on`, `:vpn off`, `:vpn lockdown on\|off`, `:vpn time` and `:vpn <place>` (`se`, `se got`, `se-got-wg-001`) change it or read the account's time, unless an agent types them (§4.4 of the same proposal); `:rate good\|bad` rates the selected session; `:route <task>` says where `+auto` would run a task |
 | Enter / Shift+Enter or Ctrl+J / Tab / Esc | Submit / new line / complete `@`, `+` or `:` / clear and leave |
 | A paste over 8 KiB | Shown as a chip (`[paste 2.1 MB · 31,204 lines]`) and sent intact on submit |
 
@@ -1108,6 +1108,12 @@ The owner asked on 2026-11-09 to start making plugins for Irie, beginning with a
 | Bitwarden for agents | Held back: see below | none yet | none yet |
 | Dead man's switch | `:setup switch`, `/irie:dead-mans-switch`, `irie dms` ([extensions.md](proposals/extensions.md) §2) | none: on while its skill is (`skills.disabled`) | `:setup switch` |
 
+**Writing**, the second plugin ([writers.md](proposals/writers.md)), is on by default, and has one part:
+
+| Part | What it brings | Its own switch | What sets it up |
+|---|---|---|---|
+| Writing in Variorum | `:write [task]`, File › Write with Variorum…, `/irie:variorum`: sessions that help a writer in Variorum, Lillian Duarte's writing app, through its door for AI, beside their words and never over them | none: on while its skill is (`skills.disabled`) | `:write`: the first session walks the writer through Variorum's door. The check looks for Variorum in an Applications folder |
+
 **One switch.** `[plugins] privacy`, on by default: each part keeps its own switch, and those are off by default, so a new Irie shows nothing of it until asked. With the plugin off, none of its parts runs, whatever its own switch says. `config.Config`'s `VPNOn`, `AnonOn` and `BrowserOn` are where the rest of Irie asks; a word or command of a part that is off says which switch turns it on (`plugins.Why`); the guide's skill leaves every session, with the reason in `irie skills` (`skills.Settings.Left`); and the VPN's mark leaves every client. Each part's own switch keeps its value meanwhile, so the plugin on again brings back what was on.
 
 **How far each part is set up.** Each part's check reads only files and the config: whether `mullvad`, `tor`, SearXNG, Mullvad Browser and its clean profile are where Irie looks, and whether the switch's checks were made. It never reads the network, an account or a vault. A part is *ready* (on, with what it needs), *off* (its own switch), *needs* (on, and it lacks something: the sentence says what and what fixes it), *off with its plugin*, or *held* (not in this build). The core adds what only it knows, the VPN's state now.
@@ -1505,6 +1511,7 @@ tor_port = 9150               # the first of the Tor compartments' SocksPorts on
 
 [plugins]                     # Irie's plugins (§4.17): each turns all its parts off when it is off
 privacy = true                # Mullvad VPN, anonymous research, Mullvad Browser for agents and the dead man's switch guide; each part keeps its own switch
+writing = true                # writing in Variorum: :write and the skill its sessions run (docs/proposals/writers.md)
 ```
 
 ---

@@ -64,6 +64,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 | `:setup switch` | Starts the dead man's switch guide: a Claude Code session on `+claude` with Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2) | `ran`, with `session` and `show` |
 | `:setup anon`, `:setup browser`, `:setup privacy` | Starts a tool session that runs `irie setup NAME`: a part of the privacy plugin, or each part in turn (DESIGN §4.17) | `ran`, with `session` and `show` |
 | `:plugins` | Says each of Irie's plugins and how far each part is set up here, a line each (the `plugins` op, DESIGN §4.17) | `answered` |
+| `:write [TASK]` | Starts a writing session in Variorum: a Claude Code session on `+claude` with Irie's skill `/irie:variorum` and the task after it, which names the session. The task may run on over more lines ([writers.md](proposals/writers.md)) | `ran`, with `session` and `show` |
 | `:vpn`, `:vpn time` | Says Mullvad VPN's state, or the account's time left, while `vpn.on` and the privacy plugin are on | `answered` |
 | `:vpn on`, `:vpn off`, `:vpn lockdown on\|off`, `:vpn PLACE` | The `vpn` op: connects, disconnects, sets lockdown mode, or goes through another country, city or server. Refused when the words come from inside an agent: the core reads the caller's process from the socket (`LOCAL_PEERPID`, `SO_PEERCRED`) and looks for an agent's host among its parents | `ran` |
 

@@ -105,6 +105,9 @@ struct IrieCommands: Commands {
             // A guided session of Irie's own, as :setup switch starts
             // from any task bar (docs/proposals/extensions.md §2.2).
             Button("Set Up a Dead Man's Switch…", action: run { Task { _ = await store.input(":setup switch") } })
+            // A writing session in Variorum, as :write starts
+            // (docs/proposals/writers.md).
+            Button("Write with Variorum…", action: run { Task { _ = await store.input(":write") } })
             Button("Rename Session…", action: run { if let id = store.selection { store.beginRename(id) } })
                 .disabled(!f.selected)
         }

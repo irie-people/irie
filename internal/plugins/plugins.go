@@ -75,7 +75,7 @@ type Live struct {
 }
 
 // All are Irie's plugins, in the order they show.
-func All() []Plugin { return []Plugin{privacy()} }
+func All() []Plugin { return []Plugin{privacy(), writing()} }
 
 // Find is the plugin named name.
 func Find(name string) (Plugin, bool) {

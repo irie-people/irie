@@ -15,7 +15,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -145,6 +145,15 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpTool, ToolArgs{Name: arg}, nil)
 	case name == "plugins" && arg == "":
 		return step(OpPlugins, PluginsArgs{}, nil)
+	case name == "write":
+		// :write [TASK] starts a writing session in Variorum
+		// (docs/proposals/writers.md). The task may run on over more
+		// lines.
+		task := arg
+		if _, more, ok := strings.Cut(in.Text, "\n"); ok {
+			task = strings.TrimSpace(task + "\n" + more)
+		}
+		return step(OpTool, ToolArgs{Name: ToolWrite, Task: Unpaste(task, in.Pastes)}, nil)
 	case name == "models" && arg == "":
 		return step(OpTool, ToolArgs{Name: ToolModels}, nil)
 	case name == "vpn":
@@ -342,7 +351,7 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Session, r.Show, r.Text = &s, true, "Started "+s.Name+"."
 		// A guide runs in a folder of Irie's, which Claude Code asks to
 		// trust the first time.
-		if as[ToolArgs](st.Args).Name == ToolSwitch {
+		if n := as[ToolArgs](st.Args).Name; n == ToolSwitch || n == ToolWrite {
 			r.Text += " The first time, Claude Code asks whether to trust the guide's folder, which is Irie's own: choose Yes, I trust this folder."
 		}
 	case OpRename:
