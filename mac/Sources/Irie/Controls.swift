@@ -157,6 +157,8 @@ extension Store {
         guard let i = rows.firstIndex(where: { $0.id == id }) else { return }
         var s = rows.remove(at: i)
         s.parked = on
+        // Parking a pinned card unpins it, as the core does.
+        if on { s.pinned = false }
         let peer = Self.peer(of: id)
         let at = rows.lastIndex(where: { Self.peer(of: $0.id) == peer }).map { $0 + 1 } ?? i
         rows.insert(s, at: at)
@@ -192,7 +194,11 @@ extension Store {
     func canDrop(onto target: Session) -> Bool {
         guard let id = dragging, id != target.id, var held = sessions.first(where: { $0.id == id }) else { return false }
         guard held.isParked == target.isParked || canPark else { return false }
+        // Across Pinned's edge it is pinned or unpinned there (Tabs.swift);
+        // another machine's card never pins.
+        guard held.isPinned == target.isPinned || canPin && held.peerName == nil else { return false }
         held.parked = target.isParked
+        held.pinned = target.isPinned
         return groupID(of: held) == groupID(of: target)
     }
 
@@ -213,7 +219,10 @@ extension Store {
         guard let from = sessions.firstIndex(where: { $0.id == id }),
               let to = sessions.firstIndex(where: { $0.id == target.id }), from != to else { return }
         let s = sessions[from], was = sessions
-        let crosses = canPark && s.isParked != target.isParked
+        // Across Pinned's edge, a pin or unpin there, which unparks; else
+        // across Parked's, a park or unpark, which unpins.
+        let pins = canPin && s.isPinned != target.isPinned && (target.isPinned || s.isParked == target.isParked)
+        let crosses = !pins && canPark && s.isParked != target.isParked
         var ids = sessions.map(\.id)
         let moving = ids.remove(at: from)
         guard let t = ids.firstIndex(of: target.id) else { return }
@@ -223,10 +232,21 @@ extension Store {
         preview { rows in
             for i in rows.indices {
                 rows[i].order = ids.firstIndex(of: rows[i].id)
-                if crosses, rows[i].id == id { rows[i].parked = target.isParked }
+                if crosses, rows[i].id == id {
+                    rows[i].parked = target.isParked
+                    if target.isParked { rows[i].pinned = false }
+                }
+                if pins, rows[i].id == id {
+                    rows[i].pinned = target.isPinned
+                    if target.isPinned { rows[i].parked = false }
+                }
             }
         }
         Task {
+            if pins {
+                await pin(s, target.isPinned, before: before, was: was)
+                return
+            }
             if crosses {
                 await park(s, target.isParked, before: before, was: was)
                 return
@@ -331,8 +351,13 @@ struct ControlItems: View {
         if store.canPark {
             Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) }
         }
+        if store.canPin, session.peerName == nil {
+            Button(session.isPinned ? "Unpin" : "Pin to the Top") { store.setPinned(session, !session.isPinned) }
+        }
         Button("Move Up") { store.move(session, by: -1) }.disabled(!canUp)
         Button("Move Down") { store.move(session, by: 1) }.disabled(!canDown)
+        Button("Move to the Top of Its Group") { store.moveToEdge(session, top: true) }.disabled(!canUp)
+        Button("Move to the Bottom of Its Group") { store.moveToEdge(session, top: false) }.disabled(!canDown)
     }
 }
 

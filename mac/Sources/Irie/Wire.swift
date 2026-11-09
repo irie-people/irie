@@ -39,6 +39,8 @@ struct Session: Codable, Identifiable, Equatable {
     /// tool call; 1 while it is promoted (Controls.swift).
     var order: Int?
     var parked: Bool?
+    /// Whether it is pinned, in the Pinned group at the top (Tabs.swift).
+    var pinned: Bool?
     var frozen: Date?
     var freezing: Bool?
     var priority: Int?
@@ -62,7 +64,7 @@ struct Session: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, frozen, freezing, priority, loose, trod, hue, tutor, host
+        case order, parked, pinned, frozen, freezing, priority, loose, trod, hue, tutor, host
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }

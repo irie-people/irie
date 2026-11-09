@@ -16,6 +16,10 @@ final class MenuState {
         var closable = false
         var parked = false
         var canPark = false
+        /// Pin, and the cards picked with ⌘ or ⇧ (Tabs.swift).
+        var pinned = false
+        var canPin = false
+        var picked = 0
         var canReopen = false
         var trodHand = false
         var canTrod = false
@@ -47,6 +51,7 @@ extension Store {
         return MenuState.Facts(
             selected: selection != nil && outsideSelection == nil,
             closable: c != nil, parked: c?.isParked == true, canPark: c != nil && canPark,
+            pinned: c?.isPinned == true, canPin: c != nil && canPin && c?.peerName == nil, picked: picked.count,
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
@@ -106,15 +111,38 @@ struct IrieCommands: Commands {
         // Sessions close like tabs (Closing.swift). KeyRouter catches ⌘W
         // first; the window's own Close moves to ⇧⌘W.
         CommandGroup(after: .newItem) {
-            Button("Close Session", action: run { if let s = store.closable { store.close(s) } })
+            Button(f.picked > 1 ? "Close \(f.picked) Sessions" : "Close Session", action: run { store.closeKey() })
                 .keyboardShortcut("w")
+                .disabled(!f.closable && f.picked < 2)
+            // Several at once, as one step that ⌘Z takes back (Tabs.swift).
+            Button("Close Other Sessions", action: run { if let s = store.closable { store.closeMany(store.others(than: s)) } })
                 .disabled(!f.closable)
+            Button("Close Sessions Below", action: run { if let s = store.closable { store.closeMany(store.below(s)) } })
+                .disabled(!f.closable)
+            Button("Close All Finished", action: run { store.closeFinished() })
             Button("Reopen Closed Session", action: run { store.reopenLast() })
                 .keyboardShortcut("t", modifiers: [.command, .shift])
                 .disabled(!f.canReopen)
             // The sidebar's z key does it while the list has the keyboard.
             Button(f.parked ? "Unpark Session" : "Park Session", action: run { store.toggleParked() })
                 .disabled(!f.canPark)
+            Button(f.pinned ? "Unpin Session" : "Pin Session to the Top", action: run {
+                if let s = store.closable { store.setPinned(s, !s.isPinned) }
+            })
+            .disabled(!f.canPin)
+            // The keys move the selected card in its group; with ⇧, to its
+            // top or bottom, without promoting it.
+            Menu("Move Session") {
+                Button("Up", action: run { store.moveSelected(by: -1) })
+                    .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                Button("Down", action: run { store.moveSelected(by: 1) })
+                    .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                Button("To the Top of Its Group", action: run { store.moveSelectedToEdge(top: true) })
+                    .keyboardShortcut(.upArrow, modifiers: [.command, .option, .shift])
+                Button("To the Bottom of Its Group", action: run { store.moveSelectedToEdge(top: false) })
+                    .keyboardShortcut(.downArrow, modifiers: [.command, .option, .shift])
+            }
+            .disabled(!f.closable)
             Divider()
             // A run you start goes on while you watch, until no session
             // has work left or the plan is as full as it may get.

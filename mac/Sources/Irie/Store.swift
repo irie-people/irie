@@ -40,6 +40,13 @@ final class Store {
     /// Parked is folded until it is opened, so a parked card goes out of
     /// sight at once; the app keeps it open once opened (fold(_:)).
     var parkedOpen = UserDefaults.standard.bool(forKey: "parkedOpen")
+    /// The cards picked with ⌘ or ⇧ to act on together (Tabs.swift); empty
+    /// while one card is simply selected.
+    var picked: Set<String> = []
+    /// The card picked last, where a ⇧-click's range starts.
+    @ObservationIgnored var pickAnchor: String?
+    /// The card under the pointer, which a middle click closes.
+    @ObservationIgnored var hovered: String?
     /// The repos the @ words know and the agents the + words name, with what
     /// each runs: what the task bar's menu and the new-task sheet offer.
     private(set) var repoNames: [String] = []
@@ -61,6 +68,8 @@ final class Store {
     private(set) var canConfigure = false
     /// Whether the core parks sessions (Controls.swift).
     private(set) var canPark = false
+    /// Whether the core pins sessions (Tabs.swift).
+    private(set) var canPin = false
     /// Whether the core has the trod bot (DESIGN §4.10).
     private(set) var canTrod = false
     /// The core gives a boost of Gabriel's (DESIGN §4.11).
@@ -277,6 +286,7 @@ final class Store {
                 canDock = hello.features.contains("dock")
                 canConfigure = hello.features.contains("config")
                 canPark = hello.features.contains("park")
+                canPin = hello.features.contains("pin")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
                 canArch = hello.features.contains("arch")
@@ -601,7 +611,9 @@ final class Store {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
         let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
         let parked = rows.filter(\.isParked)
-        let here = rows.filter { !$0.isParked && $0.peerName == nil }
+        // Pinned heads the list, in either view (Tabs.swift).
+        let pinned = rows.filter { $0.isPinned && !$0.isParked && $0.peerName == nil }
+        let here = rows.filter { !$0.isParked && !$0.isPinned && $0.peerName == nil }
         var hosts: [String] = [], byHost: [String: [Session]] = [:]
         for s in rows where !s.isParked {
             guard let h = s.peerName else { continue }
@@ -611,6 +623,9 @@ final class Store {
         var out: [SessionGroup] = []
         switch mode {
         case .list:
+            if !pinned.isEmpty {
+                out.append(SessionGroup(id: SessionGroup.pinned, title: "Pinned", path: nil, sessions: pinned))
+            }
             if !here.isEmpty {
                 out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: here))
             }
@@ -625,7 +640,10 @@ final class Store {
                 byRepo[r, default: []].append(s)
             }
             let names = SessionGroup.names(order)
-            out = order.map { SessionGroup(id: "repo:" + $0, title: names[$0] ?? $0, path: $0, sessions: byRepo[$0] ?? []) }
+            if !pinned.isEmpty {
+                out.append(SessionGroup(id: SessionGroup.pinned, title: "Pinned", path: nil, sessions: pinned))
+            }
+            out += order.map { SessionGroup(id: "repo:" + $0, title: names[$0] ?? $0, path: $0, sessions: byRepo[$0] ?? []) }
             if !none.isEmpty {
                 out.append(SessionGroup(id: "repo:", title: "Not in a repo", path: nil, sessions: none))
             }
@@ -645,6 +663,7 @@ final class Store {
     func groupID(of s: Session) -> String {
         if s.isParked { return SessionGroup.parked }
         if let h = s.peerName { return SessionGroup.hostID(h) }
+        if s.isPinned { return SessionGroup.pinned }
         switch mode {
         case .list: return SessionGroup.list
         case .repo: return "repo:" + (s.repo ?? "")
@@ -1188,9 +1207,11 @@ struct SessionGroup: Identifiable, Equatable {
     /// The paired machine whose sessions it holds, for a machine's group.
     var host: String? = nil
 
-    /// The List view's one group, which has no header, and the Parked group.
+    /// The List view's one group, which has no header, the Parked group,
+    /// and the Pinned group at the top.
     static let list = "list"
     static let parked = "parked"
+    static let pinned = "pinned"
 
     /// A paired machine's group.
     static func hostID(_ name: String) -> String { "host:" + name }
