@@ -12,6 +12,7 @@ type (
 	ContextTurn      = ipc.ContextTurn
 	ForkArgs         = ipc.ForkArgs
 	ForkResult       = ipc.ForkResult
+	StopSubArgs      = ipc.StopSubArgs
 	FreezeArgs       = ipc.FreezeArgs
 	FreezeResult     = ipc.FreezeResult
 	PriorityArgs     = ipc.PriorityArgs
@@ -164,6 +165,7 @@ const (
 	OpUnpark           = ipc.OpUnpark
 	OpPin              = ipc.OpPin
 	OpUnpin            = ipc.OpUnpin
+	OpStopSub          = ipc.OpStopSub
 	StateFrozen        = ipc.StateFrozen
 	OpConversation     = ipc.OpConversation
 	FrameConversation  = ipc.FrameConversation

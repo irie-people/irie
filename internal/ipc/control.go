@@ -22,7 +22,19 @@ const (
 	// among the rest, just under Pinned.
 	OpPin   = "pin"
 	OpUnpin = "unpin"
+	// OpStopSub ends one of a session's subs at your word: a helper, whose
+	// tool calls are turned away from then on with word to end at once, or
+	// a teammate, whose terminal ends.
+	OpStopSub = "stop_sub"
 )
+
+// StopSubArgs name the sub to stop: a helper by its Agent (sub:<id>), or a
+// teammate by its Teammate, its tmux session on the team server.
+type StopSubArgs struct {
+	Session  string `json:"session"`
+	Agent    string `json:"agent,omitempty"`
+	Teammate string `json:"teammate,omitempty"`
+}
 
 // StateFrozen is the state of a frozen session (DESIGN §5.3). It comes
 // after failed and exited, and before every other state.

@@ -605,60 +605,75 @@ private struct HelperRows: View, Equatable {
     static func has(_ s: Session) -> Bool { !(s.subagents ?? []).isEmpty || !(s.team ?? []).isEmpty }
 
     var body: some View {
-        let helpers = session.subagents ?? []
-        let team = session.team ?? []
+        // Those hidden from the card keep working, out of sight here
+        // (Tabs.swift); a line says how many, and brings them back.
+        let hidden = store.hiddenSubs[session.id] ?? []
+        let helpers = (session.subagents ?? []).filter { !hidden.contains($0.agent) }
+        let team = (session.team ?? []).filter { !hidden.contains("team:" + $0.session) }
+        let away = (session.subagents ?? []).count - helpers.count + (session.team ?? []).count - team.count
         // In their orchestrator's colour while work goes on in it, its own
         // or theirs once its turn is over, so they read as its.
         let own = Look.agentInk(session)
-        if !helpers.isEmpty || !team.isEmpty {
+        if !helpers.isEmpty || !team.isEmpty || away > 0 {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(helpers.prefix(3)) { h in
-                    let loud = h.needsYou == true
-                    let shown = store.helperShown && store.selection == session.id && store.openHelpers[session.id] == h.agent
-                    // A click shows the helper beside its session's conversation.
-                    Button { store.openHelper(h.agent, in: session.id) } label: {
-                        HStack(spacing: 5) {
-                            Text("↳").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
-                            Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : own ?? Theme.ink)
-                            if let d = h.detail, !d.isEmpty {
-                                Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : own ?? Theme.muted)
+                    SubRow(session: session, key: h.agent, name: h.type ?? "Helper") {
+                        let loud = h.needsYou == true
+                        let shown = store.helperShown && store.selection == session.id && store.openHelpers[session.id] == h.agent
+                        // A click shows the helper beside its session's conversation.
+                        Button { store.openHelper(h.agent, in: session.id) } label: {
+                            HStack(spacing: 5) {
+                                Text("↳").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                                Text(h.type ?? "Helper").font(Theme.font(12, .bold)).foregroundStyle(loud ? Theme.needs : own ?? Theme.ink)
+                                if let d = h.detail, !d.isEmpty {
+                                    Text(d).font(Theme.font(12, loud ? .semibold : .regular)).foregroundStyle(loud ? Theme.needs : own ?? Theme.muted)
+                                }
                             }
+                            .lineLimit(1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(shown ? Theme.selection : .clear))
+                            .contentShape(Rectangle())
                         }
-                        .lineLimit(1)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(shown ? Theme.selection : .clear))
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .help([h.type, h.detail, h.command].compactMap { $0 }.joined(separator: "\n"))
+                        .accessibilityHint("Shows the helper beside the conversation")
                     }
-                    .buttonStyle(.plain)
-                    .help([h.type, h.detail, h.command].compactMap { $0 }.joined(separator: "\n"))
-                    .accessibilityHint("Shows the helper beside the conversation")
                 }
                 if helpers.count > 3 {
                     Text("and \(helpers.count - 3) more helpers").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
                 }
                 // Its teammates, whose terminals stand beside its own.
                 ForEach(team.prefix(3)) { m in
-                    Button { store.showTeam(session.id) } label: {
-                        HStack(spacing: 5) {
-                            Text("⊞").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
-                            Text(m.name).font(Theme.font(12, .bold)).foregroundStyle(own ?? Theme.ink)
-                            Text(m.dead == true ? (m.exitCode ?? 0) == 0 ? "Done" : "Failed" : m.working == true ? m.title ?? "Working" : "Waiting")
-                                .font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                    SubRow(session: session, key: "team:" + m.session, name: m.name) {
+                        Button { store.showTeam(session.id) } label: {
+                            HStack(spacing: 5) {
+                                Text("⊞").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                                Text(m.name).font(Theme.font(12, .bold)).foregroundStyle(own ?? Theme.ink)
+                                Text(m.dead == true ? (m.exitCode ?? 0) == 0 ? "Done" : "Failed" : m.working == true ? m.title ?? "Working" : "Waiting")
+                                    .font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                            }
+                            .lineLimit(1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .lineLimit(1)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .help([m.name, m.type, m.title].compactMap { $0 }.joined(separator: "\n"))
+                        .accessibilityHint("Shows the session's terminal beside its teammates'")
                     }
-                    .buttonStyle(.plain)
-                    .help([m.name, m.type, m.title].compactMap { $0 }.joined(separator: "\n"))
-                    .accessibilityHint("Shows the session's terminal beside its teammates'")
                 }
                 if team.count > 3 {
                     Text("and \(team.count - 3) more teammates").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                }
+                if away > 0 {
+                    Button { store.showSubs(session.id) } label: {
+                        Text("\(away) hidden · Show").font(Theme.font(12)).foregroundStyle(own ?? Theme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Show the helpers and teammates hidden from this card")
                 }
             }
             // Under the card's name: its inset, its mark and the gap, less

@@ -47,6 +47,9 @@ final class Store {
     @ObservationIgnored var pickAnchor: String?
     /// The card under the pointer, which a middle click closes.
     @ObservationIgnored var hovered: String?
+    /// Helpers and teammates hidden from their cards, by session: each
+    /// keeps working (Tabs.swift).
+    var hiddenSubs: [String: Set<String>] = [:]
     /// The repos the @ words know and the agents the + words name, with what
     /// each runs: what the task bar's menu and the new-task sheet offer.
     private(set) var repoNames: [String] = []

@@ -60,6 +60,7 @@ const (
 	UIUnparked       = "ui.unparked"
 	UIPinned         = "ui.pinned"
 	UIUnpinned       = "ui.unpinned"
+	UISubStopped     = "ui.sub_stopped"
 	UIClosed         = "ui.closed"
 	UIReopened       = "ui.reopened"
 	UIUndo           = "ui.undo"
@@ -96,7 +97,7 @@ func init() {
 		SpawnRequested, SpawnFailed, SessionStarted, PromptSubmitted, ToolStarted, ToolFinished, ToolFailed,
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
-		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
+		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
 		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent,
 	} {
 		kinds[k] = true
