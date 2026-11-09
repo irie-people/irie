@@ -60,6 +60,7 @@ struct IrieApp: App {
         .commands {
             LearnCommands(store: store)
             IrieCommands(store: store, menu: store.menu)
+            PluginCommands(store: store, menu: store.menu)
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
