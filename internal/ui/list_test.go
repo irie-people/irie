@@ -439,17 +439,51 @@ func TestCloseWhenDoneDropsTheCount(t *testing.T) {
 	}
 }
 
-func TestAnotherMachinesCardSaysWhereItRuns(t *testing.T) {
+// A paired machine's sessions wait under a header of their own, after
+// Parked and before Outside Irie, in both views, in the core's order (DESIGN
+// §2.8); parked, one goes into Parked with the rest. Under the header a
+// card leaves out where it runs, which the header says, but still says
+// when its machine isn't answering; in Parked it keeps it.
+func TestAnotherMachinesSessionsHaveAGroupOfTheirOwn(t *testing.T) {
 	down := time.Date(2026, 11, 1, 10, 41, 0, 0, time.UTC)
-	m, _ := newModel(t, 60, 40, 0)
+	m, _ := newModel(t, 60, 60, 0)
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Header: &ipc.Header{}, Sessions: []ipc.Session{
-		{ID: "Asahi/s1", Name: "fix the build", State: ipc.StateWorking, Detail: "on Asahi · running go test", Host: "Asahi", Created: now},
-		{ID: "Asahi/s2", Name: "write the docs", State: ipc.StateIdle, Detail: "Asahi isn't answering · idle", Host: "Asahi", HostDown: &down, Created: now},
+		{ID: "s1", Name: "web-fix", Repo: "/home/alice/code/website", State: ipc.StateWorking, Detail: "Editing main.go", Created: now, Order: 0},
+		{ID: "s2", Name: "old-notes", State: ipc.StateDone, Parked: true, Created: now, Order: 1},
+		{ID: "Asahi/s1", Name: "fix the build", Repo: "/home/alice/code/website", State: ipc.StateWorking, Detail: "on Asahi · running go test", Host: "Asahi", Created: now, Order: 2},
+		{ID: "Asahi/s2", Name: "write the docs", State: ipc.StateIdle, Detail: "Asahi isn't answering · idle", Host: "Asahi", HostDown: &down, Created: now, Order: 3},
+		{ID: "Asahi/s3", Name: "spike", State: ipc.StateDone, Detail: "on Asahi · done", Host: "Asahi", Parked: true, Created: now, Order: 4},
 	}}})
+	m = send(m, outsideFrame(outsideSessions(1), ""))
+	m = send(m, keyMsg("esc"))
+	for _, c := range []struct {
+		view listView
+		want []string
+	}{
+		{byRepo, []string{"▾ website", "web-fix", "▸ Parked", "▾ On Asahi", "fix the build", "write the docs", "▾ Outside Irie", "outside-00"}},
+		{byList, []string{"web-fix", "▸ Parked", "▾ On Asahi", "fix the build", "write the docs", "▾ Outside Irie", "outside-00"}},
+	} {
+		if m.view != c.view {
+			m = send(m, keyMsg("v"))
+		}
+		if got := outline(m); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("the %v view's outline is %q, want %q", c.view, got, c.want)
+		}
+	}
 	view := strings.Join(screen(t, m), "\n")
-	for _, want := range []string{"on Asahi · running go test", "Asahi isn't answering · "} {
+	for _, want := range []string{"On Asahi  2", "running go test", "Asahi isn't answering · "} {
 		if !strings.Contains(view, want) {
 			t.Errorf("no %q in\n%s", want, view)
 		}
+	}
+	if strings.Contains(view, "on Asahi · ") {
+		t.Errorf("a card under On Asahi says where it runs again:\n%s", view)
+	}
+	m = send(m, keyMsg("Z"))
+	if got, want := outline(m)[:4], []string{"web-fix", "▾ Parked", "old-notes", "spike"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("with Parked open the outline starts %q, want %q", got, want)
+	}
+	if view := strings.Join(screen(t, m), "\n"); !strings.Contains(view, "on Asahi · done") {
+		t.Errorf("the parked card doesn't say where it runs:\n%s", view)
 	}
 }

@@ -110,6 +110,17 @@ func columns(ps []piece) int {
 	return n
 }
 
+// cardDetail is what a session's card says it is doing. The core starts a
+// paired machine's detail with where it runs, "on Asahi · ", which a card
+// under that machine's own header leaves out; a parked one, among this
+// machine's, keeps it, and so does one whose machine isn't answering.
+func cardDetail(s ipc.Session) string {
+	if s.Host == "" || s.Parked {
+		return s.Detail
+	}
+	return strings.TrimPrefix(s.Detail, "on "+s.Host+" · ")
+}
+
 // stateLabel is a state in plain words.
 func stateLabel(s ipc.Session) string {
 	if waiting(s) {
@@ -178,16 +189,15 @@ func (m Model) card(it item, selected, hovered bool) []string {
 	marks := m.marks(s)
 	nameW := max(w-columns(marks)-1-lipgloss.Width(a), 1)
 	name := cut(s.Name, nameW)
-	detail, dc := s.Detail, p.muted
+	detail, dc := cardDetail(s), p.muted
 	if detail == "" {
 		detail = stateLabel(s)
 	}
 	if needs {
 		dc = p.needs
 	}
-	// Another machine's session (docs/proposals/multi-host.md §4.5): the
-	// core's detail says where it runs; it is muted while that machine
-	// isn't answering.
+	// Another machine's session (DESIGN §2.8): its detail is muted while
+	// that machine isn't answering.
 	if s.HostDown != nil {
 		dc = p.muted
 	}
@@ -405,6 +415,8 @@ func (m Model) detailRows() (string, [][]piece) {
 			rows = append(rows, []piece{{"Claude Code sessions in other terminals", p.muted, false}}, []piece{{"m moves an idle one in", p.muted, false}})
 		case g.key == parkedKey:
 			rows = append(rows, []piece{{"out of the way; they keep running", p.muted, false}}, []piece{{"z unparks one, Z folds or opens them", p.muted, false}})
+		case g.host != "":
+			rows = append(rows, []piece{{"Irie's sessions on " + g.host, p.muted, false}}, []piece{{"they run there, in its order", p.muted, false}})
 		}
 		return g.title, append(rows, []piece{{what, p.muted, false}})
 	case itemOutside:

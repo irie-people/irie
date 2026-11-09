@@ -55,6 +55,9 @@ extension Session {
     var isParked: Bool { parked ?? false }
     /// Whether it runs, so that it can pause.
     var canFreeze: Bool { state != "exited" && state != "failed" }
+    /// The paired machine it runs on, when that is another one (DESIGN
+    /// §2.8); nil for one of this Mac's own.
+    var peerName: String? { host.flatMap { $0.isEmpty ? nil : $0 } }
 }
 
 extension Store {
