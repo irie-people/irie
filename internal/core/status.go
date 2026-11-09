@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/statusline"
 	"github.com/irie-people/irie/internal/ui"
@@ -100,6 +101,13 @@ func (c *Core) theme(a ipc.ThemeArgs) error {
 	c.appColors = &ipc.Theme{Name: a.Theme, Light: light, Dark: dark}
 	c.mu.Unlock()
 	c.publishHeader()
+	// Claude Code's own panels in it too, through Irie's theme of Claude
+	// Code's, which sessions started from now on take (internal/harness/claude).
+	if c.claude != "" {
+		if _, err := claude.WriteTheme(c.claude, dark); err != nil {
+			c.log.Warn("claude theme", "err", err)
+		}
+	}
 	return nil
 }
 

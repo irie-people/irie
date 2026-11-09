@@ -136,6 +136,9 @@ final class IrieTerminalView: LocalProcessTerminalView {
 
     /// The press that waits to be known as a click or a drag.
     private var pressed: NSEvent?
+    /// The press went to the program, on a rule it drags (TerminalRule),
+    /// and so do the moves and the release that follow it.
+    private var passing = false
     /// The press is selecting, with mouse reporting off until it ends.
     private var selecting = false
     /// A finished selection holds with mouse reporting still off: SwiftTerm
@@ -157,8 +160,19 @@ final class IrieTerminalView: LocalProcessTerminalView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         pressed = nil
+        passing = false
         if selecting { finishSelecting(event) } // its button-up went astray
         letGo()
+        if event.clickCount == 1, !event.modifierFlags.contains(.shift), let x = ruleUnder(event),
+           let down = NSEvent.mouseEvent(with: .leftMouseDown, location: convert(NSPoint(x: x, y: convert(event.locationInWindow, from: nil).y), to: nil),
+                                         modifierFlags: event.modifierFlags, timestamp: event.timestamp, windowNumber: event.windowNumber,
+                                         context: nil, eventNumber: event.eventNumber, clickCount: 1, pressure: event.pressure) {
+            // On a rule the program drags, such as the edge of Claude Code's
+            // diff panel: the press goes to it, from the rule itself.
+            passing = true
+            super.mouseDown(with: down)
+            return
+        }
         if event.clickCount > 1 || event.modifierFlags.contains(.shift) {
             selecting = true
             allowMouseReporting = false
@@ -169,6 +183,10 @@ final class IrieTerminalView: LocalProcessTerminalView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if passing {
+            super.mouseDragged(with: event)
+            return
+        }
         if let down = pressed, TerminalSelection.isDrag(from: down, to: event) {
             pressed = nil
             selecting = true
@@ -187,7 +205,10 @@ final class IrieTerminalView: LocalProcessTerminalView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if let down = pressed {
+        if passing {
+            passing = false
+            super.mouseUp(with: event)
+        } else if let down = pressed {
             // A click: tmux has it where the button went down, and the
             // program in the terminal too, if it asks. The selection goes,
             // as the Ghostty terminal's does.
@@ -198,6 +219,24 @@ final class IrieTerminalView: LocalProcessTerminalView {
         } else if selecting {
             finishSelecting(event)
         }
+    }
+
+    /// The x, in points, of the middle of a rule the program draws under a
+    /// press or beside it, while the program has asked for the mouse; nil
+    /// for anywhere else (TerminalRule).
+    private func ruleUnder(_ event: NSEvent) -> CGFloat? {
+        guard let t = terminal, t.mouseMode != .off, t.cols > 0, t.rows > 0 else { return nil }
+        let cw = bounds.width / CGFloat(t.cols), ch = bounds.height / CGFloat(t.rows)
+        let p = convert(event.locationInWindow, from: nil)
+        let col = Int(p.x / cw), row = Int((bounds.height - p.y) / ch)
+        guard row >= 0, row < t.rows else { return nil }
+        let top = max(0, row - TerminalRule.reach), bottom = min(t.rows - 1, row + TerminalRule.reach)
+        let shown = t.getTopVisibleRow()
+        for c in TerminalRule.columns(near: col, of: t.cols) {
+            let cells = (top...bottom).map { t.getCharacter(col: c, row: $0 + shown) ?? " " }
+            if TerminalRule.isRule(cells, press: row - top) { return (CGFloat(c) + 0.5) * cw }
+        }
+        return nil
     }
 
     /// Ends a selection where the button came up: the selection is copied

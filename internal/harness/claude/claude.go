@@ -143,6 +143,11 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		}
 	}
 	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow, Deny: s.Deny}
+	// Irie's theme, so the panel Claude Code docks beside the conversation
+	// sits in Irie's palette (theme.go).
+	if AtLeast(s.Probe.Version, ThemeVersion) {
+		x.Theme = SessionTheme(ConfigDir(s.Home, s.Environ))
+	}
 	// Tips as objects, with an id and a cooldown, need 2.1.247.
 	if AtLeast(s.Probe.Version, TipsVersion) {
 		x.Tips = s.Tips
@@ -328,6 +333,7 @@ type Extra struct {
 	Doors  []arch.Door // the doors of the session's arch agents (DESIGN §4.11)
 	Allow  []string    // what the agent runs without asking, as Claude Code's permission rules
 	Deny   []string    // what the agent is refused, as Claude Code's permission rules
+	Theme  string      // the session's colour theme, such as Irie's "custom:irie"; "" leaves the user's own
 }
 
 type permissions struct {
@@ -395,7 +401,8 @@ func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byt
 		OutputStyle  string                    `json:"outputStyle,omitempty"`
 		Tips         *spinnerTips              `json:"spinnerTipsOverride,omitempty"`
 		Permissions  *permissions              `json:"permissions,omitempty"`
-	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style}
+		Theme        string                    `json:"theme,omitempty"`
+	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style, Theme: x.Theme}
 	if len(x.Allow) > 0 || len(x.Deny) > 0 {
 		file.Permissions = &permissions{Allow: x.Allow, Deny: x.Deny}
 	}

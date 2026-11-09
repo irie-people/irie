@@ -77,3 +77,31 @@ extension Notification.Name {
     /// "note" says so in words.
     static let irieTerminalCopied = Notification.Name("irieTerminalCopied")
 }
+
+/// A vertical rule a program draws, such as the edge of the panel Claude
+/// Code docks beside its conversation (its diff panel, or a mod's pane),
+/// which the program moves when it is dragged. A drag that starts on one, or
+/// a cell beside it, goes to the program, which has asked for the mouse,
+/// from the rule itself; any other drag still selects (TerminalSelection).
+enum TerminalRule {
+    /// The glyphs such a rule is drawn with. The ASCII bar, which tables
+    /// are made of, is not one.
+    static let glyphs: Set<Character> = ["│", "┃", "║", "▏", "▕", "▎", "▐", "▌", "╎", "╏", "┆", "┇", "┊", "┋", "├", "┤", "┼", "╟", "╢"]
+
+    /// How many rows of a column, either side of the press, are read.
+    static let reach = 3
+
+    /// Whether a column's cells, from `reach` rows over the press to as
+    /// many under it, make a rule through the press: its own cell is a rule
+    /// glyph, and so are most of the others.
+    static func isRule(_ column: [Character], press: Int) -> Bool {
+        guard column.indices.contains(press), glyphs.contains(column[press]) else { return false }
+        return column.filter { glyphs.contains($0) }.count >= min(column.count, reach + 2)
+    }
+
+    /// The columns to look in for a press in column `col` of `cols`: its
+    /// own, then those either side, as a rule is one narrow cell wide.
+    static func columns(near col: Int, of cols: Int) -> [Int] {
+        [col, col - 1, col + 1].filter { $0 >= 0 && $0 < cols }
+    }
+}

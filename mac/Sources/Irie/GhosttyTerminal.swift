@@ -516,6 +516,9 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
     private var pressed: NSEvent?
     /// The press is selecting, with mouse reporting off until it ends.
     private var selecting = false
+    /// The press went to the program, on a rule it drags (TerminalRule),
+    /// and so do the moves and the release that follow it.
+    private var passing = false
     /// The presses of a double- or triple-click that Ghostty has counted.
     /// A first click that went to tmux reached it reported, which it does
     /// not count, so the next press is given what it missed.
@@ -541,9 +544,19 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         pressed = nil
+        passing = false
         if selecting { finishSelecting(event) } // its button-up went astray
-        guard surface != nil else { return }
+        guard let surface else { return }
         if event.clickCount == 1 { counted = 0 }
+        if event.clickCount == 1, !event.modifierFlags.contains(.shift), let x = ruleUnder(event, surface) {
+            // On a rule the program drags, such as the edge of Claude Code's
+            // diff panel: the press goes to it, from the rule itself.
+            passing = true
+            let p = convert(event.locationInWindow, from: nil)
+            ghostty_surface_mouse_pos(surface, x, frame.height - p.y, Self.mods(event.modifierFlags))
+            button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, event)
+            return
+        }
         if event.clickCount > 3 { return } // a fourth click keeps the line
         if event.clickCount > 1 || event.modifierFlags.contains(.shift) {
             select(from: event)
@@ -553,6 +566,10 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if passing {
+            position(event)
+            return
+        }
         if let down = pressed, TerminalSelection.isDrag(from: down, to: event) {
             pressed = nil
             select(from: down)
@@ -561,7 +578,11 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if let down = pressed {
+        if passing {
+            passing = false
+            position(event)
+            button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, event)
+        } else if let down = pressed {
             // A click: tmux has it where the button went down, and the
             // program in the terminal too, if it asks for the mouse.
             pressed = nil
@@ -573,6 +594,45 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
             finishSelecting(event)
         }
         if let surface { ghostty_surface_mouse_pressure(surface, 0, 0) }
+    }
+
+    /// The x, in points, of the middle of a rule the program draws under a
+    /// press or beside it, while the program has asked for the mouse; nil
+    /// for anywhere else (TerminalRule).
+    private func ruleUnder(_ event: NSEvent, _ surface: ghostty_surface_t) -> CGFloat? {
+        guard ghostty_surface_mouse_captured(surface) else { return nil }
+        let size = ghostty_surface_size(surface)
+        let scale = window?.backingScaleFactor ?? 2
+        guard size.columns > 0, size.rows > 0, size.cell_width_px > 0, size.cell_height_px > 0 else { return nil }
+        let cw = CGFloat(size.cell_width_px) / scale, ch = CGFloat(size.cell_height_px) / scale
+        let p = convert(event.locationInWindow, from: nil)
+        let col = Int(p.x / cw), row = Int((frame.height - p.y) / ch)
+        guard row >= 0, row < Int(size.rows) else { return nil }
+        let top = max(0, row - TerminalRule.reach), bottom = min(Int(size.rows) - 1, row + TerminalRule.reach)
+        for c in TerminalRule.columns(near: col, of: Int(size.columns)) {
+            if let cells = column(surface, c, top, bottom), TerminalRule.isRule(cells, press: row - top) {
+                return (CGFloat(c) + 0.5) * cw
+            }
+        }
+        return nil
+    }
+
+    /// The characters of one column of the screen on show, a row each from
+    /// `top` to `bottom`, a blank for an empty cell.
+    private func column(_ surface: ghostty_surface_t, _ col: Int, _ top: Int, _ bottom: Int) -> [Character]? {
+        func point(_ y: Int) -> ghostty_point_s {
+            ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: UInt32(col), y: UInt32(y))
+        }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, ghostty_selection_s(top_left: point(top), bottom_right: point(bottom), rectangle: true), &text) else {
+            return nil
+        }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let start = text.text else { return nil }
+        var s = String(decoding: UnsafeRawBufferPointer(start: start, count: Int(text.text_len)), as: UTF8.self)
+        if s.hasSuffix("\n") { s.removeLast() }
+        let rows = s.split(separator: "\n", omittingEmptySubsequences: false).map { $0.first ?? " " }
+        return rows.count == bottom - top + 1 ? rows : nil
     }
 
     /// Starts selecting at a press: mouse reporting goes off until the
