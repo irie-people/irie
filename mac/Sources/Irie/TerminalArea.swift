@@ -25,6 +25,9 @@ struct TerminalArea: View {
         // ui.red_on_done; reading it here draws the frame again when it
         // changes.
         let _ = store.redOnDone
+        // A theme of yours that changed, or one being made, draws the
+        // ground and the frame again too (Looks.swift).
+        let _ = LookBook.shared.revision
         VStack(spacing: 0) {
             // The right sidebar (RightSidebar.swift), a drawer that slides
             // in from the window's edge, over the terminal's or the

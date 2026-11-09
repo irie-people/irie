@@ -284,7 +284,7 @@ final class Store {
                 canPlugins = hello.features.contains("plugins")
                 loadPluginsSoon()
                 keepPlugins()
-                if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
+                if hello.features.contains("theme") { sendTheme(Palette.chosen) }
                 loadChoices()
                 // The store lives as long as the app. The frames go in a
                 // batch at a time (Pace.swift), and wait while a menu is
@@ -307,11 +307,14 @@ final class Store {
     }
 
     /// Tells the core the palette in use: the agents' colours on Irie's
-    /// status line follow it, so they match the cards.
+    /// status line follow it, so they match the cards. A theme of yours
+    /// brings its dark colours, which the status line is drawn from.
     func sendTheme(_ id: String) {
         // A preview leaves that to the installed app (Preview.swift).
         guard !Preview.isOn else { return }
-        Task { _ = try? await client.call("theme", ThemeArgs(theme: id), timeout: 2, as: Empty.self) }
+        let p = Palette.named(id)
+        let args = ThemeArgs(theme: p.id, dark: p.isCustom ? p.dark.hexes : nil)
+        Task { _ = try? await client.call("theme", args, timeout: 2, as: Empty.self) }
     }
 
     private static func describe(_ error: Error) -> String {

@@ -15,6 +15,9 @@ enum Snapshot {
         UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)
         let store = Store(socketPath: "/nonexistent/irie-snapshot.sock")
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
+        // A theme and layouts of the fixture's own, never the files in
+        // the config folder (Looks.swift).
+        LookBook.shared.useFixture()
         // Closed, whatever the app has saved; a fixture store saves nothing.
         store.side = SideState()
         do {
@@ -124,6 +127,23 @@ enum Snapshot {
                     try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                     print(name)
                 }
+            }
+            // Make a Theme's two pages (ThemeMaker.swift): a new theme from
+            // the default palette, and the fixture's layouts.
+            for (page, dark) in [(ThemeMaker.Page.colours, false), (.colours, true), (.layouts, false)] {
+                let (rep, _) = window(ThemeMaker(page: page).environment(store), dark: dark,
+                                      width: ThemeMaker.size.width, height: ThemeMaker.size.height)
+                let name = "make-theme-\(page.rawValue)-\(dark ? "dark" : "light").png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            // The fixture's own theme being changed, every colour open.
+            do {
+                let (rep, _) = window(ThemeMaker(opening: .edit("harbour"), everyColour: true).environment(store), dark: false,
+                                      width: ThemeMaker.size.width, height: ThemeMaker.size.height)
+                let name = "make-theme-change-light.png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
             }
         } catch {
             FileHandle.standardError.write(Data("snapshot: \(error.localizedDescription)\n".utf8))

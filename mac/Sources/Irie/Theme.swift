@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// One of Irie's palettes: a light and a dark set of swatches. Rosewater is
-/// the default; View > Theme picks Terracotta, Lilac or Evergreen, and the app keeps
+/// the default; View > Theme picks Terracotta, Lilac or Evergreen, or a
+/// theme of your own (Looks.swift, ThemeMaker.swift), and the app keeps
 /// the choice. In every palette and mode, each text colour keeps 4.5:1 and
 /// each mark 3:1 on every surface it sits on (WCAG 2.2), and Increase
 /// Contrast strengthens them further. The terminal sidebar has the same
@@ -19,7 +20,9 @@ struct Palette: Identifiable, Equatable {
     /// Where the app keeps the choice.
     static let defaultsKey = "theme"
 
-    static func named(_ id: String?) -> Palette { all.first { $0.id == id } ?? standard }
+    /// The palette with this id: one of Irie's, or one of yours
+    /// (Looks.swift); Rosewater for one there is not.
+    static func named(_ id: String?) -> Palette { all.first { $0.id == id } ?? custom.first { $0.id == id } ?? standard }
 }
 
 /// One mode of a palette, as 0xRRGGBB.
@@ -116,14 +119,26 @@ enum Theme {
     /// The palette in use. The app sets it from the defaults at launch and
     /// from View > Theme, and draws its views again when it changes.
     static var palette = Palette.named(UserDefaults.standard.string(forKey: Palette.defaultsKey)) {
-        didSet { colors = Colors(palette) }
+        didSet {
+            colors = Colors(palette)
+            paletteRevision &+= 1
+        }
     }
 
     private static var colors = Colors(palette)
+    /// Counts the palettes put in use, since a theme of yours can change
+    /// its colours and keep its name.
+    private static var paletteRevision = 0
 
-    /// Makes the palette with this id the one in use, if it is not already.
+    /// A theme being made, which the window wears in place of the one
+    /// chosen while Make a Theme has it (ThemeMaker.swift).
+    static var trying: Palette?
+
+    /// Makes the palette with this id the one in use, or the theme being
+    /// made while there is one, if it is not already.
     static func use(_ id: String) {
-        if palette.id != id { palette = Palette.named(id) }
+        let p = trying ?? Palette.named(id)
+        if palette != p { palette = p }
     }
 
     static var sidebar: Color { colors.sidebar }
@@ -247,12 +262,12 @@ enum Theme {
     /// then draws every working card again whenever anything changes, and
     /// works its contrast out again each time.
     private static var agentColors: [String: Color] = [:]
-    private static var agentColorsPalette = ""
+    private static var agentColorsPalette = -1
 
     private static func cached(_ kind: String, _ slot: Int, _ make: () -> Color) -> Color {
-        if agentColorsPalette != palette.id {
+        if agentColorsPalette != paletteRevision {
             agentColors = [:]
-            agentColorsPalette = palette.id
+            agentColorsPalette = paletteRevision
         }
         let key = "\(kind) \(slot)"
         if let c = agentColors[key] { return c }
@@ -507,6 +522,11 @@ extension Color {
 
 /// The sun rising over two waves: Irie's mark.
 struct SunMark: View {
+    /// Colours of its own, as Make a Theme draws a palette not in use; the
+    /// palette's own by default.
+    var sun: Color?
+    var waves: Color?
+
     var body: some View {
         Canvas { ctx, size in
             let s = min(size.width, size.height) / 32
@@ -519,8 +539,8 @@ struct SunMark: View {
                 rays.move(to: p(a.0, a.1))
                 rays.addLine(to: p(b.0, b.1))
             }
-            ctx.stroke(rays, with: .color(Theme.sun), style: StrokeStyle(lineWidth: 2 * s, lineCap: .round))
-            ctx.fill(Path(ellipseIn: CGRect(x: 10.5 * s, y: 8 * s, width: 11 * s, height: 11 * s)), with: .color(Theme.sun))
+            ctx.stroke(rays, with: .color(sun ?? Theme.sun), style: StrokeStyle(lineWidth: 2 * s, lineCap: .round))
+            ctx.fill(Path(ellipseIn: CGRect(x: 10.5 * s, y: 8 * s, width: 11 * s, height: 11 * s)), with: .color(sun ?? Theme.sun))
             for (y, from, to) in [(21.6, 3.0, 29.0), (26.6, 6.5, 26.0)] {
                 var wave = Path()
                 wave.move(to: p(from, y))
@@ -532,7 +552,7 @@ struct SunMark: View {
                     x = next
                     up.toggle()
                 }
-                ctx.stroke(wave, with: .color(Theme.waves), style: StrokeStyle(lineWidth: 2 * s, lineCap: .round))
+                ctx.stroke(wave, with: .color(waves ?? Theme.waves), style: StrokeStyle(lineWidth: 2 * s, lineCap: .round))
             }
         }
         .accessibilityHidden(true)

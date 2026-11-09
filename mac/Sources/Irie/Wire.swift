@@ -422,6 +422,8 @@ struct SubscribeArgs: Encodable {
 /// follow, so they match the cards.
 struct ThemeArgs: Encodable {
     var theme: String
+    /// A theme of yours: its dark colours by role, as "#RRGGBB".
+    var dark: [String: String]?
 }
 
 struct AttachInfo: Decodable, Equatable {

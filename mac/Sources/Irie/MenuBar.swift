@@ -175,9 +175,9 @@ struct IrieCommands: Commands {
                 .disabled(!f.helperShown)
         }
         CommandGroup(after: .toolbar) {
-            Picker("Theme", selection: $theme) {
-                ForEach(Palette.all) { p in Text(p.name).tag(p.id) }
-            }
+            // The palettes, yours after Irie's, Make a Theme, and the
+            // window's layouts (Looks.swift).
+            LookMenus(store: store, theme: $theme)
             Divider()
             Button("Bigger Text", action: run { store.setFontSize(store.fontSize + 1) })
                 .keyboardShortcut("=")

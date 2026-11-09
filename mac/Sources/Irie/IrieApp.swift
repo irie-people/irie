@@ -68,6 +68,13 @@ struct IrieApp: App {
                 .environment(store)
         }
         .defaultSize(width: 560, height: 640)
+        // View > Theme > Make a Theme… and View > Layout: themes and
+        // layouts of your own (ThemeMaker.swift).
+        Window("Make a Theme", id: ThemeMaker.windowID) {
+            ThemeMaker()
+                .environment(store)
+        }
+        .defaultSize(ThemeMaker.size)
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
@@ -153,6 +160,8 @@ struct ContentView: View {
         NavigationSplitView {
             // A new palette draws the sidebar afresh. The terminal area
             // follows the palette itself, so its terminal stays attached.
+            // So does a theme of yours that changed, or one being made,
+            // which the window wears meanwhile (Looks.swift).
             let _ = Theme.use(theme)
             // At its narrowest the sidebar still fits the title bar's row
             // (sun, name and counts) beside the traffic lights; a row that
@@ -161,7 +170,7 @@ struct ContentView: View {
             // again only when their own row changes, and the colour is
             // Look's, which they don't watch.
             SidebarView()
-                .id("\(theme) \(store.redOnDone)")
+                .id("\(theme) \(LookBook.shared.revision) \(store.redOnDone)")
                 .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 420)
         } detail: {
             TerminalArea()
@@ -181,12 +190,14 @@ struct ContentView: View {
         }
         .background(WindowReader { window in
             keys.window = window
+            WindowPanes.window = window
             // A preview takes over the window of the build before (Preview.swift).
             PreviewState.shared.adopt(window, store: store)
         })
         .onAppear {
             keys.install(store)
             WindowCloseItem.install()
+            LookBook.shared.start(store)
         }
         .onChange(of: theme) { store.sendTheme(theme) }
     }
