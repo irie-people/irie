@@ -58,6 +58,7 @@ type track struct {
 	held     bool         // a frozen session's running agent came to a tool call, where the shim holds it
 	priority int          // the level of the last priority.set
 	parked   bool         // ui.parked, until ui.unparked
+	pinned   bool         // ui.pinned, until ui.unpinned
 
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads. own are the
@@ -208,6 +209,10 @@ func (t *track) apply(e event.Event) {
 		t.parked = true
 	case event.UIUnparked:
 		t.parked = false
+	case event.UIPinned:
+		t.pinned = true
+	case event.UIUnpinned:
+		t.pinned = false
 	}
 }
 
@@ -372,7 +377,7 @@ func (t *track) live() string {
 // it was doing.
 func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	s.State = t.state(dead)
-	s.Priority, s.Parked = t.priority, t.parked
+	s.Priority, s.Parked, s.Pinned = t.priority, t.parked, t.pinned
 	code := func(e *event.Event, key string) *int {
 		if n, ok := e.Int(key); ok {
 			return &n

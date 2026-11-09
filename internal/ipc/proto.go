@@ -208,6 +208,7 @@ type Session struct {
 	// Where the user put it and what they did to it (control.go).
 	Order    int        `json:"order"`              // its place in the list, from 0 at the top
 	Parked   bool       `json:"parked,omitempty"`   // in the Parked group at the end of the list
+	Pinned   bool       `json:"pinned,omitempty"`   // in the Pinned group at the top of the list
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
@@ -697,9 +698,20 @@ type ClosedSession struct {
 	Auto   bool      `json:"auto,omitempty"`
 }
 
-// CloseArgs name the session to close.
+// CloseArgs name the session to close, or several: Sessions close together,
+// as one step of the history, which one undo takes back (DESIGN §4.5).
+// Finished adds every session whose work is through, as close_when_done
+// would close it, but for the pinned ones, the parked ones and another
+// machine's: the sidebars' Close All Finished.
 type CloseArgs struct {
-	Session string `json:"session"`
+	Session  string   `json:"session,omitempty"`
+	Sessions []string `json:"sessions,omitempty"`
+	Finished bool     `json:"finished,omitempty"`
+}
+
+// CloseResult lists the sessions a close closed.
+type CloseResult struct {
+	Sessions []string `json:"sessions"`
 }
 
 // ReopenArgs name the closed session to reopen: the one closed last when
@@ -838,6 +850,11 @@ type SpawnArgs struct {
 	Model string `json:"model,omitempty"`
 	// Continues is the session a failover carries the task on from.
 	Continues string `json:"continues,omitempty"`
+	// After is the session that started this one: the session whose agent
+	// ran irie ctl spawn, or the one selected where the task was typed.
+	// With ui.new_tabs = "next" the new session goes just after it in the
+	// list, as a browser opens a tab beside the one it came from.
+	After string `json:"after,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that

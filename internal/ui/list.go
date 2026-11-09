@@ -57,11 +57,12 @@ type item struct {
 }
 
 // Keys. groupKey names the Outside Irie group, listKey the List view's one
-// list and parkedKey the Parked group.
+// list, parkedKey the Parked group and pinnedKey the Pinned group.
 const (
 	groupKey  = "\x00outside"
 	listKey   = "\x00list"
 	parkedKey = "\x00parked"
+	pinnedKey = "\x00pinned"
 )
 
 func sessionKey(id string) string { return "session:" + id }
@@ -89,11 +90,14 @@ func (m Model) homeKey(s ipc.Session) string {
 	return notInARepo
 }
 
-// groupOf is the group a session is in: Parked while it is parked, else its
-// home.
+// groupOf is the group a session is in: Parked while it is parked, Pinned
+// while it is pinned, else its home.
 func (m Model) groupOf(s ipc.Session) string {
-	if s.Parked {
+	switch {
+	case s.Parked:
 		return parkedKey
+	case s.Pinned && s.Host == "":
+		return pinnedKey
 	}
 	return m.homeKey(s)
 }
@@ -136,7 +140,7 @@ func tail(p string, n int) string {
 
 // groups returns the groups of Irie's sessions in the current view, in
 // order, with the indexes of their sessions in the core's order (control.go):
-// the List view's one list or a group per repo, then Parked, then a group
+// Pinned, then the List view's one list or a group per repo, then Parked, then a group
 // for each paired machine's sessions, in the order the core lists them, so
 // they stand apart from this machine's. Parked, a machine's session goes
 // into Parked with the rest. Only the user moves a session, by dragging,
@@ -144,12 +148,12 @@ func tail(p string, n int) string {
 func (m Model) groups() ([]*group, [][]int) {
 	var keys, hosts []string
 	members := map[string][]int{}
-	titles := map[string]string{notInARepo: "Not in a repo", listKey: "Sessions", parkedKey: "Parked"}
+	titles := map[string]string{notInARepo: "Not in a repo", listKey: "Sessions", parkedKey: "Parked", pinnedKey: "Pinned"}
 	for i, s := range m.sessions {
 		k := m.groupOf(s)
 		if _, ok := members[k]; !ok {
 			switch {
-			case k == parkedKey:
+			case k == parkedKey, k == pinnedKey:
 			case s.Host != "" && k == hostKey(s.Host):
 				hosts = append(hosts, k)
 				titles[k] = "On " + s.Host
@@ -190,6 +194,9 @@ func (m Model) groups() ([]*group, [][]int) {
 			}
 			return 0
 		})
+	}
+	if len(members[pinnedKey]) > 0 {
+		keys = append([]string{pinnedKey}, keys...)
 	}
 	if len(members[parkedKey]) > 0 {
 		keys = append(keys, parkedKey)

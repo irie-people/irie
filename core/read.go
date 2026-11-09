@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -14,7 +15,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :fork [@TURN] [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -120,6 +121,18 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return Step{}, err
 		}
 		return step(OpClose, CloseArgs{Session: s.ID}, s)
+	case name == "close" && (arg == "others" || arg == "below"):
+		s, err := selected()
+		if err != nil {
+			return Step{}, err
+		}
+		ids := closeSet(arg, s, v.Sessions)
+		if len(ids) == 0 {
+			return Step{}, Errorf(CodeBadArgs, ":close %s finds nothing to close: pinned and parked sessions stay.", arg)
+		}
+		return step(OpClose, CloseArgs{Sessions: ids}, s)
+	case name == "close" && arg == "finished":
+		return step(OpClose, CloseArgs{Finished: true}, nil)
 	case name == "reopen" && arg == "":
 		return step(OpReopen, ReopenArgs{}, nil)
 	case (name == OpUndo || name == OpRedo) && arg == "":
@@ -171,6 +184,16 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 				what = "not parked"
 			}
 			return Step{}, Errorf(CodeBadArgs, ":%s takes the selected session, which must be %s.", name, what)
+		}
+		return step(name, ParkArgs{Session: sel.ID}, sel)
+	case (name == OpPin || name == OpUnpin) && arg == "":
+		on := name == OpPin
+		if sel == nil || sel.Pinned == on || sel.Host != "" {
+			what := "pinned"
+			if on {
+				what = "not pinned"
+			}
+			return Step{}, Errorf(CodeBadArgs, ":%s takes the selected session, which must be one of this machine's and %s.", name, what)
 		}
 		return step(name, ParkArgs{Session: sel.ID}, sel)
 	case name == OpFork:
@@ -265,6 +288,27 @@ func outsideName(o OutsideSession) string {
 
 // Said words what a step did, given what its op returned, or the error it
 // failed with. A client shows Text as it is.
+// closeSet is what :close others or :close below closes, as the List view
+// draws it: this machine's sessions that are neither pinned nor parked, in
+// the list's order, but for s; for below, only those after s.
+func closeSet(which string, s *Session, rows []Session) []string {
+	list := slices.Clone(rows)
+	slices.SortStableFunc(list, func(a, b Session) int { return cmp.Compare(a.Order, b.Order) })
+	var ids []string
+	after := false
+	for _, r := range list {
+		switch {
+		case r.ID == s.ID:
+			after = true
+		case r.Pinned || r.Parked || r.Host != "":
+		case which == "below" && !after:
+		default:
+			ids = append(ids, r.ID)
+		}
+	}
+	return ids
+}
+
 func Said(st Step, result any, err error) (InputResult, error) {
 	if err != nil {
 		// Nothing to undo is news, not a failure.
@@ -307,7 +351,17 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	case OpRate:
 		r.Text = fmt.Sprintf("Rated %s %s. The router learns from it.", name, as[RateArgs](st.Args).Verdict)
 	case OpClose:
-		r.Session, r.Text = nil, "Closed "+name+". :reopen brings it back."
+		a, n := as[CloseArgs](st.Args), len(as[CloseResult](result).Sessions)
+		switch {
+		case len(a.Sessions) == 0 && !a.Finished:
+			r.Session, r.Text = nil, "Closed "+name+". :reopen brings it back."
+		case n == 0:
+			r.Did, r.Session, r.Text = InputAnswered, nil, "Nothing has finished to close. Pinned and parked sessions stay."
+		case n == 1:
+			r.Session, r.Text = nil, "Closed 1 session. :undo brings it back."
+		default:
+			r.Session, r.Text = nil, fmt.Sprintf("Closed %d sessions. :undo brings them all back.", n)
+		}
 	case OpReopen:
 		s := as[ReopenResult](result).Session
 		r.Session, r.Text = &s, "Reopened "+s.Name+"."
@@ -349,6 +403,10 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text = "Parked " + name + "."
 	case OpUnpark:
 		r.Text = "Unparked " + name + "."
+	case OpPin:
+		r.Text = "Pinned " + name + ": no close but yours of it reaches it."
+	case OpUnpin:
+		r.Text = "Unpinned " + name + "."
 	default:
 		r.Text = "Done."
 	}

@@ -44,6 +44,11 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":rename Login fix", "s1", "", OpRename, RenameArgs{Session: "s1", Name: "Login fix"}},
 		{":rate good", "s1", "", OpRate, RateArgs{Session: "s1", Verdict: Good}},
 		{":close", "s4", "", OpClose, CloseArgs{Session: "s4"}},
+		// Others and below leave the parked s3 alone.
+		{":close others", "s1", "", OpClose, CloseArgs{Sessions: []string{"s2", "s4"}}},
+		{":close below", "s2", "", OpClose, CloseArgs{Sessions: []string{"s4"}}},
+		{":close finished", "", "", OpClose, CloseArgs{Finished: true}},
+		{":pin", "s1", "", OpPin, ParkArgs{Session: "s1"}},
 		{":reopen", "", "", OpReopen, ReopenArgs{}},
 		{":undo", "", "", OpUndo, UndoArgs{}},
 		{"  :redo  ", "", "", OpRedo, UndoArgs{}},

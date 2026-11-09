@@ -150,6 +150,66 @@ func (c *Core) close(a ipc.CloseArgs) error {
 	return nil
 }
 
+// closeMany closes several sessions at your word, as close closes one: the
+// sessions a names, and with a.Finished every session whose work is
+// through (doneWith). It returns those it closed, in the list's order, and
+// passes over one closed or gone meanwhile; the first other error stops it,
+// with what closed so far.
+func (c *Core) closeMany(a ipc.CloseArgs) ([]string, error) {
+	c.mu.Lock()
+	want := map[string]bool{}
+	for _, id := range append([]string{a.Session}, a.Sessions...) {
+		if id != "" {
+			want[id] = true
+		}
+	}
+	var ids []string
+	for _, id := range c.fullOrder() {
+		x := c.sessions[id]
+		if x != nil && (want[id] || a.Finished && c.doneWith(x)) {
+			ids = append(ids, id)
+		}
+	}
+	var closed []string
+	var err error
+	for _, id := range ids {
+		if c.sessions[id] == nil {
+			continue
+		}
+		if err = c.closeLocked(id, false); err != nil {
+			c.log.Warn("close", "session", id, "err", err)
+			break
+		}
+		closed = append(closed, id)
+	}
+	frames := c.changes()
+	c.mu.Unlock()
+	c.publish(frames)
+	if len(closed) > 0 {
+		c.publishClosed()
+	}
+	return closed, err
+}
+
+// doneWith reports whether Close All Finished closes x: its turn is over,
+// done, idle or exited, and nothing of its work goes on (finished), no
+// helper or teammate at work; and it is neither pinned nor parked, which
+// you keep on purpose. Another machine's sessions are never in c.sessions.
+// The caller holds c.mu.
+func (c *Core) doneWith(x *session) bool {
+	if x.track.pinned || x.track.parked || x.track.frozen != nil || !finished(x) {
+		return false
+	}
+	if _, waits := x.subsAtWork(); waits {
+		return false
+	}
+	switch x.wire().State {
+	case ipc.StateDone, ipc.StateIdle, ipc.StateExited:
+		return true
+	}
+	return false
+}
+
 // closeLocked closes session id: at your word, or on its own (auto) when
 // spawn.close_when_done closes it. The caller holds c.mu.
 func (c *Core) closeLocked(id string, auto bool) error {
@@ -247,14 +307,15 @@ func (c *Core) reopenable(x *session) closedRecord {
 // the review dock and the jot dog still show it, and reopen brings it
 // back. The caller holds c.mu.
 func (c *Core) closeWhenDone(x *session) {
-	if c.awaitsLook(x) || !finished(x) {
+	// A pinned session closes only at your own word (pin.go).
+	if x.track.pinned || c.awaitsLook(x) || !finished(x) {
 		return
 	}
 	id, quiet := x.id, x.quiet
 	time.AfterFunc(c.cfg().Spawn.CloseDelay, func() {
 		c.mu.Lock()
 		x := c.sessions[id]
-		if !c.cfg().Spawn.CloseWhenDone || x == nil || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || x.track.frozen != nil || !finished(x) {
+		if !c.cfg().Spawn.CloseWhenDone || x == nil || x.track.pinned || x.quiet != quiet || x.dead || x.track.activity != done || len(x.track.needs) > 0 || x.track.frozen != nil || !finished(x) {
 			c.mu.Unlock()
 			return
 		}

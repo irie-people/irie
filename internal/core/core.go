@@ -739,7 +739,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
 		}}, nil
@@ -763,11 +763,21 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		if err := c.close(a); err != nil {
-			return nil, err
+		if len(a.Sessions) == 0 && !a.Finished {
+			if a.Session == "" {
+				return nil, ipc.Errorf(ipc.CodeBadArgs, "close needs a session, sessions or finished")
+			}
+			if err := c.close(a); err != nil {
+				return nil, err
+			}
+			c.recordAction(actClose, a.Session, nil)
+			return ipc.CloseResult{Sessions: []string{a.Session}}, nil
 		}
-		c.recordAction(actClose, a.Session, nil)
-		return nil, nil
+		// Several close as one step of the history, which one undo takes
+		// back (undo.go), even when one of them failed to close.
+		ids, err := c.closeMany(a)
+		c.recordSteps(actClose, ids, nil)
+		return ipc.CloseResult{Sessions: ids}, err
 	case ipc.OpDog:
 		return c.dogList()
 	case ipc.OpReady:

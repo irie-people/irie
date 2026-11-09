@@ -29,6 +29,10 @@ const controlUsage = `  irie ctl freeze SESSION|--all          stop a session's 
                                          one this runs in
   irie ctl unpark [SESSION]              bring it back, last in the list, just
                                          above Parked
+  irie ctl pin [SESSION]                 keep a session at hand, last in the
+                                         Pinned group at the top, where no
+                                         close but your own of it reaches it
+  irie ctl unpin [SESSION]               put it back, first among the rest
 `
 
 // ctlFreeze is `irie ctl freeze` (on) and `irie ctl thaw`.
@@ -99,6 +103,21 @@ func ctlPark(args []string, on bool) error {
 	if on {
 		name, op = "park", ipc.OpPark
 	}
+	return ctlPlace(name, op, args)
+}
+
+// ctlPin is `irie ctl pin` (on) and `irie ctl unpin`, which find their
+// session as ctl park does.
+func ctlPin(args []string, on bool) error {
+	name, op := "unpin", ipc.OpUnpin
+	if on {
+		name, op = "pin", ipc.OpPin
+	}
+	return ctlPlace(name, op, args)
+}
+
+// ctlPlace runs op, park, unpark, pin or unpin, on the session args name.
+func ctlPlace(name, op string, args []string) error {
 	if len(args) > 1 {
 		return fmt.Errorf("usage: irie ctl %s [SESSION]", name)
 	}

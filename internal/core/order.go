@@ -8,7 +8,8 @@ package core
 // session keeps its place for its reopen.
 //
 // Parking a session puts it last in the Parked group at the end of the
-// list, and unparking it puts it last among the rest, just above Parked:
+// list, and unparking it puts it last among the rest, just above Parked;
+// parking a pinned one unpins it (pin.go):
 // either way it goes to the end of the one order, which the sidebars draw
 // with the parked sessions apart. Park is in the journal (ui.parked,
 // ui.unparked), which a restarted core replays. A park or unpark the user
@@ -236,6 +237,33 @@ func (c *Core) putBefore(id, before string) error {
 	return nil
 }
 
+// placeNew puts session id, just spawned by a, where ui.new_tabs says
+// (DESIGN §4.1): last, where the order puts any session it does not name
+// yet; first among the rest, just under Pinned; or next, just after the
+// session that started it, as a browser opens a tab beside the one it came
+// from. That is a.After, the session whose agent spawned it or the one
+// selected where it was typed, else the session it is a subtask of or a
+// failover from; when that one is pinned, first among the rest, and when
+// it is closed or there is none, last. It records nothing: a new session
+// is not a move of yours. The caller holds c.mu.
+func (c *Core) placeNew(id string, a ipc.SpawnArgs) {
+	switch c.cfg().UI.NewTabs {
+	case "first":
+		c.toFirstUnpinned(id)
+	case "next":
+		from := cmp.Or(a.After, a.Parent, a.Continues)
+		y := c.sessions[from]
+		switch {
+		case y == nil || from == id:
+		case y.track.pinned:
+			c.toFirstUnpinned(id)
+		default:
+			ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
+			c.setOrder(slices.Insert(ids, slices.Index(ids, from)+1, id))
+		}
+	}
+}
+
 // toTop puts session id first in the list. The caller holds c.mu.
 func (c *Core) toTop(id string) {
 	ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
@@ -267,16 +295,25 @@ func (c *Core) park(a ipc.ParkArgs, on bool) (step map[string]any, err error) {
 		return nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Before)
 	}
 	from := c.nextOf(a.Session)
+	// Parking a pinned session unpins it (pin.go).
+	unpins := on && c.sessions[a.Session] != nil && c.sessions[a.Session].track.pinned
 	changed, err := c.setParked(a.Session, on)
 	if !changed {
 		return nil, err
+	}
+	if unpins {
+		c.setPinned(a.Session, false)
 	}
 	if a.Before != "" && a.Before != a.Session {
 		c.putBefore(a.Session, a.Before)
 	} else {
 		c.toEnd(a.Session)
 	}
-	return map[string]any{"from": from, "to": c.nextOf(a.Session)}, nil
+	step = map[string]any{"from": from, "to": c.nextOf(a.Session)}
+	if unpins {
+		step["pinned"] = true
+	}
+	return step, nil
 }
 
 // setParked parks or unparks session id, and reports whether that changed
@@ -354,6 +391,11 @@ func doPark(on bool, k string) func(c *Core, a action) (action, error) {
 			return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 		}
 		c.setParked(x.id, on)
+		// A park that unpinned the session pins it again when undone, and
+		// unpins it again when redone.
+		if a.flag("pinned") {
+			c.setPinned(x.id, !on)
+		}
 		if _, ok := a.Data[k]; ok {
 			c.putBack(x.id, a.strs(k))
 		}
