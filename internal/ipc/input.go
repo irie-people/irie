@@ -43,6 +43,9 @@ type InputArgs struct {
 	// Apart is the session a task typed before was added to, as more for
 	// its jot: the task is taken back from it and started on its own.
 	Apart string `json:"apart,omitempty"`
+	// Space is the space the client shows, where a task starts ("" for
+	// the first).
+	Space string `json:"space,omitempty"`
 }
 
 // Paste is a long paste that a client shows as Label in what was typed.

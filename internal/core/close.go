@@ -166,7 +166,9 @@ func (c *Core) closeMany(a ipc.CloseArgs) ([]string, error) {
 	var ids []string
 	for _, id := range c.fullOrder() {
 		x := c.sessions[id]
-		if x != nil && (want[id] || a.Finished && c.doneWith(x)) {
+		// Finished takes one space's, when a.Space names it (spaces.go).
+		inSpace := a.Space == nil || c.spaceOf(x) == c.spaceKey(*a.Space)
+		if x != nil && (want[id] || a.Finished && inSpace && c.doneWith(x)) {
 			ids = append(ids, id)
 		}
 	}

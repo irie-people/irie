@@ -370,6 +370,11 @@ func (c *Core) recordAction(kind, id string, data map[string]any) {
 // share a batch, so that undo and redo take them together. It never runs
 // for what undo and redo do.
 func (c *Core) recordSteps(kind string, ids []string, data map[string]any) {
+	c.recordEach(kind, ids, func(string) map[string]any { return maps.Clone(data) })
+}
+
+// recordEach is recordSteps with data of each session's own.
+func (c *Core) recordEach(kind string, ids []string, data func(id string) map[string]any) {
 	k, ok := actionKinds[kind]
 	if !ok {
 		c.log.Warn("history: unknown action kind", "kind", kind)
@@ -385,7 +390,7 @@ func (c *Core) recordSteps(kind string, ids []string, data map[string]any) {
 	c.mu.Lock()
 	at := time.Now().UTC().Truncate(time.Millisecond)
 	for _, id := range ids {
-		a := action{ID: newActionID(), Kind: kind, Session: id, Name: c.nameOf(id), At: at, Data: maps.Clone(data), Batch: batch}
+		a := action{ID: newActionID(), Kind: kind, Session: id, Name: c.nameOf(id), At: at, Data: data(id), Batch: batch}
 		if r, ok := c.closedRecord(id); ok && c.sessions[id] == nil {
 			a = a.with("closed", r.Closed.Format(time.RFC3339Nano))
 		}

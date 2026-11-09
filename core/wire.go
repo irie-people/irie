@@ -144,6 +144,11 @@ type (
 	KeysArgs         = ipc.KeysArgs
 	PairArgs         = ipc.PairArgs
 	PairResult       = ipc.PairResult
+	Space            = ipc.Space
+	SpacesArgs       = ipc.SpacesArgs
+	SpacesResult     = ipc.SpacesResult
+	SpaceArgs        = ipc.SpaceArgs
+	SpaceResult      = ipc.SpaceResult
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -312,4 +317,11 @@ const (
 	FeatureScreenLive  = ipc.FeatureScreenLive
 	FrameScreen        = ipc.FrameScreen
 	OpPair             = ipc.OpPair
+	OpSpaces           = ipc.OpSpaces
+	OpSpace            = ipc.OpSpace
+	SpacesList         = ipc.SpacesList
+	SpacesNew          = ipc.SpacesNew
+	SpacesRename       = ipc.SpacesRename
+	SpacesMove         = ipc.SpacesMove
+	SpacesRemove       = ipc.SpacesRemove
 )
