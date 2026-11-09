@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/tmux"
 	"github.com/irie-people/irie/internal/vpn"
@@ -30,7 +31,7 @@ const vpnExpiryEvery = time.Hour
 // keepVPN starts following the VPN when vpn.on turns on, and stops when it
 // turns off. The caller holds c.mu.
 func (c *Core) keepVPN() {
-	on := c.cfg().VPN.On
+	on := c.cfg().VPNOn()
 	switch {
 	case on && c.vpn.cancel == nil:
 		ctx, cancel := context.WithCancel(context.Background())
@@ -144,7 +145,7 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 
 // vpnHeader is the header's mark, while vpn.on. The caller holds c.mu.
 func (c *Core) vpnHeader(now time.Time) *ipc.VPN {
-	if !c.cfg().VPN.On {
+	if !c.cfg().VPNOn() {
 		return nil
 	}
 	v := c.vpn
@@ -194,8 +195,8 @@ func timeLeft(expires, now time.Time) string {
 // from inside an agent is refused: the VPN is the person's, and an agent at
 // work would pull the network from under the others.
 func (c *Core) vpnOp(peer int, a ipc.VPNArgs) (ipc.VPNResult, error) {
-	if !c.cfg().VPN.On {
-		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "Mullvad VPN control is off: [vpn] on = true in config.toml turns it on.")
+	if why := plugins.Why(*c.cfg(), plugins.VPN); why != "" {
+		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
 	}
 	c.mu.Lock()
 	v := c.vpn

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/skills"
 	"github.com/irie-people/irie/internal/version"
 )
@@ -22,7 +23,7 @@ func skillsCmd(args []string) error {
 		return err
 	}
 	fmt.Printf("Skills that come with Irie. Each Claude Code session gets them as a plugin\nfor that session only, and runs them as /%s:<name>.\n\n", skills.Plugin)
-	choices := skills.Choose(skills.Bundled(), skills.Settings{Enabled: cfg.Skills.Enabled, Disabled: cfg.Skills.Disabled, Profile: true})
+	choices := skills.Choose(skills.Bundled(), plugins.SkillSettings(cfg, true))
 	width := 0
 	for _, c := range choices {
 		width = max(width, len(skills.Plugin)+len(c.Name)+2)

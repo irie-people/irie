@@ -7,6 +7,7 @@ import (
 
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/skills"
 )
 
@@ -38,9 +39,8 @@ func (c *Core) guide(g guideSpec, want string) (ipc.Session, error) {
 	if !ok || profile.Harness != "claude-code" {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "The %s guide runs on +%s, a Claude Code profile, which your config has not got.", g.name, g.profile)
 	}
-	cfg := c.cfg().Skills
 	var choice *skills.Choice
-	for _, ch := range skills.Choose(skills.Bundled(), skills.Settings{Enabled: cfg.Enabled, Disabled: cfg.Disabled, Profile: profile.TakesSkills()}) {
+	for _, ch := range skills.Choose(skills.Bundled(), plugins.SkillSettings(*c.cfg(), profile.TakesSkills())) {
 		if ch.Name == g.skill {
 			choice = &ch
 		}

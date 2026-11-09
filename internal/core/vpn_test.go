@@ -118,7 +118,7 @@ func TestAnAgentCannotChangeTheVPN(t *testing.T) {
 
 func TestTheVPNWhenOff(t *testing.T) {
 	c := bareCore(t, config.Default())
-	if _, err := c.vpnOp(0, ipc.VPNArgs{}); err == nil || !strings.Contains(err.Error(), "[vpn] on = true") {
+	if _, err := c.vpnOp(0, ipc.VPNArgs{}); err == nil || !strings.Contains(err.Error(), "irie plugins on privacy vpn") {
 		t.Errorf("err = %v", err)
 	}
 	c.mu.Lock()
@@ -126,6 +126,20 @@ func TestTheVPNWhenOff(t *testing.T) {
 	c.mu.Unlock()
 	if h.VPN != nil {
 		t.Errorf("header has a VPN while it is off: %+v", h.VPN)
+	}
+	// vpn.on with the privacy plugin off is off too, and says why
+	// (DESIGN §4.17).
+	cfg := config.Default()
+	cfg.VPN.On, cfg.Plugins.Privacy = true, false
+	c = bareCore(t, cfg)
+	if _, err := c.vpnOp(0, ipc.VPNArgs{}); err == nil || !strings.Contains(err.Error(), "as the privacy plugin is") {
+		t.Errorf("err with the plugin off = %v", err)
+	}
+	c.mu.Lock()
+	h = c.headerNow()
+	c.mu.Unlock()
+	if h.VPN != nil {
+		t.Errorf("header has a VPN while its plugin is off: %+v", h.VPN)
 	}
 }
 

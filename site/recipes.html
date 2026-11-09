@@ -108,6 +108,7 @@
     <li><a href="#long-input">Hand over a long log or spec</a></li>
     <li><a href="#away">Keep agents working while you’re away</a></li>
     <li><a href="#handoff">Let an agent hand work to another</a></li>
+    <li><a href="#privacy">The privacy plugin</a></li>
   </ul>
 
   <h2 id="parallel">Several agents on one feature</h2>
@@ -242,6 +243,19 @@ and read their branches before you merge them.</code></pre>
     <li>The helper’s result coming back to the first agent as a note. <a class="tag" href="roadmap.html#after" data-m="after">Planned</a></li>
   </ul>
 
+  <h2 id="privacy">The privacy plugin</h2>
+  <p>Irie’s plugins are sets of features that go on and off together. The first, Privacy, holds the next three recipes: a dead man’s switch for your family, Mullvad VPN in Irie, and Mullvad Browser for agents.</p>
+  <ol class="rules">
+    <li>See how each part stands on your computer, and what each still needs:
+<pre><code>irie plugins</code></pre>
+      Or type <code>:plugins</code> in a task bar, or open the Mac app’s Settings › Plugins.</li>
+    <li>Set up each part in turn. It asks before it installs or changes anything:
+<pre><code>irie setup privacy</code></pre>
+      Or type <code>:setup privacy</code> in a task bar.</li>
+    <li>To turn the whole plugin off, whatever each part’s own switch says:
+<pre><code>irie plugins off privacy</code></pre></li>
+  </ol>
+
   <h2 id="dead-mans-switch">Set up a dead man’s switch</h2>
   <p>If something happens to you, the people you love need to know what to do, and how to get into the accounts that matter. Irie walks you through setting that up, one step at a time. If you stop checking in, you get a reminder first; much later, the people you chose get an email that says what has happened and what to do.</p>
   <ol class="rules">
@@ -265,7 +279,7 @@ and read their branches before you merge them.</code></pre>
   <h2 id="vpn">Mullvad VPN in Irie</h2>
   <p>If you use Mullvad VPN, Irie can show it where you already look, and change it from any task bar, your phone’s included.</p>
   <ol class="rules">
-    <li>Turn it on in the Mac app’s Settings › General › Mullvad VPN, or in <code>config.toml</code>:
+    <li>Turn it on in the Mac app’s Settings › Plugins, or with <code>irie plugins on privacy vpn</code>, or in <code>config.toml</code>:
 <pre><code>[vpn]
 on = true</code></pre></li>
     <li>Type <code>:vpn</code> to see it, <code>:vpn on</code> or <code>:vpn off</code> to connect or disconnect, <code>:vpn se got</code> to go through Gothenburg, <code>:vpn lockdown on</code> to block the network while it is off, and <code>:vpn time</code> for your account’s time left.</li>

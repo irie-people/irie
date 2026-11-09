@@ -55,6 +55,13 @@ const usage = `usage: irie [command]
                           SearXNG, and turn +anon and +tor tasks on
   irie anon [<command>]   anonymous research's compartments and exits: check,
                           run a program through one, forget (irie anon help)
+  irie plugins [on|off PLUGIN [PART]]
+                          Irie's plugins, such as privacy, and how far each
+                          part is set up; turn a plugin or a part on or off
+  irie setup privacy [--yes]
+                          set up each part of the privacy plugin in turn:
+                          Mullvad VPN, anonymous research, Mullvad Browser
+                          and the dead man's switch
   irie peer <command>     your other machines' Irie, shown in this list and
                           started on with ^NAME (irie peer for help)
   irie version            print the version
@@ -145,6 +152,8 @@ func run(args []string) int {
 			return anonServe(args[1:])
 		}
 		err = anonCmd(args)
+	case "plugins", "plugin":
+		err = pluginsCmd(args, os.Stdout)
 	case "peer":
 		err = peerCmd(args)
 	case "lid":

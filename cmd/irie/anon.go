@@ -3,23 +3,19 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/irie-people/irie/internal/anon"
 	"github.com/irie-people/irie/internal/config"
-	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/repo"
@@ -130,7 +126,7 @@ func anonServe(args []string) int {
 
 func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show bool) error {
 	on := "off: `irie setup anon` sets it up"
-	if cfg.Anon.On {
+	if cfg.AnonOn() {
 		on = "on: +anon and +tor tasks run in compartments"
 	}
 	fmt.Fprintf(w, "Anonymous research is %s.\n", on)
@@ -155,7 +151,7 @@ func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show
 		search = "installed; it starts with the first anonymous task, or `irie anon up`"
 	}
 	fmt.Fprintf(w, "SearXNG: %s\n", search)
-	if coreErr != nil && cfg.Anon.On {
+	if coreErr != nil && cfg.AnonOn() {
 		fmt.Fprintf(w, "(Irie's core did not answer: %v)\n", coreErr)
 	}
 	all, err := anon.Store{Path: d.Compartments()}.Load()
@@ -435,23 +431,7 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }
 
-// anonOn sets anon.on = true: through the core when it runs, which keeps
-// the file's comments and checks the result, else in the file.
+// anonOn sets anon.on = true.
 func anonOn(p paths.Paths) error {
-	set := ipc.ConfigArgs{Set: []ipc.ConfigSet{{Key: "anon.on", Value: json.RawMessage(`true`)}}}
-	if err := ipc.Call(p.Socket(), 10*time.Second, ipc.OpConfig, set, nil); err == nil {
-		return nil
-	}
-	data, err := os.ReadFile(p.ConfigFile())
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	out, err := config.Apply(data, []config.Edit{{Key: "anon.on", Value: true}})
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(p.ConfigFile()), 0o700); err != nil {
-		return err
-	}
-	return filetx.WriteFile(p.ConfigFile(), out, 0o600)
+	return setConfig(p, []config.Edit{{Key: "anon.on", Value: true}})
 }

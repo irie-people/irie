@@ -111,6 +111,9 @@ type Settings struct {
 	Enabled  bool     // skills.enabled
 	Disabled []string // skills.disabled
 	Profile  bool     // the session's profile takes skills
+	// Left are skills left out by the plugin that brings them, while it is
+	// off (internal/plugins), each with why.
+	Left map[string]string
 }
 
 // Choice is whether one skill goes to a session, and why not.
@@ -132,6 +135,8 @@ func Choose(all []Skill, s Settings) []Choice {
 			c.Why = "this profile takes no skills"
 		case slices.Contains(s.Disabled, sk.Name):
 			c.Why = "turned off (skills.disabled)"
+		case s.Left[sk.Name] != "":
+			c.Why = s.Left[sk.Name]
 		default:
 			c.On = true
 		}

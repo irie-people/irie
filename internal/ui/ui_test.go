@@ -1652,7 +1652,7 @@ func TestColonCommands(t *testing.T) {
 		t.Errorf("routes %v, status %q", b.routes, m.status)
 	}
 	enter(":bogus")
-	if !m.statusErr || !strings.Contains(m.status, ":setup [local|switch], :write [TASK], :models") {
+	if !m.statusErr || !strings.Contains(m.status, ":setup [local|switch|anon|browser|privacy], :plugins, :models") {
 		t.Errorf("unknown command: %q", m.status)
 	}
 }
