@@ -107,7 +107,7 @@ struct TerminalArea: View {
                 } label: {
                     Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: "sidebar.right")
                 }
-                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)" : "Show the right sidebar: helpers and what is ready to review (⌥⌘B)")
+                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)" : "Show the right sidebar: helpers, what is ready to review, and notices (⌥⌘B)")
             }
         }
     }
@@ -176,6 +176,15 @@ struct TerminalArea: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: copied)
+        // The notice on show (Notices.swift): here, at the top of the
+        // working area, and never over the task bar.
+        .overlay(alignment: .topTrailing) {
+            NoticeToast()
+                .padding(.top, 20)
+                .padding(.trailing, 24)
+                .padding(.leading, 48)
+        }
+        .animation(.easeOut(duration: 0.15), value: store.notice)
         .onReceive(NotificationCenter.default.publisher(for: .irieTerminalCopied)) { note in
             guard let text = note.userInfo?["note"] as? String else { return }
             let c = CopiedNote(text: text)

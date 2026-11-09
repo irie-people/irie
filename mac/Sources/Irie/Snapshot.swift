@@ -77,8 +77,25 @@ enum Snapshot {
             // The right sidebar (RightSidebar.swift), inline after the
             // terminal: its Dock in both modes, Helpers and Review.
             for (base, tab, dark) in [("side-dock", SideTab.dock, false), ("side-dock-dark", SideTab.dock, true),
-                                      ("side-helpers", SideTab.helpers, false), ("side-review", SideTab.review, false)] {
-                store.side = SideState(open: true, width: SideState.startWidth, tab: tab)
+                                      ("side-helpers", SideTab.helpers, false), ("side-review", SideTab.review, false),
+                                      ("side-notices", SideTab.notices, false), ("side-notices-dark", SideTab.notices, true),
+                                      ("side-narrow", SideTab.review, false)] {
+                // At its narrowest, with a count on every tab, the tabs
+                // draw tighter and × stays in sight.
+                let narrow = base == "side-narrow"
+                store.side = SideState(open: true, width: narrow ? SideState.minWidth : SideState.startWidth, tab: tab)
+                if narrow { store.noticesSeen = .distantPast }
+                if tab == .notices || narrow {
+                    // The notices kept, and an error on show at the top of
+                    // the working area, clear of the task bar.
+                    let now = Date()
+                    store.notices = [
+                        LoggedNotice(text: "Parked “api-fix”. It is at the end of the list, in Parked.", isError: false, at: now.addingTimeInterval(-3600)),
+                        LoggedNotice(text: "Added to “site-copy”.", isError: false, at: now.addingTimeInterval(-900)),
+                        LoggedNotice(text: "Couldn’t start the task: no space left on device", isError: true, at: now.addingTimeInterval(-60)),
+                    ]
+                    store.notice = Store.Notice(text: "Couldn’t start the task: no space left on device", isError: true)
+                }
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
                 let name = base + ".png"
@@ -86,6 +103,7 @@ enum Snapshot {
                 print(name)
             }
             store.side = SideState()
+            store.notice = nil
 
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)

@@ -2,8 +2,9 @@ import SwiftUI
 
 /// The task bar at the foot of the sidebar. It is always three lines tall,
 /// and longer text scrolls inside it. Nothing appears or vanishes around it,
-/// so the list above never shifts: the hint is the placeholder, and notices
-/// float above the bar. Beside the text, a menu picks the repo a task runs
+/// so the list above never shifts, and nothing is ever drawn over it: the
+/// hint is the placeholder, and notices show at the top of the working area
+/// (Notices.swift). Beside the text, a menu picks the repo a task runs
 /// in; an @repo word in the text wins over it, and +profile still picks the
 /// agent. ⌘N opens the full new-task sheet. It empties as a task starts,
 /// so the next can be typed at once; one that reads as more for the task
@@ -60,8 +61,6 @@ struct TaskBar: View {
                 .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)
         )
         .padding(10)
-        .overlay(alignment: .top) { notice }
-        .animation(.easeOut(duration: 0.15), value: store.notice)
         .onReceive(NotificationCenter.default.publisher(for: .irieQuickTask)) { _ in focused = true }
     }
 
@@ -91,53 +90,6 @@ struct TaskBar: View {
             .disabled(blank)
             .help("Start (Return)")
             .accessibilityLabel("Start the task")
-    }
-
-    /// A notice that reports a step the history can take back, such as a
-    /// park, offers Undo at its end, in the one place that never moves.
-    @ViewBuilder private var notice: some View {
-            if let n = store.notice {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(n.text)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(n.isError ? Theme.needs : Theme.ink)
-                        .lineLimit(4)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if n.undo {
-                        Button("Undo") {
-                            store.dismissNotice()
-                            store.undo()
-                        }
-                        .buttonStyle(.borderless)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Theme.accentInk)
-                        .help("Take it back (⌘Z)")
-                    }
-                    if let apart = n.apart {
-                        Button("New task") { store.startApart(apart) }
-                            .buttonStyle(.borderless)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(Theme.accentInk)
-                            .help("Take it back and start it as a task of its own")
-                    }
-                }
-                    .padding(.horizontal, Theme.inset)
-                    .padding(.vertical, 7)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                            .fill(Theme.field)
-                            .shadow(radius: 3, y: 1)
-                            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                                .strokeBorder(n.isError ? Theme.needs.opacity(0.6) : Theme.edge, lineWidth: 1))
-                    )
-                    .padding(.horizontal, 10)
-                    // 4 points above the field, over the bar's padding and the list
-                    .alignmentGuide(.top) { d in d[.bottom] - 6 }
-                    .transition(.opacity)
-                    .accessibilityAddTraits(.updatesFrequently)
-            }
     }
 
     /// ↑/↓ recall only from an empty bar or while already walking the history,

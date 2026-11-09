@@ -106,6 +106,14 @@ final class Store {
     /// Whether the new-task sheet is open (⌘N).
     var newTaskSheet = false
     var notice: Notice?
+    /// Every notice shown, oldest first, the newest 100, kept across
+    /// launches: the right sidebar's Notices tab lists them, since the one
+    /// on show goes by itself (say).
+    var notices: [LoggedNotice] = LoggedNotice.saved()
+    /// When the Notices tab last showed: the errors since count on its tab.
+    var noticesSeen = Date()
+    /// Whether the pointer rests on the notice on show, which holds it.
+    @ObservationIgnored var noticeHeld = false
     /// Whether a task is starting. The task bar takes the next one
     /// meanwhile, so several may be on their way.
     private(set) var spawning = false
@@ -918,9 +926,6 @@ final class Store {
         }
     }
 
-    /// Shows a notice above the task bar and has VoiceOver read it. A
-    /// confirmation goes after 3 s; an error stays until the next notice, or
-    /// until the user edits or submits (WCAG 2.2.1).
     /// Starts a run of the trod bot by hand, which keeps the sessions
     /// going at once, while you watch, until none has work left or the
     /// plan is as full as it may get; or stops it (DESIGN §4.10).
@@ -1016,18 +1021,59 @@ final class Store {
         }
     }
 
+    /// Shows a notice at the top of the working area (NoticeToast), never
+    /// over the task bar, has VoiceOver read it, and keeps it in the right
+    /// sidebar's Notices tab. It goes by itself: a confirmation after
+    /// `seconds` (3 s), an error after 8 s at least, and neither while the
+    /// pointer rests on it. Its × closes it at once, and an error goes as
+    /// the user edits or submits too. The tab keeps each one, so nothing is
+    /// lost as it goes (WCAG 2.2.1).
     func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false, apart: InputArgs? = nil) {
-        notice = Notice(text: text, isError: error, undo: undo && canUndo, apart: apart)
+        let n = Notice(text: text, isError: error, undo: undo && canUndo, apart: apart)
+        notice = n
+        noticeHeld = false
+        log(n)
         AccessibilityNotification.Announcement(text).post()
-        guard !error else { return }
-        let id = notice?.id
+        let wait = error ? max(seconds, Self.errorSeconds) : seconds
         Task {
-            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
-            if notice?.id == id { notice = nil }
+            try? await Task.sleep(nanoseconds: wait * 1_000_000_000)
+            // The pointer on it holds it, and it goes a moment after the
+            // pointer leaves.
+            while notice?.id == n.id, noticeHeld {
+                while notice?.id == n.id, noticeHeld { try? await Task.sleep(nanoseconds: 250_000_000) }
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+            if notice?.id == n.id { notice = nil }
         }
     }
 
-    func dismissNotice() { notice = nil }
+    /// The least time an error shows, in seconds.
+    static let errorSeconds: UInt64 = 8
+
+    func dismissNotice() {
+        notice = nil
+        noticeHeld = false
+    }
+
+    /// Empties the Notices tab.
+    func clearNotices() {
+        notices = []
+        if !isFixture { LoggedNotice.save([]) }
+    }
+
+    /// The Notices tab shows, so what it lists has been seen.
+    func sawNotices() { noticesSeen = Date() }
+
+    /// The errors since the Notices tab last showed, which its tab counts
+    /// in red.
+    var unseenErrors: Int { notices.filter { $0.isError && $0.at > noticesSeen }.count }
+
+    private func log(_ n: Notice) {
+        notices.append(LoggedNotice(id: n.id, text: n.text, isError: n.isError))
+        if notices.count > LoggedNotice.kept { notices.removeFirst(notices.count - LoggedNotice.kept) }
+        if !isFixture { LoggedNotice.save(notices) }
+        if side.open && side.tab == .notices { sawNotices() }
+    }
 
     // MARK: Desktop actions
 

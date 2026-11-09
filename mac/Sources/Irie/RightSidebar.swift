@@ -14,10 +14,10 @@ import SwiftUI
 // selection changes, and only the user opens it or switches its tab: a
 // helper starting only puts a count on a tab.
 
-/// A tab of the right sidebar, in the order the proposal gives them, which
-/// also gives each its key: ⌥⌘1 to ⌥⌘5.
+/// A tab of the right sidebar, in the order the proposal gives them, then
+/// Notices, which also gives each its key: ⌥⌘1 to ⌥⌘6.
 enum SideTab: String, CaseIterable, Identifiable {
-    case dock, changes, helpers, plan, review
+    case dock, changes, helpers, plan, review, notices
 
     var id: String { rawValue }
 
@@ -28,12 +28,25 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .helpers: return "Helpers"
         case .plan: return "Plan"
         case .review: return "Review"
+        case .notices: return "Notices"
+        }
+    }
+
+    /// Its icon, which stands for its name in a narrow sidebar.
+    var symbol: String {
+        switch self {
+        case .dock: return "square.grid.2x2"
+        case .changes: return "plusminus"
+        case .helpers: return "person.2"
+        case .plan: return "list.bullet"
+        case .review: return "checkmark.circle"
+        case .notices: return "bell"
         }
     }
 
     /// The tabs this build has, in their order. The others come with the
     /// core features they need.
-    static let built: [SideTab] = [.dock, .helpers, .review]
+    static let built: [SideTab] = [.dock, .helpers, .review, .notices]
 
     /// Its key with ⌥⌘, by its place among all the tabs, so a key keeps its
     /// tab as more tabs arrive.
@@ -82,7 +95,7 @@ extension Store {
         if side.open { closeSide() } else { openSide(side.tab) }
     }
 
-    /// A tab's own key (⌥⌘1 to ⌥⌘5): shows the sidebar on that tab, or
+    /// A tab's own key (⌥⌘1 to ⌥⌘6): shows the sidebar on that tab, or
     /// closes it when that tab already shows.
     func toggleSideTab(_ tab: SideTab) {
         if side.open && side.tab == tab { closeSide() } else { openSide(tab) }
@@ -224,7 +237,12 @@ struct RightSidebar: View {
 
     private var header: some View {
         HStack(spacing: 2) {
-            ForEach(SideTab.built) { t in tabButton(t) }
+            // In a sidebar too narrow for their names, the tabs show as
+            // icons, with their counts, so every tab and × stay in sight.
+            ViewThatFits(in: .horizontal) {
+                tabs(tight: false)
+                tabs(tight: true)
+            }
             Spacer(minLength: 4)
             iconButton("xmark", help: "Close the right sidebar (⌥⌘B)", label: "Close the right sidebar") { store.closeSide() }
         }
@@ -232,15 +250,27 @@ struct RightSidebar: View {
         .padding(.vertical, 7)
     }
 
-    private func tabButton(_ t: SideTab) -> some View {
+    private func tabs(tight: Bool) -> some View {
+        HStack(spacing: 2) {
+            ForEach(SideTab.built) { t in tabButton(t, tight: tight) }
+        }
+    }
+
+    private func tabButton(_ t: SideTab, tight: Bool) -> some View {
         let on = store.side.tab == t
         let n = count(t)
         return Button { store.openSide(t) } label: {
             HStack(spacing: 4) {
-                Text(t.title)
-                    .font(Theme.font(12, on ? .bold : .medium))
-                    .lineLimit(1)
-                    .fixedSize()
+                if tight {
+                    Text(Image(systemName: t.symbol))
+                        .font(.system(size: 12, weight: on ? .bold : .medium))
+                        .foregroundStyle(on ? Theme.ink : Theme.muted)
+                } else {
+                    Text(t.title)
+                        .font(Theme.font(12, on ? .bold : .medium))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
                 if n.count > 0 {
                     Text("\(n.count)")
                         .font(Theme.font(10, .bold))
@@ -251,7 +281,7 @@ struct RightSidebar: View {
                 }
             }
             .foregroundStyle(on ? Theme.ink : Theme.muted)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, tight ? 5 : 7)
             .padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.selection : Color.clear))
             .contentShape(Rectangle())
@@ -285,6 +315,9 @@ struct RightSidebar: View {
             return (running.count, running.contains { $0.needsYou == true })
         case .review:
             return (store.reviewRows(now: Date(), dropped: ReviewTab.dropped).count, false)
+        case .notices:
+            let n = store.unseenErrors
+            return (n, n > 0)
         default:
             return (0, false)
         }
@@ -294,6 +327,7 @@ struct RightSidebar: View {
         switch store.side.tab {
         case .dock: DockTab()
         case .review: ReviewTab()
+        case .notices: NoticesTab()
         default: HelpersTab()
         }
     }
