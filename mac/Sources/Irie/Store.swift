@@ -832,7 +832,7 @@ final class Store {
         // elsewhere does in Finder.
         if renaming != nil && renaming != id { endRename(commit: true) }
         // A card in another space takes the sidebar there (Spaces.swift).
-        if let s = sessions.first(where: { $0.id == id }), s.peerName == nil, s.spaceKey != space { setSpace(s.spaceKey) }
+        if let s = sessions.first(where: { $0.id == id }), s.peerName == nil, s.spaceKey != space { setSpace(s.spaceKey, showing: false) }
         // Each set is news to every view that read it, even to the same
         // value, so only what changes is set.
         if selection != id { selection = id }

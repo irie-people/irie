@@ -58,13 +58,15 @@ extension Store {
         (key.isEmpty ? spaces.first : spaces.first { $0.id == key })?.name ?? "the first space"
     }
 
-    /// Shows a space: the card shown there last, else its first.
-    func setSpace(_ key: String) {
+    /// Shows a space: the card shown there last, else its first; or, when
+    /// showing is false, as show(_:) goes to a card of its own there, none.
+    func setSpace(_ key: String, showing: Bool = true) {
         guard key != space else { return }
         if let id = selection { lastShown[space] = id }
         space = key
         UserDefaults.standard.set(key, forKey: "space")
         pickNone()
+        guard showing else { return }
         let here = drawnOrder
         if let id = lastShown[key], here.contains(where: { $0.id == id }) {
             show(id)
