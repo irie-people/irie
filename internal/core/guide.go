@@ -13,7 +13,8 @@ import (
 
 // A guide is a Claude Code session that runs one of Irie's own skills, which
 // the user starts from any task bar: `:setup switch` runs the dead man's
-// switch guide (docs/proposals/extensions.md §2.2). It gets Irie's plugin as
+// switch guide (docs/proposals/extensions.md §2.2), and `:write` a writing
+// session in Variorum (docs/proposals/writers.md). It gets Irie's plugin as
 // every Claude Code session does (skills.go); the guide first checks that
 // its skill will be in it, and says why when it won't.
 type guideSpec struct {
@@ -26,8 +27,14 @@ type guideSpec struct {
 // decides who can reach everything a person owns.
 var guideSwitch = guideSpec{skill: "dead-mans-switch", name: "Dead Man's Switch", profile: "claude"}
 
-// guide starts g's session, with the skill's command as its task.
-func (c *Core) guide(g guideSpec) (ipc.Session, error) {
+// guideWrite runs on +claude too: it reads what the writer shares with it
+// in Variorum, which is theirs to choose, and writes beside their words.
+var guideWrite = guideSpec{skill: "variorum", name: "Variorum", profile: "claude"}
+
+// guide starts g's session, with the skill's command as its task, and after
+// it what the person wants done, when they said. Such a task names the
+// session until Claude Code titles it, as a typed task does.
+func (c *Core) guide(g guideSpec, want string) (ipc.Session, error) {
 	profile, ok := c.profile(g.profile)
 	if !ok || profile.Harness != "claude-code" {
 		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "The %s guide runs on +%s, a Claude Code profile, which your config has not got.", g.name, g.profile)
@@ -69,8 +76,11 @@ func (c *Core) guide(g guideSpec) (ipc.Session, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ipc.Session{}, err
 	}
-	task := "/" + skills.Plugin + ":" + g.skill
-	return c.spawnProfile(ipc.SpawnArgs{Task: task, Name: g.name, Cwd: dir}, true, g.profile, profile, nil, map[string]any{"guide": g.skill})
+	task, name, named := "/"+skills.Plugin+":"+g.skill, g.name, true
+	if want = strings.TrimSpace(want); want != "" {
+		task, name, named = task+" "+want, title(want), false
+	}
+	return c.spawnProfile(ipc.SpawnArgs{Task: task, Name: name, Cwd: dir}, named, g.profile, profile, nil, map[string]any{"guide": g.skill})
 }
 
 // guideDir is where g's sessions run: <data>/guides/<skill>.

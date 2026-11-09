@@ -67,6 +67,9 @@ type Plugins struct {
 	// Tor, Mullvad Browser for agents and the dead man's switch guide. Each
 	// part keeps its own switch too.
 	Privacy bool `toml:"privacy"`
+	// Writing is writing in Variorum: :write and the skill its sessions run
+	// (docs/proposals/writers.md).
+	Writing bool `toml:"writing"`
 }
 
 // VPNOn says whether Mullvad VPN control runs: vpn.on, with the privacy
@@ -761,7 +764,7 @@ func Default() Config {
 		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 		Browser: Browser{Connector: "off", Headless: true, Idle: browser.DefaultIdle, Search: browser.DefaultSearch},
 		Anon:    Anon{Route: anon.Mullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: anon.Mullvad, Browser: true, TorPort: 9150},
-		Plugins: Plugins{Privacy: true},
+		Plugins: Plugins{Privacy: true, Writing: true},
 	}
 }
 

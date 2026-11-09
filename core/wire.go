@@ -282,6 +282,7 @@ const (
 	ToolAnon           = ipc.ToolAnon
 	ToolBrowser        = ipc.ToolBrowser
 	ToolPrivacy        = ipc.ToolPrivacy
+	ToolWrite          = ipc.ToolWrite
 	PartReady          = ipc.PartReady
 	PartOff            = ipc.PartOff
 	PartNeeds          = ipc.PartNeeds
