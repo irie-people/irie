@@ -45,6 +45,10 @@ type Options struct {
 	Bin     string // the irie binary the core's panes run
 	Version string
 	Log     *slog.Logger
+	// ClaudeDir is Claude Code's config folder, where the Mac app's
+	// palette goes as Irie's theme of Claude Code's (the theme op); ""
+	// writes none, as in tests.
+	ClaudeDir string
 }
 
 // Core is the running core.
@@ -56,6 +60,7 @@ type Core struct {
 	bin     string
 	version string
 	log     *slog.Logger
+	claude  string // Claude Code's config folder (Options.ClaudeDir)
 
 	spawnMu     turns        // one spawn at a time, a promoted session's first; taken before mu
 	sendMu      turns        // one message typed to an agent at a time, likewise
@@ -281,7 +286,7 @@ func (c *Core) countTokens() {
 
 func newCore(o Options, r *tmux.Runner) *Core {
 	c := &Core{
-		paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(),
+		paths: o.Paths, tmux: r, bin: o.Bin, version: o.Version, log: o.Log, http: httpClient(), claude: o.ClaudeDir,
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		dock:     &tmux.Runner{Bin: r.Bin, Socket: tmux.DockSocket(r.Socket)},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},

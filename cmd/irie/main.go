@@ -13,6 +13,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/core"
+	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/hook"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/localmodel"
@@ -290,7 +291,9 @@ func supervised(name string, args []string, body func(core.Options) error) int {
 		log.Error("no binary", "err", err)
 		return 1
 	}
-	err = body(core.Options{Config: cfg, Paths: p, Bin: bin, Version: version.String(), Log: log})
+	home, _ := os.UserHomeDir()
+	err = body(core.Options{Config: cfg, Paths: p, Bin: bin, Version: version.String(), Log: log,
+		ClaudeDir: claude.ConfigDir(home, os.Environ())})
 	if err != nil {
 		log.Error("exit", "err", err)
 		fmt.Fprintln(os.Stderr, "irie:", err)
