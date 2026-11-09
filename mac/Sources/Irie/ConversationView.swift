@@ -17,6 +17,8 @@ struct ConversationView: View {
     private var selected: Session? { store.selectedRow }
 
     var body: some View {
+        // So does a theme of yours that changed, or one being made.
+        let _ = LookBook.shared.revision
         VStack(spacing: 0) {
             if let s = selected {
                 // A helper shows in the right sidebar's Helpers tab

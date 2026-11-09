@@ -234,7 +234,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `complete` | `text`, an `@` or `+` token | `items[]`; for `+`, `notes[]`: what each profile runs and costs (§6.3) | M3 (`notes` M10) |
 | `hook` | `harness`, `session`, `payload` | `context?`, `deny?`. Waits while the agent is held | M2 |
 | `status` | `session`, `payload`: Claude Code's status line JSON | `state`, `subagents[]`: the session's, for Irie's own status line; `color?`, the session's own colour while it works | M10 (§6.3) |
-| `theme` | `theme`: one of `ui.theme`'s palettes | none. The Mac app's palette, which `color` follows from then on instead of `ui.theme` | §6.3 |
+| `theme` | `theme`: one of `ui.theme`'s palettes, or the name of a palette of the user's own with `dark`, its dark set as `#RRGGBB` by role ([MAC.md](MAC.md) §1) | none. The Mac app's palette, which `color` follows from then on instead of `ui.theme` | §6.3 |
 | `local` | `start?` | the local server, the machine's memory, and each model weighed against it | M10 (§6.3) |
 | `route` | `task`, `parent?` | where `+auto` would run it: class, choice, reason, every profile weighed | M10 (§6.4) |
 | `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |

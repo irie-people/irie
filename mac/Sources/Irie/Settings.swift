@@ -778,6 +778,7 @@ private struct ConfigFileSection: View {
 @MainActor
 private struct AppearanceSettings: View {
     @Environment(Store.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var model: SettingsModel
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
     @AppStorage(AppearanceChoice.defaultsKey) private var appearance = AppearanceChoice.system.rawValue
@@ -795,10 +796,33 @@ private struct AppearanceSettings: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: appearance) { AppearanceChoice.apply() }
+                HStack {
+                    Spacer()
+                    if let t = LookBook.shared.theme(theme) {
+                        Button("Change “\(t.name)”…") { make(.edit(t.id)) }
+                    }
+                    Button("Make a Theme…") { make(.new) }
+                }
             } header: {
                 Text("Theme")
             } footer: {
-                footnote("Each palette has a light and a dark set; Irie’s status line in the terminal follows it too.")
+                footnote("Each palette has a light and a dark set; Irie’s status line in the terminal follows it too. Make a Theme starts from three colours of yours and works out the rest, easy to read in both.")
+            }
+            Section {
+                LabeledContent("Yours") {
+                    Text(LookBook.shared.layouts.isEmpty ? "None yet" : LookBook.shared.layouts.map(\.name).joined(separator: ", "))
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+                HStack {
+                    Spacer()
+                    Button("Arrange Layouts…") { make(.layouts(saving: false)) }
+                    Button("Save the Window’s Layout…") { make(.layouts(saving: true)) }
+                }
+            } header: {
+                Text("Layouts")
+            } footer: {
+                footnote("A layout keeps how the window is arranged: what the right side shows, the sidebar, the details panel, the right sidebar and the text size. View › Layout puts one back, and ⌃⌘1 to ⌃⌘9 your first nine.")
             }
             Section {
                 Picker("On the right", selection: Bindable(store).showTerminal) {
@@ -862,15 +886,23 @@ private struct AppearanceSettings: View {
     }
 }
 
+extension AppearanceSettings {
+    /// Opens Make a Theme on what was asked for (ThemeMaker.swift).
+    fileprivate func make(_ r: LookBook.Request) {
+        LookBook.shared.request = r
+        openWindow(id: ThemeMaker.windowID)
+    }
+}
+
 /// The palettes as small pictures of the sidebar, in the mode the window
-/// is drawn in.
+/// is drawn in: Irie's, then yours.
 private struct PalettePicker: View {
     @Binding var selection: String
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 14) {
-            ForEach(Palette.all) { p in
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 104, maximum: 120), spacing: 14)], spacing: 12) {
+            ForEach(Palette.all + LookBook.shared.themes.map(\.palette)) { p in
                 let on = selection == p.id
                 Button { selection = p.id } label: {
                     VStack(spacing: 6) {
