@@ -103,7 +103,13 @@ func fakeCLI(args []string) int {
 				return 4
 			}
 			r := a.Response.Response
-			reply(fmt.Sprintf("answer %s %s %s stop=%v", r.Behavior, r.UpdatedInput, r.Message, r.Interrupt))
+			// An answer without updatedInput reads as null, as JSON
+			// writes it, whichever Go reads it.
+			input := string(r.UpdatedInput)
+			if input == "" {
+				input = "null"
+			}
+			reply(fmt.Sprintf("answer %s %s %s stop=%v", r.Behavior, input, r.Message, r.Interrupt))
 		case l.Type == "user" && l.Message.Content == "slow":
 			emit(map[string]any{"type": "system", "subtype": "init", "model": "claude-test", "permissionMode": "auto"})
 			s, ok := read()

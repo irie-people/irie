@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"image"
 	"image/color"
 	"image/png"
 	"os"
@@ -92,8 +93,30 @@ func TestPhoneIcons(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(kept, drawn) {
+		keptImg, err := png.Decode(bytes.NewReader(kept))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !samePicture(keptImg, img) {
 			t.Errorf("internal/remote/web/%s is not what mkicon draws: run go run ./tools/mkicon -phone internal/remote/web", f.name)
 		}
 	}
+}
+
+// samePicture reports whether a and b have the same pixels. It compares
+// pixels, not files: Go's PNG encoder writes the same picture in other bytes
+// from one Go release to the next.
+func samePicture(a, b image.Image) bool {
+	r := a.Bounds()
+	if r != b.Bounds() {
+		return false
+	}
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			if color.NRGBAModel.Convert(a.At(x, y)) != color.NRGBAModel.Convert(b.At(x, y)) {
+				return false
+			}
+		}
+	}
+	return true
 }

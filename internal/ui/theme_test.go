@@ -199,15 +199,16 @@ func TestPalettesMatchTheMacApp(t *testing.T) {
 }
 
 // asksForBackground reports whether cmd asks the terminal for its
-// background, alone or in a batch. Of the commands it is given it runs only
-// a batch, which does not run what it holds; a tick would wait a second.
+// background, alone or with the next tick. Of the commands it is given it
+// runs only andBackground's, which does not run what it holds; a tick would
+// wait a second.
 func asksForBackground(cmd tea.Cmd) bool {
 	if cmd == nil {
 		return false
 	}
 	code := func(c tea.Cmd) uintptr { return reflect.ValueOf(c).Pointer() }
 	nop := func() tea.Msg { return nil }
-	ask, batch := code(tea.RequestBackgroundColor), code(tea.Batch(nop, nop))
+	ask, batch := code(tea.RequestBackgroundColor), code(andBackground(nop))
 	switch code(cmd) {
 	case ask:
 		return true

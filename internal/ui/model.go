@@ -188,7 +188,18 @@ func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-func (m Model) Init() tea.Cmd { return tea.Batch(tick(), tea.RequestBackgroundColor) }
+// andBackground is next and a request for the terminal's background colour,
+// which comes back as a tea.BackgroundColorMsg. It is never inlined, so its
+// command has one address, by which the tests find it. tea.Batch's command
+// has another address wherever the compiler inlines it, and where it does
+// changes from one Go release to the next.
+//
+//go:noinline
+func andBackground(next tea.Cmd) tea.Cmd {
+	return func() tea.Msg { return tea.BatchMsg{next, tea.RequestBackgroundColor} }
+}
+
+func (m Model) Init() tea.Cmd { return andBackground(tick()) }
 
 func (m *Model) setFocus(f focusArea) {
 	m.focus = f
@@ -334,7 +345,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		if !m.known && m.asked < askBackground {
 			m.asked++
-			return m, tea.Batch(tick(), tea.RequestBackgroundColor)
+			return m, andBackground(tick())
 		}
 		return m, tick()
 	case FrameMsg:
