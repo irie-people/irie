@@ -16,6 +16,7 @@ import (
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/repo"
 	"github.com/irie-people/irie/internal/tmux"
 	"github.com/irie-people/irie/internal/vpn"
@@ -108,8 +109,8 @@ func (c *Core) anonName(asked, base string) (string, error) {
 // with an exit of its own, and Tor and SearXNG started as it needs them,
 // in the background.
 func (c *Core) prepareAnon(name, route string) (anon.Compartment, []string, error) {
-	if !c.cfg().Anon.On {
-		return anon.Compartment{}, nil, ipc.Errorf(ipc.CodeBadArgs, "Anonymous research is off: `irie setup anon` sets it up.")
+	if why := plugins.Why(*c.cfg(), plugins.Anon); why != "" {
+		return anon.Compartment{}, nil, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
 	}
 	if name == anon.SearchName {
 		return anon.Compartment{}, nil, ipc.Errorf(ipc.CodeBadArgs, "%s is Irie's search compartment, for SearXNG alone: name another", name)
@@ -382,8 +383,8 @@ func (c *Core) keepSearx(comp anon.Compartment) error {
 // what it needs when a.Up.
 func (c *Core) anonOp(a ipc.AnonArgs) (ipc.AnonResult, error) {
 	cfg := c.cfg().Anon
-	if !cfg.On {
-		return ipc.AnonResult{}, ipc.Errorf(ipc.CodeBadArgs, "Anonymous research is off: `irie setup anon` sets it up.")
+	if why := plugins.Why(*c.cfg(), plugins.Anon); why != "" {
+		return ipc.AnonResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
 	}
 	var r ipc.AnonResult
 	if a.Up {

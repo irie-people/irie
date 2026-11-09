@@ -20,7 +20,7 @@ import (
 	"github.com/irie-people/irie/internal/ready"
 )
 
-const setupUsage = "usage: irie setup [--check] [--json] [--yes] | irie setup local [--model MODEL] [--yes] | irie setup browser [--yes] [--page URL] | irie setup anon [--yes]"
+const setupUsage = "usage: irie setup [--check] [--json] [--yes] | irie setup local [--model MODEL] [--yes] | irie setup browser [--yes] [--page URL] | irie setup anon [--yes] | irie setup privacy [--yes]"
 
 func setup(args []string) error {
 	if len(args) > 0 && args[0] == "local" {
@@ -31,6 +31,9 @@ func setup(args []string) error {
 	}
 	if len(args) > 0 && args[0] == "anon" {
 		return setupAnon(args[1:], os.Stdin, os.Stdout)
+	}
+	if len(args) > 0 && args[0] == "privacy" {
+		return setupPrivacy(args[1:], os.Stdin, os.Stdout)
 	}
 	if len(args) > 0 && args[0] == "lid" {
 		return setupLid(args[1:], os.Stdin, os.Stdout)

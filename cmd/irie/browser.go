@@ -3,25 +3,19 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/config"
-	"github.com/irie-people/irie/internal/filetx"
-	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/repo"
 	"github.com/irie-people/irie/internal/version"
@@ -135,23 +129,7 @@ func setupBrowser(args []string, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }
 
-// connectorOn sets browser.connector = "on": through the core when it runs,
-// which keeps the file's comments and checks the result, else in the file.
+// connectorOn sets browser.connector = "on".
 func connectorOn(p paths.Paths) error {
-	set := ipc.ConfigArgs{Set: []ipc.ConfigSet{{Key: "browser.connector", Value: json.RawMessage(`"on"`)}}}
-	if err := ipc.Call(p.Socket(), 10*time.Second, ipc.OpConfig, set, nil); err == nil {
-		return nil
-	}
-	data, err := os.ReadFile(p.ConfigFile())
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	out, err := config.Apply(data, []config.Edit{{Key: "browser.connector", Value: "on"}})
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(p.ConfigFile()), 0o700); err != nil {
-		return err
-	}
-	return filetx.WriteFile(p.ConfigFile(), out, 0o600)
+	return setConfig(p, []config.Edit{{Key: "browser.connector", Value: "on"}})
 }

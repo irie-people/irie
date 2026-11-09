@@ -110,6 +110,10 @@ type (
 	ResultArgs       = ipc.ResultArgs
 	ResultResult     = ipc.ResultResult
 	ToolArgs         = ipc.ToolArgs
+	PluginsArgs      = ipc.PluginsArgs
+	PluginsResult    = ipc.PluginsResult
+	Plugin           = ipc.Plugin
+	PluginPart       = ipc.PluginPart
 	AnonArgs         = ipc.AnonArgs
 	AnonResult       = ipc.AnonResult
 	VPNArgs          = ipc.VPNArgs
@@ -225,6 +229,7 @@ const (
 	OpReady            = ipc.OpReady
 	OpVPN              = ipc.OpVPN
 	OpAnon             = ipc.OpAnon
+	OpPlugins          = ipc.OpPlugins
 	OpLearn            = ipc.OpLearn
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
@@ -274,6 +279,14 @@ const (
 	ToolModels         = ipc.ToolModels
 	ToolReady          = ipc.ToolReady
 	ToolSwitch         = ipc.ToolSwitch
+	ToolAnon           = ipc.ToolAnon
+	ToolBrowser        = ipc.ToolBrowser
+	ToolPrivacy        = ipc.ToolPrivacy
+	PartReady          = ipc.PartReady
+	PartOff            = ipc.PartOff
+	PartNeeds          = ipc.PartNeeds
+	PartPluginOff      = ipc.PartPluginOff
+	PartHeld           = ipc.PartHeld
 	VPNOn              = ipc.VPNOn
 	VPNOff             = ipc.VPNOff
 	VPNLockdown        = ipc.VPNLockdown

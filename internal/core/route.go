@@ -534,8 +534,16 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 		args, name, title = []string{"setup"}, "setup", "get Irie ready"
 	case ipc.ToolSwitch:
 		return c.guide(guideSwitch)
+	// The privacy plugin's setups (DESIGN §4.17): each asks before it
+	// installs or changes anything, in the session's terminal.
+	case ipc.ToolAnon:
+		args, name, title = []string{"setup", "anon"}, "setup-anon", "set up anonymous research"
+	case ipc.ToolBrowser:
+		args, name, title = []string{"setup", "browser"}, "setup-browser", "set up Mullvad Browser for agents"
+	case ipc.ToolPrivacy:
+		args, name, title = []string{"setup", "privacy"}, "setup-privacy", "set up the privacy plugin"
 	default:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s, %s, %s and %s", a.Name, ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s", a.Name, strings.Join([]string{ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy}, ", "))
 	}
 	p := config.Profile{Harness: "tool", Command: c.bin, Args: args, Env: map[string]string{}}
 	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{})

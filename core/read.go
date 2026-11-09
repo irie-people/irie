@@ -14,7 +14,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch], :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :fork [@TURN] [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :fork [@TURN] [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -128,6 +128,10 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpTool, ToolArgs{Name: ToolSetup}, nil)
 	case name == "setup" && arg == "switch":
 		return step(OpTool, ToolArgs{Name: ToolSwitch}, nil)
+	case name == "setup" && (arg == ToolAnon || arg == ToolBrowser || arg == ToolPrivacy):
+		return step(OpTool, ToolArgs{Name: arg}, nil)
+	case name == "plugins" && arg == "":
+		return step(OpPlugins, PluginsArgs{}, nil)
 	case name == "models" && arg == "":
 		return step(OpTool, ToolArgs{Name: ToolModels}, nil)
 	case name == "vpn":
@@ -325,6 +329,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		if d := as[VPNArgs](st.Args).Do; d == "" || d == VPNTime {
 			r.Did = InputAnswered
 		}
+	case OpPlugins:
+		r.Did, r.Text = InputAnswered, strings.TrimRight(as[PluginsResult](result).Text, "\n")
 	case OpUndo, OpRedo:
 		u := as[UndoResult](result)
 		r.Text = undone(st.Op, u)

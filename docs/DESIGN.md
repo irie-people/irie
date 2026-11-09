@@ -312,6 +312,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/localmodel/` | Ollama client, memory estimates and the machine's memory, preflight, setup suggestions, `irie runtime` | M10 |
 | `internal/statusline/` | `irie statusline`: cost, context and plan use from Claude Code's status line | M10 |
 | `internal/dms/` | The dead man's switch guide's helpers, `irie dms`: the Healthchecks checks, the phone's check-in and the calendar file ([extensions.md](proposals/extensions.md) §2) | Extensions |
+| `internal/plugins/` | Irie's plugins (§4.17): each plugin and its parts, how far each part is set up here, its switches, and the reasons a part that is off gives | Plugins |
 | `internal/vpn/` | Mullvad VPN through its own CLI: the tunnel's state from `mullvad status --json` and `status listen --json`, lockdown, the account's expiry and the `:vpn` changes ([extensions.md](proposals/extensions.md) §4) | Extensions |
 | `e2e/` | Opt-in tests against the real Claude Code | M11 |
 
@@ -1087,6 +1088,38 @@ The owner asked on 2026-11-09 for agents that research wrongdoing without leadin
 
 ---
 
+### 4.17 Plugins
+
+The owner asked on 2026-11-09 to start making plugins for Irie, beginning with a privacy plugin that holds the Mullvad, Tor and Bitwarden work and the dead man's switch. A **plugin** is a set of Irie's features that go on and off together under one name. Each lists its **parts**, and each part says what it brings to Irie (commands, words, skills, agents' tools), which key in config.toml turns it on, what sets it up, and how far it is set up on this computer. `internal/plugins` holds them: a plugin is a value in Go that names its parts, and the code of each part stays where it was (`internal/vpn`, `internal/anon`, `internal/browser`, `internal/dms`). A plugin's code is Irie's own, built into the irie binary and tested with the rest, so nothing is downloaded or loaded to run one.
+
+**Privacy**, the first plugin:
+
+| Part | What it brings | Its own switch | What sets it up |
+|---|---|---|---|
+| Mullvad VPN | The header's mark in every client, `:vpn`, File › VPN ([extensions.md](proposals/extensions.md) §4) | `vpn.on` | The Mullvad VPN app, the person's own to install; then the switch |
+| Anonymous research | `+anon`, `+tor`, `irie anon`, irie-anon's search and fetch (§4.16) | `anon.on` | `:setup anon` |
+| Mullvad Browser for agents | irie-browser's tools, `irie browser` (§4.15) | `browser.connector` | `:setup browser` |
+| Bitwarden for agents | Held back: see below | none yet | none yet |
+| Dead man's switch | `:setup switch`, `/irie:dead-mans-switch`, `irie dms` ([extensions.md](proposals/extensions.md) §2) | none: on while its skill is (`skills.disabled`) | `:setup switch` |
+
+**One switch.** `[plugins] privacy`, on by default: each part keeps its own switch, and those are off by default, so a new Irie shows nothing of it until asked. With the plugin off, none of its parts runs, whatever its own switch says. `config.Config`'s `VPNOn`, `AnonOn` and `BrowserOn` are where the rest of Irie asks; a word or command of a part that is off says which switch turns it on (`plugins.Why`); the guide's skill leaves every session, with the reason in `irie skills` (`skills.Settings.Left`); and the VPN's mark leaves every client. Each part's own switch keeps its value meanwhile, so the plugin on again brings back what was on.
+
+**How far each part is set up.** Each part's check reads only files and the config: whether `mullvad`, `tor`, SearXNG, Mullvad Browser and its clean profile are where Irie looks, and whether the switch's checks were made. It never reads the network, an account or a vault. A part is *ready* (on, with what it needs), *off* (its own switch), *needs* (on, and it lacks something: the sentence says what and what fixes it), *off with its plugin*, or *held* (not in this build). The core adds what only it knows, the VPN's state now.
+
+**Where it shows.**
+- `irie plugins` prints each plugin and a line for each part, with ● ready, ! needs, · off and ○ held, so colour never carries the state alone. `irie plugins on|off PLUGIN [PART]` turns a plugin or a part on or off, through the core when it runs, which keeps the file's comments, else in the file.
+- `:plugins` in any task bar answers with the same lines.
+- `:setup anon`, `:setup browser` and `:setup privacy` start a tool session that runs `irie setup NAME`, as `:setup local` does: the person answers each yes or no in its terminal. `irie setup privacy` turns the plugin on if it is off, then offers each part that isn't ready, one at a time, and starts the dead man's switch guide when asked.
+- Settings › Plugins in the Mac app: each plugin with its switch, and each part with its state, its sentence, its own switch (greyed while the plugin is off) and Set Up… where words set it up. The core's `plugins` op answers it, and with `plugin`, `part` and `on` turns one on or off, so the app never needs to know which key or value a switch takes. The VPN's switch moved here from Settings › General.
+
+**Bitwarden for agents, held back.** It was built on 2026-11-01 on the branch `irie/irie-extensions` ([extensions.md](proposals/extensions.md) §3) and never installed. Before it came into the plugin, a review on 2026-11-09 found that an agent, with nothing but its own shell, could get past the person's Touch ID: the core counted a process whose parent is pid 1 as the person's, the keys that may allow a request were read from a file any of the user's processes can write, the master password and bw's session key were in bw's environment, where `ps -E` shows them on macOS 14, and an Allow named the request but not the command or environment it would run with. So the part shows, held, and nothing of it runs: [extensions.md](proposals/extensions.md) §3.8 lists what must change first, and the work stays on its branch until then.
+
+**Later.** Plugins from outside Irie, each in a repository of its own, pinned to a commit and checked by hash as M12 does for skills, holding what needs no code of Irie's: skills, MCP servers and set-up steps. A plugin's parts with code of their own come in as Irie's do, through a pull request.
+
+**Tests:** `internal/plugins`: the defaults (the plugin on, its parts off, the guide ready, Bitwarden held), parts on with nothing installed saying what they lack and what fixes it, then ready once their programs are there, the VPN's state from the core, the switch's date, the plugin off turning every part off while their own switches keep their values, the reasons a word gives, the guide's skill left out with its reason, each switch's key and value, and the text. `internal/core`: the `plugins` op, `:plugins`, a part turned on through the op written to config.toml, the plugin off through it, the VPN's op and mark with the plugin off, and `+anon` refused with the plugin off. `core`: the new words.
+
+---
+
 ## 5. Data and config
 
 ### 5.1 Event envelope
@@ -1460,6 +1493,9 @@ search_route = "mullvad"      # mullvad | tor: where SearXNG asks the engines fr
 browser = true                # give anonymous tasks Irie's browser through their exit, when Mullvad Browser is installed
 tor = ""                      # the tor executable; "" = PATH, then Homebrew's and Linux's places
 tor_port = 9150               # the first of the Tor compartments' SocksPorts on 127.0.0.1
+
+[plugins]                     # Irie's plugins (§4.17): each turns all its parts off when it is off
+privacy = true                # Mullvad VPN, anonymous research, Mullvad Browser for agents and the dead man's switch guide; each part keeps its own switch
 ```
 
 ---

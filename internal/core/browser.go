@@ -16,10 +16,10 @@ import (
 // no browser found is a warning on the session's row instead, which says
 // how to install it.
 func (c *Core) browserServer(id string) (*harness.MCPServer, string) {
-	b := c.cfg().Browser
-	if b.Connector != "on" {
+	if !c.cfg().BrowserOn() {
 		return nil, ""
 	}
+	b := c.cfg().Browser
 	path := b.Path
 	if path != "" {
 		path = repo.Expand(path, home())

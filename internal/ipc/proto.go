@@ -95,6 +95,9 @@ const (
 	// OpAnon says how anonymous research stands, and starts Irie's own
 	// Tor and SearXNG (DESIGN §4.16).
 	OpAnon = "anon"
+	// OpPlugins lists Irie's plugins, each with its parts and how far each
+	// is set up on this computer (DESIGN §4.17).
+	OpPlugins = "plugins"
 	// OpLearn gives what the Help menu shows: the learning resources, the
 	// user's own links and the glossary (docs/proposals/learning.md).
 	OpLearn = "learn"
@@ -995,12 +998,64 @@ type ToolArgs struct {
 	Name string `json:"name"`
 }
 
-// Tools.
+// Tools. Anon, browser and privacy run `irie setup NAME`, which sets up
+// that part of the privacy plugin, or each part of it in turn (DESIGN
+// §4.17).
 const (
-	ToolSetup  = "setup"
-	ToolModels = "models"
-	ToolReady  = "ready"
-	ToolSwitch = "switch"
+	ToolSetup   = "setup"
+	ToolModels  = "models"
+	ToolReady   = "ready"
+	ToolSwitch  = "switch"
+	ToolAnon    = "anon"
+	ToolBrowser = "browser"
+	ToolPrivacy = "privacy"
+)
+
+// PluginsArgs ask the plugins op for Irie's plugins, after turning a
+// plugin, or one part of it, on or off when On is set. The core knows which
+// key in config.toml each takes, and the value.
+type PluginsArgs struct {
+	Plugin string `json:"plugin,omitempty"` // such as privacy
+	Part   string `json:"part,omitempty"`   // such as vpn; "" = the plugin itself
+	On     *bool  `json:"on,omitempty"`
+}
+
+// PluginsResult are Irie's plugins (DESIGN §4.17).
+type PluginsResult struct {
+	Plugins []Plugin `json:"plugins"`
+	Text    string   `json:"text"` // them in words, a line for each part, as :plugins answers
+}
+
+// Plugin is one of Irie's plugins: features that go on and off together.
+type Plugin struct {
+	Name    string       `json:"name"`            // its key under [plugins], such as privacy
+	Title   string       `json:"title"`           // Privacy
+	Summary string       `json:"summary"`         // what it is for, in a sentence
+	On      bool         `json:"on"`              // plugins.<name>
+	Setup   string       `json:"setup,omitempty"` // the words that set up each of its parts in turn, such as :setup privacy
+	Parts   []PluginPart `json:"parts"`
+}
+
+// PluginPart is one feature of a plugin, and how far it is set up here.
+type PluginPart struct {
+	Name    string   `json:"name"`             // vpn
+	Title   string   `json:"title"`            // Mullvad VPN
+	Summary string   `json:"summary"`          // what it lets you do, in a sentence
+	Switch  string   `json:"switch,omitempty"` // the config key that turns it on, such as vpn.on; "" = it has none of its own
+	On      bool     `json:"on"`               // its own switch, as config.toml has it
+	State   string   `json:"state"`            // ready, off, needs, plugin_off or held
+	Detail  string   `json:"detail"`           // what it has and lacks, in a sentence
+	Setup   string   `json:"setup,omitempty"`  // the words that set it up, such as :setup anon
+	Brings  []string `json:"brings,omitempty"` // what it adds to Irie: commands, words, skills and agents' tools
+}
+
+// A plugin part's states.
+const (
+	PartReady     = "ready"      // on, with what it needs
+	PartOff       = "off"        // its own switch is off
+	PartNeeds     = "needs"      // on, and it lacks something: the detail says what
+	PartPluginOff = "plugin_off" // its plugin is off, so it is too
+	PartHeld      = "held"       // not in this build: the detail says why
 )
 
 // AnonArgs ask the anon op for the state of anonymous research (DESIGN

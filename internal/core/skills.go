@@ -6,6 +6,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/skills"
 )
 
@@ -14,10 +15,7 @@ import (
 // leaves the session without skills, and its warnings say why. The caller
 // holds c.mu.
 func (c *Core) skillsFolder(p config.Profile, x *session) string {
-	cfg := c.cfg().Skills
-	on := skills.On(skills.Choose(skills.Bundled(), skills.Settings{
-		Enabled: cfg.Enabled, Disabled: cfg.Disabled, Profile: p.TakesSkills(),
-	}))
+	on := skills.On(skills.Choose(skills.Bundled(), plugins.SkillSettings(*c.cfg(), p.TakesSkills())))
 	if len(on) == 0 {
 		return ""
 	}

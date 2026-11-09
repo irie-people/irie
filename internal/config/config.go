@@ -56,7 +56,30 @@ type Config struct {
 	VPN      VPN                `toml:"vpn"`
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
+	Plugins  Plugins            `toml:"plugins"`
 }
+
+// Plugins are Irie's plugins (DESIGN §4.17, internal/plugins): sets of
+// features that go on and off together. A plugin that is off turns all of
+// its parts off, whatever their own switches say.
+type Plugins struct {
+	// Privacy is Mullvad VPN control, anonymous research over Mullvad and
+	// Tor, Mullvad Browser for agents and the dead man's switch guide. Each
+	// part keeps its own switch too.
+	Privacy bool `toml:"privacy"`
+}
+
+// VPNOn says whether Mullvad VPN control runs: vpn.on, with the privacy
+// plugin on.
+func (c Config) VPNOn() bool { return c.Plugins.Privacy && c.VPN.On }
+
+// AnonOn says whether +anon and +tor tasks run: anon.on, with the privacy
+// plugin on.
+func (c Config) AnonOn() bool { return c.Plugins.Privacy && c.Anon.On }
+
+// BrowserOn says whether Claude Code sessions get Irie's browser:
+// browser.connector, with the privacy plugin on.
+func (c Config) BrowserOn() bool { return c.Plugins.Privacy && c.Browser.Connector == "on" }
 
 // Lid is a MacBook's lid (DESIGN §4.12). macOS sleeps a MacBook the
 // moment its lid closes, whatever else keeps it awake, so the core turns
@@ -738,6 +761,7 @@ func Default() Config {
 		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 		Browser: Browser{Connector: "off", Headless: true, Idle: browser.DefaultIdle, Search: browser.DefaultSearch},
 		Anon:    Anon{Route: anon.Mullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: anon.Mullvad, Browser: true, TorPort: 9150},
+		Plugins: Plugins{Privacy: true},
 	}
 }
 
@@ -848,7 +872,8 @@ func Parse(data []byte, path string) (Config, error) {
 		VPN      *VPN                      `toml:"vpn"`
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
-	}{Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+		Plugins  *Plugins                  `toml:"plugins"`
+	}{Plugins: &c.Plugins, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
