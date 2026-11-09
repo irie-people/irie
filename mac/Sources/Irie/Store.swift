@@ -50,6 +50,14 @@ final class Store {
     /// Helpers and teammates hidden from their cards, by session: each
     /// keeps working (Tabs.swift).
     var hiddenSubs: [String: Set<String>] = [:]
+    /// The spaces, as the core's header lists them, and the one on show,
+    /// by its row key: "" for the first (Spaces.swift).
+    var spaces: [SpaceInfo] = []
+    var space = UserDefaults.standard.string(forKey: "space") ?? ""
+    /// The space whose name is open to edit.
+    var renamingSpace: String?
+    /// The card shown last in each space, which showing it again shows.
+    @ObservationIgnored var lastShown: [String: String] = [:]
     /// The repos the @ words know and the agents the + words name, with what
     /// each runs: what the task bar's menu and the new-task sheet offer.
     private(set) var repoNames: [String] = []
@@ -461,6 +469,11 @@ final class Store {
             // The VPN's part says how the VPN is now.
             loadPluginsSoon()
         }
+        if let s = h.spaces, s != spaces {
+            spaces = s
+            // A space removed leaves its cards in the first.
+            if !space.isEmpty, !s.dropFirst().contains(where: { $0.id == space }) { setSpace("") }
+        }
     }
 
     /// The picked session while it shows beside its teammates: the terminal
@@ -616,7 +629,9 @@ final class Store {
     /// state change never moves a card (DESIGN §4.1).
     var drawnGroups: [SessionGroup] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
+        // The space on show, and every paired machine's cards (Spaces.swift).
+        let rows = (f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) })
+            .filter { $0.peerName != nil || $0.spaceKey == space }
         let parked = rows.filter(\.isParked)
         // Pinned heads the list, in either view (Tabs.swift).
         let pinned = rows.filter { $0.isPinned && !$0.isParked && $0.peerName == nil }
@@ -820,6 +835,8 @@ final class Store {
         // Going to another session renames the one open to edit, as clicking
         // elsewhere does in Finder.
         if renaming != nil && renaming != id { endRename(commit: true) }
+        // A card in another space takes the sidebar there (Spaces.swift).
+        if let s = sessions.first(where: { $0.id == id }), s.peerName == nil, s.spaceKey != space { setSpace(s.spaceKey, showing: false) }
         // Each set is news to every view that read it, even to the same
         // value, so only what changes is set.
         if selection != id { selection = id }
@@ -873,6 +890,8 @@ final class Store {
         args.profile = agent
         if canPickModel { args.model = model }
         if canTutor { args.tutor = tutor }
+        // A task starts in the space on show.
+        if !spaces.isEmpty { args.space = space }
         return await send(args)
     }
 

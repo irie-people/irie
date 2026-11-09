@@ -74,6 +74,8 @@ func Read(in InputArgs, v View) (Step, error) {
 	// before goes to that jot's agent instead (DESIGN §4.2). Apart starts
 	// one that went there on its own after all.
 	a.Jot, a.Apart = true, in.Apart
+	// It starts in the space the client shows, beside the card selected.
+	a.Space, a.After = in.Space, in.Session
 	st := Step{Op: OpSpawn, Args: a}
 	for i := range v.Sessions {
 		if in.Apart != "" && v.Sessions[i].ID == in.Apart {

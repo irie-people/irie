@@ -7,6 +7,7 @@ import (
 	"math"
 	"os/exec"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -173,6 +174,7 @@ func (c *Core) headerNow() ipc.Header {
 	h.Machine = c.mach
 	h.Peers = c.peersInfo()
 	h.Trod = c.trodHeader(c.awakeNow())
+	h.Spaces = slices.Clone(c.spaces)
 	h.VPN = c.vpnHeader(time.Now())
 	h.Theme = c.appColors
 	return h

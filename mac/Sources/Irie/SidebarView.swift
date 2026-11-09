@@ -38,6 +38,8 @@ struct SidebarView: View {
             CoachCard()
             SessionList()
                 .frame(minHeight: Self.cardsLeast)
+            // The spaces, a chip each (Spaces.swift).
+            if store.canSpaces { SpaceBar() }
             ReviewDock()
             // The footer sits lighter than the list, with rounded top
             // corners: the switch between the views, the details and the
@@ -1068,6 +1070,8 @@ private struct Actions: View {
             Button("Copy Branch Name") { store.copy(branch, what: "branch name") }
         }
         Button("Copy Session ID") { store.copy(session.id, what: "session ID") }
+        Divider()
+        SpaceMenu(list: [session])
         Divider()
         Button("Close Session") { store.close(session) }
         CloseManyItems(session: session)

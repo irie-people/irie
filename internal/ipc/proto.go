@@ -209,6 +209,7 @@ type Session struct {
 	Order    int        `json:"order"`              // its place in the list, from 0 at the top
 	Parked   bool       `json:"parked,omitempty"`   // in the Parked group at the end of the list
 	Pinned   bool       `json:"pinned,omitempty"`   // in the Pinned group at the top of the list
+	Space    string     `json:"space,omitempty"`    // the space it is in (spaces.go); "" for the first
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
@@ -628,6 +629,8 @@ type Header struct {
 	Trod *TrodShift `json:"trod,omitempty"`
 	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
 	VPN *VPN `json:"vpn,omitempty"`
+	// Spaces are the spaces, in their order, the first first (spaces.go).
+	Spaces []Space `json:"spaces,omitempty"`
 	// Theme is the palette the Mac app draws in, once it has said (the
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
@@ -711,6 +714,9 @@ type CloseArgs struct {
 	Session  string   `json:"session,omitempty"`
 	Sessions []string `json:"sessions,omitempty"`
 	Finished bool     `json:"finished,omitempty"`
+	// Space keeps Finished to the sessions of one space ("" for the
+	// first); without it, every space's.
+	Space *string `json:"space,omitempty"`
 }
 
 // CloseResult lists the sessions a close closed.
@@ -859,6 +865,10 @@ type SpawnArgs struct {
 	// With ui.new_tabs = "next" the new session goes just after it in the
 	// list, as a browser opens a tab beside the one it came from.
 	After string `json:"after,omitempty"`
+	// Space is the space the new session goes in; "" takes the space of
+	// the session that started it (After, Parent or Continues), else the
+	// first.
+	Space string `json:"space,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that

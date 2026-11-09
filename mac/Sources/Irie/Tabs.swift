@@ -119,7 +119,7 @@ extension Store {
     func closeFinished() {
         Task {
             do {
-                let r = try await client.call("close", CloseArgs(finished: true), as: CloseResult.self)
+                let r = try await client.call("close", CloseArgs(finished: true, space: spaces.isEmpty ? nil : space), as: CloseResult.self)
                 if r.sessions.isEmpty {
                     say("Nothing has finished to close. Pinned and parked sessions stay.", error: false)
                     return
@@ -135,7 +135,7 @@ extension Store {
 
     /// When the shown session is among ids, shows the next drawn card that
     /// isn't, or the one before it, as when a tab closes.
-    private func showNext(after ids: Set<String>) {
+    func showNext(after ids: Set<String>) {
         guard let id = selection, ids.contains(id) else { return }
         let order = drawnOrder
         guard let i = order.firstIndex(where: { $0.id == id }) else { return }
@@ -355,6 +355,7 @@ struct PickedActions: View {
     var body: some View {
         let n = list.count
         Button("Close \(n) Sessions") { store.closeMany(list) }
+        SpaceMenu(list: list)
         if store.canPark {
             if list.contains(where: { !$0.isParked }) {
                 Button("Park \(n) Sessions") { store.setParked(list, true) }

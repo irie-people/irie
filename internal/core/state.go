@@ -59,6 +59,7 @@ type track struct {
 	priority int          // the level of the last priority.set
 	parked   bool         // ui.parked, until ui.unparked
 	pinned   bool         // ui.pinned, until ui.unpinned
+	space    string       // the space of the last ui.spaced (spaces.go)
 
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads. own are the
@@ -213,6 +214,8 @@ func (t *track) apply(e event.Event) {
 		t.pinned = true
 	case event.UIUnpinned:
 		t.pinned = false
+	case event.UISpaced:
+		t.space = e.Str("space")
 	}
 }
 
