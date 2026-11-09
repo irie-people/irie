@@ -93,7 +93,10 @@ extension Store {
     /// them in one `close`, and ⌘Z brings them all back. When the shown one
     /// goes, the next card left takes its place, or the one before it.
     func closeMany(_ list: [Session]) {
-        guard !list.isEmpty else { return }
+        guard !list.isEmpty else {
+            say("Nothing to close there. Pinned and parked cards stay.", error: false)
+            return
+        }
         if list.count == 1 {
             close(list[0])
             return
@@ -372,18 +375,17 @@ struct PickedActions: View {
 }
 
 /// A card's close items: Close Others, Close Below and Close All Finished.
+/// They read the rows only once chosen, so a card's menu never draws again
+/// with every row's news.
 @MainActor
 struct CloseManyItems: View {
     @Environment(Store.self) private var store
     let session: Session
 
     var body: some View {
-        let others = store.others(than: session)
-        let below = store.below(session)
-        Button(others.isEmpty ? "Close Others" : "Close \(others.count) Others") { store.closeMany(others) }
-            .disabled(others.isEmpty)
-        Button(below.isEmpty ? "Close Below" : "Close \(below.count) Below") { store.closeMany(below) }
-            .disabled(below.isEmpty)
+        Button("Close Others") { store.closeMany(store.others(than: session)) }
+        Button("Close Below") { store.closeMany(store.below(session)) }
+            .disabled(session.isPinned || session.peerName != nil)
         Button("Close All Finished") { store.closeFinished() }
     }
 }
