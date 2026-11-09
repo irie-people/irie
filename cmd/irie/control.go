@@ -23,11 +23,12 @@ const controlUsage = `  irie ctl freeze SESSION|--all          stop a session's 
   irie ctl reorder [--before OTHER] SESSION
                                          put a session just before another in
                                          the list, or last
-  irie ctl park [SESSION]                put a session out of the way, in the
-                                         Parked group at the end of the list:
-                                         by id or name, or with none the one
-                                         this runs in
-  irie ctl unpark [SESSION]              bring it back to its place
+  irie ctl park [SESSION]                put a session out of the way, last in
+                                         the Parked group at the end of the
+                                         list: by id or name, or with none the
+                                         one this runs in
+  irie ctl unpark [SESSION]              bring it back, last in the list, just
+                                         above Parked
 `
 
 // ctlFreeze is `irie ctl freeze` (on) and `irie ctl thaw`.

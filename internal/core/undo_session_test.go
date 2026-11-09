@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -481,6 +482,70 @@ func TestUndoAndRedoOfAParkAndAnUnpark(t *testing.T) {
 	if got, want := c.uiSteps(a.ID), []string{"ui.undo park open>open", "ui.redo park open>open", "ui.undo unpark open>open", "ui.redo unpark open>open"}; !slices.Equal(got, want) {
 		t.Errorf("journal %v, want %v", got, want)
 	}
+}
+
+// Park and unpark put a session last in the group it joins, so undoing
+// either puts it back in the place it left, and redoing it puts it last
+// again. A step kept from before park and unpark moved a session has no
+// place to put it back in, and its undo leaves it where it is.
+func TestUndoOfAParkOrAnUnparkPutsTheSessionBackInItsPlace(t *testing.T) {
+	c := setup(t)
+	id := map[string]string{}
+	for _, n := range []string{"alpha", "beta", "gamma", "delta"} {
+		id[n] = c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: n}).ID
+	}
+	look := func(when string, order, inParked []string) {
+		t.Helper()
+		rows := c.list()
+		if got := names(rows); !slices.Equal(got, order) {
+			t.Errorf("%s: order %v, want %v", when, got, order)
+		}
+		if got := parked(rows); !slices.Equal(got, inParked) {
+			t.Errorf("%s: parked %v, want %v", when, got, inParked)
+		}
+	}
+	c.park(id["beta"], true)
+	c.park(id["delta"], true)
+	c.park(id["alpha"], true)
+	look("parked beta, delta and alpha", []string{"gamma", "beta", "delta", "alpha"}, []string{"beta", "delta", "alpha"})
+	if r := c.step(dirUndo); r.Label != `park "alpha"` {
+		t.Errorf("undo %+v", r)
+	}
+	look("the park of alpha undone", []string{"alpha", "gamma", "beta", "delta"}, []string{"beta", "delta"})
+	c.step(dirRedo)
+	look("the park of alpha redone", []string{"gamma", "beta", "delta", "alpha"}, []string{"beta", "delta", "alpha"})
+
+	// Unparked, beta goes last among the rest; undone, it is back first in
+	// Parked, where it was.
+	c.park(id["beta"], false)
+	look("unparked beta", []string{"gamma", "delta", "alpha", "beta"}, []string{"delta", "alpha"})
+	c.step(dirUndo)
+	look("the unpark of beta undone", []string{"gamma", "beta", "delta", "alpha"}, []string{"beta", "delta", "alpha"})
+	c.step(dirRedo)
+	look("the unpark of beta redone", []string{"gamma", "delta", "alpha", "beta"}, []string{"delta", "alpha"})
+
+	// Dragged across Parked's edge, gamma is parked where it is dropped,
+	// just before alpha; undone, it is back first among the rest, and
+	// redone, back where it was dropped.
+	if err := c.call(ipc.OpPark, ipc.ParkArgs{Session: id["gamma"], Before: id["alpha"]}, nil); err != nil {
+		t.Fatal(err)
+	}
+	look("gamma dropped in Parked", []string{"delta", "gamma", "alpha", "beta"}, []string{"delta", "gamma", "alpha"})
+	c.step(dirUndo)
+	look("the drop of gamma undone", []string{"gamma", "delta", "alpha", "beta"}, []string{"delta", "alpha"})
+	c.step(dirRedo)
+	look("the drop of gamma redone", []string{"delta", "gamma", "alpha", "beta"}, []string{"delta", "gamma", "alpha"})
+	// Dropped before no session, nothing changes.
+	if err := c.call(ipc.OpUnpark, ipc.ParkArgs{Session: id["gamma"], Before: "s000000000000"}, nil); err == nil || !strings.Contains(err.Error(), "no session") {
+		t.Errorf("unpark before no session: %v", err)
+	}
+	look("an unpark before no session", []string{"delta", "gamma", "alpha", "beta"}, []string{"delta", "gamma", "alpha"})
+
+	// A step from before keeps no place: its undo unparks gamma where it
+	// is.
+	c.editHistory(func(h *history) { h.Undo[len(h.Undo)-1].Data = nil })
+	c.step(dirUndo)
+	look("an old park undone", []string{"delta", "gamma", "alpha", "beta"}, []string{"delta", "alpha"})
 }
 
 // Promote unparks a session with no step of its own, so undoing a park

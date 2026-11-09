@@ -343,6 +343,18 @@ func parked(rows []ipc.Session) []string {
 	return out
 }
 
+// unparked are the names of the rows that are not parked, in the list's
+// order.
+func unparked(rows []ipc.Session) []string {
+	var out []string
+	for _, s := range rows {
+		if !s.Parked {
+			out = append(out, s.Name)
+		}
+	}
+	return out
+}
+
 // park parks a session (on) or unparks it, as the sidebars' z does.
 func (c *coreEnv) park(id string, on bool) {
 	c.t.Helper()
@@ -355,56 +367,62 @@ func (c *coreEnv) park(id string, on bool) {
 	}
 }
 
-func TestParkKeepsThePlaceThroughARestartAndPromoteUnparks(t *testing.T) {
+// Parking a session puts it last, in Parked, and unparking it puts it last
+// among the rest, just above Parked, not back where it was. Both last
+// through a restart, and promoting a parked session unparks it at the top.
+func TestParkAndUnparkPutASessionLastAndPromoteUnparks(t *testing.T) {
 	c := setup(t)
-	for _, n := range []string{"alpha", "beta", "gamma"} {
+	for _, n := range []string{"alpha", "beta", "gamma", "delta"} {
 		c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: n})
 	}
 	id := map[string]string{}
 	for _, s := range c.list() {
 		id[s.Name] = s.ID
 	}
-	order := []string{"alpha", "beta", "gamma"}
-	for _, n := range []string{"alpha", "gamma"} {
-		if err := c.call(ipc.OpPark, ipc.ParkArgs{Session: id[n]}, nil); err != nil {
-			t.Fatal(err)
-		}
+	for _, n := range []string{"beta", "alpha"} {
+		c.park(id[n], true)
 	}
-	// Parking twice changes nothing.
-	if err := c.call(ipc.OpPark, ipc.ParkArgs{Session: id["gamma"]}, nil); err != nil {
-		t.Fatal(err)
-	}
+	// Parking twice changes nothing, and moves nothing.
+	c.park(id["beta"], true)
+	want := []string{"gamma", "delta", "beta", "alpha"}
 	rows := c.list()
-	if got := parked(rows); !slices.Equal(got, []string{"alpha", "gamma"}) {
-		t.Errorf("parked = %v, want alpha and gamma", got)
+	if got := parked(rows); !slices.Equal(got, []string{"beta", "alpha"}) {
+		t.Errorf("parked = %v, want beta then alpha, the last parked last", got)
 	}
-	// Parking leaves the order be, so unparking brings a session back to
-	// its place.
-	if got := names(rows); !slices.Equal(got, order) {
-		t.Errorf("order = %v, want %v", got, order)
+	if got := names(rows); !slices.Equal(got, want) {
+		t.Errorf("order = %v, want %v", got, want)
 	}
 	c.restartCore()
-	if got := parked(c.list()); !slices.Equal(got, []string{"alpha", "gamma"}) {
+	rows = c.list()
+	if got := parked(rows); !slices.Equal(got, []string{"beta", "alpha"}) {
 		t.Errorf("after a restart, parked = %v", got)
 	}
-	if err := c.call(ipc.OpUnpark, ipc.ParkArgs{Session: id["alpha"]}, nil); err != nil {
-		t.Fatal(err)
+	if got := names(rows); !slices.Equal(got, want) {
+		t.Errorf("after a restart, order = %v, want %v", got, want)
 	}
-	if got := parked(c.list()); !slices.Equal(got, []string{"gamma"}) {
-		t.Errorf("after unparking alpha, parked = %v", got)
+	// Unparked, beta comes last among the rest, below delta, and unparking
+	// it twice moves nothing.
+	c.park(id["beta"], false)
+	c.park(id["beta"], false)
+	rows = c.list()
+	if got := parked(rows); !slices.Equal(got, []string{"alpha"}) {
+		t.Errorf("after unparking beta, parked = %v", got)
 	}
-	// Promoting a parked session unparks it (DESIGN §4.3).
-	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["gamma"], Level: 1}, nil); err != nil {
+	if got := unparked(rows); !slices.Equal(got, []string{"gamma", "delta", "beta"}) {
+		t.Errorf("after unparking beta, the rest = %v", got)
+	}
+	// Promoting a parked session unparks it, at the top (DESIGN §4.3).
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["alpha"], Level: 1}, nil); err != nil {
 		t.Fatal(err)
 	}
 	rows = c.list()
 	if got := parked(rows); len(got) > 0 {
-		t.Errorf("after promoting gamma, parked = %v", got)
+		t.Errorf("after promoting alpha, parked = %v", got)
 	}
-	if got := names(rows); !slices.Equal(got, []string{"gamma", "alpha", "beta"}) {
-		t.Errorf("after promoting gamma: %v", got)
+	if got := names(rows); !slices.Equal(got, []string{"alpha", "gamma", "delta", "beta"}) {
+		t.Errorf("after promoting alpha: %v", got)
 	}
-	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["gamma"], Level: 0}, nil); err != nil {
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["alpha"], Level: 0}, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, op := range []string{ipc.OpPark, ipc.OpUnpark} {

@@ -505,6 +505,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-09 | https://github.com/manaflow-ai/cmux (README) | cmux's own description (a Mac terminal with vertical tabs and notifications for coding agents), for the FAQ's answer on how Irie differs |
 | 2026-11-09 | https://github.com/smtg-ai/claude-squad (README) | Claude Squad's own description (a terminal app that gives each agent a tmux session and git worktree), for the FAQ's answer on how Irie differs |
 | 2026-11-09 | https://claude.com/download ; https://code.claude.com/docs/en/desktop (sessions, Permission modes) | Claude's desktop app runs Claude Code sessions in parallel, for the FAQ's answer on how Irie differs; auto mode's background check of commands and network requests, for its auto mode answer |
+| 2026-11-09 | The owner's request "when i park a tab in irie i want it to move to the parked section, when unparking from the park section i want it to go back to the bottom of the non park list", read against Irie's own journal (`ui.parked`, `ui.unparked`, `ui.reordered`) and the Mac app's log for 2026-11-09, locally | Park moves a card at once, last in Parked, and unpark puts it last among the rest; a drag across Parked's edge is one `park` or `unpark` with `before`; undo puts the card back where it was (DESIGN §4.1, §4.5, docs/MAC.md, docs/proposals/park.md) |
 
 ## Third-party code
 

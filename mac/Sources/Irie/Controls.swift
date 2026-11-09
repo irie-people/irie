@@ -6,14 +6,14 @@ import UniformTypeIdentifiers
 // freezes a session's whole process tree at once, its helpers and everything
 // they started, and Resume continues it. Promote puts a session at the top of
 // the list and gives its process tree the machine first: the other sessions
-// run in macOS's background state. Park puts a session in the Parked group at
-// the end of the list, folded until opened, so it goes out of sight and out
-// of the To verify count; Unpark brings it back to its place. Parked or
-// unparked from the card under the pointer, the card stays put until the
-// pointer leaves it, so a second click on the same spot takes it back; a
-// notice offers Undo too. The core keeps the one order both sidebars draw,
-// and a card dragged elsewhere in its group goes where it is dropped;
-// dropped across the Parked group's edge, it is parked or unparked there.
+// run in macOS's background state. Park puts a session last in the Parked
+// group at the end of the list, folded until opened, so it goes out of sight
+// and out of the To verify count; Unpark puts it last among the rest, just
+// above Parked. Either moves the card at once, and a notice offers Undo,
+// which puts it back where it was. The core keeps the one order both
+// sidebars draw, and a card dragged elsewhere in its group goes where it is
+// dropped; dropped across the Parked group's edge, it is parked or unparked
+// there.
 // Move Up and Move Down move one without a drag. Each change shows at once,
 // and the core's frames confirm it.
 
@@ -37,6 +37,9 @@ struct ReorderArgs: Encodable {
 
 struct ParkArgs: Encodable {
     var session: String
+    /// Where a drag across Parked's edge dropped it: just before this
+    /// session, or last when nil.
+    var before: String?
 }
 
 /// Where a dragged card would land: just above or just below the card under
@@ -83,7 +86,6 @@ extension Store {
     /// Promotes a session to the top, which unparks it, or puts it back
     /// among the rest, where it stays. It shows at once.
     func setPromoted(_ s: Session, _ on: Bool) {
-        if on { lingering[s.id] = nil }
         preview { rows in
             guard let i = rows.firstIndex(where: { $0.id == s.id }) else { return }
             rows[i].priority = on ? 1 : 0
@@ -110,61 +112,58 @@ extension Store {
         }
     }
 
-    /// Parks a session, which puts its card in the Parked group at the end
-    /// of the list, or unparks it back to its place. It shows at once, and
-    /// a notice says where it went, since a folded Parked hides it, with
-    /// Undo. From the card under the pointer (fromPointer), the card stays
-    /// where it is, drawn parked or not, until the pointer leaves it: what
-    /// slid under the pointer, such as Parked's header, which folds, or the
-    /// next card's Park, would take the click meant to take it back.
-    func setParked(_ s: Session, _ on: Bool, fromPointer: Bool = false) {
+    /// Parks a session, which puts its card last in the Parked group at the
+    /// end of the list, or unparks it, last among the rest, just above
+    /// Parked, as the core does (DESIGN §4.1). The card moves at once, and a
+    /// notice says where it went, since a folded Parked hides it, with Undo,
+    /// which puts it back where it was.
+    func setParked(_ s: Session, _ on: Bool) {
         guard canPark, s.isParked != on else { return }
-        if fromPointer, hovered == s.id {
-            if let drawn = lingering[s.id] {
-                // Back the way it is drawn.
-                if drawn == on { lingering[s.id] = nil }
-            } else {
-                lingering[s.id] = s.isParked
-            }
-        } else {
-            lingering[s.id] = nil
-        }
-        preview { rows in
-            if let i = rows.firstIndex(where: { $0.id == s.id }) { rows[i].parked = on }
-        }
-        Task {
-            do {
-                _ = try await client.call(on ? "park" : "unpark", ParkArgs(session: s.id), as: Empty.self)
-                say(on ? "Parked \(s.name), out of the way at the end of the list." : "Unparked \(s.name), back in its place.",
-                    error: false, seconds: 6, undo: true)
-            } catch {
-                lingering[s.id] = nil
-                preview { rows in
-                    if let i = rows.firstIndex(where: { $0.id == s.id }) { rows[i].parked = s.parked }
-                }
-                say("Couldn’t \(on ? "park" : "unpark") \(s.name): \(error.localizedDescription)", error: true)
-            }
-        }
-    }
-
-    /// The pointer came onto a card or left it. A card that lingers there
-    /// takes its place once the pointer leaves it.
-    func hover(_ id: String, _ inside: Bool) {
-        if inside {
-            hovered = id
-            return
-        }
-        if hovered == id { hovered = nil }
-        settle(id)
-    }
-
-    /// Puts a lingering card, or with none named every one, where it now
-    /// belongs.
-    func settle(_ id: String? = nil) {
-        guard id.map({ lingering[$0] != nil }) ?? !lingering.isEmpty else { return }
+        let was = sessions
         withAnimation(.easeOut(duration: 0.2)) {
-            if let id { lingering[id] = nil } else { lingering = [:] }
+            preview { rows in Self.putLast(&rows, s.id, parked: on) }
         }
+        Task { await park(s, on, was: was) }
+    }
+
+    /// Asks the core to park or unpark s, last in the group it joins or just
+    /// before the session a drag dropped it on, and says where it went.
+    /// Should the core refuse, the cards go back as they were.
+    private func park(_ s: Session, _ on: Bool, before: String? = nil, was: [Session]) async {
+        do {
+            _ = try await client.call(on ? "park" : "unpark", ParkArgs(session: s.id, before: before), as: Empty.self)
+            let place = before != nil ? "where you dropped it" : on ? "out of the way at the end of the list" : "last in the list"
+            say("\(on ? "Parked" : "Unparked") \(s.name), \(place).", error: false, seconds: 6, undo: true)
+        } catch {
+            preview { rows in
+                for i in rows.indices {
+                    guard let old = was.first(where: { $0.id == rows[i].id }) else { continue }
+                    rows[i].order = old.order
+                    if rows[i].id == s.id { rows[i].parked = s.parked }
+                }
+            }
+            say("Couldn’t \(on ? "park" : "unpark") \(s.name): \(error.localizedDescription)", error: true)
+        }
+    }
+
+    /// Puts session id last among its machine's sessions in rows, which are
+    /// in the list's order, parked (on) or not, as the core's park and
+    /// unpark do: a peer's sessions, whose ids name the peer, come after
+    /// this Mac's. It numbers the rows' places again.
+    static func putLast(_ rows: inout [Session], _ id: String, parked on: Bool) {
+        guard let i = rows.firstIndex(where: { $0.id == id }) else { return }
+        var s = rows.remove(at: i)
+        s.parked = on
+        let peer = Self.peer(of: id)
+        let at = rows.lastIndex(where: { Self.peer(of: $0.id) == peer }).map { $0 + 1 } ?? i
+        rows.insert(s, at: at)
+        for j in rows.indices { rows[j].order = j }
+    }
+
+    /// The peer a session runs on, which its id names, as "asahi/s123…";
+    /// nil for one of this Mac's own.
+    static func peer(of id: String) -> Substring? {
+        id.firstIndex(of: "/").map { id[..<$0] }
     }
 
     /// Parks or unparks the selected card: the sidebar's z key.
@@ -189,8 +188,8 @@ extension Store {
     /// repo's cards.
     func canDrop(onto target: Session) -> Bool {
         guard let id = dragging, id != target.id, var held = sessions.first(where: { $0.id == id }) else { return false }
-        guard held.isParked == drawnParked(target) || canPark else { return false }
-        held.parked = drawnParked(target)
+        guard held.isParked == target.isParked || canPark else { return false }
+        held.parked = target.isParked
         return groupID(of: held) == groupID(of: target)
     }
 
@@ -204,11 +203,14 @@ extension Store {
     }
 
     /// Puts session id in target's place, at once, and tells the core.
-    /// Across the Parked group's edge it is parked or unparked as well.
+    /// Across the Parked group's edge it is parked or unparked there, as one
+    /// park that says where it went, so the core moves it once and one undo
+    /// takes it back.
     func reorder(_ id: String, onto target: Session) {
         guard let from = sessions.firstIndex(where: { $0.id == id }),
               let to = sessions.firstIndex(where: { $0.id == target.id }), from != to else { return }
-        setParked(sessions[from], drawnParked(target))
+        let s = sessions[from], was = sessions
+        let crosses = canPark && s.isParked != target.isParked
         var ids = sessions.map(\.id)
         let moving = ids.remove(at: from)
         guard let t = ids.firstIndex(of: target.id) else { return }
@@ -216,9 +218,16 @@ extension Store {
         ids.insert(moving, at: at)
         let before = at + 1 < ids.count ? ids[at + 1] : nil
         preview { rows in
-            for i in rows.indices { rows[i].order = ids.firstIndex(of: rows[i].id) }
+            for i in rows.indices {
+                rows[i].order = ids.firstIndex(of: rows[i].id)
+                if crosses, rows[i].id == id { rows[i].parked = target.isParked }
+            }
         }
         Task {
+            if crosses {
+                await park(s, target.isParked, before: before, was: was)
+                return
+            }
             do {
                 _ = try await client.call("reorder", ReorderArgs(session: id, before: before), as: Empty.self)
             } catch {
@@ -290,11 +299,11 @@ struct ParkButton: View {
 
     var body: some View {
         let on = session.isParked
-        Button { store.setParked(session, !on, fromPointer: onCard) } label: {
+        Button { store.setParked(session, !on) } label: {
             Image(systemName: on ? "parkingsign.circle.fill" : "parkingsign.circle")
                 .frame(width: onCard ? 16 : nil, height: onCard ? 18 : nil)
         }
-        .help(on ? "Unpark: put it back in its place in the list" : "Park: put it out of the way, in Parked at the end of the list")
+        .help(on ? "Unpark: put it back, last in the list" : "Park: put it out of the way, last in Parked at the end of the list")
         .accessibilityLabel(on ? "Unpark" : "Park")
     }
 }
@@ -317,7 +326,7 @@ struct ControlItems: View {
         }
         Button(session.isPromoted ? "Stop Promoting" : "Promote to the Top") { store.setPromoted(session, !session.isPromoted) }
         if store.canPark {
-            Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked, fromPointer: true) }
+            Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) }
         }
         Button("Move Up") { store.move(session, by: -1) }.disabled(!canUp)
         Button("Move Down") { store.move(session, by: 1) }.disabled(!canDown)
@@ -388,7 +397,7 @@ struct ControlLines: View {
     var body: some View {
         if session.isParked {
             lineText("Parked: out of the way, still running",
-                     more: "It waits in Parked at the end of the list and keeps running, and it still turns red when it needs you. Unpark puts it back in its place.")
+                     more: "It waits in Parked at the end of the list and keeps running, and it still turns red when it needs you. Unpark puts it back, last in the list.")
         }
         if session.isFrozen {
             if session.freezing == true {
@@ -427,7 +436,6 @@ struct Reorderable: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onDrag {
-                store.settle()
                 store.dragging = session.id
                 return NSItemProvider(object: session.id as NSString)
             }

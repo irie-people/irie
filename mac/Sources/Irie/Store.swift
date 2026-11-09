@@ -71,12 +71,6 @@ final class Store {
     private(set) var archAgents: [ArchAgent] = []
     /// While a boost is on, when it ends.
     private(set) var boostUntil: Date?
-    /// Cards parked or unparked from under the pointer, each with whether
-    /// it is drawn parked: it stays where it was until the pointer leaves
-    /// it, so a second click on the same spot takes it back (Controls.swift).
-    var lingering: [String: Bool] = [:]
-    /// The card under the pointer.
-    @ObservationIgnored var hovered: String?
     /// Whether the core keeps a history to undo, and what undo and redo
     /// would take next (Undo.swift).
     private(set) var canUndo = false
@@ -382,7 +376,6 @@ final class Store {
             case "remove":
                 guard let id = f.id else { continue }
                 rows.removeAll { $0.id == id }
-                if lingering[id] != nil { lingering[id] = nil }
                 if coach?.session == id { coach = nil }
                 touched = true
             case "outside":
@@ -586,17 +579,17 @@ final class Store {
     var drawnGroups: [SessionGroup] {
         let f = filter.trimmingCharacters(in: .whitespaces).lowercased()
         let rows = f.isEmpty ? sessions : sessions.filter { $0.name.lowercased().contains(f) }
-        let parked = rows.filter(drawnParked)
+        let parked = rows.filter(\.isParked)
         var out: [SessionGroup] = []
         switch mode {
         case .list:
-            let active = rows.filter { !drawnParked($0) }
+            let active = rows.filter { !$0.isParked }
             if !active.isEmpty {
                 out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: active))
             }
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
-            for s in rows where !drawnParked(s) {
+            for s in rows where !s.isParked {
                 guard let r = s.repo, !r.isEmpty else {
                     none.append(s)
                     continue
@@ -616,14 +609,10 @@ final class Store {
         return out
     }
 
-    /// Whether a session is drawn in Parked: whether it is parked, or for a
-    /// card that lingers under the pointer, whether it was.
-    func drawnParked(_ s: Session) -> Bool { lingering[s.id] ?? s.isParked }
-
-    /// The id of the group a session is drawn in: Parked while it is drawn
+    /// The id of the group a session is drawn in: Parked while it is
     /// parked, else the list or its repo's group.
     func groupID(of s: Session) -> String {
-        if drawnParked(s) { return SessionGroup.parked }
+        if s.isParked { return SessionGroup.parked }
         switch mode {
         case .list: return SessionGroup.list
         case .repo: return "repo:" + (s.repo ?? "")

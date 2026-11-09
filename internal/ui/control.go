@@ -2,12 +2,12 @@ package ui
 
 // What the sidebar does to a session as a whole, and to its place in the
 // list (DESIGN §4.1, §4.3). f freezes or thaws the selected session and F
-// every session; ! promotes it to the top or puts it back; z parks it in the
-// Parked group at the end of the list, out of the way, or unparks it back to
-// its place, and Z folds Parked; a card or row dragged with the mouse goes
-// where it is dropped, among the others of its group. The core keeps the one
-// order both sidebars draw, so a state change never moves a row. Each change
-// shows at once and the core's frames confirm it.
+// every session; ! promotes it to the top or puts it back; z parks it last
+// in the Parked group at the end of the list, out of the way, or unparks
+// it, last among the rest, and Z folds Parked; a card or row dragged with
+// the mouse goes where it is dropped, among the others of its group. The
+// core keeps the one order both sidebars draw, so a state change never
+// moves a row. Each change shows at once and the core's frames confirm it.
 
 import (
 	"cmp"
@@ -24,7 +24,9 @@ type Controls interface {
 	Freeze(id string, on, all bool) error
 	Priority(id string, level int, reason string) error
 	Reorder(id, before string) error
-	Park(id string, on bool) error
+	// Park parks session id (on) or unparks it, last in the group it
+	// joins, or just before session before, where a drag drops it.
+	Park(id string, on bool, before string) error
 }
 
 // controlledMsg reports how a control went.
@@ -165,22 +167,39 @@ func (m Model) parkKey() (tea.Model, tea.Cmd) {
 	return m.park(c, s, !s.Parked)
 }
 
-// park parks session s (on), which puts it in the Parked group at the end
-// of the list, or unparks it back to its place, at once. The selection goes
-// with it, or to its group's header while that is folded.
+// park parks session s (on), which puts it last in the Parked group at the
+// end of the list, or unparks it, last among the rest, just above Parked,
+// at once, as the core does. The selection goes with it, or to its group's
+// header while that is folded.
 func (m Model) park(c Controls, s ipc.Session, on bool) (tea.Model, tea.Cmd) {
-	x := &m.sessions[m.index(s.ID)]
+	i := m.index(s.ID)
+	x := m.sessions[i]
 	x.Parked = on
+	rest := slices.Delete(slices.Clone(m.sessions), i, i+1)
+	m.sessions = slices.Insert(rest, lastOfHost(rest, x.Host, i), x)
+	m.renumber()
 	done := "parked " + s.Name + "; z unparks it"
 	if !on {
 		done = "unparked " + s.Name
 	}
-	i := m.sessionIndex(s.ID)
-	if i < 0 {
-		i = keyIndex(m.items(), m.groupOf(*x))
+	j := m.sessionIndex(s.ID)
+	if j < 0 {
+		j = keyIndex(m.items(), m.groupOf(x))
 	}
-	m.moveTo(i)
-	return m, func() tea.Msg { return controlledMsg{done: done, err: c.Park(s.ID, on)} }
+	m.moveTo(j)
+	return m, func() tea.Msg { return controlledMsg{done: done, err: c.Park(s.ID, on, "")} }
+}
+
+// lastOfHost is where the core puts a session of host that goes last, in
+// rows without it: after the other sessions of its machine, whose rows come
+// together, this machine's first. With no other, it stays at, where it was.
+func lastOfHost(rows []ipc.Session, host string, at int) int {
+	for j, r := range rows {
+		if r.Host == host {
+			at = j + 1
+		}
+	}
+	return at
 }
 
 // foldParked is Z: it folds the Parked group, or unfolds it.
@@ -327,10 +346,10 @@ func (m Model) release(y int) (tea.Model, tea.Cmd) {
 		done = "unparked " + name
 	}
 	return m, func() tea.Msg {
+		// Across Parked's edge the park carries where it was dropped, so
+		// the core moves it once, and one undo takes it back.
 		if parked != d.parked {
-			if err := c.Park(d.id, parked); err != nil {
-				return controlledMsg{err: err}
-			}
+			return controlledMsg{done: done, err: c.Park(d.id, parked, before)}
 		}
 		return controlledMsg{done: done, err: c.Reorder(d.id, before)}
 	}
@@ -379,10 +398,10 @@ func (b socketBackend) Reorder(id, before string) error {
 	return ipc.Call(b.socket, callTimeout, ipc.OpReorder, ipc.ReorderArgs{Session: id, Before: before}, nil)
 }
 
-func (b socketBackend) Park(id string, on bool) error {
+func (b socketBackend) Park(id string, on bool, before string) error {
 	op := ipc.OpUnpark
 	if on {
 		op = ipc.OpPark
 	}
-	return ipc.Call(b.socket, callTimeout, op, ipc.ParkArgs{Session: id}, nil)
+	return ipc.Call(b.socket, callTimeout, op, ipc.ParkArgs{Session: id, Before: before}, nil)
 }

@@ -303,7 +303,7 @@ function sessionActions(conn, s, { inSession = false } = {}) {
   if (!inSession) items.push({ label: 'Open', run: () => openSession(conn.m.id, s.id) });
   if (conn.can('park')) {
     items.push(s.parked
-      ? { label: 'Unpark', note: 'Back to its place in the list', run: () => op(conn, 'unpark', { session: s.id }, { undo: `Unparked “${s.name}”` }) }
+      ? { label: 'Unpark', note: 'Last in the list, above Parked', run: () => op(conn, 'unpark', { session: s.id }, { undo: `Unparked “${s.name}”` }) }
       : { label: 'Park', note: 'Out of the way, still running', run: () => op(conn, 'park', { session: s.id }, { undo: `Parked “${s.name}”` }) });
   }
   if (!ended && conn.can('freeze')) {

@@ -33,8 +33,12 @@ func (b *ctlBackend) Reorder(id, before string) error {
 	return nil
 }
 
-func (b *ctlBackend) Park(id string, on bool) error {
-	b.calls = append(b.calls, fmt.Sprintf("park %s %v", id, on))
+func (b *ctlBackend) Park(id string, on bool, before string) error {
+	call := fmt.Sprintf("park %s %v", id, on)
+	if before != "" {
+		call += fmt.Sprintf(" before %q", before)
+	}
+	b.calls = append(b.calls, call)
 	return nil
 }
 
@@ -344,8 +348,8 @@ func TestDraggingInTheListView(t *testing.T) {
 
 // A card dragged across Parked's edge is parked there, and a parked one
 // dragged back among its own group's cards is unparked; the core hears
-// both, and where it went. Into any other group it goes back, parked as it
-// was.
+// both, each as one park that says where it went. Into any other group it
+// goes back, parked as it was.
 func TestDraggingAcrossParkedsEdge(t *testing.T) {
 	rows := parkedSessions()
 	for i := range rows {
@@ -358,7 +362,7 @@ func TestDraggingAcrossParkedsEdge(t *testing.T) {
 	y := func(name string) int { return lineOf(t, m, name) }
 	// fork-docs into Parked, between scratch-notes and web-copy.
 	m = dragAlong(m, y("fork-docs"), y("scratch-notes"))
-	want := []string{"park s4 true", `reorder s4 before "s3"`}
+	want := []string{`park s4 true before "s3"`}
 	if !slices.Equal(b.calls, want) {
 		t.Errorf("calls = %v, want %v", b.calls, want)
 	}
@@ -371,7 +375,7 @@ func TestDraggingAcrossParkedsEdge(t *testing.T) {
 	// web-copy back among website's cards, above web-fix.
 	b.calls = nil
 	m = dragAlong(m, y("web-copy"), y("web-fix"))
-	want = []string{"park s5 false", `reorder s5 before "s1"`}
+	want = []string{`park s5 false before "s1"`}
 	if !slices.Equal(b.calls, want) {
 		t.Errorf("calls = %v, want %v", b.calls, want)
 	}
@@ -421,9 +425,10 @@ func TestAFrozenFlagSitsBesideTheGlyph(t *testing.T) {
 
 // z parks the selected session at once, out of sight in Parked, which starts
 // folded, and the selection goes to Parked's header; z again unparks it,
-// back to its place. Z opens Parked, and with it open the selection goes
-// with a session parked; Z folds it again, taking a selection inside it to
-// its header. :park and :unpark do the same as z.
+// last among the rest, just above Parked. Z opens Parked, and with it open
+// the selection goes with a session parked, which goes last in Parked; Z
+// folds it again, taking a selection inside it to its header. :park and
+// :unpark do the same as z.
 func TestZParksAndUnparks(t *testing.T) {
 	m, b := ctlAt(t, sessions(4), 34, 60)
 	m = send(m, keyMsg("esc"))
@@ -457,7 +462,7 @@ func TestZParksAndUnparks(t *testing.T) {
 	m = send(m, keyMsg("Z"))
 	m = selectNamed(t, m, "task-001")
 	m = send(m, keyMsg("z"))
-	if got := outline(m); !slices.Equal(got, []string{"▾ Not in a repo", "task-000", "task-001", "task-002", "task-003"}) {
+	if got := outline(m); !slices.Equal(got, []string{"▾ Not in a repo", "task-000", "task-002", "task-003", "task-001"}) {
 		t.Errorf("unparked, the outline is %q", got)
 	}
 	if last := b.calls[len(b.calls)-1]; last != "park s000000000001 false" || selectedName(m) != "task-001" {
@@ -478,6 +483,9 @@ func TestZParksAndUnparks(t *testing.T) {
 	}
 	// The commands.
 	m = send(m, keyMsg("Z"))
+	if got, want := outline(m), []string{"▾ Not in a repo", "task-002", "task-001", "▾ Parked", "task-003", "task-000"}; !slices.Equal(got, want) {
+		t.Errorf("the last parked goes last: outline %q, want %q", got, want)
+	}
 	m = selectNamed(t, m, "task-002")
 	m = typeText(send(m, keyMsg("tab")), ":park")
 	m = send(m, keyMsg("enter"))
@@ -512,5 +520,23 @@ func TestPromotingAParkedSessionUnparksIt(t *testing.T) {
 	m = send(m, keyMsg("!"))
 	if got := outline(m); !slices.Equal(got, []string{"▾ Not in a repo", "task-002", "task-000", "task-001"}) {
 		t.Errorf("outline %q", got)
+	}
+}
+
+// A session that goes last goes after the others of its machine, as the
+// core puts it: another machine's rows come after this one's.
+func TestLastOfHostIsAfterItsMachinesSessions(t *testing.T) {
+	rows := []ipc.Session{{ID: "s1"}, {ID: "s2"}, {ID: "asahi/s3", Host: "asahi"}, {ID: "asahi/s4", Host: "asahi"}}
+	for _, c := range []struct {
+		host   string
+		at, to int
+	}{
+		{"", 0, 2},      // this machine's: after s2, before asahi's
+		{"asahi", 2, 4}, // asahi's: after asahi/s4
+		{"pi", 4, 4},    // the only one of its machine: where it was
+	} {
+		if got := lastOfHost(rows, c.host, c.at); got != c.to {
+			t.Errorf("lastOfHost(%q, %d) = %d, want %d", c.host, c.at, got, c.to)
+		}
 	}
 }

@@ -102,7 +102,7 @@ func (f *fakeBackend) Input(a ipc.InputArgs) (ipc.InputResult, error) {
 	case ipc.PriorityArgs:
 		err = c.Priority(x.Session, x.Level, x.Reason)
 	case ipc.ParkArgs:
-		err = c.Park(x.Session, st.Op == ipc.OpPark)
+		err = c.Park(x.Session, st.Op == ipc.OpPark, x.Before)
 	}
 	return irie.Said(st, res, err)
 }
@@ -113,7 +113,7 @@ type noControlsBackend struct{}
 func (noControlsBackend) Freeze(string, bool, bool) error    { return errors.New(noControls) }
 func (noControlsBackend) Priority(string, int, string) error { return errors.New(noControls) }
 func (noControlsBackend) Reorder(string, string) error       { return errors.New(noControls) }
-func (noControlsBackend) Park(string, bool) error            { return errors.New(noControls) }
+func (noControlsBackend) Park(string, bool, string) error    { return errors.New(noControls) }
 
 func (f *fakeBackend) Rate(id, verdict string) error {
 	f.rates = append(f.rates, id+" "+verdict)

@@ -59,9 +59,6 @@ struct SidebarView: View {
             .layoutPriority(1)
         }
         .background(Theme.sidebar.ignoresSafeArea())
-        // A card parked from under the pointer takes its place once the
-        // pointer leaves it, or the app the front (Controls.swift).
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in store.settle() }
         .toolbar {
             // Both over the sidebar, beside the traffic lights and above the
             // find field: macOS sets automatic items in their own column's
@@ -299,7 +296,6 @@ private struct SessionCard: View, Equatable {
         .contentShape(shape)
         .onHover { inside in
             hovering = inside
-            store.hover(session.id, inside)
             if inside { actionsShown = true } else { hideActions() }
         }
         .onTapGesture { if !renaming { store.show(session.id, focus: true) } }

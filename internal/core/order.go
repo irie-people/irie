@@ -7,11 +7,13 @@ package core
 // registry lives in pane options, so a restarted core keeps it. A closed
 // session keeps its place for its reopen.
 //
-// Parking a session puts it in the Parked group at the end of the list and
-// leaves the order be, so unparking brings it back to its place. Park is
-// in the journal (ui.parked, ui.unparked), which a restarted core replays.
-// A park or unpark the user asks for is a step of the history (DESIGN
-// §4.5), so undo takes it back.
+// Parking a session puts it last in the Parked group at the end of the
+// list, and unparking it puts it last among the rest, just above Parked:
+// either way it goes to the end of the one order, which the sidebars draw
+// with the parked sessions apart. Park is in the journal (ui.parked,
+// ui.unparked), which a restarted core replays. A park or unpark the user
+// asks for is a step of the history (DESIGN §4.5), so undo takes it back,
+// to the place it left.
 
 import (
 	"cmp"
@@ -240,17 +242,41 @@ func (c *Core) toTop(id string) {
 	c.setOrder(slices.Insert(ids, 0, id))
 }
 
-// park parks a session (on) or unparks it, and reports whether that
-// changed anything: parking one that is parked already, or unparking one
-// that is not, changes nothing. It records no step: the op does
-// (control.go), and undo and redo park through it too.
-func (c *Core) park(a ipc.ParkArgs, on bool) (bool, error) {
+// toEnd puts session id last in the list. The caller holds c.mu.
+func (c *Core) toEnd(id string) {
+	ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
+	c.setOrder(append(ids, id))
+}
+
+// park parks a session (on) or unparks it, and puts it last in the order,
+// so it goes to the end of the group it joins, Parked or the rest; or,
+// for a drag across Parked's edge, just before a.Before. Parking one that
+// is parked already, or unparking one that is not, changes nothing and
+// moves nothing. When it changed something, step is what undoing and
+// redoing it need (§4.5): the sessions that came after it before, and
+// those that do now. It records no step of its own: the op does
+// (control.go).
+func (c *Core) park(a ipc.ParkArgs, on bool) (step map[string]any, err error) {
 	c.mu.Lock()
+	defer func() {
+		frames := c.changes()
+		c.mu.Unlock()
+		c.publish(frames)
+	}()
+	if a.Before != "" && c.sessions[a.Before] == nil {
+		return nil, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Before)
+	}
+	from := c.nextOf(a.Session)
 	changed, err := c.setParked(a.Session, on)
-	frames := c.changes()
-	c.mu.Unlock()
-	c.publish(frames)
-	return changed, err
+	if !changed {
+		return nil, err
+	}
+	if a.Before != "" && a.Before != a.Session {
+		c.putBefore(a.Session, a.Before)
+	} else {
+		c.toEnd(a.Session)
+	}
+	return map[string]any{"from": from, "to": c.nextOf(a.Session)}, nil
 }
 
 // setParked parks or unparks session id, and reports whether that changed
@@ -277,11 +303,15 @@ const (
 	actUnpark = "unpark"
 )
 
+// Undoing a park unparks the session in the place it left, and redoing it
+// parks it again where the park put it; an unpark the same way round.
 func init() {
-	parkEff := effect{check: checkPark(true), do: doPark(true)}
-	unparkEff := effect{check: checkPark(false), do: doPark(false)}
-	registerAction(actPark, actionKind{verb: "park", undo: unparkEff, redo: parkEff})
-	registerAction(actUnpark, actionKind{verb: "unpark", undo: parkEff, redo: unparkEff})
+	registerAction(actPark, actionKind{verb: "park",
+		undo: effect{check: checkPark(false), do: doPark(false, "from")},
+		redo: effect{check: checkPark(true), do: doPark(true, "to")}})
+	registerAction(actUnpark, actionKind{verb: "unpark",
+		undo: effect{check: checkPark(true), do: doPark(true, "from")},
+		redo: effect{check: checkPark(false), do: doPark(false, "to")}})
 }
 
 // checkPark is what makes parking a's session (on), or unparking it,
@@ -310,16 +340,27 @@ func checkPark(on bool) func(c *Core, a action) []problem {
 	}
 }
 
-// doPark parks a's session (on) or unparks it the way the op does, with no
-// step of its own, and takes the name it has now.
-func doPark(on bool) func(c *Core, a action) (action, error) {
+// doPark parks a's session (on) or unparks it, and puts it in the place its
+// data keeps as k: where the session was before the step (from), or where
+// the step put it (to). A step kept from before park and unpark moved a
+// session has no place, and the session stays where it is, as it did then.
+// It takes the name the session has now.
+func doPark(on bool, k string) func(c *Core, a action) (action, error) {
 	return func(c *Core, a action) (action, error) {
-		if _, err := c.park(ipc.ParkArgs{Session: a.Session}, on); err != nil {
-			return a, err
-		}
 		c.mu.Lock()
-		defer c.mu.Unlock()
-		a.Name = c.nameOf(a.Session)
+		x := c.sessions[a.Session]
+		if x == nil {
+			c.mu.Unlock()
+			return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		}
+		c.setParked(x.id, on)
+		if _, ok := a.Data[k]; ok {
+			c.putBack(x.id, a.strs(k))
+		}
+		a.Name = x.name
+		frames := c.changes()
+		c.mu.Unlock()
+		c.publish(frames)
 		return a, nil
 	}
 }
