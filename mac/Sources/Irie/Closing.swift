@@ -14,8 +14,12 @@ struct ClosedSession: Decodable, Equatable, Identifiable {
     var auto: Bool?
 }
 
+/// One session to close, or several (sessions), or every finished one,
+/// which close as one step of the history (Tabs.swift).
 struct CloseArgs: Encodable {
-    var session: String
+    var session: String?
+    var sessions: [String]?
+    var finished: Bool?
 }
 
 struct ReopenArgs: Encodable {

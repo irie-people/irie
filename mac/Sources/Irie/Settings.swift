@@ -149,13 +149,17 @@ struct CoreConfig: Decodable, Equatable {
         var redOnDone: Bool
         /// How a helper beside its session is drawn: browser or terminal.
         var helperStyle: String
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style" }
+        /// Where a new session goes in the list: last, first or next.
+        var newTabs: String
+        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs" }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             redOnDone = try c.decode(Bool.self, forKey: .redOnDone)
             // A core from before helper styles has none: the cards.
             helperStyle = try c.decodeIfPresent(String.self, forKey: .helperStyle) ?? "browser"
+            // A core from before new_tabs puts a new session last.
+            newTabs = try c.decodeIfPresent(String.self, forKey: .newTabs) ?? "last"
         }
     }
 
@@ -472,13 +476,14 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     enum Tab: String, CaseIterable, Identifiable {
-        case general, appearance, agents, arch, trod, local, repos, plugins, learning
+        case general, tabs, appearance, agents, arch, trod, local, repos, plugins, learning
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
             case .general: return "General"
+            case .tabs: return "Tabs"
             case .appearance: return "Appearance"
             case .agents: return "Agents"
             case .arch: return "Arch Agents"
@@ -493,6 +498,7 @@ struct SettingsView: View {
         var icon: String {
             switch self {
             case .general: return "gearshape"
+            case .tabs: return "rectangle.stack"
             case .appearance: return "paintpalette"
             case .agents: return "person.2"
             case .arch: return "shield.lefthalf.filled"
@@ -505,7 +511,7 @@ struct SettingsView: View {
         }
     }
 
-    static let size = CGSize(width: 600, height: 560)
+    static let size = CGSize(width: 680, height: 560)
 
     /// The app's defaults key for the tab on show, which the Plugins menu
     /// sets before it opens the window.
@@ -539,6 +545,7 @@ struct SettingsView: View {
     static func page(_ t: Tab, model: SettingsModel) -> some View {
         switch t {
         case .general: GeneralSettings(model: model)
+        case .tabs: TabsSettings(model: model)
         case .appearance: AppearanceSettings(model: model)
         case .agents: AgentSettings(model: model)
         case .arch: ArchSettings(model: model)
@@ -1826,6 +1833,54 @@ private struct PluginPartRow: View {
         case "ready": return Theme.done
         case "needs": return Theme.needs
         default: return Theme.muted
+        }
+    }
+}
+
+/// Settings › Tabs: where new sessions go, and closing and moving the cards
+/// your way (Tabs.swift).
+@MainActor
+private struct TabsSettings: View {
+    @Environment(Store.self) private var store
+    @ObservedObject var model: SettingsModel
+    @AppStorage(CloseFromPointer.defaultsKey) private var closeFromPointer = true
+
+    var body: some View {
+        SettingsForm(model: model) {
+            Section {
+                switch (store.link, model.config) {
+                case let (.online, c?):
+                    Picker("New sessions go", selection: model.bind(c, \.ui.newTabs, "ui.new_tabs")) {
+                        Text("Last in the list").tag("last")
+                        Text("First, under Pinned").tag("first")
+                        Text("Next to the one that started it").tag("next")
+                    }
+                default:
+                    Picker("New sessions go", selection: .constant("last")) {
+                        Text("Last in the list").tag("last")
+                    }
+                    .disabled(true)
+                }
+            } header: {
+                Text("New sessions")
+            } footer: {
+                footnote("Next puts a session an agent starts just under that agent’s card, and a task you type just under the card you have selected, as a browser opens a tab beside the one it came from.")
+            }
+            Section {
+                Toggle("Close a card from under the pointer", isOn: $closeFromPointer)
+            } header: {
+                Text("Closing")
+            } footer: {
+                footnote("The card under the pointer shows a × in place of its mark, and a middle click closes it. ⌘W closes the selected card, or every card you picked with ⌘-click or ⇧-click. A card’s menu closes the others, those below it, or all finished, and a group’s header closes its group: ⌘Z brings back all that one close took. Pinned cards stay through all of these, and through close when done.")
+            }
+            Section {
+                LabeledContent("Move up or down", value: "⌥⌘↑  ⌥⌘↓")
+                LabeledContent("To the top or bottom of its group", value: "⇧⌥⌘↑  ⇧⌥⌘↓")
+            } header: {
+                Text("Moving")
+            } footer: {
+                footnote("Or drag a card. Dropped across Pinned’s edge it is pinned, and across Parked’s it is parked. Pin to the Top is in a card’s menu and in File; promoting a card is still the way to give it the machine first.")
+            }
         }
     }
 }

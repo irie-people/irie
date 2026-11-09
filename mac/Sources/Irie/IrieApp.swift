@@ -82,11 +82,23 @@ struct IrieApp: App {
 @MainActor
 final class KeyRouter {
     private var monitor: Any?
+    private var middle: Any?
     /// Irie's own window, where the sessions are (WindowReader).
     weak var window: NSWindow?
 
     func install(_ store: Store) {
         guard monitor == nil else { return }
+        // A middle click on a card closes it, as on a browser's tab, while
+        // Settings › Tabs lets a card close from under the pointer.
+        middle = NSEvent.addLocalMonitorForEvents(matching: .otherMouseUp) { [weak self, weak store] event in
+            guard let self, let store, event.buttonNumber == 2 else { return event }
+            return MainActor.assumeIsolated {
+                guard event.window != nil, event.window === self.window, CloseFromPointer.on,
+                      let id = store.hovered, let s = store.sessions.first(where: { $0.id == id }) else { return event }
+                store.close(s)
+                return nil
+            }
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak store] event in
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
@@ -108,10 +120,9 @@ final class KeyRouter {
                 MainActor.assumeIsolated {
                     if !irie || mods.contains(.shift) {
                         window.performClose(nil)
-                    } else if let s = store.closable {
-                        store.close(s)
                     } else {
-                        NSSound.beep()
+                        // The cards picked, or the selected one (Tabs.swift).
+                        store.closeKey()
                     }
                 }
                 return nil

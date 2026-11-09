@@ -17,6 +17,11 @@ const (
 	// list; OpUnpark puts it last among the rest, just above Parked.
 	OpPark   = "park"
 	OpUnpark = "unpark"
+	// OpPin puts a session last in the Pinned group at the top of the list,
+	// where no close but your own of it reaches it; OpUnpin puts it first
+	// among the rest, just under Pinned.
+	OpPin   = "pin"
+	OpUnpin = "unpin"
 )
 
 // StateFrozen is the state of a frozen session (DESIGN §5.3). It comes
@@ -50,9 +55,10 @@ type ReorderArgs struct {
 	Before  string `json:"before,omitempty"`
 }
 
-// ParkArgs name the session to park or unpark. It goes last in the group
-// it joins, Parked or the rest, or with Before just before that session,
-// where a drag across Parked's edge drops it.
+// ParkArgs name the session to park or unpark, or to pin or unpin. It goes
+// last in the group it joins, Parked or Pinned or the rest (first among the
+// rest for an unpin), or with Before just before that session, where a drag
+// across Parked's or Pinned's edge drops it.
 type ParkArgs struct {
 	Session string `json:"session"`
 	Before  string `json:"before,omitempty"`

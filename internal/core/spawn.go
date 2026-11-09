@@ -307,6 +307,9 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		c.escalate(hash, class, profileName, time.Now())
 	}
 	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor, anon: comp})
+	if err == nil {
+		c.placeNew(x.id, a)
+	}
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
 	}

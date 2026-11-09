@@ -52,6 +52,9 @@ type action struct {
 	Label   string         `json:"label"`   // what the header shows, as `close "api-fix"`
 	At      time.Time      `json:"at"`
 	Data    map[string]any `json:"data,omitempty"` // what the kind needs to undo it, such as when it closed
+	// Batch names the steps taken together, as one close of several
+	// sessions: undo and redo take them together (undo).
+	Batch string `json:"batch,omitempty"`
 }
 
 func (a action) with(k string, v any) action {
@@ -155,13 +158,44 @@ func (h *history) drop(dir, id string) bool {
 
 // labels are what the header shows: the next undo and redo, or "".
 func (h *history) labels() (undo, redo string) {
-	if a, ok := h.top(dirUndo); ok {
-		undo = a.Label
+	return h.label(dirUndo), h.label(dirRedo)
+}
+
+// label is what the header shows for what dir takes next: its step's
+// label, or for a batch the verb and how many sessions, `close 6 sessions`;
+// "" when there is nothing to take.
+func (h *history) label(dir string) string {
+	a, ok := h.top(dir)
+	if !ok {
+		return ""
 	}
-	if a, ok := h.top(dirRedo); ok {
-		redo = a.Label
+	n := h.batched(dir)
+	if n < 2 {
+		return a.Label
 	}
-	return undo, redo
+	verb := a.Kind
+	if k, ok := actionKinds[a.Kind]; ok {
+		verb = k.verb
+	}
+	return fmt.Sprintf("%s %d sessions", verb, n)
+}
+
+// batched is how many steps at the top of dir's stack share the batch of
+// the step there: 1 for a step taken on its own, 0 for none.
+func (h *history) batched(dir string) int {
+	from, _ := h.stack(dir)
+	t, ok := h.top(dir)
+	switch {
+	case !ok:
+		return 0
+	case t.Batch == "":
+		return 1
+	}
+	n := 0
+	for i := len(*from) - 1; i >= 0 && (*from)[i].Batch == t.Batch; i-- {
+		n++
+	}
+	return n
 }
 
 // stateFile is state.json. Keys this version does not know, such as a later
@@ -328,18 +362,36 @@ func newActionID() string {
 // now done, and tells clients the history changed. It never runs for what
 // undo and redo do.
 func (c *Core) recordAction(kind, id string, data map[string]any) {
+	c.recordSteps(kind, []string{id}, data)
+}
+
+// recordSteps records that the user took an action of kind on each of the
+// sessions ids at once, now done: a step for each, which for more than one
+// share a batch, so that undo and redo take them together. It never runs
+// for what undo and redo do.
+func (c *Core) recordSteps(kind string, ids []string, data map[string]any) {
 	k, ok := actionKinds[kind]
 	if !ok {
 		c.log.Warn("history: unknown action kind", "kind", kind)
 		return
 	}
-	c.mu.Lock()
-	a := action{ID: newActionID(), Kind: kind, Session: id, Name: c.nameOf(id), At: time.Now().UTC().Truncate(time.Millisecond), Data: data}
-	if r, ok := c.closedRecord(id); ok && c.sessions[id] == nil {
-		a = a.with("closed", r.Closed.Format(time.RFC3339Nano))
+	if len(ids) == 0 {
+		return
 	}
-	a.Label = k.labelOf(a)
-	c.steps.hist.push(a)
+	batch := ""
+	if len(ids) > 1 {
+		batch = newActionID()
+	}
+	c.mu.Lock()
+	at := time.Now().UTC().Truncate(time.Millisecond)
+	for _, id := range ids {
+		a := action{ID: newActionID(), Kind: kind, Session: id, Name: c.nameOf(id), At: at, Data: maps.Clone(data), Batch: batch}
+		if r, ok := c.closedRecord(id); ok && c.sessions[id] == nil {
+			a = a.with("closed", r.Closed.Format(time.RFC3339Nano))
+		}
+		a.Label = k.labelOf(a)
+		c.steps.hist.push(a)
+	}
 	c.saveState()
 	c.mu.Unlock()
 	c.publishHistory()
@@ -456,10 +508,49 @@ func offers(p *problem, key string) bool {
 }
 
 // undo undoes or redoes, by dir, the next step of the history (DESIGN
-// §4.5). One at a time: a second waits for the first. When the step is
-// uncertain nothing changes and the result asks what to do; a.Choice
-// answers such a question. A failed effect leaves the history as it was.
+// §4.5), and with it the rest of its batch: steps taken together, as one
+// close of several sessions, go back together, under the batch's label.
+// A question about one of them stops there, with the rest still next, so
+// that once it is answered the same undo goes on with them.
 func (c *Core) undo(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
+	c.mu.Lock()
+	first, _ := c.steps.hist.top(dir)
+	label := c.steps.hist.label(dir)
+	c.mu.Unlock()
+	res, err := c.undoStep(dir, a)
+	if first.Batch == "" {
+		return res, err
+	}
+	for err == nil && moved(res.Did) {
+		c.mu.Lock()
+		next, ok := c.steps.hist.top(dir)
+		c.mu.Unlock()
+		if !ok || next.Batch != first.Batch {
+			break
+		}
+		res, err = c.undoStep(dir, ipc.UndoArgs{})
+	}
+	if err == nil && moved(res.Did) {
+		res.Label = label
+	}
+	return res, err
+}
+
+// moved reports whether a step left the stack it was on: it was taken,
+// counted as taken, or skipped.
+func moved(did string) bool {
+	switch did {
+	case ipc.DidUndo, ipc.DidRedo, ipc.DidSettle, ipc.DidSkip:
+		return true
+	}
+	return false
+}
+
+// undoStep undoes or redoes, by dir, the next step of the history. One at
+// a time: a second waits for the first. When the step is uncertain nothing
+// changes and the result asks what to do; a.Choice answers such a
+// question. A failed effect leaves the history as it was.
+func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 	c.undoMu.Lock()
 	defer c.undoMu.Unlock()
 	if (a.Choice == "") != (a.ChoiceID == "") {
