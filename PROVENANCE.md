@@ -516,6 +516,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-09 | claude --help (Claude Code 2.1.319) | --strict-mcp-config, which loads only --mcp-config's servers, for anonymous research sessions; permissions.deny in --settings |
 | 2026-11-09 | https://manpages.debian.org/testing/tor/tor.1.en.html | internal/anon/services.go: Irie's torrc (SocksPort, whose ports are isolated from one another by default, ClientOnly, AvoidDiskWrites, SafeLogging, PidFile) and SIGHUP to reload it |
 | 2026-11-09 | Mullvad Browser 16.0's defaults/preferences (browser/omni.ja, MPL-2.0), and Firefox's media.peerconnection.enabled, network.dns.disabled, network.proxy.allow_hijacking_localhost and network.proxy.failover_direct | internal/browser/launch.go: the prefs behind a proxy; Mullvad Browser locks failover_direct off and keeps WebRTC to relays; typeof RTCPeerConnection was undefined with the prefs, checked here |
+| 2026-11-09 | The owner's request "when i park a tab in irie i want it to move to the parked section, when unparking from the park section i want it to go back to the bottom of the non park list", read against Irie's own journal (`ui.parked`, `ui.unparked`, `ui.reordered`) and the Mac app's log for 2026-11-09, locally | Park moves a card at once, last in Parked, and unpark puts it last among the rest; a drag across Parked's edge is one `park` or `unpark` with `before`; undo puts the card back where it was (DESIGN §4.1, §4.5, docs/MAC.md, docs/proposals/park.md) |
 
 ## Third-party code
 

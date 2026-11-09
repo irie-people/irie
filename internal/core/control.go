@@ -66,16 +66,17 @@ func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err
 			return nil, true, err
 		}
 		// Only a park or unpark that changed something is a step of the
-		// history.
-		changed, err := c.park(a, op == ipc.OpPark)
-		if err != nil || !changed {
+		// history, which keeps the place the session left and the one it
+		// went to.
+		step, err := c.park(a, op == ipc.OpPark)
+		if err != nil || step == nil {
 			return nil, true, err
 		}
 		kind := actUnpark
 		if op == ipc.OpPark {
 			kind = actPark
 		}
-		c.recordAction(kind, a.Session, nil)
+		c.recordAction(kind, a.Session, step)
 		return nil, true, nil
 	}
 	return nil, false, nil

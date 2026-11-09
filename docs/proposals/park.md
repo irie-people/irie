@@ -13,6 +13,13 @@ Date: 2026-10-27. Status: requirements, with what this change builds and what is
 | `irie ctl list` | Parked sessions mixed in, unmarked | Listed last, under PARKED |
 | Irie's status line, parked and finished | `✓ to verify` | `✓ parked` |
 
+**Update, 2026-11-09.** The owner answered open question 1 and asked for a plainer park: "when i park a tab in irie i want it to move to the parked section, when unparking from the park section i want it to go back to the bottom of the non park list". Irie's journal and the Mac app's log showed why. A park from a card's Ⓟ at 14:55:52 UTC left the card in place, lingering under the pointer as R9 had it; 1.5 s later the owner dragged the card, and the drop among the other cards unparked it again. So:
+
+- Park moves the card into Parked at once, from its Ⓟ and its menu too; the lingering of R9 is gone. It goes last in Parked, so the newest parked is at the bottom.
+- Unpark puts the card last among the rest, just above Parked, rather than back in its old place (R1). A peer's sessions still come after this machine's.
+- Undo puts the card back where it was: the step keeps the sessions after it before the move, and those after it where it went, for redo.
+- A drag across Parked's edge is one `park` or `unpark` that names the session it lands before (`before`), not a park and a reorder, so the core moves it once, nothing jumps to the end and back, and one undo takes the drop back.
+
 ---
 
 ## 1. Why park
@@ -45,7 +52,7 @@ So "click it again to undo" did the wrong thing every time, and a card's own but
 
 | # | Requirement | Status | Where |
 |---|---|---|---|
-| R1 | Park and unpark any session. Parking leaves its place in the one order, so unpark brings it back there | done | core `park`, `unpark` (DESIGN §2.4, §4.1) |
+| R1 | Park and unpark any session. Parking leaves its place in the one order, so unpark brings it back there. *Changed 2026-11-09:* park puts it last in Parked and unpark last among the rest | done | core `park`, `unpark` (DESIGN §2.4, §4.1) |
 | R2 | Parked is a group at the end of the list, after the List or the repo groups and before Outside Irie, in the list's order | done | both sidebars |
 | R3 | Parked starts folded, so a session parked goes out of sight at once; once opened it stays open. Folded, its header says how many sessions it holds and how many need you, in red | done | both sidebars |
 | R4 | A parked session keeps running and still turns red when it needs you, and so does Parked's header | done | DESIGN §10, decision 3 |
@@ -53,7 +60,7 @@ So "click it again to undo" did the wrong thing every time, and a card's own but
 | R6 | Park survives restarts of the app, the sidebar and the core, and installs | done | journal replay of `ui.parked`, `ui.unparked` |
 | R7 | Promoting a parked session unparks it. A closed session comes back unparked when it is reopened | done | core |
 | R8 | Every way in: Mac app, a card's Ⓟ on hover, its menu, the details panel's Ⓟ, File > Park Session, `z` and `⇧Z` while the list has the keyboard, a drag across Parked's edge, VoiceOver's actions; terminal sidebar, `z`, `Z`, `:park`, `:unpark` and the drag | done | |
-| R9 | A park or unpark done on a card under the pointer leaves the card where it is, in its new state, until the pointer leaves it; a second click on the same spot takes it back | new | Mac app |
+| R9 | A park or unpark done on a card under the pointer leaves the card where it is, in its new state, until the pointer leaves it; a second click on the same spot takes it back. *Withdrawn 2026-11-09:* the card moves at once, and Undo takes it back | new | Mac app |
 | R10 | Park and unpark are steps of the core's one history: undo and redo take them back, from either sidebar | new | core (DESIGN §4.5) |
 | R11 | The notice after a park or unpark offers Undo, in the place that never moves | new | Mac app |
 | R12 | Edit > Undo and Redo (⌘Z, ⇧⌘Z) step through the whole history, name the step, and ask the core's questions in an alert | new | Mac app |
@@ -61,7 +68,7 @@ So "click it again to undo" did the wrong thing every time, and a card's own but
 | R14 | `irie ctl list` lists parked sessions last, under PARKED, as both sidebars do | new | CLI |
 | R15 | Irie's status line says `✓ parked` for a parked session whose turn is over, not `✓ to verify` | new | status line |
 | R16 | The details panel says a session is parked, and Parked's header says on hover how to unpark | new | Mac app |
-| L1 | Promote has the same slide under the pointer: the card jumps to the top and the next card's ↑ arrives under the pointer. The same lingering would fix it | later | |
+| L1 | Promote has the same slide under the pointer: the card jumps to the top and the next card's ↑ arrives under the pointer | later | |
 | L2 | Park several at once, such as every finished session you have seen, as one step you take | later | |
 | L3 | How long a session has been parked, in the details | later | |
 | L4 | A shortcut that parks while the terminal has the keyboard; `z` needs the list to have it | later | |
@@ -91,6 +98,6 @@ In the Mac app, ⌘Z and ⇧⌘Z go to the history unless a text field has the k
 
 ## 6. Open questions
 
-1. Unpark brings a card back to its old place, which may be far up a long list. Should it come back last instead, beside Parked, where the eye already is?
+1. Unpark brings a card back to its old place, which may be far up a long list. Should it come back last instead, beside Parked, where the eye already is? *Answered 2026-11-09: yes, last* (see the update at the top).
 2. Should parking also freeze, to give a long-parked session's CPU back? Freeze exists on its own today.
 3. Which shortcut, if any, should park while the terminal has the keyboard (L4)?

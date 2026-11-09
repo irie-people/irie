@@ -13,8 +13,8 @@ const (
 	// OpReorder puts a session elsewhere in the list. Move, its near
 	// namesake, brings in a session from outside Irie.
 	OpReorder = "reorder"
-	// OpPark puts a session in the Parked group at the end of the list;
-	// OpUnpark brings it back to its place.
+	// OpPark puts a session last in the Parked group at the end of the
+	// list; OpUnpark puts it last among the rest, just above Parked.
 	OpPark   = "park"
 	OpUnpark = "unpark"
 )
@@ -50,7 +50,10 @@ type ReorderArgs struct {
 	Before  string `json:"before,omitempty"`
 }
 
-// ParkArgs name the session to park or unpark.
+// ParkArgs name the session to park or unpark. It goes last in the group
+// it joins, Parked or the rest, or with Before just before that session,
+// where a drag across Parked's edge drops it.
 type ParkArgs struct {
 	Session string `json:"session"`
+	Before  string `json:"before,omitempty"`
 }

@@ -185,9 +185,10 @@ func TestUndoOfAPromotionPutsTheSessionBack(t *testing.T) {
 		t.Fatalf("promoted: %v, parked %v", got, parked(rows))
 	}
 
+	// Back where it was promoted from: last, as parking put it, and parked.
 	c.step(dirUndo)
 	rows = c.list()
-	if got := names(rows); !slices.Equal(got, []string{"alpha", "beta", "gamma"}) || !slices.Equal(parked(rows), []string{"beta"}) {
+	if got := names(rows); !slices.Equal(got, []string{"alpha", "gamma", "beta"}) || !slices.Equal(parked(rows), []string{"beta"}) {
 		t.Errorf("after undo: %v, parked %v", got, parked(rows))
 	}
 	if s, _ := c.row(id["beta"]); s.Priority != 0 {
