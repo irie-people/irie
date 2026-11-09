@@ -67,6 +67,13 @@ final class Store {
     private(set) var canBoost = false
     /// The core lists its arch agents (op arch).
     private(set) var canArch = false
+    /// The core serves the plugins op (DESIGN §4.17).
+    private(set) var canPlugins = false
+    /// Irie's plugins as the core says they stand, for the Plugins menu
+    /// (Plugins.swift); empty from a core from before them.
+    var plugins: [PluginInfo] = []
+    /// Reads the plugins once a minute (keepPlugins).
+    @ObservationIgnored var pluginsTimer: Task<Void, Never>?
     /// The arch agents, as the core last listed them.
     private(set) var archAgents: [ArchAgent] = []
     /// While a boost is on, when it ends.
@@ -213,7 +220,10 @@ final class Store {
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
-        settings.changed = { [weak self] in self?.loadChoices() }
+        settings.changed = { [weak self] in
+            self?.loadChoices()
+            self?.loadPluginsSoon()
+        }
         watchMenu()
     }
 
@@ -233,6 +243,10 @@ final class Store {
         Pace.shared.set(active: NSApplication.shared.isActive)
         let nc = NotificationCenter.default
         nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: true) }
+        // A part set up in another app's terminal shows once you come back.
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.loadPluginsSoon() }
+        }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: false) }
         Task { await run() }
     }
@@ -267,6 +281,9 @@ final class Store {
                 canBoost = hello.features.contains("gabriel")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
+                canPlugins = hello.features.contains("plugins")
+                loadPluginsSoon()
+                keepPlugins()
                 if hello.features.contains("theme") { sendTheme(Theme.palette.id) }
                 loadChoices()
                 // The store lives as long as the app. The frames go in a
@@ -424,6 +441,8 @@ final class Store {
         }
         if h.vpn != vpn {
             vpn = h.vpn
+            // The VPN's part says how the VPN is now.
+            loadPluginsSoon()
         }
     }
 

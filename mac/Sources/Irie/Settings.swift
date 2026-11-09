@@ -70,6 +70,17 @@ struct PluginInfo: Decodable, Equatable, Identifiable {
         var setup: String?
 
         var id: String { name }
+
+        /// Its state in words, for a menu and a screen reader.
+        var stateWords: String {
+            switch state {
+            case "ready": return "ready"
+            case "needs": return "needs setting up"
+            case "held": return "not in Irie yet"
+            case "plugin_off": return "off with its plugin"
+            default: return "off"
+            }
+        }
     }
 }
 
@@ -496,6 +507,11 @@ struct SettingsView: View {
 
     static let size = CGSize(width: 600, height: 560)
 
+    /// The app's defaults key for the tab on show, which the Plugins menu
+    /// sets before it opens the window.
+    static let tabKey = "settingsTab"
+    @AppStorage(SettingsView.tabKey) private var tab = Tab.general.rawValue
+
     /// What the core's settings hang on: a core to ask, and one that knows
     /// the config op.
     private struct Reach: Equatable {
@@ -504,10 +520,11 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             ForEach(Tab.allCases) { t in
                 Self.page(t, model: model)
                     .tabItem { Label(t.title, systemImage: t.icon) }
+                    .tag(t.rawValue)
             }
         }
         .frame(width: Self.size.width, height: Self.size.height)
@@ -1790,7 +1807,7 @@ private struct PluginPartRow: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(part.title): \(Self.spoken(part.state)). \(part.detail)")
+        .accessibilityLabel("\(part.title): \(part.stateWords). \(part.detail)")
     }
 
     /// Each state has a glyph of its own, so colour never carries it alone:
@@ -1809,16 +1826,6 @@ private struct PluginPartRow: View {
         case "ready": return Theme.done
         case "needs": return Theme.needs
         default: return Theme.muted
-        }
-    }
-
-    static func spoken(_ state: String) -> String {
-        switch state {
-        case "ready": return "ready"
-        case "needs": return "needs setting up"
-        case "held": return "not in Irie yet"
-        case "plugin_off": return "off with its plugin"
-        default: return "off"
         }
     }
 }

@@ -28,6 +28,8 @@ final class MenuState {
         var helperShown = false
         var showTerminal = false
         var sideOpen = false
+        var canPlugins = false
+        var plugins: [PluginInfo] = []
     }
 
     private(set) var facts = Facts()
@@ -48,7 +50,7 @@ extension Store {
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
-            sideOpen: side.open)
+            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins)
     }
 
     /// Keeps the menu's facts up to date: whenever what they are read from
