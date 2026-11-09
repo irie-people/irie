@@ -123,14 +123,16 @@
   <p>A <dfn>model</dfn> is the AI behind an agent, and some run on your own computer for free. Irie can run a model server for you, Ollama, and start Claude Code on a model there with <code>+local</code>.</p>
   <p>Anthropic doesn’t support Claude Code on other companies’ models, so how well it works is up to the model.</p>
   <p>Before it starts one, Irie checks that the model can hold enough text for an agent’s work and that your computer can hold the model. If not, it says how to fix it, since a model with too little room can quietly lose its instructions.</p>
+  <p>It’s early to say how well local models do real work. The first coding runs on one passed their tests, but ran slowly.</p>
+  <p>By default, small jobs go to a local model when one is set up and there’s memory free for it, and hard work goes to the strongest model.</p>
 
   <h2>What happens if I close the window?</h2>
   <p>Your agents keep working. Open Irie again and they’re all where you left them.</p>
 
   <h2>Does Irie send my code anywhere?</h2>
   <p>Irie runs on your computer and sends nothing over the internet of its own. Each agent talks to its own AI company, just as it would without Irie.</p>
-  <p>Irie keeps a log of what each agent did, such as the commands it ran, on your computer for 30 days.</p>
-  <p><a href="what-irie-is.html">What Irie is</a> lists everything it keeps and sends, and how to check it yourself.</p>
+  <p>It has no telemetry, analytics, crash reports or update checks.</p>
+  <p><a href="what-irie-is.html">What Irie is</a> lists everything it keeps and sends, and <a href="what-irie-is.html#check">how to check it yourself</a>.</p>
 
   <h2>Does it change my agent’s settings?</h2>
   <p>It never edits your settings files. Each time it starts an agent, it adds its <dfn>hooks</dfn>, small commands the agent runs to say what it’s doing.</p>
@@ -142,8 +144,15 @@
   <p>Name a project with <code>@</code>, and its agent works in a <dfn>worktree</dfn>: a second working copy, which version 1 never deletes.</p>
   <p>Add <code>!</code> after the name, or name a folder outside <dfn>git</dfn>, the tool that keeps a project’s history, and the agent works on your own files there.</p>
 
+  <h2>Is it safe to run agents in auto mode?</h2>
+  <p>Irie’s built-in cloud profiles start Claude Code in <dfn>auto mode</dfn>, where Claude Code decides which steps it may take without asking you. Irie never answers a permission prompt for an agent, and a profile’s <a href="profiles.html#profile-keys"><code>permission_mode</code></a> picks another mode.</p>
+  <p>In those sessions, Mikael, a helper built into Irie, weighs steps that could do harm that can’t be undone, such as <code>rm</code>, <code>git push</code> or <code>curl</code>, before they run. He stops one that would clearly do harm, such as deleting what you’d want kept or sending secrets where they don’t belong, and tells the agent why.</p>
+  <p>He’s a helper, not a lock: if his check fails or takes over 20 seconds, the step runs. So Claude Code’s own permissions and auto mode’s check remain the hard limits.</p>
+  <p>To see what an agent did, read Irie’s log in <code>~/.local/state/irie/journal/</code>: each step it took, with the command it ran, kept for 30 days. <a href="https://github.com/irie-people/irie/blob/main/internal/arch/agents/mikael.door.md">Mikael’s rules</a> are plain text anyone can read.</p>
+
   <h2>What does it run on?</h2>
-  <p>Macs and Linux computers, with tmux, and on a Mac there’s also Irie for Mac, an app of its own. Windows isn’t planned for version 1.</p>
+  <p>Macs and Linux computers, with tmux. On a Mac there’s also Irie for Mac, an app of its own; on Linux, Irie runs in a terminal, without the app.</p>
+  <p>Windows isn’t planned for version 1.</p>
 
   <h2>What does it cost?</h2>
   <p>Irie is free, and anyone may read, change and share its code under the Apache 2.0 license. The agents it starts still run on your own AI account, and cost what they would without Irie.</p>
@@ -154,6 +163,18 @@
   <p>Yes. The Apache 2.0 license allows it at no cost, and Irie works inside your company’s Claude Code settings, with its AI provider.</p>
   <p><a href="work.html">Irie at work</a> has the details, and says what isn’t there yet.</p>
 
+  <h2>How is Irie different from Conductor, cmux, Claude Squad or Claude’s desktop app?</h2>
+  <p>They run coding agents side by side too. <a href="https://conductor.build/">Conductor</a> runs Claude Code, Codex and Cursor agents on a Mac, each in a workspace of its own, and <a href="https://code.claude.com/docs/en/desktop">Claude’s desktop app</a> runs Claude Code sessions in parallel.</p>
+  <p><a href="https://github.com/manaflow-ai/cmux">cmux</a> is a Mac terminal with vertical tabs and notifications for coding agents. <a href="https://github.com/smtg-ai/claude-squad">Claude Squad</a> is a terminal app that gives each agent a tmux session and worktree of its own.</p>
+  <p>Where Irie differs:</p>
+  <ul class="rules">
+    <li>Small jobs can run on a model on your own computer, and by default each task goes to the cheapest profile that does such tasks well.</li>
+    <li>Irie sends nothing over the internet of its own, and has no telemetry, account or server.</li>
+    <li>Irie for Mac shows each agent as a card, red when the agent needs you.</li>
+    <li>No company is behind Irie: anyone who contributes builds it.</li>
+    <li>The <a href="profiles.html#dog">jot dog</a> sends an agent back to finish when its work isn’t committed, and the <a href="profiles.html#trod">trod bot</a>, once you turn it on, keeps your sessions going through the night, by your rules.</li>
+  </ul>
+
   <h2>What does “Irie” mean?</h2>
   <blockquote class="definition">
     <p><strong>i·rie</strong> /ˈaɪ.ri/ · <em>adjective, Jamaican Patois</em></p>
@@ -162,8 +183,10 @@
   </blockquote>
   <p>Say it EYE-ree.</p>
 
-  <h2>Who makes it?</h2>
-  <p>Anyone who contributes. Accepted changes are sized in <dfn>Steak</dfn>, Irie’s measure of who built what.</p>
+  <h2>Who makes it, and how will it last?</h2>
+  <p>Anyone who contributes, with no company behind it. Accepted changes are sized in <dfn>Steak</dfn>, Irie’s measure of who built what.</p>
+  <p>Irie is free, and anyone may read, change and share its code under the Apache 2.0 license. So if the people building it ever stop, anyone can carry it on.</p>
+  <p>Anyone can build it: the <a href="https://github.com/irie-people/irie/blob/main/docs/DESIGN.md">design</a> explains every part, and <a href="https://github.com/irie-people/irie/blob/main/PROVENANCE.md">PROVENANCE.md</a> lists every source it was built from.</p>
   <p>If Irie ever makes money, it all goes back to the people who build it, after running costs. Each person’s share follows their Steak.</p>
   <p><a href="contribute.html">You can help</a>.</p>
 </main>
