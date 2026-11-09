@@ -76,6 +76,11 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			e.Data["asks"] = true
 		}
 		switch {
+		case e.Kind == event.ToolStarted && x.stopped[e.Agent]:
+			// A helper you stopped: its call is turned away, with word to
+			// end at once (sub.go).
+			reply.Deny = stoppedNote
+			continue
 		case unfinished != "" && ends:
 			// The turn goes on, so it has not ended: the dog sent the
 			// agent back to finish what it left.
@@ -112,6 +117,9 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			c.saveResult(x, msg)
 		}
 		c.record(x, e)
+		if e.Kind == event.SubagentFinished {
+			delete(x.stopped, e.Agent)
+		}
 		// A teach-mode turn that asks the user to write a part is theirs:
 		// the agent waits at its prompt (docs/proposals/learning.md §4.4).
 		if e.Kind == event.TurnEnded && e.Agent == event.Main && x.tutor == config.TutorTeach {

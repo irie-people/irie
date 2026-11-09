@@ -9,7 +9,7 @@ import (
 // controlOps are the ops of what the user does to a session as a whole and
 // to its place in the list (ipc/control.go): freeze.go, priority.go and
 // order.go.
-var controlOps = []string{ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpPark, ipc.OpUnpark}
+var controlOps = []string{ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin}
 
 // control serves the control ops; ok is false for any other op.
 func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err error) {
@@ -75,6 +75,22 @@ func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err
 		kind := actUnpark
 		if op == ipc.OpPark {
 			kind = actPark
+		}
+		c.recordAction(kind, a.Session, step)
+		return nil, true, nil
+	case ipc.OpPin, ipc.OpUnpin:
+		var a ipc.ParkArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, true, err
+		}
+		// As park: only a pin or unpin that changed something is a step.
+		step, err := c.pin(a, op == ipc.OpPin)
+		if err != nil || step == nil {
+			return nil, true, err
+		}
+		kind := actUnpin
+		if op == ipc.OpPin {
+			kind = actPin
 		}
 		c.recordAction(kind, a.Session, step)
 		return nil, true, nil

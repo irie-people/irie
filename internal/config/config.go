@@ -338,7 +338,14 @@ type UI struct {
 	// unanswered before the dog force quits it and opens it again; 0 =
 	// never (DESIGN §2.4).
 	FreezeDog time.Duration `toml:"freeze_dog"`
+	// NewTabs is where a new session goes in the list (DESIGN §4.1): last,
+	// first (just under Pinned), or next, just after the session that
+	// started it, as a browser opens a tab beside the one it came from.
+	NewTabs string `toml:"new_tabs"`
 }
+
+// NewTabs are the places ui.new_tabs puts a new session.
+var NewTabs = []string{"last", "first", "next"}
 
 // MinFreezeDog is the shortest ui.freeze_dog: a window busy for a moment,
 // as when the machine pages, is not frozen.
@@ -668,7 +675,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -1039,6 +1046,9 @@ func (c Config) Validate() error {
 	}
 	if !slices.Contains(TeammateModes, c.Spawn.Teammates) {
 		bad("spawn.teammates = %q: must be panes or off", c.Spawn.Teammates)
+	}
+	if !slices.Contains(NewTabs, c.UI.NewTabs) {
+		bad("ui.new_tabs = %q: must be last, first or next", c.UI.NewTabs)
 	}
 	if !slices.Contains(HelperStyles, c.UI.HelperStyle) {
 		bad("ui.helper_style = %q: must be browser or terminal", c.UI.HelperStyle)

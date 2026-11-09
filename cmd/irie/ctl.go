@@ -195,6 +195,8 @@ func ctl(args []string) error {
 		return ctlReorder(args[1:])
 	case "park", "unpark":
 		return ctlPark(args[1:], args[0] == "park")
+	case "pin", "unpin":
+		return ctlPin(args[1:], args[0] == "pin")
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":
@@ -513,6 +515,9 @@ func ctlSpawn(args []string) error {
 		return err
 	}
 	a.Task, a.Cwd, a.Name, a.Force = task, dir, *name, *force
+	// An agent's spawn goes beside its own session when ui.new_tabs is
+	// next.
+	a.After = os.Getenv("IRIE_SESSION")
 	var r ipc.SpawnResult
 	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		return err

@@ -78,7 +78,7 @@ func TestEveryKindOfTheDesignIsKnown(t *testing.T) {
 		"subagent.started", "subagent.finished", "session.ended", "pane.exited",
 		"gate.set", "gate.held", "gate.released", "freeze.on", "freeze.off", "priority.set",
 		"note.queued", "note.delivered",
-		"ui.renamed", "ui.parked", "ui.unparked", "ui.closed", "ui.reopened", "ui.undo", "ui.redo",
+		"ui.renamed", "ui.parked", "ui.unparked", "ui.pinned", "ui.unpinned", "ui.sub_stopped", "ui.closed", "ui.reopened", "ui.undo", "ui.redo",
 	} {
 		if !Known(k) {
 			t.Errorf("kind %s is unknown", k)
