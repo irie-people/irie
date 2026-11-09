@@ -18,10 +18,11 @@ A writer types `:write` and what they want, and an agent helps with their writin
 
 ## What it is
 
-An extension in the sense of [extensions.md](extensions.md) §1.1:
+Irie's second plugin, **Writing** (DESIGN §4.17), with one part, Writing in Variorum. `[plugins] writing` is on by default, and `irie plugins off writing` turns it off; then the skill leaves every session, and `:write` says why. The plugin shows in Settings › Plugins and the Plugins menu, in `irie plugins` and in `:plugins`, which say whether Variorum is in an Applications folder and where it comes from if not. In the sense of [extensions.md](extensions.md) §1.1, the part is:
 
 | Part | What | Where |
 |---|---|---|
+| The plugin | Its switch, and a check for Variorum in `/Applications` or `~/Applications` | `internal/plugins/writing.go` |
 | A skill | `/irie:variorum`: Variorum's words, nine rules, how to start, eight jobs, the setup in `reference/setup.md`, and the credit | `internal/skills/bundled/variorum/` |
 | Words | `:write [TASK]` starts a writing session: Claude Code on `+claude`, in `<data>/guides/variorum`, running `/irie:variorum TASK`. The task names the session | `core/read.go`, `internal/core/guide.go` |
 | Controls | **File › Write with Variorum…** in the Mac app sends `:write` | `mac/Sources/Irie/MenuBar.swift` |

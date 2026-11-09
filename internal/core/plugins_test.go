@@ -9,16 +9,16 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-// TestThePluginsOp: the op lists the privacy plugin and its parts, and
-// :plugins answers with them in words (DESIGN §4.17).
+// TestThePluginsOp: the op lists the privacy and writing plugins and their
+// parts, and :plugins answers with them in words (DESIGN §4.17).
 func TestThePluginsOp(t *testing.T) {
 	c := bareCore(t, config.Default())
 	r, err := c.pluginsOp(ipc.PluginsArgs{})
-	if err != nil || len(r.Plugins) != 1 || r.Plugins[0].Name != "privacy" || !r.Plugins[0].On || len(r.Plugins[0].Parts) != 5 {
+	if err != nil || len(r.Plugins) != 2 || r.Plugins[0].Name != "privacy" || !r.Plugins[0].On || len(r.Plugins[0].Parts) != 5 || r.Plugins[1].Name != "writing" || !r.Plugins[1].On || len(r.Plugins[1].Parts) != 1 {
 		t.Fatalf("plugins = %+v", r.Plugins)
 	}
 	in, err := c.input(ipc.InputArgs{Text: ":plugins"}, 0)
-	if err != nil || in.Did != ipc.InputAnswered || !strings.HasPrefix(in.Text, "Privacy plugin: on.") || !strings.Contains(in.Text, "Dead man's switch") {
+	if err != nil || in.Did != ipc.InputAnswered || !strings.HasPrefix(in.Text, "Privacy plugin: on.") || !strings.Contains(in.Text, "Dead man's switch") || !strings.Contains(in.Text, "Writing plugin: on.") {
 		t.Errorf(":plugins = %+v, %v", in, err)
 	}
 	// A part turned on through the op: the core writes its key.

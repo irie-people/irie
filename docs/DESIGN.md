@@ -1102,6 +1102,12 @@ The owner asked on 2026-11-09 to start making plugins for Irie, beginning with a
 | Bitwarden for agents | Held back: see below | none yet | none yet |
 | Dead man's switch | `:setup switch`, `/irie:dead-mans-switch`, `irie dms` ([extensions.md](proposals/extensions.md) §2) | none: on while its skill is (`skills.disabled`) | `:setup switch` |
 
+**Writing**, the second plugin ([writers.md](proposals/writers.md)), is on by default, and has one part:
+
+| Part | What it brings | Its own switch | What sets it up |
+|---|---|---|---|
+| Writing in Variorum | `:write [task]`, File › Write with Variorum…, `/irie:variorum`: sessions that help a writer in Variorum, Lillian Duarte's writing app, through its door for AI, beside their words and never over them | none: on while its skill is (`skills.disabled`) | `:write`: the first session walks the writer through Variorum's door. The check looks for Variorum in an Applications folder |
+
 **One switch.** `[plugins] privacy`, on by default: each part keeps its own switch, and those are off by default, so a new Irie shows nothing of it until asked. With the plugin off, none of its parts runs, whatever its own switch says. `config.Config`'s `VPNOn`, `AnonOn` and `BrowserOn` are where the rest of Irie asks; a word or command of a part that is off says which switch turns it on (`plugins.Why`); the guide's skill leaves every session, with the reason in `irie skills` (`skills.Settings.Left`); and the VPN's mark leaves every client. Each part's own switch keeps its value meanwhile, so the plugin on again brings back what was on.
 
 **How far each part is set up.** Each part's check reads only files and the config: whether `mullvad`, `tor`, SearXNG, Mullvad Browser and its clean profile are where Irie looks, and whether the switch's checks were made. It never reads the network, an account or a vault. A part is *ready* (on, with what it needs), *off* (its own switch), *needs* (on, and it lacks something: the sentence says what and what fixes it), *off with its plugin*, or *held* (not in this build). The core adds what only it knows, the VPN's state now.
@@ -1497,6 +1503,7 @@ tor_port = 9150               # the first of the Tor compartments' SocksPorts on
 
 [plugins]                     # Irie's plugins (§4.17): each turns all its parts off when it is off
 privacy = true                # Mullvad VPN, anonymous research, Mullvad Browser for agents and the dead man's switch guide; each part keeps its own switch
+writing = true                # writing in Variorum: :write and the skill its sessions run (docs/proposals/writers.md)
 ```
 
 ---
