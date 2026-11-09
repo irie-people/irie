@@ -1,5 +1,81 @@
 # Changelog
 
+## [1.0.0](https://github.com/irie-people/irie/compare/v0.2.0...v1.0.0) (2026-11-09)
+
+
+### Features
+
+* **anon:** research anonymously in compartments with exits of their own ([244f5b7](https://github.com/irie-people/irie/commit/244f5b750c42961903989f8fdf39d2b0e73b1f39))
+* **browser:** agents drive Mullvad Browser through Irie's own MCP server ([49d1b30](https://github.com/irie-people/irie/commit/49d1b30510b8938791868915f24d6b16d1a49f02))
+* **claude:** run sessions on the Agent SDK for credits that do not cover Claude Code ([c489b2e](https://github.com/irie-people/irie/commit/c489b2e7f8e5796917e7b91eb3a3fe2ce7c51f63))
+* **context:** let old contexts go after context.keep_days, 30 by default ([5826794](https://github.com/irie-people/irie/commit/58267944c6fe5a5c8c379747a4e559dfe34348d6))
+* **core:** a show brings its session into Gabriel's focus at once ([7375aaf](https://github.com/irie-people/irie/commit/7375aaf7006c50fb8c2d77304eb917ebbcfa25df))
+* **core:** Claude Code's own panels in Irie's palette ([7e02412](https://github.com/irie-people/irie/commit/7e0241230b616935a92202330b7ecf7a65586444))
+* **core:** every client draws in the Mac app's palette ([d0be490](https://github.com/irie-people/irie/commit/d0be4901ff25d450d2dfccbf8964532650b4b34a))
+* **core:** make rename, reorder, freeze and promote undoable ([d03b8d1](https://github.com/irie-people/irie/commit/d03b8d1086f9a7ce35c381b6bd0d050ca569d1dd))
+* **core:** pin sessions, close several as one undo step, and place new tabs ([806540c](https://github.com/irie-people/irie/commit/806540c316a51994da6dfe8e103d79d00157d301))
+* **core:** spaces, named sets of sessions a sidebar shows one at a time ([f4ddaca](https://github.com/irie-people/irie/commit/f4ddacaccf0205a733e4343f19a7fd7a80918f1d))
+* **core:** the theme op takes a palette of the user's own ([3e096c1](https://github.com/irie-people/irie/commit/3e096c1f940370e9f7a3b264e921352624877d15))
+* **demo:** reels of a card that needs you, a closed window and a local model ([4b2feb9](https://github.com/irie-people/irie/commit/4b2feb9bf84d506d148059a625d687c987f1c1ca))
+* hide a card's helper or teammate, or stop it ([2b7efb0](https://github.com/irie-people/irie/commit/2b7efb0ef0187f11b39445a650913861f27b6be3))
+* **localmodel:** estimate sliding-window and looped models' cache ([def1b6f](https://github.com/irie-people/irie/commit/def1b6f079da8b352825878f16c01db14bfe71a3))
+* **mac:** a Plugins menu in the menu bar ([ff1eedf](https://github.com/irie-people/irie/commit/ff1eedfa6bd9d87d9942969f7cca5cfa0c3e5a8e))
+* **mac:** film answers, a closed window and steady frames in recordings ([6cd1b98](https://github.com/irie-people/irie/commit/6cd1b98c9e235742f5d5e9f4a4ca2de134dddce7))
+* **mac:** make a theme, and save the window's layouts ([445c1c2](https://github.com/irie-people/irie/commit/445c1c24e807a451395e08a079968136d9abc162))
+* **mac:** pick how long conversations are kept, in Settings ([1aa522f](https://github.com/irie-people/irie/commit/1aa522f43562d2ca5c4454c39c1ae59fa2f28a90))
+* **mac:** pin, close several, pick cards, move keys and a Tabs settings pane ([f9f5611](https://github.com/irie-people/irie/commit/f9f5611ef72cb3c39f1e2197295dd3b3a3a1ff94))
+* **mac:** show Irie's plugins in Settings, with each part's state and switch ([3f037f0](https://github.com/irie-people/irie/commit/3f037f0ea8773792b2d76cbbce97d29aac91a3eb))
+* **mac:** show notices clear of the task bar, and keep them in a Notices tab ([6898153](https://github.com/irie-people/irie/commit/6898153b7a647f6bacb9129492b11be728120a9a))
+* **mac:** slide the right sidebar in from the window's edge, as a drawer ([d8e08b7](https://github.com/irie-people/irie/commit/d8e08b70400de7ee46c6d6083528f0d36cceb6c0))
+* **mac:** spaces as chips under the list, with keys and Move to Space ([670d66f](https://github.com/irie-people/irie/commit/670d66fe51b1c639d9e284a9b00086cbd7986a98))
+* **mac:** the right sidebar sits inline after the terminal ([da5e3d4](https://github.com/irie-people/irie/commit/da5e3d487ab8fa4c63163464f60645442326562d))
+* **park:** park moves a card into Parked at once, and unpark puts it last in the list ([2aadc37](https://github.com/irie-people/irie/commit/2aadc374fde55a6398b7abadfe18172308ad20c6))
+* **peers:** put another machine's sessions in a group of their own ([cf8462c](https://github.com/irie-people/irie/commit/cf8462c48c93048dfbf39fddc62cc5f3b90c6e6d))
+* **plugins:** a writing plugin, for writing in Variorum ([0caab9c](https://github.com/irie-people/irie/commit/0caab9cc0ea3aa06e8ffc33a3a2ff71cf79d47d5))
+* **plugins:** plugins for Irie, starting with privacy ([4f7ab2a](https://github.com/irie-people/irie/commit/4f7ab2aa9100e75074a34ece74a886761a96cb50))
+* **remote:** a Term view on the phone, with the terminal live ([c2ab7f2](https://github.com/irie-people/irie/commit/c2ab7f2323579f685c913a49f73be619f1e88b24))
+* **site:** link-preview tags and a preview picture on every page ([1d12ffa](https://github.com/irie-people/irie/commit/1d12ffa999a7dd764ce479161523359137c96480))
+* **trod:** keep the week to a day line with trod.pace ([df45141](https://github.com/irie-people/irie/commit/df451416e15deafacae9e7ddaed4446c79ed48d5))
+* **write:** write with Variorum, Lillian Duarte's writing app, from any task bar ([5a0ec8f](https://github.com/irie-people/irie/commit/5a0ec8ff0d14f5659e45135ddd424f625de98256))
+
+
+### Bug Fixes
+
+* **anon:** turn anonymous research on before the optional installs ([088057e](https://github.com/irie-people/irie/commit/088057eab6459896489e85e5e704c5e9990b0297))
+* **anon:** wait for Tor's ports to open before using them ([2267d50](https://github.com/irie-people/irie/commit/2267d5050a720b549d7a3337c7385dc44c0c8541))
+* **arch:** Raphael gives a sidebar a minute before he restarts it ([370ea3c](https://github.com/irie-people/irie/commit/370ea3c03dbfadf5a0044f5aa3afbd63964b0357))
+* **browser:** say 1 link listed, not 1 links ([671ac9d](https://github.com/irie-people/irie/commit/671ac9d8e4b35778f4662dc32b2bfead7efd6dd9))
+* **claude:** run local models in accept-edits mode with build and test commands allowed ([f0a5dee](https://github.com/irie-people/irie/commit/f0a5dee0ca9a420e7b9913c37d097ed1f63eada1))
+* **context:** a turn is one commit, its bookkeeping riding with the next ([83efc92](https://github.com/irie-people/irie/commit/83efc92f9f70f7891251d42d79ec84cba8b0ed58))
+* **context:** pack the store and give its gc time to finish ([54f59cc](https://github.com/irie-people/irie/commit/54f59cc1db5b89467984e6fcb5a7be465afac655))
+* **context:** store a turn as one commit, once its reply is written ([0f1096b](https://github.com/irie-people/irie/commit/0f1096bbcf885306ef1c19195689dde7432e5558))
+* **core:** fit the waiting state round live's words, trod bot and lid ([f2d5637](https://github.com/irie-people/irie/commit/f2d5637da1b4bb613f97e86e9afce79caa11360e))
+* **core:** round the agents' memory in the header up, not down ([42eef29](https://github.com/irie-people/irie/commit/42eef294598ad0d716821cb6ff535ef929c59971))
+* **core:** stop the Iries that test runs and checks leave running ([3a4e220](https://github.com/irie-people/irie/commit/3a4e22060d109f97db7a6e2d04eae84d96eaa8c7))
+* **core:** wait a minute for a new core to answer, not five seconds ([e34c0cf](https://github.com/irie-people/irie/commit/e34c0cf832e6861db9787f48c580ff1880b7515f))
+* **demo:** delete a sandbox once its agents have finished writing ([e1f5e09](https://github.com/irie-people/irie/commit/e1f5e0960ed8a2555540f81c6863022d7f43bc43))
+* **mac:** drag a program's panel edge in the terminal ([a3b53c9](https://github.com/irie-people/irie/commit/a3b53c937768fd9d968feb22031888691a91399c))
+* **mac:** fill the join between the selected card and its terminal, over the divider ([7d6ea06](https://github.com/irie-people/irie/commit/7d6ea06e1e3bc5e6330d55d7e9f35a14a09782dd))
+* **mac:** give the recording's window the store as the views now take it ([95d5245](https://github.com/irie-people/irie/commit/95d5245f42f1817bcb2c22e063f8885d87a916f4))
+* **mac:** keep an arch item's buttons on the main actor ([f61b87e](https://github.com/irie-people/irie/commit/f61b87e2b00e57a6bda9cfcea64a5c0b5134a063))
+* **mac:** resize the terminal once a drag of the sidebar ends ([7114385](https://github.com/irie-people/irie/commit/7114385718b2e180c516d2e17d7bdfd150f2ea21))
+* **mac:** show a card in another space with one swap of the terminal ([1372b47](https://github.com/irie-people/irie/commit/1372b47ca163762b4e4329e8656490ae96ec623e))
+* **raphael:** name each waiting update once, and an empty plist fairly ([f2606f4](https://github.com/irie-people/irie/commit/f2606f44c295f93482c1974a610d05863f22985f))
+* **raphael:** take no sleep for a stuck core, and open the app again ([3e9779b](https://github.com/irie-people/irie/commit/3e9779b8edad5b54661dfa9b88a0ee5a2c254c03))
+* **sdk:** keep escape sequences, controls and tabs in shown text out of the terminal ([4864b00](https://github.com/irie-people/irie/commit/4864b00bf3170c30f31b9994aef49a7842a6d794))
+* **trod:** leave a peer's rows to its own core ([49c7483](https://github.com/irie-people/irie/commit/49c7483ccd9d5df096c2125e3a1681ec4568d8c2))
+* **trod:** thaw one session at a time, and none into a signed-out agent ([fde80f3](https://github.com/irie-people/irie/commit/fde80f3995d42b578de16f3e25c7f0c9a5fdb880))
+
+
+### Performance Improvements
+
+* **mac:** a card's close items read the rows only once chosen ([722335c](https://github.com/irie-people/irie/commit/722335c1f6660ec8cd553339a9a4fc2973cbd4d8))
+
+
+### Miscellaneous Chores
+
+* release 1.0.0 ([cb1ecdb](https://github.com/irie-people/irie/commit/cb1ecdbe56979a02c28e0242fe41afab824e62cf))
+
 ## [0.2.0](https://github.com/irie-people/irie/compare/v0.1.0...v0.2.0) (2026-11-02)
 
 
