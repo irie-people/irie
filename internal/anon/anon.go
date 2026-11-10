@@ -149,6 +149,12 @@ type Options struct {
 	TorPort   int      // the first of the Tor compartments' SocksPorts
 }
 
+// ErrMacOnExit is Take's error when the Mac's own tunnel has come to leave
+// from the relay a compartment holds: the research and the user's own
+// traffic would leave from one address. The compartment keeps its relay;
+// it is used again once the Mac's tunnel leaves from another.
+var ErrMacOnExit = errors.New("the Mac's own Mullvad tunnel now leaves from this compartment's relay: connect Mullvad VPN to another location, then start the task again")
+
 // ErrRouteDiffers is Take's error when a compartment is asked for on
 // another route than the one it has.
 var ErrRouteDiffers = errors.New("the compartment leaves by another route")
@@ -195,6 +201,9 @@ func Take(s Store, name, route string, o Options, relays []Relay, avoid string, 
 				c.TorPort = freePort(all, o.TorPort)
 			}
 		case Mullvad:
+			if c.Relay != "" && c.Relay == avoid {
+				return ErrMacOnExit
+			}
 			if c.Relay != "" && slices.ContainsFunc(relays, func(r Relay) bool { return r.Host == c.Relay }) {
 				break
 			}
@@ -299,12 +308,28 @@ func Environ(environ []string, c Compartment) []string {
 	return append(append(out, ProxyEnv(c.Proxy())...), "IRIE_ANON="+c.Name)
 }
 
-// Exports are ProxyEnv as lines of a shell's export, for Claude Code's
-// CLAUDE_ENV_FILE, which runs before each Bash command, with IRIE_ANON
-// naming the compartment.
-func Exports(c Compartment) string {
+// LocalProxyEnv are the proxy variables of an anonymous session's shell:
+// its forwarder on 127.0.0.1 (forward.go), SOCKS5 with names looked up at
+// the exit for ALL_PROXY, and the HTTP proxy for the rest, which Python's
+// urllib and npm take too. They name no exit.
+func LocalProxyEnv(socks, http int) []string {
+	var env []string
+	for _, kv := range [][2]string{
+		{"ALL_PROXY", fmt.Sprintf("socks5h://127.0.0.1:%d", socks)},
+		{"HTTPS_PROXY", fmt.Sprintf("http://127.0.0.1:%d", http)},
+		{"HTTP_PROXY", fmt.Sprintf("http://127.0.0.1:%d", http)},
+	} {
+		env = append(env, kv[0]+"="+kv[1], strings.ToLower(kv[0])+"="+kv[1])
+	}
+	return append(env, "NO_PROXY=localhost,127.0.0.1,::1", "no_proxy=localhost,127.0.0.1,::1")
+}
+
+// Exports are LocalProxyEnv as lines of a shell's export, for Claude
+// Code's CLAUDE_ENV_FILE, which runs before each Bash command, with
+// IRIE_ANON naming the compartment.
+func Exports(name string, socks, http int) string {
 	var b []byte
-	for _, kv := range append(ProxyEnv(c.Proxy()), "IRIE_ANON="+c.Name) {
+	for _, kv := range append(LocalProxyEnv(socks, http), "IRIE_ANON="+name) {
 		k, v, _ := strings.Cut(kv, "=")
 		b = fmt.Appendf(b, "export %s=%s\n", k, shellQuote(v))
 	}

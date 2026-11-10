@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,10 @@ type ServerOptions struct {
 	Search      string // Irie's SearXNG, such as http://127.0.0.1:8888; "" = none
 	Evidence    string // the folder fetch's save writes to
 	Version     string
+	// Socks and HTTP are the ports on 127.0.0.1 of the session's
+	// forwarder (forward.go), the only way its sandboxed shell has out; 0
+	// = none.
+	Socks, HTTP int
 }
 
 // pageChars is how much of a page one fetch call gives: with the header,
@@ -70,7 +75,45 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, o ServerOptions) er
 		return fmt.Errorf("no compartment %q", o.Compartment)
 	}
 	s := &server{o: o, c: c}
+	stop, err := s.forward()
+	if err != nil {
+		return err
+	}
+	defer stop()
 	return mcp.Server{Name: ServerName, Version: o.Version, Instructions: s.instructions(), Tools: s.tools()}.Serve(ctx, in, out)
+}
+
+// forward opens the session's forwarder on its ports: 127.0.0.1, and ::1
+// where the machine has it. The ports close when the server ends, with
+// the session, so a restart of Irie's core never cuts a download.
+func (s *server) forward() (func(), error) {
+	f := Forwarder{Exit: s.c.Upstream()}
+	var lns []net.Listener
+	stop := func() {
+		for _, ln := range lns {
+			ln.Close()
+		}
+	}
+	for _, p := range []struct {
+		port   int
+		handle func(net.Conn)
+	}{{s.o.Socks, f.SOCKS}, {s.o.HTTP, f.HTTP}} {
+		if p.port == 0 {
+			continue
+		}
+		ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(p.port)))
+		if err != nil {
+			stop()
+			return nil, fmt.Errorf("the forwarder's port %d: %v", p.port, err)
+		}
+		lns = append(lns, ln)
+		go serveConns(ln, p.handle)
+		if ln6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(p.port))); err == nil {
+			lns = append(lns, ln6)
+			go serveConns(ln6, p.handle)
+		}
+	}
+	return stop, nil
 }
 
 func (s *server) instructions() string {

@@ -137,3 +137,21 @@ func TestATutorModeIsANoteBeforeTheTask(t *testing.T) {
 		t.Error("off adds nothing")
 	}
 }
+
+// A generic harness can shut no path, so an anonymous research session
+// doesn't start on one: it would leave from the Mac's own exit (DESIGN
+// §4.16).
+func TestAnonymousResearchIsRefused(t *testing.T) {
+	p := config.Profile{Command: "aider"}
+	for name, change := range map[string]func(*harness.Spawn){
+		"strict MCP": func(s *harness.Spawn) { s.StrictMCP = true },
+		"denied":     func(s *harness.Spawn) { s.Deny = []string{"WebFetch"} },
+		"sandboxed":  func(s *harness.Spawn) { s.Sandbox = &harness.Sandbox{SOCKSPort: 9250, HTTPPort: 9251} },
+	} {
+		s := spawnOf("x")
+		change(&s)
+		if _, _, _, err := (Harness{}).Launch(p, s); err == nil || !strings.Contains(err.Error(), "anonymous research") {
+			t.Errorf("%s: %v, want the launch refused", name, err)
+		}
+	}
+}

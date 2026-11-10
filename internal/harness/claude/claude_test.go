@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -670,4 +671,67 @@ func TestMCPServersGoInAFileOfTheSessions(t *testing.T) {
 	if argv, _, _ := launchSpawn(t, defaultProfile(), s); slices.Contains(argv, "--mcp-config") {
 		t.Errorf("argv = %q: --mcp-config with no servers", argv)
 	}
+}
+
+// TestAnonymousResearchRunsInASandbox: an anonymous session's shell runs
+// in Claude Code's sandbox, out only through its forwarder, with no retry
+// outside it, or the session doesn't start (DESIGN §4.16).
+func TestAnonymousResearchRunsInASandbox(t *testing.T) {
+	home := t.TempDir()
+	managed := filepath.Join(t.TempDir(), "managed-settings.json")
+	old := ManagedSettings[runtime.GOOS]
+	ManagedSettings[runtime.GOOS] = managed
+	t.Cleanup(func() { ManagedSettings[runtime.GOOS] = old })
+	s := spawnOf("x")
+	s.Home = home
+	s.MCP = map[string]harness.MCPServer{"irie-anon": {Command: irieBin, Args: []string{"anon", "mcp"}}}
+	s.StrictMCP, s.Deny = true, []string{"WebFetch", "WebSearch"}
+	s.Sandbox = &harness.Sandbox{SOCKSPort: 9250, HTTPPort: 9251, DenyRead: []string{"/home/alice/.local/share/irie/anon", "~/.ssh"}, DenyEnv: []string{"GH_TOKEN"}}
+	s.Probe = harness.Probe{Version: "2.1.316", Flags: map[string]bool{"--mcp-config": true, "--strict-mcp-config": true}}
+	_, _, files := launchSpawn(t, defaultProfile(), s)
+	var got struct {
+		Sandbox map[string]any `json:"sandbox"`
+	}
+	if err := json.Unmarshal(files[SettingsFile], &got); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{
+		"enabled": true, "failIfUnavailable": true, "allowUnsandboxedCommands": false, "allowAppleEvents": false,
+		"enableWeakerNetworkIsolation": false, "network.httpProxyPort": 9251.0, "network.socksProxyPort": 9250.0,
+		"network.allowLocalBinding": false, "network.allowAllUnixSockets": false,
+	}
+	for key, v := range want {
+		if g := dig(got.Sandbox, key); g != v {
+			t.Errorf("sandbox.%s = %v, want %v", key, g, v)
+		}
+	}
+	if b := files[SettingsFile]; !bytes.Contains(b, []byte(`"~/.ssh"`)) || !bytes.Contains(b, []byte(`"name": "GH_TOKEN",`)) {
+		t.Errorf("settings = %s", b)
+	}
+	if _, _, rfiles, err := (Harness{}).Resume(defaultProfile(), s); err != nil || !bytes.Contains(rfiles[SettingsFile], []byte(`"socksProxyPort": 9250`)) {
+		t.Errorf("a resumed session keeps its sandbox: %v", err)
+	}
+	refused := func(why string) {
+		t.Helper()
+		if _, _, _, err := (Harness{}).Launch(defaultProfile(), s); err == nil || !strings.Contains(err.Error(), why) {
+			t.Errorf("%s: %v, want the launch refused", why, err)
+		}
+	}
+	// Settings that rank beside or above --settings and would let the
+	// shell out.
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o700)
+	os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"sandbox": {"excludedCommands": ["docker *"]}}`), 0o600)
+	refused("excludedCommands")
+	os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"sandbox": {"network": {"allowLocalBinding": true}}}`), 0o600)
+	if _, _, _, err := (Harness{}).Launch(defaultProfile(), s); err != nil {
+		t.Errorf("a switch in the user's own settings, which --settings outranks: %v", err)
+	}
+	os.WriteFile(managed, []byte(`{"sandbox": {"network": {"allowLocalBinding": true}}}`), 0o600)
+	refused("allowLocalBinding")
+	os.WriteFile(managed, []byte(`{"sandbox": {"network": {"socksProxyPort": 1080}}}`), 0o600)
+	refused("socksProxyPort")
+	os.Remove(managed)
+	os.Remove(filepath.Join(home, ".claude", "settings.json"))
+	s.Probe.Version = "2.1.200"
+	refused("2.1.295")
 }

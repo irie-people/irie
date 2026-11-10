@@ -28,6 +28,11 @@ func (Harness) Launch(p config.Profile, s harness.Spawn) ([]string, map[string]s
 	if p.Command == "" {
 		return nil, nil, nil, errors.New("generic: the profile has no command")
 	}
+	// A generic harness can shut no path: an anonymous session on it would
+	// leave from the Mac's own exit (DESIGN §4.16).
+	if s.StrictMCP || len(s.Deny) > 0 || s.Sandbox != nil {
+		return nil, nil, nil, errors.New("generic: anonymous research runs only on Claude Code, which can shut its paths")
+	}
 	// With no output styles, a tutor mode is a note before the task.
 	task := harness.WithTutor(s.Tutor, s.Visual, s.Task)
 	argv := append([]string{p.Command}, slices.Clone(p.Args)...)

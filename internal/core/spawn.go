@@ -427,6 +427,9 @@ func (c *Core) launch(j job) (*session, error) {
 	// An anonymous session's servers and shut paths (DESIGN §4.16); else
 	// Irie's browser, for a harness that takes MCP servers (DESIGN §4.15).
 	if j.anon != nil {
+		if h.ID() != "claude-code" {
+			return nil, fmt.Errorf("anonymous research runs only on Claude Code, which can shut its paths; +%s runs on %s", j.profile, h.ID())
+		}
 		if err := c.anonLaunch(&s, x, *j.anon); err != nil {
 			return nil, err
 		}

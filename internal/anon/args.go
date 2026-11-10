@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"strconv"
 )
 
 // Args are the arguments of `irie anon mcp` that serve o, after the irie
@@ -15,6 +16,12 @@ func Args(o ServerOptions) []string {
 	}
 	if o.Evidence != "" {
 		args = append(args, "--evidence", o.Evidence)
+	}
+	if o.Socks != 0 {
+		args = append(args, "--socks", strconv.Itoa(o.Socks))
+	}
+	if o.HTTP != 0 {
+		args = append(args, "--http", strconv.Itoa(o.HTTP))
 	}
 	return args
 }
@@ -28,11 +35,13 @@ func ParseArgs(args []string, errOut io.Writer) (ServerOptions, error) {
 	fs.StringVar(&o.Compartment, "compartment", "", "the session's compartment")
 	fs.StringVar(&o.Search, "search", "", "Irie's SearXNG, such as http://127.0.0.1:8888")
 	fs.StringVar(&o.Evidence, "evidence", "", "the folder fetch's save writes to")
+	fs.IntVar(&o.Socks, "socks", 0, "the forwarder's SOCKS5 port on 127.0.0.1")
+	fs.IntVar(&o.HTTP, "http", 0, "the forwarder's HTTP proxy port on 127.0.0.1")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
 	if fs.NArg() > 0 || o.Dirs.Root == "" || o.Compartment == "" {
-		return o, errors.New("usage: irie anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR]")
+		return o, errors.New("usage: irie anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR] [--socks PORT] [--http PORT]")
 	}
 	return o, CheckName(o.Compartment)
 }

@@ -158,16 +158,21 @@ func TestWhereNamesNoAddress(t *testing.T) {
 	if p := c.Proxy(); p != "socks5h://se-got-wg-socks5-001.relays.mullvad.net:1080" {
 		t.Errorf("Proxy = %q", p)
 	}
-	ex := Exports(c)
+	// A session's shell gets its forwarder's local ports, never the exit.
+	ex := Exports(c.Name, 9250, 9251)
 	for _, want := range []string{
-		"export ALL_PROXY='socks5h://se-got-wg-socks5-001.relays.mullvad.net:1080'\n",
-		"export https_proxy='socks5h://se-got-wg-socks5-001.relays.mullvad.net:1080'\n",
+		"export ALL_PROXY='socks5h://127.0.0.1:9250'\n",
+		"export https_proxy='http://127.0.0.1:9251'\n",
+		"export HTTP_PROXY='http://127.0.0.1:9251'\n",
 		"export NO_PROXY='localhost,127.0.0.1,::1'\n",
 		"export IRIE_ANON='acme'\n",
 	} {
 		if !strings.Contains(ex, want) {
 			t.Errorf("exports lack %q:\n%s", want, ex)
 		}
+	}
+	if strings.Contains(ex, "mullvad") || strings.Contains(ex, "se-got") {
+		t.Errorf("the exports name the exit:\n%s", ex)
 	}
 	if q := shellQuote("it's"); q != `'it'\''s'` {
 		t.Errorf("shellQuote = %s", q)
@@ -409,6 +414,32 @@ func TestVerifyAMullvadExit(t *testing.T) {
 	through(t, s)
 	if _, err := Verify(context.Background(), c); err == nil || !strings.Contains(err.Error(), "the Mac's own") {
 		t.Errorf("an exit shared with the Mac: %v", err)
+	}
+	// The Mac's own exit not answering leaves the two untold apart, which
+	// doesn't pass.
+	s = exits(t, `not an answer`, `{"mullvad_exit_ip": true, "mullvad_exit_ip_hostname": "se-got-wg-socks5-001"}`)
+	through(t, s)
+	if _, err := Verify(context.Background(), c); err == nil || !strings.Contains(err.Error(), "didn't answer") {
+		t.Errorf("a Mac whose own check didn't answer: %v", err)
+	}
+}
+
+// A compartment whose relay the Mac's own tunnel has come to leave from
+// is not used, and keeps its relay for when the tunnel moves on.
+func TestTakeRefusesAnExitTheMacLeavesFrom(t *testing.T) {
+	s := Store{Path: filepath.Join(t.TempDir(), "compartments.json")}
+	rs := []Relay{{Host: "se-got-wg-001", Country: "Sweden", Owned: true}, {Host: "se-sto-wg-002", Country: "Sweden", Owned: true}}
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+	a, err := Take(s, "acme", "", Options{}, rs, "", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Take(s, "acme", "", Options{}, rs, a.Relay, now); !errors.Is(err, ErrMacOnExit) {
+		t.Fatalf("the Mac on acme's relay: %v", err)
+	}
+	again, err := Take(s, "acme", "", Options{}, rs, "us-sea-wg-406", now)
+	if err != nil || again.Relay != a.Relay || again.Moved {
+		t.Errorf("acme after the Mac moved on: %+v, %v", again, err)
 	}
 }
 

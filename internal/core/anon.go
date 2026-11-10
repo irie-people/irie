@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -151,28 +154,79 @@ func (c *Core) prepareAnon(name, route string) (anon.Compartment, []string, erro
 func (c *Core) anonLaunch(s *harness.Spawn, x *session, comp anon.Compartment) error {
 	cfg := c.cfg().Anon
 	d := c.anonDirs()
-	o := anon.ServerOptions{Dirs: d, Compartment: comp.Name, Evidence: filepath.Join(x.cwd, "evidence")}
+	ports, err := c.anonPorts()
+	if err != nil {
+		return err
+	}
+	o := anon.ServerOptions{Dirs: d, Compartment: comp.Name, Evidence: filepath.Join(x.cwd, "evidence"), Socks: ports[0], HTTP: ports[1]}
 	if cfg.Search && anon.SearxInstalled(d) {
 		o.Search = fmt.Sprintf("http://127.0.0.1:%d", cfg.SearchPort)
 	}
 	s.MCP = map[string]harness.MCPServer{anon.ServerName: {Command: c.bin, Args: anon.Args(o)}}
 	if cfg.Browser {
-		if srv := c.anonBrowser(x.id, comp); srv != nil {
+		if srv := c.anonBrowser(x.id, ports[0]); srv != nil {
 			s.MCP[browser.ServerName] = *srv
 		}
 	}
-	s.StrictMCP, s.Deny, s.Teams = true, anonDeny, false
-	if err := filetx.WriteFile(filepath.Join(s.Dir, harness.AnonEnvFile), []byte(anon.Exports(comp)), 0o600); err != nil {
+	// What the session may not read, by its shell or its Read tool: the
+	// compartments' exits and the user's sign-ins.
+	shut := append([]string{d.Root}, anon.Credentials...)
+	s.StrictMCP, s.Teams = true, false
+	s.Deny = append(slices.Clone(anonDeny), readRules(shut)...)
+	s.Sandbox = &harness.Sandbox{SOCKSPort: ports[0], HTTPPort: ports[1], DenyRead: shut, DenyEnv: anon.SecretNames(s.Environ)}
+	if err := filetx.WriteFile(filepath.Join(s.Dir, harness.AnonEnvFile), []byte(anon.Exports(comp.Name, ports[0], ports[1])), 0o600); err != nil {
 		return err
 	}
-	x.anon = comp.Name
+	x.anon, x.anonPorts = comp.Name, ports
 	return nil
 }
 
+// anonPorts are two free ports on 127.0.0.1 for a session's forwarder,
+// from anon.ForwardPort up: ones no live session holds and nothing else
+// listens on. The caller holds c.mu.
+func (c *Core) anonPorts() ([2]int, error) {
+	held := map[int]bool{}
+	for _, y := range c.sessions {
+		held[y.anonPorts[0]], held[y.anonPorts[1]] = true, true
+	}
+	var got [2]int
+	n := 0
+	for p := anon.ForwardPort; p < anon.ForwardPort+2000 && n < len(got); p++ {
+		if held[p] {
+			continue
+		}
+		ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+		if err != nil {
+			continue
+		}
+		ln.Close()
+		got[n] = p
+		n++
+	}
+	if n < len(got) {
+		return got, errors.New("anonymous research: no free port on 127.0.0.1 for the session's forwarder")
+	}
+	return got, nil
+}
+
+// readRules are Claude Code's Read rules for paths, each the path and all
+// under it; an absolute path takes a second slash before it.
+func readRules(paths []string) []string {
+	var rules []string
+	for _, p := range paths {
+		if strings.HasPrefix(p, "/") {
+			p = "/" + p
+		}
+		rules = append(rules, "Read("+p+")", "Read("+p+"/**)")
+	}
+	return rules
+}
+
 // anonBrowser is Irie's browser for an anonymous session: through the
-// compartment's exit, whatever browser.connector says, when the browser is
-// installed.
-func (c *Core) anonBrowser(id string, comp anon.Compartment) *harness.MCPServer {
+// session's forwarder, on its SOCKS5 port, to the compartment's exit,
+// whatever browser.connector says, when the browser is installed. Its
+// profile names no exit.
+func (c *Core) anonBrowser(id string, socks int) *harness.MCPServer {
 	b := c.cfg().Browser
 	path := b.Path
 	if path != "" {
@@ -183,7 +237,7 @@ func (c *Core) anonBrowser(id string, comp anon.Compartment) *harness.MCPServer 
 	}
 	o := browser.Options{
 		Path: path, Profile: filepath.Join(c.paths.Session(id), "browser"), Template: c.paths.BrowserTemplate(),
-		Headless: b.Headless, Idle: b.Idle, Proxy: comp.Proxy(), Search: b.Search,
+		Headless: b.Headless, Idle: b.Idle, Proxy: fmt.Sprintf("socks5://127.0.0.1:%d", socks), Search: b.Search,
 	}
 	return &harness.MCPServer{Command: c.bin, Args: browser.Args(o)}
 }
@@ -196,7 +250,7 @@ func anonNote(x *session) string {
 	}
 	return "[Irie] This session is anonymous research, in compartment " + x.anon + ": its web traffic leaves from an exit of its own, which nothing else of the user's uses. " +
 		"Search with irie-anon's search, read pages and files with its fetch (save: true keeps one as evidence, with its address, UTC time and SHA-256), and use irie-browser for a page that needs JavaScript or clicks. " +
-		"WebFetch and WebSearch are off here. Your shell's programs that read proxy variables, such as curl, git and Go's, leave from the same exit (never print those variables: they name it). Python's may fail instead, and one that ignores them, such as Node's fetch, would leave from the Mac's own exit, so use these tools for the web. The rules:\n" +
+		"WebFetch and WebSearch are off here, and your shell runs in a sandbox whose only way out is the same exit: curl, git, Python and most programs take it through the proxy variables, and a program that ignores them, looks names up itself or doesn't use TCP can't connect at all. Irie's ctl, this machine's other ports and sockets, and the user's sign-ins are out of your shell's reach. Never look up your exit's address. The rules:\n" +
 		"- Research only: read, never act. Never sign in or sign up, post, comment, message, buy, or fill in a form that reaches a person, and never run what you download.\n" +
 		"- Never put the user's name, accounts, places or anything else that could identify them into a search, a page or a request.\n" +
 		"- Never contact the people or groups you research, nor let them learn they are researched. Keep to the wrongdoing: leave alone what of people's private lives has nothing to do with it.\n" +

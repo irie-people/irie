@@ -103,6 +103,9 @@ type Spawn struct {
 	// without them.
 	StrictMCP bool
 	Deny      []string
+	// Sandbox shuts an anonymous research session's shell in (DESIGN
+	// §4.16); nil = none. A harness that cannot fails the launch.
+	Sandbox *Sandbox
 
 	// Arch is what Irie's arch agents bring to the session (DESIGN §4.11).
 	Arch Arch
@@ -116,6 +119,17 @@ type Spawn struct {
 	// Tips are Irie's tips, for a harness that can show them, as Claude
 	// Code does under its spinner (learn.agent_tips).
 	Tips []learn.Tip
+}
+
+// Sandbox is the box an anonymous research session's shell runs in, as
+// Claude Code's sandbox makes it (DESIGN §4.16): its programs reach the
+// network only through the two ports on 127.0.0.1 of the session's
+// forwarder, never a Unix socket or the machine's other ports, and can't
+// read DenyRead or see the variables DenyEnv names.
+type Sandbox struct {
+	SOCKSPort, HTTPPort int
+	DenyRead            []string // paths, absolute or from ~/, which may end in a wildcard
+	DenyEnv             []string // variables' names
 }
 
 // MCPServer is an MCP server that an agent runs over stdio: its command and

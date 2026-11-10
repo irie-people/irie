@@ -148,8 +148,13 @@ func Verify(ctx context.Context, c Compartment) (string, error) {
 	// Mullvad names a relay's proxy se-got-wg-socks5-001 and its tunnel's
 	// exit se-got-wg-001: the same server either way.
 	server := func(s string) string { return strings.Replace(s, "-wg-socks5-", "-wg-", 1) }
+	// Not checked is not passed: an exit that may be the Mac's own is used
+	// for nothing.
 	mac, err := Where(ctx, "")
-	if err == nil && mac.Server != "" && server(mac.Server) == server(e.Server) {
+	if err != nil {
+		return "", errors.New("the Mac's own exit didn't answer the check, so the compartment's can't be told apart from it: try again")
+	}
+	if mac.Server != "" && server(mac.Server) == server(e.Server) {
 		return "", errors.New("the exit is the Mac's own: use it for nothing")
 	}
 	where := e.Country

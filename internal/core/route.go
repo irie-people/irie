@@ -377,7 +377,8 @@ const delegateNote = `[Irie] To save tokens, you can hand a small, self-containe
 // not delegated itself. The caller holds c.mu.
 func (c *Core) delegateHint(x *session) string {
 	r := c.cfg().Route
-	if !r.Delegate || x.harness != "claude-code" || x.local || x.out == nil || x.out.parent != "" {
+	// An anonymous session's sandboxed shell can't reach Irie's ctl.
+	if !r.Delegate || x.harness != "claude-code" || x.local || x.out == nil || x.out.parent != "" || x.anon != "" {
 		return ""
 	}
 	cheaper := route.Cheaper(x.profile, r.Profiles, r.Priors())

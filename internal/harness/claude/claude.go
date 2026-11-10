@@ -143,6 +143,17 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		}
 	}
 	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow, Deny: s.Deny}
+	// An anonymous session's shell runs in Claude Code's sandbox, or the
+	// session doesn't start (sandbox.go).
+	if s.Sandbox != nil {
+		if !AtLeast(s.Probe.Version, MinVersion) {
+			return nil, nil, nil, fmt.Errorf("claude: anonymous research needs Claude Code %s or later, for its sandbox", MinVersion)
+		}
+		if err := loosened(ConfigDir(s.Home, s.Environ)); err != nil {
+			return nil, nil, nil, fmt.Errorf("claude: %v", err)
+		}
+		x.Sandbox = sandboxFor(s.Sandbox)
+	}
 	// Irie's theme, so the panel Claude Code docks beside the conversation
 	// sits in Irie's palette (theme.go).
 	if AtLeast(s.Probe.Version, ThemeVersion) {
@@ -334,6 +345,8 @@ type Extra struct {
 	Allow  []string    // what the agent runs without asking, as Claude Code's permission rules
 	Deny   []string    // what the agent is refused, as Claude Code's permission rules
 	Theme  string      // the session's colour theme, such as Irie's "custom:irie"; "" leaves the user's own
+	// Sandbox is an anonymous session's sandbox (sandbox.go); nil = none.
+	Sandbox *sandboxSettings
 }
 
 type permissions struct {
@@ -402,7 +415,8 @@ func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byt
 		Tips         *spinnerTips              `json:"spinnerTipsOverride,omitempty"`
 		Permissions  *permissions              `json:"permissions,omitempty"`
 		Theme        string                    `json:"theme,omitempty"`
-	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style, Theme: x.Theme}
+		Sandbox      *sandboxSettings          `json:"sandbox,omitempty"`
+	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style, Theme: x.Theme, Sandbox: x.Sandbox}
 	if len(x.Allow) > 0 || len(x.Deny) > 0 {
 		file.Permissions = &permissions{Allow: x.Allow, Deny: x.Deny}
 	}

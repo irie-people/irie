@@ -153,51 +153,52 @@ type Core struct {
 // session is one registry entry. Its facts come from tmux pane options and
 // the session's spec.json, its state from its events.
 type session struct {
-	id       string
-	name     string
-	named    bool // the user chose the name, by rename or at spawn: Claude Code's titles leave it be (title.go)
-	agent    string
-	created  time.Time
-	cwd      string
-	repo     string   // the main checkout of the task's repo, when it runs in one
-	worktree string   // the worktree Irie made for the task
-	branch   string   // the worktree's branch
-	copied   []string // local files copied into the worktree
-	profile  string
-	harness  string
-	observed bool // its harness reports through hooks; else the task is in once the agent runs
-	paste    bool // its task is pasted into the terminal
-	vendorID string
-	warnings []string
-	pane     string
-	command  string // the pane's foreground command
-	bracket  bool   // the agent asked for bracketed paste
-	dead     bool
-	exitCode int
-	shown    bool
-	track    track
-	quiet    int        // counts the session's events and messages; a close-when-done timer fires only if it has not moved
-	tally    tokenTally // read from the transcripts track names
-	statusN  uint64     // its status line updates, counted for perf
-	tokens   *ipc.Tokens
-	model    string                 // the model the agent runs, as its profile said
-	local    bool                   // a model of a local runtime
-	tutor    string                 // its tutor mode, explain or teach; "" when off (learn.tutor)
-	anon     string                 // the compartment it researches in, anonymously; "" when it doesn't (anon.go)
-	usage    statusline.Usage       // its last status line update
-	memory   int64                  // what its processes take, last measured
-	out      *outcome               // its route and how it went, shared with Core.outcomes
-	conv     *conversation          // its conversation, read while clients follow it (conversation.go)
-	note     string                 // what its agent is told at its next tool call, once (freeze.go)
-	demoted  bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
-	userWord time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
-	convSubs int                    // the subscriptions that follow its conversation
-	screen   *screenFeed            // its terminal, read while clients watch it live (screenfeed.go)
-	helpers  map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
-	dog      dogState               // what the jot dog found its jot left (dog.go)
-	team     []team.Teammate        // its teammates on the team server, last listed (team.go)
-	stopped  map[string]bool        // its helpers you stopped, whose tool calls are turned away until they end (sub.go)
-	hue      int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
+	id        string
+	name      string
+	named     bool // the user chose the name, by rename or at spawn: Claude Code's titles leave it be (title.go)
+	agent     string
+	created   time.Time
+	cwd       string
+	repo      string   // the main checkout of the task's repo, when it runs in one
+	worktree  string   // the worktree Irie made for the task
+	branch    string   // the worktree's branch
+	copied    []string // local files copied into the worktree
+	profile   string
+	harness   string
+	observed  bool // its harness reports through hooks; else the task is in once the agent runs
+	paste     bool // its task is pasted into the terminal
+	vendorID  string
+	warnings  []string
+	pane      string
+	command   string // the pane's foreground command
+	bracket   bool   // the agent asked for bracketed paste
+	dead      bool
+	exitCode  int
+	shown     bool
+	track     track
+	quiet     int        // counts the session's events and messages; a close-when-done timer fires only if it has not moved
+	tally     tokenTally // read from the transcripts track names
+	statusN   uint64     // its status line updates, counted for perf
+	tokens    *ipc.Tokens
+	model     string                 // the model the agent runs, as its profile said
+	local     bool                   // a model of a local runtime
+	tutor     string                 // its tutor mode, explain or teach; "" when off (learn.tutor)
+	anon      string                 // the compartment it researches in, anonymously; "" when it doesn't (anon.go)
+	anonPorts [2]int                 // its forwarder's SOCKS5 and HTTP ports on 127.0.0.1, while anon is set
+	usage     statusline.Usage       // its last status line update
+	memory    int64                  // what its processes take, last measured
+	out       *outcome               // its route and how it went, shared with Core.outcomes
+	conv      *conversation          // its conversation, read while clients follow it (conversation.go)
+	note      string                 // what its agent is told at its next tool call, once (freeze.go)
+	demoted   bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
+	userWord  time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
+	convSubs  int                    // the subscriptions that follow its conversation
+	screen    *screenFeed            // its terminal, read while clients watch it live (screenfeed.go)
+	helpers   map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
+	dog       dogState               // what the jot dog found its jot left (dog.go)
+	team      []team.Teammate        // its teammates on the team server, last listed (team.go)
+	stopped   map[string]bool        // its helpers you stopped, whose tool calls are turned away until they end (sub.go)
+	hue       int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
 	// Jots added to its own, to type to its agent once it can take them,
 	// and whether that is under way (follow.go).
 	followUps []followUp
