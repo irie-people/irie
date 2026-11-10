@@ -81,6 +81,17 @@ func TestSpawnTokensLeadTheWords(t *testing.T) {
 	if _, err := SpawnTokens(&SpawnArgs{}, []string{"@a", "@b", "x"}, "/home/alice"); err == nil {
 		t.Error("two @ tokens accepted")
 	}
+	// A task quoted whole keeps its leading words as tokens: a +anon lost
+	// in the task would run it outside any compartment (DESIGN §4.16).
+	var q SpawnArgs
+	rest, err = SpawnTokens(&q, []string{"+haiku +anon:acme find who runs  it\nand where", "too"}, "/home/alice")
+	if err != nil || q.Profile != "haiku" || q.Anon != "acme" || !reflect.DeepEqual(rest, []string{"find who runs  it\nand where", "too"}) {
+		t.Errorf("a quoted task: args %+v, rest %q, %v", q, rest, err)
+	}
+	var tor SpawnArgs
+	if rest, err := SpawnTokens(&tor, []string{"+tor look"}, "/home/alice"); err != nil || tor.Anon != AnonNew || tor.AnonRoute != "tor" || !reflect.DeepEqual(rest, []string{"look"}) {
+		t.Errorf("+tor quoted: args %+v, rest %q, %v", tor, rest, err)
+	}
 }
 
 // A paste goes back whole in place of its label, after the words are read,

@@ -1104,7 +1104,8 @@ The owner asked on 2026-11-09 for agents that research wrongdoing without leadin
 - curl, git and Go left through the exit, and Python failed rather than go direct.
 - The browser went through a SOCKS relay of the compartment's city, with WebRTC off and a UTC zone. Its pages couldn't reach the Mac's SearXNG.
 - The check found two leaks, both now fixed. `irie anon run` sent a program out from the Mac's own exit when the shell had `NO_PROXY=*`, or from another compartment's exit when run inside an anonymous session. A fetch error named the exit's address in the tunnel.
-- A second pass that day found two more, now fixed. A program in the shell that ignored proxy settings, such as Node's fetch, left from the Mac's own exit, which the sandbox now stops. A profile on the generic harness ran an anonymous task with none of its shut paths, which is now refused.
+- A second pass that day found two more, now fixed. A program in the shell that ignored proxy settings, such as Node's fetch, left from the Mac's own exit, which the sandbox now stops. A profile on the generic harness ran an anonymous task with none of its shut paths, which is now refused. A task given to `irie ctl spawn` quoted whole, as `"+anon:acme find who runs it"`, ran outside any compartment. Its leading `@` and `+` words are now read as words (`core.SpawnTokens`).
+- A real `+haiku +anon` session spawned through Irie then passed every check. Its proxy variables named only the forwarder's ports. curl, Python, the browser, `exit` and `fetch` left from its compartment's exit, and all else was refused.
 
 ---
 

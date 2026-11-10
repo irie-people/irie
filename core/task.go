@@ -61,14 +61,45 @@ func ParseTask(input, home string) (SpawnArgs, error) {
 // ctl spawn` takes them, and returns the words that follow.
 func SpawnTokens(a *SpawnArgs, words []string, home string) ([]string, error) {
 	for i, w := range words {
-		if !isToken(w) || strings.ContainsAny(w, " \t\n") {
+		if !isToken(w) {
 			return words[i:], nil
+		}
+		// One quoted word that starts with tokens, as in "+anon:acme find
+		// who runs it": its leading words are tokens too. Taken as the
+		// task, a +anon in it would be lost, and the task would run
+		// outside any compartment, from the Mac's own exit.
+		if strings.ContainsAny(w, " \t\n") {
+			toks, rest := leadingTokens(w)
+			for _, t := range toks {
+				if err := applyToken(a, t, home); err != nil {
+					return nil, err
+				}
+			}
+			return append([]string{rest}, words[i+1:]...), nil
 		}
 		if err := applyToken(a, w, home); err != nil {
 			return nil, err
 		}
 	}
 	return nil, nil
+}
+
+// leadingTokens splits the @ and + words off the front of s, and leaves
+// the rest as it was.
+func leadingTokens(s string) (toks []string, rest string) {
+	for {
+		s = strings.TrimLeft(s, " \t")
+		end := strings.IndexAny(s, " \t\n")
+		if end < 0 {
+			end = len(s)
+		}
+		if w := s[:end]; w == "" || !isToken(w) {
+			return toks, s
+		} else {
+			toks = append(toks, w)
+		}
+		s = s[end:]
+	}
 }
 
 func isToken(w string) bool { return strings.HasPrefix(w, "@") || strings.HasPrefix(w, "+") }

@@ -157,7 +157,7 @@ func TestUpstreamIsTheExitsOwnProxy(t *testing.T) {
 // any whose name says it holds a secret, but nothing else.
 func TestSecretNamesKeepSignInsFromTheShell(t *testing.T) {
 	got := SecretNames([]string{"PATH=/usr/bin", "ACME_API_KEY=x", "DB_PASSWORD=y", "SSH_AUTH_SOCK=/tmp/s", "GIT_AUTHOR_NAME=alice", "IRIE_SESSION=s1", "HOME=/home/alice", "MY_OAUTH_CLIENT=z"})
-	for _, want := range []string{"GH_TOKEN", "ACME_API_KEY", "DB_PASSWORD", "SSH_AUTH_SOCK", "MY_OAUTH_CLIENT"} {
+	for _, want := range []string{"GH_TOKEN", "ACME_API_KEY", "DB_PASSWORD", "SSH_AUTH_SOCK", "MY_OAUTH_CLIENT", "CLAUDE_CODE_MESSAGING_TOKEN"} {
 		if !slices.Contains(got, want) {
 			t.Errorf("SecretNames lacks %s: %v", want, got)
 		}

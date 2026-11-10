@@ -33,6 +33,8 @@ var secrets = []string{
 	"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITLAB_TOKEN", "NPM_TOKEN", "NODE_AUTH_TOKEN",
 	"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
 	"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HF_TOKEN", "SSH_AUTH_SOCK",
+	// Claude Code's own, which it may set for its commands itself.
+	"CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
 }
 
 var secretName = regexp.MustCompile(`(?i)token|secret|passw|api_?key|private_?key|credential|cookie|_auth$|^auth_|_auth_|oauth`)
