@@ -89,7 +89,7 @@ func TestAnAnonymousSessionGetsItsServersAndNothingElse(t *testing.T) {
 		t.Errorf("%s = %q, %v", harness.AnonEnvFile, b, err)
 	}
 	note := anonNote(x)
-	for _, want := range []string{"compartment acme", "WebFetch and WebSearch are off", "never act", "identify them", "untrusted"} {
+	for _, want := range []string{"compartment acme", "WebFetch and WebSearch are off", "never print those variables", "Node's fetch", "never act", "identify them", "untrusted"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("the note lacks %q:\n%s", want, note)
 		}

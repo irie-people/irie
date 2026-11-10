@@ -163,6 +163,10 @@ func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show
 		return nil
 	}
 	fmt.Fprintln(w, "\nCompartments:")
+	width := 20
+	for name := range all {
+		width = max(width, len(name))
+	}
 	for _, c := range anon.Sorted(all) {
 		where := c.Where()
 		if show {
@@ -172,7 +176,7 @@ func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show
 		if c.Name == anon.SearchName {
 			note = " (SearXNG's)"
 		}
-		fmt.Fprintf(w, "  %-20s %-8s %s, since %s%s\n", c.Name, c.Route, where, c.Created.Local().Format("2006-01-02"), note)
+		fmt.Fprintf(w, "  %-*s %-8s %s, since %s%s\n", width, c.Name, c.Route, where, c.Created.Local().Format("2006-01-02"), note)
 	}
 	return nil
 }
@@ -290,9 +294,7 @@ func anonRun(cfg config.Config, p paths.Paths, d anon.Dirs, args []string) error
 	if err != nil {
 		return err
 	}
-	env := append(os.Environ(), anon.ProxyEnv(t.Proxy())...)
-	env = append(env, "IRIE_ANON="+t.Name)
-	return syscall.Exec(bin, argv, env)
+	return syscall.Exec(bin, argv, anon.Environ(os.Environ(), t.Compartment))
 }
 
 // macExit is the relay of the Mac's own Mullvad tunnel, which must be up.

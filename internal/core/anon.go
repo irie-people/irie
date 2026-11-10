@@ -196,7 +196,7 @@ func anonNote(x *session) string {
 	}
 	return "[Irie] This session is anonymous research, in compartment " + x.anon + ": its web traffic leaves from an exit of its own, which nothing else of the user's uses. " +
 		"Search with irie-anon's search, read pages and files with its fetch (save: true keeps one as evidence, with its address, UTC time and SHA-256), and use irie-browser for a page that needs JavaScript or clicks. " +
-		"WebFetch and WebSearch are off here. Your shell's programs that read proxy variables, curl, Python's and Go's among them, leave from the same exit; one that ignores them would leave from the Mac's own exit, so use these tools for the web. The rules:\n" +
+		"WebFetch and WebSearch are off here. Your shell's programs that read proxy variables, such as curl, git and Go's, leave from the same exit (never print those variables: they name it). Python's may fail instead, and one that ignores them, such as Node's fetch, would leave from the Mac's own exit, so use these tools for the web. The rules:\n" +
 		"- Research only: read, never act. Never sign in or sign up, post, comment, message, buy, or fill in a form that reaches a person, and never run what you download.\n" +
 		"- Never put the user's name, accounts, places or anything else that could identify them into a search, a page or a request.\n" +
 		"- Never contact the people or groups you research, nor let them learn they are researched. Keep to the wrongdoing: leave alone what of people's private lives has nothing to do with it.\n" +

@@ -174,6 +174,39 @@ func TestWhereNamesNoAddress(t *testing.T) {
 	}
 }
 
+// A program reads the first of two copies of a variable: the proxy
+// variables a shell had go, or an inherited NO_PROXY=* would send a
+// program from the Mac's own exit, and another compartment's proxy from
+// that one's.
+func TestEnvironDropsTheProxiesItHad(t *testing.T) {
+	c := Compartment{Name: "acme", Route: Mullvad, Relay: "se-got-wg-001"}
+	env := Environ([]string{
+		"PATH=/usr/bin", "NO_PROXY=*", "no_proxy=*",
+		"ALL_PROXY=socks5h://other.example:1080", "https_proxy=http://proxy.example:3128",
+		"FTP_PROXY=http://proxy.example:3128", "IRIE_ANON=other", "HOME=/home/alice",
+	}, c)
+	seen := map[string]string{}
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		if _, twice := seen[k]; twice {
+			t.Errorf("%s is set twice: %v", k, env)
+		}
+		seen[k] = v
+	}
+	want := map[string]string{
+		"PATH": "/usr/bin", "HOME": "/home/alice", "IRIE_ANON": "acme",
+		"ALL_PROXY": c.Proxy(), "https_proxy": c.Proxy(), "NO_PROXY": "localhost,127.0.0.1,::1", "no_proxy": "localhost,127.0.0.1,::1",
+	}
+	for k, v := range want {
+		if seen[k] != v {
+			t.Errorf("%s = %q, want %q", k, seen[k], v)
+		}
+	}
+	if _, ok := seen["FTP_PROXY"]; ok {
+		t.Error("a proxy the shell had is kept, ahead of the compartment's ALL_PROXY")
+	}
+}
+
 func TestTorrcGivesEachTorCompartmentAPort(t *testing.T) {
 	d := Dirs{Root: t.TempDir()}
 	all := map[string]Compartment{

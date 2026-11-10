@@ -3,6 +3,7 @@ package anon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -107,8 +108,12 @@ func TestFetchReadsAPageThroughTheExit(t *testing.T) {
 	if h := proxy.hosts(); len(h) != 1 || h[0] != "acme.example:80" {
 		t.Errorf("the exit was asked for %v: the name should be looked up there", h)
 	}
-	// Kept as evidence: the body as it came, and what it was.
-	files, _ := filepath.Glob(filepath.Join(dir, "evidence", "*"))
+	// Kept as evidence: the body as it came, and what it was, in a folder
+	// git ignores, as it is often in a work tree.
+	if b, err := os.ReadFile(filepath.Join(dir, "evidence", ".gitignore")); err != nil || !strings.HasSuffix(string(b), "\n*\n") {
+		t.Errorf("the evidence folder's .gitignore = %q, %v", b, err)
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "evidence", "[0-9]*"))
 	if len(files) != 2 {
 		t.Fatalf("evidence = %v", files)
 	}
@@ -167,5 +172,30 @@ func TestFetchSaysWhatAFileIs(t *testing.T) {
 	}
 	if extension("application/pdf") != ".pdf" || extension("text/html; charset=utf-8") != ".html" {
 		t.Error("extensions")
+	}
+}
+
+// An agent is never told where its compartment leaves from, not even in
+// Go's errors, which name the proxy by its name or its address inside the
+// tunnel.
+func TestErrorsDontNameTheExit(t *testing.T) {
+	c := Compartment{Name: "acme", Route: Mullvad, Relay: "se-got-wg-001"}
+	for _, err := range []error{
+		errors.New(`Get "http://acme.example/": socks connect tcp 10.124.0.17:1080->acme.example:80: unknown error TTL expired`),
+		errors.New(`Get "https://acme.example/": proxyconnect tcp: dial tcp: lookup se-got-wg-socks5-001.relays.mullvad.net: no such host`),
+		errors.New(`dial tcp [fd00::17]:1080: connect: no route to host`),
+		errors.New(`Mullvad named se-got-wg-socks5-001, and the Mac's tunnel se-got-wg-001`),
+	} {
+		got := unnamed(c, err)
+		if strings.Contains(got, "10.124") || strings.Contains(got, "fd00") || strings.Contains(got, "se-got") || !strings.Contains(got, "the exit") {
+			t.Errorf("unnamed(%q) = %q", err, got)
+		}
+	}
+	if got := unnamed(c, errors.New("dial tcp 192.0.2.1:443: i/o timeout")); got != "dial tcp 192.0.2.1:443: i/o timeout" {
+		t.Errorf("a site's own address is not the exit's: %q", got)
+	}
+	tor := Compartment{Name: "t", Route: Tor, TorPort: 9151}
+	if got := unnamed(tor, errors.New("dial tcp 127.0.0.1:9151: connect: connection refused")); !strings.Contains(got, "9151") {
+		t.Errorf("a Tor port of the Mac's own names nothing: %q", got)
 	}
 }

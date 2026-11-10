@@ -266,9 +266,11 @@ func Sorted(all map[string]Compartment) []Compartment {
 }
 
 // ProxyEnv are the variables that send a shell's programs through proxy:
-// those curl, Go, Python's requests and most others read, in both cases,
-// with the machine's own addresses left out so local tools still answer.
-// A program that ignores them leaves from the Mac's own tunnel.
+// those curl, git, Go and most others read, in both cases, with the
+// machine's own addresses left out so local tools still answer. Python's
+// urllib, and requests without PySocks, fail rather than leave without
+// them. A program that ignores them, such as Node's fetch, leaves from the
+// Mac's own tunnel.
 func ProxyEnv(proxy string) []string {
 	var env []string
 	for _, k := range []string{"ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY"} {
@@ -278,6 +280,23 @@ func ProxyEnv(proxy string) []string {
 		env = append(env, k+"="+proxy)
 	}
 	return append(env, "NO_PROXY=localhost,127.0.0.1,::1", "no_proxy=localhost,127.0.0.1,::1")
+}
+
+// Environ is environ, a program's environment, sent through compartment
+// c. Every proxy variable environ had goes first: a program reads the
+// first of two copies of a variable, so an inherited NO_PROXY=* would send
+// it out from the Mac's own exit, and another compartment's proxy, as in
+// an anonymous session's shell, would send it out from that one's.
+func Environ(environ []string, c Compartment) []string {
+	out := make([]string, 0, len(environ)+9)
+	for _, kv := range environ {
+		k, _, _ := strings.Cut(kv, "=")
+		if k == "IRIE_ANON" || strings.HasSuffix(strings.ToUpper(k), "_PROXY") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(append(out, ProxyEnv(c.Proxy())...), "IRIE_ANON="+c.Name)
 }
 
 // Exports are ProxyEnv as lines of a shell's export, for Claude Code's

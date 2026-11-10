@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -140,7 +142,7 @@ func (s *server) exit(ctx context.Context, args json.RawMessage) mcp.Result {
 	defer cancel()
 	words, err := Verify(ctx, s.c)
 	if err != nil {
-		return mcp.Errorf("Compartment %s: %v", s.c.Name, err)
+		return mcp.Errorf("Compartment %s: %s", s.c.Name, unnamed(s.c, err))
 	}
 	return mcp.Text(fmt.Sprintf("Compartment %s leaves from %s. %s", s.c.Name, s.c.Where(), words))
 }
@@ -210,7 +212,7 @@ func (s *server) fetch(ctx context.Context, args json.RawMessage) mcp.Result {
 		}
 	}
 	if err != nil {
-		return mcp.Errorf("%v", err)
+		return mcp.Errorf("%s", unnamed(s.c, err))
 	}
 	var saved string
 	if a.Save {
@@ -228,6 +230,24 @@ func (s *server) fetch(ctx context.Context, args json.RawMessage) mcp.Result {
 		head += "\nKept as evidence: " + saved
 	}
 	return mcp.Text(head + "\n\n" + window(u.String(), text, a.Offset))
+}
+
+// unnamed is err's words with the compartment's exit taken out. Go's
+// errors name the proxy a request went through, by its name or by its
+// address inside Mullvad's tunnel, and an agent is never told where its
+// compartment leaves from. A Tor compartment's proxy is a port of the
+// Mac's own, which names nothing.
+func unnamed(c Compartment, err error) string {
+	text := err.Error()
+	if c.Route != Mullvad || c.Relay == "" {
+		return text
+	}
+	host, port, _ := net.SplitHostPort(SocksAddr(c.Relay))
+	for _, name := range []string{host, SocksName(c.Relay), c.Relay} {
+		text = strings.ReplaceAll(text, name, "the exit")
+	}
+	at := regexp.MustCompile(`(?:\d{1,3}\.){3}\d{1,3}:` + port + `\b|\[[0-9A-Fa-f:.]+\]:` + port + `\b`)
+	return at.ReplaceAllString(text, "the exit")
 }
 
 // checkURL refuses what is not a web address this compartment may fetch:
@@ -302,6 +322,9 @@ func (s *server) save(f Fetched) (string, error) {
 	if err := os.MkdirAll(s.o.Evidence, 0o700); err != nil {
 		return "", err
 	}
+	if err := ignoreSelf(s.o.Evidence); err != nil {
+		return "", err
+	}
 	sum := sha256.Sum256(f.Body)
 	host := strings.NewReplacer(":", "_", "/", "_").Replace(f.FinalURL.Host)
 	base := fmt.Sprintf("%s-%s-%s", f.At.UTC().Format("20060102T150405Z"), host, hex.EncodeToString(sum[:4]))
@@ -318,6 +341,25 @@ func (s *server) save(f Fetched) (string, error) {
 		return "", err
 	}
 	return body, nil
+}
+
+// ignoreSelf has git ignore dir and all in it. The evidence folder is in
+// the session's folder, often a git work tree, and research must never go
+// into a commit by `git add -A`, nor be lost to `git clean -fd`. A
+// .gitignore already there is left as it is.
+func ignoreSelf(dir string) error {
+	f, err := os.OpenFile(filepath.Join(dir, ".gitignore"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, fs.ErrExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(f, "# Irie's evidence of anonymous research: never committed.\n*\n")
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 func extension(contentType string) string {

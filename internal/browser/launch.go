@@ -341,7 +341,9 @@ func resolveProxy(ctx context.Context, proxy string) (string, error) {
 	defer cancel()
 	addrs, err := lookupHost(lctx, host)
 	if err != nil || len(addrs) == 0 {
-		return "", fmt.Errorf("the proxy %s doesn't resolve (is Mullvad VPN connected?): %v", host, err)
+		// An anonymous session's proxy is its compartment's exit, which
+		// its agent is never told: the words don't name it.
+		return "", errors.New("the browser's proxy doesn't resolve: is Mullvad VPN connected?")
 	}
 	slices.SortStableFunc(addrs, func(a, b string) int {
 		return boolInt(strings.Contains(a, ":")) - boolInt(strings.Contains(b, ":"))
