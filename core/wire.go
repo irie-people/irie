@@ -63,6 +63,11 @@ type (
 	Machine          = ipc.Machine
 	PerfResult       = ipc.PerfResult
 	Session          = ipc.Session
+	Rebuilds         = ipc.Rebuilds
+	Cold             = ipc.Cold
+	RebuildsResult   = ipc.RebuildsResult
+	RebuildsSpan     = ipc.RebuildsSpan
+	RebuildsPart     = ipc.RebuildsPart
 	TrodRow          = ipc.TrodRow
 	TrodShift        = ipc.TrodShift
 	TrodArgs         = ipc.TrodArgs
@@ -302,6 +307,7 @@ const (
 	OpPlugins          = ipc.OpPlugins
 	OpMarkets          = ipc.OpMarkets
 	OpLearn            = ipc.OpLearn
+	OpRebuilds         = ipc.OpRebuilds
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
 	FeatureBoostAlways = ipc.FeatureBoostAlways
@@ -327,6 +333,16 @@ const (
 	StateIdle          = ipc.StateIdle
 	StatePaused        = ipc.StatePaused
 	StatePausing       = ipc.StatePausing
+	RebuildYou         = ipc.RebuildYou
+	RebuildTrod        = ipc.RebuildTrod
+	RebuildDog         = ipc.RebuildDog
+	RebuildThaw        = ipc.RebuildThaw
+	RebuildReopen      = ipc.RebuildReopen
+	RebuildBackground  = ipc.RebuildBackground
+	RebuildLimit       = ipc.RebuildLimit
+	RebuildBoost       = ipc.RebuildBoost
+	RebuildTool        = ipc.RebuildTool
+	RebuildChanged     = ipc.RebuildChanged
 	ArchOK             = ipc.ArchOK
 	ArchNote           = ipc.ArchNote
 	ArchWarn           = ipc.ArchWarn

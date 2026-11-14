@@ -342,7 +342,11 @@ enum Fixture {
                     group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
                     repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "glooks000000",
-                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6,
+                    // It woke cold three times today, which the card says
+                    // (DESIGN §6.3).
+                    rebuilds: Rebuilds(today: 3, todayUSD: 4.10, week: 5, weekUSD: 7.30, cause: "you", words: "$4.10 today: woke cold 3 times"),
+                    cold: Cold(tokens: 310_000, usd: 2.48, words: "~$2.48 to wake")),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",

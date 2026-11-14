@@ -125,7 +125,9 @@ struct ReviewDock: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Reopen \(c.name) to review it")
+            // Its next turn writes its whole context into its cache again
+            // once that has run out: the price, in a few words (DESIGN §6.3).
+            .help("Reopen \(c.name) to review it" + (c.cold.map { " · \($0.words)" } ?? ""))
             .accessibilityLabel("\(c.name), finished \(Age.spoken(c.closed, now: now))\(new ? ", new" : "")")
             .accessibilityHint("Reopens it")
             Button { mark(c.id) } label: {
