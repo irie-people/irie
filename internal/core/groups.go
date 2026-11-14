@@ -1147,18 +1147,30 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 			}
 			c.groups = slices.DeleteFunc(c.groups, func(k ipc.Group) bool { return k.ID == g.ID })
 		case ipc.GroupMove:
-			into := a.Into
-			if into != "" {
-				i := c.findGroup(into)
-				if i < 0 {
-					return ipc.Errorf(ipc.CodeNotFound, "no group %q", into)
-				}
-				into = c.groups[i].ID
-			}
 			xs := c.groupable(a.Sessions)
 			gs, err := c.groupsIn(a.Groups)
 			if err != nil {
 				return err
+			}
+			// Into by name or path, among the groups of what moves' space
+			// first.
+			into := a.Into
+			if into != "" {
+				i := -1
+				if len(xs) > 0 {
+					i = c.findGroupIn(into, c.spaceOf(xs[0]))
+				} else if len(gs) > 0 {
+					if sp, ok := c.spaceOfGroup(gs[0]); ok {
+						i = c.findGroupIn(into, sp)
+					}
+				}
+				if i < 0 {
+					i = c.findGroup(into)
+				}
+				if i < 0 {
+					return ipc.Errorf(ipc.CodeNotFound, "no group %q", into)
+				}
+				into = c.groups[i].ID
 			}
 			if len(xs) == 0 && len(gs) == 0 {
 				return ipc.Errorf(ipc.CodeBadArgs, "move needs one of this machine's sessions, or a group")
