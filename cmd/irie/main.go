@@ -51,7 +51,7 @@ const usage = `usage: ` + brand.Slug + ` [command]
                           closed now, and why
   ` + brand.Slug + ` remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (` + brand.Slug + ` remote for help)
-` + privacyUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
+` + privacyUsage + writingUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
                           ` + brand.Name + `'s plugins in this build, and how far
                           each part is set up; turn a plugin or a part on or off
 ` + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
@@ -72,7 +72,7 @@ Used by ` + brand.Name + ` itself:
   ` + brand.Slug + ` statusline [--then COMMAND]
                             the status line of Claude Code sessions, which runs
                             the user's own
-` + privacyServerUsage + `  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
+` + privacyServerUsage + writingServerUsage + `  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
                             with it` + privacyRuntimeUsage + `
   ` + brand.Slug + ` placeholder          what the slot shows when no session is shown
   ` + brand.Slug + ` team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS

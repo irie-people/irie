@@ -149,6 +149,7 @@ type Core struct {
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
+	variorum   variorumState         // Variorum's door: the note each session named last (variorum.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -728,6 +729,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.raphaelOp(peer, a)
+	case ipc.OpVariorum:
+		var a ipc.VariorumArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.variorumOp(peer, a)
 	}
 	return c.Call(op, raw)
 }
@@ -759,7 +766,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins, ipc.OpVariorum,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
 		})}, nil
 	case ipc.OpPerf:
@@ -937,6 +944,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.pluginsOp(a)
+	case ipc.OpVariorum:
+		var a ipc.VariorumArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.variorumOp(0, a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {

@@ -70,6 +70,9 @@
 //	                       plugin as <name>@inline, as Claude Code does, so
 //	                       the probe hands sessions Irie's skills; unset, the
 //	                       probe finds neither and sessions get none
+//	IRIE_FAKE_MCP          when set, --help lists --mcp-config, so the probe
+//	                       hands sessions Irie's MCP servers; the flag is
+//	                       taken and kept in argv either way
 //	IRIE_FAKE_IGNORE_TERM  when set, SIGTERM is logged and ignored, as by an
 //	                       agent that hangs
 //	IRIE_FAKE_PACE         a pause before each step, such as 300ms
@@ -108,6 +111,7 @@ type options struct {
 	model, effort, mode, settings, sessionID, name, resume string
 	agents, agent                                          string
 	appendPrompt                                           string // --append-system-prompt, taken and kept in argv
+	mcpConfig                                              string // --mcp-config, taken and kept in argv
 	version, help                                          bool
 	task                                                   string
 	plugins                                                []string // --plugin-dir, repeatable
@@ -169,6 +173,8 @@ func parseArgs(args []string) (options, error) {
 		case "--plugin-dir":
 			o.plugins = append(o.plugins, "")
 			dst = &o.plugins[len(o.plugins)-1]
+		case "--mcp-config":
+			dst = &o.mcpConfig
 		case "--agents":
 			dst = &o.agents
 		case "--agent":
@@ -238,6 +244,7 @@ Options:
   --append-system-prompt <prompt>  Append a system prompt to the default system prompt
   --effort <level>           Effort level for the current session
   -h, --help                 Display help for command
+  --mcp-config <configs...>  Load MCP servers from JSON files or strings
   --model <model>            Model for the current session
   -n, --name <name>          Set a display name for this session
   --permission-mode <mode>   Permission mode to use for the session
@@ -285,6 +292,9 @@ func run(args []string) int {
 		}
 		if os.Getenv("IRIE_FAKE_PLUGINS") == "" {
 			h = strings.Replace(h, "  --plugin-dir <path>        Load a plugin from a directory for this session only\n", "", 1)
+		}
+		if os.Getenv("IRIE_FAKE_MCP") == "" {
+			h = strings.Replace(h, "  --mcp-config <configs...>  Load MCP servers from JSON files or strings\n", "", 1)
 		}
 		fmt.Print(h)
 		return 0

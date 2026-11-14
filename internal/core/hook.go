@@ -121,6 +121,11 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		if e.Kind == event.SubagentFinished {
 			delete(x.stopped, e.Agent)
 		}
+		// The note a call to Variorum's door names is the session's, for
+		// the Variorum tab (variorum.go).
+		if e.Kind == event.ToolStarted {
+			c.noteVariorum(x, call.Tool, call.Input)
+		}
 		// A teach-mode turn that asks the user to write a part is theirs:
 		// the agent waits at its prompt (docs/proposals/learning.md §4.4).
 		if e.Kind == event.TurnEnded && e.Agent == event.Main && x.tutor == config.TutorTeach {

@@ -150,6 +150,13 @@ type (
 	SpacesResult     = ipc.SpacesResult
 	SpaceArgs        = ipc.SpaceArgs
 	SpaceResult      = ipc.SpaceResult
+	VariorumArgs     = ipc.VariorumArgs
+	VariorumResult   = ipc.VariorumResult
+	VariorumNoteRef  = ipc.VariorumNoteRef
+	VariorumNote     = ipc.VariorumNote
+	VariorumBlock    = ipc.VariorumBlock
+	VariorumTake     = ipc.VariorumTake
+	VariorumComment  = ipc.VariorumComment
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -242,6 +249,7 @@ const (
 	OpAnon             = ipc.OpAnon
 	OpPlugins          = ipc.OpPlugins
 	OpLearn            = ipc.OpLearn
+	OpVariorum         = ipc.OpVariorum
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
 	FeatureWatch       = ipc.FeatureWatch
@@ -325,4 +333,14 @@ const (
 	SpacesRename       = ipc.SpacesRename
 	SpacesMove         = ipc.SpacesMove
 	SpacesRemove       = ipc.SpacesRemove
+	VariorumStatus     = ipc.VariorumStatus
+	VariorumConnect    = ipc.VariorumConnect
+	VariorumForget     = ipc.VariorumForget
+	VariorumNotes      = ipc.VariorumNotes
+	VariorumRead       = ipc.VariorumRead
+	VariorumShow       = ipc.VariorumShow
+	VariorumReady      = ipc.VariorumReady
+	VariorumSetup      = ipc.VariorumSetup
+	VariorumNeeds      = ipc.VariorumNeeds
+	VariorumOff        = ipc.VariorumOff
 )

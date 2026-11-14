@@ -86,3 +86,8 @@ func (c *Core) guide(g guideSpec, want string) (ipc.Session, error) {
 
 // guideDir is where g's sessions run: <data>/guides/<skill>.
 func (c *Core) guideDir(g guideSpec) string { return filepath.Join(c.paths.Data, "guides", g.skill) }
+
+// writing says whether a session that runs in dir is a writing session:
+// one :write started, or one that carries it on, as a reopen or a fork
+// does, which all run in the writing guide's folder.
+func (c *Core) writing(dir string) bool { return dir == c.guideDir(guideWrite) }

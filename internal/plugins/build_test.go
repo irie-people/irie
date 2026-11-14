@@ -37,7 +37,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 		t.Fatalf("go list -deps %s: %v", tags, err)
 	}
 	deps := strings.Fields(string(out))
-	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp"} {
+	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "variorum"} {
 		for _, d := range deps {
 			if d == "github.com/irie-people/irie/internal/"+pkg {
 				t.Errorf("a build without plugins links internal/%s", pkg)

@@ -532,6 +532,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-10 | https://code.claude.com/docs/en/permissions.md | Read rules take `//` before an absolute path and `~/` for home: an anonymous session's Read rules for the compartments' file and the user's sign-ins |
 | 2026-11-10 | RFC 1928, SOCKS Protocol Version 5, https://www.rfc-editor.org/rfc/rfc1928 | the forwarder's SOCKS5 server and its client to the exit: greeting, no-authentication method, CONNECT with an IPv4, IPv6 or domain address, reply codes (`internal/anon/forward.go`) |
 | 2026-11-10 | RFC 9110, HTTP Semantics, §7.6.1 and §9.3.6, https://www.rfc-editor.org/rfc/rfc9110 | the forwarder's HTTP proxy: CONNECT's 2xx and tunnel, and the hop-by-hop headers it drops from a plain request and its response |
+| 2026-11-14 | https://github.com/lduarte-io/Variorum at 5dde1bcf95158499d5f00551941f758c1da8d6b9 (Variorum's source, by Lillian Duarte, AGPL-3.0; read only, no code copied) | The door's protocol, read for interoperability: the shim's preamble and refusals (its opening read of requests before initialize), admission by client name and key, the setups' shapes and quoting, the 16-connection limit, the tool names and JSON keys of list_notes, read_note and show_in_app, the activity log's 500-line cap; and checking the variorum skill against it |
 
 ## Third-party code
 

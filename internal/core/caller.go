@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/tmux"
@@ -50,12 +51,12 @@ func notBuilt(what string) error {
 // builtFeatures leaves out of hello's features the ops of a plugin this
 // build leaves out, so a client never offers them.
 func builtFeatures(all []string) []string {
-	if privacyBuilt {
-		return all
-	}
 	var out []string
 	for _, f := range all {
-		if f != ipc.OpVPN && f != ipc.OpAnon {
+		switch {
+		case !privacyBuilt && (f == ipc.OpVPN || f == ipc.OpAnon):
+		case !config.WritingBuilt && f == ipc.OpVariorum:
+		default:
 			out = append(out, f)
 		}
 	}
