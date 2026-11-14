@@ -81,6 +81,9 @@ final class Store {
     var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
     private(set) var canConfigure = false
+    /// Whether the core sends an agent on with "continue" (op continue), for
+    /// a double ↓ on its empty prompt (ContinueKey.swift).
+    private(set) var canContinue = false
     /// Whether the core parks sessions (Controls.swift).
     private(set) var canPark = false
     /// Whether the core pins sessions (Tabs.swift).
@@ -177,6 +180,9 @@ final class Store {
     private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
     @ObservationIgnored weak var terminalView: NSView?
+    /// The split's lead pane, the picked session's own terminal while it
+    /// shows beside its teammates (TeamSplit.swift).
+    @ObservationIgnored weak var leadView: NSView?
     /// Whether the rows are `--snapshot`'s, which draws the terminal's frame
     /// round an empty terminal, as no core attaches one.
     private(set) var isFixture = false
@@ -206,6 +212,10 @@ final class Store {
     var focusMessage = 0
     /// Whether the message box has the keyboard.
     @ObservationIgnored var messageHasKeys = false
+    /// The message box's own field while it has the keyboard. The window
+    /// has one field editor for all its fields, so the field it edits tells
+    /// the box from the find field and the task bar (ContinueKey.swift).
+    @ObservationIgnored weak var messageField: NSTextField?
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     var outside: [OutsideSession] = []
@@ -315,6 +325,7 @@ final class Store {
                 canLearn = hello.features.contains("learn")
                 canDock = hello.features.contains("dock")
                 canConfigure = hello.features.contains("config")
+                canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
                 canPin = hello.features.contains("pin")
                 canGroup = hello.features.contains("group")
@@ -786,6 +797,37 @@ final class Store {
         let order = drawnOrder
         guard n >= 1, n <= order.count else { return }
         show(order[n - 1].id)
+    }
+
+    /// The session a terminal view types to, while it is the picked
+    /// session's own: the main terminal, or the split's lead pane. A
+    /// session of another machine's has no terminal here (ContinueTarget).
+    func continueSession(for view: NSView) -> String? {
+        guard let s = selectedRow, s.host == nil, outsideSelection == nil else { return nil }
+        if view === terminalView, showTerminal, splitSession == nil { return s.id }
+        if view === leadView, splitSession?.id == s.id { return s.id }
+        return nil
+    }
+
+    /// Whether the field editor edits the message box.
+    func isMessageBox(_ editor: NSTextView) -> Bool {
+        guard messageHasKeys, let field = messageField else { return false }
+        return (editor.delegate as AnyObject?) === field
+    }
+
+    /// Sends a session's agent on: the core types "continue" and Enter
+    /// into its prompt while the prompt is empty (op continue), for a
+    /// double ↓ on it (ContinueKey.swift). When it can't, as when the
+    /// prompt has something typed in it, a notice says why.
+    func continueAgent(_ id: String) {
+        guard canContinue else { return }
+        Task {
+            do {
+                _ = try await client.call("continue", ContinueArgs(session: id), as: Empty.self)
+            } catch {
+                say(error.localizedDescription, error: true)
+            }
+        }
     }
 
     /// Moves the keyboard between the session list and the terminal.
@@ -1347,3 +1389,6 @@ extension String {
     /// last folder.
     var repoLabel: String { hasPrefix("/") || hasPrefix("~") ? (self as NSString).lastPathComponent : self }
 }
+
+/// The double ↓ on an empty prompt asks the store (ContinueKey.swift).
+extension Store: ContinueTarget {}

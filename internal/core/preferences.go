@@ -22,11 +22,12 @@ func preferencesNote(prefs []string) string {
 }
 
 // startNote is what a session is told each time it starts, after a /clear
-// or a compaction too: whether it can delegate, then the user's
-// preferences, so that they hold all along. The caller holds c.mu.
+// or a compaction too: whether it can delegate, its profile's playbook,
+// then the user's preferences, so that they hold all along. The caller
+// holds c.mu.
 func (c *Core) startNote(x *session) string {
 	var notes []string
-	for _, n := range []string{c.delegateHint(x), anonNote(x), preferencesNote(c.cfg().Spawn.Preferences)} {
+	for _, n := range []string{c.delegateHint(x), anonNote(x), c.playbookNote(x), preferencesNote(c.cfg().Spawn.Preferences)} {
 		if n != "" {
 			notes = append(notes, n)
 		}

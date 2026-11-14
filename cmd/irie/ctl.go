@@ -111,6 +111,9 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          conversation and its raw terminal
   ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, as
                                          a person would; TEXT - reads stdin
+  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on: type
+                                         "continue" and Enter, only while its
+                                         prompt shows with nothing typed in it
   ` + brand.Slug + ` ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -138,6 +141,13 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          is still running at the timeout
   ` + brand.Slug + ` ctl rate SESSION good|bad         rate a session's work; the router learns
                                          each profile's accuracy from it
+  ` + brand.Slug + ` ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK...
+                                         run a task on several sessions of one
+                                         profile (default the first local one),
+                                         here or on HOST; a judge then scores
+                                         each, makes the one result and rewrites
+                                         the profile's playbook. With no task,
+                                         list the benches
   ` + brand.Slug + ` ctl perf [--json]                 the core's own counters since it started:
                                          each request and how long it took, waits
                                          on its lock, frames sent, ticks, and its
@@ -181,6 +191,8 @@ func ctl(args []string) error {
 		return ctlConversation(args[1:])
 	case "send":
 		return ctlSend(args[1:])
+	case "continue":
+		return ctlContinue(args[1:])
 	case "flip":
 		return ctlFlip(args[1:])
 	case "watch":
@@ -195,6 +207,8 @@ func ctl(args []string) error {
 		return ctlRoute(args[1:])
 	case "delegate":
 		return ctlDelegate(args[1:])
+	case "bench":
+		return ctlBench(args[1:])
 	case "rate":
 		return ctlRate(args[1:])
 	case "perf":
@@ -727,6 +741,17 @@ func ctlSend(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+}
+
+func ctlContinue(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: " + brand.Slug + " ctl continue SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: args[0]}, nil)
 }
 
 // matchClosed are the closed sessions whose name or id holds every word of
