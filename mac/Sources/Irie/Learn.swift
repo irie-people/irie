@@ -13,9 +13,9 @@ struct LearnCommands: Commands {
     let store: Store
     @Environment(\.openWindow) private var openWindow
 
-    static let site = URL(string: "https://irie-people.github.io/irie/")!
+    static let site = URL(string: Brand.site)!
     static let pages = [
-        ("Irie Guide", "docs.html"),
+        ("\(Brand.name) Guide", "docs.html"),
         ("Your First Session", "first-session.html"),
         ("Tasks, Repos and Worktrees", "tasks.html"),
         ("Keys and Commands", "keys.html"),
@@ -69,7 +69,7 @@ struct LearnWindow: View {
                 case .glossary: GlossaryList(terms: result.glossary, find: $find)
                 }
             } else if loaded {
-                Text("These come from Irie’s core, which isn’t answering. Start it in a terminal with `irie up`.")
+                Text("These come from \(Brand.name)’s core, which isn’t answering. Start it in a terminal with `\(Brand.slug) up`.")
                     .font(Theme.font(13))
                     .foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)
@@ -116,7 +116,7 @@ private struct ResourceList: View {
                         ForEach(g.items) { r in ResourceRow(resource: r) }
                     }
                 }
-                Text("Irie links to these and copies nothing of them. Each opens in your browser.")
+                Text("\(Brand.name) links to these and copies nothing of them. Each opens in your browser.")
                     .font(Theme.font(11.5))
                     .foregroundStyle(Theme.muted)
             }

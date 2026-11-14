@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 )
 
@@ -186,7 +187,7 @@ func newAuthority(now time.Time) (*Authority, error) {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:                serial(),
-		Subject:                     pkix.Name{CommonName: "Irie local CA " + now.UTC().Format("2006-01-02"), Organization: []string{"Irie"}},
+		Subject:                     pkix.Name{CommonName: brand.Name + " local CA " + now.UTC().Format("2006-01-02"), Organization: []string{brand.Name}},
 		NotBefore:                   now.Add(-time.Hour),
 		NotAfter:                    now.Add(caLife),
 		IsCA:                        true,
@@ -406,7 +407,7 @@ func (l *Leaves) issue(now time.Time, dialed net.IP) (*tls.Certificate, *x509.Ce
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: serial(),
-		Subject:      pkix.Name{CommonName: dns[len(dns)-1], Organization: []string{"Irie"}},
+		Subject:      pkix.Name{CommonName: dns[len(dns)-1], Organization: []string{brand.Name}},
 		NotBefore:    now.Add(-time.Hour),
 		NotAfter:     now.Add(leafLife),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
@@ -447,17 +448,17 @@ func (a *Authority) Profile() []byte {
 	<array>
 		<dict>
 			<key>PayloadCertificateFileName</key>
-			<string>irie-ca.cer</string>
+			<string>` + brand.Slug + `-ca.cer</string>
 			<key>PayloadContent</key>
 			<data>`)
 	b.WriteString(base64.StdEncoding.EncodeToString(a.Cert.Raw))
 	fmt.Fprintf(&b, `</data>
 			<key>PayloadDescription</key>
-			<string>Lets this phone check that it talks to Irie on your own machines.</string>
+			<string>Lets this phone check that it talks to `+brand.Name+` on your own machines.</string>
 			<key>PayloadDisplayName</key>
 			<string>%[1]s</string>
 			<key>PayloadIdentifier</key>
-			<string>io.github.irie-people.irie.ca.%[2]s</string>
+			<string>io.github.irie-people.`+brand.Slug+`.ca.%[2]s</string>
 			<key>PayloadType</key>
 			<string>com.apple.security.root</string>
 			<key>PayloadUUID</key>
@@ -467,11 +468,11 @@ func (a *Authority) Profile() []byte {
 		</dict>
 	</array>
 	<key>PayloadDescription</key>
-	<string>Irie's own certificate authority, which may vouch only for machines on a local network. With it, the Irie app on this phone talks to Irie on your machines privately.</string>
+	<string>`+brand.Name+`'s own certificate authority, which may vouch only for machines on a local network. With it, the `+brand.Name+` app on this phone talks to `+brand.Name+` on your machines privately.</string>
 	<key>PayloadDisplayName</key>
-	<string>Irie</string>
+	<string>`+brand.Name+`</string>
 	<key>PayloadIdentifier</key>
-	<string>io.github.irie-people.irie.%[3]s</string>
+	<string>io.github.irie-people.`+brand.Slug+`.%[3]s</string>
 	<key>PayloadRemovalDisallowed</key>
 	<false/>
 	<key>PayloadType</key>

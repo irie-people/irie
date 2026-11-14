@@ -1,3 +1,5 @@
+//go:build !nowriting
+
 package plugins
 
 import (

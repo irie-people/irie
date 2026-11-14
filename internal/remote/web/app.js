@@ -13,6 +13,9 @@ import * as Push from './js/push.js';
 const params = new URLSearchParams(location.search);
 const root = document.documentElement;
 const app = document.getElementById('app');
+// The product's name: the gateway serves this file with the brand's own
+// name in place of this one (internal/brand, Text).
+const BRAND = 'Irie';
 
 // ---- The viewport ---------------------------------------------------------
 // The app is as tall as the visual viewport, so the bottom bar sits right
@@ -550,7 +553,9 @@ function buildHome() {
   refs.chips = h('div', { class: 'machine-chips', role: 'list' });
   const header = h('header', { class: 'bar home-bar on-dark' },
     h('div', { class: 'title-row' },
-      h('h1', { class: 'large-title' }, h('span', { class: 'title-mark', html: L.sun('sun') }), 'Irie'),
+      h('h1', { class: 'large-title' }, h('span', { class: 'title-mark', html: L.sun('sun') }),
+        // A long name (up to 30 characters) shrinks, then trails off.
+        h('span', { class: 'title-name' + (BRAND.length > 12 ? ' long' : ''), title: BRAND }, BRAND)),
       refs.needsPill),
     refs.chips);
   refs.filterNote = h('div', { class: 'filter-note', hidden: true });

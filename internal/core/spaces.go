@@ -20,6 +20,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -211,11 +212,46 @@ func (c *Core) spaceOp(a ipc.SpaceArgs) (ipc.SpaceResult, error) {
 			from[id] = was
 		}
 	}
+	// Each space has its own groups: a session leaves its group unless
+	// the whole group goes with it, which then comes out of a group around
+	// it that stays (groups.go), and undo puts them back.
+	going := map[string]bool{}
+	for _, id := range moved {
+		going[id] = true
+	}
+	left := map[string][]ipc.Group{}
+	out := map[string][]ipc.Group{}
+	for _, id := range moved {
+		chain := c.chainOf(c.groupOf(c.sessions[id]))
+		g, nest := c.leaveForSpace(c.sessions[id], to, going)
+		if g != "" {
+			left[id] = chain
+		}
+		if nest.ID != "" {
+			out[id] = append(c.chainOf(nest.Parent), nest)
+		}
+	}
+	changed := len(left) > 0 || len(out) > 0
+	if changed {
+		c.tidyOrder()
+		c.saveGroups()
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
+	if changed {
+		c.publishHeader()
+	}
 	c.recordEach(actSpace, moved, func(id string) map[string]any {
-		return map[string]any{"from": from[id], "to": to}
+		d := map[string]any{"from": from[id], "to": to}
+		if chain, ok := left[id]; ok {
+			g := chain[len(chain)-1]
+			d["group"], d["group_name"], d["group_groups"] = g.ID, g.Name, shotOf(chain)
+		}
+		if chain, ok := out[id]; ok {
+			d["nest"], d["nest_groups"] = chain[len(chain)-1].ID, shotOf(chain)
+		}
+		return d
 	})
 	return ipc.SpaceResult{Sessions: moved}, nil
 }
@@ -246,7 +282,7 @@ func checkSpace(k string) func(c *Core, a action) []problem {
 		if c.spaceOf(x) == c.spaceKey(a.str(k)) {
 			return []problem{{code: "already", question: fmt.Sprintf("%q is in that space already.", x.name),
 				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
-					Detail: "Nothing needs moving, so the history moves on as if Irie had moved it."}},
+					Detail: "Nothing needs moving, so the history moves on as if " + brand.Name + " had moved it."}},
 				recommend: ipc.ChoiceSettle}}
 		}
 		return nil
@@ -263,10 +299,45 @@ func doSpace(k string) func(c *Core, a action) (action, error) {
 			return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 		}
 		c.putInSpace(x, a.str(k))
+		// A session the move took out of its group goes back in it with
+		// undo, and out again with redo; so does a group the move took out
+		// of the group around it.
+		g, nest := a.str("group"), a.str("nest")
+		if g != "" {
+			if k == "from" {
+				// Back in its group, unless the group went to another
+				// space meanwhile.
+				if c.groupIndex(g) < 0 || c.groupIn(g, c.spaceOf(x), map[string]bool{x.id: true}) {
+					if shot := a.shot("group_groups"); len(shot) > 0 {
+						c.restoreGroups(shot)
+					} else {
+						c.ensureGroup(g, a.str("group_name"))
+					}
+					c.setGroup(x, g, event.SourceUser)
+				}
+			} else {
+				c.setGroup(x, "", event.SourceUser)
+			}
+		}
+		if i := c.groupIndex(nest); i >= 0 {
+			if k == "from" {
+				c.restoreGroups(a.shot("nest_groups"))
+			} else if c.groups[i].Parent != "" {
+				c.groups[i].Parent = ""
+				c.groups[i].Name = c.groupName(c.groups[i].Name, nest, "", c.spaceOf(x))
+			}
+		}
+		if g != "" || nest != "" {
+			c.tidyOrder()
+			c.saveGroups()
+		}
 		a.Name = x.name
 		frames := c.changes()
 		c.mu.Unlock()
 		c.publish(frames)
+		if g != "" || nest != "" {
+			c.publishHeader()
+		}
 		return a, nil
 	}
 }

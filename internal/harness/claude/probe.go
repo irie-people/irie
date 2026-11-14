@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
@@ -110,7 +111,7 @@ func (Harness) Probe(p config.Profile, env []string) harness.Probe {
 	if pr.Flags["--plugin-dir"] {
 		if why, retry := plugins(path, p.Args, env); why != "" {
 			delete(pr.Flags, "--plugin-dir")
-			pr.Warnings = append(pr.Warnings, "Irie's skills left out: "+why)
+			pr.Warnings = append(pr.Warnings, brand.Name+"'s skills left out: "+why)
 			again = retry
 		}
 	}
@@ -130,7 +131,7 @@ func (Harness) Probe(p config.Profile, env []string) harness.Probe {
 // returns why Irie's skills are left out, "" when they can go in, and whether
 // to look again at the next launch.
 func plugins(path string, args, env []string) (why string, retry bool) {
-	dir, err := os.MkdirTemp("", "irie-plugin-probe-")
+	dir, err := os.MkdirTemp("", brand.Slug+"-plugin-probe-")
 	if err != nil {
 		return "no folder for the plugin probe: " + err.Error(), true
 	}
@@ -139,7 +140,7 @@ func plugins(path string, args, env []string) (why string, retry bool) {
 	if err := os.MkdirAll(filepath.Dir(manifest), 0o700); err != nil {
 		return "no folder for the plugin probe: " + err.Error(), true
 	}
-	if err := os.WriteFile(manifest, []byte(`{"name": "irie", "description": "Irie's probe", "version": "0"}`+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(manifest, []byte(`{"name": "`+brand.Slug+`", "description": "`+brand.Name+`'s probe", "version": "0"}`+"\n"), 0o600); err != nil {
 		return "no folder for the plugin probe: " + err.Error(), true
 	}
 	out, err := probeFor(pluginTimeout, path, append(slices.Clone(args), "--plugin-dir", dir, "plugin", "list", "--json"), env)
@@ -170,11 +171,11 @@ func pluginList(out string) string {
 	for _, p := range list {
 		name, from, _ := strings.Cut(p.ID, "@")
 		switch {
-		case name != "irie":
+		case name != brand.Slug:
 		case from == "inline":
 			loaded = loaded || p.Enabled
 		default:
-			return "a plugin of your own is named irie (" + p.ID + ")"
+			return "a plugin of your own is named " + brand.Slug + " (" + p.ID + ")"
 		}
 	}
 	if !loaded {

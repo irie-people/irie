@@ -15,20 +15,22 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Sessions and fixed targets of Irie's server.
 const (
-	MainSession   = "irie"        // what the user sees
-	AgentsSession = "irie-agents" // never attached
+	MainSession   = brand.Slug             // what the user sees
+	AgentsSession = brand.Slug + "-agents" // never attached
 	CoreWindow    = "core"
-	Sidebar       = "irie:0.0"
-	Slot          = "irie:0.1"
+	Sidebar       = brand.Slug + ":0.0"
+	Slot          = brand.Slug + ":0.1"
 	// ViewSession holds the window of the session the Mac app shows beside
 	// its teammates, linked from irie-agents, so a client of its own shows
 	// that agent at the split's size while every other agent keeps the
 	// slot's (DESIGN §2.3). It exists only while the app splits.
-	ViewSession = "irie-view"
+	ViewSession = brand.Slug + "-view"
 )
 
 // Pane roles, kept in the @irie_role pane option.
@@ -41,6 +43,7 @@ const (
 	RoleRuntime     = "runtime" // Irie's own Ollama server (DESIGN §6.3), in its own window of irie-agents
 	RoleLlama       = "llama"   // Irie's own llama-server (DESIGN §6.5), in its own window of irie-agents
 	RoleRemote      = "remote"  // the phone app's gateway (docs/PHONE.md), in its own window of irie-agents
+	RoleTunnel      = "tunnel"  // an ssh tunnel to a peer's llama-server (DESIGN §6.5), in its own window of irie-agents
 	// RoleClosing is an agent pane of a closed session while its agent
 	// ends. It is out of the slot, alone in its window and in no row.
 	RoleClosing = "closing"
@@ -69,7 +72,7 @@ var ErrNoServer = errors.New("tmux: no server running")
 var Dirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"}
 
 // ErrNotFound means no tmux was found.
-var ErrNotFound = errors.New("tmux not found: `irie setup` installs it, or set tmux.path")
+var ErrNotFound = errors.New("tmux not found: `" + brand.Slug + " setup` installs it, or set tmux.path")
 
 // ErrTimeout means a command did not finish by its deadline: the server is
 // stopped, swapped out or wedged.

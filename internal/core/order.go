@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/tmux"
@@ -97,8 +98,11 @@ func (c *Core) fullOrder() []string {
 	return ids
 }
 
-// setOrder makes ids the order and keeps it in tmux. The caller holds c.mu.
+// setOrder makes ids the order, with each of your groups' sessions kept
+// together as the sidebars draw them (groups.go), and keeps it in tmux.
+// The caller holds c.mu.
 func (c *Core) setOrder(ids []string) {
+	ids = c.together(ids)
 	c.order = ids
 	if _, err := c.tmux.Run("set-option", "-t", agentsTarget, optOrder, strings.Join(ids, " ")); err != nil {
 		c.log.Warn("order", "err", err)
@@ -264,8 +268,16 @@ func (c *Core) placeNew(id string, a ipc.SpawnArgs) {
 	}
 }
 
-// toTop puts session id first in the list. The caller holds c.mu.
+// toTop puts session id first in the list; one of a group of yours, first
+// in the innermost group around it that holds another card, where the
+// group is (groups.go). The caller holds c.mu.
 func (c *Core) toTop(id string) {
+	if x := c.sessions[id]; x != nil && !x.track.pinned {
+		if first := c.edgeIn(x, false); first != "" {
+			c.gather([]string{id}, "", first)
+			return
+		}
+	}
 	ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
 	c.setOrder(slices.Insert(ids, 0, id))
 }
@@ -370,7 +382,7 @@ func checkPark(on bool) func(c *Core, a action) []problem {
 		if x.track.parked == on {
 			return []problem{{code: "already", question: fmt.Sprintf("%q %s.", x.name, already),
 				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
-					Detail: fmt.Sprintf("Nothing needs %sing, so the history moves on as if Irie had %sed it.", verb, verb)}},
+					Detail: fmt.Sprintf("Nothing needs %sing, so the history moves on as if "+brand.Name+" had %sed it.", verb, verb)}},
 				recommend: ipc.ChoiceSettle}}
 		}
 		return nil

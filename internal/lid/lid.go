@@ -31,19 +31,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 )
 
 // Rule is the sudoers file `irie setup lid` writes. sudo reads each file in
 // /etc/sudoers.d whose name has no dot, so the file it is checked under
 // first, Rule+".new", is never read while it is unchecked.
-const Rule = "/private/etc/sudoers.d/irie-lid"
+const Rule = "/private/etc/sudoers.d/" + brand.Slug + "-lid"
 
 // Pmset is the tool the rule names: sudo matches a command by its path.
 const Pmset = "/usr/bin/pmset"
 
 // Label is the launchd agent's label, after the Mac app's bundle id.
-const Label = "io.github.irie-hq.irie.lid"
+const Label = brand.BundleID + ".lid"
 
 // Every is how often the launchd agent runs its check.
 const Every = 2 * time.Minute
@@ -63,7 +64,7 @@ const thermalKey = "com.apple.system.thermalpressurelevel"
 
 // ErrNoRule is a hold sudo refused: `irie setup lid` has not been run, or
 // its rule was removed.
-var ErrNoRule = errors.New("the rule that lets Irie turn the Mac's sleep off is not installed: run irie setup lid")
+var ErrNoRule = errors.New("the rule that lets " + brand.Name + " turn the Mac's sleep off is not installed: run " + brand.Slug + " setup lid")
 
 // Supported reports whether this is a Mac, the one system a lid is kept
 // open for.
@@ -407,7 +408,7 @@ func RuleText(user string) (string, error) {
 	if !userName.MatchString(user) {
 		return "", fmt.Errorf("lid: %q is not a user name a sudoers rule can name", user)
 	}
-	return fmt.Sprintf("# Irie (irie setup lid): lets %s turn sleep off and on, so a closed lid does not stop agents at work.\n%s ALL = (root) NOPASSWD: %s -a disablesleep 1, %s -a disablesleep 0\n", user, user, Pmset, Pmset), nil
+	return fmt.Sprintf("# "+brand.Name+" ("+brand.Slug+" setup lid): lets %s turn sleep off and on, so a closed lid does not stop agents at work.\n%s ALL = (root) NOPASSWD: %s -a disablesleep 1, %s -a disablesleep 0\n", user, user, Pmset, Pmset), nil
 }
 
 // InstallScript is the shell script, run as root, that installs text as

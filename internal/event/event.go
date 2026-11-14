@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Version is the envelope version.
@@ -62,6 +64,7 @@ const (
 	UIUnpinned       = "ui.unpinned"
 	UISubStopped     = "ui.sub_stopped"
 	UISpaced         = "ui.spaced"
+	UIGrouped        = "ui.grouped"
 	UIClosed         = "ui.closed"
 	UIReopened       = "ui.reopened"
 	UIUndo           = "ui.undo"
@@ -98,7 +101,7 @@ func init() {
 		SpawnRequested, SpawnFailed, SessionStarted, PromptSubmitted, ToolStarted, ToolFinished, ToolFailed,
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
-		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
+		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
 		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent,
 	} {
 		kinds[k] = true
@@ -236,7 +239,7 @@ func Validate(e Event) error {
 		bad("ts %q is not RFC 3339 UTC with milliseconds", e.TS)
 	}
 	if !sessionID.MatchString(e.Session) {
-		bad("session %q is not an Irie session id", e.Session)
+		bad("session %q is not an "+brand.Name+" session id", e.Session)
 	}
 	if e.Agent != "" && e.Agent != Main && (!strings.HasPrefix(e.Agent, "sub:") || e.Agent == "sub:") {
 		bad("agent %q is not main or sub:<id>", e.Agent)

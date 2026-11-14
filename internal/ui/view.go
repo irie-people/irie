@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
 )
@@ -141,7 +142,9 @@ const tagline = "you've got this 🌴"
 func (m Model) header() string {
 	p := m.pal
 	band := func(fg color.Color) lipgloss.Style { return on(p.ground, fg) }
-	title := blank(p.ground, 1) + band(p.sun).Render("☀") + band(p.accentInk).Bold(true).Render(" Irie")
+	// A long name (up to brand.MaxName) takes half the bar at most, so the
+	// counts keep their room.
+	title := blank(p.ground, 1) + band(p.sun).Render("☀") + band(p.accentInk).Bold(true).Render(" "+cut(brand.Name, max(6, (m.width-4)/2)))
 	right := ""
 	switch m.conn {
 	case offline:
@@ -185,7 +188,7 @@ func (m Model) header() string {
 		}
 	}
 	left := title
-	if phrase := "   " + tagline; lipgloss.Width(title)+lipgloss.Width(phrase)+lipgloss.Width(right)+2 <= m.width {
+	if phrase := "   " + tagline; !m.tips && lipgloss.Width(title)+lipgloss.Width(phrase)+lipgloss.Width(right)+2 <= m.width {
 		left += band(p.muted).Render(phrase)
 	}
 	return left + blank(p.ground, m.width-lipgloss.Width(left)-lipgloss.Width(right)-1) + right + blank(p.ground, 1)
@@ -298,8 +301,9 @@ func (m Model) statusLine() string {
 	case itemOutside:
 		return m.outsideStatus(m.outside[it.o])
 	case itemGroup:
+		// A group of yours inside another by its path, Work / Irie.
 		g := it.group
-		text := g.title + " · " + groupLabel(g)
+		text := strings.Join(g.path(), " / ") + " · " + groupLabel(g)
 		if g.outside {
 			text = "Claude Code sessions in other terminals · m moves an idle one in"
 		}

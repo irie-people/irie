@@ -11,11 +11,13 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -97,7 +99,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 	// selected is the selected row, which must be one of Irie's.
 	selected := func() (*Session, error) {
 		if sel == nil {
-			return nil, Errorf(CodeBadArgs, ":%s acts on the selected session; select one of Irie's.", name)
+			return nil, Errorf(CodeBadArgs, ":%s acts on the selected session; select one of "+brand.Name+"'s.", name)
 		}
 		return sel, nil
 	}
@@ -156,12 +158,51 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			task = strings.TrimSpace(task + "\n" + more)
 		}
 		return step(OpTool, ToolArgs{Name: ToolWrite, Task: Unpaste(task, in.Pastes)}, nil)
+	case name == "markets":
+		// :markets shows the market map, and :markets TASK starts the task
+		// in the map's folder (DESIGN §4.17). The task may run on over
+		// more lines, and takes +agent words as any task does; its folder
+		// is the map's, so it takes no @repo.
+		task := arg
+		if _, more, ok := strings.Cut(in.Text, "\n"); ok {
+			task = strings.TrimSpace(task + "\n" + more)
+		}
+		if task == "" {
+			return step(OpMarkets, MarketsArgs{}, nil)
+		}
+		a, err := ParseTask(task, v.Home)
+		if err != nil {
+			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
+		}
+		if a.Repo != "" || a.Cwd != "" {
+			return Step{}, Errorf(CodeBadArgs, ":markets runs its task in the map's folder, so it takes no @repo.")
+		}
+		a.Task = Unpaste(a.Task, in.Pastes)
+		if a.Profile == "" {
+			a.Profile = in.Profile
+		}
+		if a.Tutor == "" {
+			a.Tutor = in.Tutor
+		}
+		a.Model = in.Model
+		a.Space, a.After = in.Space, in.Session
+		return step(OpMarkets, MarketsArgs{Task: &a}, nil)
 	case name == "models" && arg == "":
 		return step(OpTool, ToolArgs{Name: ToolModels}, nil)
 	case name == "vpn":
 		return step(OpVPN, vpnArgs(arg), nil)
 	case name == "route" && arg != "":
 		return step(OpRoute, RouteArgs{Task: arg}, nil)
+	case name == "bench" && arg != "":
+		// :bench [^HOST] [+PROFILE] [@REPO] TASK runs the task on several
+		// sessions of one profile, then judges them (DESIGN §6.6). The
+		// task may run on over more lines.
+		a, err := BenchTask(arg, in.Text, v.Home)
+		if err != nil {
+			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
+		}
+		a.Task = Unpaste(a.Task, in.Pastes)
+		return step(OpBench, a, nil)
 	case (name == OpFreeze || name == OpThaw) && arg == "all":
 		return step(name, FreezeArgs{All: true}, nil)
 	case (name == OpFreeze || name == OpThaw) && arg == "":
@@ -207,6 +248,40 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return Step{}, Errorf(CodeBadArgs, ":%s takes the selected session, which must be one of this machine's and %s.", name, what)
 		}
 		return step(name, ParkArgs{Session: sel.ID}, sel)
+	case name == "group":
+		// :group makes a new group of the selected session, and :group
+		// NAME puts it in the group of that name, made when none has it.
+		if sel == nil || sel.Host != "" {
+			return Step{}, Errorf(CodeBadArgs, ":group takes the selected session, which must be one of this machine's.")
+		}
+		if arg == "" {
+			return step(OpGroup, GroupArgs{Do: GroupNew, Sessions: []string{sel.ID}}, sel)
+		}
+		return step(OpGroup, GroupArgs{Do: GroupAdd, Name: arg, Sessions: []string{sel.ID}}, sel)
+	case name == "ungroup" && arg == "":
+		// :ungroup takes the selected session one group out: into the
+		// group around its group, or none. With a group's header selected,
+		// it ungroups that group, whose sessions and groups stay where they
+		// are, in the group around it.
+		if sel == nil && in.Group != "" {
+			return step(OpGroup, GroupArgs{Do: GroupUngroup, Group: in.Group}, nil)
+		}
+		if sel == nil || sel.Group == "" {
+			return Step{}, Errorf(CodeBadArgs, ":ungroup takes the selected session, which must be in a group.")
+		}
+		return step(OpGroup, GroupArgs{Do: GroupRemove, Sessions: []string{sel.ID}}, sel)
+	case name == "nest":
+		// :nest NAME puts the selected group, or the selected session's,
+		// with what it holds, inside the group of that name or path,
+		// Work/Irie; :nest alone puts it back at the top of the list.
+		g := in.Group
+		if g == "" && sel != nil && sel.Host == "" {
+			g = sel.Group
+		}
+		if g == "" {
+			return Step{}, Errorf(CodeBadArgs, ":nest takes the selected group, or the group of the selected session, which must be in one.")
+		}
+		return step(OpGroup, GroupArgs{Do: GroupMove, Groups: []string{g}, Into: arg}, sel)
 	case name == OpFork:
 		// :fork [@AT] [TASK] carries the selected session's context on
 		// from a point of it, its newest turn by default (DESIGN §4.13).
@@ -234,7 +309,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		}
 		return Step{Op: OpMove, Args: MoveArgs{VendorID: o.VendorID}, Outside: o}, nil
 	}
-	return Step{}, Errorf(CodeBadArgs, "Irie has no :%s. The commands are %s.", name, Commands)
+	return Step{}, Errorf(CodeBadArgs, brand.Name+" has no :%s. The commands are %s.", name, Commands)
 }
 
 // vpnArgs reads the words after :vpn (docs/proposals/extensions.md §4.1):
@@ -265,7 +340,7 @@ func pickOutside(outside []OutsideSession, what, selected string) (*OutsideSessi
 				return &outside[i], nil
 			}
 		}
-		return nil, Errorf(CodeBadArgs, ":move brings in the selected session under Outside Irie, or one you name.")
+		return nil, Errorf(CodeBadArgs, ":move brings in the selected session under Outside "+brand.Name+", or one you name.")
 	}
 	var named []int
 	for i, o := range outside {
@@ -278,11 +353,11 @@ func pickOutside(outside []OutsideSession, what, selected string) (*OutsideSessi
 	}
 	switch len(named) {
 	case 0:
-		return nil, Errorf(CodeNotFound, "No session outside Irie is called “%s”.", what)
+		return nil, Errorf(CodeNotFound, "No session outside "+brand.Name+" is called “%s”.", what)
 	case 1:
 		return &outside[named[0]], nil
 	}
-	return nil, Errorf(CodeBadArgs, "%d sessions outside Irie are called “%s”; select one and :move it.", len(named), what)
+	return nil, Errorf(CodeBadArgs, "%d sessions outside "+brand.Name+" are called “%s”; select one and :move it.", len(named), what)
 }
 
 // outsideName is how a session outside Irie is called in words: its name,
@@ -354,7 +429,7 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		// A guide runs in a folder of Irie's, which Claude Code asks to
 		// trust the first time.
 		if n := as[ToolArgs](st.Args).Name; n == ToolSwitch || n == ToolWrite {
-			r.Text += " The first time, Claude Code asks whether to trust the guide's folder, which is Irie's own: choose Yes, I trust this folder."
+			r.Text += " The first time, Claude Code asks whether to trust the guide's folder, which is " + brand.Name + "'s own: choose Yes, I trust this folder."
 		}
 	case OpRename:
 		s := as[RenameResult](result).Session
@@ -378,7 +453,7 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Session, r.Text = &s, "Reopened "+s.Name+"."
 	case OpMove:
 		s := as[MoveResult](result).Session
-		r.Session, r.Text = &s, "Moved "+outsideName(*st.Outside)+" into Irie."
+		r.Session, r.Text = &s, "Moved "+outsideName(*st.Outside)+" into "+brand.Name+"."
 	case OpFork:
 		f := as[ForkResult](result)
 		s := f.Session
@@ -389,6 +464,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text += "."
 	case OpRoute:
 		r.Did, r.Text = InputAnswered, as[RouteChoice](result).Reason
+	case OpBench:
+		r.Text = BenchStarted(as[BenchResult](result).Bench)
 	case OpVPN:
 		r.Text = as[VPNResult](result).Text
 		if d := as[VPNArgs](st.Args).Do; d == "" || d == VPNTime {
@@ -396,6 +473,15 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		}
 	case OpPlugins:
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[PluginsResult](result).Text, "\n")
+	case OpMarkets:
+		// The Mac app opens its Markets window for the answer; a client
+		// without one says it.
+		m := as[MarketsResult](result)
+		if m.Session != nil {
+			r.Did, r.Session, r.Text = InputSpawned, m.Session, started(*m.Session)
+			break
+		}
+		r.Did, r.Text = InputAnswered, m.Text
 	case OpUndo, OpRedo:
 		u := as[UndoResult](result)
 		r.Text = undone(st.Op, u)
@@ -418,6 +504,30 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text = "Pinned " + name + ": no close but yours of it reaches it."
 	case OpUnpin:
 		r.Text = "Unpinned " + name + "."
+	case OpGroup:
+		g := as[GroupResult](result)
+		in := GroupTitle(g.Groups, g.Group, " / ")
+		switch a := as[GroupArgs](st.Args); {
+		case a.Do == GroupMove && len(a.Groups) > 0 && g.Steps == 0:
+			r.Did, r.Text = InputAnswered, "That group is there already."
+		case a.Do == GroupMove && len(a.Groups) > 0:
+			moved := g.Groups[max(0, FindGroup(g.Groups, a.Groups[0]))].ID
+			if in == "" {
+				r.Text = "Put the group " + GroupTitle(g.Groups, moved, " / ") + " at the top of the list. :undo puts it back."
+			} else {
+				r.Text = "Put the group " + GroupTitle(g.Groups, moved, " / ") + ". :undo puts it back."
+			}
+		case a.Do == GroupUngroup:
+			r.Text = "Ungrouped it: what it held stays where it is. :undo groups it again."
+		case a.Do == GroupRemove:
+			r.Text = "Took " + name + " out of its group. :undo puts it back."
+		case len(g.Sessions) == 0:
+			r.Did, r.Text = InputAnswered, name+" is in "+in+" already."
+		case as[GroupArgs](st.Args).Do == GroupNew:
+			r.Text = "Made the group " + in + " of " + name + ". :group NAME puts another session in it."
+		default:
+			r.Text = "Put " + name + " in the group " + in + "."
+		}
 	default:
 		r.Text = "Done."
 	}
@@ -449,7 +559,7 @@ func undone(op string, u UndoResult) string {
 		if u.Choice != nil {
 			return u.Choice.Question
 		}
-		return "Irie asks about " + what + "."
+		return brand.Name + " asks about " + what + "."
 	case DidUndo:
 		return "Undid " + what + "."
 	case DidRedo:

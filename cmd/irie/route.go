@@ -11,6 +11,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	irie "github.com/irie-people/irie/core"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/route"
@@ -40,7 +42,7 @@ func ctlRoute(args []string) error {
 		return err
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl route [--json] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl route [--json] TASK...")
 	}
 	if err := up(nil); err != nil {
 		return err
@@ -66,7 +68,7 @@ func printChoice(w io.Writer, ch route.Choice) {
 	fmt.Fprintf(w, "class    %s (%s)\n", ch.Class, ch.Why)
 	fmt.Fprintf(w, "choice   %s\n\n", ch.Reason)
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "PROFILE\tACCURACY\tOUTCOMES\tCOST\tPER SUCCESS\tNOTE")
+	fmt.Fprintln(tw, "PROFILE\tACCURACY\tFLOOR\tOUTCOMES\tCOST\tPER SUCCESS\tNOTE")
 	for _, c := range ch.Candidates {
 		note := c.Note
 		if !c.Usable && note == "" {
@@ -76,7 +78,11 @@ func printChoice(w io.Writer, ch route.Choice) {
 		if c.Profile == ch.Profile {
 			mark = "→"
 		}
-		fmt.Fprintf(tw, "%s %s\t%s\t%d\t%s\t%s\t%s\n", mark, c.Profile, route.Percent(c.Accuracy), c.Outcomes, route.Relative(c.Cost), route.Relative(c.PerSuccess), note)
+		floor := "-"
+		if c.Floor > 0 {
+			floor = route.Percent(c.Floor)
+		}
+		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%d\t%s\t%s\t%s\n", mark, c.Profile, route.Percent(c.Accuracy), floor, c.Outcomes, route.Relative(c.Cost), route.Relative(c.PerSuccess), note)
 	}
 	tw.Flush()
 }
@@ -100,7 +106,7 @@ func ctlDelegate(args []string) error {
 		return err
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -117,7 +123,7 @@ func ctlDelegate(args []string) error {
 	if profile == "" {
 		profile = config.Auto
 	}
-	a := ipc.SpawnArgs{Task: task, Cwd: cwd, Profile: profile, Delegate: true, Parent: os.Getenv("IRIE_SESSION"), PermissionMode: *mode}
+	a := ipc.SpawnArgs{Task: task, Cwd: cwd, Profile: profile, Delegate: true, Parent: os.Getenv(brand.Env("SESSION")), PermissionMode: *mode}
 	var r ipc.SpawnResult
 	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		var ie *ipc.Error
@@ -127,7 +133,7 @@ func ctlDelegate(args []string) error {
 		return err
 	}
 	s := r.Session
-	fmt.Fprintf(os.Stderr, "irie: delegated to +%s as %s (%s)\n", s.Profile, s.Name, s.ID)
+	fmt.Fprintf(os.Stderr, brand.Slug+": delegated to +%s as %s (%s)\n", s.Profile, s.Name, s.ID)
 	return waitDone(os.Stdout, p.Socket(), s.ID, *timeout)
 }
 
@@ -165,13 +171,13 @@ func waitDone(w io.Writer, sock, id string, timeout time.Duration) error {
 				return errors.New(msg)
 			case s.State == ipc.StateNeedsYou, s.State == ipc.StateStalled:
 				if told != s.Detail {
-					fmt.Fprintf(os.Stderr, "irie: %s needs the user in Irie: %s\n", s.Name, s.Detail)
+					fmt.Fprintf(os.Stderr, brand.Slug+": %s needs the user in "+brand.Name+": %s\n", s.Name, s.Detail)
 					told = s.Detail
 				}
 			}
 		}
 		if time.Now().After(deadline) {
-			return exitCode{exitStillRunning, fmt.Errorf("session %s is still at work after %v; it goes on in Irie", id, timeout)}
+			return exitCode{exitStillRunning, fmt.Errorf("session %s is still at work after %v; it goes on in "+brand.Name, id, timeout)}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -179,11 +185,115 @@ func waitDone(w io.Writer, sock, id string, timeout time.Duration) error {
 
 func ctlRate(args []string) error {
 	if len(args) != 2 || (args[1] != ipc.Good && args[1] != ipc.Bad) {
-		return errors.New("usage: irie ctl rate SESSION good|bad")
+		return errors.New("usage: " + brand.Slug + " ctl rate SESSION good|bad")
 	}
 	sock, err := socket()
 	if err != nil {
 		return err
 	}
 	return ipc.Call(sock, 5*time.Second, ipc.OpRate, ipc.RateArgs{Session: args[0], Verdict: args[1]}, nil)
+}
+
+func ctlBench(args []string) error {
+	fs := flag.NewFlagSet("ctl bench", flag.ContinueOnError)
+	runs := fs.Int("runs", 0, "how many sessions run the task; default bench.runs")
+	judge := fs.String("judge", "", "the profile that judges them; default bench.judge")
+	wait := fs.Bool("wait", false, "wait until the bench is judged, and print the verdict")
+	asJSON := fs.Bool("json", false, "print as JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	task, err := taskArg(fs.Args())
+	if err != nil {
+		return err
+	}
+	if err := up(nil); err != nil {
+		return err
+	}
+	_, p, err := load()
+	if err != nil {
+		return err
+	}
+	sock := p.Socket()
+	if strings.TrimSpace(task) == "" {
+		var r ipc.BenchResult
+		if err := ipc.Call(sock, 5*time.Second, ipc.OpBench, ipc.BenchArgs{}, &r); err != nil {
+			return err
+		}
+		if *asJSON {
+			return json.NewEncoder(os.Stdout).Encode(r.Benches)
+		}
+		if len(r.Benches) == 0 {
+			fmt.Println("no benches yet; " + irie.BenchUsage)
+			return nil
+		}
+		for _, b := range r.Benches {
+			fmt.Println(irie.BenchLine(b))
+		}
+		return nil
+	}
+	home, _ := os.UserHomeDir()
+	first, _, _ := strings.Cut(task, "\n")
+	a, err := irie.BenchTask(first, task, home)
+	if err != nil {
+		return fmt.Errorf("%v\n%s", err, irie.BenchUsage)
+	}
+	a.Runs, a.Judge = *runs, strings.TrimPrefix(*judge, "+")
+	var r ipc.BenchResult
+	// Its runs start one after another, and the first may load a local
+	// model, which can take minutes.
+	if err := ipc.Call(sock, 10*time.Minute, ipc.OpBench, a, &r); err != nil {
+		return err
+	}
+	if !*wait {
+		if *asJSON {
+			return json.NewEncoder(os.Stdout).Encode(r.Bench)
+		}
+		fmt.Println(irie.BenchStarted(r.Bench))
+		return nil
+	}
+	id := r.Bench.ID
+	for {
+		time.Sleep(5 * time.Second)
+		var lr ipc.BenchResult
+		if err := ipc.Call(sock, 5*time.Second, ipc.OpBench, ipc.BenchArgs{}, &lr); err != nil {
+			// The core may be restarting; it carries on with the bench.
+			continue
+		}
+		for _, b := range lr.Benches {
+			if b.ID != id || (b.State != ipc.BenchDone && b.State != ipc.BenchFailed) {
+				continue
+			}
+			if *asJSON {
+				return json.NewEncoder(os.Stdout).Encode(b)
+			}
+			printBench(os.Stdout, b)
+			if b.State == ipc.BenchFailed {
+				return errors.New(b.Problem)
+			}
+			return nil
+		}
+	}
+}
+
+// printBench prints a judged bench: each run's score and what it missed,
+// what the judge made, and the playbook's size.
+func printBench(w io.Writer, b ipc.Bench) {
+	fmt.Fprintf(w, "bench %s: %s, +%s, %s work\n", b.ID, b.State, b.Profile, b.Class)
+	for i, r := range b.Runs {
+		score := "-"
+		if r.Score != nil {
+			score = fmt.Sprint(*r.Score)
+		}
+		fmt.Fprintf(w, "  run %d  %s  %-4s %s  %s\n", i+1, r.Session, r.Verdict, score, r.Missed)
+	}
+	if b.JudgeID != "" {
+		fmt.Fprintf(w, "  judge  %s (+%s)\n", b.JudgeID, b.Judge)
+	}
+	if b.Final != "" {
+		fmt.Fprintf(w, "  result %s\n", b.Final)
+	}
+	if b.State == ipc.BenchDone {
+		fmt.Fprintf(w, "  playbook: %d rules for +%s\n", b.Rules, b.Profile)
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -49,6 +50,67 @@ func screenLines(out string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
+}
+
+// promptMarks start the line of the agent's own prompt: Claude Code draws
+// ❯, and > before it.
+var promptMarks = []string{"❯", ">"}
+
+// agentPrompt finds the agent's own prompt, where you type it a message,
+// on a screen's lines, as Claude Code draws it near the bottom: a line
+// that starts with its mark, right under a rule across the terminal, with
+// a title in the rule or none, and the lines down to the next rule. Before
+// 2.0 a box drew the rules and edged the lines. typed is what the prompt
+// holds, its lines joined by newlines, without the mark. shows is false
+// when no prompt shows, as while a permission's, a question's or a plan's
+// menu stands in for it, or a dialog such as /config. The prompt nearest
+// the bottom is the one; a line of the conversation above never sits
+// between two rules with nothing after its mark. The Mac app reads its
+// terminal by the same rule (ContinueKey.swift).
+func agentPrompt(lines []string) (typed string, shows bool) {
+	for i := len(lines) - 1; i > 0; i-- {
+		first, ok := promptLine(lines[i])
+		if !ok || !isRule(lines[i-1]) {
+			continue
+		}
+		text := []string{first}
+		for _, l := range lines[i+1:] {
+			if isRule(l) {
+				return strings.TrimSpace(strings.Join(text, "\n")), true
+			}
+			text = append(text, unboxed(l))
+		}
+		return "", false
+	}
+	return "", false
+}
+
+// promptLine is what follows the prompt's mark on line l, and whether l
+// starts with one.
+func promptLine(l string) (string, bool) {
+	l = unboxed(l)
+	for _, m := range promptMarks {
+		if rest, ok := strings.CutPrefix(l, m); ok && (rest == "" || unicode.IsSpace([]rune(rest)[0])) {
+			return strings.TrimSpace(rest), true
+		}
+	}
+	return "", false
+}
+
+// unboxed is line l without the blanks round it and a box's edges.
+func unboxed(l string) string {
+	l = strings.TrimSpace(l)
+	l = strings.TrimSuffix(strings.TrimPrefix(l, "│"), "│")
+	return strings.TrimSpace(l)
+}
+
+// isRule says whether line l is a rule across the terminal, as over and
+// under Claude Code's prompt: ─ from its start, or a box's corner, and a
+// run of them, maybe with a title such as the session's name.
+func isRule(l string) bool {
+	l = strings.TrimSpace(l)
+	starts := strings.HasPrefix(l, "─") || strings.HasPrefix(l, "╭") || strings.HasPrefix(l, "╰")
+	return starts && strings.Contains(l, strings.Repeat("─", 8))
 }
 
 // menuLine is one line of a prompt's menu, as Claude Code draws its
@@ -121,7 +183,7 @@ func (c *Core) keys(a ipc.KeysArgs) error {
 	}
 	for _, k := range a.Keys {
 		if !keyName(k) {
-			return ipc.Errorf(ipc.CodeBadArgs, "%q is not a key Irie presses: a letter, a digit, or one of %s", k, strings.Join(ipc.KeyNames, ", "))
+			return ipc.Errorf(ipc.CodeBadArgs, "%q is not a key "+brand.Name+" presses: a letter, a digit, or one of %s", k, strings.Join(ipc.KeyNames, ", "))
 		}
 	}
 	if len(a.Text) > maxKeysText {
@@ -164,7 +226,7 @@ func (c *Core) keys(a ipc.KeysArgs) error {
 			return err
 		}
 		defer os.Remove(file)
-		buf := "irie-keys-" + x.id
+		buf := brand.Slug + "-keys-" + x.id
 		cmds = append(cmds, []string{"load-buffer", "-b", buf, file}, []string{"paste-buffer", "-p", "-d", "-b", buf, "-t", x.pane})
 	}
 	if _, err := c.tmux.RunList(cmds); err != nil {

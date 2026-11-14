@@ -11,12 +11,13 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
 // psUsage is the part of ctlUsage for agents seen as processes
 // (proposals/agent-os.md).
-const psUsage = `  irie ctl ps [--json] [--watch]         every agent as a process: its state as a
+const psUsage = `  ` + brand.Slug + ` ctl ps [--json] [--watch]         every agent as a process: its state as a
                                          letter (R working, S done or idle, W
                                          waits on you, H paused, T frozen, I
                                          starting, Z exited, X failed), priority,
@@ -50,7 +51,7 @@ func ctlPs(args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: irie ctl ps [--json] [--watch]")
+		return errors.New("usage: " + brand.Slug + " ctl ps [--json] [--watch]")
 	}
 	sock, err := socket()
 	if err != nil {

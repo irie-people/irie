@@ -25,11 +25,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Plugin is the plugin's name, which Claude Code puts before each skill's:
 // /irie:present.
-const Plugin = "irie"
+const Plugin = brand.Slug
 
 // Skill is one skill Irie can hand an agent.
 type Skill struct {
@@ -39,12 +41,30 @@ type Skill struct {
 	Files       map[string][]byte // its files, by slash path inside its folder
 }
 
-//go:embed bundled
+// bundled are the skills that come with every build. A plugin's skills
+// come with its plugin (DESIGN §4.17): bundled_privacy.go and
+// bundled_writing.go add theirs to plugged, so a build tag that leaves a
+// plugin out leaves its skills out too.
+//
+//go:embed bundled/present bundled/out-of-sight
 var bundled embed.FS
+
+// plugged are the bundled skills of the plugins this build has.
+var plugged []embed.FS
 
 // Bundled returns the skills built into this binary, by name. Each is a
 // folder of bundled/ with a SKILL.md whose frontmatter names it.
 func Bundled() []Skill {
+	var out []Skill
+	for _, f := range append([]embed.FS{bundled}, plugged...) {
+		out = append(out, bundledIn(f)...)
+	}
+	slices.SortFunc(out, func(a, b Skill) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+// bundledIn reads the skills of one embedded bundled/ folder.
+func bundledIn(bundled embed.FS) []Skill {
 	entries, err := fs.ReadDir(bundled, "bundled")
 	if err != nil {
 		panic(err) // the embed holds the folder
@@ -54,7 +74,7 @@ func Bundled() []Skill {
 		if !e.IsDir() {
 			continue
 		}
-		s := Skill{Name: e.Name(), Source: "bundled with Irie", Files: map[string][]byte{}}
+		s := Skill{Name: e.Name(), Source: "bundled with " + brand.Name, Files: map[string][]byte{}}
 		root := "bundled/" + e.Name()
 		err := fs.WalkDir(bundled, root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
@@ -63,6 +83,9 @@ func Bundled() []Skill {
 			b, err := bundled.ReadFile(p)
 			if err != nil {
 				return err
+			}
+			if strings.HasSuffix(p, ".md") {
+				b = []byte(brand.Text(string(b)))
 			}
 			s.Files[strings.TrimPrefix(p, root+"/")] = b
 			return nil
@@ -73,7 +96,6 @@ func Bundled() []Skill {
 		s.Description = Frontmatter(s.Files["SKILL.md"])["description"]
 		out = append(out, s)
 	}
-	slices.SortFunc(out, func(a, b Skill) int { return strings.Compare(a.Name, b.Name) })
 	return out
 }
 
@@ -172,14 +194,14 @@ func Layout(set []Skill, version string) map[string][]byte {
 		License     string `json:"license"`
 	}{
 		Name:        Plugin,
-		Description: "Skills that come with Irie, handed to this session only",
+		Description: "Skills that come with " + brand.Name + ", handed to this session only",
 		Version:     version,
-		Author:      author{Name: "Irie", URL: "https://github.com/irie-people/irie"},
+		Author:      author{Name: brand.Name, URL: brand.Repo},
 		License:     "Apache-2.0",
 	}, "", "  ")
 	files[".claude-plugin/plugin.json"] = append(manifest, '\n')
 	var src strings.Builder
-	src.WriteString("# Sources\n\nIrie made this folder for its sessions, and never changes it while one uses it. Each skill and where it comes from:\n\n| Skill | Source |\n|---|---|\n")
+	src.WriteString("# Sources\n\n" + brand.Name + " made this folder for its sessions, and never changes it while one uses it. Each skill and where it comes from:\n\n| Skill | Source |\n|---|---|\n")
 	for _, s := range set {
 		fmt.Fprintf(&src, "| %s | %s %s |\n", s.Name, s.Source, version)
 		for p, b := range s.Files {

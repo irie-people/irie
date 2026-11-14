@@ -14,45 +14,50 @@ import (
 	"time"
 
 	irie "github.com/irie-people/irie/core"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 )
 
-const ctlUsage = `usage: irie ctl <command>
+const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
 
-  irie ctl list [--json]                 the sessions and their states
-  irie ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
+  ` + brand.Slug + ` ctl list [--json]                 the sessions and their states
+  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
-                                         starting Irie if needed. @REPO runs it in
+                                         starting ` + brand.Name + ` if needed. @REPO runs it in
                                          a new worktree of that repo, @REPO! in the
                                          repo's own checkout; +PROFILE picks the
                                          agent, +ollama:MODEL a local model. TASK -
                                          reads the task from stdin. --wait waits
                                          until the agent is ready, and fails if it
                                          is not; --force spawns a local profile even
-                                         when its context or memory falls short
-  irie ctl input [--json] [--session SESSION] TEXT...
-                                         type to Irie as into a task bar, and
+                                         when its context or memory falls short;
+                                         --group puts it in the group of that name
+                                         or path, Work/Sidebar, made when none has it
+                                         (else it goes in the group of the session
+                                         this runs in)
+  ` + brand.Slug + ` ctl input [--json] [--session SESSION] TEXT...
+                                         type to ` + brand.Name + ` as into a task bar, and
                                          print what it says: a task with its @
                                          and + words, a question such as "hows
                                          the parser?", or a : command, which acts
                                          on SESSION, by id or name. TEXT - reads
                                          stdin
-  irie ctl history [--json] [QUERY...]   the sessions that closed, newest first, whose
+  ` + brand.Slug + ` ctl history [--json] [QUERY...]   the sessions that closed, newest first, whose
                                          name or id has every QUERY word. With
                                          spawn.close_when_done a finished session
                                          closes itself, so the sidebar has no
                                          To verify group: look here instead
-  irie ctl dog [--json]                  the jots that are not through: those whose
+  ` + brand.Slug + ` ctl dog [--json]                  the jots that are not through: those whose
                                          turn is over but whose work is not committed,
                                          or not yet in their repo's land branch
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
-  irie ctl arch [--json]                 Irie's arch agents: each one's icon, name
+  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
-  irie ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]
+  ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
                                          Gabriel: whether you are at the computer
                                          and it is busy, what is in your focus,
                                          and the sessions and apps he holds back
@@ -60,8 +65,11 @@ const ctlUsage = `usage: irie ctl <command>
                                          (arch.gabriel.on); boost gives your focus
                                          the machine first for a while (an hour,
                                          arch.gabriel.boost) busy or not, and frees
-                                         idle local models; boost off ends it
-  irie ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]
+                                         idle local models; boost always puts it
+                                         first whenever you are at the computer
+                                         (arch.gabriel.always); boost off ends
+                                         either
+  ` + brand.Slug + ` ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]
                                          Raphael (Raffi): what his last look over
                                          your Mac found, with his advice: what runs
                                          hot, memory and swap, the disk and the
@@ -73,7 +81,7 @@ const ctlUsage = `usage: irie ctl <command>
                                          it on your OK; mine N tells him a startup
                                          item is yours; on and off turn him on or
                                          off (arch.raphael.on)
-  irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]
+  ` + brand.Slug + ` ctl trod [on|off|now [--until HH:MM]|stop] [--json]
                                          the trod bot: whether it works now,
                                          the rules and guidelines it gives each
                                          agent it sends on, and what it did
@@ -83,54 +91,64 @@ const ctlUsage = `usage: irie ctl <command>
                                          watch until no session has work left
                                          or the plan is as full as it may get;
                                          stop ends it
-  irie ctl close [SESSION]               close a session, by id or name, or with
+  ` + brand.Slug + ` ctl close [SESSION]               close a session, by id or name, or with
                                          none the one this runs in: an agent
                                          closes its own once you approve its
                                          work. It is done: the jot dog lets it
                                          be. history lists it and reopen
                                          brings it back
-  irie ctl reopen [--lost | SESSION]     bring a closed session back, by id or name
+  ` + brand.Slug + ` ctl reopen [--lost | SESSION]     bring a closed session back, by id or name
                                          (the one closed last with none), carrying
                                          on its conversation; prints its new id.
                                          --lost brings back every session the last
                                          restart lost, one at a time, pinned,
                                          parked or frozen as it was
-  irie ctl show [--focus] SESSION        show a session in the slot
-  irie ctl rename SESSION NAME...        rename a session, by its id or name,
+  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
+  ` + brand.Slug + ` ctl rename SESSION NAME...        rename a session, by its id or name,
                                          and print the name it got: numbered
                                          when another session has it
-  irie ctl flip                          flip the slot between the shown session's
+  ` + brand.Slug + ` ctl flip                          flip the slot between the shown session's
                                          conversation and its raw terminal
-  irie ctl send SESSION TEXT...          type a message to a session's agent, as
+  ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, as
                                          a person would; TEXT - reads stdin
-  irie ctl conversation [--json] [--follow] SESSION
+  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on: type
+                                         "continue" and Enter, only while its
+                                         prompt shows with nothing typed in it
+  ` + brand.Slug + ` ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
                                          printing what changes
-  irie ctl watch [--session SESSION]     print events as NDJSON until interrupted
-  irie ctl move [--wait] [+PROFILE] SESSION
+  ` + brand.Slug + ` ctl watch [--session SESSION]     print events as NDJSON until interrupted
+  ` + brand.Slug + ` ctl move [--wait] [+PROFILE] SESSION
                                          carry an idle Claude Code session that
-                                         runs outside Irie on in Irie, and print
+                                         runs outside ` + brand.Name + ` on in ` + brand.Name + `, and print
                                          its new session id. SESSION is its id or
-                                         name, as ctl list shows under OUTSIDE IRIE
-  irie ctl local [--json]                the local Ollama server, the machine's
+                                         name, as ctl list shows it under OUTSIDE
+  ` + brand.Slug + ` ctl local [--json]                the local Ollama server, the machine's
                                          memory, and each model weighed against it
-  irie ctl preflight [--model MODEL] [--force] [PROFILE]
+  ` + brand.Slug + ` ctl preflight [--model MODEL] [--force] [PROFILE]
                                          check a local profile's model (default
                                          +local) as a spawn would, loading it
-  irie ctl route [--json] TASK...        where +auto would run a task, and why:
+  ` + brand.Slug + ` ctl route [--json] TASK...        where +auto would run a task, and why:
                                          each profile's accuracy for the task's
                                          class, its cost and its cost per success
-  irie ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...
+  ` + brand.Slug + ` ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...
                                          from an agent: run a subtask in this
                                          directory on the cheapest profile accurate
                                          enough for it, wait, and print its result.
                                          Exits 3 when it needs a stronger model
                                          than the caller's cheaper ones, 4 when it
                                          is still running at the timeout
-  irie ctl rate SESSION good|bad         rate a session's work; the router learns
+  ` + brand.Slug + ` ctl rate SESSION good|bad         rate a session's work; the router learns
                                          each profile's accuracy from it
-  irie ctl perf [--json]                 the core's own counters since it started:
+  ` + brand.Slug + ` ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK...
+                                         run a task on several sessions of one
+                                         profile (default the first local one),
+                                         here or on HOST; a judge then scores
+                                         each, makes the one result and rewrites
+                                         the profile's playbook. With no task,
+                                         list the benches
+  ` + brand.Slug + ` ctl perf [--json]                 the core's own counters since it started:
                                          each request and how long it took, waits
                                          on its lock, frames sent, ticks, and its
                                          runs of claude agents. go run ./tools/perf
@@ -173,6 +191,8 @@ func ctl(args []string) error {
 		return ctlConversation(args[1:])
 	case "send":
 		return ctlSend(args[1:])
+	case "continue":
+		return ctlContinue(args[1:])
 	case "flip":
 		return ctlFlip(args[1:])
 	case "watch":
@@ -187,6 +207,8 @@ func ctl(args []string) error {
 		return ctlRoute(args[1:])
 	case "delegate":
 		return ctlDelegate(args[1:])
+	case "bench":
+		return ctlBench(args[1:])
 	case "rate":
 		return ctlRate(args[1:])
 	case "perf":
@@ -201,6 +223,12 @@ func ctl(args []string) error {
 		return ctlPark(args[1:], args[0] == "park")
 	case "pin", "unpin":
 		return ctlPin(args[1:], args[0] == "pin")
+	case "group":
+		return ctlGroup(args[1:])
+	case "ungroup":
+		return ctlUngroup(args[1:])
+	case "nest":
+		return ctlNest(args[1:])
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":
@@ -221,7 +249,7 @@ func socket() (string, error) {
 		return "", err
 	}
 	if _, err := os.Stat(p.Socket()); err != nil {
-		return "", errors.New("Irie is not running; `irie up` starts it")
+		return "", errors.New(brand.Name + " is not running; `" + brand.Slug + " up` starts it")
 	}
 	return p.Socket(), nil
 }
@@ -286,7 +314,7 @@ func printList(w io.Writer, r ipc.ListResult) error {
 	// Claude Code sessions that run outside Irie, under a heading of their
 	// own; ctl move takes them by id or name.
 	if len(r.Outside) > 0 || r.OutsideProblem != "" {
-		fmt.Fprintln(tw, "\nOUTSIDE IRIE")
+		fmt.Fprintln(tw, "\nOUTSIDE "+strings.ToUpper(brand.Name))
 		if r.OutsideProblem != "" {
 			fmt.Fprintln(tw, r.OutsideProblem)
 		}
@@ -319,7 +347,7 @@ func ctlInput(args []string) error {
 		text = string(b)
 	}
 	if strings.TrimSpace(text) == "" {
-		return errors.New("usage: irie ctl input [--json] [--session SESSION] TEXT...")
+		return errors.New("usage: " + brand.Slug + " ctl input [--json] [--session SESSION] TEXT...")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -358,7 +386,7 @@ func ctlInput(args []string) error {
 
 func ctlRename(args []string) error {
 	if len(args) < 2 {
-		return errors.New("usage: irie ctl rename SESSION NAME...")
+		return errors.New("usage: " + brand.Slug + " ctl rename SESSION NAME...")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -392,7 +420,7 @@ func or(s, fallback string) string {
 // ctlMove moves a session that runs outside Irie in. It finds the session
 // by its full id, its short id or its name in the core's list.
 func ctlMove(args []string) error {
-	const usage = "usage: irie ctl move [--wait] [+PROFILE] SESSION"
+	const usage = "usage: " + brand.Slug + " ctl move [--wait] [+PROFILE] SESSION"
 	fs := flag.NewFlagSet("ctl move", flag.ContinueOnError)
 	wait := fs.Bool("wait", false, "wait until the moved session is ready, and fail if it is not")
 	if err := fs.Parse(args); err != nil {
@@ -455,7 +483,7 @@ func pickOutside(r ipc.ListResult, what string) (string, error) {
 		if len(what) == 36 && strings.Count(what, "-") == 4 {
 			return what, nil
 		}
-		msg := fmt.Sprintf("no Claude Code session %q runs outside Irie; `irie ctl list` shows them", what)
+		msg := fmt.Sprintf("no Claude Code session %q runs outside "+brand.Name+"; `"+brand.Slug+" ctl list` shows them", what)
 		if r.OutsideProblem != "" {
 			msg += " (" + r.OutsideProblem + ")"
 		}
@@ -478,6 +506,7 @@ func ctlSpawn(args []string) error {
 	name := fs.String("name", "", "name the session")
 	wait := fs.Bool("wait", false, "wait until the agent is ready, and fail if it is not")
 	force := fs.Bool("force", false, "spawn a local profile even when its context or memory falls short")
+	group := fs.String("group", "", "put the session in the group of this name, made when none has it")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -497,7 +526,7 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...")
 	}
 	if *cwd != "" && a.Repo != "" {
 		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
@@ -518,10 +547,10 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.Task, a.Cwd, a.Name, a.Force = task, dir, *name, *force
+	a.Task, a.Cwd, a.Name, a.Force, a.Group = task, dir, *name, *force, strings.TrimSpace(*group)
 	// An agent's spawn goes beside its own session when ui.new_tabs is
 	// next.
-	a.After = os.Getenv("IRIE_SESSION")
+	a.After = os.Getenv(brand.Env("SESSION"))
 	var r ipc.SpawnResult
 	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		return err
@@ -571,7 +600,7 @@ func ctlShow(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: irie ctl show [--focus] SESSION")
+		return errors.New("usage: " + brand.Slug + " ctl show [--focus] SESSION")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -618,7 +647,7 @@ func ctlConversation(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: irie ctl conversation [--json] [--follow] SESSION")
+		return errors.New("usage: " + brand.Slug + " ctl conversation [--json] [--follow] SESSION")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -629,7 +658,7 @@ func ctlConversation(args []string) error {
 			return json.NewEncoder(os.Stdout).Encode(cv)
 		}
 		if cv.Reset && len(cv.Items) == 0 && cv.Transcript == "" {
-			fmt.Println("(no transcript: this session started before Irie followed transcripts; its terminal has everything)")
+			fmt.Println("(no transcript: this session started before " + brand.Name + " followed transcripts; its terminal has everything)")
 		}
 		for _, it := range cv.Items {
 			fmt.Println(conversationLine(it))
@@ -697,7 +726,7 @@ func conversationLine(it ipc.Item) string {
 
 func ctlSend(args []string) error {
 	if len(args) < 2 {
-		return errors.New("usage: irie ctl send SESSION TEXT...")
+		return errors.New("usage: " + brand.Slug + " ctl send SESSION TEXT...")
 	}
 	text := strings.Join(args[1:], " ")
 	if text == "-" {
@@ -712,6 +741,17 @@ func ctlSend(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+}
+
+func ctlContinue(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: " + brand.Slug + " ctl continue SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: args[0]}, nil)
 }
 
 // matchClosed are the closed sessions whose name or id holds every word of
@@ -781,7 +821,7 @@ func ctlReopen(args []string) error {
 	}
 	args = fs.Args()
 	if len(args) > 1 || *lost && len(args) > 0 {
-		return errors.New("usage: irie ctl reopen [--lost | SESSION]")
+		return errors.New("usage: " + brand.Slug + " ctl reopen [--lost | SESSION]")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -834,7 +874,7 @@ func reopenLost(sock string) error {
 	for i, c := range batch {
 		var r ipc.ReopenResult
 		if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: c.ID}, &r); err != nil {
-			fmt.Fprintf(os.Stderr, "irie: %s did not come back: %v\n", c.Name, err)
+			fmt.Fprintf(os.Stderr, brand.Slug+": %s did not come back: %v\n", c.Name, err)
 			failed++
 			continue
 		}
@@ -891,7 +931,7 @@ func waitStarted(sock, id string, d time.Duration) {
 // its work (DESIGN §4.5).
 func ctlClose(args []string) error {
 	if len(args) > 1 {
-		return errors.New("usage: irie ctl close [SESSION]")
+		return errors.New("usage: " + brand.Slug + " ctl close [SESSION]")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -901,7 +941,7 @@ func ctlClose(args []string) error {
 	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
 		return err
 	}
-	id, err := sessionTarget("close", args, os.Getenv("IRIE_SESSION"), l.Sessions)
+	id, err := sessionTarget("close", args, os.Getenv(brand.Env("SESSION")), l.Sessions)
 	if err != nil {
 		return err
 	}
@@ -915,7 +955,7 @@ func ctlClose(args []string) error {
 func sessionTarget(verb string, args []string, own string, sessions []ipc.Session) (string, error) {
 	if len(args) == 0 {
 		if own == "" {
-			return "", fmt.Errorf("usage: irie ctl %s [SESSION]: with no SESSION it %ss the session it runs in, and it runs in none", verb, verb)
+			return "", fmt.Errorf("usage: "+brand.Slug+" ctl %s [SESSION]: with no SESSION it %ss the session it runs in, and it runs in none", verb, verb)
 		}
 		return own, nil
 	}
@@ -929,7 +969,7 @@ func sessionTarget(verb string, args []string, own string, sessions []ipc.Sessio
 
 func ctlFlip(args []string) error {
 	if len(args) > 0 {
-		return errors.New("usage: irie ctl flip")
+		return errors.New("usage: " + brand.Slug + " ctl flip")
 	}
 	sock, err := socket()
 	if err != nil {

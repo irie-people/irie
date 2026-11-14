@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/repo"
 )
@@ -24,7 +25,7 @@ func ctlDog(args []string) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return errors.New("usage: irie ctl dog [--json]")
+		return errors.New("usage: " + brand.Slug + " ctl dog [--json]")
 	}
 	sock, err := socket()
 	if err != nil {

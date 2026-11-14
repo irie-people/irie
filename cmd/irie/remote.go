@@ -20,6 +20,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/core"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
@@ -27,31 +28,31 @@ import (
 	"github.com/irie-people/irie/internal/version"
 )
 
-const remoteUsage = `usage: irie remote <command>
+const remoteUsage = `usage: ` + brand.Slug + ` remote <command>
 
-The phone app (docs/PHONE.md): this machine's Irie on your phone, over your
+The phone app (docs/PHONE.md): this machine's ` + brand.Name + ` on your phone, over your
 local network. Turn it on with remote.on = true in the config; the core then
 keeps it running.
 
-  irie remote on [--name NAME]
+  ` + brand.Slug + ` remote on [--name NAME]
                           turn the phone app on for this machine (remote.on),
                           and name it for the phone
-  irie remote off         turn it off
-  irie remote pair [--for DURATION] [--open] [--link]
+  ` + brand.Slug + ` remote off         turn it off
+  ` + brand.Slug + ` remote pair [--for DURATION] [--open] [--link]
                           open a pairing code for a phone (10 minutes by
                           default) and say where the phone sets up; --open
                           shows it with a QR code in the browser; --link
                           prints only the pairing link, which another
-                          machine's irie peer add takes
-  irie remote devices     list the phones paired with this machine
-  irie remote forget ID|NAME|all
+                          machine's ` + brand.Slug + ` peer add takes
+  ` + brand.Slug + ` remote devices     list the phones paired with this machine
+  ` + brand.Slug + ` remote forget ID|NAME|all
                           unpair a phone
-  irie remote ca export   print the certificate authority with its key, for
+  ` + brand.Slug + ` remote ca export   print the certificate authority with its key, for
                           another machine of yours to import
-  irie remote ca import   take an authority from stdin, so one profile on the
+  ` + brand.Slug + ` remote ca import   take an authority from stdin, so one profile on the
                           phone serves both machines
-  irie remote ca profile  print the authority as an iOS profile
-  irie remote serve [--supervise]
+  ` + brand.Slug + ` remote ca profile  print the authority as an iOS profile
+  ` + brand.Slug + ` remote serve [--supervise]
                           the gateway itself, which the core runs
 `
 
@@ -101,7 +102,7 @@ func remoteCmd(args []string) error {
 		fs := flag.NewFlagSet("remote pair", flag.ContinueOnError)
 		life := fs.Duration("for", remote.CodeLife, "how long the code works")
 		open := fs.Bool("open", false, "show the code and a QR code in the browser")
-		link := fs.Bool("link", false, "print only the pairing link, for `irie peer add` on another machine")
+		link := fs.Bool("link", false, "print only the pairing link, for `"+brand.Slug+" peer add` on another machine")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -127,13 +128,13 @@ func remoteCmd(args []string) error {
 		// starts or stops the gateway within a second.
 		var res ipc.ConfigResult
 		if err := ipc.Call(p.Socket(), 5*time.Second, ipc.OpConfig, ipc.ConfigArgs{Set: set}, &res); err != nil {
-			return fmt.Errorf("the core didn't take it (%w); set remote.on in %s by hand, then run irie up", err, p.ConfigFile())
+			return fmt.Errorf("the core didn't take it (%w); set remote.on in %s by hand, then run "+brand.Slug+" up", err, p.ConfigFile())
 		}
 		if sub == "off" {
 			fmt.Println("The phone app is off on this machine.")
 			return nil
 		}
-		fmt.Printf("The phone app is on, on port %d. Pair a phone with `irie remote pair`.\n", cfg.Remote.Port)
+		fmt.Printf("The phone app is on, on port %d. Pair a phone with `"+brand.Slug+" remote pair`.\n", cfg.Remote.Port)
 		return nil
 	case "devices":
 		ds, err := store.Devices()
@@ -141,7 +142,7 @@ func remoteCmd(args []string) error {
 			return err
 		}
 		if len(ds) == 0 {
-			fmt.Println("No phone is paired with this machine. `irie remote pair` pairs one.")
+			fmt.Println("No phone is paired with this machine. `" + brand.Slug + " remote pair` pairs one.")
 			return nil
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
@@ -156,14 +157,14 @@ func remoteCmd(args []string) error {
 		return w.Flush()
 	case "forget":
 		if len(args) != 1 {
-			return errors.New("usage: irie remote forget ID|NAME|all")
+			return errors.New("usage: " + brand.Slug + " remote forget ID|NAME|all")
 		}
 		gone, err := store.Forget(args[0])
 		if err != nil {
 			return err
 		}
 		if len(gone) == 0 {
-			return fmt.Errorf("no paired phone is %q; `irie remote devices` lists them", args[0])
+			return fmt.Errorf("no paired phone is %q; `"+brand.Slug+" remote devices` lists them", args[0])
 		}
 		for _, d := range gone {
 			fmt.Printf("Forgot %s (%s).\n", d.Name, d.ID)
@@ -171,7 +172,7 @@ func remoteCmd(args []string) error {
 		return nil
 	case "ca":
 		if len(args) != 1 {
-			return errors.New("usage: irie remote ca export|import|profile")
+			return errors.New("usage: " + brand.Slug + " remote ca export|import|profile")
 		}
 		switch args[0] {
 		case "export":
@@ -204,7 +205,7 @@ func remoteCmd(args []string) error {
 			_, err = os.Stdout.Write(a.Profile())
 			return err
 		}
-		return errors.New("usage: irie remote ca export|import|profile")
+		return errors.New("usage: " + brand.Slug + " remote ca export|import|profile")
 	case "help", "-h", "--help":
 		fmt.Print(remoteUsage)
 		return nil
@@ -277,7 +278,7 @@ func pair(on bool, port int, name, dir string, store *remote.Store, life time.Du
 			fmt.Printf("     or %s\n", u)
 		}
 	}
-	fmt.Println("   and follow its steps: install Irie's certificate, open Irie, add it to the Home Screen.")
+	fmt.Println("   and follow its steps: install " + brand.Name + "'s certificate, open " + brand.Name + ", add it to the Home Screen.")
 	if ca, err := remote.LoadAuthority(dir); err == nil {
 		fmt.Printf("   Before you trust the certificate, check under its More Details that its SHA-256\n   begins %s. A stranger on the Wi-Fi could hand you another.\n", ca.FingerprintStart())
 	}
@@ -289,7 +290,7 @@ func pair(on bool, port int, name, dir string, store *remote.Store, life time.Du
 	if ca, err := remote.LoadAuthority(dir); err == nil {
 		u, _ := url.Parse(urls[0])
 		link = remote.PairLink("https://"+net.JoinHostPort(u.Hostname(), strconv.Itoa(port)), code, ca.FingerprintHex(), name)
-		fmt.Println("The native app (Irie built in Xcode): scan this with the iPhone's camera, or open")
+		fmt.Println("The native app (" + brand.Name + " built in Xcode): scan this with the iPhone's camera, or open")
 		fmt.Printf("  %s\n\n", link)
 		if q, err := terminalQR(link); err == nil {
 			fmt.Println(q)
@@ -362,7 +363,7 @@ func pairPage(name string, urls []string, code string, until time.Time, fingerpr
 		if err != nil {
 			return "", err
 		}
-		native = `<h2 style="font-size:18px;margin:30px 0 6px">Irie built in Xcode</h2><p>Scan this one with the camera instead, and the app pairs itself.</p><div class=qr>` + nsvg + `</div>`
+		native = `<h2 style="font-size:18px;margin:30px 0 6px">` + brand.Name + ` built in Xcode</h2><p>Scan this one with the camera instead, and the app pairs itself.</p><div class=qr>` + nsvg + `</div>`
 	}
 	esc := func(s string) string {
 		return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
@@ -391,7 +392,7 @@ small{color:var(--muted)}
 <div class=url>%[3]s</div>%[4]s
 <div class=code>%[5]s</div>
 <small>Enter this code in the app. It works until %[6]s.</small>
-<p style="margin:20px 0 0;font-size:14px">Before you trust Irie's certificate on the phone, check under its More Details that its SHA-256 begins<br><b style="font:600 15px ui-monospace,Menlo,monospace">%[7]s</b></p>
+<p style="margin:20px 0 0;font-size:14px">Before you trust `+brand.Name+`'s certificate on the phone, check under its More Details that its SHA-256 begins<br><b style="font:600 15px ui-monospace,Menlo,monospace">%[7]s</b></p>
 %[8]s
 </main>`, esc(name), svg, esc(urls[0]), more.String(), esc(code), until.Format("15:04"), esc(fingerprint), native), nil
 }

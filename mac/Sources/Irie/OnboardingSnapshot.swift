@@ -12,7 +12,7 @@ enum OnboardingSnapshot {
         NSApplication.shared.setActivationPolicy(.accessory)
         let ready = ReadyReport(items: [
             ReadyItem(id: "tmux", name: "tmux", status: "ok", version: "3.7b", purpose: "keeps your agents running when no window is open", blocks: true),
-            ReadyItem(id: "claude", name: "Claude Code", status: "ok", version: "2.1.316", purpose: "the coding agent Irie starts for you", blocks: true),
+            ReadyItem(id: "claude", name: "Claude Code", status: "ok", version: "2.1.316", purpose: "the coding agent \(Brand.name) starts for you", blocks: true),
             ReadyItem(id: "signin", name: "Signed in", status: "ok", purpose: "Claude Code works on your Claude account", blocks: true),
             ReadyItem(id: "git", name: "git", status: "ok", version: "2.47.1", purpose: "gives each task on a project its own worktree"),
         ])
@@ -22,7 +22,7 @@ enum OnboardingSnapshot {
                                        fix: ReadyFix(say: "Sign in to Claude Code in your browser", show: "claude auth login"))
         var shots: [(String, Store, CGFloat?)] = []
         func store(_ edit: (Store) -> Void) -> Store {
-            let s = Store(socketPath: "/nonexistent/irie-snapshot.sock")
+            let s = Store(socketPath: "/nonexistent/\(Brand.slug)-snapshot.sock")
             edit(s)
             return s
         }
@@ -47,7 +47,7 @@ enum OnboardingSnapshot {
         shots.append(("coach-stalled", coached("stalled", Coach(started: true)), nil))
         shots.append(("banner", store { $0.loadFixture(Fixture.sessions, selection: nil); $0.readiness = signedOut }, nil))
         shots.append(("offline-starting", store { $0.starting = true }, 300))
-        shots.append(("offline-failed", store { $0.startProblem = .failed("tmux not found: `irie setup` installs it, or set tmux.path", bin: "/home/alice/.local/share/irie/bin/irie") }, 300))
+        shots.append(("offline-failed", store { $0.startProblem = .failed("tmux not found: `\(Brand.slug) setup` installs it, or set tmux.path", bin: "/home/alice/.local/share/\(Brand.slug)/bin/\(Brand.slug)") }, 300))
         shots.append(("offline-not-installed", store { $0.startProblem = .notInstalled }, 300))
         shots.append(("offline", store { _ in }, 300))
         do {
@@ -73,7 +73,7 @@ enum OnboardingSnapshot {
             if name.hasPrefix("welcome") {
                 WelcomeContent()
             } else if name.hasPrefix("offline") {
-                Offline(why: "Irie isn’t running.", socket: "/tmp/irie-501/core.sock").frame(height: height)
+                Offline(why: "\(Brand.name) isn’t running.", socket: "/tmp/\(Brand.slug)-501/core.sock").frame(height: height)
             } else {
                 VStack(spacing: 0) {
                     ReadyBanner()

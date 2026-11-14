@@ -114,9 +114,11 @@ svg { display: block; }
 @media (prefers-color-scheme: dark) { .home-bar { box-shadow: inset 0 -.5px 0 var(--bar-edge); } }
 .title-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding-top: 6px; }
 .large-title {
-  flex: 1; margin: 0; display: flex; align-items: center; gap: 9px;
+  flex: 1; min-width: 0; margin: 0; display: flex; align-items: center; gap: 9px;
   font: 700 32px/1.1 var(--round); letter-spacing: .2px;
 }
+.title-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-name.long { font-size: 22px; }
 .title-mark .sun { width: 34px; height: 34px; }
 .needs-pill {
   display: inline-flex; align-items: center; gap: 6px; min-height: 34px;

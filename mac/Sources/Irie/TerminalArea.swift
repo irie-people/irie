@@ -67,13 +67,13 @@ struct TerminalArea: View {
         .toolbarBackground(Theme.ground, for: .windowToolbar)
         // The window's own title. The bar hides it (IrieApp.showsTitle),
         // or the name would show twice.
-        .navigationTitle(selected?.name ?? "Irie")
+        .navigationTitle(selected?.name ?? "\(Brand.name)")
         .toolbar {
             // The bar's only title: the name and subtitle centre on its
             // midline beside the button.
             ToolbarItem(placement: .principal) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(selected?.name ?? "Irie")
+                    Text(selected?.name ?? "\(Brand.name)")
                         .font(.system(size: 13, weight: .semibold))
                     // Its state and the rest, in its agent's colour while it
                     // works, as its card and the terminal's frame.
@@ -147,11 +147,11 @@ struct TerminalArea: View {
                 ConversationView()
             } else if store.attach == nil, !store.isFixture {
                 if store.starting {
-                    ProgressView("Starting Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressView("Starting \(Brand.name)…").frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if case let .offline(why) = store.link {
-                    Placeholder(title: why, text: "The sidebar says what to do. The app connects by itself once Irie is running.")
+                    Placeholder(title: why, text: "The sidebar says what to do. The app connects by itself once \(Brand.name) is running.")
                 } else {
-                    ProgressView("Connecting to Irie…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressView("Connecting to \(Brand.name)…").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             if store.attach != nil, let note = linkNote {
@@ -269,7 +269,7 @@ struct TerminalArea: View {
     private var linkNote: String? {
         switch store.link {
         case .online: return nil
-        case .connecting: return "Connecting to Irie…"
+        case .connecting: return "Connecting to \(Brand.name)…"
         case let .offline(why): return "\(why) Reconnecting…"
         }
     }

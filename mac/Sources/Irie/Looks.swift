@@ -282,9 +282,9 @@ enum LookFiles {
     static var config: URL {
         let env = ProcessInfo.processInfo.environment
         if let x = env["XDG_CONFIG_HOME"], x.hasPrefix("/") {
-            return URL(fileURLWithPath: x).appendingPathComponent("irie")
+            return URL(fileURLWithPath: x).appendingPathComponent("\(Brand.slug)")
         }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/irie")
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/\(Brand.slug)")
     }
 
     static var themes: URL { config.appendingPathComponent("themes") }
@@ -323,7 +323,7 @@ enum LookFiles {
         for url in files(LookFiles.themes) {
             let id = url.deletingPathExtension().lastPathComponent
             guard !Palette.all.contains(where: { $0.id == id }) else {
-                problems.append("\(url.lastPathComponent): \(id) is the name of one of Irie's palettes")
+                problems.append("\(url.lastPathComponent): \(id) is the name of one of \(Brand.name)'s palettes")
                 continue
             }
             guard let data = try? Data(contentsOf: url), let f = try? JSONDecoder().decode(ThemeFile.self, from: data) else {
@@ -480,7 +480,7 @@ final class LookBook {
         dark.accent = 0x96C3DB; dark.accentInk = 0xAFD2E5; dark.accentFill = 0x96C3DB; dark.selection = 0x283A46; dark.waves = 0x96C3DB
         themes = [CustomTheme(palette: Palette(id: "harbour", name: "Harbour", light: light, dark: dark,
                                                terminal: TerminalColors(ground: 0x0F161C, ink: 0xE6EDF2)), basedOn: start.id,
-                              file: URL(fileURLWithPath: "/home/alice/.config/irie/themes/harbour.json"))]
+                              file: URL(fileURLWithPath: "/home/alice/.config/\(Brand.slug)/themes/harbour.json"))]
         layouts = [
             PaneLayout(id: "pairing", name: "Pairing", view: "terminal", sidebar: .init(shown: true, width: 300),
                        details: .init(minimized: false, height: 120), drawer: .init(open: true, tab: "helpers", width: 380), textSize: 14),
@@ -642,16 +642,15 @@ struct LookMenus: View {
 
     var body: some View {
         let looks = LookBook.shared
+        // The palette in use ticked. A ticked item each, rather than an
+        // inline Picker, which drew a line at the menu's top and another
+        // beside the one before Make a Theme.
         Menu("Theme") {
-            Picker("Theme", selection: $theme) {
-                ForEach(Palette.all) { p in Text(p.name).tag(p.id) }
-                if !looks.themes.isEmpty {
-                    Divider()
-                    ForEach(looks.themes) { t in Text(t.name).tag(t.id) }
-                }
+            ForEach(Palette.all) { p in pick(p.name, p.id) }
+            if !looks.themes.isEmpty {
+                Divider()
+                ForEach(looks.themes) { t in pick(t.name, t.id) }
             }
-            .pickerStyle(.inline)
-            .labelsHidden()
             Divider()
             Button("Make a Theme…") { open(.new) }
             if let t = looks.theme(theme) {
@@ -672,13 +671,18 @@ struct LookMenus: View {
                 Button(l.name) { looks.apply(l) }
             }
             Divider()
-            Button("Save the Window’s Layout…") { open(.layouts(saving: true)) }
-            Button("Arrange Layouts…") { open(.layouts(saving: false)) }
+            Button("Save Layout…") { open(.layouts(saving: true)) }
+            Button("Edit Layouts…") { open(.layouts(saving: false)) }
         }
     }
 
     private func open(_ r: LookBook.Request) {
         LookBook.shared.request = r
         openWindow(id: ThemeMaker.windowID)
+    }
+
+    /// A palette's item, ticked while it is the one in use.
+    private func pick(_ name: String, _ id: String) -> some View {
+        Toggle(name, isOn: Binding(get: { theme == id }, set: { if $0 { theme = id } }))
     }
 }

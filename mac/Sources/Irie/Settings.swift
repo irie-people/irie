@@ -76,7 +76,7 @@ struct PluginInfo: Decodable, Equatable, Identifiable {
             switch state {
             case "ready": return "ready"
             case "needs": return "needs setting up"
-            case "held": return "not in Irie yet"
+            case "held": return "not in \(Brand.name) yet"
             case "plugin_off": return "off with its plugin"
             default: return "off"
             }
@@ -151,7 +151,9 @@ struct CoreConfig: Decodable, Equatable {
         var helperStyle: String
         /// Where a new session goes in the list: last, first or next.
         var newTabs: String
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs" }
+        /// What the strip under the terminal shows: cheer or tips.
+        var bar: String
+        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs", bar }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -160,6 +162,8 @@ struct CoreConfig: Decodable, Equatable {
             helperStyle = try c.decodeIfPresent(String.self, forKey: .helperStyle) ?? "browser"
             // A core from before new_tabs puts a new session last.
             newTabs = try c.decodeIfPresent(String.self, forKey: .newTabs) ?? "last"
+            // A core from before ui.bar shows the phrases.
+            bar = try c.decodeIfPresent(String.self, forKey: .bar) ?? "cheer"
         }
     }
 
@@ -224,6 +228,8 @@ struct CoreConfig: Decodable, Equatable {
     struct Route: Decodable, Equatable {
         var profiles: [String]
         var minAccuracy: Double
+        /// A local model's floor; nil from a core that has none.
+        var localMinAccuracy: Double?
         var failover: Bool
         var delegate: Bool
         var accuracy: [String: [String: Double]]
@@ -231,6 +237,7 @@ struct CoreConfig: Decodable, Equatable {
         enum CodingKeys: String, CodingKey {
             case profiles, failover, delegate, accuracy, cost
             case minAccuracy = "min_accuracy"
+            case localMinAccuracy = "local_min_accuracy"
         }
     }
 
@@ -579,7 +586,7 @@ private struct SettingsForm<Content: View>: View {
             }
             if let p = model.problem {
                 Section {
-                    Label("config.toml doesn’t load as it stands, so Irie runs on what it loaded last. \(p)",
+                    Label("config.toml doesn’t load as it stands, so \(Brand.name) runs on what it loaded last. \(p)",
                           systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Theme.needs)
                         .textSelection(.enabled)
@@ -603,7 +610,7 @@ private struct WithConfig<Content: View>: View {
         switch store.link {
         case .online:
             if !store.canConfigure {
-                ContentUnavailableView("This Irie is too old for Settings", systemImage: "gearshape.arrow.triangle.2.circlepath",
+                ContentUnavailableView("This \(Brand.name) is too old for Settings", systemImage: "gearshape.arrow.triangle.2.circlepath",
                                        description: Text("Install a newer build to change these here, or edit config.toml."))
             } else if let c = model.config {
                 content(c)
@@ -619,7 +626,7 @@ private struct WithConfig<Content: View>: View {
         case .connecting:
             ProgressView()
         case let .offline(why):
-            ContentUnavailableView("Irie isn’t answering", systemImage: "bolt.horizontal.circle",
+            ContentUnavailableView("\(Brand.name) isn’t answering", systemImage: "bolt.horizontal.circle",
                                    description: Text("\(why) These settings are the core’s, so they show once it runs."))
         }
     }
@@ -708,7 +715,7 @@ private struct GeneralSettings: View {
                     } header: {
                         Text("Conversations")
                     } footer: {
-                        footnote("Irie keeps each session’s conversation in git, a commit per turn, so you can fork it from any turn. Once a closed session’s last turn is this old, its conversation is deleted. Open sessions and turns you tagged stay.")
+                        footnote("\(Brand.name) keeps each session’s conversation in git, a commit per turn, so you can fork it from any turn. Once a closed session’s last turn is this old, its conversation is deleted. Open sessions and turns you tagged stay.")
                     }
                 }
                 Section {
@@ -716,7 +723,7 @@ private struct GeneralSettings: View {
                 } header: {
                     Text("Usage")
                 } footer: {
-                    footnote("Irie becomes the status line of the sessions it starts from now on, and runs yours inside it.")
+                    footnote("\(Brand.name) becomes the status line of the sessions it starts from now on, and runs yours inside it.")
                 }
                 ConfigFileSection(path: model.path)
             }
@@ -758,8 +765,8 @@ private struct ConfigFileSection: View {
             }
         } footer: {
             footnote(exists
-                 ? "Changes here are written to this file as you make them, with your comments and layout kept. A hand edit applies when Irie next starts, or with your next change here."
-                 : "There is no file yet: Irie runs on its defaults, and your first change here makes it.")
+                 ? "Changes here are written to this file as you make them, with your comments and layout kept. A hand edit applies when \(Brand.name) next starts, or with your next change here."
+                 : "There is no file yet: \(Brand.name) runs on its defaults, and your first change here makes it.")
         }
     }
 
@@ -806,7 +813,7 @@ private struct AppearanceSettings: View {
             } header: {
                 Text("Theme")
             } footer: {
-                footnote("Each palette has a light and a dark set; Irie’s status line in the terminal follows it too. Make a Theme starts from three colours of yours and works out the rest, easy to read in both.")
+                footnote("Each palette has a light and a dark set; \(Brand.name)’s status line in the terminal follows it too. Make a Theme starts from three colours of yours and works out the rest, easy to read in both.")
             }
             Section {
                 LabeledContent("Yours") {
@@ -816,8 +823,8 @@ private struct AppearanceSettings: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Arrange Layouts…") { make(.layouts(saving: false)) }
-                    Button("Save the Window’s Layout…") { make(.layouts(saving: true)) }
+                    Button("Edit Layouts…") { make(.layouts(saving: false)) }
+                    Button("Save Layout…") { make(.layouts(saving: true)) }
                 }
             } header: {
                 Text("Layouts")
@@ -846,8 +853,8 @@ private struct AppearanceSettings: View {
                 Text("Window")
             } footer: {
                 footnote((TerminalEngine.built.count > 1
-                    ? "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
-                    : "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
+                    ? "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
+                    : "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
                     + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
             }
             Section {
@@ -1029,7 +1036,7 @@ private struct ProfileEditor: View {
                 .foregroundStyle(.secondary)
         } else if profile.local != nil {
             LabeledContent("Runs") { Text("Claude Code on a local model").foregroundStyle(.secondary) }
-            CommitField(title: "Model", prompt: "the one irie setup local chose",
+            CommitField(title: "Model", prompt: "the one \(Brand.slug) setup local chose",
                         value: model.bind(profile: name, profile, \.model, "model"))
         } else {
             Picker("Model", selection: model.bind(profile: name, profile, \.model, "model")) {
@@ -1062,6 +1069,8 @@ private struct RouteSection: View {
     let config: CoreConfig
     /// The floor while its slider is dragged; sent when it is let go.
     @State private var floor: Double?
+    /// The same for local models.
+    @State private var localFloor: Double?
 
     var body: some View {
         let c = config
@@ -1081,10 +1090,25 @@ private struct RouteSection: View {
                         .frame(width: 40, alignment: .trailing)
                 }
             }
+            if let local = c.route.localMinAccuracy {
+                LabeledContent("Floor for local models") {
+                    HStack {
+                        Slider(value: Binding(get: { localFloor ?? local }, set: { localFloor = $0 }), in: 0.3...1) { editing in
+                            guard !editing, let f = localFloor else { return }
+                            model.binding(local, "route.local_min_accuracy") { $0.route.localMinAccuracy = $1 }.wrappedValue = (f * 100).rounded() / 100
+                            localFloor = nil
+                        }
+                        .frame(width: 200)
+                        Text("\(Int(((localFloor ?? local) * 100).rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+            }
         } header: {
             Text("Auto")
         } footer: {
-            footnote("Auto runs each task on the agent with the lowest cost per success among those at least this accurate for the task’s size. At 90% medium work stays on the strongest.")
+            footnote("Auto runs each task on the agent with the lowest cost per success among those at least this accurate for the task’s size. At 90% medium work stays on the strongest. A local model costs no tokens, so it can have a lower floor and take more of the work.")
         }
         Section {
             ForEach(routable, id: \.self) { name in
@@ -1140,7 +1164,7 @@ private struct LocalSettings: View {
                         external = on
                         if !on, !c.local.url.isEmpty { model.reset("local.url") }
                     })) {
-                        Text("Irie runs its own").tag(false)
+                        Text("\(Brand.name) runs its own").tag(false)
                         Text("One you run").tag(true)
                     }
                     .pickerStyle(.radioGroup)
@@ -1154,7 +1178,7 @@ private struct LocalSettings: View {
                 } header: {
                     Text("Server")
                 } footer: {
-                    footnote("+local and +ollama:<model> run Claude Code on a model of this server. Irie’s own listens on 127.0.0.1 only.")
+                    footnote("+local and +ollama:<model> run Claude Code on a model of this server. \(Brand.name)’s own listens on 127.0.0.1 only.")
                 }
                 Section {
                     Picker("Context", selection: model.bind(c, \.local.context, "local.context")) {
@@ -1171,9 +1195,9 @@ private struct LocalSettings: View {
                         }
                     }
                 } header: {
-                    Text("Irie’s own server")
+                    Text("\(Brand.name)’s own server")
                 } footer: {
-                    footnote("These apply when Irie’s own server next starts. Below 64k tokens a coding agent loses its instructions.")
+                    footnote("These apply when \(Brand.name)’s own server next starts. Below 64k tokens a coding agent loses its instructions.")
                 }
                 .disabled(ext)
             }
@@ -1209,11 +1233,11 @@ private struct LearningSettings: View {
                         footnote(Self.about(l.tutor) + " Sessions started from now on follow this; +explain or +teach in a task sets it for that task alone.")
                     }
                     Section {
-                        Toggle("Show Irie’s tips under Claude Code’s spinner", isOn: model.bind(c, \.learn!.agentTips, "learn.agent_tips"))
+                        Toggle("Show \(Brand.name)’s tips under Claude Code’s spinner", isOn: model.bind(c, \.learn!.agentTips, "learn.agent_tips"))
                     } header: {
                         Text("Tips")
                     } footer: {
-                        footnote("Now and then, among Claude Code’s own tips, marked “Irie tip”. Claude Code’s own setting to hide tips hides these too.")
+                        footnote("Now and then, among Claude Code’s own tips, marked “\(Brand.name) tip”. Claude Code’s own setting to hide tips hides these too.")
                     }
                     Section {
                         ForEach(l.links.keys.sorted(), id: \.self) { name in
@@ -1247,11 +1271,11 @@ private struct LearningSettings: View {
                     } header: {
                         Text("Your links")
                     } footer: {
-                        footnote("They come first in Help > Learning Resources, before the free courses Irie links to.")
+                        footnote("They come first in Help > Learning Resources, before the free courses \(Brand.name) links to.")
                     }
                 } else {
                     Section {
-                        Text("This Irie’s core is older than the learning settings. Install the new build to set them here.")
+                        Text("This \(Brand.name)’s core is older than the learning settings. Install the new build to set them here.")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1290,7 +1314,7 @@ private struct RepoSettings: View {
                         }
                     }
                     Button("Add a Folder…") {
-                        if let path = chooseFolder("Irie looks for git repos up to two levels under this folder."), !c.repos.roots.contains(path) {
+                        if let path = chooseFolder("\(Brand.name) looks for git repos up to two levels under this folder."), !c.repos.roots.contains(path) {
                             model.bind(c, \.repos.roots, "repos.roots").wrappedValue = c.repos.roots + [path]
                         }
                     }
@@ -1320,7 +1344,7 @@ private struct RepoSettings: View {
                     footnote("A name here wins over a repo of that name under the folders above.")
                 }
                 Section {
-                    CommitField(title: "Branch names start with", prompt: "irie/", value: model.bind(c, \.worktree.branchPrefix, "worktree.branch_prefix"))
+                    CommitField(title: "Branch names start with", prompt: "\(Brand.slug)/", value: model.bind(c, \.worktree.branchPrefix, "worktree.branch_prefix"))
                     CommitField(title: "New branches start from", prompt: "the land branch, else HEAD", value: model.bind(c, \.worktree.base, "worktree.base"))
                     Toggle("Check out submodules", isOn: model.bind(c, \.worktree.submodules, "worktree.submodules"))
                 } header: {
@@ -1388,7 +1412,7 @@ private struct ArchSettings: View {
     var body: some View {
         WithConfig(model: model) { _ in
             if store.archAgents.isEmpty {
-                ContentUnavailableView("This Irie has no arch agents yet", systemImage: "shield.lefthalf.filled",
+                ContentUnavailableView("This \(Brand.name) has no arch agents yet", systemImage: "shield.lefthalf.filled",
                                        description: Text("Install a newer build to meet them here."))
             } else {
                 SettingsForm(model: model) {
@@ -1550,7 +1574,7 @@ private struct TrodSettings: View {
             if let t = c.trod {
                 form(t)
             } else {
-                ContentUnavailableView("This Irie has no trod bot yet", systemImage: "moon.stars",
+                ContentUnavailableView("This \(Brand.name) has no trod bot yet", systemImage: "moon.stars",
                                        description: Text("Install a newer build to keep sessions going at night."))
             }
         }
@@ -1801,7 +1825,7 @@ private struct PluginSettings: View {
                 ConfigFileSection(path: model.path)
             }
         } else if case .online = store.link {
-            ContentUnavailableView("This Irie has no plugins yet", systemImage: "puzzlepiece.extension",
+            ContentUnavailableView("This \(Brand.name) has no plugins yet", systemImage: "puzzlepiece.extension",
                                    description: Text("Install a newer build to see them here."))
         } else {
             ProgressView()
@@ -1897,6 +1921,18 @@ private struct TabsSettings: View {
                 Text("New sessions")
             } footer: {
                 footnote("Next puts a session an agent starts just under that agent’s card, and a task you type just under the card you have selected, as a browser opens a tab beside the one it came from.")
+            }
+            if case let (.online, c?) = (store.link, model.config) {
+                Section {
+                    Picker("The strip under the terminal shows", selection: model.bind(c, \.ui.bar, "ui.bar")) {
+                        Text("Words of encouragement").tag("cheer")
+                        Text("Tips for beginners").tag("tips")
+                    }
+                } header: {
+                    Text("Bottom bar")
+                } footer: {
+                    footnote("One at a time, a new one every half minute. Tips explain the cards, the keys and the task bar to someone new to \(Brand.name).")
+                }
             }
             Section {
                 Toggle("Close a card from under the pointer", isOn: $closeFromPointer)

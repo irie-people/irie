@@ -23,6 +23,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Session is what the store is told of a session when it syncs one.
@@ -95,7 +97,7 @@ func Open(dir string) (*Store, error) {
 	if _, err := s.git(nil, "config", "core.logAllRefUpdates", "always"); err != nil {
 		return nil, err
 	}
-	os.WriteFile(filepath.Join(dir, "description"), []byte("Irie's contexts: a branch per session, a commit per turn (DESIGN §4.13)\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, "description"), []byte(brand.Name+"'s contexts: a branch per session, a commit per turn (DESIGN §4.13)\n"), 0o600)
 	return s, nil
 }
 
@@ -320,7 +322,7 @@ func (st *Store) commitLine(s Session, h *head, f *feed, chain []*node, working,
 		old = h.turns[len(h.turns)-1].Commit
 	}
 	if base >= 0 && base < len(h.turns)-1 {
-		if err := st.updateRef(fmt.Sprintf("refs/irie/rewound/%s/%d", s.ID, time.Now().UnixMilli()), old, "", "rewound"); err != nil {
+		if err := st.updateRef(fmt.Sprintf("refs/"+brand.Slug+"/rewound/%s/%d", s.ID, time.Now().UnixMilli()), old, "", "rewound"); err != nil {
 			return err
 		}
 		h.turns = h.turns[:base+1]
@@ -459,7 +461,7 @@ func (st *Store) lsTurns(commit string) ([]treeEntry, error) {
 // updateRef moves ref from old ("" when it must not exist) to id, with a
 // reflog line saying why.
 func (st *Store) updateRef(ref, id, old, why string) error {
-	args := []string{"update-ref", "--create-reflog", "-m", "irie: " + why, ref, id}
+	args := []string{"update-ref", "--create-reflog", "-m", brand.Slug + ": " + why, ref, id}
 	if old != "" {
 		args = append(args, old)
 	} else {
@@ -747,7 +749,7 @@ func lineUUID(b []byte, l *line) string {
 func (st *Store) Expire(keep time.Duration, open func(session string) bool, now time.Time) ([]string, error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	out, err := st.git(nil, "for-each-ref", "--format=%(refname)%09%(committerdate:unix)", "refs/heads/", "refs/irie/rewound/")
+	out, err := st.git(nil, "for-each-ref", "--format=%(refname)%09%(committerdate:unix)", "refs/heads/", "refs/"+brand.Slug+"/rewound/")
 	if err != nil {
 		return nil, err
 	}
@@ -805,7 +807,7 @@ func (st *Store) Tag(name, commit string) error {
 	if _, err := st.git(nil, "check-ref-format", "refs/tags/"+name); err != nil || strings.HasPrefix(name, "-") {
 		return fmt.Errorf("%q cannot be a tag's name", name)
 	}
-	_, err := st.git(nil, "update-ref", "--create-reflog", "-m", "irie: tag", "refs/tags/"+name, commit)
+	_, err := st.git(nil, "update-ref", "--create-reflog", "-m", brand.Slug+": tag", "refs/tags/"+name, commit)
 	return err
 }
 

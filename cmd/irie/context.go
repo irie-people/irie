@@ -12,35 +12,36 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ctxgit"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 )
 
 // contextUsage is the part of ctlUsage for contexts in git (DESIGN §4.13).
-const contextUsage = `  irie ctl ctx log [--json] [-n N] SESSION[@AT]
+const contextUsage = `  ` + brand.Slug + ` ctl ctx log [--json] [-n N] SESSION[@AT]
                                          a session's context in git, newest
                                          turn first, a commit each: the prompt
                                          that started it, from which session.
                                          AT names a point: a turn (3, or -1 for
                                          the one before the newest), a tag, a
                                          commit, or an entry's uuid
-  irie ctl ctx show [--raw] SESSION[@AT] one turn as it reads, or --raw its
+  ` + brand.Slug + ` ctl ctx show [--raw] SESSION[@AT] one turn as it reads, or --raw its
                                          transcript lines
-  irie ctl ctx diff A[@AT] B[@AT]        where two contexts parted, the turns
+  ` + brand.Slug + ` ctl ctx diff A[@AT] B[@AT]        where two contexts parted, the turns
                                          each took since, and how they differ
-  irie ctl ctx tag SESSION[@AT] NAME     name a point of a context; the name
+  ` + brand.Slug + ` ctl ctx tag SESSION[@AT] NAME     name a point of a context; the name
                                          then serves as AT, and as a fork's
                                          start
-  irie ctl ctx sync SESSION              store a session's newest turns now
-  irie ctl ctx git ARGS...               run git on the context store, such as
+  ` + brand.Slug + ` ctl ctx sync SESSION              store a session's newest turns now
+  ` + brand.Slug + ` ctl ctx git ARGS...               run git on the context store, such as
                                          log --graph --all
-  irie ctl ctx clean                     let go now of the contexts of closed
+  ` + brand.Slug + ` ctl ctx clean                     let go now of the contexts of closed
                                          sessions whose newest turn is older than
                                          context.keep_days (30 by default; 0
-                                         keeps them for good), as Irie does on its
+                                         keeps them for good), as ` + brand.Name + ` does on its
                                          own every few hours
-  irie ctl fork [--at AT] [--here] [--name NAME] [--model MODEL] [--wait] [+PROFILE] SESSION [TASK...]
+  ` + brand.Slug + ` ctl fork [--at AT] [--here] [--name NAME] [--model MODEL] [--wait] [+PROFILE] SESSION [TASK...]
                                          carry a session's context on from a
                                          point of it in a new session, in a
                                          worktree of its own at that turn's
@@ -53,7 +54,7 @@ const contextUsage = `  irie ctl ctx log [--json] [-n N] SESSION[@AT]
 // ctlContext is `irie ctl ctx`.
 func ctlContext(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: irie ctl ctx log|show|diff|tag|sync|git ...")
+		return errors.New("usage: " + brand.Slug + " ctl ctx log|show|diff|tag|sync|git ...")
 	}
 	switch args[0] {
 	case "log":
@@ -78,7 +79,7 @@ func ctlContext(args []string) error {
 		fmt.Println(p.ContextStore())
 		return nil
 	}
-	return fmt.Errorf("irie ctl ctx: no command %q: log, show, diff, tag, sync, git or clean", args[0])
+	return fmt.Errorf(brand.Slug+" ctl ctx: no command %q: log, show, diff, tag, sync, git or clean", args[0])
 }
 
 // splitAt splits SESSION@AT. An @ at the start, or with nothing or a space
@@ -123,7 +124,7 @@ func ctxLog(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: irie ctl ctx log [--json] [-n N] SESSION[@AT]")
+		return errors.New("usage: " + brand.Slug + " ctl ctx log [--json] [-n N] SESSION[@AT]")
 	}
 	session, at := splitAt(fs.Arg(0))
 	r, err := contextCall(ipc.ContextArgs{Action: ipc.ContextLog, Session: session, At: at, Limit: *n})
@@ -160,7 +161,7 @@ func ctxShow(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: irie ctl ctx show [--raw] SESSION[@AT]")
+		return errors.New("usage: " + brand.Slug + " ctl ctx show [--raw] SESSION[@AT]")
 	}
 	r, t, err := point(fs.Arg(0))
 	if err != nil {
@@ -178,7 +179,7 @@ func ctxShow(args []string) error {
 
 func ctxDiff(args []string) error {
 	if len(args) != 2 {
-		return errors.New("usage: irie ctl ctx diff A[@AT] B[@AT]")
+		return errors.New("usage: " + brand.Slug + " ctl ctx diff A[@AT] B[@AT]")
 	}
 	ra, ta, err := point(args[0])
 	if err != nil {
@@ -193,14 +194,14 @@ func ctxDiff(args []string) error {
 	if err != nil || base == "" {
 		fmt.Println("These contexts share no turn.")
 	} else {
-		subject, _ := storeOut(repo, "log", "-1", "--format=%(trailers:key=Irie-Turn,valueonly,separator=) %s", base)
+		subject, _ := storeOut(repo, "log", "-1", "--format=%(trailers:key="+brand.Name+"-Turn,valueonly,separator=) %s", base)
 		turn, prompt, _ := strings.Cut(subject, " ")
 		fmt.Printf("Parted after turn %s, %s: %s\n", turn, base[:12], oneLine(prompt, 80))
 		for _, side := range []struct {
 			arg string
 			t   ipc.ContextTurn
 		}{{args[0], ta}, {args[1], tb}} {
-			out, _ := storeOut(repo, "log", "--first-parent", "--reverse", "--format=  turn %(trailers:key=Irie-Turn,valueonly,separator=)  %s", base+".."+side.t.Commit)
+			out, _ := storeOut(repo, "log", "--first-parent", "--reverse", "--format=  turn %(trailers:key="+brand.Name+"-Turn,valueonly,separator=)  %s", base+".."+side.t.Commit)
 			fmt.Printf("\n%s since:\n", side.arg)
 			if out == "" {
 				fmt.Println("  nothing")
@@ -215,7 +216,7 @@ func ctxDiff(args []string) error {
 
 func ctxTag(args []string) error {
 	if len(args) != 2 {
-		return errors.New("usage: irie ctl ctx tag SESSION[@AT] NAME")
+		return errors.New("usage: " + brand.Slug + " ctl ctx tag SESSION[@AT] NAME")
 	}
 	session, at := splitAt(args[0])
 	r, err := contextCall(ipc.ContextArgs{Action: ipc.ContextTag, Session: session, At: at, Name: args[1]})
@@ -228,7 +229,7 @@ func ctxTag(args []string) error {
 
 func ctxSync(args []string) error {
 	if len(args) != 1 {
-		return errors.New("usage: irie ctl ctx sync SESSION")
+		return errors.New("usage: " + brand.Slug + " ctl ctx sync SESSION")
 	}
 	r, err := contextCall(ipc.ContextArgs{Action: ipc.ContextSync, Session: args[0]})
 	if err != nil {
@@ -240,7 +241,7 @@ func ctxSync(args []string) error {
 
 func ctxClean(args []string) error {
 	if len(args) != 0 {
-		return errors.New("usage: irie ctl ctx clean")
+		return errors.New("usage: " + brand.Slug + " ctl ctx clean")
 	}
 	r, err := contextCall(ipc.ContextArgs{Action: ipc.ContextClean})
 	if err != nil {
@@ -248,7 +249,7 @@ func ctxClean(args []string) error {
 	}
 	switch {
 	case r.KeepDays == 0:
-		fmt.Println("context.keep_days is 0, so every context is kept. Set it in config.toml, or in Irie's Settings, to let old ones go.")
+		fmt.Println("context.keep_days is 0, so every context is kept. Set it in config.toml, or in " + brand.Name + "'s Settings, to let old ones go.")
 	case len(r.Removed) == 0:
 		fmt.Printf("No context of a closed session is older than %d days.\n", r.KeepDays)
 	default:
@@ -310,7 +311,7 @@ func ctlFork(args []string) error {
 		rest = rest[1:]
 	}
 	if len(rest) == 0 {
-		return errors.New("usage: irie ctl fork [--at AT] [--here] [--name NAME] [--model MODEL] [--wait] [+PROFILE] SESSION [TASK...]")
+		return errors.New("usage: " + brand.Slug + " ctl fork [--at AT] [--here] [--name NAME] [--model MODEL] [--wait] [+PROFILE] SESSION [TASK...]")
 	}
 	a.Session, a.At = splitAt(rest[0])
 	if *at != "" {

@@ -18,6 +18,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 )
 
@@ -141,13 +142,13 @@ func Run(specPath string) int {
 	exitPath := filepath.Join(dir, ExitFile)
 	spec, err := ReadSpec(specPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "irie host: %v\n", err)
+		fmt.Fprintf(os.Stderr, brand.Slug+" host: %v\n", err)
 		return 126
 	}
 	finish := func(x Exit) int {
 		x.At = time.Now().UTC()
 		if err := writeJSON(exitPath, x); err != nil {
-			fmt.Fprintf(os.Stderr, "irie host: %v\n", err)
+			fmt.Fprintf(os.Stderr, brand.Slug+" host: %v\n", err)
 		}
 		return x.Code
 	}
@@ -155,7 +156,7 @@ func Run(specPath string) int {
 	env := prependPath(environ(os.Environ(), spec.Env, spec.Unset, spec.Cwd), spec.Path)
 	path, err := LookPath(spec.Argv[0], env)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "irie: %s: command not found\n", spec.Argv[0])
+		fmt.Fprintf(os.Stderr, brand.Slug+": %s: command not found\n", spec.Argv[0])
 		return finish(Exit{Code: 127})
 	}
 
@@ -176,7 +177,7 @@ func Run(specPath string) int {
 		pid, err = syscall.ForkExec(path, spec.Argv, attr)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "irie: %s: %v\n", spec.Argv[0], err)
+		fmt.Fprintf(os.Stderr, brand.Slug+": %s: %v\n", spec.Argv[0], err)
 		return finish(Exit{Code: 126})
 	}
 
@@ -197,7 +198,7 @@ func Run(specPath string) int {
 	}()
 
 	if err := writeJSON(filepath.Join(dir, InfoFile), Info{PID: os.Getpid(), Agent: pid, Freeze: 1}); err != nil {
-		fmt.Fprintf(os.Stderr, "irie host: %v\n", err)
+		fmt.Fprintf(os.Stderr, brand.Slug+" host: %v\n", err)
 	}
 
 	ws, err := wait(pid, dir)
@@ -205,7 +206,7 @@ func Run(specPath string) int {
 		setForeground(0, syscall.Getpgrp())
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "irie host: wait: %v\n", err)
+		fmt.Fprintf(os.Stderr, brand.Slug+" host: wait: %v\n", err)
 		return finish(Exit{Code: 126})
 	}
 	if ws.Signaled() {

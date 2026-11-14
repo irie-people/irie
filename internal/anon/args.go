@@ -5,6 +5,8 @@ import (
 	"flag"
 	"io"
 	"strconv"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Args are the arguments of `irie anon mcp` that serve o, after the irie
@@ -28,12 +30,12 @@ func Args(o ServerOptions) []string {
 
 // ParseArgs reads the arguments of `irie anon mcp`.
 func ParseArgs(args []string, errOut io.Writer) (ServerOptions, error) {
-	fs := flag.NewFlagSet("irie anon mcp", flag.ContinueOnError)
+	fs := flag.NewFlagSet(brand.Slug+" anon mcp", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	var o ServerOptions
 	fs.StringVar(&o.Dirs.Root, "dir", "", "anon's folder, <data>/anon")
 	fs.StringVar(&o.Compartment, "compartment", "", "the session's compartment")
-	fs.StringVar(&o.Search, "search", "", "Irie's SearXNG, such as http://127.0.0.1:8888")
+	fs.StringVar(&o.Search, "search", "", brand.Name+"'s SearXNG, such as http://127.0.0.1:8888")
 	fs.StringVar(&o.Evidence, "evidence", "", "the folder fetch's save writes to")
 	fs.IntVar(&o.Socks, "socks", 0, "the forwarder's SOCKS5 port on 127.0.0.1")
 	fs.IntVar(&o.HTTP, "http", 0, "the forwarder's HTTP proxy port on 127.0.0.1")
@@ -41,7 +43,7 @@ func ParseArgs(args []string, errOut io.Writer) (ServerOptions, error) {
 		return o, err
 	}
 	if fs.NArg() > 0 || o.Dirs.Root == "" || o.Compartment == "" {
-		return o, errors.New("usage: irie anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR] [--socks PORT] [--http PORT]")
+		return o, errors.New("usage: " + brand.Slug + " anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR] [--socks PORT] [--http PORT]")
 	}
 	return o, CheckName(o.Compartment)
 }

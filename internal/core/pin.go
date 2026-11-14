@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -78,8 +79,16 @@ func (c *Core) setPinned(id string, on bool) bool {
 }
 
 // toFirstUnpinned puts session id first among this machine's sessions that
-// are neither pinned nor parked: just under Pinned. The caller holds c.mu.
+// are neither pinned nor parked: just under Pinned; one of a group of
+// yours, last in the innermost group around it that holds another card,
+// where the group is (groups.go). The caller holds c.mu.
 func (c *Core) toFirstUnpinned(id string) {
+	if x := c.sessions[id]; x != nil {
+		if last := c.edgeIn(x, true); last != "" {
+			c.gather([]string{id}, last, "")
+			return
+		}
+	}
 	ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
 	at := len(ids)
 	for i, s := range ids {
@@ -128,7 +137,7 @@ func checkPin(on bool) func(c *Core, a action) []problem {
 		if x.track.pinned == on {
 			return []problem{{code: "already", question: fmt.Sprintf("%q %s.", x.name, already),
 				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
-					Detail: fmt.Sprintf("Nothing needs %sning, so the history moves on as if Irie had %sned it.", verb, verb)}},
+					Detail: fmt.Sprintf("Nothing needs %sning, so the history moves on as if "+brand.Name+" had %sned it.", verb, verb)}},
 				recommend: ipc.ChoiceSettle}}
 		}
 		return nil

@@ -43,6 +43,8 @@ struct Session: Codable, Identifiable, Equatable {
     var pinned: Bool?
     /// The space it is in; nil or "" for the first (Spaces.swift).
     var space: String?
+    /// The group of yours it is in; nil or "" for none (Groups.swift).
+    var group: String?
     var frozen: Date?
     var freezing: Bool?
     var priority: Int?
@@ -66,7 +68,7 @@ struct Session: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, pinned, space, frozen, freezing, priority, loose, trod, hue, tutor, host
+        case order, parked, pinned, space, group, frozen, freezing, priority, loose, trod, hue, tutor, host
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -199,17 +201,29 @@ struct Header: Decodable {
     var trod: TrodShift?
     /// Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
     var vpn: VPNMark?
+    /// Gabriel's boost while one is on, however it was started (DESIGN
+    /// §4.11), from a core whose hello lists boost-always.
+    var boost: BoostMark?
     /// How busy the machine is, read every 5 s (DESIGN §2.4).
     var load: MachineLoad?
     /// The spaces, in their order, the first first (Spaces.swift).
     var spaces: [SpaceInfo]?
+    /// Your groups, in the order they were made (Groups.swift).
+    var groups: [GroupInfo]?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
-        case trod, vpn, load, spaces
+        case trod, vpn, boost, load, spaces, groups
     }
+}
+
+/// Gabriel's boost: when one started by hand ends, and whether it is
+/// always on while you're at the computer (arch.gabriel.always).
+struct BoostMark: Decodable, Equatable {
+    var until: Date?
+    var always: Bool?
 }
 
 /// How busy the core's machine is: its CPUs, the work waiting to run over
@@ -482,6 +496,11 @@ struct LearnArgs: Encodable {
 struct LearnResult: Decodable {
     var resources: [LearnResource]
     var glossary: [LearnTerm]
+    /// What the strip under the terminal shows, ui.bar: "cheer" or "tips";
+    /// nil from a core from before it (DESIGN §2.10).
+    var bar: String?
+    /// The tips it shows one at a time when it is tips.
+    var tips: [String]?
 }
 
 struct LearnResource: Decodable, Identifiable, Hashable {

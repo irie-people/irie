@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.2.0](https://github.com/irie-people/irie/compare/v1.1.0...v1.2.0) (2026-11-14)
+
+
+### Features
+
+* **arch:** let Gabriel boost your focus always ([0709aed](https://github.com/irie-people/irie/commit/0709aed5f3952e5b96e55ffcc2a92db0caed2cbd))
+* **arch:** put the tab you are on first in Gabriel's focus ([46b473f](https://github.com/irie-people/irie/commit/46b473f232fb5435f8d4bc68e2c37405bee4ee86))
+* **groups:** make a new group from a session's tab ([7625872](https://github.com/irie-people/irie/commit/76258726105be9b38cb4273757ec79b2f4bb7906))
+* **groups:** put groups inside groups, and drag a group into another ([6816ee9](https://github.com/irie-people/irie/commit/6816ee9422aedf1d7727368e9331297b2ceafb51))
+* **mac:** show the always boost in the menu, from the core's header ([62232b5](https://github.com/irie-people/irie/commit/62232b566260f1049feabc34da06a4e522f36107))
+* **plugins:** add a markets plugin that shows your market map in a window ([08f733e](https://github.com/irie-people/irie/commit/08f733e3ebc9b6efad8ea55c76b67820494de043))
+* **ui:** draw groups inside groups in the terminal sidebar ([4bf4d1d](https://github.com/irie-people/irie/commit/4bf4d1dc9599a7683d96188bd7feba8cd1265d33))
+
+
+### Bug Fixes
+
+* **arch:** keep the tab on top known whenever you are at the computer ([9d9e28b](https://github.com/irie-people/irie/commit/9d9e28b1c8bee7f7eaee718703daf3d348f7be42))
+* **groups:** a drop in its own group moves a card there, and a renamed group's moves say its name ([bea1f1c](https://github.com/irie-people/irie/commit/bea1f1c65f40648440ee3ae7ef6b4f5357e9dd0d))
+* **groups:** find a move's group in its space, and describe nesting ([c7e9f71](https://github.com/irie-people/irie/commit/c7e9f71fbf35b8c9286471349c7e76130a936411))
+* **groups:** keep each group together, in place and in its space ([e5621cb](https://github.com/irie-people/irie/commit/e5621cbd5368c15e6c74ef4fa77a49417443be94))
+* **groups:** keep the product's name out of the group examples ([0136b22](https://github.com/irie-people/irie/commit/0136b2280c1390d59e5dcc6870c25887f81498a8))
+* **groups:** what review found in groups inside groups ([bac934c](https://github.com/irie-people/irie/commit/bac934c1ea10ef9d89b3ed4383307f261809cea9))
+* **mac:** keep the Markets window's state on the main actor ([70610e5](https://github.com/irie-people/irie/commit/70610e5af587839b9e2797a38835c9d0a9e5cb07))
+* **mac:** number each installed build so macOS reopens it, not an old copy ([2a03acb](https://github.com/irie-people/irie/commit/2a03acbfc565a3c9fdf52ecced35b85793e00fe7))
+* **mac:** open a Markets link only at the person's click ([40b78ea](https://github.com/irie-people/irie/commit/40b78eace49e2bfc09f901d249876395cb52164f))
+
+## [1.1.0](https://github.com/irie-people/irie/compare/v1.0.0...v1.1.0) (2026-11-14)
+
+
+### Features
+
+* **brand:** keep the product's names in one place ([8698483](https://github.com/irie-people/irie/commit/8698483ee742a77e8b66f4ab36238904dcc90f0a))
+* **brand:** name the build tags a copy builds with ([698d654](https://github.com/irie-people/irie/commit/698d654318f229c1f8aa4e755fa8b08dfaaa8c41))
+* **core:** bring back the sessions a restart lost ([24cf8ab](https://github.com/irie-people/irie/commit/24cf8ab0f29fc0a837c60b43f4eebdf1cef7752a))
+* **plugins:** build Irie without a plugin's code ([a813f8c](https://github.com/irie-people/irie/commit/a813f8c74402ce44ce8dd438d49f1d7d6f5fbe2e))
+
+
+### Bug Fixes
+
+* **anon:** close three leaks found testing anonymous research ([60adf55](https://github.com/irie-people/irie/commit/60adf55b6c1654241ccfeff8a14bff4cf8d58bb1))
+* **anon:** keep a quoted +anon task in its compartment ([726c120](https://github.com/irie-people/irie/commit/726c1201d593184e5fc0a929be41c089590280eb))
+* **anon:** shut an anonymous session's shell in a sandbox ([c26dbed](https://github.com/irie-people/irie/commit/c26dbed438f4a8ca0bec305d9741d0ccbb70eeea))
+* **mac:** give each build its own Brand.swift draft ([30b86d7](https://github.com/irie-people/irie/commit/30b86d72073cdfe45bd802b4cb045373556ae6ce))
+
 ## [1.0.0](https://github.com/irie-people/irie/compare/v0.2.0...v1.0.0) (2026-11-09)
 
 

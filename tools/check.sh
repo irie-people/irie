@@ -7,8 +7,9 @@
 #                             such as ./internal/worktree, the way to check
 #                             one package while the machine is busy
 #
-# It fails on a Go file gofmt would change, a go vet finding, a failing test
-# or a row listed twice in PROVENANCE.md. gofmt and the PROVENANCE.md check
+# It fails on a Go file gofmt would change, a go vet finding (for every
+# package, also in a build without the plugins), a failing test or a row
+# listed twice in PROVENANCE.md. gofmt and the PROVENANCE.md check
 # always cover the whole checkout; they take a second.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
@@ -24,4 +25,8 @@ if [ -n "$unformatted" ]; then
 fi
 sh tools/provenance.sh check
 go vet "$@"
+# A build that leaves the plugins out (DESIGN §4.17), as a company's copy
+# may, must still compile, its tests too: the stand-ins and tags can't
+# drift from the code they stand in for.
+if [ "$*" = ./... ]; then go vet -tags noprivacy,nowriting,nomarkets ./...; fi
 go test "$@"

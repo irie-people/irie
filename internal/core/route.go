@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -27,6 +28,7 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/journal"
 	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/route"
 	"github.com/irie-people/irie/internal/statusline"
 )
@@ -213,7 +215,7 @@ func (c *Core) localReady(name string, p config.Profile, probe bool) (need, budg
 	o, own, err := c.ollama(probe)
 	if err != nil {
 		if err == errLocalDown {
-			return 0, 0, "Irie's Ollama server is not running", false
+			return 0, 0, brand.Name + "'s Ollama server is not running", false
 		}
 		return 0, 0, err.Error(), false
 	}
@@ -229,7 +231,7 @@ func (c *Core) localReady(name string, p config.Profile, probe bool) (need, budg
 	}
 	i := slices.IndexFunc(ms, func(m ipc.LocalModel) bool { return m.Name == model })
 	if i < 0 {
-		return 0, 0, "no model " + model + "; irie setup local", false
+		return 0, 0, "no model " + model + "; " + brand.Slug + " setup local", false
 	}
 	m := ms[i]
 	machine := c.readMachine()
@@ -273,8 +275,13 @@ func (c *Core) choose(class, why string, only []string, probe bool) route.Choice
 			continue
 		}
 		counts := stats.Counts(name, class)
+		// A local model costs no tokens, so it has a floor of its own.
+		floor := r.MinAccuracy
+		if p.Local != nil {
+			floor = r.LocalMinAccuracy
+		}
 		cand := route.Candidate{
-			Profile: name, Accuracy: route.Accuracy(prior.Accuracy[class], r.PriorWeight, counts),
+			Profile: name, Accuracy: route.Accuracy(prior.Accuracy[class], r.PriorWeight, counts), Floor: floor,
 			Outcomes: counts.Good + counts.Bad, Cost: prior.Cost, Usable: true,
 		}
 		if mean, ok := stats.MeanCost(name, class); ok {
@@ -283,7 +290,7 @@ func (c *Core) choose(class, why string, only []string, probe bool) route.Choice
 			}
 		}
 		switch {
-		case p.Local != nil && cand.Accuracy < r.MinAccuracy:
+		case p.Local != nil && cand.Accuracy < floor:
 			// Below the floor it cannot win, so it is not probed.
 			cand.Usable, cand.Note = false, "not accurate enough for "+class+" work"
 		case p.Local != nil:
@@ -370,7 +377,14 @@ func (c *Core) escalate(hash, class, profile string, now time.Time) {
 
 // delegateNote is what a Claude Code session is told about delegating, with
 // the profiles it can hand work to.
-const delegateNote = `[Irie] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run ` + "`" + `"$IRIE_BIN" ctl delegate "<subtask>"` + "`" + ` with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (%s), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.`
+const delegateNote = `[` + brand.Name + `] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run ` + "`" + `"$` + brand.EnvPrefix + `_BIN" ctl delegate "<subtask>"` + "`" + ` with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (%s), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.`
+
+// localOne and localMany follow delegateNote when local models are among
+// the profiles a session can hand work to: they cost no tokens at all.
+const (
+	localOne  = ` %s runs on a local model, which costs no tokens: prefer handing it every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and check what comes back.`
+	localMany = ` %s run on local models, which cost no tokens: prefer handing them every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and check what comes back.`
+)
 
 // delegateHint is the note for a session that may delegate: a Claude Code
 // session on a cloud profile with cheaper ones to hand work to, which was
@@ -386,15 +400,27 @@ func (c *Core) delegateHint(x *session) string {
 		return ""
 	}
 	names := make([]string, len(cheaper))
+	var local []string
 	for i, p := range cheaper {
 		names[i] = "+" + p
+		if q, ok := c.cfg().Profiles[p]; ok && q.Local != nil {
+			local = append(local, "+"+p)
+		}
 	}
-	return fmt.Sprintf(delegateNote, strings.Join(names, ", "))
+	note := fmt.Sprintf(delegateNote, strings.Join(names, ", "))
+	switch len(local) {
+	case 0:
+	case 1:
+		note += fmt.Sprintf(localOne, local[0])
+	default:
+		note += fmt.Sprintf(localMany, strings.Join(local[:len(local)-1], ", ")+" and "+local[len(local)-1])
+	}
+	return note
 }
 
 // failoverNote opens the task a failover carries on.
 func failoverNote(profile string) string {
-	return fmt.Sprintf("[Irie] This task ran on +%s, which stopped at its usage limit. What it did so far is in this directory: check it, then finish the task.\n\n", profile)
+	return fmt.Sprintf("["+brand.Name+"] This task ran on +%s, which stopped at its usage limit. What it did so far is in this directory: check it, then finish the task.\n\n", profile)
 }
 
 // failover carries a task on after its session stopped at a usage limit
@@ -526,13 +552,23 @@ func (toolHarness) Respond(event.Event, harness.HookReply) []byte { return nil }
 func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 	var args []string
 	var name, title string
+	// A plugin's tools are in the build only with their plugin (DESIGN
+	// §4.17).
+	for plugin, tools := range map[string][]string{
+		"privacy": {ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy},
+		"writing": {ipc.ToolWrite},
+	} {
+		if _, ok := plugins.Find(plugin); !ok && slices.Contains(tools, a.Name) {
+			return ipc.Session{}, notBuilt("The " + plugin + " plugin")
+		}
+	}
 	switch a.Name {
 	case ipc.ToolSetup:
 		args, name, title = []string{"setup", "local"}, "setup-local", "set up local models"
 	case ipc.ToolModels:
 		args, name, title = []string{"ctl", "local"}, "models", "local models and their memory"
 	case ipc.ToolReady:
-		args, name, title = []string{"setup"}, "setup", "get Irie ready"
+		args, name, title = []string{"setup"}, "setup", "get "+brand.Name+" ready"
 	case ipc.ToolSwitch:
 		return c.guide(guideSwitch, "")
 	// The privacy plugin's setups (DESIGN §4.17): each asks before it

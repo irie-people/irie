@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -85,6 +86,12 @@ func TestAutoRoutesByCostPerSuccess(t *testing.T) {
 	}
 	if ch := c.routeDry(hardTask); ch.Profile != "fake" || ch.Candidates[0].Profile != "cheap" || ch.Candidates[0].Accuracy >= 0.85 {
 		t.Errorf("hard choice = %+v", ch)
+	}
+	// Neither runs a local model, so each needs route.min_accuracy.
+	for _, cand := range ch.Candidates {
+		if cand.Floor != 0.85 {
+			t.Errorf("%s's floor = %v, want route.min_accuracy", cand.Profile, cand.Floor)
+		}
 	}
 
 	// The + list says where auto sends each class.
@@ -292,5 +299,29 @@ func TestToolSessions(t *testing.T) {
 	}
 	if err := c.call("tool", ipc.ToolArgs{Name: "bogus"}, &r); err == nil {
 		t.Error("a tool that is not there")
+	}
+}
+
+// A session that can hand work to local models is told they cost no
+// tokens, and to prefer them for every subtask that fits.
+func TestTheDelegationNoteNamesTheFreeProfiles(t *testing.T) {
+	cfg := config.Default()
+	c := bareCore(t, cfg)
+	x := &session{harness: "claude-code", profile: "claude", out: &outcome{}}
+	h := c.delegateHint(x)
+	if !strings.Contains(h, "(+local, +haiku, +sonnet)") || !strings.Contains(h, " +local runs on a local model, which costs no tokens: prefer handing it every subtask that fits") {
+		t.Errorf("with one local profile: %q", h)
+	}
+	cfg.Profiles["dory"] = config.Profile{Harness: "claude-code", Local: &config.LocalModel{Runtime: "llama-server"}}
+	cfg.Route.Profiles = []string{"dory", "local", "haiku", "sonnet", "claude"}
+	cfg.Route.Accuracy["dory"] = map[string]float64{"small": 0.86, "medium": 0.35, "hard": 0.05}
+	cfg.Route.Cost["dory"] = 0
+	c = bareCore(t, cfg)
+	if h := c.delegateHint(x); !strings.Contains(h, " +dory and +local run on local models, which cost no tokens: prefer handing them") {
+		t.Errorf("with two: %q", h)
+	}
+	// A session on a local model is told nothing: none is cheaper.
+	if h := c.delegateHint(&session{harness: "claude-code", profile: "dory", local: true, out: &outcome{}}); h != "" {
+		t.Errorf("a local session is told %q", h)
 	}
 }

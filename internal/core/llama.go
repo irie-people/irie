@@ -11,6 +11,7 @@ package core
 // irie-agents, under `irie runtime`, on 127.0.0.1.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
@@ -36,7 +38,7 @@ import (
 const llamaRuntime = "llama-server"
 
 // llamaWindow names the window of Irie's own llama-server.
-const llamaWindow = "irie-llama"
+const llamaWindow = brand.Slug + "-llama"
 
 // llamaPrefix names a model of Irie's llama-server as a profile:
 // +llama:Ternary-Bonsai-2-27B-PTQ1_0 is +big on that model.
@@ -177,12 +179,13 @@ func splitPart(name string) bool {
 }
 
 // llamaNeed is what a model takes in Irie's llama-server: its weights, its
-// context cache at local.context and local.kv_cache in one slot, and
-// working room. The cache is the one the server loads with local.llama_args,
-// whose --override-kv can change it, as a looped model's loop count does.
+// context cache at local.context and local.kv_cache in each of its
+// local.llama_slots, and working room. The cache is the one the server
+// loads with local.llama_args, whose --override-kv can change it, as a
+// looped model's loop count does.
 func (c *Core) llamaNeed(m llamaModel) localmodel.Need {
 	l := c.cfg().Local
-	return localmodel.Estimate(m.g.Weights(), m.g.InfoWith(l.LlamaArgs), l.Context, l.KVCache, 1)
+	return localmodel.Estimate(m.g.Weights(), m.g.InfoWith(l.LlamaArgs), l.Context, l.KVCache, l.LlamaSlots)
 }
 
 // llamaWhy is why a coding agent cannot run on a model on build b, in a
@@ -257,7 +260,7 @@ func llamaPick(name string, p config.Profile, list []ipc.LocalModel) (string, er
 		if i := slices.IndexFunc(list, func(m ipc.LocalModel) bool { return localmodel.SameModel(m.Name, p.Model) }); i >= 0 {
 			return list[i].Name, nil
 		}
-		return "", ipc.Errorf(ipc.CodeNotFound, "+%s: no model %s among Ollama's models and the GGUF files Irie's llama-server may run", name, p.Model)
+		return "", ipc.Errorf(ipc.CodeNotFound, "+%s: no model %s among Ollama's models and the GGUF files "+brand.Name+"'s llama-server may run", name, p.Model)
 	}
 	if best := bestBy(list, localmodel.LlamaRank); best != "" {
 		return best, nil
@@ -280,8 +283,10 @@ func llamaPick(name string, p config.Profile, list []ipc.LocalModel) (string, er
 // startLlama starts Irie's own llama-server on model m, in place of the
 // one it runs, and waits until the model is loaded: llama-server under
 // `irie runtime`, which stops it with its window, in its own window, with
-// Irie's context and cache type in one slot, then local.llama_args. A
-// server that exits first is an error with the last lines it printed.
+// Irie's cache type and local.llama_slots slots of local.context each,
+// then local.llama_args. llama-server splits its context evenly between
+// its slots. A server that exits first is an error with the last lines it
+// printed.
 func (c *Core) startLlama(bin string, m llamaModel) error {
 	l := c.cfg().Local
 	o := localmodel.Llama{URL: c.llamaURL(), HTTP: c.http}
@@ -312,7 +317,7 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 		c.mu.Lock()
 	} else if answers() {
 		c.mu.Unlock()
-		return fmt.Errorf("%s already runs a server Irie did not start; stop it, or set local.llama_port", o.URL)
+		return fmt.Errorf("%s already runs a server "+brand.Name+" did not start; stop it, or set local.llama_port", o.URL)
 	}
 	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", llamaWindow, "-P", "-F", "#{pane_id}"}
 	for _, k := range slices.Sorted(maps.Keys(runnerCaps)) {
@@ -320,7 +325,7 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 	}
 	args = append(args, "--",
 		c.bin, "runtime", "--", bin, "-m", m.path, "--alias", m.name, "--host", "127.0.0.1", "--port", strconv.Itoa(l.LlamaPort),
-		"-c", strconv.Itoa(l.Context), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", "1")
+		"-c", strconv.Itoa(l.Context*l.LlamaSlots), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", strconv.Itoa(l.LlamaSlots))
 	args = append(args, l.LlamaArgs...)
 	out, err := c.tmux.Run(args...)
 	if err != nil {
@@ -419,7 +424,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 			problem("%s needs about %s of memory at a %s context (%s of weights, %s of context cache), more than the %s local models may take here; pick a smaller model or packing, or raise local.memory_gib", m.name, localmodel.Bytes(need.Total), localmodel.Tokens(c.cfg().Local.Context), localmodel.Bytes(need.Weights), localmodel.Bytes(need.Cache), localmodel.Bytes(budget))
 		}
 		if free := machine.Available + freed - localmodel.Reserve(machine); machine.Total > 0 && need.Total > free && !short {
-			msg := fmt.Sprintf("%s needs about %s of memory and the machine has %s free, of which Irie leaves %s for everything else", m.name, localmodel.Bytes(need.Total), localmodel.Bytes(machine.Available+freed), localmodel.Bytes(localmodel.Reserve(machine)))
+			msg := fmt.Sprintf("%s needs about %s of memory and the machine has %s free, of which "+brand.Name+" leaves %s for everything else", m.name, localmodel.Bytes(need.Total), localmodel.Bytes(machine.Available+freed), localmodel.Bytes(localmodel.Reserve(machine)))
 			if force {
 				warn("%s; loading it anyway", msg)
 			} else {
@@ -428,7 +433,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 			}
 		}
 		if len(users) > 0 {
-			msg := fmt.Sprintf("Irie's llama-server runs %s for %s, and runs one model at a time", running, strings.Join(users, ", "))
+			msg := fmt.Sprintf(brand.Name+"'s llama-server runs %s for %s, and runs one model at a time", running, strings.Join(users, ", "))
 			if force {
 				warn("%s; %s takes its place", msg, m.name)
 			} else {
@@ -452,7 +457,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 	}
 	chk.Context, chk.Loaded = props.Context, true
 	if chk.Context < p.Local.MinContext {
-		problem("%s runs with a %s context at %s and the profile needs %s; raise local.context in Irie's config", m.name, localmodel.Tokens(chk.Context), c.llamaURL(), localmodel.Tokens(p.Local.MinContext))
+		problem("%s runs with a %s context at %s and the profile needs %s; raise local.context in "+brand.Name+"'s config", m.name, localmodel.Tokens(chk.Context), c.llamaURL(), localmodel.Tokens(p.Local.MinContext))
 	}
 	return chk
 }
@@ -476,6 +481,9 @@ func (c *Core) llamaTarget(name string, p config.Profile) (string, localmodel.Bu
 // does an Ollama one: the model is picked, checked and loaded, and p gets
 // it and the environment that points Claude Code at the server.
 func (c *Core) prepareLlama(name string, p *config.Profile, force bool) ([]string, error) {
+	if p.Local.Peer != "" {
+		return c.preparePeerLlama(name, p, force)
+	}
 	bin, b, m, err := c.llamaTarget(name, *p)
 	if err != nil {
 		return nil, err
@@ -530,6 +538,10 @@ func (c *Core) llamaStatus() *ipc.LlamaStatus {
 // localReady does for Ollama's: llama-server is there, the profile has a
 // model this build runs, and the machine can hold it.
 func (c *Core) llamaReady(name string, p config.Profile) (need, budget int64, note string, ok bool) {
+	if p.Local.Peer != "" {
+		note, ok := c.peerLlamaReady(name, p)
+		return 0, 0, note, ok
+	}
 	_, b, err := c.llamaBuild()
 	if err != nil {
 		return 0, 0, err.Error(), false
@@ -564,6 +576,10 @@ func (c *Core) llamaNote(name string, p config.Profile) string {
 	cost := "local, $0"
 	if p.Cost != "" {
 		cost = p.Cost
+	}
+	if p.Local.Peer != "" {
+		note, _ := c.peerLlamaReady(name, p)
+		return strings.Join([]string{cmp.Or(p.Model, "its model"), cost, note}, " · ")
 	}
 	_, b, err := c.llamaBuild()
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
@@ -164,7 +165,7 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 		}
 		if model == "" {
 			add(cost)
-			add("no model yet: irie setup local")
+			add("no model yet: " + brand.Slug + " setup local")
 			break
 		}
 		add(model)
@@ -172,7 +173,7 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 		if i := slices.IndexFunc(models, func(m ipc.LocalModel) bool { return localmodel.SameModel(m.Name, model) }); i >= 0 {
 			add(memoryNote(models[i], mem))
 		} else if server == serverStarting {
-			add("starting Irie's Ollama server")
+			add("starting " + brand.Name + "'s Ollama server")
 		}
 	case p.Harness == "claude-code":
 		add(strings.TrimSpace(strings.TrimPrefix(p.Model, "claude-") + " " + p.Effort))

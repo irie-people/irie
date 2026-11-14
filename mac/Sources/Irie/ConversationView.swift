@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The right side by default: the shown session's conversation. You and
@@ -5,7 +6,7 @@ import SwiftUI
 /// to its exact command or path, runs of reads or edits gather into one
 /// line, and subagents are chips. A message box at the foot types to the
 /// agent through the core; while the agent waits on you in its terminal, a
-/// banner opens the terminal instead. View > Terminal (⌥⌘T) flips to the
+/// banner opens the terminal instead. View › Show Terminal (⌥⌘T) flips to the
 /// live terminal and back. Colours, type and shapes come from Theme and the
 /// system's text styles only, so the view follows the palette.
 @MainActor
@@ -37,7 +38,7 @@ struct ConversationView: View {
     }
 
     /// The newest helper the shown session's conversation names, which
-    /// View > Show Helpers opens when none runs.
+    /// View › Helpers opens when none runs.
     private var newestHelper: String? {
         guard let s = selected else { return nil }
         return HelperRef.list(model.items, s).last?.agent
@@ -90,7 +91,7 @@ struct ConversationFeed: View {
         default:
             if model.transcript == nil {
                 ConversationNote(title: "This one lives in its terminal",
-                                 text: "It started before Irie could follow conversations, so there’s nothing to show here. Its terminal has all of it.",
+                                 text: "It started before \(Brand.name) could follow conversations, so there’s nothing to show here. Its terminal has all of it.",
                                  terminal: true)
             } else {
                 ConversationNote(title: "Nothing here yet", text: "Messages show here as they come.")
@@ -728,6 +729,10 @@ struct Composer: View {
     @State private var text = ""
     @State private var problem: String?
     @FocusState private var focused: Bool
+    /// A double ↓ on the note that stands for the box sends the agent on,
+    /// as on its empty prompt (ContinueKey.swift; the box's own ↓ is the
+    /// key router's).
+    @State private var downs = DoublePress()
 
     /// It waits on you in its terminal. Your turn in teach mode waits at its
     /// prompt instead, so the box takes your word that the part is written.
@@ -761,7 +766,7 @@ struct Composer: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.muted)
-            .help("Show the live terminal (View > Terminal)")
+            .help("Show the live terminal (View › Show Terminal, ⌥⌘T)")
         }
         .padding(.horizontal, 24)
         .padding(.top, 10)
@@ -770,7 +775,23 @@ struct Composer: View {
         .frame(maxWidth: .infinity)
         .background(Theme.ground)
         .onChange(of: store.focusMessage) { focused = true }
-        .onChange(of: focused) { store.messageHasKeys = focused }
+        .onChange(of: focused) {
+            store.messageHasKeys = focused
+            store.messageField = nil
+            // The field the window's field editor edits once AppKit has
+            // handed it the keyboard: the box's, which ContinueKey knows
+            // from the find field and the task bar by it.
+            if focused {
+                DispatchQueue.main.async {
+                    guard store.messageHasKeys, let editor = WindowPanes.window?.firstResponder as? NSTextView, editor.isFieldEditor else { return }
+                    store.messageField = editor.delegate as? NSTextField
+                }
+            }
+        }
+        .onDisappear {
+            store.messageHasKeys = false
+            store.messageField = nil
+        }
         .onChange(of: session.id) {
             text = ""
             problem = nil
@@ -858,6 +879,12 @@ struct Composer: View {
         }
         .onKeyPress(.space) {
             store.showTerminal = true
+            return .handled
+        }
+        .onKeyPress(.downArrow, phases: .down) { press in
+            guard waits, store.canContinue, press.modifiers.intersection([.shift, .control, .option, .command]).isEmpty,
+                  downs.press(at: ProcessInfo.processInfo.systemUptime) else { return .ignored }
+            store.continueAgent(session.id)
             return .handled
         }
         .accessibilityElement(children: .combine)

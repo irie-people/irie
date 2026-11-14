@@ -15,10 +15,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // ThemeSlug is Irie's theme's name: "custom:irie" as a theme setting.
-const ThemeSlug = "irie"
+const ThemeSlug = brand.Slug
 
 // ThemeVersion is the first Claude Code with custom themes.
 const ThemeVersion = "2.1.118"
@@ -64,7 +66,7 @@ func WriteTheme(dir string, dark map[string]string) (bool, error) {
 		Name      string            `json:"name"`
 		Base      string            `json:"base"`
 		Overrides map[string]string `json:"overrides"`
-	}{"Irie", "dark", overrides}, "", "  ")
+	}{brand.Name, "dark", overrides}, "", "  ")
 	if err != nil {
 		return false, err
 	}

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
@@ -162,8 +163,8 @@ func (h *history) labels() (undo, redo string) {
 }
 
 // label is what the header shows for what dir takes next: its step's
-// label, or for a batch the verb and how many sessions, `close 6 sessions`;
-// "" when there is nothing to take.
+// label, or for a batch its own label, or the verb and how many sessions,
+// `close 6 sessions`; "" when there is nothing to take.
 func (h *history) label(dir string) string {
 	a, ok := h.top(dir)
 	if !ok {
@@ -172,6 +173,10 @@ func (h *history) label(dir string) string {
 	n := h.batched(dir)
 	if n < 2 {
 		return a.Label
+	}
+	// A batch that says what it did, as `ungroup "Work"`, says it.
+	if l, _ := a.Data["batch_label"].(string); l != "" {
+		return l
 	}
 	verb := a.Kind
 	if k, ok := actionKinds[a.Kind]; ok {
@@ -375,26 +380,47 @@ func (c *Core) recordSteps(kind string, ids []string, data map[string]any) {
 
 // recordEach is recordSteps with data of each session's own.
 func (c *Core) recordEach(kind string, ids []string, data func(id string) map[string]any) {
-	k, ok := actionKinds[kind]
-	if !ok {
-		c.log.Warn("history: unknown action kind", "kind", kind)
-		return
+	steps := make([]takenStep, len(ids))
+	for i, id := range ids {
+		steps[i] = takenStep{kind: kind, session: id, data: data(id)}
 	}
-	if len(ids) == 0 {
+	c.recordTaken(steps)
+}
+
+// takenStep is one step of what the user took at once: its kind, the
+// session it acted on, and what undoing it needs.
+type takenStep struct {
+	kind, session string
+	data          map[string]any
+}
+
+// recordTaken records steps the user took at once, now done, of one kind
+// or several, as a group op moves sessions and groups together: for more
+// than one they share a batch, so that undo and redo take them together.
+// It never runs for what undo and redo do.
+func (c *Core) recordTaken(steps []takenStep) {
+	steps = slices.DeleteFunc(slices.Clone(steps), func(s takenStep) bool {
+		if _, ok := actionKinds[s.kind]; !ok {
+			c.log.Warn("history: unknown action kind", "kind", s.kind)
+			return true
+		}
+		return false
+	})
+	if len(steps) == 0 {
 		return
 	}
 	batch := ""
-	if len(ids) > 1 {
+	if len(steps) > 1 {
 		batch = newActionID()
 	}
 	c.mu.Lock()
 	at := time.Now().UTC().Truncate(time.Millisecond)
-	for _, id := range ids {
-		a := action{ID: newActionID(), Kind: kind, Session: id, Name: c.nameOf(id), At: at, Data: data(id), Batch: batch}
-		if r, ok := c.closedRecord(id); ok && c.sessions[id] == nil {
+	for _, s := range steps {
+		a := action{ID: newActionID(), Kind: s.kind, Session: s.session, Name: c.nameOf(s.session), At: at, Data: s.data, Batch: batch}
+		if r, ok := c.closedRecord(s.session); ok && c.sessions[s.session] == nil {
 			a = a.with("closed", r.Closed.Format(time.RFC3339Nano))
 		}
-		a.Label = k.labelOf(a)
+		a.Label = actionKinds[s.kind].labelOf(a)
 		c.steps.hist.push(a)
 	}
 	c.saveState()
@@ -580,7 +606,7 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 		id, d, codes, ok := parseChoiceID(a.ChoiceID)
 		if !ok || id != top.ID || d != dir {
 			unlock()
-			return res, ipc.Errorf(ipc.CodeStale, "the history changed since Irie asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
+			return res, ipc.Errorf(ipc.CodeStale, "the history changed since "+brand.Name+" asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
 		}
 		accepted, asked = codes[:len(codes)-1], codes[len(codes)-1]
 	}
@@ -591,7 +617,7 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 	}
 	var probs []problem
 	if !known {
-		probs = []problem{{code: "unknown", question: fmt.Sprintf("This version of Irie cannot %s %s.", dir, top.Label), recommend: ipc.ChoiceSkip}}
+		probs = []problem{{code: "unknown", question: fmt.Sprintf("This version of "+brand.Name+" cannot %s %s.", dir, top.Label), recommend: ipc.ChoiceSkip}}
 	} else {
 		probs = eff.check(c, top)
 	}
@@ -627,7 +653,7 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 				return ask(p, accepted)
 			}
 			unlock()
-			return res, ipc.Errorf(ipc.CodeStale, "things changed since Irie asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
+			return res, ipc.Errorf(ipc.CodeStale, "things changed since "+brand.Name+" asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
 		}
 		c.steps.hist.finish(dir, top.ID, top)
 		c.saveState()
@@ -715,7 +741,7 @@ func checkClose(c *Core, a action) []problem {
 		if _, ok := c.closedRecord(a.Session); ok {
 			return []problem{{code: "closed", question: fmt.Sprintf("%q is closed already.", c.nameOf(a.Session)),
 				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it closed and move on",
-					Detail: "Nothing needs closing, so the history moves on as if Irie had closed it."}},
+					Detail: "Nothing needs closing, so the history moves on as if " + brand.Name + " had closed it."}},
 				recommend: ipc.ChoiceSettle}}
 		}
 		return []problem{gone(a)}
@@ -765,7 +791,7 @@ func checkClose(c *Core, a action) []problem {
 }
 
 func gone(a action) problem {
-	return problem{code: "gone", question: fmt.Sprintf("%q is gone: Irie no longer has it, open or closed.", a.Name), recommend: ipc.ChoiceSkip}
+	return problem{code: "gone", question: fmt.Sprintf("%q is gone: "+brand.Name+" no longer has it, open or closed.", a.Name), recommend: ipc.ChoiceSkip}
 }
 
 // notOpen is what makes a step about an open session uncertain when its
@@ -783,7 +809,7 @@ func notOpen(c *Core, a action, verb string) []problem {
 func alreadyDone(question string) problem {
 	return problem{code: "already", question: question,
 		options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
-			Detail: "Nothing needs doing, so the history moves on as if Irie had done it."}},
+			Detail: "Nothing needs doing, so the history moves on as if " + brand.Name + " had done it."}},
 		recommend: ipc.ChoiceSettle}
 }
 
@@ -806,7 +832,7 @@ func checkReopen(c *Core, a action) []problem {
 	if x := c.sessions[a.Session]; x != nil {
 		return []problem{{code: "open", question: fmt.Sprintf("%q is open already.", x.name),
 			options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it open and move on",
-				Detail: "Nothing needs reopening, so the history moves on as if Irie had reopened it."}},
+				Detail: "Nothing needs reopening, so the history moves on as if " + brand.Name + " had reopened it."}},
 			recommend: ipc.ChoiceSettle}}
 	}
 	r, ok := c.closedRecord(a.Session)
@@ -818,7 +844,7 @@ func checkReopen(c *Core, a action) []problem {
 	}
 	spec, err := host.ReadSpec(c.paths.SpecFile(r.ID))
 	if err != nil {
-		return cannot("no-spec", "Irie lost how it ran")
+		return cannot("no-spec", brand.Name+" lost how it ran")
 	}
 	if fi, err := os.Stat(spec.Cwd); err != nil || !fi.IsDir() {
 		return cannot("no-folder", fmt.Sprintf("its folder %s is gone", spec.Cwd))

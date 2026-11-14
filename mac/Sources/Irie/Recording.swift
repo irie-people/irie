@@ -7,10 +7,13 @@ import SwiftUI
 /// reel types tasks, moves between cards, answers an agent and closes and
 /// opens the window, then exits (docs/demo/README.md).
 ///
-/// The window stands far off any screen, as --snapshot's does, and the app
-/// never takes the focus. macOS lets an app read its own windows back from
-/// the window server without the Screen Recording permission, so nothing
-/// asks: each frame is the window as the screen would show it, its terminal
+/// The window has to show to be filmed, so it opens on a desktop the user
+/// cannot see (Desktops.swift), takes no clicks, and the app never takes
+/// the focus; with every desktop in sight it does not film at all, rather
+/// than play the reel over the user's work. macOS lets an app read its own
+/// windows back from the window server without the Screen Recording
+/// permission, a window on another desktop too, so nothing asks: each
+/// frame is the window as the screen would show it, its terminal
 /// and animations included, which --snapshot's drawing leaves out. On a
 /// quiet Mac a frame at 2x takes about 30 ms to read back, convert to sRGB
 /// and encode, so the film runs at a steady 30 frames a second; --fps asks
@@ -39,7 +42,7 @@ enum Recording {
     }
 
     private static func fail(_ why: String) -> Never {
-        FileHandle.standardError.write(Data("Irie --record: \(why)\n".utf8))
+        FileHandle.standardError.write(Data("\(Brand.name) --record: \(why)\n".utf8))
         exit(2)
     }
 
@@ -112,6 +115,10 @@ enum Recording {
         window.toolbarStyle = IrieApp.toolbarStyle
         window.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
         window.setFrame(NSRect(x: -40000, y: -40000, width: o.size.width, height: o.size.height), display: true)
+        guard Desktops.showUnseen(window) else {
+            say("the film needs a desktop the user is not looking at, so the reel never plays over their work: add one in Mission Control")
+            return 1
+        }
 
         // The window with a store of its own, as the app has after a
         // launch: what it shows comes from the core alone. It returns once
@@ -142,7 +149,7 @@ enum Recording {
         // An app with no window on screen is napped, and its timers slowed;
         // this keeps the film's clock on time until it is done.
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
-                                                          reason: "Filming Irie's window")
+                                                          reason: "Filming \(Brand.name)'s window")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let scale = window.backingScaleFactor
         let film = Film(url: o.out, window: CGWindowID(window.windowNumber), fps: o.fps, backdrop: o.backdrop,
@@ -203,7 +210,7 @@ enum Recording {
     }
 
     private static func say(_ why: String) {
-        FileHandle.standardError.write(Data("Irie --record: \(why)\n".utf8))
+        FileHandle.standardError.write(Data("\(Brand.name) --record: \(why)\n".utf8))
     }
 }
 
@@ -437,8 +444,8 @@ final class Film: @unchecked Sendable {
     private let window: CGWindowID
     private let fps: Int
     private let backdrop: CGColor
-    private let queue = DispatchQueue(label: "Irie film", qos: .userInitiated)
-    private let encoder = DispatchQueue(label: "Irie film encoding", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "\(Brand.name) film", qos: .userInitiated)
+    private let encoder = DispatchQueue(label: "\(Brand.name) film encoding", qos: .userInitiated)
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?

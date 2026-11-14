@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/arch"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/learn"
@@ -121,7 +122,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		return nil, nil, nil, errors.New("claude: no session id")
 	}
 	if s.Bin == "" {
-		return nil, nil, nil, errors.New("claude: no irie binary for the hooks")
+		return nil, nil, nil, errors.New("claude: no " + brand.Slug + " binary for the hooks")
 	}
 	p, allow := localPermissions(p)
 	taken, err := TakeArch(p, s)
@@ -196,7 +197,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		case hasFlag(p.Args, "--mcp-config") || hasFlag(p.Args, "--strict-mcp-config"):
 			return nil, nil, nil, errors.New("claude: anonymous research can't run on a profile that passes its own --mcp-config")
 		case len(s.MCP) == 0:
-			return nil, nil, nil, errors.New("claude: anonymous research needs Irie's own MCP servers")
+			return nil, nil, nil, errors.New("claude: anonymous research needs " + brand.Name + "'s own MCP servers")
 		}
 	}
 	var mcp []byte
@@ -329,7 +330,7 @@ var Styles = map[string]string{config.TutorExplain: "Explanatory", config.TutorT
 const TipsVersion = "2.1.247"
 
 // TipsLabel is what Claude Code shows before Irie's tips.
-const TipsLabel = "Irie tip"
+const TipsLabel = brand.Name + " tip"
 
 // tipCooldown is how many sessions Claude Code waits before it shows one of
 // Irie's tips again, so they come seldom among its own.
@@ -356,10 +357,14 @@ type permissions struct {
 
 // LocalAllowed are the commands a local model's session runs without
 // asking (localPermissions): building, testing, vetting and formatting, in
-// Go, Python, JavaScript and Rust. Claude Code runs its read-only commands,
-// such as ls, cat and git diff, without asking in every mode.
+// Go, Python, JavaScript and Rust, setting up a Go module, and committing
+// its work where it runs, so that a bench's run (DESIGN §6.6) gets through
+// on its own. A test runs any code it likes, so go run adds no new risk;
+// nothing here pushes. Claude Code runs its read-only commands, such as ls,
+// cat and git diff, without asking in every mode.
 var LocalAllowed = []string{
 	"Bash(go build *)", "Bash(go test *)", "Bash(go vet *)", "Bash(go fmt *)", "Bash(gofmt *)",
+	"Bash(go mod *)", "Bash(go run *)", "Bash(git add *)", "Bash(git commit *)",
 	"Bash(pytest *)", "Bash(python -m pytest *)", "Bash(python3 -m pytest *)",
 	"Bash(npm test *)", "Bash(npm run test *)", "Bash(npm run build *)", "Bash(npm run lint *)",
 	"Bash(cargo build *)", "Bash(cargo check *)", "Bash(cargo test *)", "Bash(cargo fmt *)",

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -22,18 +23,26 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/proc"
+	"github.com/irie-people/irie/internal/skills"
 	"github.com/irie-people/irie/internal/sysload"
 )
 
 // Gabriel (DESIGN §4.11) carries the user's focus to the machine. While the
 // user is at the computer and it is busy, what they work on comes first:
 // the session on show while Irie is in front, a session they messaged or
-// started lately, a promoted one, and the app in front. Every other
-// session's process tree steps back into macOS's background state, as for
-// a promotion (priority.go), and so do the user's other heavy apps outside
-// Irie. All of it comes back once the machine is calm again, the user
-// walks away, Gabriel is turned off, or the core stops; a core that starts
-// first takes back what a core before it left, from gabriel.json.
+// started lately, a promoted one, the subtasks these delegated, and the app
+// in front. Every other session's process tree steps back into macOS's
+// background state, as for a promotion (priority.go), and so do the user's
+// other heavy apps outside Irie. All of it comes back once the machine is
+// calm again, the user walks away, Gabriel is turned off, or the core
+// stops; a core that starts first takes back what a core before it left,
+// from gabriel.json.
+//
+// The tab the user is on comes first of all: the top of the focus never
+// steps back, not even for a promotion, and while it works the machine
+// every other session but an install steps back for it, the rest of the
+// focus too. macOS has one background state a user may undo, so the order
+// top, rest of the focus, the rest is kept by when each steps back.
 
 // gabrielIdleEvery is how often the machine's idle time is read: ioreg is a
 // process to start.
@@ -48,7 +57,7 @@ const gabrielCalm = 30 * time.Second
 const gabrielMostOutside = 8
 
 // irieBundleID is Irie.app's (mac/Info.plist).
-const irieBundleID = "io.github.irie-hq.irie"
+const irieBundleID = brand.BundleID
 
 // terminalApps are terminals Irie's own window may be in: with one in
 // front, the session on show may be what the user looks at.
@@ -72,6 +81,17 @@ type gabState struct {
 	focus     map[string]bool // the sessions in the user's focus
 	installs  map[string]bool // the sessions that ran an install at the last sweep, in the focus too
 	outside   map[int]outProc // the apps outside Irie it slowed, by pid
+	// top is the tab the user is on, with the subtasks it delegated, while
+	// anything steps back (onTop): it never does.
+	top map[string]bool
+	// topBusy says the top works the machine (topBusyNext): every other
+	// session but an install steps back for it, the rest of the focus too.
+	topBusy bool
+	topCalm time.Time // since when the top has run light, while topBusy
+	topOf   string    // the session on show that topBusy was read for
+	// shownAt is when the user last turned to a tab in Irie (refocus): they
+	// were at the computer then, with Irie in front.
+	shownAt time.Time
 	// boostUntil is when the boost on ends: until then the user's focus
 	// gets the machine first whether it is busy or not.
 	boostUntil time.Time
@@ -87,7 +107,19 @@ type outProc struct {
 // gabrielOff reports whether Gabriel may not run in this core: a test core
 // (IRIE_GABRIEL=off, internal/testutil) would take the user's own agents
 // for apps outside it.
-func gabrielOff() bool { return os.Getenv("IRIE_GABRIEL") == "off" }
+func gabrielOff() bool { return os.Getenv(brand.Env("GABRIEL")) == "off" }
+
+// gabrielOn reports whether Gabriel works in this core: he is on, the
+// system has a background state, and it is not a test core.
+func gabrielOn(g config.Gabriel) bool { return g.On && proc.CanBackground && !gabrielOff() }
+
+// holds says whether Gabriel holds back: while he is on and the user is at
+// the computer, when the machine is busy or a boost is on, and at all times
+// then with arch.gabriel.always. While the user is away nothing is held
+// back, so work left running goes at full speed.
+func holds(on, present, busy, boosting, always bool) bool {
+	return on && present && (busy || boosting || always)
+}
 
 // busyNext says whether the machine is busy now, given whether it was:
 // busy as soon as the work waiting to run leaves less than a CPU free or
@@ -117,8 +149,8 @@ func busyNext(l sysload.Load, was bool, calmSince, now time.Time) (bool, time.Ti
 }
 
 // inFocus is the set of sessions in the user's focus: promoted ones, those
-// they messaged or started within word, and the one on show while Irie is
-// in front. The caller holds c.mu.
+// they messaged or started within word, the one on show while Irie is in
+// front, and the subtasks these delegated. The caller holds c.mu.
 func (c *Core) inFocus(irieFront bool, word time.Duration, now time.Time) map[string]bool {
 	f := map[string]bool{}
 	for id, x := range c.sessions {
@@ -129,19 +161,101 @@ func (c *Core) inFocus(irieFront bool, word time.Duration, now time.Time) map[st
 	if irieFront && c.selected != "" {
 		f[c.selected] = true
 	}
-	return f
+	return c.withDelegates(f)
 }
 
-// refocus takes the session now on show into the user's focus at once
-// while Gabriel holds back, and moves the trees before it returns: a show
-// never waits for his next sweep, up to sampleEvery ticks away, with the
-// session the user turned to still in the background. The caller holds
-// c.mu.
-func (c *Core) refocus() {
-	if !c.gab.holding {
+// withDelegates adds to set every live session that one in it delegated
+// (ctl delegate), and theirs in turn: a session waits on the subtasks it
+// hands out, so they go where it goes. The caller holds c.mu.
+func (c *Core) withDelegates(set map[string]bool) map[string]bool {
+	for grew := true; grew; {
+		grew = false
+		for id, x := range c.sessions {
+			if !set[id] && !x.dead && x.out != nil && x.out.parent != "" && set[x.out.parent] {
+				set[id] = true
+				grew = true
+			}
+		}
+	}
+	return set
+}
+
+// onTop is the tab the user is on: the session on show while Irie, or a
+// terminal it may be in, is in front, with the subtasks it delegated. It
+// comes first of all, and never steps back. The caller holds c.mu.
+func (c *Core) onTop(irieFront bool) map[string]bool {
+	x := c.sessions[c.selected]
+	if !irieFront || x == nil || x.dead {
+		return nil
+	}
+	return c.withDelegates(map[string]bool{x.id: true})
+}
+
+// topBusyNext says whether the top works the machine now, given whether it
+// did: at once when its trees use heavy of a CPU between them, as the last
+// sample read them, or memory is critically short; light again only after
+// gabrielCalm with neither, so the rest does not flap between the top's
+// tool calls.
+func topBusyNext(cpu, heavy float64, critical, was bool, calmSince, now time.Time) (bool, time.Time) {
+	if cpu >= heavy || critical {
+		return true, time.Time{}
+	}
+	if !was {
+		return false, time.Time{}
+	}
+	if calmSince.IsZero() {
+		calmSince = now
+	}
+	if now.Sub(calmSince) >= gabrielCalm {
+		return false, time.Time{}
+	}
+	return true, calmSince
+}
+
+// placeTop works out st's top and whether it works the machine. There is a
+// top whenever the user is at the computer, so that a promotion, which
+// puts the others in the background at once, never puts it there; whether
+// it works the machine counts only while Gabriel holds back. A tab the user
+// turns to starts afresh. The caller holds c.mu.
+func (c *Core) placeTop(st *gabState, now time.Time) {
+	st.top = nil
+	if st.present {
+		st.top = c.onTop(st.irieFront)
+	}
+	if !st.holding || len(st.top) == 0 {
+		st.topBusy, st.topCalm, st.topOf = false, time.Time{}, ""
 		return
 	}
-	c.gab.focus = c.focusNow(c.gab.irieFront, c.gab.installs, c.cfg().Arch.Gabriel.Word, time.Now())
+	if st.topOf != c.selected {
+		st.topBusy, st.topCalm, st.topOf = false, time.Time{}, c.selected
+	}
+	var cpu float64
+	for id := range st.top {
+		cpu += c.sessions[id].cpu
+	}
+	st.topBusy, st.topCalm = topBusyNext(cpu, c.cfg().Arch.Gabriel.Heavy, c.load.Pressure >= sysload.PressureCritical, st.topBusy, st.topCalm, now)
+}
+
+// refocus takes the session now on show into the user's focus, and to the
+// top of it, and moves the trees before it returns: a show never waits for
+// Gabriel's next sweep, up to sampleEvery ticks away, with the session the
+// user turned to still in the background. A show is the user's own doing:
+// they are at the computer, with Irie in front, whatever the last sweep
+// read. The caller holds c.mu.
+func (c *Core) refocus() {
+	g := c.cfg().Arch.Gabriel
+	if !gabrielOn(g) {
+		return
+	}
+	now := time.Now()
+	if !c.gab.present {
+		// Back from away: the next sweep reads the idle time afresh, and
+		// holds back again as it says.
+		c.gab.idleRead = time.Time{}
+	}
+	c.gab.shownAt, c.gab.present, c.gab.irieFront = now, true, true
+	c.gab.focus = c.focusNow(true, c.gab.installs, g.Word, now)
+	c.placeTop(&c.gab, now)
 	c.background()
 }
 
@@ -180,7 +294,7 @@ func (c *Core) gabrielSweep() {
 	load := c.load
 	c.mu.Unlock()
 
-	on := g.On && proc.CanBackground && !gabrielOff()
+	on := gabrielOn(g)
 	if on {
 		if now.Sub(st.idleRead) >= gabrielIdleEvery {
 			if idle, ok := machineIdle(); ok {
@@ -195,12 +309,15 @@ func (c *Core) gabrielSweep() {
 	} else {
 		st.present, st.busy, st.calmSince = false, false, time.Time{}
 	}
-	// A boost holds back as a busy machine does, until its time is up;
-	// while the user is away it waits like the rest.
-	boosting := now.Before(st.boostUntil)
-	st.holding = on && st.present && (st.busy || boosting)
+	// A boost holds back as a busy machine does, until its time is up, and
+	// arch.gabriel.always for good; while the user is away they wait like
+	// the rest.
+	st.holding = holds(on, st.present, st.busy, now.Before(st.boostUntil), g.Always)
 	st.frontOK, st.irieFront = false, false
-	if st.holding {
+	// What is in front says what the user looks at: the tab they are on
+	// never steps back (placeTop), not even for a promotion, which comes at
+	// once and needs it known.
+	if st.present {
 		if a, ok, err := focus.Front(); err == nil && ok {
 			st.front, st.frontOK = a, true
 			st.irieFront = a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)
@@ -224,9 +341,17 @@ func (c *Core) gabrielSweep() {
 	outside := c.slowOutside(held, st, g, trees)
 
 	c.mu.Lock()
-	// The focus is read last, so a show made during the sweep keeps the
-	// session it brought into the focus (refocus).
+	// A show made during the sweep wins: the user turned to a tab in Irie,
+	// so they are at the computer with Irie in front, and the idle time is
+	// read afresh next time (refocus). The focus and its top are read last,
+	// so it keeps the session it brought there, and the top goes on from
+	// where the show left it.
+	if c.gab.shownAt.After(st.shownAt) {
+		st.shownAt, st.present, st.irieFront, st.idleRead = c.gab.shownAt, true, true, time.Time{}
+	}
+	st.topBusy, st.topCalm, st.topOf = c.gab.topBusy, c.gab.topCalm, c.gab.topOf
 	st.focus = c.focusNow(st.irieFront, st.installs, g.Word, now)
+	c.placeTop(&st, now)
 	st.outside = outside
 	// A boost started or stopped meanwhile wins; one whose time is up ends.
 	st.boostUntil = c.gab.boostUntil
@@ -344,7 +469,7 @@ func (c *Core) heavyOutside(ps []focus.Proc, t proc.Table, awake map[int]bool, s
 		case p.UID != mine || p.PID == os.Getpid() || !alive:
 		case !wasHeld && p.CPU < g.Heavy:
 		case inTree[p.PID] || front[p.PID] || awake[p.PID]:
-		case p.Path == c.bin || tmuxBin != "" && p.Path == tmuxBin || strings.Contains(p.Path, "/Irie.app/"):
+		case p.Path == c.bin || tmuxBin != "" && p.Path == tmuxBin || strings.Contains(p.Path, "/"+brand.Name+".app/"):
 		case st.frontOK && st.front.BundlePath != "" && strings.HasPrefix(p.Path, st.front.BundlePath+"/"):
 		case systemPath(p.Path) || spared(p.Path, g.Spare):
 		default:
@@ -473,7 +598,30 @@ func (c *Core) gabrielOp(a ipc.GabrielArgs) (ipc.GabrielResult, error) {
 	}
 	r := c.gabrielReport()
 	r.Freed = freed
+	if a.Boost || a.Stop {
+		// Every client hears at once (the header's boost).
+		c.publishHeader()
+	}
 	return r, nil
+}
+
+// boostHeader is Gabriel's boost for the header while one is on: when a
+// boost started by hand ends, and arch.gabriel.always; nil while none is,
+// or while he is off. The caller holds c.mu.
+func (c *Core) boostHeader(now time.Time) *ipc.Boost {
+	g := c.cfg().Arch.Gabriel
+	if !g.On || !proc.CanBackground || gabrielOff() {
+		return nil
+	}
+	b := ipc.Boost{Always: g.Always}
+	if now.Before(c.gab.boostUntil) {
+		until := c.gab.boostUntil
+		b.Until = &until
+	}
+	if b.Until == nil && !b.Always {
+		return nil
+	}
+	return &b
 }
 
 // freeModels lets the models of Irie's own Ollama go that no live session
@@ -524,8 +672,8 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 	defer c.mu.Unlock()
 	st := c.gab
 	r := ipc.GabrielResult{
-		On: g.On && proc.CanBackground && !gabrielOff(), Outside: g.Outside, Present: st.present, Idle: st.idle.Round(time.Second).String(),
-		Busy: st.busy, Holding: st.holding, CPUs: c.load.CPUs, RunQueue: c.load.RunQueue, Pressure: c.load.Pressure,
+		On: gabrielOn(g), Outside: g.Outside, Present: st.present, Idle: st.idle.Round(time.Second).String(),
+		Busy: st.busy, Holding: st.holding, Always: g.Always, CPUs: c.load.CPUs, RunQueue: c.load.RunQueue, Pressure: c.load.Pressure,
 	}
 	if st.frontOK {
 		r.Front = st.front.Name
@@ -540,9 +688,31 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 			r.Focus = append(r.Focus, ipc.GabrielSession{ID: id, Name: x.name})
 		}
 	}
+	// The tab the user is on first, then what it delegated.
+	top := slices.SortedFunc(maps.Keys(st.top), func(a, b string) int {
+		switch {
+		case a == c.selected:
+			return -1
+		case b == c.selected:
+			return 1
+		}
+		return strings.Compare(a, b)
+	})
+	for _, id := range top {
+		if x := c.sessions[id]; x != nil {
+			r.Top = append(r.Top, ipc.GabrielSession{ID: id, Name: x.name})
+			r.TopCPU += x.cpu
+		}
+	}
+	r.TopBusy = st.topBusy
 	for _, id := range slices.Sorted(maps.Keys(c.sessions)) {
-		if x := c.sessions[id]; x.demoted && x.track.priority == 0 && !st.focus[id] && st.holding {
+		x := c.sessions[id]
+		switch {
+		case !x.demoted || st.top[id]:
+		case x.track.priority == 0 && !st.focus[id] && st.holding:
 			r.Held = append(r.Held, ipc.GabrielSession{ID: id, Name: x.name})
+		case st.focus[id] && st.topBusy:
+			r.Back = append(r.Back, ipc.GabrielSession{ID: id, Name: x.name})
 		}
 	}
 	for _, pid := range slices.Sorted(maps.Keys(st.outside)) {
@@ -553,83 +723,353 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 }
 
 // focusNote is what an agent is told when Gabriel turns away a call that
-// would take the user's focus.
-const focusNote = "[Irie] Gabriel turned this call away: it would bring an app, a window or a page to the front while your user works on something else, and take their focus. Do it without the front: open -g (and --background for Irie.app), a browser headless (--headless=new keeps the profile and its logins) or new pages in the background with no bringToFront, a Mac view checked with Irie.app's --snapshot. If your user must see it, say so in a line and let them open it."
+// would put a window where the user works.
+var focusNote = "[" + brand.Name + "] Gabriel turned this call away: it would put a window where your user works, in front of what they look at, or on the desktop they are on even behind it. Work without a window where you can: a browser headless (--headless=new keeps the profile and its logins), pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. A window you must open goes through \"$" + brand.Env("BIN") + "\" away -- COMMAND, with open -g inside it, which puts each window it opens on a desktop they are not looking at; never a tab in their own browser. The " + skills.Plugin + ":out-of-sight skill says more. If your user must see it, say so in a line and let them open it."
 
 var (
-	// shellSplit cuts a shell command at the places a new one starts.
-	shellSplit = regexp.MustCompile("[;&|\\n]+|\\$\\(|`")
 	// appActivates is AppleScript that brings an app forward or types into
 	// one.
 	appActivates = regexp.MustCompile(`(?i)\b(activate|reopen|keystroke|key code|open location)\b`)
+	// hereDoc starts a here-document: <<END, <<-END, <<'END' or <<"END".
+	hereDoc = regexp.MustCompile(`<<-?[ \t]*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?`)
+	// redirect is a word that sends a stream to a file or reads one: >,
+	// 2>, >>out, <in, &>out, 2>&1.
+	redirect = regexp.MustCompile(`^(\d*|&)(>>?|<)`)
+	// assignment sets a variable for the command after it: PATH=/usr/bin.
+	assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+)
+
+// shells run the script they are given with -c.
+var shells = []string{"sh", "bash", "zsh", "dash", "ksh"}
+
+// quietFlags keep an app started as the command, or that open(1) passes
+// them to, from showing a window where the user works: Irie.app's own runs,
+// which draw out of sight or put the window back on its desktop
+// (Desktops.swift), and a browser headless.
+var quietFlags = []string{"--snapshot", "--render-conversation", "--render-onboarding", "--record", "--bench", "--background", "--away", "--away-helper", "--version", "--help", "--headless"}
+
+// prefixes run the command after them, as sudo or nice do, or start a
+// compound command, as then or { do. Each maps to the letters of its
+// options that take a value, which is skipped with the option.
+var prefixes = map[string]string{
+	"sudo": "ughpCDrtUT", "env": "uSP", "nice": "n", "timeout": "sk", "caffeinate": "tw", "xargs": "nILPsEJR",
+	"nohup": "", "exec": "a", "command": "", "time": "", "!": "", "{": "",
+	"do": "", "then": "", "else": "", "elif": "", "if": "", "while": "", "until": "",
+}
+
+// windowEffect is where a shell command would put a window, from best to
+// worst.
+type windowEffect int
+
+const (
+	outOfSight windowEffect = iota // nowhere the user works
+	inSight                        // on the desktop the user is on, behind the app in front
+	inFront                        // in front: an app, a window or a page brought forward
 )
 
 // stealsFocus reports whether a shell command would bring an app, a window
 // or a page to the front: open(1) without -g or -j, AppleScript that
-// activates an app or types into it, or an app's own executable started
-// straight, short of a headless browser, Irie.app's --snapshot, --record
-// and --background, and the like. It reads the command roughly, as a person
-// would, and errs toward letting it run.
-func stealsFocus(cmd string) bool {
-	for _, seg := range shellSplit.Split(cmd, -1) {
-		words := strings.Fields(seg)
-		for len(words) > 0 && (strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") || slices.Contains([]string{"sudo", "env", "nohup", "exec", "command", "time", "("}, words[0])) {
-			words = words[1:]
-		}
+// activates an app or types into it, or an app's own executable started as
+// the command, short of a headless browser and Irie.app's --snapshot,
+// --record, --background, --away and the like.
+func stealsFocus(cmd string) bool { return windowOf(cmd) == inFront }
+
+// opensInSight reports whether a shell command would open a window on the
+// desktop the user is on, behind the app in front, where it still covers
+// what they see: open(1) with -g but not -j, short of what Irie.app keeps
+// out of sight itself. irie away is the way to open one (DESIGN §4.11, "Out
+// of sight").
+func opensInSight(cmd string) bool { return windowOf(cmd) == inSight }
+
+// windowOf is the worst any command a shell command runs does with a
+// window. It reads the command as a person would, not as a full shell
+// grammar, and errs toward letting it run: the guard stops a reflex, and a
+// wrong refusal costs the agent a retry.
+func windowOf(cmd string) windowEffect {
+	worst := outOfSight
+	for _, ws := range commands(withoutText(cmd)) {
+		words, piped := command(ws)
 		if len(words) == 0 {
 			continue
 		}
-		prog := strings.Trim(words[0], `"'`)
+		prog, base := words[0], filepath.Base(words[0])
+		e := outOfSight
 		switch {
 		case prog == "open" || prog == "/usr/bin/open":
-			if openInFront(words[1:]) {
-				return true
+			e = openEffect(words[1:], piped)
+		case base == "osascript":
+			if appActivates.MatchString(strings.Join(words, " ")) {
+				e = inFront
 			}
-		case filepath.Base(prog) == "osascript":
-			if appActivates.MatchString(seg) {
-				return true
+		case slices.Contains(shells, base):
+			// sh -c 'open …': the script it is given.
+			for i, w := range words[1:] {
+				if strings.HasPrefix(w, "-") && !strings.HasPrefix(w, "--") && strings.HasSuffix(w, "c") {
+					if i+2 < len(words) {
+						e = windowOf(words[i+2])
+					}
+					break
+				}
 			}
-		case strings.Contains(seg, ".app/Contents/MacOS/"):
-			quiet := []string{"--headless", "--snapshot", "--render-conversation", "--record", "--background", "--version", "--help"}
-			if !slices.ContainsFunc(quiet, func(q string) bool { return strings.Contains(seg, q) }) {
-				return true
+		case base == "eval":
+			e = windowOf(strings.Join(words[1:], " "))
+		case strings.Contains(prog, ".app/Contents/MacOS/"):
+			irie := strings.Contains("/"+prog, "/"+brand.Name+".app/") || strings.Contains("/"+prog, "/"+brand.Name+" Preview.app/")
+			if !(irie && quietWords(words[1:]) || slices.ContainsFunc(words[1:], headless)) {
+				e = inFront
 			}
 		}
+		worst = max(worst, e)
 	}
-	return false
+	return worst
 }
 
-// openInFront reports whether open(1) with args opens something in front:
-// it has something to open, and neither -g (in the background) nor -j
-// (hidden).
-func openInFront(args []string) bool {
-	target := false
-	for i := 0; i < len(args); i++ {
-		a := strings.Trim(args[i], `"'`)
-		switch {
-		case a == "--args":
-			return target
-		case a == "-a" || a == "-b" || a == "-s" || a == "--env" || a == "--stdin" || a == "--stdout" || a == "--stderr":
-			i++ // its value
-			if a == "-a" || a == "-b" {
-				target = true
-			}
-		case strings.HasPrefix(a, "--"):
-		case strings.HasPrefix(a, "-") && len(a) > 1:
-			if strings.ContainsAny(a[1:], "gj") {
-				return false
-			}
-		default:
-			target = true
+// commands splits a shell command into the commands it runs, each as its
+// words with the shell's quotes taken off. It splits at ; & | ( ) and new
+// lines outside quotes, and where $( and backticks start a command, even
+// inside double quotes. Quoted text stays one word, so a message that holds
+// "; open -a" is an argument and runs nothing.
+func commands(cmd string) [][]string {
+	var out [][]string
+	var cur []string
+	var word strings.Builder
+	in := false // a word is under way
+	endWord := func() {
+		if in {
+			cur = append(cur, word.String())
+			word.Reset()
+			in = false
 		}
 	}
-	return target
+	endCommand := func() {
+		endWord()
+		if len(cur) > 0 {
+			out = append(out, cur)
+			cur = nil
+		}
+	}
+	for i := 0; i < len(cmd); i++ {
+		c := cmd[i]
+		switch {
+		case c == '\\' && i+1 < len(cmd):
+			i++
+			if cmd[i] != '\n' {
+				word.WriteByte(cmd[i])
+				in = true
+			}
+		case c == '\'':
+			j := strings.IndexByte(cmd[i+1:], '\'')
+			if j < 0 {
+				j = len(cmd) - i - 1
+			}
+			word.WriteString(cmd[i+1 : i+1+j])
+			in = true
+			i += j + 1
+		case c == '"':
+			j := i + 1
+			for j < len(cmd) && cmd[j] != '"' && cmd[j] != '`' && !(cmd[j] == '$' && j+1 < len(cmd) && cmd[j+1] == '(') {
+				if cmd[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			j = min(j, len(cmd))
+			word.WriteString(cmd[i+1 : j])
+			in = true
+			if j < len(cmd) && cmd[j] != '"' {
+				i = j - 1 // a command inside the quotes: read on from it
+				continue
+			}
+			i = j
+		case c == '&' && (i > 0 && (cmd[i-1] == '>' || cmd[i-1] == '<') || i+1 < len(cmd) && cmd[i+1] == '>'):
+			word.WriteByte(c) // 2>&1, &>out: a redirect, not a new command
+			in = true
+		case c == '$' && i+1 < len(cmd) && cmd[i+1] == '(':
+			endCommand()
+			i++
+		case strings.IndexByte(";&|\n()`", c) >= 0:
+			endCommand()
+		case c == ' ' || c == '\t' || c == '\r':
+			endWord()
+		default:
+			word.WriteByte(c)
+			in = true
+		}
+	}
+	endCommand()
+	return out
+}
+
+// command strips what runs a command, such as sudo -u alice, nice, timeout
+// 30s or xargs, what starts a compound one, such as then or {, and the
+// variables set for it, down to the command itself. piped says xargs runs
+// it, with arguments of its own.
+func command(words []string) (rest []string, piped bool) {
+	for len(words) > 0 {
+		w := words[0]
+		if assignment.MatchString(w) {
+			words = words[1:]
+			continue
+		}
+		takes, ok := prefixes[w]
+		if !ok {
+			return words, piped
+		}
+		piped = piped || w == "xargs"
+		words = words[1:]
+		for len(words) > 0 && strings.HasPrefix(words[0], "-") && words[0] != "-" {
+			o := words[0]
+			words = words[1:]
+			if o == "--" {
+				break
+			}
+			if len(o) == 2 && strings.ContainsRune(takes, rune(o[1])) && len(words) > 0 {
+				words = words[1:]
+			}
+		}
+		if w == "timeout" && len(words) > 0 {
+			words = words[1:] // its duration
+		}
+	}
+	return words, piped
+}
+
+// withoutText drops here-documents, whose lines are text such as a commit
+// message, not commands, and may start with words like open. A
+// here-document fed to a shell is commands, and stays.
+func withoutText(cmd string) string {
+	for from := 0; from < len(cmd); {
+		m := hereDoc.FindStringSubmatchIndex(cmd[from:])
+		if m == nil {
+			break
+		}
+		for i := range m {
+			m[i] += from
+		}
+		// <<< is a here-string, on its own line.
+		if m[0] > 0 && cmd[m[0]-1] == '<' {
+			from = m[1]
+			continue
+		}
+		delim := cmd[m[2]:m[3]]
+		nl := strings.IndexByte(cmd[m[1]:], '\n')
+		if nl < 0 {
+			cmd = cmd[:m[0]] + cmd[m[1]:]
+			from = m[0]
+			continue
+		}
+		body := m[1] + nl + 1
+		stop, end := len(cmd), len(cmd)
+		for at := body; at < len(cmd); {
+			line, next := cmd[at:], len(cmd)
+			if i := strings.IndexByte(line, '\n'); i >= 0 {
+				line, next = line[:i], at+i+1
+			}
+			if strings.TrimLeft(line, "\t") == delim {
+				stop, end = at, next
+				break
+			}
+			at = next
+		}
+		fed := false
+		if cs := commands(cmd[strings.LastIndexByte(cmd[:m[0]], '\n')+1 : m[0]]); len(cs) > 0 {
+			if w, _ := command(cs[len(cs)-1]); len(w) > 0 {
+				fed = slices.Contains(shells, filepath.Base(w[0]))
+			}
+		}
+		if fed {
+			cmd = cmd[:m[0]] + cmd[m[1]:stop] + cmd[end:]
+		} else {
+			cmd = cmd[:m[0]] + cmd[m[1]:body] + cmd[end:]
+		}
+		from = m[0]
+	}
+	return cmd
+}
+
+// quietWords reports whether words hold a flag that keeps the window out
+// of sight, as a word of its own, such as --snapshot or --headless=new.
+func quietWords(words []string) bool {
+	return slices.ContainsFunc(words, func(w string) bool {
+		return slices.ContainsFunc(quietFlags, func(q string) bool { return w == q || strings.HasPrefix(w, q+"=") })
+	})
+}
+
+// headless reports whether a word starts a browser without a window.
+func headless(w string) bool { return w == "--headless" || strings.HasPrefix(w, "--headless=") }
+
+// openEffect is where open(1) with args puts a window: nowhere without
+// something to open, or hidden (-j); in front without -g; else on the
+// desktop the user is on, behind the app in front. Short of that are
+// Irie.app given a flag of its own that keeps its window out of sight, as
+// tools/live.sh gives it --background, and a new browser (-n) started
+// headless; a browser that runs already drops the arguments. piped says
+// xargs gives it what to open.
+func openEffect(args []string, piped bool) windowEffect {
+	target, background, hidden, fresh, irie := piped, false, false, false, false
+	var passed []string // what --args hands the app
+	opens := func(v string) {
+		target = true
+		v = strings.TrimSuffix(v, "/")
+		base := strings.TrimSuffix(filepath.Base(v), ".app")
+		irie = irie || base == brand.Name || base == brand.Name+" Preview" || strings.HasPrefix(v, brand.BundleID)
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--args":
+			passed = args[i+1:]
+			i = len(args)
+		case redirect.MatchString(a):
+			if op := strings.TrimLeft(a, "0123456789"); op == ">" || op == ">>" || op == "<" || op == "&>" || op == "&>>" {
+				i++ // the file follows
+			}
+		case a == "--background":
+			background = true
+		case a == "--hide":
+			hidden = true
+		case a == "--new":
+			fresh = true
+		case a == "--url":
+			if i+1 < len(args) {
+				i++
+				opens(args[i])
+			}
+		case a == "--arch" || a == "--stdin" || a == "--stdout" || a == "--stderr" || a == "--env":
+			i++ // its value
+		case strings.HasPrefix(a, "--"):
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			flags := a[1:]
+			hidden = hidden || strings.Contains(flags, "j")
+			background = background || strings.Contains(flags, "g")
+			fresh = fresh || strings.Contains(flags, "n")
+			// The last of -absuio takes a value, as -na Safari does.
+			if last := flags[len(flags)-1:]; strings.Contains("absuio", last) && i+1 < len(args) {
+				i++
+				if strings.Contains("abu", last) {
+					opens(args[i])
+				}
+			}
+		default:
+			opens(a)
+		}
+	}
+	switch {
+	case !target || hidden:
+		return outOfSight
+	case !background:
+		return inFront
+	case irie && quietWords(passed), fresh && slices.ContainsFunc(passed, headless):
+		return outOfSight
+	}
+	return inSight
 }
 
 // focusGuard says what to tell the agent when a Bash call it is about to
-// make would take the user's focus while they look at something else: not
-// at the session that makes it, with Irie in front. "" lets the call run.
-// It holds no lock when it is called.
+// make would put a window where the user works: on the desktop they are on,
+// always, since nobody asked for a window behind them; in front, unless
+// they watch the session that makes it, with Irie in front, and may want
+// what it opens. "" lets the call run. It holds no lock when it is called.
 func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Event) string {
 	g := c.cfg().Arch.Gabriel
 	if tool != "Bash" || !g.On || !g.Guard || gabrielOff() || !slices.ContainsFunc(evs, func(e event.Event) bool { return e.Kind == event.ToolStarted }) {
@@ -638,19 +1078,24 @@ func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Ev
 	var in struct {
 		Command string `json:"command"`
 	}
-	if json.Unmarshal(input, &in) != nil || !stealsFocus(in.Command) {
+	if json.Unmarshal(input, &in) != nil {
 		return ""
 	}
-	// The user watching this very session may want what it opens.
-	if a, ok, err := focus.Front(); err == nil && ok && (a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)) {
-		c.mu.Lock()
-		watching := c.selected == id
-		c.mu.Unlock()
-		if watching {
-			return ""
+	switch windowOf(in.Command) {
+	case inSight:
+		return focusNote
+	case inFront:
+		if a, ok, err := focus.Front(); err == nil && ok && (a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)) {
+			c.mu.Lock()
+			watching := c.selected == id
+			c.mu.Unlock()
+			if watching {
+				return ""
+			}
 		}
+		return focusNote
 	}
-	return focusNote
+	return ""
 }
 
 // installing is the sessions that run tools/live.sh: every session's work

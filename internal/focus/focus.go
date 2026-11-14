@@ -120,7 +120,7 @@ func ParseProcs(out string) []Proc {
 		pid, e1 := strconv.Atoi(f[0])
 		ppid, e2 := strconv.Atoi(f[1])
 		uid, e3 := strconv.Atoi(f[2])
-		cpu, e4 := strconv.ParseFloat(f[3], 64)
+		cpu, e4 := strconv.ParseFloat(strings.Replace(f[3], ",", ".", 1), 64) // 0,5 in some locales
 		if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
 			continue
 		}

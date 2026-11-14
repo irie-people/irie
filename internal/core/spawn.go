@@ -14,8 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irie-people/irie/internal/anon"
-	"github.com/irie-people/irie/internal/browser"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -277,7 +276,7 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		}
 		c.mu.Unlock()
 	}
-	var comp *anon.Compartment
+	var comp *compartment
 	if a.Anon != "" {
 		an, err := c.anonName(a.Anon, base)
 		if err != nil {
@@ -308,8 +307,11 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	}
 	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor, anon: comp})
 	if err == nil {
-		c.placeNew(x.id, a)
+		// Its space and group first: where it goes in the list follows
+		// them (groups.go).
 		c.placeInSpace(x.id, a)
+		c.placeInGroup(x.id, a)
+		c.placeNew(x.id, a)
 	}
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
@@ -321,6 +323,8 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		c.log.Warn("spawn failed", "err", err)
 		return ipc.Session{}, err
 	}
+	// A group --group made goes to the sidebars with the row in it.
+	c.publishHeader()
 	c.log.Info("spawned", "session", x.id, "name", x.name, "cwd", x.cwd, "worktree", x.worktree)
 	return x.wire(), nil
 }
@@ -344,13 +348,13 @@ type job struct {
 	run     config.Profile // the profile as it runs: routed, its local model checked
 	h       harness.Harness
 	probe   harness.Probe
-	task    string            // the task; empty when the job resumes
-	next    string            // a resumed conversation's next prompt, as a fork's task (ctx.go)
-	resume  string            // the vendor id of the conversation to carry on
-	data    map[string]any    // more data for spawn.requested
-	reopen  *closedRecord     // the closed session that comes back, with its id and place in the list
-	tutor   string            // its tutor mode, explain or teach; "" when off (learn.tutor)
-	anon    *anon.Compartment // the compartment it researches in, anonymously; nil when it doesn't (anon.go)
+	task    string         // the task; empty when the job resumes
+	next    string         // a resumed conversation's next prompt, as a fork's task (ctx.go)
+	resume  string         // the vendor id of the conversation to carry on
+	data    map[string]any // more data for spawn.requested
+	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
+	tutor   string         // its tutor mode, explain or teach; "" when off (learn.tutor)
+	anon    *compartment   // the compartment it researches in, anonymously; nil when it doesn't (anon.go)
 }
 
 // launch writes the session's files, creates its window and records the
@@ -434,10 +438,10 @@ func (c *Core) launch(j job) (*session, error) {
 			return nil, err
 		}
 	} else if j.probe.Flags["--mcp-config"] {
-		if srv, warn := c.browserServer(id); warn != "" {
+		if mcp, warn := c.browserMCP(id); warn != "" {
 			x.warnings = append(x.warnings, warn)
-		} else if srv != nil {
-			s.MCP = map[string]harness.MCPServer{browser.ServerName: *srv}
+		} else if mcp != nil {
+			s.MCP = mcp
 		}
 	}
 	launch := h.Launch
@@ -462,7 +466,7 @@ func (c *Core) launch(j job) (*session, error) {
 	if env == nil {
 		env = map[string]string{}
 	}
-	env["IRIE_SESSION"], env["IRIE_SOCKET"], env["IRIE_BIN"] = id, c.paths.Socket(), c.bin
+	env[brand.Env("SESSION")], env[brand.Env("SOCKET")], env[brand.Env("BIN")] = id, c.paths.Socket(), c.bin
 	var unset []string
 	if c.cfg().Spawn.HideTmux {
 		unset = []string{"TMUX", "TMUX_PANE"}

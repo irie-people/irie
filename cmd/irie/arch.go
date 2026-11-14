@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-const archUsage = "usage: irie ctl arch [--json]"
+const archUsage = "usage: " + brand.Slug + " ctl arch [--json]"
 
 // ctlArch lists Irie's arch agents (DESIGN §4.11): each one's icon, name
 // and work, what he does now, and what you can do with him.
@@ -52,7 +53,7 @@ func printArch(w io.Writer, r ipc.ArchResult) error {
 		}
 		for i, it := range a.Items {
 			if i == archItemsShown {
-				fmt.Fprintf(w, "  … and %d more: `irie ctl %s` says them all\n", len(a.Items)-i, a.Name)
+				fmt.Fprintf(w, "  … and %d more: `"+brand.Slug+" ctl %s` says them all\n", len(a.Items)-i, a.Name)
 				break
 			}
 			mark := "-"

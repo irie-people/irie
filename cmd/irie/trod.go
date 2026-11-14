@@ -11,10 +11,11 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-const trodUsage = "usage: irie ctl trod [on|off|now [--until HH:MM]|stop] [--json]"
+const trodUsage = "usage: " + brand.Slug + " ctl trod [on|off|now [--until HH:MM]|stop] [--json]"
 
 // ctlTrod is the trod bot's report (DESIGN §4.10): whether it works now,
 // the rules and guidelines it gives every agent it sends on, and what it
@@ -103,10 +104,10 @@ func printTrod(w io.Writer, r ipc.TrodResult, now time.Time) error {
 		if r.Line != nil {
 			most = *r.Line
 		}
-		fmt.Fprintf(w, "Trod bot: working, started by hand at %s. It works while you are at the Mac too, until no session has work left or the plan reaches %.0f%%%s; `irie ctl trod stop` stops it.\n",
+		fmt.Fprintf(w, "Trod bot: working, started by hand at %s. It works while you are at the Mac too, until no session has work left or the plan reaches %.0f%%%s; `"+brand.Slug+" ctl trod stop` stops it.\n",
 			h.From.Local().Format("15:04"), most, limit)
 	case !r.On:
-		fmt.Fprintf(w, "Trod bot: off (%s when on). `irie ctl trod on` turns it on; `irie ctl trod now` starts a run at once.\n", hours)
+		fmt.Fprintf(w, "Trod bot: off (%s when on). `"+brand.Slug+" ctl trod on` turns it on; `"+brand.Slug+" ctl trod now` starts a run at once.\n", hours)
 	case !r.In:
 		fmt.Fprintf(w, "Trod bot: on, %s; out of its hours until %s.\n", hours, r.From.AddDate(0, 0, 1).Local().Format("Mon 15:04"))
 	case r.Works:

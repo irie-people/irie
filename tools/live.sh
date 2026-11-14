@@ -26,24 +26,44 @@
 set -eu
 cd "$(git rev-parse --show-toplevel)"
 
+# The product's names, from internal/brand (DESIGN §2.10): Irie, irie and
+# IRIE unless a copy renamed it.
+eval "$(tools/brand.sh)"
+
 # Inside an Irie session IRIE_BIN names the build that started the session,
 # and `irie up` would start that one again instead of the new one.
-unset IRIE_BIN
+unset "${BRAND_ENV}_BIN"
 
 # Irie's data directory, found the way internal/paths finds it.
 case ${XDG_DATA_HOME:-} in
-/*) data=$XDG_DATA_HOME/irie ;;
-*) data=$HOME/.local/share/irie ;;
+/*) data=$XDG_DATA_HOME/$BRAND_SLUG ;;
+*) data=$HOME/.local/share/$BRAND_SLUG ;;
 esac
 case ${XDG_CONFIG_HOME:-} in
-/*) conf=$XDG_CONFIG_HOME/irie/config.toml ;;
-*) conf=$HOME/.config/irie/config.toml ;;
+/*) conf=$XDG_CONFIG_HOME/$BRAND_SLUG/config.toml ;;
+*) conf=$HOME/.config/$BRAND_SLUG/config.toml ;;
 esac
-bin=$data/bin/irie
-app=${HOME:?}/Applications/Irie.app
+bin=$data/bin/$BRAND_SLUG
+app=${HOME:?}/Applications/$BRAND_NAME.app
 appstamp=$data/bin/app.commit
 
 say() { echo "live: $*" >&2; }
+
+# app_in_front says whether the app is the one in front, by its name as
+# Launch Services lists it.
+app_in_front() { lsappinfo list 2>/dev/null | grep -F "\"$BRAND_NAME\" ASN:" | grep -q '(in front)'; }
+
+# app_pids prints the pids of the running app. irie away runs the same
+# executable with --away-helper for an agent's command, which is no app to
+# stop: stopping it would stop the command (DESIGN §2.1, principle 6).
+app_pids() {
+	for p in $(pgrep -x "$BRAND_EXE"); do
+		case $(ps -o args= -p "$p" 2>/dev/null) in
+		*--away-helper*) ;;
+		*) echo "$p" ;;
+		esac
+	done
+}
 
 # rev prints the commit a Go binary was built from.
 rev() { go version -m "$1" 2>/dev/null | sed -n 's/^[[:space:]]*build[[:space:]]*vcs\.revision=//p'; }
@@ -56,7 +76,7 @@ running() { "$1" ctl list >/dev/null 2>&1; }
 # only names the agent in a report: a row's name may change meanwhile, as
 # when Claude Code titles a new session (DESIGN §4.2).
 agents() {
-	tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},agent}' \
+	tmux -L "${sock:-$BRAND_SLUG}" list-panes -a -f '#{==:#{@irie_role},agent}' \
 		-F '#{pane_id} #{pane_pid} #{pane_dead} #{@irie_name}' 2>/dev/null | sort || true
 }
 
@@ -209,7 +229,7 @@ if [ -n "$live" ]; then catch_up "$live" "the live build" live; fi
 # from the config file itself.
 sock=$({ "$bin" config print 2>/dev/null || cat "$conf" 2>/dev/null || true; } |
 	sed -n '/^\[tmux\]/,/^\[/s/^[[:space:]]*socket[[:space:]]*=[[:space:]]*"\(.*\)"$/\1/p' | head -1)
-core=$(tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
+core=$(tmux -L "${sock:-$BRAND_SLUG}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
 corebin=
 if [ -n "$core" ]; then
 	corebin=$(ps -o command= -p "$core" | cut -d' ' -f1)
@@ -240,10 +260,10 @@ if [ -n "$code" ]; then take_slot; fi
 
 # Irie.app builds while the tests run, not after them.
 newapp=
-if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/dev/null; }; then
+if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || [ -n "$(app_pids)" ]; }; then
 	built=$(cat "$appstamp" 2>/dev/null || true)
 	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac tools/mkicon 2>/dev/null; then
-		newapp=mac/build/Irie.app
+		newapp="mac/build/$BRAND_NAME.app"
 		# An install that stopped after building, as at a full lock queue,
 		# leaves the app beside a note of the sources it was built from, the
 		# committed mac/ and tools/mkicon: a run again from the same sources
@@ -251,7 +271,9 @@ if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x Irie >/d
 		appsrc=$(git rev-parse HEAD:mac HEAD:tools/mkicon 2>/dev/null | paste -sd ' ' -)
 		if [ "$(cat mac/build/Irie.sources 2>/dev/null)" != "$appsrc" ] || [ ! -d "$newapp" ]; then
 			rm -f mac/build/Irie.sources
-			mac/build.sh >"$work/mac.log" 2>&1 &
+			# A build to install, numbered after every earlier one, so
+			# macOS opens it rather than another copy (mac/build.sh).
+			IRIE_MAC_INSTALL=1 mac/build.sh >"$work/mac.log" 2>&1 &
 			macpid=$!
 		fi
 	fi
@@ -286,13 +308,13 @@ fi
 # time, and only the swap below holds the lock.
 if [ -n "$gonew" ]; then
 	tmpbin=$bin.new.$$
-	go build -o "$tmpbin" ./cmd/irie
+	go build -tags "$BRAND_TAGS" -o "$tmpbin" ./cmd/irie
 fi
 if [ -n "$macpid" ]; then
 	if ! wait "$macpid"; then
 		macpid=
 		cat "$work/mac.log" >&2
-		say "Irie.app did not build"
+		say "$BRAND_NAME.app did not build"
 		exit 1
 	fi
 	macpid=
@@ -311,7 +333,7 @@ take_lock "${IRIE_LIVE_WAIT:-3600}"
 # drop it. Its merge leaves the tests it did not touch cached.
 live=$(git rev-parse -q --verify refs/heads/live || true)
 if [ -n "$live" ]; then catch_up "$live" "an install that landed while this one tested" live; fi
-core=$(tmux -L "${sock:-irie}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
+core=$(tmux -L "${sock:-$BRAND_SLUG}" list-panes -a -f '#{==:#{@irie_role},core}' -F '#{pane_pid}' 2>/dev/null | head -1 || true)
 if [ -n "$core" ]; then
 	corerev=$(rev "$(ps -o command= -p "$core" | cut -d' ' -f1)")
 	if [ -n "$corerev" ]; then catch_up "$corerev" "the running Irie's build" "$corerev"; fi
@@ -345,8 +367,7 @@ pids=
 # waits beside the old one, and the core swaps it in once another app is in
 # front or you step away (Gabriel, DESIGN §4.11).
 inuse=
-if [ -n "$newapp" ] && pgrep -x Irie >/dev/null &&
-	lsappinfo list 2>/dev/null | grep -q '"Irie" ASN:[^ ]* (in front)'; then
+if [ -n "$newapp" ] && [ -n "$(app_pids)" ] && app_in_front; then
 	idle=$(ioreg -c IOHIDSystem -d 4 -k HIDIdleTime 2>/dev/null | awk '/HIDIdleTime/ {print int($NF / 1000000000); exit}')
 	if [ "${idle:-999}" -lt 60 ]; then inuse=1; fi
 fi
@@ -354,7 +375,7 @@ if [ -n "$inuse" ]; then
 	rm -rf "$app.next"
 	ditto "$newapp" "$app.next"
 	echo "$head" >"$appstamp.next"
-	say "you are using Irie.app, so the new one waits beside it and swaps in once you look away"
+	say "you are using $BRAND_NAME.app, so the new one waits beside it and swaps in once you look away"
 	newapp=
 fi
 if [ -n "$newapp" ]; then
@@ -362,17 +383,17 @@ if [ -n "$newapp" ]; then
 	# The app keeps no state of its own (docs/MAC.md), so it is stopped, not
 	# asked to quit. Launch Services would bring back an Irie that is still
 	# running instead of starting the new one, so it waits for the exit.
-	pids=$(pgrep -x Irie || true)
+	pids=$(app_pids)
 	front=
 	if [ -n "$pids" ]; then
-		if lsappinfo list 2>/dev/null | grep -q '"Irie" ASN:[^ ]* (in front)'; then front=1; fi
+		if app_in_front; then front=1; fi
 		kill $pids 2>/dev/null || true
 		n=0
-		while pgrep -x Irie >/dev/null && [ $n -lt 30 ]; do
+		while [ -n "$(app_pids)" ] && [ $n -lt 30 ]; do
 			sleep 0.1
 			n=$((n + 1))
 		done
-		pkill -9 -x Irie || true
+		for p in $(app_pids); do kill -9 "$p" 2>/dev/null || true; done
 	fi
 	mkdir -p "$(dirname "$app")"
 	rm -rf "$app"
@@ -409,9 +430,9 @@ else
 	say "$what is installed; Irie is not running, and $bin starts it"
 fi
 if [ -n "$pids" ]; then
-	say "Irie.app is rebuilt and relaunched"
+	say "$BRAND_NAME.app is rebuilt and relaunched"
 elif [ -n "$newapp" ]; then
-	say "Irie.app is rebuilt in $app"
+	say "$BRAND_NAME.app is rebuilt in $app"
 fi
 
 # The push comes last, so that a slow or refused one never holds back the
