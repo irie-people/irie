@@ -489,6 +489,9 @@ func hostIDs(name string, raw json.RawMessage) json.RawMessage {
 func (c *Core) showPeerRow(id string) error {
 	c.mu.Lock()
 	c.selected, c.split = id, ""
+	// The tab on top was this core's session on show, no longer on show
+	// (gabriel.go).
+	c.refocus()
 	var cmds [][]string
 	if slot := c.snap.SlotPane(); slot != nil && slot.Role != tmux.RolePlaceholder {
 		out, err := tmux.SwapOut(c.snap, slot.ID)
