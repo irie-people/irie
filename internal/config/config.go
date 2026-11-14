@@ -58,6 +58,7 @@ type Config struct {
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
 	Markets  Markets            `toml:"markets"`
+	Mail     Mail               `toml:"mail"`
 	Plugins  Plugins            `toml:"plugins"`
 }
 
@@ -78,6 +79,10 @@ type Plugins struct {
 	// Markets is a map of your own market research: the page in
 	// markets.folder in the Mac app's Markets window, and :markets.
 	Markets bool `toml:"markets"`
+	// Mail is Irie's own mail client: Gmail, Proton Mail and other IMAP
+	// accounts in one list, each in a colour of its own
+	// (docs/proposals/mail.md).
+	Mail bool `toml:"mail"`
 }
 
 // Markets is the markets plugin's map (DESIGN §4.17).
@@ -91,6 +96,10 @@ type Markets struct {
 // MarketsOn says whether the markets plugin runs: plugins.markets, with
 // the plugin built in.
 func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
+
+// MailOn says whether the mail plugin runs: plugins.mail, with the plugin
+// built in.
+func (c Config) MailOn() bool { return MailBuilt && c.Plugins.Mail }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -875,8 +884,9 @@ func Default() Config {
 		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 		Browser: Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
 		Anon:    Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
+		Mail:    defaultMail(),
 		VPN:     VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins: Plugins{VPN: true, Privacy: true, Writing: true},
+		Plugins: Plugins{VPN: true, Privacy: true, Writing: true, Mail: true},
 	}
 }
 
@@ -991,8 +1001,9 @@ func Parse(data []byte, path string) (Config, error) {
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
 		Markets  *Markets                  `toml:"markets"`
+		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1071,6 +1082,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Spawn.Preferences == nil {
 		c.Spawn.Preferences = []string{}
+	}
+	if c.Mail.Accounts == nil {
+		c.Mail.Accounts = map[string]MailAccount{}
 	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
@@ -1591,13 +1605,14 @@ func (c Config) Validate() error {
 	if an.Tor != "" && !pathLike(an.Tor) {
 		bad("anon.tor = %q: must be an absolute or ~ path, or empty for the usual places", an.Tor)
 	}
+	checkMail(c.Mail, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1635,6 +1650,10 @@ func (c Config) Write(w io.Writer) error {
 	if !MarketsBuilt {
 		delete(m, "markets")
 		delete(plugins, "markets")
+	}
+	if !MailBuilt {
+		delete(m, "mail")
+		delete(plugins, "mail")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

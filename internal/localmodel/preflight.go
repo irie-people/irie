@@ -80,6 +80,12 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 	if info.Context > 0 && info.Context < w.MinContext {
 		problem("%s takes at most %s tokens of context and the profile needs %s; pick a model with a longer context, or lower the profile's local.min_context", model, Tokens(info.Context), Tokens(w.MinContext))
 	}
+	if info.Runner == RunnerMLX {
+		// The caps on llama-server's prompt cache and checkpoints do not
+		// reach Ollama's MLX engine: a Qwen3.5 4B there grew to 16 GB in two
+		// Claude Code tasks on an 18 GiB Mac (DESIGN §6.3).
+		problem("%s runs on Ollama's MLX engine, whose memory "+brand.Name+" cannot cap; use a GGUF build of it, such as a q4_K_M tag", model)
+	}
 	if m.Remote {
 		warn("%s runs on Ollama's cloud, not on this machine", model)
 	}
