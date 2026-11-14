@@ -19,6 +19,8 @@ final class MenuState {
         /// Pin, and the cards picked with ⌘ or ⇧ (Tabs.swift).
         var pinned = false
         var canPin = false
+        /// Your groups (Groups.swift).
+        var canGroup = false
         var picked = 0
         var canReopen = false
         var trodHand = false
@@ -57,7 +59,8 @@ extension Store {
         return MenuState.Facts(
             selected: selection != nil && outsideSelection == nil,
             closable: c != nil, parked: c?.isParked == true, canPark: c != nil && canPark,
-            pinned: c?.isPinned == true, canPin: c != nil && canPin && c?.peerName == nil, picked: picked.count,
+            pinned: c?.isPinned == true, canPin: c != nil && canPin && c?.peerName == nil,
+            canGroup: canGroup && (picked.count > 1 || c != nil && c?.peerName == nil), picked: picked.count,
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
@@ -144,6 +147,8 @@ struct IrieCommands: Commands {
                 if let s = store.closable { store.setPinned(s, !s.isPinned) }
             })
             .disabled(!f.canPin)
+            Button(f.picked > 1 ? "New Group of \(f.picked) Sessions" : "New Group with Session", action: run { store.newGroupKey() })
+                .disabled(!f.canGroup)
             // The keys move the selected card in its group; with ⇧, to its
             // top or bottom, without promoting it.
             Menu("Move Session") {

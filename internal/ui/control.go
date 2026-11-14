@@ -230,13 +230,19 @@ func (m *Model) press(i int) {
 
 // crosses reports whether session s can be carried into group g across
 // Parked's edge: any session into Parked, which parks it, and a parked one
-// back into its own group, which unparks it.
+// back into its own group, which unparks it; one of no group of yours into
+// any run of the List view's sessions of none.
 func (m Model) crosses(s ipc.Session, g string) bool {
 	if s.Parked {
-		return g == m.homeKey(s)
+		return g == m.homeKey(s) || isRun(g) && isRun(m.homeKey(s))
 	}
 	return g == parkedKey
 }
+
+// sameZone reports whether a dragged session moves between groups a and b
+// as within one: the same group, or two runs of the List view's sessions
+// of no group of yours, which your groups split.
+func sameZone(a, b string) bool { return a == b || isRun(a) && isRun(b) }
 
 // dragTo carries the held session to where the pointer is, among the
 // sessions of its group, past each card it crosses, or across Parked's
@@ -267,7 +273,7 @@ func (m *Model) dragTo(y int) {
 	// before or just after the card, whichever lands it under the pointer.
 	rest := slices.Delete(slices.Clone(m.sessions), from, from+1)
 	tries := [][]ipc.Session{slices.Insert(slices.Clone(rest), it.s, s)}
-	if it.group.key != d.group {
+	if !sameZone(it.group.key, d.group) {
 		if !m.crosses(s, it.group.key) {
 			return
 		}
@@ -318,9 +324,9 @@ func (m Model) release(y int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if on && m.items()[i].group.key != d.group {
+	if on && !sameZone(m.items()[i].group.key, d.group) {
 		m.putBack(d)
-		m.setStatus("a session moves only among the others of its group, or into Parked and out", false)
+		m.setStatus("a session moves only among the others of its group, or into Parked and out; :group NAME puts it in a group of yours", false)
 		return m, nil
 	}
 	c, ok := m.controls()

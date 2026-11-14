@@ -130,6 +130,7 @@ type Core struct {
 	outcomes   map[string]*outcome   // every session's route and outcome, those gone included
 	order      []string              // the list's order from the top, which the user sets (order.go)
 	spaces     []ipc.Space           // the spaces, the first first (spaces.go)
+	groups     []ipc.Group           // your groups, in the order they were made (groups.go)
 	hues       map[string]int        // the colours the core gave the sessions, the closed ones' too (hue.go)
 	bg         map[int]bgProc        // the processes Irie put in the background, by pid (priority.go)
 	gab        gabState              // what Gabriel sees and holds back (gabriel.go)
@@ -344,6 +345,7 @@ func Run(o Options) error {
 	c.loadOutcomes()
 	c.loadOrder()
 	c.loadSpaces()
+	c.loadGroups()
 	c.loadHues()
 	c.loadClosed()
 	c.loadState()
@@ -656,6 +658,7 @@ func (c *Core) trodFrom(now time.Time) time.Time {
 func (c *Core) row(x *session, from time.Time) ipc.Session {
 	s := x.wire()
 	s.Space = c.spaceOf(x)
+	s.Group = c.groupOf(x)
 	if !from.IsZero() {
 		s.Trod = trodRow(&x.track, from)
 	}
@@ -758,7 +761,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
-			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
+			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
 		})}, nil
@@ -789,6 +792,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.spaceOp(a)
+	case ipc.OpGroup:
+		var a ipc.GroupArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.groupOp(a)
 	case ipc.OpStopSub:
 		var a ipc.StopSubArgs
 		if err := decode(raw, &a); err != nil {

@@ -34,6 +34,12 @@ const controlUsage = `  ` + brand.Slug + ` ctl freeze SESSION|--all          sto
                                          Pinned group at the top, where no
                                          close but your own of it reaches it
   ` + brand.Slug + ` ctl unpin [SESSION]               put it back, first among the rest
+  ` + brand.Slug + ` ctl group NAME [SESSION...]       put sessions in the group of that name,
+                                         made when none has it, which the
+                                         sidebars draw together: by id or name,
+                                         or with none the one this runs in;
+                                         --list lists the groups
+  ` + brand.Slug + ` ctl ungroup [SESSION...]          take sessions out of their groups
 `
 
 // ctlFreeze is `irie ctl freeze` (on) and `irie ctl thaw`.
@@ -115,6 +121,79 @@ func ctlPin(args []string, on bool) error {
 		name, op = "pin", ipc.OpPin
 	}
 	return ctlPlace(name, op, args)
+}
+
+// ctlGroup is `irie ctl group NAME [SESSION...]`: the sessions go in the
+// group of that name, made when none has it, as one step of the history.
+// With no session it groups the one it runs in; --list lists the groups.
+func ctlGroup(args []string) error {
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	if len(args) == 1 && args[0] == "--list" {
+		var r ipc.GroupResult
+		if err := ipc.Call(sock, 5*time.Second, ipc.OpGroup, ipc.GroupArgs{}, &r); err != nil {
+			return err
+		}
+		for _, g := range r.Groups {
+			fmt.Printf("%s\t%s\n", g.ID, g.Name)
+		}
+		return nil
+	}
+	if len(args) == 0 || strings.TrimSpace(args[0]) == "" {
+		return errors.New("usage: " + brand.Slug + " ctl group NAME [SESSION...] | --list")
+	}
+	ids, err := groupTargets(sock, "group", args[1:])
+	if err != nil {
+		return err
+	}
+	var r ipc.GroupResult
+	if err := ipc.Call(sock, 10*time.Second, ipc.OpGroup, ipc.GroupArgs{Do: ipc.GroupAdd, Name: args[0], Sessions: ids}, &r); err != nil {
+		return err
+	}
+	for _, g := range r.Groups {
+		if g.ID == r.Group {
+			fmt.Printf("in %s: %d moved\n", g.Name, len(r.Sessions))
+		}
+	}
+	return nil
+}
+
+// ctlUngroup is `irie ctl ungroup [SESSION...]`: the sessions come out of
+// their groups, as one step of the history.
+func ctlUngroup(args []string) error {
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	ids, err := groupTargets(sock, "ungroup", args)
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpGroup, ipc.GroupArgs{Do: ipc.GroupRemove, Sessions: ids}, nil)
+}
+
+// groupTargets are the sessions args name, by id or name, or with none the
+// one this runs in.
+func groupTargets(sock, verb string, args []string) ([]string, error) {
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+		return nil, err
+	}
+	if len(args) == 0 {
+		id, err := sessionTarget(verb, nil, os.Getenv(brand.Env("SESSION")), l.Sessions)
+		return []string{id}, err
+	}
+	ids := make([]string, 0, len(args))
+	for _, a := range args {
+		id, err := sessionTarget(verb, []string{a}, "", l.Sessions)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // ctlPlace runs op, park, unpark, pin or unpin, on the session args name.

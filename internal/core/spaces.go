@@ -212,11 +212,33 @@ func (c *Core) spaceOp(a ipc.SpaceArgs) (ipc.SpaceResult, error) {
 			from[id] = was
 		}
 	}
+	// Each space has its own groups: a session leaves its group unless
+	// the whole group goes with it (groups.go), and undo puts it back.
+	going := map[string]bool{}
+	for _, id := range moved {
+		going[id] = true
+	}
+	left := map[string]ipc.Group{}
+	for _, id := range moved {
+		if g := c.leaveForSpace(c.sessions[id], to, going); g != "" {
+			left[id] = ipc.Group{ID: g, Name: c.groupNameOf(g)}
+		}
+	}
+	if len(left) > 0 {
+		c.saveGroups()
+	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
+	if len(left) > 0 {
+		c.publishHeader()
+	}
 	c.recordEach(actSpace, moved, func(id string) map[string]any {
-		return map[string]any{"from": from[id], "to": to}
+		d := map[string]any{"from": from[id], "to": to}
+		if g, ok := left[id]; ok {
+			d["group"], d["group_name"] = g.ID, g.Name
+		}
+		return d
 	})
 	return ipc.SpaceResult{Sessions: moved}, nil
 }
@@ -264,10 +286,25 @@ func doSpace(k string) func(c *Core, a action) (action, error) {
 			return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 		}
 		c.putInSpace(x, a.str(k))
+		// A session the move took out of its group goes back in it with
+		// undo, and out again with redo.
+		g := a.str("group")
+		if g != "" {
+			if k == "from" {
+				c.ensureGroup(g, a.str("group_name"))
+				c.setGroup(x, g, event.SourceUser)
+			} else {
+				c.setGroup(x, "", event.SourceUser)
+			}
+			c.saveGroups()
+		}
 		a.Name = x.name
 		frames := c.changes()
 		c.mu.Unlock()
 		c.publish(frames)
+		if g != "" {
+			c.publishHeader()
+		}
 		return a, nil
 	}
 }

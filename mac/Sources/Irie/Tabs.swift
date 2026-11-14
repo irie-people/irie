@@ -73,13 +73,17 @@ extension Store {
             .filter { $0.id != s.id && !$0.isPinned && !$0.isParked && $0.peerName == nil }
     }
 
-    /// The cards below s in its group, which Close Below closes; none for a
-    /// pinned card, or another machine's.
+    /// The cards below s, which Close Below closes: in the List view every
+    /// card under it between Pinned and Parked, your groups' too; else
+    /// those under it in its group. None for a pinned card, or another
+    /// machine's.
     func below(_ s: Session) -> [Session] {
         guard !s.isPinned, s.peerName == nil,
-              let g = drawnGroups.first(where: { g in g.sessions.contains { $0.id == s.id } }),
-              let i = g.sessions.firstIndex(where: { $0.id == s.id }) else { return [] }
-        return Array(g.sessions[(i + 1)...]).filter { !$0.isPinned && $0.peerName == nil }
+              let g = drawnGroups.first(where: { g in g.sessions.contains { $0.id == s.id } }) else { return [] }
+        let section = g.bare || g.userGroup != nil
+            ? drawnGroups.filter { $0.bare || $0.userGroup != nil }.flatMap(\.sessions) : g.sessions
+        guard let i = section.firstIndex(where: { $0.id == s.id }) else { return [] }
+        return Array(section[(i + 1)...]).filter { !$0.isPinned && $0.peerName == nil }
     }
 
     /// The cards a group header's Close Group closes: none for Pinned's or
@@ -355,6 +359,7 @@ struct PickedActions: View {
     var body: some View {
         let n = list.count
         Button("Close \(n) Sessions") { store.closeMany(list) }
+        GroupMenu(list: list)
         SpaceMenu(list: list)
         if store.canPark {
             if list.contains(where: { !$0.isParked }) {
@@ -391,14 +396,21 @@ struct CloseManyItems: View {
     }
 }
 
-/// A group header's menu: fold it, and close its cards.
+/// A group header's menu: fold it, and close its cards; for your group,
+/// rename it and ungroup it too (Groups.swift).
 @MainActor
 struct GroupActions: View {
     @Environment(Store.self) private var store
     let group: SessionGroup
 
     var body: some View {
+        if let id = group.userGroup {
+            Button("Rename Group…") { store.renamingGroup = id }
+        }
         Button(store.isOpen(group) ? "Fold" : "Open") { store.fold(group) }
+        if let id = group.userGroup {
+            Button("Ungroup") { store.ungroup(id) }
+        }
         let list = store.closable(in: group)
         if !list.isEmpty {
             Divider()

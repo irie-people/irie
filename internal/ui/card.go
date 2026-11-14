@@ -418,6 +418,8 @@ func (m Model) detailRows() (string, [][]piece) {
 			rows = append(rows, []piece{{"out of the way; they keep running", p.muted, false}}, []piece{{"z unparks one, Z folds or opens them", p.muted, false}})
 		case g.host != "":
 			rows = append(rows, []piece{{brand.Name + "'s sessions on " + g.host, p.muted, false}}, []piece{{"they run there, in its order", p.muted, false}})
+		case g.user != "":
+			rows = append(rows, []piece{{"a group of yours", p.muted, false}}, []piece{{":group " + g.title + " puts one in, :ungroup takes it out", p.muted, false}})
 		}
 		return g.title, append(rows, []piece{{what, p.muted, false}})
 	case itemOutside:

@@ -309,6 +309,7 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	if err == nil {
 		c.placeNew(x.id, a)
 		c.placeInSpace(x.id, a)
+		c.placeInGroup(x.id, a)
 	}
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)
@@ -320,6 +321,8 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		c.log.Warn("spawn failed", "err", err)
 		return ipc.Session{}, err
 	}
+	// A group --group made goes to the sidebars with the row in it.
+	c.publishHeader()
 	c.log.Info("spawned", "session", x.id, "name", x.name, "cwd", x.cwd, "worktree", x.worktree)
 	return x.wire(), nil
 }

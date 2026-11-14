@@ -1,9 +1,10 @@
 package ui
 
-// The list (DESIGN §4.1): Irie's sessions in one list or a group per repo,
-// then the Parked group, a group for each paired machine's sessions (§2.8)
-// and the Outside Irie group. Every group but the List view's one list has
-// a header that folds it. The sessions keep the core's one order, which
+// The list (DESIGN §4.1): Irie's sessions in one list, with your groups in
+// it, or a group per repo, then the Parked group, a group for each paired
+// machine's sessions (§2.8) and the Outside Irie group. Every group but the
+// List view's runs of sessions of no group of yours has a header that
+// folds it. The sessions keep the core's one order, which
 // only the user changes, so a state change never moves one. The arrow keys
 // walk the visible headers and sessions, and the selection and the scroll
 // follow what they are on, not where it is, so what the core sends never
@@ -35,8 +36,9 @@ const (
 	itemOutside                 // a session outside Irie
 )
 
-// group is a heading of the list: the List view's one list, a repo,
-// Parked, another machine, or Outside Irie.
+// group is a heading of the list: the List view's one list, or a run of
+// it between your groups, one of your groups, a repo, Parked, another
+// machine, or Outside Irie.
 type group struct {
 	key     string
 	title   string
@@ -44,8 +46,9 @@ type group struct {
 	needs   int // how many of them need you
 	folded  bool
 	outside bool
-	bare    bool   // drawn without a header: the List view's one list
+	bare    bool   // drawn without a header: the List view's sessions of no group of yours
 	host    string // the paired machine whose sessions it holds
+	user    string // the group of yours it is
 }
 
 // item is one entry of the list.
@@ -76,14 +79,46 @@ const notInARepo = "repo:"
 // hostKey names the group of a paired machine's sessions (DESIGN §2.8).
 func hostKey(host string) string { return "host:" + host }
 
+// userKey names one of your groups (DESIGN §4.1).
+func userKey(id string) string { return "group:" + id }
+
+// runKey names the List view's nth run of sessions of no group of yours:
+// listKey for the first, then one for each run after one of your groups.
+func runKey(n int) string {
+	if n == 0 {
+		return listKey
+	}
+	return fmt.Sprintf("%s#%d", listKey, n)
+}
+
+// isRun reports whether key names a run of the List view's sessions of no
+// group of yours, which a session may be dragged between.
+func isRun(key string) bool { return key == listKey || strings.HasPrefix(key, listKey+"#") }
+
+// inGroup is the group of yours s is in, when the header lists it.
+func (m Model) inGroup(s ipc.Session) (ipc.Group, bool) {
+	if s.Group == "" {
+		return ipc.Group{}, false
+	}
+	for _, g := range m.head.Groups {
+		if g.ID == s.Group {
+			return g, true
+		}
+	}
+	return ipc.Group{}, false
+}
+
 // homeKey is the group a session is in while it is not parked: its
-// machine's group when another machine runs it, else the List view's one
-// list, or in the Repo view its repo's group.
+// machine's group when another machine runs it, else in the List view its
+// group of yours or the one list, or in the Repo view its repo's group.
 func (m Model) homeKey(s ipc.Session) string {
 	switch {
 	case s.Host != "":
 		return hostKey(s.Host)
 	case m.view == byList:
+		if g, ok := m.inGroup(s); ok {
+			return userKey(g.ID)
+		}
 		return listKey
 	case s.Repo != "":
 		return "repo:" + s.Repo
@@ -144,14 +179,30 @@ func tail(p string, n int) string {
 // Pinned, then the List view's one list or a group per repo, then Parked, then a group
 // for each paired machine's sessions, in the order the core lists them, so
 // they stand apart from this machine's. Parked, a machine's session goes
-// into Parked with the rest. Only the user moves a session, by dragging,
-// promoting or parking it, so a state change never does.
+// into Parked with the rest. In the List view each of your groups is where
+// the first of its sessions is, with the rest of them after it, and the
+// sessions of none between your groups are in runs with no header. Only
+// the user moves a session, by dragging, promoting or parking it, so a
+// state change never does.
 func (m Model) groups() ([]*group, [][]int) {
 	var keys, hosts []string
 	members := map[string][]int{}
 	titles := map[string]string{notInARepo: "Not in a repo", listKey: "Sessions", parkedKey: "Parked", pinnedKey: "Pinned"}
+	users := map[string]string{}
+	runs, last := 0, ""
 	for i, s := range m.sessions {
 		k := m.groupOf(s)
+		if k == listKey {
+			// A run of sessions of no group of yours goes on until one of
+			// your groups starts; a session of a group already drawn above
+			// is drawn there, and ends no run.
+			if last != "" && !isRun(last) {
+				runs++
+			}
+			k = runKey(runs)
+		} else if g, ok := m.inGroup(s); ok && k == userKey(g.ID) {
+			titles[k], users[k] = g.Name, g.ID
+		}
 		if _, ok := members[k]; !ok {
 			switch {
 			case k == parkedKey, k == pinnedKey:
@@ -160,6 +211,7 @@ func (m Model) groups() ([]*group, [][]int) {
 				titles[k] = "On " + s.Host
 			default:
 				keys = append(keys, k)
+				last = k
 			}
 		}
 		members[k] = append(members[k], i)
@@ -207,8 +259,8 @@ func (m Model) groups() ([]*group, [][]int) {
 	order := make([][]int, len(keys))
 	for i, k := range keys {
 		// The one list has no header, so it never folds.
-		bare := k == listKey
-		g := &group{key: k, title: titles[k], count: len(members[k]), folded: m.folded[k] && !bare, bare: bare}
+		bare := isRun(k)
+		g := &group{key: k, title: titles[k], count: len(members[k]), folded: m.folded[k] && !bare, bare: bare, user: users[k]}
 		if slices.Contains(hosts, k) {
 			g.host = m.sessions[members[k][0]].Host
 		}

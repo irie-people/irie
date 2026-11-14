@@ -105,36 +105,32 @@ private struct SessionList: View {
                     // One clock for every card's age.
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
                         LazyVStack(alignment: .leading, spacing: 6) {
+                            // Under Pinned, a faint line marks where the List
+                            // view's cards start.
+                            let underPinned = groups.first?.id == SessionGroup.pinned ? groups.dropFirst().first?.id : nil
                             ForEach(groups) { g in
-                                // The List view's one list needs no header;
-                                // under Pinned, a faint line marks where it
-                                // starts.
-                                if g.id != SessionGroup.list {
+                                // The List view's cards of no group of yours
+                                // need no header.
+                                if !g.bare {
                                     GroupHeader(group: g)
-                                } else if groups.first?.id == SessionGroup.pinned {
+                                } else if g.id == underPinned {
                                     Capsule().fill(Theme.muted.opacity(0.25)).frame(height: 1)
                                         .padding(.horizontal, 6).padding(.vertical, 2)
                                         .accessibilityHidden(true)
                                 }
                                 if store.isOpen(g) {
-                                    // Each card is drawn again only when what
-                                    // it shows changed (SessionCard.==): a
-                                    // frame about one session redraws one
-                                    // card, not the list.
-                                    let last = g.sessions.count - 1
-                                    ForEach(Array(g.sessions.enumerated()), id: \.element.id) { i, s in
-                                        SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil,
-                                                    picked: store.picked.contains(s.id),
-                                                    listFocused: listFocused, now: ctx.date, first: i == 0, last: i == last)
-                                            .equatable()
-                                            .id(s.id)
-                                        // Only a session with helpers has the
-                                        // rows: wrapped, empty ones would take
-                                        // the stack's spacing.
-                                        if HelperRows.has(s) {
-                                            HelperRows(session: s)
-                                                .equatable()
-                                        }
+                                    if g.userGroup != nil {
+                                        // Your group's cards hang off a rail,
+                                        // so where the group ends shows.
+                                        VStack(alignment: .leading, spacing: 6) { cards(g, now: ctx.date) }
+                                            .padding(.leading, 9)
+                                            .overlay(alignment: .leading) {
+                                                Capsule().fill(Theme.muted.opacity(0.3)).frame(width: 2)
+                                                    .padding(.leading, 2).padding(.vertical, 3)
+                                                    .accessibilityHidden(true)
+                                            }
+                                    } else {
+                                        cards(g, now: ctx.date)
                                     }
                                 }
                             }
@@ -162,23 +158,23 @@ private struct SessionList: View {
             // The arrows walk on into the outside rows, which they only select.
             // A name open to edit keeps its keys.
             .onKeyPress(.upArrow) {
-                guard store.renaming == nil else { return .ignored }
+                guard store.renaming == nil, store.renamingGroup == nil else { return .ignored }
                 store.walk(-1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
-                guard store.renaming == nil else { return .ignored }
+                guard store.renaming == nil, store.renamingGroup == nil else { return .ignored }
                 store.walk(1)
                 return .handled
             }
             // Escape puts down the cards picked with ⌘ or ⇧ (Tabs.swift).
             .onKeyPress(.escape) {
-                guard store.renaming == nil, !store.picked.isEmpty else { return .ignored }
+                guard store.renaming == nil, store.renamingGroup == nil, !store.picked.isEmpty else { return .ignored }
                 store.pickNone()
                 return .handled
             }
             .onKeyPress(.return) {
-                guard store.renaming == nil else { return .ignored }
+                guard store.renaming == nil, store.renamingGroup == nil else { return .ignored }
                 if let o = store.selectedOutside {
                     store.explainOutside(o)
                     return .handled
@@ -189,7 +185,7 @@ private struct SessionList: View {
             }
             // z parks or unparks the selected card, and Z folds Parked.
             .onKeyPress(characters: CharacterSet(charactersIn: "zZ"), phases: .down) { press in
-                guard store.renaming == nil, store.canPark, press.modifiers.subtracting([.shift, .capsLock]).isEmpty else { return .ignored }
+                guard store.renaming == nil, store.renamingGroup == nil, store.canPark, press.modifiers.subtracting([.shift, .capsLock]).isEmpty else { return .ignored }
                 if press.modifiers.contains(.shift) {
                     store.foldParked()
                 } else if store.closable != nil {
@@ -200,6 +196,26 @@ private struct SessionList: View {
                 return .handled
             }
             .accessibilityLabel("Sessions")
+        }
+    }
+
+    /// A group's cards, each with its helpers. Each card is drawn again only
+    /// when what it shows changed (SessionCard.==): a frame about one
+    /// session redraws one card, not the list.
+    @ViewBuilder private func cards(_ g: SessionGroup, now: Date) -> some View {
+        let last = g.sessions.count - 1
+        ForEach(Array(g.sessions.enumerated()), id: \.element.id) { i, s in
+            SessionCard(session: s, selected: s.id == store.selection && store.outsideSelection == nil,
+                        picked: store.picked.contains(s.id),
+                        listFocused: listFocused, now: now, first: i == 0, last: i == last)
+                .equatable()
+                .id(s.id)
+            // Only a session with helpers has the rows: wrapped, empty ones
+            // would take the stack's spacing.
+            if HelperRows.has(s) {
+                HelperRows(session: s)
+                    .equatable()
+            }
         }
     }
 }
@@ -538,45 +554,82 @@ private struct RenameField: View {
 
 /// A group's header: its name and count, and a chevron that folds it. A
 /// folded group says how many of its sessions need you, in red, and the
-/// Parked header turns red while any parked session needs you.
+/// Parked header turns red while any parked session needs you. Your group's
+/// header renames it in place, on a double click or Rename Group…, and a
+/// card dropped on it joins the group (Groups.swift).
 @MainActor
 private struct GroupHeader: View {
     @Environment(Store.self) private var store
     let group: SessionGroup
+    /// A card held over your group's header.
+    @State private var targeted = false
 
     var body: some View {
         let open = store.isOpen(group)
         let needs = group.sessions.filter { Look($0).loud }.count
         let note = !open && needs > 0 ? "\(needs) \(needs == 1 ? "needs" : "need") you" : nil
-        Button { store.fold(group) } label: {
+        if let id = group.userGroup, store.renamingGroup == id {
             HStack(spacing: 5) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 8.5, weight: .heavy))
-                    .rotationEffect(.degrees(open ? 90 : 0))
-                    .foregroundStyle(Theme.muted)
-                    .frame(width: 10)
-                Text(group.title)
-                    .font(Theme.font(12, .heavy))
-                    .foregroundStyle(group.id == SessionGroup.parked && needs > 0 ? Theme.needs : Theme.ink)
-                    .lineLimit(1)
-                if let note {
-                    Text("· " + note).font(Theme.font(11.5, .bold)).foregroundStyle(Theme.needs).lineLimit(1)
-                }
+                chevron(open)
+                GroupNameField(id: id, name: group.title)
                 Spacer(minLength: 4)
-                Text("\(group.sessions.count)").font(Theme.font(11.5, .bold)).monospacedDigit().foregroundStyle(Theme.muted)
+                count
             }
             .padding(.horizontal, 4)
             .padding(.top, 3)
-            .contentShape(Rectangle())
+        } else {
+            Button { store.fold(group) } label: {
+                HStack(spacing: 5) {
+                    chevron(open)
+                    Text(group.title)
+                        .font(Theme.font(12, .heavy))
+                        .foregroundStyle(group.id == SessionGroup.parked && needs > 0 ? Theme.needs : Theme.ink)
+                        .lineLimit(1)
+                    if let note {
+                        Text("· " + note).font(Theme.font(11.5, .bold)).foregroundStyle(Theme.needs).lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    count
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, targeted ? 2 : 0)
+                .padding(.top, 3)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(targeted ? Theme.hover : .clear))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(targeted ? Theme.accent : .clear, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(help)
+            .contextMenu { GroupActions(group: group) }
+            // A card dropped on your group's header joins it.
+            .onDrop(of: group.userGroup == nil ? [] : [.text], isTargeted: $targeted) { _ in store.dropOnGroup(group) }
+            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                if let id = group.userGroup { store.renamingGroup = id }
+            })
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([group.title, "\(group.sessions.count) sessions", note].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityHint(open ? "Folds the group" : "Opens the group")
+            .accessibilityAddTraits([.isHeader, .isButton])
+            .accessibilityAction { store.fold(group) }
+            .accessibilityActions {
+                if let id = group.userGroup {
+                    Button("Rename group") { store.renamingGroup = id }
+                    Button("Ungroup") { store.ungroup(id) }
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .help(help)
-        .contextMenu { GroupActions(group: group) }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([group.title, "\(group.sessions.count) sessions", note].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityHint(open ? "Folds the group" : "Opens the group")
-        .accessibilityAddTraits([.isHeader, .isButton])
-        .accessibilityAction { store.fold(group) }
+    }
+
+    private func chevron(_ open: Bool) -> some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 8.5, weight: .heavy))
+            .rotationEffect(.degrees(open ? 90 : 0))
+            .foregroundStyle(Theme.muted)
+            .frame(width: 10)
+    }
+
+    private var count: some View {
+        Text("\(group.sessions.count)").font(Theme.font(11.5, .bold)).monospacedDigit().foregroundStyle(Theme.muted)
     }
 
     private var help: String {
@@ -588,6 +641,9 @@ private struct GroupHeader: View {
         }
         if let h = group.host {
             return "\(Brand.name)’s sessions on \(h), the machine paired with this Mac. They run there, in the order they have there."
+        }
+        if group.userGroup != nil {
+            return "\(group.title), a group of yours. Drop a card here or on one of its cards to put it in; double-click to rename it; right-click to ungroup it or close its sessions."
         }
         return group.path.map(Age.tilde) ?? group.title
     }
@@ -1071,6 +1127,7 @@ private struct Actions: View {
         }
         Button("Copy Session ID") { store.copy(session.id, what: "session ID") }
         Divider()
+        GroupMenu(list: [session])
         SpaceMenu(list: [session])
         Divider()
         Button("Close Session") { store.close(session) }

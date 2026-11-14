@@ -43,6 +43,8 @@ struct Session: Codable, Identifiable, Equatable {
     var pinned: Bool?
     /// The space it is in; nil or "" for the first (Spaces.swift).
     var space: String?
+    /// The group of yours it is in; nil or "" for none (Groups.swift).
+    var group: String?
     var frozen: Date?
     var freezing: Bool?
     var priority: Int?
@@ -66,7 +68,7 @@ struct Session: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, pinned, space, frozen, freezing, priority, loose, trod, hue, tutor, host
+        case order, parked, pinned, space, group, frozen, freezing, priority, loose, trod, hue, tutor, host
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -203,12 +205,14 @@ struct Header: Decodable {
     var load: MachineLoad?
     /// The spaces, in their order, the first first (Spaces.swift).
     var spaces: [SpaceInfo]?
+    /// Your groups, in the order they were made (Groups.swift).
+    var groups: [GroupInfo]?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
-        case trod, vpn, load, spaces
+        case trod, vpn, load, spaces, groups
     }
 }
 

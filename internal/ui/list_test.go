@@ -487,3 +487,42 @@ func TestAnotherMachinesSessionsHaveAGroupOfTheirOwn(t *testing.T) {
 		t.Errorf("the parked card doesn't say where it runs:\n%s", view)
 	}
 }
+
+// Your groups, in the List view: each where the first of its sessions is,
+// under a header that folds it, with the rest of its sessions after it,
+// and the sessions of none between your groups with no header. A parked
+// session of a group waits in Parked; the Repo view groups by repo alone.
+func TestTheListViewDrawsYourGroups(t *testing.T) {
+	m := repoModel(t, 34, 80)
+	m = send(m, keyMsg("v"))
+	rows := repoSessions()
+	// web-fix, scratch-notes, irie-theme, fork-docs, web-copy, irie-tests:
+	// scratch-notes and web-copy in Steak, fork-docs in Gigbot, irie-tests
+	// in a group the header no longer lists.
+	rows[1].Group, rows[4].Group, rows[3].Group, rows[5].Group = "g1", "g1", "g2", "gone"
+	head := &ipc.Header{Groups: []ipc.Group{{ID: "g1", Name: "Steak"}, {ID: "g2", Name: "Gigbot"}}}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	want := []string{"web-fix", "▾ Steak", "scratch-notes", "web-copy", "irie-theme", "▾ Gigbot", "fork-docs", "irie-tests"}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("outline %q, want %q", got, want)
+	}
+	if y := lineOf(t, m, "Steak"); !strings.Contains(screen(t, m)[y], "▾ Steak  2") {
+		t.Errorf("Steak's header %q", screen(t, m)[y])
+	}
+	m.fold(userKey("g1"))
+	if got := outline(m); !reflect.DeepEqual(got[:3], []string{"web-fix", "▸ Steak", "irie-theme"}) {
+		t.Errorf("folded: %q", got)
+	}
+	m.fold(userKey("g1"))
+	// A parked one waits in Parked, out of its group.
+	rows[4].Parked = true
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[4]}})
+	if got := outline(m); !reflect.DeepEqual(got[:4], []string{"web-fix", "▾ Steak", "scratch-notes", "irie-theme"}) || got[len(got)-1] != "▸ Parked" {
+		t.Errorf("with web-copy parked: %q", got)
+	}
+	// The Repo view leaves your groups out.
+	m = send(m, keyMsg("v"))
+	if got := strings.Join(outline(m), " "); strings.Contains(got, "Steak") || strings.Contains(got, "Gigbot") {
+		t.Errorf("the Repo view draws your groups: %q", got)
+	}
+}

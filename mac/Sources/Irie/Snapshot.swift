@@ -262,6 +262,9 @@ enum Fixture {
     }}
     """#
 
+    /// A group of yours, which conversation-view and warm-look are in.
+    static let groups = [GroupInfo(id: "gmacapp00000", name: "Mac app")]
+
     static var sessions: [Session] {
         let now = Date()
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
@@ -280,9 +283,10 @@ enum Fixture {
                     tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800), hue: 5),
             Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "\(Brand.slug)/conversation-view", profile: "claude",
-                    trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
+                    group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
-                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "gmacapp00000",
+                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",

@@ -214,7 +214,8 @@ extension Store {
     /// Puts session id in target's place, at once, and tells the core.
     /// Across the Parked group's edge it is parked or unparked there, as one
     /// park that says where it went, so the core moves it once and one undo
-    /// takes it back.
+    /// takes it back; among the cards of another group of yours, or of
+    /// none, it joins that group or leaves its own there (Groups.swift).
     func reorder(_ id: String, onto target: Session) {
         guard let from = sessions.firstIndex(where: { $0.id == id }),
               let to = sessions.firstIndex(where: { $0.id == target.id }), from != to else { return }
@@ -223,6 +224,7 @@ extension Store {
         // across Parked's, a park or unpark, which unpins.
         let pins = canPin && s.isPinned != target.isPinned && (target.isPinned || s.isParked == target.isParked)
         let crosses = !pins && canPark && s.isParked != target.isParked
+        let regroups = !pins && !crosses && dropRegroups(s, onto: target)
         var ids = sessions.map(\.id)
         let moving = ids.remove(at: from)
         guard let t = ids.firstIndex(of: target.id) else { return }
@@ -241,6 +243,10 @@ extension Store {
                     if target.isPinned { rows[i].parked = false }
                 }
             }
+        }
+        if regroups {
+            regroup(s, onto: target, fromAbove: from < to, was: was)
+            return
         }
         Task {
             if pins {

@@ -22,7 +22,7 @@ import (
 const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
 
   ` + brand.Slug + ` ctl list [--json]                 the sessions and their states
-  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
+  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
                                          starting ` + brand.Name + ` if needed. @REPO runs it in
                                          a new worktree of that repo, @REPO! in the
@@ -31,7 +31,10 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          reads the task from stdin. --wait waits
                                          until the agent is ready, and fails if it
                                          is not; --force spawns a local profile even
-                                         when its context or memory falls short
+                                         when its context or memory falls short;
+                                         --group puts it in the group of that name,
+                                         made when none has it (else it goes in the
+                                         group of the session this runs in)
   ` + brand.Slug + ` ctl input [--json] [--session SESSION] TEXT...
                                          type to ` + brand.Name + ` as into a task bar, and
                                          print what it says: a task with its @
@@ -202,6 +205,10 @@ func ctl(args []string) error {
 		return ctlPark(args[1:], args[0] == "park")
 	case "pin", "unpin":
 		return ctlPin(args[1:], args[0] == "pin")
+	case "group":
+		return ctlGroup(args[1:])
+	case "ungroup":
+		return ctlUngroup(args[1:])
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":
@@ -479,6 +486,7 @@ func ctlSpawn(args []string) error {
 	name := fs.String("name", "", "name the session")
 	wait := fs.Bool("wait", false, "wait until the agent is ready, and fail if it is not")
 	force := fs.Bool("force", false, "spawn a local profile even when its context or memory falls short")
+	group := fs.String("group", "", "put the session in the group of this name, made when none has it")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -498,7 +506,7 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...")
 	}
 	if *cwd != "" && a.Repo != "" {
 		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
@@ -519,7 +527,7 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.Task, a.Cwd, a.Name, a.Force = task, dir, *name, *force
+	a.Task, a.Cwd, a.Name, a.Force, a.Group = task, dir, *name, *force, strings.TrimSpace(*group)
 	// An agent's spawn goes beside its own session when ui.new_tabs is
 	// next.
 	a.After = os.Getenv(brand.Env("SESSION"))

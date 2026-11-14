@@ -17,7 +17,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -209,6 +209,21 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return Step{}, Errorf(CodeBadArgs, ":%s takes the selected session, which must be one of this machine's and %s.", name, what)
 		}
 		return step(name, ParkArgs{Session: sel.ID}, sel)
+	case name == "group":
+		// :group makes a new group of the selected session, and :group
+		// NAME puts it in the group of that name, made when none has it.
+		if sel == nil || sel.Host != "" {
+			return Step{}, Errorf(CodeBadArgs, ":group takes the selected session, which must be one of this machine's.")
+		}
+		if arg == "" {
+			return step(OpGroup, GroupArgs{Do: GroupNew, Sessions: []string{sel.ID}}, sel)
+		}
+		return step(OpGroup, GroupArgs{Do: GroupAdd, Name: arg, Sessions: []string{sel.ID}}, sel)
+	case name == "ungroup" && arg == "":
+		if sel == nil || sel.Group == "" {
+			return Step{}, Errorf(CodeBadArgs, ":ungroup takes the selected session, which must be in a group.")
+		}
+		return step(OpGroup, GroupArgs{Do: GroupRemove, Sessions: []string{sel.ID}}, sel)
 	case name == OpFork:
 		// :fork [@AT] [TASK] carries the selected session's context on
 		// from a point of it, its newest turn by default (DESIGN §4.13).
@@ -420,6 +435,24 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text = "Pinned " + name + ": no close but yours of it reaches it."
 	case OpUnpin:
 		r.Text = "Unpinned " + name + "."
+	case OpGroup:
+		g := as[GroupResult](result)
+		in := ""
+		for _, x := range g.Groups {
+			if x.ID == g.Group {
+				in = x.Name
+			}
+		}
+		switch {
+		case as[GroupArgs](st.Args).Do == GroupRemove:
+			r.Text = "Took " + name + " out of its group. :undo puts it back."
+		case len(g.Sessions) == 0:
+			r.Did, r.Text = InputAnswered, name+" is in "+in+" already."
+		case as[GroupArgs](st.Args).Do == GroupNew:
+			r.Text = "Made the group " + in + " of " + name + ". :group NAME puts another session in it."
+		default:
+			r.Text = "Put " + name + " in the group " + in + "."
+		}
 	default:
 		r.Text = "Done."
 	}
