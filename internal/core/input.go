@@ -25,9 +25,12 @@ func (c *Core) input(a ipc.InputArgs, peer int) (ipc.InputResult, error) {
 	home, _ := os.UserHomeDir()
 	c.mu.Lock()
 	// ^name starts the task on that machine (peers.go), when that machine
-	// runs every Claude Code hook this one does (place.go).
-	p, text, _ := c.placeOn(a.Text)
-	a.Text = text
+	// runs every Claude Code hook this one does (place.go). A bench reads
+	// its own: it runs its sessions there and judges them from here.
+	var p *peerState
+	if first, _, _ := strings.Cut(strings.TrimSpace(a.Text), "\n"); first != ":bench" && !strings.HasPrefix(first, ":bench ") {
+		p, a.Text, _ = c.placeOn(a.Text)
+	}
 	why := ""
 	if p != nil {
 		why = c.hooksDiffer(p)
@@ -49,6 +52,10 @@ func (c *Core) input(a ipc.InputArgs, peer int) (ipc.InputResult, error) {
 	}
 	if st.Op == ipc.OpVPN {
 		res, err := c.vpnOp(peer, st.Args.(ipc.VPNArgs))
+		return irie.Said(st, res, err)
+	}
+	if st.Op == ipc.OpMail {
+		res, err := c.mailOp(peer, st.Args.(ipc.MailArgs))
 		return irie.Said(st, res, err)
 	}
 	// With place.mode = auto, a new task may go to a peer with more room.

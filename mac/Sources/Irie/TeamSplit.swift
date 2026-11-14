@@ -104,7 +104,7 @@ struct TeamSplit: View {
                                   focusToken: store.focusTerminal, followsFocus: true,
                                   takesKeysOnStart: store.terminalView.map { $0.window?.firstResponder === $0 } ?? true,
                                   shows: zoomed == nil || zoomed == Self.leadID,
-                                  onView: { panes.set(Self.leadID, $0) })
+                                  onView: { panes.set(Self.leadID, $0); store.leadView = $0 })
             } else {
                 FixtureScreen(lines: ["❯ spawn three teammates to review the auth module", "", "⏺ Spawned probe, second and third.",
                                       "  They report back on their own."])

@@ -36,13 +36,15 @@ struct Session: Codable, Identifiable, Equatable {
     var tokens: Tokens?
     /// Its place in the list, which the user sets; whether it is parked;
     /// when it was frozen, and whether its agent still runs on to its next
-    /// tool call; 1 while it is promoted (Controls.swift).
+    /// tool call; 1 while it is boosted (Controls.swift).
     var order: Int?
     var parked: Bool?
     /// Whether it is pinned, in the Pinned group at the top (Tabs.swift).
     var pinned: Bool?
     /// The space it is in; nil or "" for the first (Spaces.swift).
     var space: String?
+    /// The group of yours it is in; nil or "" for none (Groups.swift).
+    var group: String?
     var frozen: Date?
     var freezing: Bool?
     var priority: Int?
@@ -66,7 +68,7 @@ struct Session: Codable, Identifiable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, pinned, space, frozen, freezing, priority, loose, trod, hue, tutor, host
+        case order, parked, pinned, space, group, frozen, freezing, priority, loose, trod, hue, tutor, host
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -90,12 +92,15 @@ struct Subs: Codable, Equatable {
 }
 
 /// What a jot left that has not landed: files not committed, and its own
-/// commits not yet in its repo's land branch (DESIGN §4.8). The core says
-/// it in words in the session's detail too.
+/// commits not yet in its repo's land branch; or a claim its own record
+/// contradicts, "tests" when it says the tests pass while its last test run
+/// failed (DESIGN §4.8). The core says it in words in the session's detail
+/// too.
 struct Loose: Codable, Equatable {
     var dirty: Int?
     var ahead: Int?
     var land: String?
+    var unproven: String?
 }
 
 /// What a session's model calls have used, each reply counted once.
@@ -197,19 +202,31 @@ struct Header: Decodable {
     var helperStyle: String?
     /// The trod bot, while it is within its hours (DESIGN §4.10).
     var trod: TrodShift?
-    /// Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
+    /// The VPN, while vpn.on (DESIGN §4.18).
     var vpn: VPNMark?
+    /// Gabriel's boost while one is on, however it was started (DESIGN
+    /// §4.11), from a core whose hello lists boost-always.
+    var boost: BoostMark?
     /// How busy the machine is, read every 5 s (DESIGN §2.4).
     var load: MachineLoad?
     /// The spaces, in their order, the first first (Spaces.swift).
     var spaces: [SpaceInfo]?
+    /// Your groups, in the order they were made (Groups.swift).
+    var groups: [GroupInfo]?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
-        case trod, vpn, load, spaces
+        case trod, vpn, boost, load, spaces, groups
     }
+}
+
+/// Gabriel's boost: when one started by hand ends, and whether it is
+/// always on while you're at the computer (arch.gabriel.always).
+struct BoostMark: Decodable, Equatable {
+    var until: Date?
+    var always: Bool?
 }
 
 /// How busy the core's machine is: its CPUs, the work waiting to run over
@@ -229,9 +246,17 @@ struct MachineLoad: Decodable, Equatable {
     }
 }
 
-/// Mullvad VPN as the core sees it: its state, the relay's place and the
-/// state in one line. Never an address or the account's number.
+/// The VPN as the core sees it, whichever vpn.provider names: its state,
+/// where it goes and the state in one line. Never an address or an
+/// account's number.
 struct VPNMark: Decodable, Equatable {
+    /// Which VPN, as vpn.provider names it, such as mullvad or tailscale;
+    /// nil from a core from before there were others than Mullvad.
+    var kind: String?
+    /// Its name, such as Cisco Secure Client.
+    var title: String?
+    /// What its words do beyond on and off: place, lockdown, time.
+    var can: [String]?
     var state: String?
     var city: String?
     var country: String?
@@ -240,8 +265,15 @@ struct VPNMark: Decodable, Equatable {
     /// Off, and lockdown mode blocks the network.
     var blocked: Bool?
     var text: String
-    /// Why the core can't read the VPN, such as no mullvad CLI.
+    /// Why the core can't read the VPN, such as its command missing.
     var problem: String?
+
+    /// Whether its words do what (place, lockdown or time): a core from
+    /// before other VPNs drives only Mullvad, which does them all.
+    func can(_ what: String) -> Bool {
+        guard kind != nil else { return true }
+        return can?.contains(what) ?? false
+    }
 }
 
 /// The trod bot within its hours: until when, whether you are away so it

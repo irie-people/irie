@@ -163,8 +163,8 @@ func (h *history) labels() (undo, redo string) {
 }
 
 // label is what the header shows for what dir takes next: its step's
-// label, or for a batch the verb and how many sessions, `close 6 sessions`;
-// "" when there is nothing to take.
+// label, or for a batch its own label, or the verb and how many sessions,
+// `close 6 sessions`; "" when there is nothing to take.
 func (h *history) label(dir string) string {
 	a, ok := h.top(dir)
 	if !ok {
@@ -173,6 +173,10 @@ func (h *history) label(dir string) string {
 	n := h.batched(dir)
 	if n < 2 {
 		return a.Label
+	}
+	// A batch that says what it did, as `ungroup "Work"`, says it.
+	if l, _ := a.Data["batch_label"].(string); l != "" {
+		return l
 	}
 	verb := a.Kind
 	if k, ok := actionKinds[a.Kind]; ok {
@@ -376,26 +380,47 @@ func (c *Core) recordSteps(kind string, ids []string, data map[string]any) {
 
 // recordEach is recordSteps with data of each session's own.
 func (c *Core) recordEach(kind string, ids []string, data func(id string) map[string]any) {
-	k, ok := actionKinds[kind]
-	if !ok {
-		c.log.Warn("history: unknown action kind", "kind", kind)
-		return
+	steps := make([]takenStep, len(ids))
+	for i, id := range ids {
+		steps[i] = takenStep{kind: kind, session: id, data: data(id)}
 	}
-	if len(ids) == 0 {
+	c.recordTaken(steps)
+}
+
+// takenStep is one step of what the user took at once: its kind, the
+// session it acted on, and what undoing it needs.
+type takenStep struct {
+	kind, session string
+	data          map[string]any
+}
+
+// recordTaken records steps the user took at once, now done, of one kind
+// or several, as a group op moves sessions and groups together: for more
+// than one they share a batch, so that undo and redo take them together.
+// It never runs for what undo and redo do.
+func (c *Core) recordTaken(steps []takenStep) {
+	steps = slices.DeleteFunc(slices.Clone(steps), func(s takenStep) bool {
+		if _, ok := actionKinds[s.kind]; !ok {
+			c.log.Warn("history: unknown action kind", "kind", s.kind)
+			return true
+		}
+		return false
+	})
+	if len(steps) == 0 {
 		return
 	}
 	batch := ""
-	if len(ids) > 1 {
+	if len(steps) > 1 {
 		batch = newActionID()
 	}
 	c.mu.Lock()
 	at := time.Now().UTC().Truncate(time.Millisecond)
-	for _, id := range ids {
-		a := action{ID: newActionID(), Kind: kind, Session: id, Name: c.nameOf(id), At: at, Data: data(id), Batch: batch}
-		if r, ok := c.closedRecord(id); ok && c.sessions[id] == nil {
+	for _, s := range steps {
+		a := action{ID: newActionID(), Kind: s.kind, Session: s.session, Name: c.nameOf(s.session), At: at, Data: s.data, Batch: batch}
+		if r, ok := c.closedRecord(s.session); ok && c.sessions[s.session] == nil {
 			a = a.with("closed", r.Closed.Format(time.RFC3339Nano))
 		}
-		a.Label = k.labelOf(a)
+		a.Label = actionKinds[s.kind].labelOf(a)
 		c.steps.hist.push(a)
 	}
 	c.saveState()

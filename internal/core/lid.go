@@ -31,6 +31,11 @@ const lidRetry = 5 * time.Minute
 // off while it keeps it so.
 const lidVerify = time.Minute
 
+// lidLook is how often the core reads the lid while it keeps sleep off,
+// to put the display to sleep when the lid closes; tests make it 0. Each
+// read runs ioreg, about 50 ms, so not at every look.
+var lidLook = 15 * time.Second
+
 // lidRule is the sudoers rule the core needs before it tries sudo, so that
 // a Mac without it is not asked for a password at every look; tests point
 // it elsewhere.
@@ -46,6 +51,8 @@ type lidHold struct {
 	verified time.Time // when it last checked with pmset that sleep is off
 	warned   string    // what it last logged it could not do, logged once
 	stopped  bool      // the core let go as it stops: no look holds again
+	lidRead  time.Time // when it last read the lid while sleep is off
+	closed   bool      // the lid was closed at that read
 }
 
 // lidOff reports whether this core leaves the Mac's sleep alone: a test
@@ -181,6 +188,8 @@ func (c *Core) lidHoldLocked(m lid.Mac, now time.Time, why string) {
 		return
 	}
 	h.off, h.since, h.why, h.verified, h.warned = true, now, why, now, ""
+	// A lid already closed as the hold starts is dark at the next look.
+	h.lidRead, h.closed = time.Time{}, false
 	c.lidWriteLocked()
 	c.log.Info("lid: the Mac stays awake with its lid closed", "why", why)
 }
@@ -223,9 +232,42 @@ func (c *Core) lidKeepLocked(m lid.Mac, now time.Time) {
 			return
 		}
 	}
+	c.lidDarkLocked(m, now)
 	if err := lid.Touch(c.paths.LidFile(), now); err != nil {
 		c.lidWriteLocked()
 	}
+}
+
+// lidDarkLocked puts the display to sleep when the lid has closed since
+// the last read. With sleep off, macOS no longer turns the built-in display
+// off as the lid closes, and it would stay lit under the lid, spending the
+// battery and adding heat. A display beside it means the Mac is in use at
+// a desk, so the core then leaves the displays alone. It acts once a close:
+// a display woken while the lid stays shut is left awake. The caller holds
+// c.lidMu.
+func (c *Core) lidDarkLocked(m lid.Mac, now time.Time) {
+	h := &c.lid
+	if now.Sub(h.lidRead) < lidLook {
+		return
+	}
+	h.lidRead = now
+	closed, err := m.Closed()
+	if err != nil {
+		return
+	}
+	was := h.closed
+	h.closed = closed
+	if !closed || was {
+		return
+	}
+	if ext, err := m.External(); err != nil || ext {
+		return
+	}
+	if err := m.DisplaySleepNow(); err != nil {
+		c.lidWarnLocked("the display stays on under the closed lid: " + err.Error())
+		return
+	}
+	c.log.Info("lid: its lid closed, so the display sleeps")
 }
 
 // lidLetGo turns the Mac's sleep back on as the core stops, without

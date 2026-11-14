@@ -18,6 +18,25 @@ import (
 	"github.com/irie-people/irie/internal/sysload"
 )
 
+func TestAlwaysHoldsBackOnlyWhileTheUserIsThere(t *testing.T) {
+	for _, tc := range []struct {
+		name                                string
+		on, present, busy, boosting, always bool
+		holds                               bool
+	}{
+		{"room to spare", true, true, false, false, false, false},
+		{"busy", true, true, true, false, false, true},
+		{"a boost", true, true, false, true, false, true},
+		{"always, with room to spare", true, true, false, false, true, true},
+		{"always, while away", true, false, true, true, true, false},
+		{"always, with Gabriel off", false, true, true, true, true, false},
+	} {
+		if got := holds(tc.on, tc.present, tc.busy, tc.boosting, tc.always); got != tc.holds {
+			t.Errorf("%s: holds = %v, want %v", tc.name, got, tc.holds)
+		}
+	}
+}
+
 func TestBusyNextHasRoomToCalmDown(t *testing.T) {
 	now := time.Date(2026, 11, 1, 15, 0, 0, 0, time.UTC)
 	l := func(rq float64, pressure int) sysload.Load {
@@ -80,20 +99,239 @@ func TestAShowComesIntoTheFocusAtOnce(t *testing.T) {
 		"s-install": {id: "s-install"},
 	}, selected: "s-shown", log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	c.useConfig(config.Default())
-	// Not holding back: a show leaves Gabriel's focus be.
+	// With Gabriel off, as in a test core, a show leaves his state be.
+	t.Setenv("IRIE_GABRIEL", "off")
 	c.gab.focus = map[string]bool{"s-before": true}
 	c.refocus()
-	if want := map[string]bool{"s-before": true}; !reflect.DeepEqual(c.gab.focus, want) {
-		t.Errorf("not holding back: focus %v, want %v", c.gab.focus, want)
+	if want := map[string]bool{"s-before": true}; !reflect.DeepEqual(c.gab.focus, want) || c.gab.top != nil {
+		t.Errorf("Gabriel off: focus %v, top %v", c.gab.focus, c.gab.top)
 	}
-	// Holding back with Irie in front: the session now on show is in the
-	// focus, and the one before steps back with the rest, before the show
-	// returns rather than at the next sweep. An install stays in it.
-	c.gab.holding, c.gab.irieFront = true, true
+	// Holding back: the session now on show is in the focus, and the one
+	// before steps back with the rest, before the show returns rather than
+	// at the next sweep. An install stays in it. The session on show is
+	// the top of the focus at once too.
+	t.Setenv("IRIE_GABRIEL", "")
+	c.gab.holding, c.gab.present, c.gab.irieFront = true, true, true
 	c.gab.installs = map[string]bool{"s-install": true}
 	c.refocus()
 	if want := map[string]bool{"s-shown": true, "s-install": true}; !reflect.DeepEqual(c.gab.focus, want) {
 		t.Errorf("holding back: focus %v, want %v", c.gab.focus, want)
+	}
+	if want := map[string]bool{"s-shown": true}; !reflect.DeepEqual(c.gab.top, want) || c.gab.topOf != "s-shown" {
+		t.Errorf("holding back: top %v of %q, want s-shown", c.gab.top, c.gab.topOf)
+	}
+	// A show is the user's own doing. Back from away, or from another app,
+	// the tab they turn to goes on top at once, so a promotion never keeps
+	// it in the background, and the next sweep reads the idle time afresh.
+	read := time.Now()
+	c.gab = gabState{idleRead: read}
+	c.sessions["s-before"].track.priority = 1
+	c.selected = "s-install"
+	c.refocus()
+	if want := map[string]bool{"s-install": true}; !reflect.DeepEqual(c.gab.top, want) || !c.gab.present || !c.gab.irieFront || c.gab.shownAt.IsZero() {
+		t.Errorf("back from away: top %v, present %v, Irie in front %v", c.gab.top, c.gab.present, c.gab.irieFront)
+	}
+	if !c.gab.idleRead.IsZero() {
+		t.Error("back from away: the idle time is not read afresh")
+	}
+	if c.gab.holding {
+		t.Error("back from away: holding back before a sweep said so")
+	}
+}
+
+func TestShowingAPeerRowTakesTheTopAway(t *testing.T) {
+	t.Setenv("IRIE_GABRIEL", "")
+	c := &Core{sessions: map[string]*session{"s-shown": {id: "s-shown"}}, selected: "s-shown",
+		log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	c.useConfig(config.Default())
+	c.gab = gabState{present: true, irieFront: true, holding: true, topBusy: true, topOf: "s-shown", top: map[string]bool{"s-shown": true}}
+	c.selected = "peer:s-elsewhere"
+	c.refocus()
+	if c.gab.top != nil || c.gab.topBusy {
+		t.Errorf("a peer's row on show: top %v, busy %v", c.gab.top, c.gab.topBusy)
+	}
+}
+
+func TestTheTabOnTopTakesItsSubtasks(t *testing.T) {
+	now := time.Now()
+	sub := func(id, parent string) *session {
+		return &session{id: id, out: &outcome{parent: parent}}
+	}
+	c := &Core{sessions: map[string]*session{
+		"s-shown":  {id: "s-shown"},
+		"s-sub":    sub("s-sub", "s-shown"),
+		"s-subsub": sub("s-subsub", "s-sub"),
+		"s-gone":   sub("s-gone", "s-shown"),
+		"s-told":   {id: "s-told", userWord: now.Add(-time.Minute)},
+		"s-helper": sub("s-helper", "s-told"),
+		"s-other":  {id: "s-other"},
+		"s-alone":  sub("s-alone", "s-other"),
+	}, selected: "s-shown"}
+	c.sessions["s-gone"].dead = true
+	if got, want := c.onTop(true), map[string]bool{"s-shown": true, "s-sub": true, "s-subsub": true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("top = %v, want the session on show and what it delegated", got)
+	}
+	// Another app in front, or nothing on show: no tab is on top.
+	if got := c.onTop(false); got != nil {
+		t.Errorf("another app in front: top %v", got)
+	}
+	c.selected = ""
+	if got := c.onTop(true); got != nil {
+		t.Errorf("nothing on show: top %v", got)
+	}
+	// What a session in the focus delegated is in the focus too.
+	got := c.inFocus(false, 10*time.Minute, now)
+	if want := map[string]bool{"s-told": true, "s-helper": true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("focus = %v, want %v", got, want)
+	}
+}
+
+func TestTopBusyNextCalmsDownSlowly(t *testing.T) {
+	now := time.Date(2026, 11, 14, 15, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		cpu       float64
+		critical  bool
+		was       bool
+		calmSince time.Time
+		at        time.Time
+		busy      bool
+	}{
+		{"waits on the user", 3, false, false, time.Time{}, now, false},
+		{"its agent thinks", 25, false, false, time.Time{}, now, false},
+		{"runs tests", 480, false, false, time.Time{}, now, true},
+		{"just heavy", 50, false, false, time.Time{}, now, true},
+		{"memory critically short", 3, true, false, time.Time{}, now, true},
+		{"light again, not for long", 10, false, true, now, now.Add(10 * time.Second), true},
+		{"light again, for long enough", 10, false, true, now, now.Add(gabrielCalm), false},
+	} {
+		busy, _ := topBusyNext(tc.cpu, 50, tc.critical, tc.was, tc.calmSince, tc.at)
+		if busy != tc.busy {
+			t.Errorf("%s: busy = %v, want %v", tc.name, busy, tc.busy)
+		}
+	}
+	busy, since := topBusyNext(10, 50, false, true, time.Time{}, now)
+	if !busy || !since.Equal(now) {
+		t.Errorf("first light reading: %v, %v", busy, since)
+	}
+}
+
+func TestPlaceTopReadsWhetherTheTabWorks(t *testing.T) {
+	now := time.Now()
+	c := &Core{sessions: map[string]*session{
+		"s-shown": {id: "s-shown", cpu: 20},
+		"s-sub":   {id: "s-sub", cpu: 40, out: &outcome{parent: "s-shown"}},
+		"s-next":  {id: "s-next", cpu: 5},
+	}, selected: "s-shown"}
+	c.useConfig(config.Default())
+	// At the computer there is a top, so a promotion never puts it in the
+	// background; while Gabriel holds nothing back, no one steps back for
+	// it however it works.
+	st := gabState{present: true, irieFront: true}
+	c.placeTop(&st, now)
+	if len(st.top) != 2 || st.topBusy {
+		t.Errorf("not holding back: top %v, busy %v", st.top, st.topBusy)
+	}
+	// Holding back: the tab and its subtask use 60% of a CPU between them,
+	// over arch.gabriel.heavy.
+	st.holding = true
+	c.placeTop(&st, now)
+	if len(st.top) != 2 || !st.topBusy || st.topOf != "s-shown" {
+		t.Errorf("holding back: top %v, busy %v, of %q", st.top, st.topBusy, st.topOf)
+	}
+	// Running light, it stays at work until it has been light a while.
+	c.sessions["s-sub"].cpu = 0
+	c.placeTop(&st, now.Add(5*time.Second))
+	if !st.topBusy {
+		t.Error("light for a moment, the rest came back at once")
+	}
+	c.placeTop(&st, now.Add(5*time.Second+gabrielCalm))
+	if st.topBusy {
+		t.Error("light for long enough, still at work")
+	}
+	// A tab the user turns to starts afresh, light as it is.
+	c.sessions["s-shown"].cpu = 300
+	c.placeTop(&st, now.Add(time.Minute))
+	c.selected = "s-next"
+	c.placeTop(&st, now.Add(time.Minute+5*time.Second))
+	if st.topBusy || st.topOf != "s-next" {
+		t.Errorf("turned to a light tab: busy %v, of %q", st.topBusy, st.topOf)
+	}
+	// Memory critically short: the tab on top comes first, light or not.
+	c.load.Pressure = sysload.PressureCritical
+	c.placeTop(&st, now.Add(2*time.Minute))
+	if !st.topBusy {
+		t.Error("memory critically short, the tab on top does not come first")
+	}
+	// The user away, or another app in front: nothing is on top.
+	st.present = false
+	c.placeTop(&st, now)
+	if st.top != nil || st.topBusy {
+		t.Errorf("away: top %v, busy %v", st.top, st.topBusy)
+	}
+	st = gabState{present: true, holding: true}
+	c.placeTop(&st, now)
+	if st.top != nil {
+		t.Errorf("another app in front: top %v", st.top)
+	}
+}
+
+func TestTheOrderOfTheFocus(t *testing.T) {
+	c := &Core{}
+	none := map[string]bool{}
+	raised := map[string]bool{"s-raised": true, "s-raised-sub": true}
+	for _, tc := range []struct {
+		name   string
+		gab    gabState
+		raised map[string]bool
+		back   []string
+	}{
+		{"nothing to step back for", gabState{}, none, nil},
+		{"holding back", gabState{holding: true, focus: map[string]bool{"s-top": true, "s-told": true}, top: map[string]bool{"s-top": true}},
+			none, []string{"s-other", "s-install", "s-raised", "s-raised-sub"}},
+		{"the tab on top at work", gabState{holding: true, topBusy: true, focus: map[string]bool{"s-top": true, "s-told": true, "s-install": true},
+			top: map[string]bool{"s-top": true}, installs: map[string]bool{"s-install": true}},
+			none, []string{"s-told", "s-other", "s-raised", "s-raised-sub"}},
+		// The promoted step back for the tab on top, and while it works an
+		// install does not step back for them either.
+		{"the tab on top at work, with a promotion", gabState{holding: true, topBusy: true, focus: map[string]bool{"s-top": true, "s-told": true, "s-install": true, "s-raised": true},
+			top: map[string]bool{"s-top": true}, installs: map[string]bool{"s-install": true}},
+			raised, []string{"s-told", "s-other", "s-raised", "s-raised-sub"}},
+		{"a promotion", gabState{top: map[string]bool{"s-top": true}}, raised, []string{"s-told", "s-other", "s-install"}},
+		{"a promotion, no tab on top", gabState{}, raised, []string{"s-top", "s-told", "s-other", "s-install"}},
+	} {
+		c.gab = tc.gab
+		var back []string
+		for _, id := range []string{"s-top", "s-told", "s-other", "s-install", "s-raised", "s-raised-sub"} {
+			if c.stepsBack(id, tc.raised) {
+				back = append(back, id)
+			}
+		}
+		if !slices.Equal(back, tc.back) {
+			t.Errorf("%s: %v step back, want %v", tc.name, back, tc.back)
+		}
+	}
+}
+
+func TestTheReportPutsTheTabOnTopFirst(t *testing.T) {
+	cfg := config.Default()
+	c := &Core{sessions: map[string]*session{
+		"s-a":     {id: "s-a", name: "a sub", cpu: 30, demoted: false},
+		"s-top":   {id: "s-top", name: "the tab", cpu: 200},
+		"s-told":  {id: "s-told", name: "told", demoted: true},
+		"s-inst":  {id: "s-inst", name: "install"},
+		"s-other": {id: "s-other", name: "other", demoted: true},
+	}, selected: "s-top"}
+	c.useConfig(cfg)
+	c.gab = gabState{present: true, holding: true, topBusy: true,
+		top:   map[string]bool{"s-a": true, "s-top": true},
+		focus: map[string]bool{"s-a": true, "s-top": true, "s-told": true, "s-inst": true}}
+	r := c.gabrielReport()
+	if len(r.Top) != 2 || r.Top[0].ID != "s-top" || r.Top[1].ID != "s-a" || r.TopCPU != 230 || !r.TopBusy {
+		t.Errorf("top %+v at %v%%, busy %v", r.Top, r.TopCPU, r.TopBusy)
+	}
+	if len(r.Back) != 1 || r.Back[0].ID != "s-told" || len(r.Held) != 1 || r.Held[0].ID != "s-other" {
+		t.Errorf("back %+v, held %+v", r.Back, r.Held)
 	}
 }
 
@@ -212,8 +450,49 @@ func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
 	if r.BoostUntil == nil || time.Until(*r.BoostUntil) < 59*time.Minute {
 		t.Errorf("a boost of the configured hour ends at %v", r.BoostUntil)
 	}
-	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil {
-		t.Errorf("stopped, still until %v", r.BoostUntil)
+	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil || r.Always {
+		t.Errorf("stopped, still until %v or always", r.BoostUntil)
+	}
+	// Boosting always is the config's, and the report says so.
+	cfg.Arch.Gabriel.Always = true
+	c.useConfig(cfg)
+	if r, _ = c.gabrielOp(ipc.GabrielArgs{}); !r.Always || r.BoostUntil != nil {
+		t.Errorf("always: %+v", r)
+	}
+}
+
+func TestTheHeaderSaysHowGabrielBoosts(t *testing.T) {
+	t.Setenv("IRIE_GABRIEL", "")
+	cfg := config.Default()
+	c := &Core{sessions: map[string]*session{}}
+	c.useConfig(cfg)
+	now := time.Now()
+	if !proc.CanBackground {
+		if b := c.boostHeader(now); b != nil {
+			t.Errorf("no background state here, yet a boost: %+v", b)
+		}
+		return
+	}
+	if b := c.boostHeader(now); b != nil {
+		t.Errorf("no boost: %+v", b)
+	}
+	c.gab.boostUntil = now.Add(time.Hour)
+	if b := c.boostHeader(now); b == nil || b.Until == nil || !b.Until.Equal(c.gab.boostUntil) || b.Always {
+		t.Errorf("a boost of an hour: %+v", b)
+	}
+	if b := c.boostHeader(now.Add(2 * time.Hour)); b != nil {
+		t.Errorf("a boost whose time is up: %+v", b)
+	}
+	c.gab.boostUntil = time.Time{}
+	cfg.Arch.Gabriel.Always = true
+	c.useConfig(cfg)
+	if b := c.boostHeader(now); b == nil || !b.Always || b.Until != nil {
+		t.Errorf("always: %+v", b)
+	}
+	// With Gabriel off nothing boosts, always or not.
+	t.Setenv("IRIE_GABRIEL", "off")
+	if b := c.boostHeader(now); b != nil {
+		t.Errorf("Gabriel off: %+v", b)
 	}
 }
 
@@ -233,16 +512,86 @@ func TestStealsFocus(t *testing.T) {
 		"open -gj -a Safari": false,
 		"open -j report.pdf": false,
 		"open":               false,
+		"open -g -a Safari":  false,
 		`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --user-data-dir=/tmp/p`: false,
 		"mac/build/Irie.app/Contents/MacOS/Irie --snapshot /tmp/shots":                                         false,
 		"mac/build/Irie.app/Contents/MacOS/Irie --record /tmp/first-look.mp4 --reel docs/demo/first-look.reel": false,
+		"mac/build/Irie.app/Contents/MacOS/Irie --away-helper -- open -g -a Safari":                            false,
 		`osascript -e 'display notification "done"'`:                                                           false,
 		"go test ./... && git commit -m 'open the door'":                                                       false,
 		"opencode run":   false,
 		"grep -r open .": false,
+		// A path that is only an argument starts nothing.
+		"cp build/Test mac/build/Test.app/Contents/MacOS/Test":                                                                 false,
+		`ls "build/Irie Preview.app/Contents/MacOS/"`:                                                                          false,
+		`"$IRIE_BIN" away -- "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir=/tmp/p`:            false,
+		`exec "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir=/tmp/p`:                           true,
+		`nohup /Applications/Simulator.app/Contents/MacOS/Simulator & sleep 1`:                                                 true,
+		`IRIE_X=1 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9334 >/dev/null 2>&1`: true,
+		// Commands inside others run; quoted text and redirects do not.
+		"ls *.pdf | xargs open":                                             true,
+		`eval "open report.pdf"`:                                            true,
+		`bash -lc "cd /tmp && open report.pdf"`:                             true,
+		"/usr/bin/open --help 2>&1 | sed -n 1,40p":                          false,
+		`git commit -m "fix: x; open -a Safari"`:                            false,
+		"git commit -F - <<'EOF'\nfix: x\n\nopen -a Safari, then quit\nEOF": false,
+		"PATH=/usr/bin:/bin open -a Safari":                                 true,
+		"/Applications/Simulator.app/Contents/MacOS/Simulator --background": true, // only Irie.app's own flags keep a window away
 	} {
 		if got := stealsFocus(cmd); got != want {
 			t.Errorf("stealsFocus(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}
+
+// TestOpensInSight: a window opened behind the app in front still lands on
+// the desktop the user is on, so it goes through irie away instead; Irie.app
+// keeps its own windows out of sight with its flags.
+func TestOpensInSight(t *testing.T) {
+	for cmd, want := range map[string]bool{
+		"open -g -a Safari":                                                         true,
+		"open -g https://example.com":                                               true,
+		"cd /tmp && open -g report.pdf":                                             true,
+		"open -gn -a 'Google Chrome' --args --user-data-dir=/tmp/p":                 true,
+		"open -g -u https://example.com":                                            true,
+		"open -g -R build/out.txt":                                                  true,
+		"open -g mac/build/Irie.app --args --background":                            false,
+		"open -g -n -W --stdout /tmp/b.txt -a Irie.app --args --background --bench": false,
+		"open -n -g 'mac/build/hot/A/Irie Preview.app' --args --background --away":  false,
+		// A browser that runs already drops the arguments: headless needs -n.
+		"open -g -a 'Google Chrome' --args --headless=new":  true,
+		"open -gn -a 'Google Chrome' --args --headless=new": false,
+		// Only Irie.app's own flags keep its window away.
+		"open -g -a Simulator --args --background": true,
+		// Inside loops, conditionals, pipes, subshells and other commands.
+		"for f in *.png; do open -g $f; done":                                  true,
+		"if true; then open -g report.pdf; fi":                                 true,
+		"ls *.pdf | xargs open -g":                                             true,
+		"(open -g report.pdf)":                                                 true,
+		"{ open -g report.pdf; }":                                              true,
+		"nice -n 5 open -g report.pdf":                                         true,
+		"timeout 30 open -g report.pdf":                                        true,
+		"caffeinate -i open -g report.pdf":                                     true,
+		"sudo -u alice open -g report.pdf":                                     true,
+		`sh -c 'open -g -a Safari'`:                                            true,
+		`echo "$(open -g report.pdf)"`:                                         true,
+		"sh <<EOF\nopen -g report.pdf\nEOF":                                    true,
+		"open --background report.pdf":                                         true,
+		"open -g -a Safari >/tmp/--help.log":                                   true,
+		"open --hide report.pdf":                                               false,
+		`git commit -m "fix: x; open -g -a Safari"`:                            false,
+		"git commit -m \"subject\n\nopen -g -a Safari\"":                       false,
+		"cat > notes.md <<'EOF'\nopen -g -a Safari\nEOF":                       false,
+		"open -gj -a Safari":                                                   false,
+		"open -j report.pdf":                                                   false,
+		"open -g":                                                              false,
+		"open -a Safari":                                                       false, // in front, which stealsFocus says
+		`"$IRIE_BIN" away -- open -g -a Simulator`:                             false,
+		"irie away --for 30s --app Simulator -- xcrun simctl boot 'iPhone 15'": false,
+		"irie away -- open -g -n -a 'Google Chrome' --args --user-data-dir=/tmp/p http://localhost:3000": false,
+	} {
+		if got := opensInSight(cmd); got != want {
+			t.Errorf("opensInSight(%q) = %v, want %v", cmd, got, want)
 		}
 	}
 }

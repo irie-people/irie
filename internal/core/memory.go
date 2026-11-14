@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"os"
 	"os/exec"
 	"reflect"
 	"slices"
@@ -65,8 +66,8 @@ func (c *Core) sample() {
 	}
 	c.mu.Unlock()
 
-	mem := treeMemory(roots)
-	llama := mem[llamaKey]
+	use := treeUsage(roots)
+	llama := use[llamaKey].mem
 	var local int64
 	if own {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -84,7 +85,7 @@ func (c *Core) sample() {
 		c.load = load
 	}
 	for id, x := range c.sessions {
-		x.memory = mem[id]
+		x.memory, x.cpu = use[id].mem, use[id].cpu
 	}
 	c.localMem, c.llamaMem = local, llama
 	frames := c.changes()
@@ -93,38 +94,51 @@ func (c *Core) sample() {
 	c.publishHeader()
 }
 
-// treeMemory returns what the process tree under each root takes in
-// memory (resident size), by key, from one run of ps.
-func treeMemory(roots map[string]int) map[string]int64 {
-	out := map[string]int64{}
+// treeUse is what a process tree takes of the machine.
+type treeUse struct {
+	mem int64   // resident size, in bytes
+	cpu float64 // its share of the CPUs, in percent of one, as ps averages it over the last seconds
+}
+
+// treeUsage returns what the process tree under each root takes, by key,
+// from one run of ps: its memory, and its share of the CPUs, which tells
+// Gabriel when the tab the user is on works the machine (gabriel.go).
+func treeUsage(roots map[string]int) map[string]treeUse {
+	out := map[string]treeUse{}
 	if len(roots) == 0 {
 		return out
 	}
-	b, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,rss=").Output()
+	ps := exec.Command("ps", "-A", "-o", "pid=,ppid=,rss=,%cpu=")
+	// ps writes %cpu in the locale's numbers, such as 0,5 in German.
+	ps.Env = append(os.Environ(), "LC_ALL=C")
+	b, err := ps.Output()
 	if err != nil {
 		return out
 	}
-	rss, kids := parsePS(b)
+	procs, kids := parsePS(b)
 	for key, root := range roots {
-		var sum int64
+		var sum treeUse
 		for todo := []int{root}; len(todo) > 0; {
 			pid := todo[len(todo)-1]
 			todo = append(todo[:len(todo)-1], kids[pid]...)
-			sum += rss[pid]
+			sum.mem += procs[pid].mem
+			sum.cpu += procs[pid].cpu
 		}
 		out[key] = sum
 	}
 	return out
 }
 
-// parsePS reads `ps -o pid=,ppid=,rss=`: each process's resident size in
-// bytes (ps gives KiB), and each process's children.
-func parsePS(b []byte) (rss map[int]int64, kids map[int][]int) {
-	rss, kids = map[int]int64{}, map[int][]int{}
+// parsePS reads `ps -o pid=,ppid=,rss=,%cpu=`: each process's resident size
+// in bytes (ps gives KiB) and share of a CPU, and each process's children.
+// A share it cannot read, as in a locale that writes 0,5, counts as none,
+// and the process's memory still counts.
+func parsePS(b []byte) (procs map[int]treeUse, kids map[int][]int) {
+	procs, kids = map[int]treeUse{}, map[int][]int{}
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	for sc.Scan() {
 		f := strings.Fields(sc.Text())
-		if len(f) != 3 {
+		if len(f) != 4 {
 			continue
 		}
 		pid, err1 := strconv.Atoi(f[0])
@@ -133,10 +147,11 @@ func parsePS(b []byte) (rss map[int]int64, kids map[int][]int) {
 		if err1 != nil || err2 != nil || err3 != nil || pid == ppid {
 			continue
 		}
-		rss[pid] = kb << 10
+		cpu, _ := strconv.ParseFloat(strings.Replace(f[3], ",", ".", 1), 64)
+		procs[pid] = treeUse{mem: kb << 10, cpu: cpu}
 		kids[ppid] = append(kids[ppid], pid)
 	}
-	return rss, kids
+	return procs, kids
 }
 
 // memoryNow is the machine's memory and what Irie's work takes of it. The
@@ -175,7 +190,9 @@ func (c *Core) headerNow() ipc.Header {
 	h.Peers = c.peersInfo()
 	h.Trod = c.trodHeader(c.awakeNow())
 	h.Spaces = slices.Clone(c.spaces)
+	h.Groups = slices.Clone(c.groups)
 	h.VPN = c.vpnHeader(time.Now())
+	h.Boost = c.boostHeader(time.Now())
 	h.Theme = c.appColors
 	return h
 }

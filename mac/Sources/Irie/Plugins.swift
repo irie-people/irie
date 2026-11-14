@@ -4,8 +4,10 @@ import SwiftUI
 /// The menu bar's Plugins menu (DESIGN §4.17): each of Irie's plugins with
 /// its switch, and under it each part by name and state, whose submenu holds
 /// the core's sentence on what it has and lacks, its own switch and Set
-/// Up…, as Settings › Plugins has them. Like IrieCommands, it reads only
-/// the menu's facts, so it changes only when a plugin does.
+/// Up…, as Settings › Plugins has them, then the part's own commands: the
+/// VPN's, and a part whose words start a session, such as :write, starts
+/// it. Like IrieCommands, it reads only the menu's facts, so it changes
+/// only when a plugin does.
 struct PluginCommands: Commands {
     let store: Store
     let menu: MenuState
@@ -21,30 +23,55 @@ struct PluginCommands: Commands {
             if f.plugins.isEmpty {
                 Text(f.canPlugins ? "Reading the plugins…" : "This \(Brand.name) has no plugins yet")
             }
-            ForEach(f.plugins) { p in
-                Section(p.title) {
-                    Toggle("\(p.title) Plugin", isOn: Binding(get: { p.on }, set: { on in
-                        MainActor.assumeIsolated { store.setPlugin(p.name, on: on) }
-                    }))
-                    ForEach(p.parts) { x in
-                        Menu(Self.title(x)) {
-                            ForEach(Self.sentences(x.detail), id: \.self) { Text($0) }
-                            if x.switch != nil || x.setup != nil { Divider() }
-                            if x.switch != nil {
-                                Toggle("On", isOn: Binding(get: { x.on }, set: { on in
-                                    MainActor.assumeIsolated { store.setPlugin(p.name, part: x.name, on: on) }
-                                }))
+            // A plugin's switch heads its parts, with a line between plugins.
+            // Lines are Dividers: a Section draws one before and after itself,
+            // so at the menu's top, or two side by side, it drew a stray or a
+            // double line.
+            ForEach(Array(f.plugins.enumerated()), id: \.element.id) { i, p in
+                if i > 0 { Divider() }
+                Toggle("\(p.title) Plugin", isOn: Binding(get: { p.on }, set: { on in
+                    MainActor.assumeIsolated { store.setPlugin(p.name, on: on) }
+                }))
+                ForEach(p.parts) { x in
+                    Menu(Self.title(x)) {
+                        let lines = Self.sentences(x.detail)
+                        let acts = x.switch != nil || x.setup != nil
+                        ForEach(lines, id: \.self) { Text($0) }
+                        if acts, !lines.isEmpty { Divider() }
+                        if x.switch != nil {
+                            Toggle("On", isOn: Binding(get: { x.on }, set: { on in
+                                MainActor.assumeIsolated { store.setPlugin(p.name, part: x.name, on: on) }
+                            }))
+                            .disabled(!p.on)
+                        }
+                        if let words = x.setup {
+                            Button(Self.setupTitle(x, words), action: run { store.runWords(words) })
                                 .disabled(!p.on)
+                        }
+                        // The VPN: the same words as :vpn in a task bar
+                        // (DESIGN §4.18), while the core serves the vpn op,
+                        // and off until vpn.on. Lockdown and the account's
+                        // time only for a VPN that has them, as Mullvad does.
+                        if x.name == "vpn", f.canVPN {
+                            if acts || !lines.isEmpty { Divider() }
+                            Group {
+                                Button("Connect", action: run { store.runWords(":vpn on") })
+                                Button("Disconnect", action: run { store.runWords(":vpn off") })
+                                if f.vpnLockdown {
+                                    Button(f.lockdown ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On", action: run {
+                                        store.runWords(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on")
+                                    })
+                                }
+                                if f.vpnTime {
+                                    Button("Account Time Left", action: run { store.runWords(":vpn time") })
+                                }
                             }
-                            if let words = x.setup {
-                                Button("Set Up…", action: run { store.runWords(words) })
-                                    .disabled(!p.on)
-                            }
+                            .disabled(!f.vpn)
                         }
                     }
-                    if p.on, let words = p.setup {
-                        Button("Set Up Each Part…", action: run { store.runWords(words) })
-                    }
+                }
+                if p.on, let words = p.setup {
+                    Button("Set Up Each Part…", action: run { store.runWords(words) })
                 }
             }
             Divider()
@@ -66,9 +93,17 @@ struct PluginCommands: Commands {
     }
 
     /// A part's item: its name and its state in words, which a menu can't
-    /// colour, as "Mullvad VPN — ready".
+    /// colour, as "Tailscale — ready".
     static func title(_ x: PluginInfo.Part) -> String {
         "\(x.title) — \(x.stateWords)"
+    }
+
+    /// What a part's words do: :setup words set it up, and others start
+    /// its own session, as :write starts Writing in Variorum.
+    static func setupTitle(_ x: PluginInfo.Part, _ words: String) -> String {
+        // :mail opens the Mail tab, where an account is added.
+        if words == ":mail" { return "Show Mail" }
+        return words.hasPrefix(":setup") ? "Set Up…" : "Start \(x.title)…"
     }
 
     /// The core's sentence on a part, a line each, so the submenu stays

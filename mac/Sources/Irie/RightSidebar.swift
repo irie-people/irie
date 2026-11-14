@@ -15,10 +15,11 @@ import SwiftUI
 // helper starting only puts a count on a tab.
 
 /// A tab of the right sidebar, in the order the proposal gives them, then
-/// Notices, then Variorum, the Writing plugin's (VariorumTab.swift), which
-/// also gives each its key: ⌥⌘1 to ⌥⌘7.
+/// Notices, then Mail, the mail plugin's (Mail.swift), and Variorum, the
+/// Writing plugin's (VariorumTab.swift), which also gives each its key:
+/// ⌥⌘1 to ⌥⌘8.
 enum SideTab: String, CaseIterable, Identifiable {
-    case dock, changes, helpers, plan, review, notices, variorum
+    case dock, changes, helpers, plan, review, notices, mail, variorum
 
     var id: String { rawValue }
 
@@ -30,6 +31,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "Plan"
         case .review: return "Review"
         case .notices: return "Notices"
+        case .mail: return "Mail"
         case .variorum: return "Variorum"
         }
     }
@@ -43,6 +45,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "list.bullet"
         case .review: return "checkmark.circle"
         case .notices: return "bell"
+        case .mail: return "envelope"
         case .variorum: return "text.book.closed"
         }
     }
@@ -51,7 +54,7 @@ enum SideTab: String, CaseIterable, Identifiable {
     /// core can answer it (Store.sideTabs). The others come with the core
     /// features they need.
     static func built(variorum: Bool) -> [SideTab] {
-        [.dock, .helpers, .review, .notices] + (variorum ? [.variorum] : [])
+        [.dock, .helpers, .review, .notices, .mail] + (variorum ? [.variorum] : [])
     }
 
     /// Its key with ⌥⌘, by its place among all the tabs, so a key keeps its
@@ -102,7 +105,7 @@ extension Store {
         if side.open { closeSide() } else { openSide(side.tab) }
     }
 
-    /// A tab's own key (⌥⌘1 to ⌥⌘7): shows the sidebar on that tab, or
+    /// A tab's own key (⌥⌘1 to ⌥⌘8): shows the sidebar on that tab, or
     /// closes it when that tab already shows.
     func toggleSideTab(_ tab: SideTab) {
         if side.open && side.tab == tab { closeSide() } else { openSide(tab) }
@@ -121,7 +124,7 @@ extension Store {
     /// from the last run stays.
     var sideTabs: [SideTab] {
         let known = knowsFeatures ? (canVariorum ? variorum.wanted : false) : nil
-        return SideTab.built(variorum: known ?? (side.tab == .variorum))
+        return SideTab.built(variorum: known ?? (side.tab == .variorum)).filter { $0 != .mail || mailShown }
     }
 
     /// Moves the right sidebar off a tab the core no longer serves, to the
@@ -347,6 +350,9 @@ struct RightSidebar: View {
         case .notices:
             let n = store.unseenErrors
             return (n, n > 0)
+        case .mail:
+            // Unread mail is news, not something that needs you: never red.
+            return (store.mailShown ? store.mail.unread : 0, false)
         default:
             return (0, false)
         }
@@ -358,6 +364,12 @@ struct RightSidebar: View {
         case .review: ReviewTab()
         case .notices: NoticesTab()
         case .variorum: VariorumTab()
+        case .mail:
+            if store.mailShown {
+                MailTab()
+            } else {
+                SideNote(title: "Mail is off", text: "The mail plugin is off, or this \(Brand.name) was built without it: Plugins › Mail turns it on.")
+            }
         default: HelpersTab()
         }
     }

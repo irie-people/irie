@@ -25,7 +25,7 @@ Irie's second plugin, **Writing** (DESIGN §4.17), with one part, Writing in Var
 | The plugin | Its switch, and a check for Variorum in `/Applications` or `~/Applications` | `internal/plugins/writing.go` |
 | A skill | `/irie:variorum`: Variorum's words, nine rules, how to start, eight jobs, the setup in `reference/setup.md`, and the credit | `internal/skills/bundled/variorum/` |
 | Words | `:write [TASK]` starts a writing session: Claude Code on `+claude`, in `<data>/guides/variorum`, running `/irie:variorum TASK`. The task names the session | `core/read.go`, `internal/core/guide.go` |
-| Controls | **File › Write with Variorum…** in the Mac app sends `:write` | `mac/Sources/Irie/MenuBar.swift` |
+| Controls | **Plugins › Writing in Variorum › Start Writing in Variorum…** in the Mac app sends `:write` | `mac/Sources/Irie/MenuBar.swift` |
 | Helpers | `irie variorum door`, the door as each writing session's own MCP server (below). Variorum keeps the record: a receipt for each change, ⌥⌘Z, the Activity tab | `internal/variorum`, `cmd/irie` |
 
 The skill runs only when the writer starts it (`disable-model-invocation: true`), so it costs nothing in other sessions.

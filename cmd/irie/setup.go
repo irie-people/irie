@@ -21,13 +21,13 @@ import (
 	"github.com/irie-people/irie/internal/ready"
 )
 
-const setupUsage = "usage: " + brand.Slug + " setup [--check] [--json] [--yes] | " + brand.Slug + " setup local [--model MODEL] [--yes] | " + brand.Slug + " setup browser [--yes] [--page URL] | " + brand.Slug + " setup anon [--yes] | " + brand.Slug + " setup privacy [--yes]"
+const setupUsage = "usage: " + brand.Slug + " setup [--check] [--json] [--yes] | " + brand.Slug + " setup local [--model MODEL] [--yes] | " + brand.Slug + " setup browser [--yes] [--page URL] | " + brand.Slug + " setup anon [--yes] | " + brand.Slug + " setup privacy [--yes] | " + brand.Slug + " setup vpn [--yes] [VPN]"
 
 func setup(args []string) error {
 	if len(args) > 0 && args[0] == "local" {
 		return setupLocal(args[1:], os.Stdin, os.Stdout)
 	}
-	// A plugin's setup words: irie setup anon, browser, privacy.
+	// A plugin's setup words: irie setup anon, browser, privacy, vpn.
 	if len(args) > 0 {
 		if f, ok := pluginSetups[args[0]]; ok {
 			return f(args[1:], os.Stdin, os.Stdout)

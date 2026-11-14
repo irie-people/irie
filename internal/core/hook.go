@@ -17,9 +17,9 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-// toolInputKeys are the data a hook event takes from a tool's input, which
-// journal.tool_input = "none" leaves out.
-var toolInputKeys = []string{"summary", "question"}
+// toolInputKeys are the data a hook event takes from a tool's input, or
+// quotes from its output, which journal.tool_input = "none" leaves out.
+var toolInputKeys = []string{"summary", "question", "test_line"}
 
 // hook takes one hook event from the shim (DESIGN §3.3) and records it.
 // Nothing holds a call yet. A session that starts may be told it can
@@ -29,8 +29,20 @@ var toolInputKeys = []string{"summary", "question"}
 // (DESIGN §4.8); while you are away at night, an agent that asks you
 // something is told to decide itself (DESIGN §4.10); and a session or
 // subagent that starts hears the word of the arch agents with it (DESIGN
-// §4.11).
+// §4.11). Two turns in a row that fail on an API error boost the session
+// (boost.go).
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
+	return c.takeHook(a, time.Time{})
+}
+
+// takeHook is hook for an event that came at at, or now when at is zero.
+// One that came earlier is an event the shim kept while no core listened
+// (missed.go). It is recorded at the time it came, marked late, and since
+// its reply reaches no agent, nothing that only a reply carries is done
+// for it: the jot dog's nudge, the trod bot's answer, the arch agents'
+// word, Gabriel's guard and a note.
+func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
+	late := !at.IsZero()
 	h, err := harnessFor(a.Harness)
 	if err != nil {
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
@@ -44,21 +56,27 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		Input json.RawMessage `json:"tool_input"`
 	}
 	json.Unmarshal(a.Payload, &call)
-	// The jot dog reads what a finished turn left before the turn is
-	// recorded, outside c.mu (dog.go).
-	unfinished, loose := c.dogAtStop(a.Session, evs)
-	// So may the trod bot, which may read the machine's idle time
-	// (trod.go).
-	var trod trodReply
-	if unfinished == "" {
-		trod = c.trodAtHook(a.Session, evs)
-	}
-	// And the arch agents' word to a session or subagent that starts
-	// (arch.go), and Gabriel's guard of the user's focus (gabriel.go).
-	word := c.archWord(a.Session, evs)
-	focusDeny := ""
-	if trod.how != trodAtAsk {
-		focusDeny = c.focusGuard(a.Session, call.Tool, call.Input, evs)
+	var (
+		stop            dogStop
+		word, focusDeny string
+		trod            trodReply
+	)
+	if !late {
+		// The jot dog reads what a finished turn left, and holds its last
+		// message to its tests, before the turn is recorded, outside c.mu
+		// (dog.go).
+		stop = c.dogAtStop(a.Session, evs)
+		// So may the trod bot, which may read the machine's idle time
+		// (trod.go).
+		if stop.note == "" {
+			trod = c.trodAtHook(a.Session, evs)
+		}
+		// And the arch agents' word to a session or subagent that starts
+		// (arch.go), and Gabriel's guard of the user's focus (gabriel.go).
+		word = c.archWord(a.Session, evs)
+		if trod.how != trodAtAsk {
+			focusDeny = c.focusGuard(a.Session, call.Tool, call.Input, evs)
+		}
 	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]
@@ -66,10 +84,20 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		c.mu.Unlock()
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
+	if late && !lateFits(x, at) {
+		c.mu.Unlock()
+		return ipc.HookResult{}, errStale
+	}
 	var reply ipc.HookResult
-	failover, turnEnded := false, false
+	failover, turnEnded, boosts := false, false, false
 	x.quiet++
 	for _, e := range evs {
+		if late {
+			if e.Data == nil {
+				e.Data = map[string]any{}
+			}
+			e.TS, e.Data["late"] = event.Stamp(at), true
+		}
 		ends := e.Kind == event.TurnEnded && e.Agent == event.Main
 		if ends && asksUser(e.Str("message")) {
 			// Whether it asks is read from the whole message, which the
@@ -82,11 +110,12 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			// end at once (sub.go).
 			reply.Deny = stoppedNote
 			continue
-		case unfinished != "" && ends:
+		case stop.note != "" && ends:
 			// The turn goes on, so it has not ended: the dog sent the
-			// agent back to finish what it left.
-			e = nudgeEvent(e, loose)
-			reply.Unfinished = unfinished
+			// agent back to finish what it left, or to put its report
+			// right.
+			e = nudgeEvent(e, stop)
+			reply.Unfinished = stop.note
 		case trod.how == trodAtStop && ends:
 			// Likewise the trod bot, to decide what it asked.
 			e = trodEvent(e, trodAtStop)
@@ -101,6 +130,11 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		case trod.how == trodAtAsk && e.Kind == event.InputNeeded && e.Str("reason") == event.ReasonQuestion:
 			e = trodEvent(e, trodAtAsk)
 			reply.Deny = trod.note
+		}
+		if ends && e.Kind == event.TurnEnded && stop.unproven != "" {
+			// The turn ends with its word on its tests standing against
+			// its last test run: the row says so (dog.go).
+			e.Data["unproven"] = stop.unproven
 		}
 		input := call.Input
 		if c.cfg().Journal.ToolInput == "none" {
@@ -118,6 +152,7 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			c.saveResult(x, msg)
 		}
 		c.record(x, e)
+		boosts = c.boostTurn(x, e) || boosts
 		if e.Kind == event.SubagentFinished {
 			delete(x.stopped, e.Agent)
 		}
@@ -144,8 +179,15 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			failover = true
 		}
 	}
-	if n := c.takeNote(x, evs); n != "" {
-		reply.Context = joinNotes(reply.Context, n)
+	if boosts {
+		// A boost takes the tree out of the background at once, and its
+		// end puts it back.
+		c.background()
+	}
+	if !late {
+		if n := c.takeNote(x, evs); n != "" {
+			reply.Context = joinNotes(reply.Context, n)
+		}
 	}
 	c.followConversation(x)
 	if turnEnded && c.cfg().Spawn.CloseWhenDone {

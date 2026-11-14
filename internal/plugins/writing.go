@@ -42,7 +42,7 @@ func writing() Plugin {
 				Title:   "Writing in Variorum",
 				Summary: "`:write` starts a session that works in Variorum through its door for AI: editor's notes as comments, rewrites and translations as takes beside your paragraphs, books kept tidy.",
 				Setup:   ":write",
-				Brings:  []string{":write", "File › Write with Variorum…", "/" + brand.Slug + ":variorum"},
+				Brings:  []string{":write", "Plugins › Writing in Variorum", "/" + brand.Slug + ":variorum"},
 				Refused: "Writing in Variorum is left out: skills.disabled names variorum.",
 				Skills:  []string{variorumSkill},
 				own: func(c config.Config) bool {
@@ -69,7 +69,7 @@ func checkVariorum(e Env, on bool) (bool, string) {
 		return true, "Left out: skills.disabled names variorum."
 	}
 	if variorum.Installed() {
-		return true, "Ready: :write, or File › Write with Variorum… in the Mac app, starts a writing session. The first one walks you through Variorum's door for AI."
+		return true, "Ready: :write, or Plugins › Writing in Variorum › Start Writing in Variorum… in the Mac app, starts a writing session. The first one walks you through Variorum's door for AI."
 	}
 	return false, "Variorum isn't installed: it's free from " + variorum.Site + ", for macOS 26 or later on Apple silicon. Then :write walks you through its door for AI."
 }

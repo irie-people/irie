@@ -194,8 +194,8 @@ func (m Model) header() string {
 	return left + blank(p.ground, m.width-lipgloss.Width(left)-lipgloss.Width(right)-1) + right + blank(p.ground, 1)
 }
 
-// vpnMark is Mullvad VPN in the title bar, while vpn.on
-// (docs/proposals/extensions.md §4.1): green while connected, yellow while
+// vpnMark is the VPN in the title bar, whichever vpn.provider names, while
+// vpn.on (DESIGN §4.18): green while connected, yellow while
 // it comes or goes, red in error, and faint when off, unless lockdown blocks
 // the network, which is red too. `:vpn` says the rest.
 func vpnMark(v *ipc.VPN, band func(color.Color) lipgloss.Style, p palette) string {
@@ -301,8 +301,9 @@ func (m Model) statusLine() string {
 	case itemOutside:
 		return m.outsideStatus(m.outside[it.o])
 	case itemGroup:
+		// A group of yours inside another by its path, Work / Irie.
 		g := it.group
-		text := g.title + " · " + groupLabel(g)
+		text := strings.Join(g.path(), " / ") + " · " + groupLabel(g)
 		if g.outside {
 			text = "Claude Code sessions in other terminals · m moves an idle one in"
 		}

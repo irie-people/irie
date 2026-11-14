@@ -64,6 +64,7 @@ const (
 	UIUnpinned       = "ui.unpinned"
 	UISubStopped     = "ui.sub_stopped"
 	UISpaced         = "ui.spaced"
+	UIGrouped        = "ui.grouped"
 	UIClosed         = "ui.closed"
 	UIReopened       = "ui.reopened"
 	UIUndo           = "ui.undo"
@@ -72,7 +73,7 @@ const (
 	// session idle (DESIGN §5.3). It is an addition to the table of §5.2.
 	UIShown = "ui.shown"
 	// UIReordered records that the user put a session elsewhere in the
-	// list, by dragging it or by promoting it to the top (DESIGN §4.1).
+	// list, by dragging it or moving it up or down (DESIGN §4.1).
 	UIReordered = "ui.reordered"
 	// Outcomes teach the router how accurate each profile is (DESIGN §6.4):
 	// the user's rating of a session, and a task run again on a more
@@ -91,6 +92,12 @@ const (
 	// the question's tool.started and input.needed; or by a message it
 	// typed, whose prompt.submitted follows.
 	TrodSent = "trod.sent"
+	// BoostOn records that Irie boosted a session whose turns failed on an
+	// API error twice in a row (DESIGN §4.3): its whole process tree comes
+	// out of the background until BoostOff, which a turn that ends without
+	// an API error records, or the end of the boost's time.
+	BoostOn  = "boost.on"
+	BoostOff = "boost.off"
 )
 
 var kinds = map[string]bool{}
@@ -100,8 +107,8 @@ func init() {
 		SpawnRequested, SpawnFailed, SessionStarted, PromptSubmitted, ToolStarted, ToolFinished, ToolFailed,
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
-		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent,
+		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
+		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent, BoostOn, BoostOff,
 	} {
 		kinds[k] = true
 	}
@@ -202,6 +209,28 @@ func Cap(s string) string {
 		cut--
 	}
 	return s[:cut]
+}
+
+// capGap stands where CapEnds cut a string's middle out.
+const capGap = "\n…\n"
+
+// CapEnds caps s at MaxString bytes as Cap does, but by cutting out its
+// middle: it keeps a quarter for the head and the rest for the tail. A
+// command's output says how it went at its end, as a test run's FAIL lines
+// do, and a failed call's error starts with its exit code.
+func CapEnds(s string) string {
+	if len(s) <= MaxString {
+		return s
+	}
+	head := MaxString / 4
+	for head > 0 && !utf8.RuneStart(s[head]) {
+		head--
+	}
+	tail := len(s) - (MaxString - head - len(capGap))
+	for tail < len(s) && !utf8.RuneStart(s[tail]) {
+		tail++
+	}
+	return s[:head] + capGap + s[tail:]
 }
 
 // CapAll caps every string inside v, which holds decoded JSON (maps, slices

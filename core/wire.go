@@ -7,6 +7,10 @@ import "github.com/irie-people/irie/internal/ipc"
 // The wire's types: the requests and replies, every op's args and result,
 // the frames of a subscription and the rows they carry (DESIGN §2.4).
 type (
+	BenchArgs        = ipc.BenchArgs
+	BenchResult      = ipc.BenchResult
+	Bench            = ipc.Bench
+	BenchRun         = ipc.BenchRun
 	ContextArgs      = ipc.ContextArgs
 	ContextResult    = ipc.ContextResult
 	ContextTurn      = ipc.ContextTurn
@@ -22,12 +26,16 @@ type (
 	Conversation     = ipc.Conversation
 	Item             = ipc.Item
 	SendArgs         = ipc.SendArgs
+	ContinueArgs     = ipc.ContinueArgs
 	FlipResult       = ipc.FlipResult
 	DockArgs         = ipc.DockArgs
 	DockResult       = ipc.DockResult
 	DockControl      = ipc.DockControl
 	DockFile         = ipc.DockFile
 	DockUntrusted    = ipc.DockUntrusted
+	Group            = ipc.Group
+	GroupArgs        = ipc.GroupArgs
+	GroupResult      = ipc.GroupResult
 	InputArgs        = ipc.InputArgs
 	Paste            = ipc.Paste
 	InputResult      = ipc.InputResult
@@ -37,6 +45,14 @@ type (
 	PeerCaller       = ipc.PeerCaller
 	Hearer           = ipc.Hearer
 	Client           = ipc.Client
+	MailArgs         = ipc.MailArgs
+	MailNew          = ipc.MailNew
+	MailDraft        = ipc.MailDraft
+	MailResult       = ipc.MailResult
+	MailAccount      = ipc.MailAccount
+	MailMessage      = ipc.MailMessage
+	MailBody         = ipc.MailBody
+	MailAttachment   = ipc.MailAttachment
 	OutsideSession   = ipc.OutsideSession
 	MoveArgs         = ipc.MoveArgs
 	MoveResult       = ipc.MoveResult
@@ -78,6 +94,7 @@ type (
 	Subs             = ipc.Subs
 	Teammate         = ipc.Teammate
 	Header           = ipc.Header
+	Boost            = ipc.Boost
 	Load             = ipc.Load
 	Window           = ipc.Window
 	Plan             = ipc.Plan
@@ -116,6 +133,8 @@ type (
 	PluginsResult    = ipc.PluginsResult
 	Plugin           = ipc.Plugin
 	PluginPart       = ipc.PluginPart
+	MarketsArgs      = ipc.MarketsArgs
+	MarketsResult    = ipc.MarketsResult
 	AnonArgs         = ipc.AnonArgs
 	AnonResult       = ipc.AnonResult
 	VPNArgs          = ipc.VPNArgs
@@ -162,6 +181,11 @@ type (
 // The wire's constants: the API version, the op and frame names, the
 // states, the error codes and the other values its fields take.
 const (
+	OpBench            = ipc.OpBench
+	BenchRunning       = ipc.BenchRunning
+	BenchJudging       = ipc.BenchJudging
+	BenchDone          = ipc.BenchDone
+	BenchFailed        = ipc.BenchFailed
 	OpContext          = ipc.OpContext
 	OpFork             = ipc.OpFork
 	ContextLog         = ipc.ContextLog
@@ -193,6 +217,7 @@ const (
 	ItemError          = ipc.ItemError
 	ItemStopped        = ipc.ItemStopped
 	OpSend             = ipc.OpSend
+	OpContinue         = ipc.OpContinue
 	OpFlip             = ipc.OpFlip
 	OpDock             = ipc.OpDock
 	DockStateUntrusted = ipc.DockStateUntrusted
@@ -200,6 +225,15 @@ const (
 	DockStateRunning   = ipc.DockStateRunning
 	DockStateExited    = ipc.DockStateExited
 	DockStateReady     = ipc.DockStateReady
+	OpGroup            = ipc.OpGroup
+	GroupList          = ipc.GroupList
+	GroupNew           = ipc.GroupNew
+	GroupAdd           = ipc.GroupAdd
+	GroupRemove        = ipc.GroupRemove
+	GroupRename        = ipc.GroupRename
+	GroupUngroup       = ipc.GroupUngroup
+	GroupMove          = ipc.GroupMove
+	MaxGroupDepth      = ipc.MaxGroupDepth
 	OpInput            = ipc.OpInput
 	InputSpawned       = ipc.InputSpawned
 	InputAdded         = ipc.InputAdded
@@ -207,6 +241,31 @@ const (
 	InputRan           = ipc.InputRan
 	InputAsked         = ipc.InputAsked
 	MaxMessage         = ipc.MaxMessage
+	OpMail             = ipc.OpMail
+	MailList           = ipc.MailList
+	MailRead           = ipc.MailRead
+	MailFlag           = ipc.MailFlag
+	MailMove           = ipc.MailMove
+	MailSend           = ipc.MailSend
+	MailAdd            = ipc.MailAdd
+	MailRemove         = ipc.MailRemove
+	MailTest           = ipc.MailTest
+	MailTrust          = ipc.MailTrust
+	FolderInbox        = ipc.FolderInbox
+	FolderStarred      = ipc.FolderStarred
+	FolderSent         = ipc.FolderSent
+	FolderDrafts       = ipc.FolderDrafts
+	FolderArchive      = ipc.FolderArchive
+	FolderJunk         = ipc.FolderJunk
+	FolderTrash        = ipc.FolderTrash
+	FlagRead           = ipc.FlagRead
+	FlagUnread         = ipc.FlagUnread
+	FlagStar           = ipc.FlagStar
+	FlagUnstar         = ipc.FlagUnstar
+	MailReady          = ipc.MailReady
+	MailChecking       = ipc.MailChecking
+	MailNeeds          = ipc.MailNeeds
+	MailError          = ipc.MailError
 	KindInteractive    = ipc.KindInteractive
 	KindBackground     = ipc.KindBackground
 	StatusBusy         = ipc.StatusBusy
@@ -248,10 +307,12 @@ const (
 	OpVPN              = ipc.OpVPN
 	OpAnon             = ipc.OpAnon
 	OpPlugins          = ipc.OpPlugins
+	OpMarkets          = ipc.OpMarkets
 	OpLearn            = ipc.OpLearn
 	OpVariorum         = ipc.OpVariorum
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
+	FeatureBoostAlways = ipc.FeatureBoostAlways
 	FeatureWatch       = ipc.FeatureWatch
 	ViewApp            = ipc.ViewApp
 	ViewWatch          = ipc.ViewWatch
@@ -281,6 +342,7 @@ const (
 	ArchDuration       = ipc.ArchDuration
 	ArchNumber         = ipc.ArchNumber
 	ArchLines          = ipc.ArchLines
+	UnprovenTests      = ipc.UnprovenTests
 	DidUndo            = ipc.DidUndo
 	DidRedo            = ipc.DidRedo
 	DidSettle          = ipc.DidSettle
@@ -301,6 +363,7 @@ const (
 	ToolAnon           = ipc.ToolAnon
 	ToolBrowser        = ipc.ToolBrowser
 	ToolPrivacy        = ipc.ToolPrivacy
+	ToolVPN            = ipc.ToolVPN
 	ToolWrite          = ipc.ToolWrite
 	PartReady          = ipc.PartReady
 	PartOff            = ipc.PartOff
@@ -309,6 +372,7 @@ const (
 	PartHeld           = ipc.PartHeld
 	VPNOn              = ipc.VPNOn
 	VPNOff             = ipc.VPNOff
+	VPNUse             = ipc.VPNUse
 	VPNLockdown        = ipc.VPNLockdown
 	VPNPlace           = ipc.VPNPlace
 	VPNTime            = ipc.VPNTime

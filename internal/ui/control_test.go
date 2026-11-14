@@ -106,36 +106,36 @@ func TestFFreezesAndThawsAndShowsTheDiamond(t *testing.T) {
 	}
 }
 
-// ! promotes the selected session to the top of its group at once, with
-// its badge; a second ! puts it back where it stands.
-func TestBangPromotesToTheTopAtOnce(t *testing.T) {
+// ! boosts the selected session at once, with its badge, and moves no row:
+// the order is the user's; a second ! puts it back.
+func TestBangBoostsWithoutMovingTheRow(t *testing.T) {
 	m, b := ctlModel(t, sessions(3))
 	m = send(m, keyMsg("end"))
 	m = send(m, keyMsg("!"))
-	if got := order(m); !slices.Equal(got, []string{"s000000000002", "s000000000000", "s000000000001"}) {
-		t.Errorf("order = %v, want the promoted row on top at once", got)
+	want := []string{"s000000000000", "s000000000001", "s000000000002"}
+	if got := order(m); !slices.Equal(got, want) {
+		t.Errorf("order = %v, want %v: a boost moves nothing", got, want)
 	}
-	if selectedName(m) != "task-002" || m.sessions[0].Priority != 1 {
-		t.Errorf("selection %s, priority %d", selectedName(m), m.sessions[0].Priority)
+	if selectedName(m) != "task-002" || m.sessions[2].Priority != 1 {
+		t.Errorf("selection %s, priority %d", selectedName(m), m.sessions[2].Priority)
 	}
-	// The first card, whether or not the group's header scrolled away.
 	got := listText(t, m)
-	if i := slices.IndexFunc(got, func(l string) bool { return strings.Contains(l, "task-") }); i < 0 || got[i] != "◐↑task-002 1m" {
-		t.Errorf("no badge on the first card: %q", got)
+	if i := slices.IndexFunc(got, func(l string) bool { return strings.Contains(l, "task-002") }); i < 0 || got[i] != "◐↑task-002 1m" {
+		t.Errorf("no badge on its card: %q", got)
 	}
 	raw := strings.Split(m.View().Content, "\n")[lineOf(t, m, "↑task-002")]
 	if c := cells(raw); c[4].r != "↑" || c[4].fg != rgb(m.pal.accent) || !c[4].bold {
 		t.Errorf("badge %q in %s, bold %v", c[4].r, c[4].fg, c[4].bold)
 	}
-	if got := statusText(t, m); !strings.Contains(got, "promoted") {
+	if got := statusText(t, m); !strings.Contains(got, "boosted") {
 		t.Errorf("details %q", got)
 	}
 	m = send(m, keyMsg("!"))
-	want := []string{"priority s000000000002 1 ", "priority s000000000002 0 "}
-	if !slices.Equal(b.calls, want) {
-		t.Errorf("calls = %v, want %v", b.calls, want)
+	calls := []string{"priority s000000000002 1 ", "priority s000000000002 0 "}
+	if !slices.Equal(b.calls, calls) {
+		t.Errorf("calls = %v, want %v", b.calls, calls)
 	}
-	if got := order(m); got[0] != "s000000000002" || m.sessions[0].Priority != 0 {
+	if got := order(m); !slices.Equal(got, want) || m.sessions[2].Priority != 0 {
 		t.Errorf("putting it back moved it: %v", got)
 	}
 	m = typeText(send(m, keyMsg("tab")), ":prio a demo at noon")
@@ -148,12 +148,13 @@ func TestBangPromotesToTheTopAtOnce(t *testing.T) {
 	m = send(m, keyMsg("down"))
 	m = send(m, keyMsg("!"))
 	if row := screen(t, m)[lineOf(t, m, "task-001")]; !strings.HasPrefix(row, "▌◐↑task-001") {
-		t.Errorf("promoted row %q", row)
+		t.Errorf("boosted row %q", row)
 	}
 }
 
-// A promotion heads the session's own group: groups keep their places.
-func TestAPromotionHeadsItsGroup(t *testing.T) {
+// A boost leaves the row where it is in its group, and the groups where
+// they are.
+func TestABoostLeavesTheRowInItsPlace(t *testing.T) {
 	rows := repoSessions()
 	for i := range rows {
 		rows[i].Order = i
@@ -164,7 +165,7 @@ func TestAPromotionHeadsItsGroup(t *testing.T) {
 	m = send(m, keyMsg("!"))
 	want := []string{
 		"▾ website", "web-fix", "web-copy",
-		"▾ code/irie", "irie-tests", "irie-theme",
+		"▾ code/irie", "irie-theme", "irie-tests",
 		"▾ forks/irie", "fork-docs",
 		"▾ Not in a repo", "scratch-notes",
 	}
@@ -403,6 +404,61 @@ func TestDraggingAcrossParkedsEdge(t *testing.T) {
 	}
 }
 
+// In the List view a card moves among the cards of its own group, those on
+// both sides of a group inside it as one, and waits over the cards of a
+// group inside its group, where a drop sends it back. Unparked into a
+// group inside a folded one, a session's selection goes to the folded
+// group's header.
+func TestDraggingACardStaysInItsInnermostGroup(t *testing.T) {
+	rows, head := treeRows()
+	for i := range rows {
+		rows[i].Order = i
+	}
+	m, b := ctlAt(t, rows, 34, 80)
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("v"))
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	y := func(name string) int { return lineOf(t, m, name) }
+	// fork-docs, after Acme, to the top of Clients.
+	m = dragAlong(m, y("fork-docs"), y("scratch-notes"))
+	if want := []string{`reorder s4 before "s2"`}; !slices.Equal(b.calls, want) {
+		t.Errorf("calls = %v, want %v", b.calls, want)
+	}
+	want := []string{"web-fix", "▾ Clients", "fork-docs", "scratch-notes", "▾ Acme", "irie-theme", "▾ Home", "▾ Garden", "web-copy", "irie-tests"}
+	if got := outline(m); !slices.Equal(got, want) {
+		t.Errorf("outline %q, want %q", got, want)
+	}
+	// Over Acme's card scratch-notes waits in Clients, and dropped there
+	// goes back.
+	b.calls = nil
+	m = send(m, tea.MouseClickMsg{X: 5, Y: y("scratch-notes"), Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: y("fork-docs"), Button: tea.MouseLeft})
+	if got := order(m); !slices.Equal(got, []string{"s1", "s2", "s4", "s3", "s5", "s6"}) {
+		t.Fatalf("while dragging: %v", got)
+	}
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: y("irie-theme"), Button: tea.MouseLeft})
+	if got := order(m); !slices.Equal(got, []string{"s1", "s2", "s4", "s3", "s5", "s6"}) {
+		t.Errorf("over Acme the card moved: %v", got)
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 5, Y: y("irie-theme"), Button: tea.MouseLeft})
+	if got := outline(m); !slices.Equal(got, want) || len(b.calls) != 0 {
+		t.Errorf("a drop on Acme: outline %q, calls %v", got, b.calls)
+	}
+	if !strings.Contains(m.status, "only among the others of its group") || selectedName(m) != "scratch-notes" {
+		t.Errorf("status %q, selection %s", m.status, selectedName(m))
+	}
+	// irie-theme unparked while Clients is folded.
+	rows[2].Parked = true
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	m = send(m, keyMsg("Z"))
+	m.fold(userKey("g1"))
+	m = selectNamed(t, m, "irie-theme")
+	m = send(m, keyMsg("z"))
+	if last := b.calls[len(b.calls)-1]; last != "park s3 false" || selectedName(m) != "Clients" {
+		t.Errorf("unparked: call %q, selection %s", last, selectedName(m))
+	}
+}
+
 func TestWithoutControlsTheKeysSaySo(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 2)
 	m = send(m, keyMsg("f"))
@@ -509,17 +565,18 @@ func TestZParksAndUnparks(t *testing.T) {
 	}
 }
 
-// Promoting a parked session unparks it, at once, as the core does.
-func TestPromotingAParkedSessionUnparksIt(t *testing.T) {
+// Boosting a parked session leaves it in Parked, as the core does.
+func TestBoostingAParkedSessionLeavesItParked(t *testing.T) {
 	rows := sessions(3)
 	rows[2].Parked = true
 	m, _ := ctlAt(t, rows, 34, 60)
 	m = send(m, keyMsg("esc"))
 	m = send(m, keyMsg("Z"))
 	m = selectNamed(t, m, "task-002")
+	before := outline(m)
 	m = send(m, keyMsg("!"))
-	if got := outline(m); !slices.Equal(got, []string{"▾ Not in a repo", "task-002", "task-000", "task-001"}) {
-		t.Errorf("outline %q", got)
+	if got := outline(m); !slices.Equal(got, before) || !m.sessions[2].Parked || m.sessions[2].Priority != 1 {
+		t.Errorf("outline %q, want %q; parked %v, priority %d", got, before, m.sessions[2].Parked, m.sessions[2].Priority)
 	}
 }
 

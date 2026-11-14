@@ -92,10 +92,10 @@ func TestNormalize(t *testing.T) {
 	check(t, "ExitPlanMode", payload("PreToolUse", `"tool_name":"ExitPlanMode"`, `"tool_use_id":"toolu_03"`, `"tool_input":{"plan":"## Plan\n1. Fix it"}`),
 		want{event.ToolStarted, "main", map[string]any{"tool": "ExitPlanMode"}},
 		want{event.InputNeeded, "main", map[string]any{"reason": "plan"}})
-	check(t, "PostToolUse", payload("PostToolUse", bashCall, `"tool_response":{"stdout":"ok","stderr":"","interrupted":false}`, `"duration_ms":1200`),
-		want{event.ToolFinished, "main", map[string]any{"ms": 1200, "tool": "Bash"}})
+	check(t, "PostToolUse", payload("PostToolUse", bashCall, `"tool_response":{"stdout":"ok  \texample.com/x\t0.1s\n","stderr":"","interrupted":false}`, `"duration_ms":1200`),
+		want{event.ToolFinished, "main", map[string]any{"ms": 1200, "tests": "passed", "tool": "Bash"}})
 	check(t, "PostToolUseFailure", payload("PostToolUseFailure", bashCall, `"error":"Exit code 1\nFAIL"`, `"duration_ms":4187`),
-		want{event.ToolFailed, "main", map[string]any{"ms": 4187, "tool": "Bash"}})
+		want{event.ToolFailed, "main", map[string]any{"ms": 4187, "test_line": "FAIL", "tests": "failed", "tool": "Bash"}})
 	check(t, "PermissionRequest", payload("PermissionRequest", `"tool_name":"Bash"`, `"tool_input":{"command":"rm -rf node_modules"}`),
 		want{event.InputNeeded, "main", map[string]any{"reason": "permission", "summary": "rm -rf node_modules", "tool": "Bash"}})
 	check(t, "Notification permission_prompt", payload("Notification", `"notification_type":"permission_prompt"`, `"message":"Claude needs your permission to use Bash"`),
@@ -126,7 +126,9 @@ func TestNormalize(t *testing.T) {
 	check(t, "Stop whose task registry was out of reach", payload("Stop", `"stop_hook_active":false`, `"background_tasks":null`),
 		want{event.TurnEnded, "main", map[string]any{}})
 	check(t, "StopFailure", payload("StopFailure", `"error":"rate_limit"`, `"error_details":"429 Too Many Requests"`),
-		want{event.TurnFailed, "main", map[string]any{"error": "rate_limit"}})
+		want{event.TurnFailed, "main", map[string]any{"error": "rate_limit", "details": "429 Too Many Requests"}})
+	check(t, "StopFailure with its message", payload("StopFailure", `"error":"server_error"`, `"last_assistant_message":"API Error: The response stopped arriving"`),
+		want{event.TurnFailed, "main", map[string]any{"error": "server_error", "message": "API Error: The response stopped arriving"}})
 	check(t, "SubagentStart", payload("SubagentStart", inSub),
 		want{event.SubagentStarted, "sub:a1b2c3", map[string]any{"agent_type": "Explore"}})
 	subTranscript := "/home/alice/transcripts/" + vendorID + "/subagents/agent-a1b2c3.jsonl"
@@ -135,6 +137,33 @@ func TestNormalize(t *testing.T) {
 	check(t, "SessionEnd", payload("SessionEnd", `"reason":"prompt_input_exit"`),
 		want{event.SessionEnded, "main", map[string]any{"reason": "prompt_input_exit"}})
 	check(t, "an event Irie does not use", payload("PostToolBatch"))
+}
+
+// A shell command's tests, as the hooks reference gives a call's end: what
+// it printed, or an error that starts with its exit code (DESIGN §4.8).
+func TestNormalizeReadsTestRuns(t *testing.T) {
+	call := func(cmd string, more string) string {
+		return `"tool_name":"Bash","tool_input":{"command":"` + cmd + `"` + more + `},"tool_use_id":"toolu_09"`
+	}
+	failing := `"error":"Exit code 1\n--- FAIL: TestCards (0.00s)\n    cards_test.go:9: got 2\nFAIL\nFAIL\texample.com/x\t0.1s\nFAIL"`
+	check(t, "a failure names its test", payload("PostToolUseFailure", call("cd /home/alice/code/website \u0026\u0026 go test ./...", ""), failing),
+		want{event.ToolFailed, "main", map[string]any{"test_line": "--- FAIL: TestCards (0.00s)", "tests": "failed", "tool": "Bash"}})
+	check(t, "a failure that tail lets through", payload("PostToolUse", call("go test ./... 2\u003e\u00261 | tail -3", ""), `"tool_response":{"stdout":"FAIL\texample.com/x\t0.1s\nFAIL\n","stderr":""}`),
+		want{event.ToolFinished, "main", map[string]any{"test_line": "FAIL\texample.com/x\t0.1s", "tests": "failed", "tool": "Bash"}})
+	check(t, "grep -v left nothing", payload("PostToolUseFailure", call("go test ./... 2\u003e\u00261 | grep -v ^ok", ""), `"error":"Exit code 1\n"`),
+		want{event.ToolFailed, "main", map[string]any{"tests": "ran", "tool": "Bash"}})
+	check(t, "in the background", payload("PostToolUse", call("go test ./...", `,"run_in_background":true`), `"tool_response":{"stdout":"","stderr":""}`),
+		want{event.ToolFinished, "main", map[string]any{"tests": "ran", "tool": "Bash"}})
+	check(t, "cut short", payload("PostToolUse", call("go test ./...", ""), `"tool_response":{"stdout":"FAIL","stderr":"","interrupted":true}`),
+		want{event.ToolFinished, "main", map[string]any{"tests": "ran", "tool": "Bash"}})
+	check(t, "aborted", payload("PostToolUseFailure", call("go test ./...", ""), `"error":"Exit code 1\nFAIL"`, `"is_interrupt":true`),
+		want{event.ToolFailed, "main", map[string]any{"tests": "ran", "tool": "Bash"}})
+	check(t, "timed out", payload("PostToolUseFailure", call("go test ./...", ""), `"error":"Command timed out after 2m 0s"`),
+		want{event.ToolFailed, "main", map[string]any{"tests": "ran", "tool": "Bash"}})
+	check(t, "no tests", payload("PostToolUseFailure", call("git status", ""), `"error":"Exit code 1\nFAIL"`),
+		want{event.ToolFailed, "main", map[string]any{"tool": "Bash"}})
+	check(t, "not a shell command", payload("PostToolUse", `"tool_name":"Read","tool_input":{"file_path":"/home/alice/go test"},"tool_use_id":"toolu_10"`, `"tool_response":"FAIL"`),
+		want{event.ToolFinished, "main", map[string]any{"tool": "Read"}})
 }
 
 func TestNormalizeCountsTheWholePrompt(t *testing.T) {

@@ -642,16 +642,15 @@ struct LookMenus: View {
 
     var body: some View {
         let looks = LookBook.shared
+        // The palette in use ticked. A ticked item each, rather than an
+        // inline Picker, which drew a line at the menu's top and another
+        // beside the one before Make a Theme.
         Menu("Theme") {
-            Picker("Theme", selection: $theme) {
-                ForEach(Palette.all) { p in Text(p.name).tag(p.id) }
-                if !looks.themes.isEmpty {
-                    Divider()
-                    ForEach(looks.themes) { t in Text(t.name).tag(t.id) }
-                }
+            ForEach(Palette.all) { p in pick(p.name, p.id) }
+            if !looks.themes.isEmpty {
+                Divider()
+                ForEach(looks.themes) { t in pick(t.name, t.id) }
             }
-            .pickerStyle(.inline)
-            .labelsHidden()
             Divider()
             Button("Make a Theme…") { open(.new) }
             if let t = looks.theme(theme) {
@@ -672,13 +671,18 @@ struct LookMenus: View {
                 Button(l.name) { looks.apply(l) }
             }
             Divider()
-            Button("Save the Window’s Layout…") { open(.layouts(saving: true)) }
-            Button("Arrange Layouts…") { open(.layouts(saving: false)) }
+            Button("Save Layout…") { open(.layouts(saving: true)) }
+            Button("Edit Layouts…") { open(.layouts(saving: false)) }
         }
     }
 
     private func open(_ r: LookBook.Request) {
         LookBook.shared.request = r
         openWindow(id: ThemeMaker.windowID)
+    }
+
+    /// A palette's item, ticked while it is the one in use.
+    private func pick(_ name: String, _ id: String) -> some View {
+        Toggle(name, isOn: Binding(get: { theme == id }, set: { if $0 { theme = id } }))
     }
 }

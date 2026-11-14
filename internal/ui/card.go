@@ -88,7 +88,7 @@ func (m Model) padded(edge, fill color.Color, ps ...piece) string {
 
 // marks are what a session's line starts with: its state's glyph, then the
 // flags of DESIGN §5.3 next to it (◆ when it is frozen under a state that
-// comes first), then for a promoted session an ↑ in the accent, else a
+// comes first), then for a boosted session an ↑ in the accent, else a
 // space before the name.
 func (m Model) marks(s ipc.Session) []piece {
 	p, l := m.pal, m.look(s)
@@ -164,8 +164,10 @@ func stateLabel(s ipc.Session) string {
 // what it is doing in plain words, then its helpers. One that needs you is
 // tinted and edged in red; the selected one takes the selection fill, and
 // the accent edge while the list has the keyboard; a hovered one the hover
-// fill.
-func (m Model) card(it item, selected, hovered bool) []string {
+// fill. An indented card is drawn as a pane that many columns narrower
+// would draw it, after them.
+func (m Model) card(it item, indent int, selected, hovered bool) []string {
+	m.width -= indent
 	p := m.pal
 	s := m.sessions[it.s]
 	l := m.look(s)
@@ -222,7 +224,11 @@ func (m Model) card(it item, selected, hovered bool) []string {
 		}
 		lines = append(lines, m.padded(edge, fill, piece{"↳ ", p.muted, false}, piece{kind, p.ink, false}, piece{"  " + printable(sub.Detail), c, false}))
 	}
-	return append(lines, m.boxBottom(edge))
+	lines = append(lines, m.boxBottom(edge))
+	for i := range lines {
+		lines[i] = blank(p.sidebar, indent) + lines[i]
+	}
+	return lines
 }
 
 // edgeMark is the first column of a selected one-line entry: the accent
@@ -271,9 +277,9 @@ func (m Model) row(marks []piece, nameFG color.Color, name, a string, selected, 
 }
 
 // groupRow draws a group's header: `▾ irie  4`, and folded `▸ irie  4 · 1
-// needs you`, its count of what needs you in red. Parked's title is red
-// while any parked session needs you, folded or not.
-func (m Model) groupRow(g *group, selected, hovered bool) string {
+// needs you`, its count of what needs you in red, indent columns in.
+// Parked's title is red while any parked session needs you, folded or not.
+func (m Model) groupRow(g *group, indent int, selected, hovered bool) string {
 	p := m.pal
 	fill := m.rowFill(selected, hovered)
 	arrow := "▾ "
@@ -284,7 +290,7 @@ func (m Model) groupRow(g *group, selected, hovered bool) string {
 	if g.key == parkedKey && g.needs > 0 {
 		title = p.needs
 	}
-	ps := []piece{{arrow, p.muted, false}, {g.title, title, true}, {fmt.Sprintf("  %d", g.count), p.muted, false}}
+	ps := []piece{{spaces(indent) + arrow, p.muted, false}, {g.title, title, true}, {fmt.Sprintf("  %d", g.count), p.muted, false}}
 	if g.folded && g.needs > 0 {
 		ps = append(ps, piece{fmt.Sprintf(" · %d needs you", g.needs), p.needs, false})
 	}
@@ -294,13 +300,33 @@ func (m Model) groupRow(g *group, selected, hovered bool) string {
 	return m.edgeMark(selected) + spread(fill, m.width-2, append([]piece{{" ", p.ink, false}}, ps...)...) + blank(p.sidebar, 1)
 }
 
+// indentStep is how many columns in each of your groups draws what it
+// holds.
+const indentStep = 2
+
+// indent is how many columns in from the list's other entries entry it is
+// drawn: a step for each of your groups its sessions are in, a step less
+// for a group's header, so a group's sessions sit a step in from its
+// header, as a folder's files do. It stops at a third of the pane, so a
+// deep group in a narrow pane leaves room for names.
+func (m Model) indent(it item) int {
+	if it.group == nil {
+		return 0
+	}
+	d := it.group.depth
+	if it.kind == itemGroup {
+		d--
+	}
+	return min(max(d, 0), m.width/3/indentStep) * indentStep
+}
+
 // entry draws list entry i: its lines on screen.
 func (m Model) entry(items []item, i int) []string {
 	it := items[i]
-	selected, hovered := i == m.sel, it.key == m.hover
+	selected, hovered, in := i == m.sel, it.key == m.hover, m.indent(it)
 	switch it.kind {
 	case itemGroup:
-		return []string{m.groupRow(it.group, selected, hovered)}
+		return []string{m.groupRow(it.group, in, selected, hovered)}
 	case itemOutside:
 		o := m.outside[it.o]
 		a := ""
@@ -312,9 +338,10 @@ func (m Model) entry(items []item, i int) []string {
 	}
 	if m.compact() {
 		s := m.sessions[it.s]
-		return []string{m.row(m.marks(s), m.look(s).name, s.Name, age(m.now().Sub(s.Created)), selected, hovered)}
+		marks := append([]piece{{spaces(in), m.pal.ink, false}}, m.marks(s)...)
+		return []string{m.row(marks, m.look(s).name, s.Name, age(m.now().Sub(s.Created)), selected, hovered)}
 	}
-	return m.card(it, selected, hovered)
+	return m.card(it, in, selected, hovered)
 }
 
 // tabs are the List │ Repo bar's tabs, by where they sit.
@@ -406,7 +433,7 @@ func (m Model) detailRows() (string, [][]piece) {
 	switch it.kind {
 	case itemGroup:
 		g := it.group
-		what := "Enter folds it"
+		title, what := g.title, "Enter folds it"
 		if g.folded {
 			what = "Enter unfolds it"
 		}
@@ -418,8 +445,20 @@ func (m Model) detailRows() (string, [][]piece) {
 			rows = append(rows, []piece{{"out of the way; they keep running", p.muted, false}}, []piece{{"z unparks one, Z folds or opens them", p.muted, false}})
 		case g.host != "":
 			rows = append(rows, []piece{{brand.Name + "'s sessions on " + g.host, p.muted, false}}, []piece{{"they run there, in its order", p.muted, false}})
+		case g.user != "":
+			// A group inside another is titled by its path, Work / Irie,
+			// in the room the top border has for it (boxTop). The hint
+			// names it by the fewest words that find it: its name, or its
+			// path while a group nearer the top has that name.
+			path := g.path()
+			title = trail(path, m.width-8)
+			ref := g.title
+			if i := ipc.FindGroup(m.head.Groups, ref); i < 0 || m.head.Groups[i].ID != g.user {
+				ref = strings.Join(path, "/")
+			}
+			rows = append(rows, []piece{{":group " + ref + " puts one in", p.muted, false}}, []piece{{":nest NAME nests this group", p.muted, false}})
 		}
-		return g.title, append(rows, []piece{{what, p.muted, false}})
+		return title, append(rows, []piece{{what, p.muted, false}})
 	case itemOutside:
 		o := m.outside[it.o]
 		l := m.outsideLook(o)
@@ -443,7 +482,7 @@ func (m Model) detailRows() (string, [][]piece) {
 	marks := m.marks(s)
 	state := append(marks[:len(marks)-1], piece{" " + stateLabel(s), l.name, false})
 	if s.Priority > 0 {
-		state = append(state, piece{" · ↑ promoted", p.ink, false})
+		state = append(state, piece{" · ↑ boosted", p.ink, false})
 	}
 	if c := strings.TrimSpace(cost(s) + " " + routed(s)); c != "" {
 		state = append(state, piece{" · " + c, p.muted, false})
@@ -452,7 +491,7 @@ func (m Model) detailRows() (string, [][]piece) {
 	if detail == "" && len(s.Warnings) > 0 {
 		detail = s.Warnings[0]
 	}
-	// What freezing or promoting it means comes first, as in the strip.
+	// What freezing or boosting it means comes first, as in the strip.
 	if fl := frozenLine(s); fl != "" {
 		detail = strings.TrimSuffix(fl+" · "+detail, " · ")
 	}
@@ -472,6 +511,25 @@ func (m Model) detailRows() (string, [][]piece) {
 		{{s.Command, p.muted, false}},
 		{{strings.Join(where, " · "), p.muted, false}},
 	}
+}
+
+// trail joins a path of names, the outermost first, as "Work / Irie", in w
+// columns: as many outer names as it takes give way to an ellipsis, so the
+// last name, the group's own, stays.
+func trail(names []string, w int) string {
+	for i := range names {
+		t := strings.Join(names[i:], " / ")
+		if i > 0 {
+			t = "… / " + t
+		}
+		if lipgloss.Width(t) <= w {
+			return t
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return names[len(names)-1]
 }
 
 // hint is what the status strip says with nothing selected.
