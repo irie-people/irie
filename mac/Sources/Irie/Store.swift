@@ -85,6 +85,9 @@ final class Store {
     private(set) var canTrod = false
     /// The core gives a boost of Gabriel's (DESIGN §4.11).
     private(set) var canBoost = false
+    /// The core boosts always too (arch.gabriel.always), and its header
+    /// says how Gabriel boosts.
+    private(set) var canBoostAlways = false
     /// The core lists its arch agents (op arch).
     private(set) var canArch = false
     /// The core serves the plugins op (DESIGN §4.17).
@@ -101,6 +104,9 @@ final class Store {
     private(set) var archAgents: [ArchAgent] = []
     /// While a boost is on, when it ends.
     private(set) var boostUntil: Date?
+    /// Gabriel boosts always while you're at the computer
+    /// (arch.gabriel.always), as the core's header says.
+    private(set) var boostAlways = false
     /// Whether the core keeps a history to undo, and what undo and redo
     /// would take next (Undo.swift).
     private(set) var canUndo = false
@@ -303,6 +309,7 @@ final class Store {
                 canPin = hello.features.contains("pin")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
+                canBoostAlways = hello.features.contains("boost-always")
                 canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
@@ -473,6 +480,14 @@ final class Store {
             // The VPN's part says how the VPN is now.
             loadPluginsSoon()
         }
+        // Gabriel's boost, however it was started: from ctl, Settings or
+        // this menu. An older core's header never says, so its boost is
+        // the one this app started.
+        if canBoostAlways {
+            let until = h.boost?.until, always = h.boost?.always ?? false
+            if until != boostUntil { boostUntil = until }
+            if always != boostAlways { boostAlways = always }
+        }
         if let s = h.spaces, s != spaces {
             spaces = s
             // A space removed leaves its cards in the first.
@@ -570,6 +585,7 @@ final class Store {
         canPark = true
         canTrod = true
         canBoost = true
+        canBoostAlways = true
         canArch = true
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
@@ -1087,6 +1103,23 @@ final class Store {
                 }
             } catch {
                 say("Couldn’t \(on ? "start" : "stop") the boost: \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
+    /// Boosts your focus whenever you're at the computer, or no longer:
+    /// arch.gabriel.always, in the config file, shown at once; the core's
+    /// header then says so (DESIGN §4.11). Off takes the key out of the
+    /// file, as boost off does.
+    func setBoostAlways(_ on: Bool) {
+        boostAlways = on
+        Task {
+            do {
+                _ = try await client.call("config", ConfigArgs(set: [ConfigSet(key: "arch.gabriel.always", value: on ? .bool(true) : .null)]), timeout: 10, as: ConfigResult.self)
+                say(on ? "Boosting your focus whenever you’re at the computer: the rest runs on the efficiency cores, so it finishes later." : "No longer boosting always: Gabriel holds back only while the Mac is busy.", error: false, seconds: 6)
+            } catch {
+                boostAlways = !on
+                say("Couldn’t \(on ? "boost always" : "stop boosting always"): \(error.localizedDescription)", error: true)
             }
         }
     }

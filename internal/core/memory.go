@@ -176,6 +176,7 @@ func (c *Core) headerNow() ipc.Header {
 	h.Trod = c.trodHeader(c.awakeNow())
 	h.Spaces = slices.Clone(c.spaces)
 	h.VPN = c.vpnHeader(time.Now())
+	h.Boost = c.boostHeader(time.Now())
 	h.Theme = c.appColors
 	return h
 }

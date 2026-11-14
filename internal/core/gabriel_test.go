@@ -242,6 +242,41 @@ func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
 	}
 }
 
+func TestTheHeaderSaysHowGabrielBoosts(t *testing.T) {
+	t.Setenv("IRIE_GABRIEL", "")
+	cfg := config.Default()
+	c := &Core{sessions: map[string]*session{}}
+	c.useConfig(cfg)
+	now := time.Now()
+	if !proc.CanBackground {
+		if b := c.boostHeader(now); b != nil {
+			t.Errorf("no background state here, yet a boost: %+v", b)
+		}
+		return
+	}
+	if b := c.boostHeader(now); b != nil {
+		t.Errorf("no boost: %+v", b)
+	}
+	c.gab.boostUntil = now.Add(time.Hour)
+	if b := c.boostHeader(now); b == nil || b.Until == nil || !b.Until.Equal(c.gab.boostUntil) || b.Always {
+		t.Errorf("a boost of an hour: %+v", b)
+	}
+	if b := c.boostHeader(now.Add(2 * time.Hour)); b != nil {
+		t.Errorf("a boost whose time is up: %+v", b)
+	}
+	c.gab.boostUntil = time.Time{}
+	cfg.Arch.Gabriel.Always = true
+	c.useConfig(cfg)
+	if b := c.boostHeader(now); b == nil || !b.Always || b.Until != nil {
+		t.Errorf("always: %+v", b)
+	}
+	// With Gabriel off nothing boosts, always or not.
+	t.Setenv("IRIE_GABRIEL", "off")
+	if b := c.boostHeader(now); b != nil {
+		t.Errorf("Gabriel off: %+v", b)
+	}
+}
+
 func TestStealsFocus(t *testing.T) {
 	for cmd, want := range map[string]bool{
 		"open mac/build/Irie.app":                                true,

@@ -25,6 +25,8 @@ final class MenuState {
         var canTrod = false
         var boosting = false
         var canBoost = false
+        var boostAlways = false
+        var canBoostAlways = false
         var vpn = false
         var lockdown = false
         var undo: String?
@@ -59,7 +61,8 @@ extension Store {
             closable: c != nil, parked: c?.isParked == true, canPark: c != nil && canPark,
             pinned: c?.isPinned == true, canPin: c != nil && canPin && c?.peerName == nil, picked: picked.count,
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
-            boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
+            boosting: boosting, canBoost: canBoost, boostAlways: boostAlways, canBoostAlways: canBoostAlways,
+            vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
             sideOpen: side.open, canPlugins: canPlugins, plugins: plugins, canVPN: canVPN)
     }
@@ -163,9 +166,15 @@ struct IrieCommands: Commands {
             Button(f.trodHand ? "Stop the Trod Bot" : "Start the Trod Bot Now", action: run { store.setTrod(store.trod?.hand != true) })
                 .disabled(!f.canTrod)
             // Gabriel's boost: your focus gets the machine first for a
-            // while, busy or not; it ends by itself (DESIGN §4.11).
+            // while, busy or not; it ends by itself (DESIGN §4.11). While
+            // he boosts always, one for a while has nothing to add.
             Button(f.boosting ? "Stop the Boost" : "Boost Your Focus", action: run { store.setBoost(!store.boosting) })
-                .disabled(!f.canBoost)
+                .disabled(!f.canBoost || f.boostAlways)
+            // And whenever you're at the computer, ticked while it is on
+            // (arch.gabriel.always).
+            if f.canBoostAlways {
+                Toggle("Always Boost Your Focus", isOn: Binding(get: { f.boostAlways }, set: { on in MainActor.assumeIsolated { store.setBoostAlways(on) } }))
+            }
             // Mullvad VPN, while vpn.on: the same words as :vpn in a
             // task bar (docs/proposals/extensions.md §4.1). A core built
             // without the privacy plugin has no VPN, and no menu for it.

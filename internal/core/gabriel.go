@@ -482,7 +482,30 @@ func (c *Core) gabrielOp(a ipc.GabrielArgs) (ipc.GabrielResult, error) {
 	}
 	r := c.gabrielReport()
 	r.Freed = freed
+	if a.Boost || a.Stop {
+		// Every client hears at once (the header's boost).
+		c.publishHeader()
+	}
 	return r, nil
+}
+
+// boostHeader is Gabriel's boost for the header while one is on: when a
+// boost started by hand ends, and arch.gabriel.always; nil while none is,
+// or while he is off. The caller holds c.mu.
+func (c *Core) boostHeader(now time.Time) *ipc.Boost {
+	g := c.cfg().Arch.Gabriel
+	if !g.On || !proc.CanBackground || gabrielOff() {
+		return nil
+	}
+	b := ipc.Boost{Always: g.Always}
+	if now.Before(c.gab.boostUntil) {
+		until := c.gab.boostUntil
+		b.Until = &until
+	}
+	if b.Until == nil && !b.Always {
+		return nil
+	}
+	return &b
 }
 
 // freeModels lets the models of Irie's own Ollama go that no live session
