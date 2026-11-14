@@ -15,16 +15,6 @@ import (
 	"github.com/irie-people/irie/internal/skills"
 )
 
-// program makes an executable file in the test's folder and returns it.
-func program(t *testing.T, name string) string {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
-
 func privacyStatus(t *testing.T, e Env) ipc.Plugin {
 	t.Helper()
 	for _, p := range Status(e) {

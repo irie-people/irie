@@ -11,11 +11,14 @@
 package vpn
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -378,54 +381,100 @@ func (r runner) long(args ...string) (string, error) {
 	return out, nil
 }
 
-// exec runs the command and returns its output and exit code; the error
-// says only that it could not run or took too long.
+// exec runs the command and returns what it printed, stdout and stderr
+// together, and its exit code; the error says only that it could not run
+// or took too long.
 func (r runner) exec(limit time.Duration, args ...string) (string, int, error) {
+	var out bytes.Buffer
+	code, err := r.start(limit, &out, &out, args)
+	return out.String(), code, err
+}
+
+// output runs the command and returns its stdout and stderr apart, for a
+// VPN that prints JSON on stdout and warnings on stderr.
+func (r runner) output(limit time.Duration, args ...string) (string, string, int, error) {
+	var stdout, stderr bytes.Buffer
+	code, err := r.start(limit, &stdout, &stderr, args)
+	return stdout.String(), stderr.String(), code, err
+}
+
+func (r runner) start(limit time.Duration, stdout, stderr io.Writer, args []string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, r.bin, args...)
 	cmd.Stdin = nil
+	cmd.Stdout, cmd.Stderr = stdout, stderr
 	if len(r.env) > 0 {
 		cmd.Env = append(os.Environ(), r.env...)
 	}
-	out, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	what := r.name
 	if len(args) > 0 {
 		what += " " + args[0]
 	}
 	if ctx.Err() != nil {
-		return "", 0, fmt.Errorf("%s took more than %s", what, limit)
+		return 0, fmt.Errorf("%s took more than %s", what, limit)
 	}
 	var exit *exec.ExitError
 	switch {
 	case errors.As(err, &exit):
-		return string(out), exit.ExitCode(), nil
+		return exit.ExitCode(), nil
 	case err != nil:
-		return "", 0, fmt.Errorf("%s: %v", what, err)
+		return 0, fmt.Errorf("%s: %v", what, err)
 	}
-	return string(out), 0, nil
+	return 0, nil
 }
 
 // failed is the error of a command that exited with code: its last lines,
-// so a long banner doesn't hide the reason.
+// so a long banner doesn't hide the reason, with what may name the person
+// or the machine left out (said).
 func (r runner) failed(args []string, out string, code int) error {
-	msg := lastLines(out, 3)
+	msg := said(out, 3)
 	if msg == "" {
 		msg = fmt.Sprintf("exit status %d", code)
 	}
 	return fmt.Errorf("%s %s: %s", r.name, strings.Join(args, " "), msg)
 }
 
-// lastLines is out's last n lines that aren't blank, joined by "; ".
-func lastLines(out string, n int) string {
+// prompt is a line that asks for a sign-in, which may hold the user it
+// remembers, such as "Username: [alice]".
+var prompt = regexp.MustCompile(`(?i)\b(user ?name|password|passcode|pin|login|second password)\b\s*(\[[^\]]*\])?\s*:`)
+
+// said is out's last n lines that aren't blank, joined by "; ": a line of
+// JSON, which can hold every address a VPN knows, is left out, a sign-in
+// prompt is said to have been asked, and a long line is cut short.
+func said(out string, n int) string {
 	var keep []string
 	for _, l := range strings.Split(out, "\n") {
-		if l = strings.TrimSpace(l); l != "" {
-			keep = append(keep, l)
+		l = strings.TrimSpace(l)
+		switch {
+		case l == "", strings.HasPrefix(l, "{"), strings.HasPrefix(l, "["), strings.HasPrefix(l, "\""):
+			continue
+		case prompt.MatchString(l):
+			l = "it asked for a sign-in, which only you can give"
+			if len(keep) > 0 && keep[len(keep)-1] == l {
+				continue
+			}
+		case len(l) > 200:
+			l = l[:200] + "…"
 		}
+		keep = append(keep, l)
 	}
 	if len(keep) > n {
 		keep = keep[len(keep)-n:]
 	}
 	return strings.Join(keep, "; ")
+}
+
+// jsonPart is out from its first line that opens a JSON object on, for a
+// VPN that may print a warning before its JSON.
+func jsonPart(out string) []byte {
+	for i := 0; i < len(out); {
+		line, _, _ := strings.Cut(out[i:], "\n")
+		if strings.HasPrefix(strings.TrimSpace(line), "{") {
+			return []byte(strings.TrimSpace(out[i:]))
+		}
+		i += len(line) + 1
+	}
+	return nil
 }

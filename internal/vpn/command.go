@@ -20,7 +20,13 @@ func init() {
 		Server: "what it connects to, shown while it is up",
 		find: func(s Settings) (string, error) {
 			if len(s.Status) == 0 {
-				return "", errors.New("the command VPN needs vpn.status: the command that prints your VPN's state, with vpn.connected, the pattern its output matches while connected")
+				return "", errors.New("the custom VPN needs vpn.status: the command that prints your VPN's state, with vpn.connected, the pattern its output matches while connected")
+			}
+			if _, err := CommandPattern("vpn.connected", s.Connected, true); err != nil {
+				return "", err
+			}
+			if _, err := CommandPattern("vpn.connecting", s.Connecting, false); err != nil {
+				return "", err
 			}
 			return lookCommand("vpn.status", s.Status[0])
 		},
@@ -64,7 +70,7 @@ func openCommand(bin string, s Settings) (VPN, error) {
 func CommandPattern(key, pattern string, must bool) (*regexp.Regexp, error) {
 	if pattern == "" {
 		if must {
-			return nil, fmt.Errorf("%s is empty: it is the pattern your VPN's status prints while connected, such as \"(?i)connected\"", key)
+			return nil, fmt.Errorf("%s is empty: it is the pattern your VPN's status prints while connected, and never otherwise, such as \"(?m)^State: Connected$\" (\"connected\" alone also matches Disconnected)", key)
 		}
 		return nil, nil
 	}

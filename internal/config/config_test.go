@@ -744,8 +744,9 @@ command = "claude"
 }
 
 func TestVPNSection(t *testing.T) {
-	if v := Default().VPN; v.On || v.Mullvad != "" {
-		t.Errorf("default vpn = %+v, want off", v)
+	// Off in Irie; on in a copy whose brand names its VPNs.
+	if v := Default().VPN; v.On != (brand.VPNs != "") || v.Mullvad != "" {
+		t.Errorf("default vpn = %+v", v)
 	}
 	c, err := Load(writeFile(t, "[vpn]\non = true\nmullvad = \"/usr/local/bin/mullvad\"\n"))
 	if err != nil || !c.VPN.On || c.VPN.Mullvad != "/usr/local/bin/mullvad" {
@@ -755,12 +756,29 @@ func TestVPNSection(t *testing.T) {
 		t.Errorf("a bare name: %v", err)
 	}
 	// Any VPN, chosen by vpn.provider (DESIGN §4.18).
-	if v := Default().VPN; v.Provider != VPNOffered()[0] || v.Server != "" {
-		t.Errorf("default vpn = %+v, want the first VPN offered", v)
+	if v := Default().VPN; v.Provider != VPNOffered()[0] || v.Server != brand.VPNServer {
+		t.Errorf("default vpn = %+v, want the first VPN offered and the brand's server", v)
 	}
-	c, err = Load(writeFile(t, "[vpn]\non = true\nprovider = \"command\"\nserver = \"vpn.example.com\"\nstatus = [\"/usr/local/bin/myvpn\", \"status\"]\nconnect = [\"myvpn\", \"up\"]\nconnected = \"(?i)connected\"\n"))
-	if err != nil || c.VPN.Provider != "command" || c.VPN.Status[1] != "status" || c.VPN.Connect[0] != "myvpn" || c.VPN.Connected != "(?i)connected" || c.VPN.Server != "vpn.example.com" {
+	custom := "[vpn]\non = true\nprovider = \"command\"\nserver = \"vpn.example.com\"\nstatus = [\"/usr/local/bin/myvpn\", \"status\"]\nconnect = [\"myvpn\", \"up\"]\nconnected = \"(?m)^State: Connected$\"\n"
+	c, err = Load(writeFile(t, custom))
+	switch {
+	case !slices.Contains(VPNOffered(), "command"):
+		if err == nil || !strings.Contains(err.Error(), "this copy of") {
+			t.Errorf("a VPN this copy doesn't offer: %v", err)
+		}
+	case err != nil || c.VPN.Provider != "command" || c.VPN.Status[1] != "status" || c.VPN.Connect[0] != "myvpn" || c.VPN.Connected != "(?m)^State: Connected$" || c.VPN.Server != "vpn.example.com":
 		t.Errorf("command vpn = %+v, %v", c.VPN, err)
+	}
+	// A file that turned the privacy plugin off kept its VPN off; it still
+	// does, unless it says the VPN plugin's own.
+	for file, want := range map[string]bool{
+		"[vpn]\non = true\n\n[plugins]\nprivacy = false\n":             false,
+		"[vpn]\non = true\n\n[plugins]\nprivacy = false\nvpn = true\n": true,
+		"[vpn]\non = true\n\n[plugins]\nprivacy = true\n":              true,
+	} {
+		if c, err := Load(writeFile(t, file)); err != nil || c.Plugins.VPN != want {
+			t.Errorf("%q: plugins.vpn = %v, %v; want %v", file, c.Plugins.VPN, err, want)
+		}
 	}
 	for file, want := range map[string]string{
 		"[vpn]\nprovider = \"openvpn9\"\n": "vpn.provider",

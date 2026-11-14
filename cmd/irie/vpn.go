@@ -71,18 +71,20 @@ func setupVPN(args []string, stdin io.Reader, stdout io.Writer) error {
 		return nil
 	}
 	edits := []config.Edit{{Key: "vpn.provider", Value: k.Name}}
+	if k.Name != cfg.VPN.Provider {
+		// The last VPN's command and server stay behind: they go back to
+		// their defaults, such as the server the copy's brand names.
+		edits = append(edits, config.Edit{Key: "vpn.cli", Value: nil}, config.Edit{Key: "vpn.server", Value: nil})
+		cfg.VPN.CLI, cfg.VPN.Server = "", brand.VPNServer
+	}
 	cfg.VPN.Provider = k.Name
 	if k.Server != "" && k.Name != "command" {
-		server := cfg.VPN.Server
 		if k.Name == "system" {
 			listSystemVPNs(stdout)
 		}
-		if got := a.line(fmt.Sprintf("vpn.server, %s [%s]:", k.Server, server)); got != "" {
-			server = got
-		}
-		if server != cfg.VPN.Server {
-			edits = append(edits, config.Edit{Key: "vpn.server", Value: server})
-			cfg.VPN.Server = server
+		if got := a.line(fmt.Sprintf("vpn.server, %s [%s]:", k.Server, cfg.VPN.Server)); got != "" && got != cfg.VPN.Server {
+			edits = append(edits, config.Edit{Key: "vpn.server", Value: got})
+			cfg.VPN.Server = got
 		}
 	}
 	edits = append(edits, config.Edit{Key: "plugins.vpn", Value: true}, config.Edit{Key: "vpn.on", Value: true})
@@ -102,6 +104,10 @@ func setupVPN(args []string, stdin io.Reader, stdout io.Writer) error {
 
 // vpnMark is ● for a VPN whose command is here, and · for one that isn't.
 func vpnMark(cfg config.Config, k vpn.Kind) string {
+	if k.Name != cfg.VPN.Provider {
+		// vpn.cli is the configured VPN's own command, not this one's.
+		cfg.VPN.CLI = ""
+	}
 	cfg.VPN.Provider = k.Name
 	if _, err := k.Find(plugins.VPNSettings(cfg)); err == nil {
 		return "●"

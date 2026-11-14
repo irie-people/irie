@@ -2,11 +2,11 @@ package vpn
 
 // Tailscale, through its CLI: `tailscale status --json` for the state,
 // `tailscale up` and `tailscale down`, and an exit node for a place. Only
-// the backend's state, the tailnet's name and the exit node's name are
-// read: the JSON also lists this machine's and every peer's addresses.
+// the backend's state and the exit node's name are read: the JSON also
+// lists this machine's and every peer's addresses, and the tailnet's name,
+// which may be a person's email or user name.
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,9 +46,6 @@ func (t Tailscale) Kind() Kind { k, _ := KindOf("tailscale"); return k }
 // tailscaleStatus is what Irie reads of `tailscale status --json`.
 type tailscaleStatus struct {
 	BackendState   string `json:"BackendState"`
-	CurrentTailnet *struct {
-		Name string `json:"Name"`
-	} `json:"CurrentTailnet"`
 	ExitNodeStatus *struct {
 		ID string `json:"ID"`
 	} `json:"ExitNodeStatus"`
@@ -60,16 +57,11 @@ type tailscaleStatus struct {
 	} `json:"Peer"`
 }
 
-// ParseTailscale reads `tailscale status --json`. While it is up, where it
-// goes is the exit node, else the tailnet, unless the tailnet is named
-// after a person's address.
+// ParseTailscale reads `tailscale status --json`, after any warning before
+// it. While it is up, where it goes is its exit node, if it has one.
 func ParseTailscale(out []byte) (State, bool) {
-	out = bytes.TrimSpace(out)
-	if len(out) == 0 || out[0] != '{' {
-		return State{}, false
-	}
-	var st tailscaleStatus
-	if json.Unmarshal(out, &st) != nil || st.BackendState == "" {
+	st, ok := parseTailscale(out)
+	if !ok {
 		return State{}, false
 	}
 	s := State{}
@@ -97,6 +89,15 @@ func ParseTailscale(out []byte) (State, bool) {
 	return s, true
 }
 
+func parseTailscale(out []byte) (tailscaleStatus, bool) {
+	var st tailscaleStatus
+	js := jsonPart(string(out))
+	if js == nil || json.Unmarshal(js, &st) != nil || st.BackendState == "" {
+		return tailscaleStatus{}, false
+	}
+	return st, true
+}
+
 func tailscaleWhere(st tailscaleStatus) string {
 	if st.ExitNodeStatus != nil {
 		for _, p := range st.Peer {
@@ -114,23 +115,31 @@ func tailscaleWhere(st tailscaleStatus) string {
 		}
 		return "an exit node"
 	}
-	if t := st.CurrentTailnet; t != nil && t.Name != "" && !strings.Contains(t.Name, "@") {
-		return t.Name
-	}
 	return ""
 }
 
-// Status is the tunnel's state now. tailscale prints its JSON whatever the
-// state, and says why when it can't, as when tailscaled isn't running.
+// Status is the tunnel's state now. tailscale prints its JSON on stdout
+// whatever the state, and its warnings, such as a client and daemon of
+// different versions, and why it can't, on stderr.
 func (t Tailscale) Status() (State, error) {
-	out, code, err := t.run.exec(t.run.timeout, "status", "--json")
+	st, err := t.status()
 	if err != nil {
 		return State{}, err
 	}
-	if s, ok := ParseTailscale([]byte(out)); ok {
-		return s, nil
+	s, _ := ParseTailscale(st)
+	return s, nil
+}
+
+// status is `tailscale status --json`'s JSON, or why there is none.
+func (t Tailscale) status() ([]byte, error) {
+	out, errs, code, err := t.run.output(t.run.timeout, "status", "--json")
+	if err != nil {
+		return nil, err
 	}
-	return State{}, t.run.failed([]string{"status", "--json"}, out, code)
+	if _, ok := parseTailscale([]byte(out)); !ok {
+		return nil, t.run.failed([]string{"status", "--json"}, errs, code)
+	}
+	return []byte(out), nil
 }
 
 // Connect brings Tailscale up as it was set up: `tailscale up` with no
@@ -138,18 +147,18 @@ func (t Tailscale) Status() (State, error) {
 // would wait for ever on a page no one sees, so the person is told
 // instead.
 func (t Tailscale) Connect() error {
-	if out, _, err := t.run.exec(t.run.timeout, "status", "--json"); err == nil {
-		var st tailscaleStatus
-		if json.Unmarshal([]byte(out), &st) == nil {
-			switch st.BackendState {
-			case "NeedsLogin":
-				return errors.New("Tailscale needs you to sign in first: open the Tailscale app, or run `tailscale login`")
-			case "NeedsMachineAuth":
-				return errors.New("Tailscale waits for the tailnet's admin to approve this device, in the admin console")
-			}
-		}
+	out, err := t.status()
+	if err != nil {
+		return err
 	}
-	_, err := t.run.long("up")
+	st, _ := parseTailscale(out)
+	switch st.BackendState {
+	case "NeedsLogin":
+		return errors.New("Tailscale needs you to sign in first: open the Tailscale app, or run `tailscale login`")
+	case "NeedsMachineAuth":
+		return errors.New("Tailscale waits for the tailnet's admin to approve this device, in the admin console")
+	}
+	_, err = t.run.long("up")
 	return err
 }
 

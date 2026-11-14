@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
@@ -28,7 +29,8 @@ type vpnState struct {
 	settings vpn.Settings       // what it follows the VPN by
 	vpn      vpn.VPN            // the VPN, once its command is found
 	state    vpn.State
-	read     bool // a state has come
+	read     bool  // a state has come
+	readN    int64 // which read it came from (vpnReads): an older read never replaces it
 	lockdown bool
 	expires  time.Time
 	problem  string // why Irie can't read it
@@ -37,9 +39,25 @@ type vpnState struct {
 // vpnExpiryEvery is how often an account's time is read again.
 const vpnExpiryEvery = time.Hour
 
-// vpnPollEvery is how often the core asks a VPN that doesn't say its own
-// changes, which is every VPN but Mullvad.
-var vpnPollEvery = 10 * time.Second
+// vpnPollEvery is how often, in nanoseconds, the core asks a VPN that
+// doesn't say its own changes, which is every VPN but Mullvad.
+var vpnPollEvery atomic.Int64
+
+func init() { vpnPollEvery.Store(int64(10 * time.Second)) }
+
+// vpnReads numbers each read of a VPN's state as it starts, so that a read
+// that began before a change, and ends after it, can't replace the state
+// the change read.
+var vpnReads atomic.Int64
+
+// setState keeps a state that read n says, unless a later read's is
+// already kept.
+func (v *vpnState) setState(n int64, s vpn.State) {
+	if n < v.readN {
+		return
+	}
+	v.state, v.read, v.readN, v.problem = s, true, n, ""
+}
 
 // keepVPN starts following the VPN when vpn.on turns on, follows it again
 // when its settings change, as for another provider, and stops when it
@@ -96,7 +114,8 @@ func (c *Core) followVPN(ctx context.Context, gen int, s vpn.Settings) {
 		}
 		started := time.Now()
 		err = l.Listen(ctx, func(st vpn.State) {
-			c.setVPN(gen, func(x *vpnState) { x.state, x.read, x.problem = st, true, "" })
+			n := vpnReads.Add(1)
+			c.setVPN(gen, func(x *vpnState) { x.setState(n, st) })
 		}, func(on bool) {
 			c.setVPN(gen, func(x *vpnState) { x.lockdown = on })
 		})
@@ -124,18 +143,22 @@ func (c *Core) followVPN(ctx context.Context, gen int, s vpn.Settings) {
 // ends. A VPN that can't say is unknown, not as it was.
 func (c *Core) pollVPN(ctx context.Context, gen int, v vpn.VPN) {
 	for {
+		n := vpnReads.Add(1)
 		st, err := v.Status()
 		if ctx.Err() != nil {
 			return
 		}
 		c.setVPN(gen, func(x *vpnState) {
-			if err != nil {
-				x.read, x.problem = false, err.Error()
+			if n < x.readN {
 				return
 			}
-			x.state, x.read, x.problem = st, true, ""
+			if err != nil {
+				x.read, x.readN, x.problem = false, n, err.Error()
+				return
+			}
+			x.setState(n, st)
 		})
-		if !sleepCtx(ctx, vpnPollEvery) {
+		if !sleepCtx(ctx, time.Duration(vpnPollEvery.Load())) {
 			return
 		}
 	}
@@ -355,10 +378,12 @@ func (c *Core) vpnOp(peer int, a ipc.VPNArgs) (ipc.VPNResult, error) {
 		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
 	}
 	// A listener says the new state soon, and polling within seconds; the
-	// answer reads it now.
+	// answer reads it now, and a poll begun before the change can't undo
+	// it.
+	n := vpnReads.Add(1)
 	st, serr := v.vpn.Status()
 	if serr == nil {
-		c.setVPN(v.gen, func(x *vpnState) { x.state, x.read, x.problem = st, true, "" })
+		c.setVPN(v.gen, func(x *vpnState) { x.setState(n, st) })
 	}
 	if did == "" {
 		did = vpnDid(title, a.Do == ipc.VPNOn, st.State, serr == nil)
@@ -391,7 +416,9 @@ func vpnDid(title string, on bool, state string, read bool) string {
 }
 
 // vpnUse is :vpn use NAME: the VPN that the core follows and the words
-// drive becomes NAME, one this copy offers, and VPN control comes on.
+// drive becomes NAME, one this copy offers, and VPN control comes on. Another
+// VPN than before leaves the last one's command and server behind: they
+// go back to their defaults, such as the server the copy's brand names.
 func (c *Core) vpnUse(args []string) (ipc.VPNResult, error) {
 	offered := config.VPNOffered()
 	if len(args) != 1 {
@@ -405,6 +432,9 @@ func (c *Core) vpnUse(args []string) (ipc.VPNResult, error) {
 		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s.", k.NotHere())
 	}
 	sets := []ipc.ConfigSet{{Key: "vpn.provider", Value: json.RawMessage(fmt.Sprintf("%q", k.Name))}, {Key: "vpn.on", Value: json.RawMessage("true")}, {Key: "plugins.vpn", Value: json.RawMessage("true")}}
+	if k.Name != c.cfg().VPN.Provider {
+		sets = append(sets, ipc.ConfigSet{Key: "vpn.cli", Value: json.RawMessage("null")}, ipc.ConfigSet{Key: "vpn.server", Value: json.RawMessage("null")})
+	}
 	if err := c.configure(c.paths.ConfigFile(), sets); err != nil {
 		return ipc.VPNResult{}, err
 	}

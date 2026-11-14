@@ -278,13 +278,15 @@ func TestParseTailscale(t *testing.T) {
 	}
 	noExit := strings.Replace(tailscaleJSON, `"ExitNodeStatus": {"ID": "n9", "Online": true, "TailscaleIPs": ["100.64.0.9/32"]},`, "", 1)
 	noExit = strings.Replace(noExit, `"ExitNode": true`, `"ExitNode": false`, 1)
-	if s, _ := ParseTailscale([]byte(noExit)); s != (State{State: Connected, Host: "example.com"}) {
+	// The tailnet's name may be a person's email or user name: never shown.
+	if s, _ := ParseTailscale([]byte(noExit)); s != (State{State: Connected}) {
 		t.Errorf("without one: %+v", s)
 	}
-	// A tailnet named after a person's address isn't shown.
-	personal := strings.Replace(noExit, `"Name": "example.com"`, `"Name": "alice@example.com"`, 1)
-	if s, _ := ParseTailscale([]byte(personal)); s != (State{State: Connected}) {
-		t.Errorf("a personal tailnet: %+v", s)
+	// A warning before the JSON, as a client and daemon of different
+	// versions print, is passed over.
+	warned := "Warning: client version \"1.90.0\" != tailscaled server version \"1.88.1\"\n" + tailscaleJSON
+	if s, ok := ParseTailscale([]byte(warned)); !ok || s.State != Connected {
+		t.Errorf("after a warning: %+v, %v", s, ok)
 	}
 	for backend, want := range map[string]State{
 		"Starting":         {State: Connecting, Host: "exit node office-gw"},
@@ -304,14 +306,14 @@ func TestParseTailscale(t *testing.T) {
 		}
 	}
 	// Nothing of an address survives.
-	if s, _ := ParseTailscale([]byte(tailscaleJSON)); strings.Contains(s.Words(), "100.64") || strings.Contains(s.Words(), "alices-mac") {
+	if s, _ := ParseTailscale([]byte(tailscaleJSON)); strings.Contains(s.Words(), "100.64") || strings.Contains(s.Words(), "alices-mac") || strings.Contains(s.Words(), "example.com") {
 		t.Errorf("kept the machine's own: %q", s.Words())
 	}
 }
 
 func TestTailscale(t *testing.T) {
 	bin, log := script(t, "tailscale", `case "$1" in
-status) cat "$(dirname "$0")/state" 2>/dev/null || { echo 'failed to connect to local tailscaled; it doesn'"'"'t appear to be running (sudo systemctl start tailscaled ?)' >&2; exit 1; };;
+status) echo 'Warning: client version "1.90.0" != tailscaled server version "1.88.1"' >&2; cat "$(dirname "$0")/state" 2>/dev/null || { echo 'failed to connect to local tailscaled; it doesn'"'"'t appear to be running (sudo systemctl start tailscaled ?)' >&2; exit 1; };;
 esac
 `)
 	ts := Tailscale{run: newRunner(bin, "tailscale", 10*time.Second)}
@@ -451,13 +453,46 @@ func TestParseNetBird(t *testing.T) {
 "signal"`, 1))); got.State != Disconnected {
 		t.Errorf("old, unlinked: %+v", got)
 	}
-	for _, bad := range []string{"", "Daemon status: NeedsLogin", `{"cliVersion":"0.83.1"}`} {
+	// A NetBird that says a sign-in's state as text, even with --json.
+	text := "Daemon status: NeedsLogin\n\nRun UP command to log in with SSO (interactive login):\n\n netbird up \n"
+	if got, ok := ParseNetBird([]byte(text)); !ok || got != (State{State: Disconnected, Cause: "NetBird needs you to sign in"}) {
+		t.Errorf("text: %+v, %v", got, ok)
+	}
+	if got, ok := ParseNetBird([]byte("WARN client: something\n" + netbirdJSON)); !ok || got.State != Connected {
+		t.Errorf("after a warning: %+v, %v", got, ok)
+	}
+	for _, bad := range []string{"", "Management: Connected", `{"cliVersion":"0.83.1"}`} {
 		if s, ok := ParseNetBird([]byte(bad)); ok {
 			t.Errorf("%q: read %+v", bad, s)
 		}
 	}
 	if s, _ := ParseNetBird([]byte(netbirdJSON)); strings.ContainsAny(s.Words(), "0123456789") {
 		t.Errorf("kept an address: %q", s.Words())
+	}
+}
+
+// TestNoJSONInAnError: JSON a VPN printed that Irie can't read stays out
+// of the error, which goes to every client: it can hold the machine's
+// address, name and endpoints.
+func TestNoJSONInAnError(t *testing.T) {
+	oneLine := `{"peers":{"details":[{"fqdn":"build-box.netbird.cloud","netbirdIp":"100.92.0.2","iceCandidateEndpoint":{"local":"192.0.2.33:51820"}}]},"netbirdIp":"100.92.0.7/16","fqdn":"alices-mac.netbird.cloud"}`
+	bin, _ := script(t, "netbird", "echo 'WARN: a newer daemon' >&2\necho '"+oneLine+"'\n")
+	_, err := (NetBird{run: newRunner(bin, "netbird", 10*time.Second)}).Status()
+	if err == nil || strings.Contains(err.Error(), "100.92") || strings.Contains(err.Error(), "alices-mac") || strings.Contains(err.Error(), "192.0.2") || !strings.Contains(err.Error(), "WARN") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// TestSaid: a command's last lines, with sign-in prompts, JSON and long
+// lines kept out.
+func TestSaid(t *testing.T) {
+	out := "Banner\n{\"ip\":\"192.0.2.1\"}\nUsername: [alice]\nPassword:\n" + strings.Repeat("x", 300) + "\n"
+	got := said(out, 3)
+	if strings.Contains(got, "alice") || strings.Contains(got, "192.0.2") || strings.Count(got, "sign-in") != 1 || !strings.HasSuffix(got, "…") {
+		t.Errorf("said %q", got)
+	}
+	if got := said("  >> notice: Ready to connect.\nSpinning: up\n", 3); got != ">> notice: Ready to connect.; Spinning: up" {
+		t.Errorf("said %q", got)
 	}
 }
 

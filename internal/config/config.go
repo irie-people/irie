@@ -968,6 +968,12 @@ func Parse(data []byte, path string) (Config, error) {
 	if file.Peers != nil {
 		c.Peers = file.Peers
 	}
+	// The VPN was the privacy plugin's until 2026-11-14 (DESIGN §4.18): a
+	// file that turned that plugin off, and says nothing of the VPN's own,
+	// keeps the VPN off too.
+	if md.IsDefined("plugins", "privacy") && !c.Plugins.Privacy && !md.IsDefined("plugins", "vpn") {
+		c.Plugins.VPN = false
+	}
 	for _, name := range slices.Sorted(maps.Keys(file.Profiles)) {
 		p, ok := c.Profiles[name]
 		if !ok {

@@ -1,14 +1,15 @@
 package vpn
 
-// NetBird, through its CLI: `netbird status --json` for the state, which
-// it prints whatever the state, `netbird up` and `netbird down`. Only the
-// daemon's state and the management server's link are read: the JSON
-// also carries this machine's NetBird address, name and endpoints.
+// NetBird, through its CLI: `netbird status --json` for the state, `netbird
+// up` and `netbird down`. Only the daemon's state and the management
+// server's link are read: the JSON also carries this machine's NetBird
+// address, name and endpoints. A NetBird that prints a sign-in's state as
+// text even with --json, "Daemon status: NeedsLogin", is read too.
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 )
 
 func init() {
@@ -42,15 +43,20 @@ type netbirdStatus struct {
 // ParseNetBird reads `netbird status --json`: its daemonStatus (Idle,
 // Connecting, Connected, NeedsLogin, LoginFailed, SessionExpired), or,
 // from a NetBird older than 0.67, which has none, whether it reaches its
-// management server.
+// management server; else a "Daemon status:" line of text.
 func ParseNetBird(out []byte) (State, bool) {
-	out = bytes.TrimSpace(out)
-	if len(out) == 0 || out[0] != '{' {
-		return State{}, false
-	}
 	var st netbirdStatus
-	if json.Unmarshal(out, &st) != nil {
-		return State{}, false
+	if js := jsonPart(string(out)); js == nil || json.Unmarshal(js, &st) != nil {
+		st = netbirdStatus{}
+		for _, line := range strings.Split(string(out), "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "Daemon status:"); ok {
+				st.DaemonStatus = strings.TrimSpace(v)
+				break
+			}
+		}
+		if st.DaemonStatus == "" {
+			return State{}, false
+		}
 	}
 	switch st.DaemonStatus {
 	case "Connected":
@@ -77,25 +83,31 @@ func ParseNetBird(out []byte) (State, bool) {
 	return State{State: Error, Cause: "NetBird says " + st.DaemonStatus}, true
 }
 
-// Status is the tunnel's state now.
+// Status is the tunnel's state now: the JSON on stdout, and why there is
+// none from stderr.
 func (n NetBird) Status() (State, error) {
-	out, code, err := n.run.exec(n.run.timeout, "status", "--json")
+	out, errs, code, err := n.run.output(n.run.timeout, "status", "--json")
 	if err != nil {
 		return State{}, err
 	}
 	if s, ok := ParseNetBird([]byte(out)); ok {
 		return s, nil
 	}
-	return State{}, n.run.failed([]string{"status", "--json"}, out, code)
+	return State{}, n.run.failed([]string{"status", "--json"}, errs, code)
 }
 
 // Connect brings NetBird up. Signed out, up would open a sign-in page and
-// wait on it, so the person is told to sign in instead.
+// wait on it, so the person is told to sign in instead; and while its
+// state can't be read, up isn't run at all.
 func (n NetBird) Connect() error {
-	if s, err := n.Status(); err == nil && s.Cause != "" && s.State != Connected {
+	s, err := n.Status()
+	if err != nil {
+		return err
+	}
+	if s.Cause != "" && s.State != Connected {
 		return errors.New(s.Cause + ": run `netbird up` in a terminal, or sign in from NetBird's app")
 	}
-	_, err := n.run.long("up")
+	_, err = n.run.long("up")
 	return err
 }
 

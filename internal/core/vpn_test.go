@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -121,7 +122,10 @@ func TestAnAgentCannotChangeTheVPN(t *testing.T) {
 }
 
 func TestTheVPNWhenOff(t *testing.T) {
-	c := bareCore(t, config.Default())
+	// Off, as in Irie; a copy whose brand names its VPNs has it on.
+	off := config.Default()
+	off.VPN.On = false
+	c := bareCore(t, off)
 	if _, err := c.vpnOp(0, ipc.VPNArgs{}); err == nil || !strings.Contains(err.Error(), "irie setup vpn") || !strings.Contains(err.Error(), "irie plugins on vpn") {
 		t.Errorf("err = %v", err)
 	}
@@ -215,7 +219,16 @@ func commandCore(t *testing.T) (*Core, string) {
 		Disconnect: []string{write("disconnect", "rm -f '"+up+"'")},
 		Connected:  "^Connected",
 	}
-	return bareCore(t, cfg), up
+	c := bareCore(t, cfg)
+	// Its following stops with the test, not with the package.
+	t.Cleanup(func() {
+		c.mu.Lock()
+		if c.vpn.cancel != nil {
+			c.vpn.cancel()
+		}
+		c.mu.Unlock()
+	})
+	return c, up
 }
 
 // waitVPN waits until the header's VPN is as ok says.
@@ -240,8 +253,8 @@ func waitVPN(t *testing.T, c *Core, ok func(*ipc.VPN) bool) *ipc.VPN {
 // asked every few seconds, its words drive it, and the words it lacks are
 // refused with the reason (DESIGN §4.18).
 func TestTheCoreFollowsAnyVPN(t *testing.T) {
-	defer func(d time.Duration) { vpnPollEvery = d }(vpnPollEvery)
-	vpnPollEvery = 20 * time.Millisecond
+	defer vpnPollEvery.Store(vpnPollEvery.Load())
+	vpnPollEvery.Store(int64(20 * time.Millisecond))
 	c, up := commandCore(t)
 	c.mu.Lock()
 	c.keepVPN()
@@ -288,8 +301,11 @@ func TestTheCoreFollowsAnyVPN(t *testing.T) {
 // TestUseAnotherVPN: :vpn use NAME writes vpn.provider and turns VPN
 // control on, and the core follows the new VPN at once; an agent can't.
 func TestUseAnotherVPN(t *testing.T) {
-	defer func(d time.Duration) { vpnPollEvery = d }(vpnPollEvery)
-	vpnPollEvery = 20 * time.Millisecond
+	if !slices.Contains(config.VPNOffered(), "command") {
+		t.Skip("this copy doesn't offer the custom VPN")
+	}
+	defer vpnPollEvery.Store(vpnPollEvery.Load())
+	vpnPollEvery.Store(int64(20 * time.Millisecond))
 	c, _ := commandCore(t)
 	cfg := *c.cfg()
 	cfg.VPN.On, cfg.VPN.Provider = false, "mullvad"
@@ -315,7 +331,8 @@ func TestUseAnotherVPN(t *testing.T) {
 	if v := c.cfg().VPN; v.Provider != "command" || !v.On || !c.cfg().Plugins.VPN {
 		t.Errorf("vpn = %+v", v)
 	}
-	if b, _ := os.ReadFile(c.paths.ConfigFile()); !strings.Contains(string(b), `provider = "command"`) {
+	// The last VPN's server stays behind.
+	if b, _ := os.ReadFile(c.paths.ConfigFile()); !strings.Contains(string(b), `provider = "command"`) || strings.Contains(string(b), "server =") {
 		t.Errorf("config.toml:\n%s", b)
 	}
 	h := waitVPN(t, c, func(h *ipc.VPN) bool { return h.Kind == "command" && h.State == vpn.Disconnected })
@@ -335,5 +352,20 @@ func TestUseAnotherVPN(t *testing.T) {
 	c.mu.Unlock()
 	if again != gen+1 {
 		t.Errorf("following %d after a new server, want %d", again, gen+1)
+	}
+}
+
+// TestAnOlderReadNeverReplacesANewer: a poll that began before :vpn on and
+// ends after it keeps its state to itself.
+func TestAnOlderReadNeverReplacesANewer(t *testing.T) {
+	var v vpnState
+	v.setState(5, vpn.State{State: vpn.Connected})
+	v.setState(4, vpn.State{State: vpn.Disconnected})
+	if v.state.State != vpn.Connected || v.readN != 5 {
+		t.Errorf("state %+v, read %d", v.state, v.readN)
+	}
+	v.setState(6, vpn.State{State: vpn.Disconnected})
+	if v.state.State != vpn.Disconnected {
+		t.Errorf("a newer read lost: %+v", v.state)
 	}
 }

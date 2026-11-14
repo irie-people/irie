@@ -8,17 +8,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/vpn"
 )
 
 // vpnEnv is a computer with no VPN's command on it: every one is configured
-// to a path that isn't there.
+// to a path that isn't there. It follows Mullvad VPN, off, whatever VPN
+// and server this copy's brand names.
 func vpnEnv(t *testing.T) Env {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := config.Default()
+	cfg.VPN.On, cfg.VPN.Provider, cfg.VPN.Server = false, "mullvad", ""
 	cfg.VPN.Mullvad = filepath.Join(dir, "none", "mullvad")
 	cfg.VPN.CLI = filepath.Join(dir, "none", "vpn")
 	return Env{Config: cfg, Paths: paths.Paths{Config: filepath.Join(dir, "config"), State: filepath.Join(dir, "state"), Data: filepath.Join(dir, "data"), Runtime: filepath.Join(dir, "run")}}
@@ -49,15 +53,19 @@ func TestTheVPNIsAPluginOfItsOwn(t *testing.T) {
 	if All()[0].Name != "vpn" {
 		t.Errorf("the VPN plugin isn't first: %v", Names())
 	}
-	if !strings.Contains(p.Summary, "Mullvad VPN") || !strings.Contains(p.Summary, "commands of your own") {
-		t.Errorf("summary %q", p.Summary)
+	// It names the VPNs this copy offers.
+	for _, name := range config.VPNOffered() {
+		k, _ := vpn.KindOf(name)
+		if !strings.Contains(p.Summary, k.Title) && !strings.Contains(p.Summary, kindWords(k)) {
+			t.Errorf("summary %q lacks %s", p.Summary, k.Title)
+		}
 	}
 	x := vpnStatus(t, e)
 	if x.Name != VPN || x.Title != "Mullvad VPN" || x.State != ipc.PartOff || x.Switch != "vpn.on" || x.Setup != ":setup vpn" {
 		t.Errorf("part = %+v", x)
 	}
-	if e.Config.VPNOn() {
-		t.Error("the VPN is on by default")
+	if d := config.Default(); d.VPNOn() != (brand.VPNs != "") {
+		t.Errorf("VPNOn by default = %v, with brand.VPNs %q", d.VPNOn(), brand.VPNs)
 	}
 	e.Config.VPN.Provider = "system"
 	if x := vpnStatus(t, e); x.Title != "The system's VPN" {
@@ -118,6 +126,7 @@ func TestTheCoreSaysHowTheVPNIsNow(t *testing.T) {
 // it on.
 func TestTheVPNPluginsSwitch(t *testing.T) {
 	cfg := config.Default()
+	cfg.VPN.On, cfg.VPN.Provider = false, "mullvad"
 	if why := Why(cfg, VPN); !strings.Contains(why, "irie setup vpn") || !strings.Contains(why, "irie plugins on vpn") {
 		t.Errorf("Why(vpn) = %q", why)
 	}
