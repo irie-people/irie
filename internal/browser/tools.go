@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/toon-format/toon-go"
+
 	"github.com/irie-people/irie/internal/brand"
 )
 
@@ -152,7 +154,8 @@ func (b *Browser) tools() []tool {
 			Name:  "eval",
 			Title: "Run JavaScript in the page",
 			Description: "Run JavaScript in the page open in the browser and return its result as JSON: for what read and links miss, such as a table's cells. " +
-				"The script is one expression, which may be a promise; wrap statements in an arrow function you call.",
+				"The script is one expression, which may be a promise; wrap statements in an arrow function you call. " +
+				"A list of objects with the same keys comes back as a table instead, which names the keys once: `[count]{key,key,...}:` and then one row of values per object, a value with a comma in double quotes.",
 			InputSchema: obj(map[string]any{
 				"tab":    tabProp,
 				"script": prop("string", "A JavaScript expression, such as [...document.querySelectorAll('td')].map(td => td.innerText)."),
@@ -562,11 +565,19 @@ func (b *Browser) eval(ctx context.Context, args json.RawMessage) toolResult {
 	})
 }
 
-// asText is a script's result as the agent reads it: a string as it is,
+// asText is a script's result as the agent reads it: a string as it is; a
+// table, a list of objects with the same keys and plain values, in TOON's
+// tabular form, which names the keys once instead of in every object
+// (about 40% fewer tokens than indented JSON, by TOON's own benchmark);
 // anything else as indented JSON, with < and > left as they are.
 func asText(v any) (string, error) {
 	if s, ok := v.(string); ok {
 		return s, nil
+	}
+	if table(v) {
+		if s, err := toon.MarshalString(v); err == nil {
+			return strings.TrimSuffix(s, "\n"), nil
+		}
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -576,6 +587,37 @@ func asText(v any) (string, error) {
 		return "", err
 	}
 	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// table reports whether v is a list of two or more objects with the same
+// keys whose values are strings, numbers, booleans or null: the shape TOON
+// writes as one header and a row per object (DESIGN §4.15).
+func table(v any) bool {
+	rows, ok := v.([]any)
+	if !ok || len(rows) < 2 {
+		return false
+	}
+	first, ok := rows[0].(map[string]any)
+	if !ok || len(first) == 0 {
+		return false
+	}
+	for _, r := range rows {
+		m, ok := r.(map[string]any)
+		if !ok || len(m) != len(first) {
+			return false
+		}
+		for k, val := range m {
+			if _, ok := first[k]; !ok {
+				return false
+			}
+			switch val.(type) {
+			case string, float64, bool, nil:
+			default:
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (b *Browser) tabsTool(ctx context.Context, args json.RawMessage) toolResult {
