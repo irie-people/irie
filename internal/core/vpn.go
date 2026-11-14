@@ -1,24 +1,32 @@
-//go:build !noprivacy
+//go:build !novpn
 
 package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/vpn"
 )
 
-// vpnState is Mullvad VPN as the core follows it, while vpn.on
-// (docs/proposals/extensions.md §4). The caller holds c.mu.
+const vpnBuilt = true
+
+// vpnState is the VPN as the core follows it, while vpn.on (DESIGN
+// §4.18): whichever VPN vpn.provider names. The caller holds c.mu.
 type vpnState struct {
 	cancel   context.CancelFunc // stops following it
-	bin      string             // the mullvad CLI in use
+	gen      int                // which following this is, so a stopped one changes nothing
+	settings vpn.Settings       // what it follows the VPN by
+	vpn      vpn.VPN            // the VPN, once its command is found
 	state    vpn.State
 	read     bool // a state has come
 	lockdown bool
@@ -26,66 +34,81 @@ type vpnState struct {
 	problem  string // why Irie can't read it
 }
 
-// vpnExpiryEvery is how often the account's time is read again.
+// vpnExpiryEvery is how often an account's time is read again.
 const vpnExpiryEvery = time.Hour
 
-// keepVPN starts following the VPN when vpn.on turns on, and stops when it
+// vpnPollEvery is how often the core asks a VPN that doesn't say its own
+// changes, which is every VPN but Mullvad.
+var vpnPollEvery = 10 * time.Second
+
+// keepVPN starts following the VPN when vpn.on turns on, follows it again
+// when its settings change, as for another provider, and stops when it
 // turns off. The caller holds c.mu.
 func (c *Core) keepVPN() {
-	on := c.cfg().VPNOn()
-	switch {
-	case on && c.vpn.cancel == nil:
-		ctx, cancel := context.WithCancel(context.Background())
-		c.vpn.cancel = cancel
-		go c.followVPN(ctx, c.cfg().VPN.Mullvad)
-	case !on && c.vpn.cancel != nil:
+	cfg := *c.cfg()
+	on := cfg.VPNOn()
+	s := plugins.VPNSettings(cfg)
+	if c.vpn.cancel != nil && (!on || !reflect.DeepEqual(s, c.vpn.settings)) {
 		c.vpn.cancel()
-		c.vpn = vpnState{}
+		c.vpn = vpnState{gen: c.vpn.gen}
 		go c.publishHeader()
+	}
+	if on && c.vpn.cancel == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		c.vpn = vpnState{cancel: cancel, gen: c.vpn.gen + 1, settings: s}
+		go c.followVPN(ctx, c.vpn.gen, s)
 	}
 }
 
-// setVPN changes what the core knows of the VPN, and tells the clients.
-func (c *Core) setVPN(f func(*vpnState)) {
+// setVPN changes what the core knows of the VPN, while gen is the
+// following in hand, and tells the clients.
+func (c *Core) setVPN(gen int, f func(*vpnState)) {
 	c.mu.Lock()
-	if c.vpn.cancel != nil {
+	if c.vpn.cancel != nil && c.vpn.gen == gen {
 		f(&c.vpn)
 	}
 	c.mu.Unlock()
 	c.publishHeader()
 }
 
-// followVPN keeps up with the daemon through `mullvad status listen`, which
-// it starts again, after a pause, whenever it ends, until ctx ends.
-func (c *Core) followVPN(ctx context.Context, configured string) {
+// followVPN keeps up with the VPN until ctx ends: through its listener,
+// which it starts again after a pause whenever it ends, or by asking it
+// every vpnPollEvery.
+func (c *Core) followVPN(ctx context.Context, gen int, s vpn.Settings) {
 	pause := time.Second
 	for ctx.Err() == nil {
-		bin, err := vpn.Find(configured)
+		v, err := vpn.Open(s)
 		if err != nil {
-			c.setVPN(func(v *vpnState) { v.problem = err.Error() })
+			c.setVPN(gen, func(st *vpnState) { st.problem = err.Error() })
 			if !sleepCtx(ctx, 30*time.Second) {
 				return
 			}
 			continue
 		}
-		cli := vpn.CLI{Bin: bin}
-		c.vpnExtras(cli)
-		stopExpiry := c.everyVPN(ctx, cli)
+		c.setVPN(gen, func(st *vpnState) { st.vpn = v })
+		c.vpnExtras(gen, v)
+		stopExtras := c.everyVPN(ctx, gen, v)
+		l, listens := v.(vpn.Listener)
+		if !listens {
+			c.pollVPN(ctx, gen, v)
+			stopExtras()
+			return
+		}
 		started := time.Now()
-		err = cli.Listen(ctx, func(s vpn.State) {
-			c.setVPN(func(v *vpnState) { v.bin, v.state, v.read, v.problem = bin, s, true, "" })
+		err = l.Listen(ctx, func(st vpn.State) {
+			c.setVPN(gen, func(x *vpnState) { x.state, x.read, x.problem = st, true, "" })
 		}, func(on bool) {
-			c.setVPN(func(v *vpnState) { v.lockdown = on })
+			c.setVPN(gen, func(x *vpnState) { x.lockdown = on })
 		})
-		stopExpiry()
+		stopExtras()
 		if ctx.Err() != nil {
 			return
 		}
-		why := "mullvad status listen ended"
+		why := v.Kind().Title + "'s listener ended"
 		if err != nil {
 			why += ": " + err.Error()
 		}
-		c.setVPN(func(v *vpnState) { v.problem = why })
+		c.setVPN(gen, func(x *vpnState) { x.problem = why })
 		c.log.Warn("vpn", "err", why)
 		if time.Since(started) > time.Minute {
 			pause = time.Second
@@ -97,35 +120,69 @@ func (c *Core) followVPN(ctx context.Context, configured string) {
 	}
 }
 
-// vpnExtras reads what the listener doesn't say at once: lockdown mode and
-// the account's time.
-func (c *Core) vpnExtras(cli vpn.CLI) {
-	lockdown, lerr := cli.Lockdown()
-	expires, eerr := cli.Expiry()
-	c.setVPN(func(v *vpnState) {
-		v.bin = cli.Bin
-		if lerr == nil {
-			v.lockdown = lockdown
+// pollVPN asks the VPN its state now and every vpnPollEvery until ctx
+// ends. A VPN that can't say is unknown, not as it was.
+func (c *Core) pollVPN(ctx context.Context, gen int, v vpn.VPN) {
+	for {
+		st, err := v.Status()
+		if ctx.Err() != nil {
+			return
 		}
-		if eerr == nil {
-			v.expires = expires
+		c.setVPN(gen, func(x *vpnState) {
+			if err != nil {
+				x.read, x.problem = false, err.Error()
+				return
+			}
+			x.state, x.read, x.problem = st, true, ""
+		})
+		if !sleepCtx(ctx, vpnPollEvery) {
+			return
+		}
+	}
+}
+
+// vpnExtras reads what the state doesn't say, for the VPNs that have it:
+// lockdown mode and the account's time.
+func (c *Core) vpnExtras(gen int, v vpn.VPN) {
+	var lockdown, hasLockdown bool
+	var expires time.Time
+	if l, ok := v.(vpn.Lockdowner); ok {
+		on, err := l.Lockdown()
+		lockdown, hasLockdown = on, err == nil
+	}
+	if t, ok := v.(vpn.Timer); ok {
+		if e, err := t.Expiry(); err == nil {
+			expires = e
+		}
+	}
+	c.setVPN(gen, func(x *vpnState) {
+		if hasLockdown {
+			x.lockdown = lockdown
+		}
+		if !expires.IsZero() {
+			x.expires = expires
 		}
 	})
 }
 
-// everyVPN reads the account's time every hour while the listener runs.
-func (c *Core) everyVPN(ctx context.Context, cli vpn.CLI) func() {
+// everyVPN reads the account's time every hour, for a VPN that has one,
+// until the returned func is called.
+func (c *Core) everyVPN(ctx context.Context, gen int, v vpn.VPN) func() {
+	t, ok := v.(vpn.Timer)
+	if !ok {
+		return func() {}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
-		t := time.NewTicker(vpnExpiryEvery)
-		defer t.Stop()
+		tick := time.NewTicker(vpnExpiryEvery)
+		defer tick.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-t.C:
-				if e, err := cli.Expiry(); err == nil {
-					c.setVPN(func(v *vpnState) { v.expires = e })
+			case <-tick.C:
+				if e, err := t.Expiry(); err == nil {
+					c.setVPN(gen, func(x *vpnState) { x.expires = e })
 				}
 			}
 		}
@@ -151,6 +208,16 @@ func (c *Core) vpnHeader(now time.Time) *ipc.VPN {
 	}
 	v := c.vpn
 	h := &ipc.VPN{Lockdown: v.lockdown, Problem: v.problem}
+	provider := v.settings.Provider
+	if provider == "" {
+		provider = c.cfg().VPN.Provider
+	}
+	if k, ok := vpn.KindOf(provider); ok {
+		h.Kind, h.Title = k.Name, k.Title
+	}
+	if v.vpn != nil {
+		h.Can = vpn.Can(v.vpn)
+	}
 	if v.read {
 		h.State, h.City, h.Country, h.Host, h.Blocked = v.state.State, v.state.City, v.state.Country, v.state.Host, v.state.Blocked
 	}
@@ -196,16 +263,39 @@ func timeLeft(expires, now time.Time) string {
 // from inside an agent is refused: the VPN is the person's, and an agent at
 // work would pull the network from under the others.
 func (c *Core) vpnOp(peer int, a ipc.VPNArgs) (ipc.VPNResult, error) {
+	if a.Do == ipc.VPNUse {
+		if c.fromAgent(peer) {
+			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't change the VPN: it is yours to change, from any task bar.")
+		}
+		return c.vpnUse(a.Args)
+	}
 	if why := plugins.Why(*c.cfg(), plugins.VPN); why != "" {
 		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
 	}
 	c.mu.Lock()
 	v := c.vpn
 	c.mu.Unlock()
+	if v.settings.Provider == "" {
+		v.settings = plugins.VPNSettings(*c.cfg())
+	}
+	title := "The VPN"
+	if k, ok := vpn.KindOf(v.settings.Provider); ok {
+		title = k.Title
+	}
 	now := time.Now()
 	if a.Do == "" || a.Do == ipc.VPNTime {
-		if a.Do == ipc.VPNTime && v.expires.IsZero() {
-			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeNotFound, brand.Name+" doesn't know the account's time yet: is this Mac logged in to a Mullvad account?")
+		if a.Do == ipc.VPNTime {
+			if v.vpn == nil {
+				if opened, err := vpn.Open(v.settings); err == nil {
+					v.vpn = opened
+				}
+			}
+			if _, ok := v.vpn.(vpn.Timer); v.vpn != nil && !ok {
+				return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s has no account time to tell: only Mullvad VPN's runs out.", title)
+			}
+			if v.expires.IsZero() {
+				return ipc.VPNResult{}, ipc.Errorf(ipc.CodeNotFound, brand.Name+" doesn't know the account's time yet: is this Mac logged in to a Mullvad account?")
+			}
 		}
 		c.mu.Lock()
 		h := c.vpnHeader(now)
@@ -219,52 +309,111 @@ func (c *Core) vpnOp(peer int, a ipc.VPNArgs) (ipc.VPNResult, error) {
 	if c.fromAgent(peer) {
 		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't change the VPN: it is yours to change, from any task bar.")
 	}
-	if v.bin == "" {
-		bin, err := vpn.Find(c.cfg().VPN.Mullvad)
+	if v.vpn == nil {
+		opened, err := vpn.Open(v.settings)
 		if err != nil {
 			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeNotFound, "%v", err)
 		}
-		v.bin = bin
+		v.vpn = opened
 	}
-	cli := vpn.CLI{Bin: v.bin}
 	var err error
 	did := ""
 	switch a.Do {
 	case ipc.VPNOn:
-		err, did = cli.Connect(), "Connected"
+		err = v.vpn.Connect()
 	case ipc.VPNOff:
-		err, did = cli.Disconnect(), "Disconnected"
+		err = v.vpn.Disconnect()
 	case ipc.VPNLockdown:
+		l, ok := v.vpn.(vpn.Lockdowner)
+		if !ok {
+			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s has no lockdown mode: :vpn lockdown is Mullvad VPN's.", title)
+		}
 		if len(a.Args) != 1 || a.Args[0] != "on" && a.Args[0] != "off" {
 			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, ":vpn lockdown takes on or off.")
 		}
 		on := a.Args[0] == "on"
-		if err = cli.SetLockdown(on); err == nil {
-			c.setVPN(func(v *vpnState) { v.lockdown = on })
+		if err = l.SetLockdown(on); err == nil {
+			c.setVPN(v.gen, func(x *vpnState) { x.lockdown = on })
 			did = "Lockdown mode is " + a.Args[0]
 		}
 	case ipc.VPNPlace:
-		if err = vpn.CheckLocation(a.Args); err != nil {
+		p, ok := v.vpn.(vpn.Placer)
+		if !ok {
+			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s has no places to choose from here: :vpn on, :vpn off, :vpn use NAME and :vpn are its words.", title)
+		}
+		if err = p.CheckPlace(a.Args); err != nil {
 			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
 		}
-		if err = cli.SetLocation(a.Args); err == nil {
+		up := v.state.State == vpn.Connected || v.state.State == vpn.Connecting
+		if err = p.SetPlace(a.Args, up); err == nil {
 			did = "The VPN goes through " + strings.Join(a.Args, " ")
-			if v.state.State == vpn.Connected || v.state.State == vpn.Connecting {
-				err = cli.Reconnect()
-			}
 		}
 	default:
-		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "vpn does not %q; it does on, off, lockdown, place and time.", a.Do)
+		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "vpn does not %q; it does on, off, use, place, lockdown and time.", a.Do)
 	}
 	if err != nil {
 		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%v", err)
 	}
-	// The listener says the new state soon; the answer reads it now.
-	if s, err := cli.Status(); err == nil {
-		c.setVPN(func(v *vpnState) { v.state, v.read = s, true })
+	// A listener says the new state soon, and polling within seconds; the
+	// answer reads it now.
+	st, serr := v.vpn.Status()
+	if serr == nil {
+		c.setVPN(v.gen, func(x *vpnState) { x.state, x.read, x.problem = st, true, "" })
+	}
+	if did == "" {
+		did = vpnDid(title, a.Do == ipc.VPNOn, st.State, serr == nil)
 	}
 	c.mu.Lock()
 	h := c.vpnHeader(time.Now())
 	c.mu.Unlock()
+	if h == nil {
+		return ipc.VPNResult{Text: did + "."}, nil
+	}
 	return ipc.VPNResult{Text: did + ". " + h.Text + ".", VPN: h}, nil
+}
+
+// vpnDid says what came of :vpn on or :vpn off: done, under way, or asked
+// for, since some VPNs return before their tunnel has changed.
+func vpnDid(title string, on bool, state string, read bool) string {
+	switch {
+	case on && read && state == vpn.Connected:
+		return "Connected"
+	case on && read && state == vpn.Connecting:
+		return "Connecting"
+	case on:
+		return "Asked " + title + " to connect"
+	case read && state == vpn.Disconnected:
+		return "Disconnected"
+	case read && state == vpn.Disconnecting:
+		return "Disconnecting"
+	}
+	return "Asked " + title + " to disconnect"
+}
+
+// vpnUse is :vpn use NAME: the VPN that the core follows and the words
+// drive becomes NAME, one this copy offers, and VPN control comes on.
+func (c *Core) vpnUse(args []string) (ipc.VPNResult, error) {
+	offered := config.VPNOffered()
+	if len(args) != 1 {
+		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, ":vpn use takes one VPN: %s.", strings.Join(offered, ", "))
+	}
+	k, ok := vpn.KindOf(args[0])
+	if !ok || !slices.Contains(offered, k.Name) {
+		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s doesn't drive %q: it drives %s.", brand.Name, args[0], strings.Join(offered, ", "))
+	}
+	if !k.Runs() {
+		return ipc.VPNResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s.", k.NotHere())
+	}
+	sets := []ipc.ConfigSet{{Key: "vpn.provider", Value: json.RawMessage(fmt.Sprintf("%q", k.Name))}, {Key: "vpn.on", Value: json.RawMessage("true")}, {Key: "plugins.vpn", Value: json.RawMessage("true")}}
+	if err := c.configure(c.paths.ConfigFile(), sets); err != nil {
+		return ipc.VPNResult{}, err
+	}
+	c.mu.Lock()
+	c.keepVPN()
+	c.mu.Unlock()
+	text := brand.Name + " follows " + k.Title + " now"
+	if _, why := plugins.FindVPN(*c.cfg()); why != "" {
+		text += ", which needs setting up: " + strings.TrimSuffix(why, ".")
+	}
+	return ipc.VPNResult{Text: text + "."}, nil
 }

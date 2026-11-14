@@ -88,9 +88,9 @@ const (
 	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
 	// a ready.Report, for the Mac app's welcome.
 	OpReady = "ready"
-	// OpVPN reads or changes Mullvad VPN through its CLI, while vpn.on
-	// (docs/proposals/extensions.md §4). A change from inside an agent is
-	// refused.
+	// OpVPN reads or changes the VPN that vpn.provider names through its
+	// own command line, while vpn.on (DESIGN §4.18). A change from inside
+	// an agent is refused.
 	OpVPN = "vpn"
 	// OpAnon says how anonymous research stands, and starts Irie's own
 	// Tor and SearXNG (DESIGN §4.16).
@@ -632,7 +632,7 @@ type Header struct {
 	Peers []PeerInfo `json:"peers,omitempty"`
 	// Trod is the trod bot while it is in its hours (DESIGN §4.10).
 	Trod *TrodShift `json:"trod,omitempty"`
-	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
+	// VPN is the VPN, while vpn.on (DESIGN §4.18).
 	VPN *VPN `json:"vpn,omitempty"`
 	// Spaces are the spaces, in their order, the first first (spaces.go).
 	Spaces []Space `json:"spaces,omitempty"`
@@ -1041,8 +1041,8 @@ type ToolArgs struct {
 }
 
 // Tools. Anon, browser and privacy run `irie setup NAME`, which sets up
-// that part of the privacy plugin, or each part of it in turn (DESIGN
-// §4.17).
+// that part of the privacy plugin, or each part of it in turn, and vpn
+// `irie setup vpn`, which sets up the VPN plugin (DESIGN §4.17).
 const (
 	ToolSetup   = "setup"
 	ToolModels  = "models"
@@ -1051,6 +1051,7 @@ const (
 	ToolAnon    = "anon"
 	ToolBrowser = "browser"
 	ToolPrivacy = "privacy"
+	ToolVPN     = "vpn"
 	ToolWrite   = "write"
 )
 
@@ -1137,14 +1138,15 @@ type AnonResult struct {
 
 // VPNArgs ask the vpn op for the VPN's state, or for a change.
 type VPNArgs struct {
-	Do   string   `json:"do,omitempty"`   // "" for the state; on, off, lockdown, place or time
-	Args []string `json:"args,omitempty"` // lockdown's on or off; place's country, city or server
+	Do   string   `json:"do,omitempty"`   // "" for the state; on, off, use, lockdown, place or time
+	Args []string `json:"args,omitempty"` // use's VPN; lockdown's on or off; place's country, city, server or exit node
 }
 
 // What the vpn op does.
 const (
 	VPNOn       = "on"
 	VPNOff      = "off"
+	VPNUse      = "use"
 	VPNLockdown = "lockdown"
 	VPNPlace    = "place"
 	VPNTime     = "time"
@@ -1157,18 +1159,21 @@ type VPNResult struct {
 	VPN  *VPN   `json:"vpn,omitempty"`
 }
 
-// VPN is Mullvad VPN as the header carries it, while vpn.on: never an
-// address, a place on the map or the account's number.
+// VPN is the VPN as the header carries it, while vpn.on: never an
+// address, a place on the map or an account's number.
 type VPN struct {
+	Kind     string     `json:"kind,omitempty"`     // which VPN, as vpn.provider names it, such as mullvad
+	Title    string     `json:"title,omitempty"`    // its name, such as Mullvad VPN
+	Can      []string   `json:"can,omitempty"`      // what its words do beyond on and off: place, lockdown, time
 	State    string     `json:"state"`              // connected, connecting, disconnected, disconnecting or error; "" while unread
 	City     string     `json:"city,omitempty"`     // the relay's, while connected or connecting
 	Country  string     `json:"country,omitempty"`  // the relay's
-	Host     string     `json:"host,omitempty"`     // the relay, such as se-got-wg-001
+	Host     string     `json:"host,omitempty"`     // where it goes: a relay such as se-got-wg-001, a gateway, a portal or a network
 	Lockdown bool       `json:"lockdown,omitempty"` // lockdown mode is on: the network is blocked while the VPN is off
 	Blocked  bool       `json:"blocked,omitempty"`  // off, and lockdown blocks the network now
 	Expires  *time.Time `json:"expires,omitempty"`  // when the account's time runs out
 	Text     string     `json:"text"`               // the state in one line
-	Problem  string     `json:"problem,omitempty"`  // why Irie can't read the VPN, such as no mullvad
+	Problem  string     `json:"problem,omitempty"`  // why Irie can't read the VPN, such as its command missing
 }
 
 // StatusArgs carry one status line update of a Claude Code session: its

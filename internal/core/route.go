@@ -531,6 +531,7 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 	// A plugin's tools are in the build only with their plugin (DESIGN
 	// §4.17).
 	for plugin, tools := range map[string][]string{
+		"vpn":     {ipc.ToolVPN},
 		"privacy": {ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy},
 		"writing": {ipc.ToolWrite},
 	} {
@@ -555,10 +556,14 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 		args, name, title = []string{"setup", "browser"}, "setup-browser", "set up Mullvad Browser for agents"
 	case ipc.ToolPrivacy:
 		args, name, title = []string{"setup", "privacy"}, "setup-privacy", "set up the privacy plugin"
+	// The VPN plugin's setup (DESIGN §4.18), which asks before it changes
+	// anything.
+	case ipc.ToolVPN:
+		args, name, title = []string{"setup", "vpn"}, "setup-vpn", "set up the VPN"
 	case ipc.ToolWrite:
 		return c.guide(guideWrite, a.Task)
 	default:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s", a.Name, strings.Join([]string{ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy, ipc.ToolWrite}, ", "))
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s", a.Name, strings.Join([]string{ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy, ipc.ToolVPN, ipc.ToolWrite}, ", "))
 	}
 	p := config.Profile{Harness: "tool", Command: c.bin, Args: args, Env: map[string]string{}}
 	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{})

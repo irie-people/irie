@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -752,6 +753,39 @@ func TestVPNSection(t *testing.T) {
 	}
 	if _, err := Load(writeFile(t, "[vpn]\nmullvad = \"mullvad\"\n")); err == nil || !strings.Contains(err.Error(), "vpn.mullvad") {
 		t.Errorf("a bare name: %v", err)
+	}
+	// Any VPN, chosen by vpn.provider (DESIGN §4.18).
+	if v := Default().VPN; v.Provider != VPNOffered()[0] || v.Server != "" {
+		t.Errorf("default vpn = %+v, want the first VPN offered", v)
+	}
+	c, err = Load(writeFile(t, "[vpn]\non = true\nprovider = \"command\"\nserver = \"vpn.example.com\"\nstatus = [\"/usr/local/bin/myvpn\", \"status\"]\nconnect = [\"myvpn\", \"up\"]\nconnected = \"(?i)connected\"\n"))
+	if err != nil || c.VPN.Provider != "command" || c.VPN.Status[1] != "status" || c.VPN.Connect[0] != "myvpn" || c.VPN.Connected != "(?i)connected" || c.VPN.Server != "vpn.example.com" {
+		t.Errorf("command vpn = %+v, %v", c.VPN, err)
+	}
+	for file, want := range map[string]string{
+		"[vpn]\nprovider = \"openvpn9\"\n": "vpn.provider",
+		"[vpn]\ncli = \"warp-cli\"\n":      "vpn.cli",
+		"[vpn]\nconnected = \"(\"\n":       "vpn.connected",
+		"[vpn]\nstatus = [\"--json\"]\n":   "vpn.status",
+		"[vpn]\nserver = \"a\\nb\"\n":      "vpn.server",
+	} {
+		if _, err := Load(writeFile(t, file)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", file, err, want)
+		}
+	}
+}
+
+// TestTheVPNsACopyOffers: a copy's brand names its VPNs, the first the
+// default, each once; none names them all.
+func TestTheVPNsACopyOffers(t *testing.T) {
+	for list, want := range map[string][]string{
+		"":                       VPNKinds,
+		"cisco":                  {"cisco"},
+		" cisco, command ,cisco": {"cisco", "command"},
+	} {
+		if got := offeredVPNs(list); !slices.Equal(got, want) {
+			t.Errorf("offeredVPNs(%q) = %v, want %v", list, got, want)
+		}
 	}
 }
 

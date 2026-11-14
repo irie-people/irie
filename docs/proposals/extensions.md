@@ -278,6 +278,8 @@ The review found sound: request ids from `crypto/rand`, each answered once and d
 
 ## 4. Mullvad VPN control
 
+**Since 2026-11-14** VPN control is a plugin of its own, the VPN plugin, for any VPN with a command line, and Mullvad VPN is the first of its kinds (DESIGN §4.18): `vpn.provider` chooses, and Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and commands of the person's own drive it the same way. What follows is Mullvad's part, which stands as it was.
+
 ### 4.1 What it lets a user do
 
 Mullvad's own app and its `mullvad` CLI drive the VPN. With this extension Irie shows the VPN's state where the user already looks, and changes it from any Irie client, the phone included, so a phone can turn the Mac's VPN on or move it to another country.
