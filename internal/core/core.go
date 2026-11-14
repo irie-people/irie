@@ -149,6 +149,7 @@ type Core struct {
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
+	mail       mailState             // the mail plugin's accounts and connections (mail.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -433,6 +434,7 @@ func Run(o Options) error {
 			// Nor does the Mac stay awake with its lid closed for a core that
 			// is gone; the next one keeps it awake again if there is work.
 			c.lidLetGo()
+			c.mailClose()
 			return nil
 		}
 	}
@@ -728,6 +730,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.raphaelOp(peer, a)
+	case ipc.OpMail:
+		var a ipc.MailArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.mailOp(peer, a)
 	}
 	return c.Call(op, raw)
 }
@@ -760,7 +768,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.OpMail,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -937,6 +945,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.pluginsOp(a)
+	case ipc.OpMail:
+		// A call with no process to it, such as one from within the core.
+		var a ipc.MailArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.mailOp(0, a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {

@@ -17,7 +17,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :mail"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -149,6 +149,10 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpTool, ToolArgs{Name: arg}, nil)
 	case name == "plugins" && arg == "":
 		return step(OpPlugins, PluginsArgs{}, nil)
+	case name == "mail" && arg == "":
+		// :mail says how the mail accounts stand; the Mac app also opens
+		// its Mail (docs/proposals/mail.md).
+		return step(OpMail, MailArgs{}, nil)
 	case name == "write":
 		// :write [TASK] starts a writing session in Variorum
 		// (docs/proposals/writers.md). The task may run on over more
@@ -398,6 +402,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		}
 	case OpPlugins:
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[PluginsResult](result).Text, "\n")
+	case OpMail:
+		r.Did, r.Text = InputAnswered, strings.TrimRight(as[MailResult](result).Text, "\n")
 	case OpUndo, OpRedo:
 		u := as[UndoResult](result)
 		r.Text = undone(st.Op, u)

@@ -1,4 +1,4 @@
-//go:build !noprivacy && !nowriting
+//go:build !noprivacy && !nowriting && !nomail
 
 package plugins
 
@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// TestABuildWithoutPlugins: go build -tags noprivacy,nowriting builds every
-// package, and its irie links none of the plugins' code (DESIGN §4.17), as
-// a company's copy that leaves them out needs.
+// TestABuildWithoutPlugins: go build -tags noprivacy,nowriting,nomail
+// builds every package, and its irie links none of the plugins' code
+// (DESIGN §4.17), as a company's copy that leaves them out needs.
 func TestABuildWithoutPlugins(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds Irie without its plugins")
@@ -23,7 +23,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if err != nil {
 		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
 	}
-	tags := "-tags=noprivacy,nowriting"
+	tags := "-tags=noprivacy,nowriting,nomail"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
@@ -37,11 +37,17 @@ func TestABuildWithoutPlugins(t *testing.T) {
 		t.Fatalf("go list -deps %s: %v", tags, err)
 	}
 	deps := strings.Fields(string(out))
-	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp"} {
+	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "mail"} {
 		for _, d := range deps {
 			if d == "github.com/irie-people/irie/internal/"+pkg {
 				t.Errorf("a build without plugins links internal/%s", pkg)
 			}
+		}
+	}
+	// Nor the mail plugin's IMAP and MIME libraries.
+	for _, d := range deps {
+		if strings.HasPrefix(d, "github.com/emersion/") {
+			t.Errorf("a build without plugins links %s", d)
 		}
 	}
 	// The list must hold what every build has, or the look above means nothing.
