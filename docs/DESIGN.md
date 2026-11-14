@@ -1792,6 +1792,32 @@ A cheap model that gets a task wrong costs a retry and the user's attention, so 
 
 With the starting guesses and floors of 85% and 60%, small work goes to `+local` when it is ready (else `+haiku`), medium work to `+sonnet`, and hard work to `+claude`; medium work goes local too once a local model's record there passes 60%, which a bench (§6.6) measures. To keep medium work on Opus, raise `route.min_accuracy` to 0.9 or more.
 
+**Measured on an 18 GiB Mac (2026-11-14).** The starting guesses were checked with ten small subtasks of the kinds `irie ctl delegate` hands on:
+- two summaries;
+- two renames across files;
+- two docstring passes;
+- two tests, each of which must fail on broken versions of the code;
+- a typo fix;
+- a commit message.
+
+Claude Code ran each one as a delegated session runs, with ten minutes for each, on an M3 Pro beside its owner's work:
+- **Haiku** passed all ten, in a median of 17 s, at about $0.004 a task.
+- **Dory 4B** passed 8, but took a median of 7.5 minutes a task, and twice ran into the ten minutes.
+- **Qwen3.5 4B** passed 7, in a median of 95 s, holding 5.2 GB with the runner caps (§6.3).
+- **FrogNano 4B** (Qwen3.5 4B trained further on coding agents' work) passed 6.
+- **Bonsai 2 9B** passed both summaries, then ran out of time on both renames, and was stopped there.
+
+A caller has to catch the local models' misses:
+- functions left out of a docstring pass;
+- code changed that the task said to keep;
+- a test with wrong expected values;
+- a commit subject copied from the template;
+- a summary of a file the model never opened.
+
+So measured, a 4B-class model belongs at 60–80% for small work in `route.accuracy`, where the starting guess for `local` is 85%.
+
+As judges they gained little. On 72 pairs of the user's jots, the follow-up rule (§4.2) was right on 90%. The best local model scored 92%, Haiku 81%, and any one of them allowed only to overrule the rule's "yes" lifted it to 94%. On the class of 153 of the user's tasks, the rule was right on 50%, Bonsai 2 9B on 61% and Haiku on 68%.
+
 **Learning.** Outcomes are folded from the journal, like every row's state, over its 30 days:
 
 | Outcome | Counts as |
