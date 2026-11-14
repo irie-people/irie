@@ -1254,7 +1254,7 @@ func (c Config) Validate() error {
 			case l.Peer != "" && l.Runtime != "llama-server":
 				bad("profiles.%s.local.peer: only a llama-server profile runs on a peer's server", name)
 			case l.Peer != "" && strings.ContainsAny(l.Peer, " /\t"):
-				bad("profiles.%s.local.peer = %q: must be a peer's name, as irie peer list shows it", name, l.Peer)
+				bad("profiles.%s.local.peer = %q: must be a peer's name, as "+brand.Slug+" peer list shows it", name, l.Peer)
 			case l.Peer == "" && (c.Local.URL == "" || l.Runtime == "llama-server") && l.MinContext > c.Local.Context:
 				bad("profiles.%s.local.min_context = %d is above local.context = %d, so "+brand.Name+"'s own server could never run it", name, l.MinContext, c.Local.Context)
 			}
