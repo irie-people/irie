@@ -943,6 +943,9 @@ final class Store {
             switch r.did {
             case "asked":
                 if let c = r.choice, let op = r.op { await answer(op, c) }
+            case "answered" where r.op == "markets":
+                // :markets: the Markets window says how the map stands.
+                NotificationCenter.default.post(name: .irieMarkets, object: nil)
             case "answered":
                 say(r.text, error: false, seconds: 8)
             case "added":
