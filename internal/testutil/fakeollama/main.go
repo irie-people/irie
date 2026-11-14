@@ -8,7 +8,7 @@
 //	OLLAMA_HOST              where to listen, such as 127.0.0.1:11435
 //	OLLAMA_CONTEXT_LENGTH    the context a loaded model gets (default 4096)
 //	IRIE_FAKE_OLLAMA_MODELS  a JSON file listing the models, as ollamafake.Model
-//	IRIE_FAKE_OLLAMA_LOG     a file it writes its OLLAMA_* environment to
+//	IRIE_FAKE_OLLAMA_LOG     a file it writes its OLLAMA_* and LLAMA_ARG_* environment to
 package main
 
 import (
@@ -41,7 +41,7 @@ func main() {
 	if f := os.Getenv("IRIE_FAKE_OLLAMA_LOG"); f != "" {
 		env := map[string]string{}
 		for _, kv := range os.Environ() {
-			if k, v, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "OLLAMA_") {
+			if k, v, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "OLLAMA_") || strings.HasPrefix(k, "LLAMA_ARG_") {
 				env[k] = v
 			}
 		}

@@ -314,9 +314,13 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 		c.mu.Unlock()
 		return fmt.Errorf("%s already runs a server Irie did not start; stop it, or set local.llama_port", o.URL)
 	}
-	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", llamaWindow, "-P", "-F", "#{pane_id}", "--",
+	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", llamaWindow, "-P", "-F", "#{pane_id}"}
+	for _, k := range slices.Sorted(maps.Keys(runnerCaps)) {
+		args = append(args, "-e", k+"="+runnerCaps[k])
+	}
+	args = append(args, "--",
 		c.bin, "runtime", "--", bin, "-m", m.path, "--alias", m.name, "--host", "127.0.0.1", "--port", strconv.Itoa(l.LlamaPort),
-		"-c", strconv.Itoa(l.Context), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", "1"}
+		"-c", strconv.Itoa(l.Context), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", "1")
 	args = append(args, l.LlamaArgs...)
 	out, err := c.tmux.Run(args...)
 	if err != nil {
