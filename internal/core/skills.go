@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/plugins"
@@ -22,7 +23,7 @@ func (c *Core) skillsFolder(p config.Profile, x *session) string {
 	dir, err := skills.Build(c.paths.Skills(), on, c.version)
 	if err != nil {
 		c.log.Warn("skills", "session", x.id, "err", err)
-		x.warnings = append(x.warnings, "Irie's skills left out: "+err.Error())
+		x.warnings = append(x.warnings, brand.Name+"'s skills left out: "+err.Error())
 		return ""
 	}
 	return dir

@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -523,7 +524,7 @@ func (m *slotModel) feed(s ipc.Session, col int) []string {
 	}
 	if len(t.items) == 0 && len(t.pending) == 0 && t.needs == nil {
 		if t.transcript == "" && s.State != ipc.StateStarting {
-			return wrapLines(styleDim.Render("This one lives in its terminal: it started before Irie could follow conversations. "+m.flipHint("see it")), col)
+			return wrapLines(styleDim.Render("This one lives in its terminal: it started before "+brand.Name+" could follow conversations. "+m.flipHint("see it")), col)
 		}
 		return []string{styleDim.Render("Nothing here yet. Messages show here as they come.")}
 	}

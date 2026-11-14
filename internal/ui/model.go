@@ -17,6 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -97,6 +98,9 @@ type Options struct {
 	Home      string // for ~ paths
 	RedOnDone bool   // ui.red_on_done: done rows are red, not green
 	Theme     string // ui.theme: the palette; "" is rosewater
+	// Tips is ui.bar = tips (DESIGN §2.10): the title bar leaves out its
+	// words of encouragement.
+	Tips bool
 }
 
 // Model is the sidebar's Bubble Tea model.
@@ -105,6 +109,7 @@ type Model struct {
 	now       func() time.Time
 	home      string
 	redOnDone bool
+	tips      bool // ui.bar = tips: no tagline in the title bar
 
 	theme    theme      // ui.theme's light and dark sets, or the Mac app's palette once the header says it
 	pal      palette    // the one in use
@@ -178,7 +183,7 @@ func New(b Backend, o Options) Model {
 	}
 	// Parked starts folded, so a session parked goes out of sight.
 	folded := map[string]bool{parkedKey: true}
-	m := Model{backend: b, now: o.Now, home: o.Home, redOnDone: o.RedOnDone, theme: th, folded: folded, sel: -1, focus: focusBar, bar: bar}
+	m := Model{backend: b, now: o.Now, home: o.Home, redOnDone: o.RedOnDone, tips: o.Tips, theme: th, folded: folded, sel: -1, focus: focusBar, bar: bar}
 	m.setDark(true)
 	m.bar.Focus()
 	return m
@@ -489,7 +494,7 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// terminal's own cursor; Enter renames, Esc keeps the name.
 		s, ok := m.selSession()
 		if !ok {
-			m.setStatus("select one of Irie's sessions to rename it", true)
+			m.setStatus("select one of "+brand.Name+"'s sessions to rename it", true)
 			break
 		}
 		m.setFocus(focusBar)

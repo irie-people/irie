@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
@@ -218,7 +219,7 @@ func Attach(cfg config.Config, nested bool) error {
 			return syscall.Exec(r.Bin, []string{"tmux", "-L", cfg.Tmux.Socket, "switch-client", "-t", tmux.MainSession}, env)
 		}
 		if !nested {
-			return errors.New("already inside tmux; run `irie attach --nested` to open Irie inside it")
+			return errors.New("already inside tmux; run `" + brand.Slug + " attach --nested` to open " + brand.Name + " inside it")
 		}
 		env = tmux.WithoutEnv(env, "TMUX", "TMUX_PANE")
 	}

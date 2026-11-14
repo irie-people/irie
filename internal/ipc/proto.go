@@ -1227,6 +1227,11 @@ type LearnArgs struct {
 type LearnResult struct {
 	Resources []learn.Resource `json:"resources"`
 	Glossary  []learn.Term     `json:"glossary"`
+	// Bar is what the strip under the terminal shows, ui.bar: cheer or
+	// tips; Tips are the tips it shows one at a time when it is tips
+	// (DESIGN §2.10). Both are empty from a core from before them.
+	Bar  string   `json:"bar,omitempty"`
+	Tips []string `json:"tips,omitempty"`
 }
 
 type ShowArgs struct {

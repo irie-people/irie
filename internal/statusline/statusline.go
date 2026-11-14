@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -328,14 +329,14 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 	case len(args) == 2 && args[0] == "--then":
 		then = args[1]
 	default:
-		fmt.Fprintln(stderr, "usage: irie statusline [--then COMMAND]")
+		fmt.Fprintln(stderr, "usage: "+brand.Slug+" statusline [--then COMMAND]")
 		return 2
 	}
 	raw, _ := io.ReadAll(io.LimitReader(stdin, maxInput))
 	st := forward(raw, getenv)
 	if then != "" {
 		err := execShell(then, raw)
-		fmt.Fprintln(stderr, "irie statusline:", err)
+		fmt.Fprintln(stderr, brand.Slug+" statusline:", err)
 		return 1
 	}
 	if u, err := Parse(raw); err == nil {
@@ -350,7 +351,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(s
 // and returns the core's answer: the session's state and helpers. It never
 // fails: without Irie the status line goes on, with no state.
 func forward(raw []byte, getenv func(string) string) *ipc.StatusReply {
-	session, socket := getenv("IRIE_SESSION"), getenv("IRIE_SOCKET")
+	session, socket := getenv(brand.Env("SESSION")), getenv(brand.Env("SOCKET"))
 	if session == "" || socket == "" || !json.Valid(raw) {
 		return nil
 	}
@@ -370,7 +371,7 @@ func forward(raw []byte, getenv func(string) string) *ipc.StatusReply {
 // execShell replaces this process with `sh -c command`, whose stdin holds
 // input: a file already unlinked, so nothing is left behind.
 func execShell(command string, input []byte) error {
-	f, err := os.CreateTemp("", "irie-status-")
+	f, err := os.CreateTemp("", brand.Slug+"-status-")
 	if err != nil {
 		return err
 	}

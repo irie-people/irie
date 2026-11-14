@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
@@ -90,11 +91,11 @@ func (c *Core) armTeam(id, dir string, a teamAnchor, profile config.Profile, env
 		}
 	}
 	maps.Copy(mates, env)
-	for _, k := range []string{"IRIE_SESSION", "TMUX", "TMUX_PANE"} {
+	for _, k := range []string{brand.Env("SESSION"), "TMUX", "TMUX_PANE"} {
 		delete(mates, k)
 	}
 	// What the hooks of a teammate read to wait while the session is frozen.
-	mates["IRIE_TEAM_OF"] = id
+	mates[brand.Env("TEAM_OF")] = id
 	if p := mates["PATH"]; p != "" {
 		mates["PATH"] = bin + string(os.PathListSeparator) + p
 	} else {

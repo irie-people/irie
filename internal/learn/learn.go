@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 //go:embed learn.toml
@@ -62,7 +64,7 @@ const (
 
 var tipID = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
-var set, setErr = parse(data)
+var set, setErr = parse(brand.Text(data))
 
 // Get returns learn.toml, which the tests check.
 func Get() Set {
@@ -112,7 +114,7 @@ func (s Set) check() error {
 		case titles[r.Title]:
 			errs = append(errs, fmt.Errorf("resource %q: the title is taken", r.Title))
 		case r.Lang != "" && !slices.ContainsFunc(markers, func(m marker) bool { return m.lang == r.Lang }):
-			errs = append(errs, fmt.Errorf("resource %q: Irie cannot tell a %s project", r.Title, r.Lang))
+			errs = append(errs, fmt.Errorf("resource %q: "+brand.Name+" cannot tell a %s project", r.Title, r.Lang))
 		}
 		titles[r.Title] = true
 	}

@@ -16,6 +16,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -120,7 +121,7 @@ func (m *Model) open(focus bool) tea.Cmd {
 		return nil
 	}
 	o := m.outside[it.o]
-	msg := outsideLabel(o) + " runs outside Irie, " + where(o)
+	msg := outsideLabel(o) + " runs outside " + brand.Name + ", " + where(o)
 	switch {
 	case o.Movable:
 		msg += "; m moves it in here"
@@ -140,7 +141,7 @@ const moveConfirm = 5 * time.Second
 func (m *Model) moveSelected() tea.Cmd {
 	o, ok := m.selOutside()
 	if !ok {
-		m.setStatus("m moves a session from Outside Irie into Irie", false)
+		m.setStatus("m moves a session from Outside "+brand.Name+" into "+brand.Name, false)
 		return nil
 	}
 	if !o.Movable || m.moving {
@@ -149,7 +150,7 @@ func (m *Model) moveSelected() tea.Cmd {
 	}
 	if m.confirming != o.Key() || m.now().Sub(m.confirmedAt) > moveConfirm {
 		m.confirming, m.confirmedAt = o.Key(), m.now()
-		m.setStatus("Press m again to move "+outsideLabel(o)+" into Irie. "+endsWarning, false)
+		m.setStatus("Press m again to move "+outsideLabel(o)+" into "+brand.Name+". "+endsWarning, false)
 		return nil
 	}
 	m.confirming = ""
@@ -157,7 +158,7 @@ func (m *Model) moveSelected() tea.Cmd {
 }
 
 // endsWarning says what a move ends.
-const endsWarning = "Its copy outside Irie ends, and anything it runs in the background stops."
+const endsWarning = "Its copy outside " + brand.Name + " ends, and anything it runs in the background stops."
 
 // moveCmd asks the core to move o in, when it can move.
 func (m *Model) moveCmd(o ipc.OutsideSession) tea.Cmd {
@@ -170,7 +171,7 @@ func (m *Model) moveCmd(o ipc.OutsideSession) tea.Cmd {
 		return nil
 	}
 	m.moving = true
-	m.setStatus("moving "+name+" into Irie…", false)
+	m.setStatus("moving "+name+" into "+brand.Name+"…", false)
 	b, id := m.backend, o.VendorID
 	return func() tea.Msg {
 		s, err := b.Move(id, "")
@@ -185,7 +186,7 @@ func (m *Model) moved(msg movedMsg) {
 		m.setStatus(msg.err.Error(), true)
 		return
 	}
-	m.setStatus("moved "+msg.name+" into Irie", false)
+	m.setStatus("moved "+msg.name+" into "+brand.Name, false)
 	m.pick(msg.session.ID)
 }
 

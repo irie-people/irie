@@ -26,6 +26,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
@@ -149,7 +150,7 @@ func (c *Core) setOutside(list []ipc.OutsideSession, parents map[int]int, err er
 	o := &c.outside
 	problem := ""
 	if err != nil {
-		problem = "sessions outside Irie: " + err.Error()
+		problem = "sessions outside " + brand.Name + ": " + err.Error()
 		list = o.list
 	} else {
 		ids, hosts := c.ownSessions()
@@ -371,7 +372,7 @@ func judge(o *ipc.OutsideSession) {
 	case o.VendorID == "":
 		o.Why = "Claude Code gave no session id for it yet"
 	case o.Kind != ipc.KindInteractive && o.Kind != ipc.KindBackground:
-		o.Why = fmt.Sprintf("Irie cannot move a session of kind %q", o.Kind)
+		o.Why = fmt.Sprintf(brand.Name+" cannot move a session of kind %q", o.Kind)
 	case o.Status == "":
 		o.Why = "its process is not running"
 	case o.Status == ipc.StatusBusy:

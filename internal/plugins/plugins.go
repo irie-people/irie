@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
@@ -74,8 +75,26 @@ type Live struct {
 	VPN *ipc.VPN // the VPN's mark, while vpn.on
 }
 
-// All are Irie's plugins, in the order they show.
-func All() []Plugin { return []Plugin{privacy(), writing()} }
+// order is the order plugins show in; a plugin this build leaves out is
+// skipped.
+var order = []string{"privacy", "writing"}
+
+// built are the plugins in this build, by name. Each plugin's file adds
+// itself, and a build tag leaves a plugin's file out with its parts' code:
+// go build -tags noprivacy,nowriting builds Irie without either (DESIGN
+// §4.17).
+var built = map[string]func() Plugin{}
+
+// All are Irie's plugins in this build, in the order they show.
+func All() []Plugin {
+	var out []Plugin
+	for _, name := range order {
+		if f, ok := built[name]; ok {
+			out = append(out, f())
+		}
+	}
+	return out
+}
 
 // Find is the plugin named name.
 func Find(name string) (Plugin, bool) {
@@ -127,7 +146,7 @@ func Status(e Env) []ipc.Plugin {
 
 func (x Part) status(e Env, pluginOn bool) ipc.PluginPart {
 	if x.Held != "" {
-		return ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, State: ipc.PartHeld, Detail: "Not in Irie yet. " + x.Held}
+		return ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, State: ipc.PartHeld, Detail: "Not in " + brand.Name + " yet. " + x.Held}
 	}
 	own := x.own(e.Config)
 	w := ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, Switch: x.Switch, On: own, Setup: x.Setup, Brings: x.Brings}
@@ -155,15 +174,16 @@ func Why(cfg config.Config, part string) string {
 		}
 		switch {
 		case x.Held != "":
-			return x.Title + " isn't in Irie yet. " + x.Held
+			return x.Title + " isn't in " + brand.Name + " yet. " + x.Held
 		case !p.on(cfg):
-			return fmt.Sprintf("%s is off, as the %s plugin is: `irie plugins on %s` turns the plugin on.", x.Title, p.Name, p.Name)
+			return fmt.Sprintf("%s is off, as the %s plugin is: `"+brand.Slug+" plugins on %s` turns the plugin on.", x.Title, p.Name, p.Name)
 		case !x.own(cfg):
 			return x.Refused
 		}
 		return ""
 	}
-	return ""
+	// A part of a plugin this build leaves out.
+	return part + " isn't in this build of " + brand.Name + "."
 }
 
 // SkillsLeft are the skills of Irie's that sessions go without because
@@ -195,7 +215,7 @@ func SkillSettings(cfg config.Config, profile bool) skills.Settings {
 func Edits(plugin, part string, on bool) ([]config.Edit, error) {
 	p, ok := Find(plugin)
 	if !ok {
-		return nil, fmt.Errorf("no plugin %q: Irie's plugins are %s", plugin, strings.Join(Names(), ", "))
+		return nil, fmt.Errorf("no plugin %q: "+brand.Name+"'s plugins are %s", plugin, strings.Join(Names(), ", "))
 	}
 	if part == "" {
 		return []config.Edit{{Key: p.key, Value: on}}, nil
@@ -205,7 +225,7 @@ func Edits(plugin, part string, on bool) ([]config.Edit, error) {
 		return nil, fmt.Errorf("the %s plugin has no part %q: its parts are %s", p.Name, part, strings.Join(partNames(p), ", "))
 	}
 	if x.Held != "" {
-		return nil, fmt.Errorf("%s isn't in Irie yet. %s", x.Title, x.Held)
+		return nil, fmt.Errorf("%s isn't in "+brand.Name+" yet. %s", x.Title, x.Held)
 	}
 	if x.Switch == "" {
 		return nil, fmt.Errorf("%s has no switch of its own: it is on while the %s plugin is", x.Title, p.Name)

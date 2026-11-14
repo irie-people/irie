@@ -8,31 +8,32 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
 // controlUsage is the part of ctlUsage for what the user does to a session
 // as a whole and to its place in the list (DESIGN §4.3).
-const controlUsage = `  irie ctl freeze SESSION|--all          stop a session's whole process tree at
+const controlUsage = `  ` + brand.Slug + ` ctl freeze SESSION|--all          stop a session's whole process tree at
                                          once, or every session's
-  irie ctl thaw SESSION|--all            continue it
-  irie ctl promote SESSION [REASON...]   put a session at the top of the list
+  ` + brand.Slug + ` ctl thaw SESSION|--all            continue it
+  ` + brand.Slug + ` ctl promote SESSION [REASON...]   put a session at the top of the list
                                          and give its process tree the machine
                                          first; the others run in the background
-  irie ctl unpromote SESSION             put it back among the rest
-  irie ctl reorder [--before OTHER] SESSION
+  ` + brand.Slug + ` ctl unpromote SESSION             put it back among the rest
+  ` + brand.Slug + ` ctl reorder [--before OTHER] SESSION
                                          put a session just before another in
                                          the list, or last
-  irie ctl park [SESSION]                put a session out of the way, last in
+  ` + brand.Slug + ` ctl park [SESSION]                put a session out of the way, last in
                                          the Parked group at the end of the
                                          list: by id or name, or with none the
                                          one this runs in
-  irie ctl unpark [SESSION]              bring it back, last in the list, just
+  ` + brand.Slug + ` ctl unpark [SESSION]              bring it back, last in the list, just
                                          above Parked
-  irie ctl pin [SESSION]                 keep a session at hand, last in the
+  ` + brand.Slug + ` ctl pin [SESSION]                 keep a session at hand, last in the
                                          Pinned group at the top, where no
                                          close but your own of it reaches it
-  irie ctl unpin [SESSION]               put it back, first among the rest
+  ` + brand.Slug + ` ctl unpin [SESSION]               put it back, first among the rest
 `
 
 // ctlFreeze is `irie ctl freeze` (on) and `irie ctl thaw`.
@@ -47,7 +48,7 @@ func ctlFreeze(args []string, on bool) error {
 		return err
 	}
 	if *all == (fs.NArg() == 1) || fs.NArg() > 1 {
-		return fmt.Errorf("usage: irie ctl %s SESSION|--all", name)
+		return fmt.Errorf("usage: "+brand.Slug+" ctl %s SESSION|--all", name)
 	}
 	sock, err := socket()
 	if err != nil {
@@ -67,9 +68,9 @@ func ctlFreeze(args []string, on bool) error {
 func ctlPromote(args []string, level int) error {
 	if len(args) == 0 || level == 0 && len(args) != 1 {
 		if level == 0 {
-			return errors.New("usage: irie ctl unpromote SESSION")
+			return errors.New("usage: " + brand.Slug + " ctl unpromote SESSION")
 		}
-		return errors.New("usage: irie ctl promote SESSION [REASON...]")
+		return errors.New("usage: " + brand.Slug + " ctl promote SESSION [REASON...]")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -86,7 +87,7 @@ func ctlReorder(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: irie ctl reorder [--before OTHER] SESSION")
+		return errors.New("usage: " + brand.Slug + " ctl reorder [--before OTHER] SESSION")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -119,7 +120,7 @@ func ctlPin(args []string, on bool) error {
 // ctlPlace runs op, park, unpark, pin or unpin, on the session args name.
 func ctlPlace(name, op string, args []string) error {
 	if len(args) > 1 {
-		return fmt.Errorf("usage: irie ctl %s [SESSION]", name)
+		return fmt.Errorf("usage: "+brand.Slug+" ctl %s [SESSION]", name)
 	}
 	sock, err := socket()
 	if err != nil {
@@ -129,7 +130,7 @@ func ctlPlace(name, op string, args []string) error {
 	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
 		return err
 	}
-	id, err := sessionTarget(name, args, os.Getenv("IRIE_SESSION"), l.Sessions)
+	id, err := sessionTarget(name, args, os.Getenv(brand.Env("SESSION")), l.Sessions)
 	if err != nil {
 		return err
 	}

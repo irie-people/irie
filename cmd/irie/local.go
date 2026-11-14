@@ -15,6 +15,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
 )
@@ -62,7 +63,7 @@ func ctlLocal(args []string) error {
 func printLocal(w io.Writer, r ipc.LocalResult) {
 	whose := "your own"
 	if r.Own {
-		whose = "Irie's own"
+		whose = brand.Name + "'s own"
 	}
 	fmt.Fprintf(w, "server   %s, %s", r.URL, whose)
 	if r.Version != "" {
@@ -85,12 +86,12 @@ func printLocal(w io.Writer, r ipc.LocalResult) {
 	case r.Chosen != "":
 		fmt.Fprintf(w, "+local   %s\n", r.Chosen)
 	case r.Pick != "":
-		fmt.Fprintf(w, "+local   %s, the best model here that fits; `irie setup local` chooses one for good\n", r.Pick)
+		fmt.Fprintf(w, "+local   %s, the best model here that fits; `"+brand.Slug+" setup local` chooses one for good\n", r.Pick)
 	}
 	printModels(w, r.Models, "+local", r.Pick, r.Chosen)
 	if l := r.Llama; l != nil {
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "llama    %s, Irie's own llama-server", l.URL)
+		fmt.Fprintf(w, "llama    %s, "+brand.Name+"'s own llama-server", l.URL)
 		if l.Bin != "" {
 			fmt.Fprintf(w, ", %s (%s)", l.Bin, l.Build)
 		}
@@ -154,7 +155,7 @@ func ctlPreflight(args []string) error {
 		return err
 	}
 	if fs.NArg() > 1 {
-		return errors.New("usage: irie ctl preflight [--model MODEL] [--force] [PROFILE]")
+		return errors.New("usage: " + brand.Slug + " ctl preflight [--model MODEL] [--force] [PROFILE]")
 	}
 	profile := strings.TrimPrefix(fs.Arg(0), "+")
 	if err := up(nil); err != nil {
@@ -214,7 +215,7 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return errors.New("usage: irie setup local [--model MODEL] [--yes]")
+		return errors.New("usage: " + brand.Slug + " setup local [--model MODEL] [--yes]")
 	}
 	cfg, p, err := load()
 	if err != nil {
@@ -239,10 +240,10 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 			inst := localmodel.HowToInstallHere()
 			fmt.Fprintf(stdout, "Ollama is not installed. Its route here: %s\n", inst.Hint)
 			if inst.Argv == nil {
-				return errors.New("install Ollama, then run `irie setup local` again")
+				return errors.New("install Ollama, then run `" + brand.Slug + " setup local` again")
 			}
 			if !ask("Run `" + strings.Join(inst.Argv, " ") + "` now?") {
-				return errors.New("Ollama is not installed; run `irie setup local --yes` to install it")
+				return errors.New("Ollama is not installed; run `" + brand.Slug + " setup local --yes` to install it")
 			}
 			cmd := exec.Command(inst.Argv[0], inst.Argv[1:]...)
 			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -250,7 +251,7 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 				return fmt.Errorf("installing Ollama: %w", err)
 			}
 			if _, err := localmodel.FindOllama(cfg.Local.Ollama); err != nil {
-				return errors.New("Ollama is still not found after installing it; open a new terminal and run `irie setup local` again")
+				return errors.New("Ollama is still not found after installing it; open a new terminal and run `" + brand.Slug + " setup local` again")
 			}
 		}
 	}
@@ -293,11 +294,11 @@ func setupLocal(args []string, stdin io.Reader, stdout io.Writer) error {
 		if s, ok := localmodel.Suggested(choice); ok {
 			size = fmt.Sprintf(" (about %s to download)", localmodel.Bytes(s.Size))
 			if !pullFits(st, s.Size) {
-				return fmt.Errorf("%s takes %s and the disk has %s free; Irie leaves %s free, so free some space or name a smaller model with --model", choice, localmodel.Bytes(s.Size), localmodel.Bytes(st.Disk), localmodel.Bytes(localmodel.PullReserve))
+				return fmt.Errorf("%s takes %s and the disk has %s free; "+brand.Name+" leaves %s free, so free some space or name a smaller model with --model", choice, localmodel.Bytes(s.Size), localmodel.Bytes(st.Disk), localmodel.Bytes(localmodel.PullReserve))
 			}
 		}
 		if !ask(fmt.Sprintf("Pull %s%s?", choice, size)) {
-			return fmt.Errorf("%s is not there; run `irie setup local --model %s --yes` to pull it", choice, choice)
+			return fmt.Errorf("%s is not there; run `"+brand.Slug+" setup local --model %s --yes` to pull it", choice, choice)
 		}
 		if err := pull(stdout, st.URL, choice); err != nil {
 			return err

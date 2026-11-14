@@ -8,6 +8,7 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -24,7 +25,7 @@ func (m *Model) closeSelected() tea.Cmd {
 	s, ok := m.selSession()
 	if !ok {
 		m.closing = ""
-		m.setStatus("x x closes one of Irie's sessions; select one first", false)
+		m.setStatus("x x closes one of "+brand.Name+"'s sessions; select one first", false)
 		return nil
 	}
 	if m.closing != s.ID || m.now().Sub(m.closingAt) > closeConfirm {

@@ -482,6 +482,11 @@ struct LearnArgs: Encodable {
 struct LearnResult: Decodable {
     var resources: [LearnResource]
     var glossary: [LearnTerm]
+    /// What the strip under the terminal shows, ui.bar: "cheer" or "tips";
+    /// nil from a core from before it (DESIGN §2.10).
+    var bar: String?
+    /// The tips it shows one at a time when it is tips.
+    var tips: [String]?
 }
 
 struct LearnResource: Decodable, Identifiable, Hashable {

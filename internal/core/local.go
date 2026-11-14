@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness/claude"
@@ -38,7 +39,7 @@ import (
 const localPrefix = "ollama:"
 
 // runtimeWindow names the window of Irie's own Ollama server.
-const runtimeWindow = "irie-ollama"
+const runtimeWindow = brand.Slug + "-ollama"
 
 // runtimeWait is how long a new server has to answer.
 var runtimeWait = 15 * time.Second
@@ -50,7 +51,7 @@ const loadTimeout = 3 * time.Minute
 const modelsTTL = 10 * time.Second
 
 // errLocalDown means Irie's own server is not running and was not started.
-var errLocalDown = errors.New("Irie's Ollama server is not running")
+var errLocalDown = errors.New(brand.Name + "'s Ollama server is not running")
 
 // localState is local.json: what Irie keeps about local models.
 type localState struct {
@@ -203,7 +204,7 @@ func (c *Core) startRuntime(o localmodel.Ollama) error {
 	defer c.localMu.Unlock()
 	bin, err := localmodel.FindOllama(c.cfg().Local.Ollama)
 	if errors.Is(err, localmodel.ErrNoOllama) {
-		return errors.New("ollama is not installed; `irie setup local` installs it")
+		return errors.New("ollama is not installed; `" + brand.Slug + " setup local` installs it")
 	}
 	if err != nil {
 		return err
@@ -226,7 +227,7 @@ func (c *Core) startRuntime(o localmodel.Ollama) error {
 		cancel()
 		if err == nil {
 			c.mu.Unlock()
-			return fmt.Errorf("%s already runs a server Irie did not start; stop it, or set local.port", o.URL)
+			return fmt.Errorf("%s already runs a server "+brand.Name+" did not start; stop it, or set local.port", o.URL)
 		}
 	}
 	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", runtimeWindow, "-P", "-F", "#{pane_id}"}
@@ -270,10 +271,10 @@ func (c *Core) startRuntime(o localmodel.Ollama) error {
 		}
 		c.mu.Unlock()
 		if p == nil || p.Dead {
-			return fmt.Errorf("Irie's Ollama server exited:%s", strings.Join(append([]string{""}, tail...), "\n  "))
+			return fmt.Errorf(brand.Name+"'s Ollama server exited:%s", strings.Join(append([]string{""}, tail...), "\n  "))
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("Irie's Ollama server did not answer at %s within %v: %v", o.URL, runtimeWait, err)
+			return fmt.Errorf(brand.Name+"'s Ollama server did not answer at %s within %v: %v", o.URL, runtimeWait, err)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -448,12 +449,12 @@ func (c *Core) localModel(ctx context.Context, o localmodel.Ollama, own bool, na
 	}
 	switch len(ok) {
 	case 0:
-		return "", ipc.Errorf(ipc.CodeNotFound, "+%s: no local model that fits this machine yet; `irie setup local` picks one and pulls it", name)
+		return "", ipc.Errorf(ipc.CodeNotFound, "+%s: no local model that fits this machine yet; `"+brand.Slug+" setup local` picks one and pulls it", name)
 	case 1:
 		model, _, _ := strings.Cut(strings.TrimPrefix(ok[0], "+"+localPrefix), " (")
 		return model, nil
 	}
-	return "", ipc.Errorf(ipc.CodeAmbiguous, "+%s has no model yet; pick one of %s, or run `irie setup local` to choose one for it", name, strings.Join(ok, ", "))
+	return "", ipc.Errorf(ipc.CodeAmbiguous, "+%s has no model yet; pick one of %s, or run `"+brand.Slug+" setup local` to choose one for it", name, strings.Join(ok, ", "))
 }
 
 // bestBy is the model of ms that an agent can run on and the machine can

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Calendar is the switch's iCalendar file (RFC 5545): a reminder to check in
@@ -46,7 +48,7 @@ func (c Calendar) Bytes() []byte {
 	line := func(s string) { fold(&b, s) }
 	line("BEGIN:VCALENDAR")
 	line("VERSION:2.0")
-	line("PRODID:-//Irie//Dead man's switch//EN")
+	line("PRODID:-//" + brand.Name + "//Dead man's switch//EN")
 	line("CALSCALE:GREGORIAN")
 	checkin := "Check in: tap I'm OK"
 	note := "Tap I'm OK on your phone, so your dead man's switch knows you are well."

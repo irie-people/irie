@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // DefaultAPI is the Management API of the hosted Healthchecks.io. A user who
@@ -110,7 +112,7 @@ func (c Client) post(uuid, what string) error {
 // do makes one request and reads its JSON reply into out.
 func (c Client) do(method, path string, in, out any) (int, error) {
 	if c.Key == "" {
-		return 0, errors.New("no Healthchecks API key: copy the project's API key, then run `irie dms key --paste`")
+		return 0, errors.New("no Healthchecks API key: copy the project's API key, then run `" + brand.Slug + " dms key --paste`")
 	}
 	var body io.Reader
 	if in != nil {
@@ -127,7 +129,7 @@ func (c Client) do(method, path string, in, out any) (int, error) {
 		return 0, err
 	}
 	req.Header.Set("X-Api-Key", c.Key)
-	req.Header.Set("User-Agent", "irie-dms")
+	req.Header.Set("User-Agent", brand.Slug+"-dms")
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -147,7 +149,7 @@ func (c Client) do(method, path string, in, out any) (int, error) {
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusCreated:
 	case http.StatusUnauthorized:
-		return resp.StatusCode, errors.New("Healthchecks refused the API key. Make a new one in the project's settings, copy it, and run `irie dms key --paste` again")
+		return resp.StatusCode, errors.New("Healthchecks refused the API key. Make a new one in the project's settings, copy it, and run `" + brand.Slug + " dms key --paste` again")
 	case http.StatusForbidden:
 		// The API's 403 is a plan's limit: "For free accounts, the limit is
 		// 20 checks per account".
@@ -165,7 +167,7 @@ func (c Client) do(method, path string, in, out any) (int, error) {
 		return resp.StatusCode, nil
 	}
 	if err := json.Unmarshal(data, out); err != nil {
-		return resp.StatusCode, fmt.Errorf("Healthchecks: an answer Irie cannot read: %v", err)
+		return resp.StatusCode, fmt.Errorf("Healthchecks: an answer "+brand.Name+" cannot read: %v", err)
 	}
 	return resp.StatusCode, nil
 }
@@ -188,7 +190,7 @@ func Ping(hc *http.Client, pingURL string) error {
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}
-	resp, err := hc.Post(pingURL, "text/plain", strings.NewReader("I'm OK, from irie dms ping"))
+	resp, err := hc.Post(pingURL, "text/plain", strings.NewReader("I'm OK, from "+brand.Slug+" dms ping"))
 	if err != nil {
 		return err
 	}
@@ -201,7 +203,7 @@ func Ping(hc *http.Client, pingURL string) error {
 	// so in the body (https://healthchecks.io/docs/http_api/).
 	switch answer := strings.TrimSpace(string(body)); {
 	case strings.Contains(answer, "not found"):
-		return errors.New("Healthchecks has no check at that ping URL any more; make the checks again with `irie dms checks`")
+		return errors.New("Healthchecks has no check at that ping URL any more; make the checks again with `" + brand.Slug + " dms checks`")
 	case strings.Contains(answer, "rate limited"):
 		return errors.New("Healthchecks took too many pings in a minute; try again in a minute")
 	}

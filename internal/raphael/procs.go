@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Proc is one process, as ps sees it.
@@ -289,7 +291,7 @@ func hotFindings(hot []Hot, o Owner, uid int, home string) []Finding {
 		app := appOf(h.Path)
 		switch {
 		case o.Irie[h.PID]:
-			f.Advice = "It is Irie's own. Restarting it is safe: your agents keep running."
+			f.Advice = "It is " + brand.Name + "'s own. Restarting it is safe: your agents keep running."
 		case o.Session[h.PID] != "":
 			// An agent's own work: Gabriel holds it back while you work.
 			continue

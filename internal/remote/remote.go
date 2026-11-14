@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -176,7 +177,7 @@ func (s *Server) App() http.Handler {
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": ipc.Errorf(ipc.CodeNotFound, "no such call")})
 	})
-	mux.HandleFunc("GET /irie.mobileconfig", s.profile)
+	mux.HandleFunc("GET /"+brand.Slug+".mobileconfig", s.profile)
 	mux.Handle("GET /", s.files("index.html"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !localPeer(r.RemoteAddr) {
@@ -229,12 +230,12 @@ func (s *Server) Setup() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"name":        s.opt.Name,
 			"https":       "https://" + net.JoinHostPort(host, strconv.Itoa(s.opt.Port)) + "/",
-			"profile":     "/irie.mobileconfig",
+			"profile":     "/" + brand.Slug + ".mobileconfig",
 			"fingerprint": s.ca.Fingerprint(),
 		})
 	})
-	mux.HandleFunc("GET /irie.mobileconfig", s.profile)
-	mux.HandleFunc("GET /irie-ca.cer", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /"+brand.Slug+".mobileconfig", s.profile)
+	mux.HandleFunc("GET /"+brand.Slug+"-ca.cer", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
 		w.Write(s.ca.Cert.Raw)
 	})
@@ -281,7 +282,7 @@ func localOrigin(origin string) bool {
 // refuse turns away a request from beyond the machine's local networks.
 func (s *Server) refuse(w http.ResponseWriter, r *http.Request) {
 	s.log.Warn("refused", "from", r.RemoteAddr, "path", r.URL.Path)
-	http.Error(w, "Irie answers only on its machine's local network.", http.StatusForbidden)
+	http.Error(w, brand.Name+" answers only on its machine's local network.", http.StatusForbidden)
 }
 
 // localPeer says whether a request comes from the machine's own networks:
@@ -378,13 +379,17 @@ func (s *Server) files(index string) http.Handler {
 			h.Set("Content-Type", "image/svg+xml")
 		}
 		h.Set("Cache-Control", "no-cache")
+		switch path.Ext(name) {
+		case ".html", ".js", ".css", ".webmanifest", ".json":
+			data = []byte(brand.Text(string(data)))
+		}
 		w.Write(data)
 	})
 }
 
 func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/x-apple-aspen-config")
-	w.Header().Set("Content-Disposition", `attachment; filename="Irie.mobileconfig"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+brand.Name+`.mobileconfig"`)
 	w.Write(s.ca.Profile())
 }
 
@@ -464,7 +469,7 @@ func (s *Server) forgetMe(w http.ResponseWriter, r *http.Request, d Device) {
 // few seconds an install restarts it.
 func (s *Server) coreDown(err error) *ipc.Error {
 	s.log.Warn("core", "err", err)
-	return &ipc.Error{Code: "core_down", Msg: fmt.Sprintf("Irie isn't answering on %s just now; it restarts on its own within a few seconds.", s.opt.Name)}
+	return &ipc.Error{Code: "core_down", Msg: fmt.Sprintf(brand.Name+" isn't answering on %s just now; it restarts on its own within a few seconds.", s.opt.Name)}
 }
 
 // call relays one op to the core and its reply back, as the core wrote it.

@@ -7,6 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // The slot's colours. The slot's pane draws the keys and the shown
@@ -148,7 +150,7 @@ func (p placeholder) View() tea.View {
 	if p.h >= markMinHeight {
 		parts = append(parts, mark(), "")
 	}
-	parts = append(parts, styleTitle.Render("Irie"), "")
+	parts = append(parts, styleTitle.Render(cut(brand.Name, max(1, p.w-2))), "")
 	if p.first {
 		parts = append(parts, lipgloss.JoinVertical(lipgloss.Center,
 			styleBold.Render("Welcome."),

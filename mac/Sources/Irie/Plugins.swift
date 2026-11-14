@@ -19,7 +19,7 @@ struct PluginCommands: Commands {
         let f = MainActor.assumeIsolated { menu.facts }
         CommandMenu("Plugins") {
             if f.plugins.isEmpty {
-                Text(f.canPlugins ? "Reading the plugins…" : "This Irie has no plugins yet")
+                Text(f.canPlugins ? "Reading the plugins…" : "This \(Brand.name) has no plugins yet")
             }
             ForEach(f.plugins) { p in
                 Section(p.title) {

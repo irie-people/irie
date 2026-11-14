@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/sysload"
 )
 
@@ -91,7 +92,7 @@ func hogsOf(ps []Proc, o Owner) []hog {
 			name = appName(app)
 		}
 		if o.Session[p.PID] != "" {
-			name = "Irie's sessions"
+			name = brand.Name + "'s sessions"
 		}
 		h := by[name]
 		if h == nil {
@@ -127,7 +128,7 @@ func bigHogs(m Memory, ps []Proc, o Owner) []Finding {
 	}
 	var fs []Finding
 	for _, h := range hogsOf(ps, o) {
-		if float64(h.rss) < 2*hogShare*float64(m.Total) || h.name == "Irie's sessions" {
+		if float64(h.rss) < 2*hogShare*float64(m.Total) || h.name == brand.Name+"'s sessions" {
 			continue
 		}
 		fs = append(fs, Finding{

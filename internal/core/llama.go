@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
@@ -36,7 +37,7 @@ import (
 const llamaRuntime = "llama-server"
 
 // llamaWindow names the window of Irie's own llama-server.
-const llamaWindow = "irie-llama"
+const llamaWindow = brand.Slug + "-llama"
 
 // llamaPrefix names a model of Irie's llama-server as a profile:
 // +llama:Ternary-Bonsai-2-27B-PTQ1_0 is +big on that model.
@@ -257,7 +258,7 @@ func llamaPick(name string, p config.Profile, list []ipc.LocalModel) (string, er
 		if i := slices.IndexFunc(list, func(m ipc.LocalModel) bool { return localmodel.SameModel(m.Name, p.Model) }); i >= 0 {
 			return list[i].Name, nil
 		}
-		return "", ipc.Errorf(ipc.CodeNotFound, "+%s: no model %s among Ollama's models and the GGUF files Irie's llama-server may run", name, p.Model)
+		return "", ipc.Errorf(ipc.CodeNotFound, "+%s: no model %s among Ollama's models and the GGUF files "+brand.Name+"'s llama-server may run", name, p.Model)
 	}
 	if best := bestBy(list, localmodel.LlamaRank); best != "" {
 		return best, nil
@@ -312,7 +313,7 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 		c.mu.Lock()
 	} else if answers() {
 		c.mu.Unlock()
-		return fmt.Errorf("%s already runs a server Irie did not start; stop it, or set local.llama_port", o.URL)
+		return fmt.Errorf("%s already runs a server "+brand.Name+" did not start; stop it, or set local.llama_port", o.URL)
 	}
 	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", llamaWindow, "-P", "-F", "#{pane_id}", "--",
 		c.bin, "runtime", "--", bin, "-m", m.path, "--alias", m.name, "--host", "127.0.0.1", "--port", strconv.Itoa(l.LlamaPort),
@@ -415,7 +416,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 			problem("%s needs about %s of memory at a %s context (%s of weights, %s of context cache), more than the %s local models may take here; pick a smaller model or packing, or raise local.memory_gib", m.name, localmodel.Bytes(need.Total), localmodel.Tokens(c.cfg().Local.Context), localmodel.Bytes(need.Weights), localmodel.Bytes(need.Cache), localmodel.Bytes(budget))
 		}
 		if free := machine.Available + freed - localmodel.Reserve(machine); machine.Total > 0 && need.Total > free && !short {
-			msg := fmt.Sprintf("%s needs about %s of memory and the machine has %s free, of which Irie leaves %s for everything else", m.name, localmodel.Bytes(need.Total), localmodel.Bytes(machine.Available+freed), localmodel.Bytes(localmodel.Reserve(machine)))
+			msg := fmt.Sprintf("%s needs about %s of memory and the machine has %s free, of which "+brand.Name+" leaves %s for everything else", m.name, localmodel.Bytes(need.Total), localmodel.Bytes(machine.Available+freed), localmodel.Bytes(localmodel.Reserve(machine)))
 			if force {
 				warn("%s; loading it anyway", msg)
 			} else {
@@ -424,7 +425,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 			}
 		}
 		if len(users) > 0 {
-			msg := fmt.Sprintf("Irie's llama-server runs %s for %s, and runs one model at a time", running, strings.Join(users, ", "))
+			msg := fmt.Sprintf(brand.Name+"'s llama-server runs %s for %s, and runs one model at a time", running, strings.Join(users, ", "))
 			if force {
 				warn("%s; %s takes its place", msg, m.name)
 			} else {
@@ -448,7 +449,7 @@ func (c *Core) checkLlama(bin string, b localmodel.Build, m llamaModel, p config
 	}
 	chk.Context, chk.Loaded = props.Context, true
 	if chk.Context < p.Local.MinContext {
-		problem("%s runs with a %s context at %s and the profile needs %s; raise local.context in Irie's config", m.name, localmodel.Tokens(chk.Context), c.llamaURL(), localmodel.Tokens(p.Local.MinContext))
+		problem("%s runs with a %s context at %s and the profile needs %s; raise local.context in "+brand.Name+"'s config", m.name, localmodel.Tokens(chk.Context), c.llamaURL(), localmodel.Tokens(p.Local.MinContext))
 	}
 	return chk
 }

@@ -1,3 +1,5 @@
+//go:build !noprivacy
+
 package plugins
 
 import (
@@ -209,7 +211,9 @@ func TestWhySaysWhatTurnsAPartOn(t *testing.T) {
 	if why := Why(cfg, VPN) + Why(cfg, Anon); why != "" {
 		t.Errorf("Why for parts that are on = %q", why)
 	}
-	if why := Why(cfg, "nothing"); why != "" {
+	// A part no plugin of this build has, as in a build that leaves its
+	// plugin out, refuses rather than reads as on.
+	if why := Why(cfg, "nothing"); !strings.Contains(why, "isn't in this build") {
 		t.Errorf("Why(nothing) = %q", why)
 	}
 }

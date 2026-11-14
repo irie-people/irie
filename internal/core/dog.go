@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
@@ -293,7 +294,7 @@ func asksUser(msg string) bool {
 // unfinished is what the dog tells an agent whose jot is not through.
 func unfinished(loose []looseIn) string {
 	var b strings.Builder
-	b.WriteString("[Irie] The jot dog: this task is not through yet.")
+	b.WriteString("[" + brand.Name + "] The jot dog: this task is not through yet.")
 	for _, l := range looseLines(loose) {
 		b.WriteString("\n- " + l)
 	}

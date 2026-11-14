@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -80,7 +81,7 @@ func (p Push) check() error {
 		return errors.New("the subscription's endpoint must be an https URL")
 	}
 	if !allowEndpoint(u) {
-		return fmt.Errorf("%s is not a push service Irie knows", u.Hostname())
+		return fmt.Errorf("%s is not a push service "+brand.Name+" knows", u.Hostname())
 	}
 	ua, err := unb64(p.P256dh)
 	if err != nil {
@@ -196,7 +197,7 @@ func encrypt(plaintext, uaPublic, authSecret []byte, as *ecdh.PrivateKey, salt [
 
 // vapidSubject is the contact a push service may use about the pushes,
 // which Apple wants as a URL or mailto: (RFC 8292 §2.1).
-const vapidSubject = "https://github.com/irie-people/irie"
+const vapidSubject = brand.Repo
 
 // jwtLife is how long a VAPID token is good for; Apple wants a day or
 // less, and a token reused for at least an hour.
