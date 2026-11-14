@@ -453,9 +453,17 @@ type GabrielResult struct {
 	RunQueue   float64          `json:"run_queue"`
 	Pressure   int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
 	Front      string           `json:"front,omitempty"` // the app in front, when he read it
-	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
-	Held       []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
-	Apps       []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
+	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus, the top among them
+	// Top is the tab the user is on, first, with the subtasks it delegated:
+	// it never steps back, and while it works the machine (TopBusy) every
+	// other session but an install steps back for it, the rest of the focus
+	// too (Back).
+	Top     []GabrielSession `json:"top,omitempty"`
+	TopBusy bool             `json:"top_busy,omitempty"`
+	TopCPU  float64          `json:"top_cpu,omitempty"` // the top's share of the CPUs, in percent of one
+	Back    []GabrielSession `json:"back,omitempty"`    // the sessions of the focus that step back for the top now
+	Held    []GabrielSession `json:"held,omitempty"`    // the sessions he holds back, out of the focus
+	Apps    []GabrielApp     `json:"apps,omitempty"`    // the apps outside Irie he slowed
 }
 
 // GabrielSession is a session in Gabriel's report.

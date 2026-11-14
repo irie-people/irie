@@ -189,6 +189,7 @@ type session struct {
 	anonPorts [2]int                 // its forwarder's SOCKS5 and HTTP ports on 127.0.0.1, while anon is set
 	usage     statusline.Usage       // its last status line update
 	memory    int64                  // what its processes take, last measured
+	cpu       float64                // its processes' share of the CPUs, last measured, in percent of one (memory.go)
 	out       *outcome               // its route and how it went, shared with Core.outcomes
 	conv      *conversation          // its conversation, read while clients follow it (conversation.go)
 	note      string                 // what its agent is told at its next tool call, once (freeze.go)
@@ -365,6 +366,12 @@ func Run(o Options) error {
 	c.loadView()
 	for _, x := range c.sessions {
 		x.demoted = true
+	}
+	// Until Gabriel first looks, the session on show is the tab on top: a
+	// promotion a core before this one left must not put it in the
+	// background for the seconds until he does (gabriel.go).
+	if x := c.sessions[c.selected]; x != nil && gabrielOn(c.cfg().Arch.Gabriel) {
+		c.gab.top = map[string]bool{x.id: true}
 	}
 	c.mu.Unlock()
 	c.releaseOutside()
