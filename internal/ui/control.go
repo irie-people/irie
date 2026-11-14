@@ -2,7 +2,7 @@ package ui
 
 // What the sidebar does to a session as a whole, and to its place in the
 // list (DESIGN §4.1, §4.3). f freezes or thaws the selected session and F
-// every session; ! promotes it to the top or puts it back; z parks it last
+// every session; ! boosts it, which moves no row, or puts it back; z parks it last
 // in the Parked group at the end of the list, out of the way, or unparks
 // it, last among the rest, and Z folds Parked; a card or row dragged with
 // the mouse goes where it is dropped, among the others of its group. The
@@ -124,9 +124,9 @@ func (m Model) freezeKey(all bool) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg { return controlledMsg{done: done, err: c.Freeze(id, on, false)} }
 }
 
-// promoteKey is !: it promotes the selected session to the top of its
-// group, which unparks a parked one, or puts a promoted one back among the
-// rest, where it stays. A reason, from :prio, goes with a promotion.
+// promoteKey is !: it boosts the selected session, or puts a boosted one
+// back among the rest. Neither moves its row: the order is the user's. A
+// reason, from :prio, goes with a boost.
 func (m Model) promoteKey(reason string) (tea.Model, tea.Cmd) {
 	c, ok := m.controls()
 	if !ok {
@@ -135,21 +135,15 @@ func (m Model) promoteKey(reason string) (tea.Model, tea.Cmd) {
 	}
 	s, ok := m.selSession()
 	if !ok {
-		m.setStatus("! promotes one of "+brand.Name+"'s sessions; select one", true)
+		m.setStatus("! boosts one of "+brand.Name+"'s sessions; select one", true)
 		return m, nil
 	}
 	i := m.index(s.ID)
-	level, done := 1, "promoted "+s.Name+": it has the machine first; ! puts it back"
+	level, done := 1, "boosted "+s.Name+": it has the machine first; ! puts it back"
 	if s.Priority > 0 {
 		level, done = 0, s.Name+" is back among the rest"
-		m.sessions[i].Priority = 0
-	} else {
-		// The core puts it first in its one order, so it heads its group.
-		s.Priority, s.Parked = 1, false
-		m.sessions = slices.Insert(slices.Delete(m.sessions, i, i+1), 0, s)
-		m.renumber()
-		m.moveTo(m.sessionIndex(s.ID))
 	}
+	m.sessions[i].Priority = level
 	return m, func() tea.Msg { return controlledMsg{done: done, err: c.Priority(s.ID, level, reason)} }
 }
 
@@ -376,7 +370,7 @@ func (m *Model) controlled(msg controlledMsg) {
 	m.setStatus(msg.done, false)
 }
 
-// frozenLine is what the status strip says first about a frozen or promoted
+// frozenLine is what the status strip says first about a frozen or boosted
 // session, if anything.
 func frozenLine(s ipc.Session) string {
 	var out string
@@ -390,7 +384,7 @@ func frozenLine(s ipc.Session) string {
 		if out != "" {
 			out += " · "
 		}
-		out += "promoted: it has the machine first"
+		out += "boosted: it has the machine first"
 	}
 	return out
 }

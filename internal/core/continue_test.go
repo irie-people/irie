@@ -98,10 +98,8 @@ func TestContinueGoesOnAfterATurnFailed(t *testing.T) {
 	c.waitState(s.ID, ipc.StateNeedsYou)
 	c.promptShows(s, "")
 
-	// It needs you, so send refuses; its prompt shows, so continue goes.
-	if err := c.call(ipc.OpSend, ipc.SendArgs{Session: s.ID, Text: continueWord}, nil); err == nil {
-		t.Error("send typed to a session that needs you")
-	}
+	// Its agent waits at its own prompt, which shows, so continue goes, as
+	// a message sent would (TestSendReachesASessionWhoseTurnFailed).
 	if err := c.call(ipc.OpContinue, ipc.ContinueArgs{Session: s.ID}, nil); err != nil {
 		t.Fatal(err)
 	}

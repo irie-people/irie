@@ -1,8 +1,10 @@
 package core
 
 // The list's order (DESIGN §4.1). The core keeps one order, which both
-// sidebars draw: a new session goes last, the user drags one elsewhere
-// (reorder) or promotes it to the top, and a state change never moves one.
+// sidebars draw: a new session goes last, and only the user moves one, by a
+// drag (reorder), a park, a pin or a group of theirs (groups.go). Neither a
+// state change nor a boost, a promotion included, ever moves one: a boost
+// changes only how the machine serves a session (priority.go).
 // The order lives in a user option of the agents' tmux session, as the
 // registry lives in pane options, so a restarted core keeps it. A closed
 // session keeps its place for its reopen.
@@ -266,20 +268,6 @@ func (c *Core) placeNew(id string, a ipc.SpawnArgs) {
 			c.setOrder(slices.Insert(ids, slices.Index(ids, from)+1, id))
 		}
 	}
-}
-
-// toTop puts session id first in the list; one of a group of yours, first
-// in the innermost group around it that holds another card, where the
-// group is (groups.go). The caller holds c.mu.
-func (c *Core) toTop(id string) {
-	if x := c.sessions[id]; x != nil && !x.track.pinned {
-		if first := c.edgeIn(x, false); first != "" {
-			c.gather([]string{id}, "", first)
-			return
-		}
-	}
-	ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
-	c.setOrder(slices.Insert(ids, 0, id))
 }
 
 // toEnd puts session id last in the list. The caller holds c.mu.

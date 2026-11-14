@@ -14,9 +14,9 @@ import (
 	"github.com/irie-people/irie/internal/vpn"
 )
 
-// The privacy plugin's parts, by name.
+// The privacy plugin's parts, by name. The VPN, once its first part, is a
+// plugin of its own (vpn.go), which a company's copy keeps.
 const (
-	VPN     = "vpn"
 	Anon    = "anon"
 	Browser = "browser"
 	Vault   = "vault"
@@ -27,7 +27,7 @@ const (
 const switchSkill = "dead-mans-switch"
 
 // mullvadApp is where the Mullvad VPN app, which brings the mullvad
-// command, comes from.
+// command that anonymous research uses, comes from.
 const mullvadApp = "https://mullvad.net/download"
 
 func init() { built["privacy"] = privacy }
@@ -38,21 +38,11 @@ func privacy() Plugin {
 	return Plugin{
 		Name:    "privacy",
 		Title:   "Privacy",
-		Summary: "Mullvad VPN, anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+		Summary: "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
 		Setup:   ":setup privacy",
 		key:     "plugins.privacy",
 		on:      func(c config.Config) bool { return c.Plugins.Privacy },
 		Parts: []Part{
-			{
-				Name:    VPN,
-				Title:   "Mullvad VPN",
-				Summary: "See the VPN in every client, and connect, disconnect or change its place from a task bar or the menu.",
-				Switch:  "vpn.on", On: true, Off: false,
-				Brings:  []string{":vpn", "Plugins › Mullvad VPN", "the header's mark"},
-				Refused: "Mullvad VPN control is off: `" + brand.Slug + " plugins on privacy vpn`, or Settings › Plugins in the Mac app, turns it on.",
-				own:     func(c config.Config) bool { return c.VPN.On },
-				check:   checkVPN,
-			},
 			{
 				Name:    Anon,
 				Title:   "Anonymous research",
@@ -103,29 +93,11 @@ func privacy() Plugin {
 	}
 }
 
-func checkVPN(e Env, on bool) (bool, string) {
-	if _, err := vpn.Find(expand(e.Config.VPN.Mullvad)); err != nil {
-		return false, "Mullvad VPN isn't installed: its app, from " + mullvadApp + ", brings the mullvad command " + brand.Name + " uses."
-	}
-	if !on {
-		return true, "Mullvad VPN is installed. Turn this on to see it and change it in " + brand.Name + "."
-	}
-	if v := e.Live.VPN; v != nil {
-		if v.Problem != "" {
-			return false, v.Problem
-		}
-		if v.Text != "" {
-			return true, v.Text
-		}
-	}
-	return true, brand.Name + " shows Mullvad VPN in every client and takes the :vpn words."
-}
-
 func checkAnon(e Env, on bool) (bool, string) {
 	d := anon.Dirs{Root: e.Paths.Anon()}
 	_, torErr := anon.FindTor(expand(e.Config.Anon.Tor))
 	searx := anon.SearxInstalled(d)
-	_, vpnErr := vpn.Find(expand(e.Config.VPN.Mullvad))
+	_, vpnErr := vpn.FindMullvad(expand(e.Config.VPN.Mullvad))
 	if !on {
 		return true, "Off. :setup anon installs Tor and SearXNG, and turns it on."
 	}

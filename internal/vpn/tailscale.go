@@ -1,0 +1,190 @@
+package vpn
+
+// Tailscale, through its CLI: `tailscale status --json` for the state,
+// `tailscale up` and `tailscale down`, and an exit node for a place. Only
+// the backend's state and the exit node's name are read: the JSON also
+// lists this machine's and every peer's addresses, and the tailnet's name,
+// which may be a person's email or user name.
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
+)
+
+func init() {
+	kinds = append(kinds, Kind{
+		Name:  "tailscale",
+		Title: "Tailscale",
+		Get:   "https://tailscale.com/download",
+		find: func(s Settings) (string, error) {
+			return findCLI(s.CLI, []string{"tailscale"}, []string{
+				// The Mac app's own binary is the CLI too.
+				"/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+				"/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "/usr/bin/tailscale",
+			})
+		},
+		open: func(bin string, s Settings) (VPN, error) {
+			r := newRunner(bin, "tailscale", s.Timeout)
+			// The Mac app's binary is its CLI only when it knows it is.
+			r.env = []string{"TAILSCALE_BE_CLI=1"}
+			return Tailscale{run: r}, nil
+		},
+	})
+}
+
+// Tailscale is Tailscale, through its CLI.
+type Tailscale struct{ run runner }
+
+// Kind is Tailscale.
+func (t Tailscale) Kind() Kind { k, _ := KindOf("tailscale"); return k }
+
+// tailscaleStatus is what Irie reads of `tailscale status --json`.
+type tailscaleStatus struct {
+	BackendState   string `json:"BackendState"`
+	ExitNodeStatus *struct {
+		ID string `json:"ID"`
+	} `json:"ExitNodeStatus"`
+	Peer map[string]struct {
+		ID       string `json:"ID"`
+		HostName string `json:"HostName"`
+		DNSName  string `json:"DNSName"`
+		ExitNode bool   `json:"ExitNode"`
+	} `json:"Peer"`
+}
+
+// ParseTailscale reads `tailscale status --json`, after any warning before
+// it. While it is up, where it goes is its exit node, if it has one.
+func ParseTailscale(out []byte) (State, bool) {
+	st, ok := parseTailscale(out)
+	if !ok {
+		return State{}, false
+	}
+	s := State{}
+	switch st.BackendState {
+	case "Running":
+		s.State = Connected
+	case "Starting":
+		s.State = Connecting
+	case "Stopped":
+		s.State = Disconnected
+	case "NeedsLogin":
+		s.State, s.Cause = Disconnected, "Tailscale needs you to sign in"
+	case "NeedsMachineAuth":
+		s.State, s.Cause = Disconnected, "this device waits for the tailnet's admin to approve it"
+	case "InUseOtherUser":
+		s.State, s.Cause = Error, "another user of this computer has Tailscale"
+	case "NoState":
+		s.State, s.Cause = Disconnected, "tailscaled is starting"
+	default:
+		s.State, s.Cause = Error, "Tailscale is in a state "+brand.Name+" doesn't know: "+st.BackendState
+	}
+	if s.State == Connected || s.State == Connecting {
+		s.Host = tailscaleWhere(st)
+	}
+	return s, true
+}
+
+func parseTailscale(out []byte) (tailscaleStatus, bool) {
+	var st tailscaleStatus
+	js := jsonPart(string(out))
+	if js == nil || json.Unmarshal(js, &st) != nil || st.BackendState == "" {
+		return tailscaleStatus{}, false
+	}
+	return st, true
+}
+
+func tailscaleWhere(st tailscaleStatus) string {
+	if st.ExitNodeStatus != nil {
+		for _, p := range st.Peer {
+			if p.ExitNode || (st.ExitNodeStatus.ID != "" && p.ID == st.ExitNodeStatus.ID) {
+				// Its MagicDNS name, which :vpn NAME takes, else the
+				// machine's own name for itself.
+				name, _, _ := strings.Cut(p.DNSName, ".")
+				if name == "" {
+					name = p.HostName
+				}
+				if name != "" {
+					return "exit node " + name
+				}
+			}
+		}
+		return "an exit node"
+	}
+	return ""
+}
+
+// Status is the tunnel's state now. tailscale prints its JSON on stdout
+// whatever the state, and its warnings, such as a client and daemon of
+// different versions, and why it can't, on stderr.
+func (t Tailscale) Status() (State, error) {
+	st, err := t.status()
+	if err != nil {
+		return State{}, err
+	}
+	s, _ := ParseTailscale(st)
+	return s, nil
+}
+
+// status is `tailscale status --json`'s JSON, or why there is none.
+func (t Tailscale) status() ([]byte, error) {
+	out, errs, code, err := t.run.output(t.run.timeout, "status", "--json")
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := parseTailscale([]byte(out)); !ok {
+		return nil, t.run.failed([]string{"status", "--json"}, errs, code)
+	}
+	return []byte(out), nil
+}
+
+// Connect brings Tailscale up as it was set up: `tailscale up` with no
+// flags changes nothing else. Signed out, or waiting for its admin, up
+// would wait for ever on a page no one sees, so the person is told
+// instead.
+func (t Tailscale) Connect() error {
+	out, err := t.status()
+	if err != nil {
+		return err
+	}
+	st, _ := parseTailscale(out)
+	switch st.BackendState {
+	case "NeedsLogin":
+		return errors.New("Tailscale needs you to sign in first: open the Tailscale app, or run `tailscale login`")
+	case "NeedsMachineAuth":
+		return errors.New("Tailscale waits for the tailnet's admin to approve this device, in the admin console")
+	}
+	_, err = t.run.long("up")
+	return err
+}
+
+// Disconnect takes Tailscale down; it stays signed in.
+func (t Tailscale) Disconnect() error {
+	_, err := t.run.run("down")
+	return err
+}
+
+// tailscaleNode is an exit node by name or address.
+var tailscaleNode = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]*$`)
+
+// CheckPlace and SetPlace make Tailscale a Placer: its places are its exit
+// nodes, by name or address, and none goes out directly again.
+func (t Tailscale) CheckPlace(where []string) error {
+	if len(where) != 1 || !tailscaleNode.MatchString(where[0]) {
+		return fmt.Errorf("a place for Tailscale is an exit node, by its name or address, such as :vpn office-gw, or :vpn none to go out directly (`tailscale exit-node list` lists them)")
+	}
+	return nil
+}
+
+func (t Tailscale) SetPlace(where []string, _ bool) error {
+	node := where[0]
+	if node == "none" {
+		node = ""
+	}
+	_, err := t.run.run("set", "--exit-node="+node)
+	return err
+}

@@ -48,18 +48,23 @@ struct PluginCommands: Commands {
                             Button(Self.setupTitle(x, words), action: run { store.runWords(words) })
                                 .disabled(!p.on)
                         }
-                        // Mullvad VPN: the same words as :vpn in a task bar
-                        // (docs/proposals/extensions.md §4.1), while the core
-                        // serves the vpn op, and off until vpn.on.
+                        // The VPN: the same words as :vpn in a task bar
+                        // (DESIGN §4.18), while the core serves the vpn op,
+                        // and off until vpn.on. Lockdown and the account's
+                        // time only for a VPN that has them, as Mullvad does.
                         if x.name == "vpn", f.canVPN {
                             if acts || !lines.isEmpty { Divider() }
                             Group {
                                 Button("Connect", action: run { store.runWords(":vpn on") })
                                 Button("Disconnect", action: run { store.runWords(":vpn off") })
-                                Button(f.lockdown ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On", action: run {
-                                    store.runWords(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on")
-                                })
-                                Button("Account Time Left", action: run { store.runWords(":vpn time") })
+                                if f.vpnLockdown {
+                                    Button(f.lockdown ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On", action: run {
+                                        store.runWords(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on")
+                                    })
+                                }
+                                if f.vpnTime {
+                                    Button("Account Time Left", action: run { store.runWords(":vpn time") })
+                                }
                             }
                             .disabled(!f.vpn)
                         }
@@ -88,7 +93,7 @@ struct PluginCommands: Commands {
     }
 
     /// A part's item: its name and its state in words, which a menu can't
-    /// colour, as "Mullvad VPN — ready".
+    /// colour, as "Tailscale — ready".
     static func title(_ x: PluginInfo.Part) -> String {
         "\(x.title) — \(x.stateWords)"
     }
@@ -96,7 +101,9 @@ struct PluginCommands: Commands {
     /// What a part's words do: :setup words set it up, and others start
     /// its own session, as :write starts Writing in Variorum.
     static func setupTitle(_ x: PluginInfo.Part, _ words: String) -> String {
-        words.hasPrefix(":setup") ? "Set Up…" : "Start \(x.title)…"
+        // :mail opens the Mail tab, where an account is added.
+        if words == ":mail" { return "Show Mail" }
+        return words.hasPrefix(":setup") ? "Set Up…" : "Start \(x.title)…"
     }
 
     /// The core's sentence on a part, a line each, so the submenu stays

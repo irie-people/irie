@@ -19,7 +19,8 @@ func TestUpsertsSortAsASnapshotWould(t *testing.T) {
 	for i := range rows {
 		rows[i].Order = i
 	}
-	// The last row is promoted: it goes first and the others move down one.
+	// The last row is dragged to the top: it goes first and the others move
+	// down one.
 	moved := []ipc.Session{rows[3], rows[0], rows[1], rows[2]}
 	for i := range moved {
 		moved[i].Order = i
@@ -43,7 +44,7 @@ func TestUpsertsSortAsASnapshotWould(t *testing.T) {
 		return out
 	}
 	if a, b := ids(byUpserts), ids(bySnapshot); !slices.Equal(a, b) || a[0] != rows[3].ID {
-		t.Errorf("after upserts %v, after a snapshot %v; want the promoted row first in both", a, b)
+		t.Errorf("after upserts %v, after a snapshot %v; want the dragged row first in both", a, b)
 	}
 	if a, b := screen(t, byUpserts), screen(t, bySnapshot); !slices.Equal(a, b) {
 		t.Errorf("the upserts drew\n%v\nthe snapshot\n%v", a, b)

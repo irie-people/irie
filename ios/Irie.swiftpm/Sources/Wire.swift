@@ -144,8 +144,8 @@ struct Header: Decodable, Equatable {
     var version: String?
     var redOnDone: Bool?
     var plan: Plan?
-    /// Mullvad VPN on that machine, while its vpn.on
-    /// (docs/proposals/extensions.md §4).
+    /// The VPN on that machine, whichever its vpn.provider names, while
+    /// its vpn.on (DESIGN §4.18).
     var vpn: VPNMark?
     /// The palette its Mac app draws in, once it has said.
     var theme: ThemeColors?
@@ -163,7 +163,7 @@ struct ThemeColors: Decodable, Equatable {
     var dark: [String: String]?
 }
 
-/// Mullvad VPN as a machine's core sees it: its state and the state in one
+/// The VPN as a machine's core sees it: its state and the state in one
 /// line. Never an address or the account's number.
 struct VPNMark: Decodable, Equatable {
     var state: String?

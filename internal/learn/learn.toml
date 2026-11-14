@@ -32,7 +32,7 @@ text = "Pause holds an agent at its next tool call; freeze stops everything it r
 
 [[tip]]
 id = "irie.promote"
-text = "Promote a session to give it the machine first; the others run in the background until you stop"
+text = "Boost a session to give it the machine first; the others' tools run in the background until you stop"
 
 [[tip]]
 id = "irie.repo"
@@ -226,6 +226,10 @@ term = "agent"
 means = "A program that does a task for you with an AI model: it reads files, runs commands and writes code. Claude Code is one."
 
 [[term]]
+term = "boost"
+means = "Give a session the machine first, where its card is; the other sessions' tools run in the background. Promote is its older name."
+
+[[term]]
 term = "branch"
 means = "A line of commits that grows on its own, so work can go on without touching the main line until it is ready."
 
@@ -296,10 +300,6 @@ means = "An agent's question before a step, such as running a command or editing
 [[term]]
 term = "profile"
 means = "A named way to run an agent: which program, which model, and how hard it thinks. +haiku and +local are profiles."
-
-[[term]]
-term = "promote"
-means = "Put a session first and give it the machine first; the other sessions run in the background."
 
 [[term]]
 term = "prompt"
