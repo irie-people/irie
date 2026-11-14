@@ -17,6 +17,7 @@ type Model struct {
 	Size    int64  `json:"size"`    // its weights, in bytes
 	Tools   bool   `json:"tools"`   // it can call tools
 	Context int    `json:"context"` // the longest context it takes; 0 = 262144
+	Runner  string `json:"runner"`  // the engine /api/show names; "" = llamacpp
 }
 
 // Server answers Ollama's API.
@@ -96,7 +97,11 @@ func (s *Server) Handler() http.Handler {
 		if max == 0 {
 			max = 262144
 		}
-		reply(w, map[string]any{"capabilities": caps, "model_info": map[string]any{
+		runner := m.Runner
+		if runner == "" {
+			runner = "llamacpp"
+		}
+		reply(w, map[string]any{"capabilities": caps, "details": map[string]any{"runner": runner}, "model_info": map[string]any{
 			"general.architecture": "fake", "fake.block_count": 8, "fake.context_length": max,
 			"fake.attention.head_count": 8, "fake.attention.head_count_kv": 2, "fake.embedding_length": 1024,
 		}})

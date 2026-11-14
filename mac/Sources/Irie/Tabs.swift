@@ -225,8 +225,8 @@ extension Store {
 
     // MARK: Move
 
-    /// Moves a session to the top (true) or the bottom of its group, without
-    /// promoting it, as a drag there would.
+    /// Moves a session to the top (true) or the bottom of its group, as a
+    /// drag there would.
     func moveToEdge(_ s: Session, top: Bool) {
         guard let g = drawnGroups.first(where: { g in g.sessions.contains { $0.id == s.id } }),
               let target = top ? g.sessions.first : g.sessions.last, target.id != s.id else { return }

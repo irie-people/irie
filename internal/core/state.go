@@ -53,8 +53,19 @@ type track struct {
 	stopped      time.Time
 	asked        bool
 	trod         []trodSend
-	trodTyped    time.Time
+	trodTyped    time.Time // also a boost's carry-on (boost.go)
 	trodAnswered bool
+
+	// For the boost after API errors (boost.go): how many of its turns in
+	// a row failed on an API error that may pass, and the boost.on of the
+	// boost it has now.
+	apiFails int
+	boost    *event.Event
+
+	// heard is when its agent last reported by a hook: a hook event the
+	// shim kept while the core was down counts only if it came later
+	// (missed.go).
+	heard time.Time
 
 	// What the user did to the session as a whole (freeze.go, priority.go,
 	// order.go).
@@ -71,6 +82,16 @@ type track struct {
 	// session's own, whose titles name it (title.go).
 	transcripts []string
 	own         []string
+	// current is the transcript of the conversation its agent runs now, as
+	// its last SessionStart named it: a new one after /clear, an older one
+	// after /resume. The meter prices waking it by this one alone.
+	current string
+
+	// What woke the session lately, the newest last, from which the
+	// prompt-cache meter tells what woke it for a rebuild (rebuilds.go),
+	// and when its agent last called a tool, for the jot dog (dogDear).
+	wakes    []wakeMark
+	lastTool time.Time
 }
 
 const (
@@ -86,10 +107,17 @@ func (t *track) apply(e event.Event) {
 		// After /clear, Claude Code ends one session and starts the next.
 		t.ended = nil
 	}
+	if at := e.Time(); e.Source == event.SourceHook && at.After(t.heard) {
+		t.heard = at
+	}
 	switch e.Kind {
 	case event.SpawnRequested:
-		// A reopened session starts over, but its tokens still count.
-		*t = track{requested: e.Time(), transcripts: t.transcripts, own: t.own, resumed: e.Str("resume") != ""}
+		// A reopened session starts over, but its tokens still count, and
+		// what woke it lately still tells the meter what woke it.
+		*t = track{requested: e.Time(), transcripts: t.transcripts, own: t.own, current: t.current, resumed: e.Str("resume") != "", wakes: t.wakes}
+		if t.resumed {
+			t.woke(e, ipc.RebuildReopen, "")
+		}
 	case event.SpawnFailed:
 		t.failed = &e
 	case event.PaneExited:
@@ -99,6 +127,9 @@ func (t *track) apply(e event.Event) {
 		t.addTranscript(e.Str("transcript"))
 		if p := e.Str("transcript"); p != "" && !slices.Contains(t.own, p) {
 			t.own = append(t.own, p)
+		}
+		if p := e.Str("transcript"); p != "" {
+			t.current = p
 		}
 		if e.Vendor != nil && e.Vendor.SessionID != "" {
 			t.vendorID = e.Vendor.SessionID
@@ -117,12 +148,18 @@ func (t *track) apply(e event.Event) {
 		// A message the trod bot typed is not the user's prompt: what
 		// the dog and the shift did since the user's last one still counts.
 		shifts := !t.trodTyped.IsZero() && e.Time().Sub(t.trodTyped) < trodTypedFor
+		if !shifts {
+			t.woke(e, ipc.RebuildYou, "")
+		}
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
 		t.waiting, t.waitingOn, t.asked, t.trodTyped, t.unproven = 0, "", false, time.Time{}, ""
 		if !shifts {
 			t.nudged, t.trodAnswered = 0, false
 		}
 	case event.ToolStarted:
+		if e.Agent == event.Main {
+			t.lastTool = e.Time()
+		}
 		t.busy(e)
 		if e.Str("tool") != "AskUserQuestion" {
 			t.trodAnswered = false
@@ -133,6 +170,13 @@ func (t *track) apply(e event.Event) {
 		}
 		t.tools[toolUseID(e)] = e
 	case event.ToolFinished, event.ToolFailed:
+		if e.Agent == event.Main {
+			t.lastTool = e.Time()
+		}
+		// A tool call that ran long enough for a cache to run out.
+		if ms, ok := e.Int("ms"); ok && time.Duration(ms)*time.Millisecond >= longTool {
+			t.wokeAfter(e, time.Duration(ms)*time.Millisecond)
+		}
 		if o := e.Str("tests"); o != "" {
 			t.test = testRun{outcome: o, line: e.Str("test_line"), cmd: t.tools[toolUseID(e)].Str("summary")}
 		}
@@ -150,13 +194,19 @@ func (t *track) apply(e event.Event) {
 			break
 		}
 		t.need(e)
+		// What goes on after it is your answer.
+		t.woke(e, ipc.RebuildYou, "")
 	case event.TurnEnded:
 		t.activity, t.viewed = done, false
 		delete(t.needs, event.Main)
 		t.stopTools(event.Main)
 		if e.Agent == event.Main {
+			t.apiFails = 0
 			t.waiting, _ = e.Int("waiting")
 			t.waitingOn = e.Str("waiting_on")
+			if t.waiting > 0 {
+				t.woke(e, ipc.RebuildBackground, "")
+			}
 			t.stopped, t.asked = e.Time(), e.Data["asks"] == true
 			t.unproven = e.Str("unproven")
 			// Only a helper in the background outlives its session's
@@ -168,11 +218,15 @@ func (t *track) apply(e event.Event) {
 			}
 		}
 	case event.DogNudged:
-		// The turn goes on: the dog sent the agent back to finish.
+		// The turn goes on: the dog sent the agent back to finish. It came
+		// to its stop without an API error all the same.
+		t.woke(e, ipc.RebuildDog, "")
 		t.nudged++
 		t.unproven = ""
+		t.apiFails = 0
 		t.busy(e)
 	case event.TrodSent:
+		t.woke(e, ipc.RebuildTrod, "")
 		t.trod = append(t.trod, trodSend{at: e.Time(), reason: e.Str("reason"), how: e.Str("how")})
 		if len(t.trod) > maxTrodSends {
 			t.trod = t.trod[len(t.trod)-maxTrodSends:]
@@ -184,12 +238,37 @@ func (t *track) apply(e event.Event) {
 			break
 		}
 		// The turn goes on: at its end, or past a question turned away.
+		if e.Str("how") == trodAtStop {
+			t.apiFails = 0
+		}
 		t.busy(e)
 	case event.TurnFailed:
 		t.activity, t.viewed = done, false
 		t.stopTools(event.Main)
 		t.need(e)
 		t.stopped, t.asked = e.Time(), false
+		if e.Str("error") == "rate_limit" {
+			// Claude Code carries the task on itself at the reset.
+			t.woke(e, ipc.RebuildLimit, "")
+		}
+		// The main agent's API error that may pass counts toward a boost,
+		// but not during one; one that only the user can mend, such as a
+		// usage limit or a login, ends the run.
+		switch {
+		case e.Agent != event.Main || t.boost != nil:
+		case passing[e.Str("error")]:
+			t.apiFails++
+		default:
+			t.apiFails = 0
+		}
+	case event.BoostOn:
+		t.boost, t.apiFails = &e, 0
+		t.woke(e, ipc.RebuildBoost, "")
+		// The carry-on Irie types next is no prompt of the user's, as
+		// the trod bot's messages are not.
+		t.trodTyped = e.Time()
+	case event.BoostOff:
+		t.boost, t.apiFails = nil, 0
 	case event.SubagentStarted:
 		// A helper that starts once the turn is over, as an in-process
 		// teammate's does for each message, leaves it over.
@@ -210,9 +289,16 @@ func (t *track) apply(e event.Event) {
 		t.subs = nil
 	case event.UIShown:
 		t.viewed = true
+	case event.UIReopened:
+		t.woke(e, ipc.RebuildReopen, "")
 	case event.FreezeOn:
 		t.frozen, t.held = &e, false
 	case event.FreezeOff:
+		// A thaw wakes a session frozen in the middle of its work, which
+		// carries on; one frozen while it waited still waits.
+		if f := t.frozen; f != nil && f.Data["working"] == true {
+			t.woke(e, ipc.RebuildThaw, e.Str("by"))
+		}
 		t.frozen, t.held = nil, false
 	case event.PrioritySet:
 		t.priority, _ = e.Int("level")
@@ -458,6 +544,9 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	}
 	if s.State == ipc.StateFrozen && t.frozen.Str("by") == trodBy {
 		s.Detail = joinDetail("Frozen by the trod bot: "+t.frozen.Str("reason"), s.Detail)
+	}
+	if t.boost != nil && s.State != ipc.StateExited && s.State != ipc.StateFailed {
+		s.Detail = joinDetail(boostedLine, s.Detail)
 	}
 	if s.State != ipc.StateExited && s.State != ipc.StateFailed {
 		s.Subagents = t.subagents()

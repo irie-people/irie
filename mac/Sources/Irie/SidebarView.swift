@@ -407,6 +407,17 @@ private struct SessionCard: View, Equatable {
                     .foregroundStyle(statusInk)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                // How often it woke cold today and what that cost, once it
+                // matters: the core sends the words only then (DESIGN §6.3).
+                // Two lines, so a narrow card keeps the price.
+                if let words = session.rebuilds?.words {
+                    Text(words)
+                        .font(Theme.font(11))
+                        .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             ZStack(alignment: .topTrailing) {
@@ -419,8 +430,8 @@ private struct SessionCard: View, Equatable {
                 .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
                 .opacity(hovering ? 0 : 1)
                 // Only the card under the pointer has them: 30 hidden sets
-                // of AppKit buttons and menus cost every drawing. A promoted
-                // card has its promote button alone, which stays.
+                // of AppKit buttons and menus cost every drawing. A boosted
+                // card has its boost button alone, which stays.
                 if actionsShown || session.isPromoted {
                     QuickActions(session: session, ink: deep != nil, first: first, last: last,
                                  all: actionsShown, hovering: hovering)
@@ -472,7 +483,7 @@ private struct SessionCard: View, Equatable {
         .accessibilityAction { store.show(session.id, focus: true) }
         .accessibilityActions {
             Button(session.isFrozen ? "Resume" : "Pause") { store.setFrozen(session, !session.isFrozen) }
-            Button(session.isPromoted ? "Stop promoting" : "Promote to the top") { store.setPromoted(session, !session.isPromoted) }
+            Button(session.isPromoted ? "Stop boosting" : "Boost") { store.setPromoted(session, !session.isPromoted) }
             if store.canPark { Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) } }
             if !first { Button("Move up") { store.move(session, by: -1) } }
             if !last { Button("Move down") { store.move(session, by: 1) } }
@@ -603,7 +614,7 @@ private struct SessionCard: View, Equatable {
 
     private var spoken: String {
         var parts = [session.name, Look.label(session)]
-        if session.isPromoted { parts.append("promoted") }
+        if session.isPromoted { parts.append("boosted") }
         if let d = session.detail, !d.isEmpty { parts.append(d) }
         parts.append("started " + Age.spoken(session.created, now: now))
         if let t = session.tokens { parts.append("\(t.total) tokens") }
@@ -973,9 +984,9 @@ private struct ModeSwitch: View {
 
 /// What a hovered card offers. They sit in the card's fixed trailing slot,
 /// three icons 16 points wide and the menu 18, so the name keeps its room;
-/// VoiceOver gets them, and more, as the card's actions. A promoted card
-/// keeps its promote button, filled, where it is once the pointer leaves:
-/// the one mark that it is promoted, beside its age, and a click on it puts
+/// VoiceOver gets them, and more, as the card's actions. A boosted card
+/// keeps its boost button, filled, where it is once the pointer leaves:
+/// the one mark that it is boosted, beside its age, and a click on it puts
 /// the card back among the rest. The others leave their room empty then, so
 /// it never moves, and their buttons and menu cost nothing.
 @MainActor
@@ -988,7 +999,7 @@ private struct QuickActions: View {
     let first: Bool
     let last: Bool
     /// Whether the card has made all of them (SessionCard's actionsShown),
-    /// or only a promoted card's promote button.
+    /// or only a boosted card's boost button.
     let all: Bool
     /// Whether the pointer is on the card: the rest show only then.
     let hovering: Bool
@@ -1240,6 +1251,10 @@ struct DetailsPanel: View {
             line(s.tutor.map { $0 == "teach" ? "Teach mode: it leaves parts for you to write" : "Explain mode: it says why it does what it does" }, color: meta)
             line(s.cwd.map(Age.tilde), mono: true, color: meta)
             line(s.tokens?.breakdown, color: meta)
+            // Its prompt-cache rebuilds, and what waking it costs once its
+            // cache has run out (DESIGN §6.3).
+            line(s.rebuilds?.summary, color: meta)
+            line(s.cold.map { "Its cache has run out: \($0.words)" }, color: meta)
             ForEach((s.subagents ?? []).prefix(3)) { h in
                 line("↳ " + [h.type ?? "Helper", h.detail].compactMap { $0 }.joined(separator: " · "),
                      color: h.needsYou == true ? Theme.needs : meta)

@@ -83,16 +83,17 @@ type Env struct {
 
 // Live is what the core knows that no file says.
 type Live struct {
-	VPN *ipc.VPN // the VPN's mark, while vpn.on
+	VPN  *ipc.VPN          // the VPN's mark, while vpn.on
+	Mail []ipc.MailAccount // the mail accounts, by the core's last look at each
 }
 
 // order is the order plugins show in; a plugin this build leaves out is
 // skipped.
-var order = []string{"vpn", "privacy", "writing", "markets"}
+var order = []string{"vpn", "privacy", "writing", "markets", "mail"}
 
 // built are the plugins in this build, by name. Each plugin's file adds
 // itself, and a build tag leaves a plugin's file out with its parts' code:
-// go build -tags novpn,noprivacy,nowriting,nomarkets builds Irie without
+// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail builds Irie without
 // any of them (DESIGN §4.17).
 var built = map[string]func() Plugin{}
 

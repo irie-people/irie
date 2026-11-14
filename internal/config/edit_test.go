@@ -232,3 +232,61 @@ func TestTreeNamesKeysAsTheFileDoes(t *testing.T) {
 		t.Errorf("profiles.local.local.min_context = %v", got)
 	}
 }
+
+// A mail account comes in as a table of its own and goes out whole, its
+// header too, leaving the other accounts and the rest of the file as they
+// were.
+func TestAMailAccountComesAndGoesWhole(t *testing.T) {
+	out := apply(t, commented,
+		Edit{Key: "mail.accounts.personal.kind", Value: "gmail"},
+		Edit{Key: "mail.accounts.personal.address", Value: "alice@example.com"},
+		Edit{Key: "mail.accounts.proton.kind", Value: "proton"},
+		Edit{Key: "mail.accounts.proton.address", Value: "alice@proton.example"},
+		Edit{Key: "mail.accounts.proton.colour", Value: 2},
+	)
+	c, err := Parse([]byte(out), "config.toml")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if a := c.Mail.Accounts["proton"]; a.Kind != MailProton || a.Address != "alice@proton.example" || a.Colour != 2 {
+		t.Errorf("proton = %+v\n%s", a, out)
+	}
+	out = apply(t, out, Edit{Key: "mail.accounts.personal", Value: nil})
+	if strings.Contains(out, "personal") || !strings.Contains(out, "[mail.accounts.proton]") || !strings.HasPrefix(out, commented) {
+		t.Errorf("after removing personal:\n%s", out)
+	}
+	c, err = Parse([]byte(out), "config.toml")
+	if err != nil || len(c.Mail.Accounts) != 1 {
+		t.Errorf("after removing personal: %v, %+v", err, c.Mail.Accounts)
+	}
+	// The last account goes too, and the file is as it was before any.
+	if out = apply(t, out, Edit{Key: "mail.accounts.proton", Value: nil}); strings.TrimRight(out, "\n") != strings.TrimRight(commented, "\n") {
+		t.Errorf("after removing the last:\n%s", out)
+	}
+}
+
+func TestMailSettingsAreChecked(t *testing.T) {
+	for _, bad := range []string{
+		"[mail.accounts.Personal]\nkind = \"gmail\"\naddress = \"a@example.com\"\n",
+		"[mail.accounts.x]\nkind = \"yahoo\"\naddress = \"a@example.com\"\n",
+		"[mail.accounts.x]\nkind = \"gmail\"\naddress = \"not an address\"\n",
+		"[mail.accounts.x]\nkind = \"imap\"\naddress = \"a@example.com\"\n",
+		"[mail.accounts.x]\nkind = \"imap\"\naddress = \"a@example.com\"\nimap = \"http://x:1\"\nsmtp = \"x:25\"\n",
+		"[mail.accounts.x]\nkind = \"gmail\"\naddress = \"a@example.com\"\ncolour = 7\n",
+		"[mail]\nfetch = 0\n",
+		"[mail]\nfresh = \"1s\"\n",
+	} {
+		if _, err := Parse([]byte(bad), "config.toml"); err == nil {
+			t.Errorf("took:\n%s", bad)
+		}
+	}
+	c, err := Parse([]byte("[mail.accounts.fm]\nkind = \"imap\"\naddress = \"a@example.com\"\nimap = \"imap.example.com:993\"\nsmtp = \"starttls://smtp.example.com:587\"\n"), "config.toml")
+	if err != nil || c.Mail.Fetch != 50 || c.Mail.Fresh != time.Minute || !c.MailOn() {
+		t.Errorf("an imap account: %v, %+v", err, c.Mail)
+	}
+	for s, want := range map[string]bool{"imap.gmail.com:993": true, "127.0.0.1:1143": false, "tls://127.0.0.1:1143": true, "starttls://smtp.gmail.com:465": false} {
+		if _, _, tls, err := MailServer(s); err != nil || tls != want {
+			t.Errorf("MailServer(%q) tls = %v, %v; want %v", s, tls, err, want)
+		}
+	}
+}

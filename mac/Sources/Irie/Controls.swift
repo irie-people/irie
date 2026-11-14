@@ -2,11 +2,11 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-// Pause, Promote, Park and drag to reorder (DESIGN §4.1, §4.3). Pause
+// Pause, Boost, Park and drag to reorder (DESIGN §4.1, §4.3). Pause
 // freezes a session's whole process tree at once, its helpers and everything
-// they started, and Resume continues it. Promote puts a session at the top of
-// the list and gives its process tree the machine first: the other sessions
-// run in macOS's background state. Park puts a session last in the Parked
+// they started, and Resume continues it. Boost gives a session's process
+// tree the machine first, the other sessions in macOS's background state,
+// and moves no card: the order is the user's. Park puts a session last in the Parked
 // group at the end of the list, folded until opened, so it goes out of sight
 // and out of the To verify count; Unpark puts it last among the rest, just
 // above Parked. Either moves the card at once, and a notice offers Undo,
@@ -86,32 +86,26 @@ extension Store {
         }
     }
 
-    /// Promotes a session to the top, which unparks it, or puts it back
-    /// among the rest, where it stays. It shows at once. A card of a group
-    /// of yours goes first in its group, which the core's frames show.
+    /// Boosts a session, or puts it back among the rest. Neither moves its
+    /// card, in a group of yours or not. It shows at once.
     func setPromoted(_ s: Session, _ on: Bool) {
         preview { rows in
             guard let i = rows.firstIndex(where: { $0.id == s.id }) else { return }
             rows[i].priority = on ? 1 : 0
-            if on {
-                if s.groupKey == nil { rows[i].order = (rows.compactMap(\.order).min() ?? 0) - 1 }
-                rows[i].parked = false
-            }
         }
         Task {
             do {
                 _ = try await client.call("priority", PriorityArgs(session: s.id, level: on ? 1 : 0), as: Empty.self)
                 if on {
-                    say("Promoted \(s.name): it has the CPU and disk first.", error: false)
+                    say("Boosted \(s.name): it has the CPU and disk first.", error: false)
                 }
             } catch {
                 preview { rows in
                     if let i = rows.firstIndex(where: { $0.id == s.id }) {
                         rows[i].priority = s.priority
-                        rows[i].parked = s.parked
                     }
                 }
-                say("Couldn’t promote \(s.name): \(error.localizedDescription)", error: true)
+                say("Couldn’t boost \(s.name): \(error.localizedDescription)", error: true)
             }
         }
     }
@@ -292,13 +286,15 @@ struct PauseButton: View {
         Button { store.setFrozen(session, !frozen) } label: {
             Image(systemName: frozen ? "play.fill" : "pause.fill").frame(width: 16, height: 18)
         }
-        .help(frozen ? "Resume: it and everything it started carry on" : "Pause: stop it, its helpers and everything they started, at once")
+        // Once its prompt cache has run out, Resume says what waking it
+        // costs (DESIGN §6.3).
+        .help(frozen ? "Resume: it and everything it started carry on" + (session.cold.map { " · \($0.words)" } ?? "") : "Pause: stop it, its helpers and everything they started, at once")
         .disabled(!frozen && !session.canFreeze)
         .accessibilityLabel(frozen ? "Resume" : "Pause")
     }
 }
 
-/// Promote, or put back, as an icon: on a hovered card, and on a promoted
+/// Boost, or put back, as an icon: on a hovered card, and on a boosted
 /// card all the time, filled, as its one mark of it (SidebarView.swift).
 @MainActor
 struct PromoteButton: View {
@@ -314,8 +310,8 @@ struct PromoteButton: View {
             Image(systemName: on ? "arrow.up.circle.fill" : "arrow.up.circle").frame(width: 16, height: 18)
         }
         .foregroundStyle(ink ? Theme.ink : on ? Theme.accentInk : Theme.muted)
-        .help(on ? "Promoted: it has the CPU and disk first; click to put it back among the rest" : "Promote: put it first, with the CPU and disk first")
-        .accessibilityLabel(on ? "Stop promoting" : "Promote")
+        .help(on ? "Boosted: it has the CPU and disk first; click to put it back among the rest" : "Boost: give it the CPU and disk first, where it is")
+        .accessibilityLabel(on ? "Stop boosting" : "Boost")
     }
 }
 
@@ -351,11 +347,11 @@ struct ControlItems: View {
 
     var body: some View {
         if session.isFrozen {
-            Button("Resume") { store.setFrozen(session, false) }
+            Button(session.cold.map { "Resume · \($0.words)" } ?? "Resume") { store.setFrozen(session, false) }
         } else {
             Button("Pause") { store.setFrozen(session, true) }.disabled(!session.canFreeze)
         }
-        Button(session.isPromoted ? "Stop Promoting" : "Promote") { store.setPromoted(session, !session.isPromoted) }
+        Button(session.isPromoted ? "Stop Boosting" : "Boost") { store.setPromoted(session, !session.isPromoted) }
         if store.canPark {
             Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) }
         }
@@ -419,7 +415,7 @@ struct TrodPrint: View {
     }
 }
 
-/// What the details panel says about a frozen, promoted or parked session,
+/// What the details panel says about a frozen, boosted or parked session,
 /// in short lines with the whole story on hover: plainly what Irie does, and
 /// that memory is not something it can set aside.
 struct ControlLines: View {
@@ -440,8 +436,8 @@ struct ControlLines: View {
             }
         }
         if session.isPromoted {
-            let more = "Promoted: it gets the CPU and disk first, and the other sessions run in the background. macOS gives no way to set memory aside for one process; the background ones are the first it slows."
-            lineText("Promoted: CPU and disk first", more: more)
+            let more = "Boosted: it gets the CPU and disk first, and the other sessions’ tools run in the background, their agents still at full speed. macOS gives no way to set memory aside for one process; the background ones are the first it slows."
+            lineText("Boosted: CPU and disk first", more: more)
             lineText("macOS can’t set memory aside", more: more, color: Theme.muted)
         }
     }

@@ -73,7 +73,7 @@ const (
 	// session idle (DESIGN §5.3). It is an addition to the table of §5.2.
 	UIShown = "ui.shown"
 	// UIReordered records that the user put a session elsewhere in the
-	// list, by dragging it or by promoting it to the top (DESIGN §4.1).
+	// list, by dragging it or moving it up or down (DESIGN §4.1).
 	UIReordered = "ui.reordered"
 	// Outcomes teach the router how accurate each profile is (DESIGN §6.4):
 	// the user's rating of a session, and a task run again on a more
@@ -92,6 +92,17 @@ const (
 	// the question's tool.started and input.needed; or by a message it
 	// typed, whose prompt.submitted follows.
 	TrodSent = "trod.sent"
+	// BoostOn records that Irie boosted a session whose turns failed on an
+	// API error twice in a row (DESIGN §4.3): its whole process tree comes
+	// out of the background until BoostOff, which a turn that ends without
+	// an API error records, or the end of the boost's time.
+	BoostOn  = "boost.on"
+	BoostOff = "boost.off"
+	// CacheRebuilt records a request that wrote most of its conversation's
+	// context into the prompt cache again instead of reading it, from the
+	// session's transcript (DESIGN §6.3): what it wrote again, what that
+	// cost and, when Irie knows, what woke the session.
+	CacheRebuilt = "cache.rebuilt"
 )
 
 var kinds = map[string]bool{}
@@ -102,7 +113,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent,
+		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent, BoostOn, BoostOff, CacheRebuilt,
 	} {
 		kinds[k] = true
 	}

@@ -126,7 +126,9 @@ func TestNormalize(t *testing.T) {
 	check(t, "Stop whose task registry was out of reach", payload("Stop", `"stop_hook_active":false`, `"background_tasks":null`),
 		want{event.TurnEnded, "main", map[string]any{}})
 	check(t, "StopFailure", payload("StopFailure", `"error":"rate_limit"`, `"error_details":"429 Too Many Requests"`),
-		want{event.TurnFailed, "main", map[string]any{"error": "rate_limit"}})
+		want{event.TurnFailed, "main", map[string]any{"error": "rate_limit", "details": "429 Too Many Requests"}})
+	check(t, "StopFailure with its message", payload("StopFailure", `"error":"server_error"`, `"last_assistant_message":"API Error: The response stopped arriving"`),
+		want{event.TurnFailed, "main", map[string]any{"error": "server_error", "message": "API Error: The response stopped arriving"}})
 	check(t, "SubagentStart", payload("SubagentStart", inSub),
 		want{event.SubagentStarted, "sub:a1b2c3", map[string]any{"agent_type": "Explore"}})
 	subTranscript := "/home/alice/transcripts/" + vendorID + "/subagents/agent-a1b2c3.jsonl"
