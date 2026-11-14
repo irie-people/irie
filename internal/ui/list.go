@@ -1,14 +1,15 @@
 package ui
 
 // The list (DESIGN §4.1): Irie's sessions in one list, with your groups in
-// it, or a group per repo, then the Parked group, a group for each paired
-// machine's sessions (§2.8) and the Outside Irie group. Every group but the
-// List view's runs of sessions of no group of yours has a header that
-// folds it. The sessions keep the core's one order, which
-// only the user changes, so a state change never moves one. The arrow keys
-// walk the visible headers and sessions, and the selection and the scroll
-// follow what they are on, not where it is, so what the core sends never
-// moves the list under you.
+// it as a tree, groups inside groups as folders are, or a group per repo,
+// then the Parked group, a group for each paired machine's sessions (§2.8)
+// and the Outside Irie group. Every group has a header that folds it, but
+// for the List view's runs of sessions of no group of yours and a group's
+// sessions that go on after a group inside it. The sessions keep the
+// core's one order, which only the user changes, so a state change never
+// moves one. The arrow keys walk the visible headers and sessions, and the
+// selection and the scroll follow what they are on, not where it is, so
+// what the core sends never moves the list under you.
 
 import (
 	"fmt"
@@ -37,18 +38,57 @@ const (
 )
 
 // group is a heading of the list: the List view's one list, or a run of
-// it between your groups, one of your groups, a repo, Parked, another
-// machine, or Outside Irie.
+// it between your groups, one of your groups, or the run of a group's
+// sessions after a group inside it, a repo, Parked, another machine, or
+// Outside Irie.
 type group struct {
 	key     string
 	title   string
-	count   int // the sessions in it
+	count   int // the sessions in it, those of the groups inside it too
 	needs   int // how many of them need you
 	folded  bool
 	outside bool
-	bare    bool   // drawn without a header: the List view's sessions of no group of yours
+	bare    bool   // drawn without a header: a run of the List view's sessions of no group of yours, or of a group's after a group inside it
 	host    string // the paired machine whose sessions it holds
-	user    string // the group of yours it is
+	user    string // the group of yours it is, or whose sessions it goes on with
+	depth   int    // how many of your groups its sessions are in: 0 outside them
+	up      *group // the header of the group of yours around it; a run's is its own group's
+}
+
+// within reports whether g is the group key names or inside it: a run of a
+// group's sessions is in that group, and a group of yours is in each one
+// around it.
+func (g *group) within(key string) bool {
+	for x := g; x != nil; x = x.up {
+		if x.key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// hidden reports whether a group of yours around g is folded, which hides
+// g, its header too.
+func (g *group) hidden() bool {
+	for x := g.up; x != nil; x = x.up {
+		if x.folded {
+			return true
+		}
+	}
+	return false
+}
+
+// path is the titles of g's header and of the groups of yours around it,
+// the outermost first.
+func (g *group) path() []string {
+	var out []string
+	for x := g; x != nil; x = x.up {
+		if !x.bare {
+			out = append(out, x.title)
+		}
+	}
+	slices.Reverse(out)
+	return out
 }
 
 // item is one entry of the list.
@@ -179,39 +219,30 @@ func tail(p string, n int) string {
 // Pinned, then the List view's one list or a group per repo, then Parked, then a group
 // for each paired machine's sessions, in the order the core lists them, so
 // they stand apart from this machine's. Parked, a machine's session goes
-// into Parked with the rest. In the List view each of your groups is where
-// the first of its sessions is, with the rest of them after it, and the
-// sessions of none between your groups are in runs with no header. Only
-// the user moves a session, by dragging, promoting or parking it, so a
-// state change never does.
+// into Parked with the rest. In the List view the rest is the tree of your
+// groups (tree). A header's count takes in every session in its group,
+// those of the groups inside it too. Only the user moves a session, by
+// dragging, promoting or parking it, so a state change never does.
 func (m Model) groups() ([]*group, [][]int) {
 	var keys, hosts []string
+	var rest []int // the List view's sessions neither pinned, parked nor another machine's
 	members := map[string][]int{}
-	titles := map[string]string{notInARepo: "Not in a repo", listKey: "Sessions", parkedKey: "Parked", pinnedKey: "Pinned"}
-	users := map[string]string{}
-	runs, last := 0, ""
+	titles := map[string]string{notInARepo: "Not in a repo", parkedKey: "Parked", pinnedKey: "Pinned"}
 	for i, s := range m.sessions {
 		k := m.groupOf(s)
-		if k == listKey {
-			// A run of sessions of no group of yours goes on until one of
-			// your groups starts; a session of a group already drawn above
-			// is drawn there, and ends no run.
-			if last != "" && !isRun(last) {
-				runs++
-			}
-			k = runKey(runs)
-		} else if g, ok := m.inGroup(s); ok && k == userKey(g.ID) {
-			titles[k], users[k] = g.Name, g.ID
-		}
-		if _, ok := members[k]; !ok {
-			switch {
-			case k == parkedKey, k == pinnedKey:
-			case s.Host != "" && k == hostKey(s.Host):
+		switch {
+		case k == parkedKey, k == pinnedKey:
+		case s.Host != "" && k == hostKey(s.Host):
+			if _, ok := members[k]; !ok {
 				hosts = append(hosts, k)
 				titles[k] = "On " + s.Host
-			default:
+			}
+		case m.view == byList:
+			rest = append(rest, i)
+			continue
+		default:
+			if _, ok := members[k]; !ok {
 				keys = append(keys, k)
-				last = k
 			}
 		}
 		members[k] = append(members[k], i)
@@ -248,29 +279,116 @@ func (m Model) groups() ([]*group, [][]int) {
 			return 0
 		})
 	}
-	if len(members[pinnedKey]) > 0 {
-		keys = append([]string{pinnedKey}, keys...)
-	}
-	if len(members[parkedKey]) > 0 {
-		keys = append(keys, parkedKey)
-	}
-	keys = append(keys, hosts...)
-	groups := make([]*group, len(keys))
-	order := make([][]int, len(keys))
-	for i, k := range keys {
-		// The one list has no header, so it never folds.
-		bare := isRun(k)
-		g := &group{key: k, title: titles[k], count: len(members[k]), folded: m.folded[k] && !bare, bare: bare, user: users[k]}
+	var groups []*group
+	var order [][]int
+	add := func(k string) {
+		g := &group{key: k, title: titles[k], folded: m.folded[k]}
 		if slices.Contains(hosts, k) {
 			g.host = m.sessions[members[k][0]].Host
 		}
-		for _, s := range members[k] {
-			if needsYou(m.sessions[s]) {
-				g.needs++
+		groups, order = append(groups, g), append(order, members[k])
+	}
+	if len(members[pinnedKey]) > 0 {
+		add(pinnedKey)
+	}
+	if m.view == byList {
+		tree, in := m.tree(rest)
+		groups, order = append(groups, tree...), append(order, in...)
+	}
+	for _, k := range keys {
+		add(k)
+	}
+	if len(members[parkedKey]) > 0 {
+		add(parkedKey)
+	}
+	for _, k := range hosts {
+		add(k)
+	}
+	for i, g := range groups {
+		for _, s := range order[i] {
+			need := needsYou(m.sessions[s])
+			for x := g; x != nil; x = x.up {
+				x.count++
+				x.needs += b2i(need)
 			}
 		}
-		groups[i], order[i] = g, members[k]
 	}
+	return groups, order
+}
+
+// tree is the rest of the List view: rest, the sessions neither pinned,
+// parked nor another machine's, in the core's order, as your groups hold
+// them, groups inside groups as folders are. Each group is where the first
+// session in it is, a session of a group inside it too, under its header,
+// with what it holds after it: its own sessions and the groups inside it,
+// in the order each first comes. A group's sessions that come after a
+// group inside it go on after that group in a run with no header, and the
+// sessions of no group between your groups are in runs with no header. A
+// group the header doesn't list counts as none: a session in one is drawn
+// as of no group, and a group in one at the top of the list.
+func (m Model) tree(rest []int) ([]*group, [][]int) {
+	// What each group holds, by its id, "" for the top of the list: a
+	// session, as an index into m.sessions, or a group inside it, by id.
+	type kid struct {
+		s  int
+		id string
+	}
+	kids := map[string][]kid{}
+	names := map[string]string{} // the groups met so far
+	paths := map[string][]ipc.Group{}
+	for _, i := range rest {
+		in := m.sessions[i].Group
+		path, ok := paths[in]
+		if !ok {
+			path = ipc.GroupPath(m.head.Groups, in)
+			paths[in] = path
+		}
+		parent := ""
+		for _, g := range path {
+			if _, met := names[g.ID]; !met {
+				names[g.ID] = g.Name
+				kids[parent] = append(kids[parent], kid{id: g.ID})
+			}
+			parent = g.ID
+		}
+		kids[parent] = append(kids[parent], kid{s: i})
+	}
+	var groups []*group
+	var order [][]int
+	runs := 0
+	// walk draws what group head holds, the top of the list for nil. at is
+	// the entry its next session goes in: head's own, until a group inside
+	// it comes, and then a new run.
+	var walk func(head *group, at int)
+	walk = func(head *group, at int) {
+		id, depth, more := "", 0, 0
+		if head != nil {
+			id, depth = head.user, head.depth
+		}
+		for _, k := range kids[id] {
+			if k.id != "" {
+				g := &group{key: userKey(k.id), title: names[k.id], folded: m.folded[userKey(k.id)], user: k.id, depth: depth + 1, up: head}
+				groups, order = append(groups, g), append(order, nil)
+				walk(g, len(groups)-1)
+				at = -1
+				continue
+			}
+			if at < 0 {
+				g := &group{title: "Sessions", bare: true}
+				if head == nil {
+					g.key = runKey(runs)
+					runs++
+				} else {
+					more++
+					g.key, g.title, g.user, g.depth, g.up = fmt.Sprintf("%s#%d", head.key, more), head.title, id, depth, head
+				}
+				groups, order = append(groups, g), append(order, nil)
+				at = len(groups) - 1
+			}
+			order[at] = append(order[at], k.s)
+		}
+	}
+	walk(nil, -1)
 	return groups, order
 }
 
@@ -281,12 +399,16 @@ func b2i(b bool) int {
 	return 0
 }
 
-// items is the list as it stands: each group's header, but the one list's,
-// and unless it is folded its sessions, then the Outside Irie group.
+// items is the list as it stands: each group's header, but a run's, and
+// unless it is folded its sessions, then the Outside Irie group. A folded
+// group of yours hides the groups inside it, headers and all.
 func (m Model) items() []item {
 	var out []item
 	groups, order := m.groups()
 	for i, g := range groups {
+		if g.hidden() {
+			continue
+		}
 		if !g.bare {
 			out = append(out, item{kind: itemGroup, key: g.key, group: g})
 		}
@@ -353,7 +475,8 @@ func firstSession(items []item) int {
 	return max(0, slices.IndexFunc(items, func(it item) bool { return it.kind != itemGroup }))
 }
 
-// fold folds or unfolds a group. A selection inside it moves to its header.
+// fold folds or unfolds a group. A selection inside it, in a group inside
+// it too, moves to its header.
 func (m *Model) fold(key string) {
 	folded := make(map[string]bool, len(m.folded)+1)
 	for k, v := range m.folded {
@@ -366,7 +489,7 @@ func (m *Model) fold(key string) {
 	sel := ""
 	if it, ok := m.selected(); ok {
 		sel = it.key
-		if it.group != nil && it.group.key == key && folded[key] {
+		if it.group != nil && it.group.within(key) && folded[key] {
 			sel = key
 		}
 	}
@@ -377,14 +500,39 @@ func (m *Model) fold(key string) {
 	m.clamp()
 }
 
-// unfoldFor unfolds the group a session is in, so it can be shown.
+// unfoldFor unfolds the group a session is in, and every group around it,
+// so it can be shown.
 func (m *Model) unfoldFor(id string) {
 	for _, it := range m.allItems() {
-		if it.kind == itemSession && m.sessions[it.s].ID == id && m.folded[it.group.key] {
-			m.fold(it.group.key)
+		if it.kind == itemSession && m.sessions[it.s].ID == id {
+			for g := it.group; g != nil; g = g.up {
+				if m.folded[g.key] {
+					m.fold(g.key)
+				}
+			}
 			return
 		}
 	}
+}
+
+// shownAt is the entry that shows session id: its own, or while a group it
+// is in is folded, that group's header; -1 for none.
+func (m Model) shownAt(id string) int {
+	items := m.items()
+	if i := keyIndex(items, sessionKey(id)); i >= 0 {
+		return i
+	}
+	for _, it := range m.allItems() {
+		if it.kind == itemSession && m.sessions[it.s].ID == id {
+			// Only the outermost folded group's header shows.
+			for g := it.group; g != nil; g = g.up {
+				if i := keyIndex(items, g.key); i >= 0 && m.folded[g.key] {
+					return i
+				}
+			}
+		}
+	}
+	return -1
 }
 
 // allItems is items with every group unfolded.

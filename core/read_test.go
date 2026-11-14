@@ -34,6 +34,34 @@ func code(err error) string {
 	return ""
 }
 
+// :nest and :ungroup act on a selected group's header, which a client
+// names as Group, or :nest on the group of the selected session.
+func TestGroupWordsTakeASelectedGroup(t *testing.T) {
+	for _, c := range []struct {
+		text, session, group string
+		args                 GroupArgs
+	}{
+		{":nest Work/Irie", "", "g1", GroupArgs{Do: GroupMove, Groups: []string{"g1"}, Into: "Work/Irie"}},
+		{":nest", "", "g1", GroupArgs{Do: GroupMove, Groups: []string{"g1"}}},
+		{":ungroup", "", "g1", GroupArgs{Do: GroupUngroup, Group: "g1"}},
+	} {
+		st, err := Read(InputArgs{Text: c.text, Session: c.session, Group: c.group}, view())
+		if err != nil || st.Op != OpGroup || !reflect.DeepEqual(st.Args, c.args) {
+			t.Errorf("%q on %q: %+v, %v; want %+v", c.text, c.group, st, err, c.args)
+		}
+	}
+	// With no group selected, :nest takes the selected session's group.
+	v := view()
+	v.Sessions[0].Group = "g2"
+	st, err := Read(InputArgs{Text: ":nest Home", Session: v.Sessions[0].ID}, v)
+	if err != nil || !reflect.DeepEqual(st.Args, GroupArgs{Do: GroupMove, Groups: []string{"g2"}, Into: "Home"}) {
+		t.Errorf(":nest Home on a session of g2: %+v, %v", st, err)
+	}
+	if _, err := Read(InputArgs{Text: ":nest Home"}, view()); code(err) != CodeBadArgs {
+		t.Errorf(":nest with nothing selected: %v", err)
+	}
+}
+
 // Each command comes to the op it names, on the session that was selected.
 func TestReadTurnsWordsIntoOps(t *testing.T) {
 	for _, c := range []struct {

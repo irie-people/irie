@@ -221,19 +221,28 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpGroup, GroupArgs{Do: GroupAdd, Name: arg, Sessions: []string{sel.ID}}, sel)
 	case name == "ungroup" && arg == "":
 		// :ungroup takes the selected session one group out: into the
-		// group around its group, or none.
+		// group around its group, or none. With a group's header selected,
+		// it ungroups that group, whose sessions and groups stay where they
+		// are, in the group around it.
+		if sel == nil && in.Group != "" {
+			return step(OpGroup, GroupArgs{Do: GroupUngroup, Group: in.Group}, nil)
+		}
 		if sel == nil || sel.Group == "" {
 			return Step{}, Errorf(CodeBadArgs, ":ungroup takes the selected session, which must be in a group.")
 		}
 		return step(OpGroup, GroupArgs{Do: GroupRemove, Sessions: []string{sel.ID}}, sel)
 	case name == "nest":
-		// :nest NAME puts the selected session's group, with what it
-		// holds, inside the group of that name or path, Work/Irie; :nest
-		// alone puts it back at the top of the list.
-		if sel == nil || sel.Group == "" || sel.Host != "" {
-			return Step{}, Errorf(CodeBadArgs, ":nest takes the group of the selected session, which must be in one.")
+		// :nest NAME puts the selected group, or the selected session's,
+		// with what it holds, inside the group of that name or path,
+		// Work/Irie; :nest alone puts it back at the top of the list.
+		g := in.Group
+		if g == "" && sel != nil && sel.Host == "" {
+			g = sel.Group
 		}
-		return step(OpGroup, GroupArgs{Do: GroupMove, Groups: []string{sel.Group}, Into: arg}, sel)
+		if g == "" {
+			return Step{}, Errorf(CodeBadArgs, ":nest takes the selected group, or the group of the selected session, which must be in one.")
+		}
+		return step(OpGroup, GroupArgs{Do: GroupMove, Groups: []string{g}, Into: arg}, sel)
 	case name == OpFork:
 		// :fork [@AT] [TASK] carries the selected session's context on
 		// from a point of it, its newest turn by default (DESIGN §4.13).
@@ -456,6 +465,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 			} else {
 				r.Text = "Put the group " + GroupTitle(g.Groups, moved, " / ") + ". :undo puts it back."
 			}
+		case a.Do == GroupUngroup:
+			r.Text = "Ungrouped it: what it held stays where it is. :undo groups it again."
 		case a.Do == GroupRemove:
 			r.Text = "Took " + name + " out of its group. :undo puts it back."
 		case len(g.Sessions) == 0:
