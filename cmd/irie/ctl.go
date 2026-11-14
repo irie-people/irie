@@ -53,7 +53,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
   ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
-  ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]
+  ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
                                          Gabriel: whether you are at the computer
                                          and it is busy, what is in your focus,
                                          and the sessions and apps he holds back
@@ -61,7 +61,10 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          (arch.gabriel.on); boost gives your focus
                                          the machine first for a while (an hour,
                                          arch.gabriel.boost) busy or not, and frees
-                                         idle local models; boost off ends it
+                                         idle local models; boost always puts it
+                                         first whenever you are at the computer
+                                         (arch.gabriel.always); boost off ends
+                                         either
   ` + brand.Slug + ` ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]
                                          Raphael (Raffi): what his last look over
                                          your Mac found, with his advice: what runs
