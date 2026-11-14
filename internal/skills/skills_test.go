@@ -218,3 +218,27 @@ func TestPruneKeepsWhatSessionsUse(t *testing.T) {
 		t.Errorf("Prune of a missing root = %v, %v", got, err)
 	}
 }
+
+// TestTheChaosSkillIsOnCall: the chaos monkey comes with every build, and
+// any agent may run it when asked to stress test something, so it is no
+// guide that only the person starts. Its catalogue of faults and its notes
+// on Irie itself come with it, and it points to both.
+func TestTheChaosSkillIsOnCall(t *testing.T) {
+	all := Bundled()
+	i := slices.IndexFunc(all, func(s Skill) bool { return s.Name == "chaos" })
+	if i < 0 {
+		t.Fatal("chaos is not bundled")
+	}
+	s := all[i]
+	if Frontmatter(s.Files["SKILL.md"])["disable-model-invocation"] == "true" {
+		t.Error("chaos: agents can't run it; only a guide is the person's alone")
+	}
+	for _, f := range []string{"reference/faults.md", "reference/irie.md"} {
+		if len(s.Files[f]) == 0 {
+			t.Errorf("chaos: no %s", f)
+		}
+		if !strings.Contains(string(s.Files["SKILL.md"]), "`"+f+"`") {
+			t.Errorf("chaos: SKILL.md never points to %s", f)
+		}
+	}
+}

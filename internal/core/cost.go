@@ -22,6 +22,7 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/skills"
 )
 
 // tabWait bounds what Tab waits for the local server's model list.
@@ -177,6 +178,10 @@ func (c *Core) profileNote(name string, p config.Profile, models []ipc.LocalMode
 		}
 	case p.Harness == "claude-code":
 		add(strings.TrimSpace(strings.TrimPrefix(p.Model, "claude-") + " " + p.Effort))
+		// What a profile that starts on a skill does, such as +chaos.
+		if p.Skill != "" {
+			add("runs /" + skills.Plugin + ":" + p.Skill)
+		}
 		if base := p.Env["ANTHROPIC_BASE_URL"]; base != "" {
 			if u, err := url.Parse(base); err == nil && u.Host != "" {
 				base = u.Host
