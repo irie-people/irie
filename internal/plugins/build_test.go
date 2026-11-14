@@ -17,16 +17,22 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds Irie without its plugins")
 	}
-	goBin := filepath.Join(runtime.GOROOT(), "bin", "go")
+	// The go on PATH, as internal/testutil finds it; else the toolchain
+	// that built this test.
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
+	}
 	tags := "-tags=noprivacy,nowriting"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
-	if out, err := build.CombinedOutput(); err != nil {
+	out, err := build.CombinedOutput()
+	if err != nil {
 		t.Fatalf("go build %s ./...: %v\n%s", tags, err, out)
 	}
 	list := exec.Command(goBin, "list", "-deps", tags, "./cmd/irie")
 	list.Dir = build.Dir
-	out, err := list.Output()
+	out, err = list.Output()
 	if err != nil {
 		t.Fatalf("go list -deps %s: %v", tags, err)
 	}
