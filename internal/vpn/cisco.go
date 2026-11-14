@@ -7,14 +7,11 @@ package vpn
 //
 // The CLI can't connect while Cisco's own app holds the connection, which
 // on a Mac it usually does, nor with single sign-on, which Cisco supports
-// only in its app. Then, on a Mac, Irie opens the app for the person to
-// connect in.
+// only in its app. Then the person connects in the app, and Irie says so;
+// it never opens a window itself (DESIGN §4.11, "Out of sight").
 
 import (
 	"errors"
-	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 )
 
@@ -30,34 +27,15 @@ func init() {
 			return findCLI(s.CLI, nil, []string{"/opt/cisco/secureclient/bin/vpn", "/opt/cisco/anyconnect/bin/vpn"})
 		},
 		open: func(bin string, s Settings) (VPN, error) {
-			return Cisco{run: newRunner(bin, "vpn", s.Timeout), host: s.Server, openApp: openCiscoApp}, nil
+			return Cisco{run: newRunner(bin, "vpn", s.Timeout), host: s.Server}, nil
 		},
 	})
 }
 
-// ciscoApps are where Cisco's Mac app is: Secure Client 5, then AnyConnect
-// 4.
-var ciscoApps = []string{"/Applications/Cisco/Cisco Secure Client.app", "/Applications/Cisco/Cisco AnyConnect Secure Mobility Client.app"}
-
-// openCiscoApp opens Cisco's Mac app, where the person connects, and says
-// whether there was one to open.
-func openCiscoApp() bool {
-	if runtime.GOOS != "darwin" {
-		return false
-	}
-	for _, app := range ciscoApps {
-		if _, err := os.Stat(app); err == nil {
-			return exec.Command("/usr/bin/open", app).Run() == nil
-		}
-	}
-	return false
-}
-
 // Cisco is Cisco Secure Client, through its CLI.
 type Cisco struct {
-	run     runner
-	host    string
-	openApp func() bool
+	run  runner
+	host string
 }
 
 // Kind is Cisco Secure Client.
@@ -114,8 +92,7 @@ func (c Cisco) Status() (State, error) {
 }
 
 // Connect connects to the host through the CLI, with nothing to answer a
-// prompt with. Where the CLI can't, on a Mac the person connects in
-// Cisco's app, which opens.
+// prompt with. Where the CLI can't, the person connects in Cisco's app.
 func (c Cisco) Connect() error {
 	out, code, err := c.run.exec(2*c.run.timeout, "connect", c.host)
 	if err == nil && code == 0 && !strings.Contains(strings.ToLower(out), ">> error:") {
@@ -124,10 +101,7 @@ func (c Cisco) Connect() error {
 	if err == nil {
 		err = c.run.failed([]string{"connect", c.host}, out, code)
 	}
-	if c.openApp != nil && c.openApp() {
-		return errors.New("Cisco Secure Client connects in its own window, open now: its command line can't (" + err.Error() + ")")
-	}
-	return err
+	return errors.New("Cisco Secure Client connects here in its own app: its command line can't while the app holds the connection, nor with single sign-on (" + err.Error() + ")")
 }
 
 // Disconnect disconnects.

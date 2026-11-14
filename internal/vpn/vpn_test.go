@@ -573,18 +573,13 @@ state) printf '`+ciscoState("Unknown", "Connected")+`';;
 connect) printf '  >> contacting host (vpn.example.com) for login information...\n  >> error: Connect capability is unavailable. Another Cisco Secure Client application acquired it.\nVPN>\n';;
 esac
 `)
-	opened := 0
-	c := Cisco{run: newRunner(bin, "vpn", 10*time.Second), host: "vpn.example.com", openApp: func() bool { opened++; return true }}
+	c := Cisco{run: newRunner(bin, "vpn", 10*time.Second), host: "vpn.example.com"}
 	if s, err := c.Status(); err != nil || s != (State{State: Connected, Host: "vpn.example.com"}) {
 		t.Errorf("status %+v, %v", s, err)
 	}
-	// The app holds the connection: the person connects in it, now open.
-	if err := c.Connect(); err == nil || !strings.Contains(err.Error(), "connects in its own window") || !strings.Contains(err.Error(), "Another Cisco Secure Client application") || opened != 1 {
-		t.Errorf("connect: %v, opened %d", err, opened)
-	}
-	c.openApp = func() bool { return false }
-	if err := c.Connect(); err == nil || strings.Contains(err.Error(), "own window") || !strings.Contains(err.Error(), "acquired it") {
-		t.Errorf("connect without the app: %v", err)
+	// The app holds the connection: the person connects in it.
+	if err := c.Connect(); err == nil || !strings.Contains(err.Error(), "connects here in its own app") || !strings.Contains(err.Error(), "acquired it") {
+		t.Errorf("connect: %v", err)
 	}
 	if err := c.Disconnect(); err != nil {
 		t.Error(err)
@@ -594,7 +589,7 @@ esac
 		t.Errorf("ran:\n%s", got)
 	}
 	ok, _ := script(t, "vpn", "printf '  >> state: Connecting\\n  >> state: Connected\\n  >> notice: Connected to vpn.example.com.\\nVPN>\\n'\n")
-	c = Cisco{run: newRunner(ok, "vpn", 10*time.Second), host: "vpn.example.com", openApp: func() bool { t.Error("opened the app after a connect that worked"); return true }}
+	c = Cisco{run: newRunner(ok, "vpn", 10*time.Second), host: "vpn.example.com"}
 	if err := c.Connect(); err != nil {
 		t.Errorf("a connect that works: %v", err)
 	}
