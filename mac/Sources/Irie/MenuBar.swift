@@ -223,7 +223,8 @@ struct IrieCommands: Commands {
             Section("Right Sidebar") {
                 Button(f.sideTab == nil ? "Show Right Sidebar" : "Hide Right Sidebar", action: run { store.toggleSide() })
                     .keyboardShortcut("b", modifiers: [.command, .option])
-                ForEach(SideTab.built) { t in
+                // Mail's tab, while the mail plugin is on (Mail.swift).
+                ForEach(SideTab.built.filter { $0 != .mail || f.plugins.contains { $0.name == "mail" && $0.on } }) { t in
                     Toggle(t.title, isOn: Binding(get: { f.sideTab == t }, set: { _ in
                         MainActor.assumeIsolated { t == .helpers ? store.toggleHelpers() : store.toggleSideTab(t) }
                     }))

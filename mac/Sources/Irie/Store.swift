@@ -104,6 +104,9 @@ final class Store {
     /// The core serves the vpn op: its build has the privacy plugin
     /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
     private(set) var canVPN = false
+    /// The core serves the mail op: its build has the mail plugin
+    /// (docs/proposals/mail.md), whose Mail tab and window show only then.
+    private(set) var canMail = false
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
     var plugins: [PluginInfo] = []
@@ -264,11 +267,15 @@ final class Store {
     /// What the menu bar shows, which changes far less often than the
     /// store does (MenuBar.swift).
     let menu = MenuState()
+    /// The mail plugin's accounts and list, which the Mail tab and window
+    /// share (Mail.swift).
+    let mail: MailModel
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
+        mail = MailModel(client: client)
         settings.changed = { [weak self] in
             self?.loadChoices()
             self?.loadPluginsSoon()
@@ -336,6 +343,7 @@ final class Store {
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
+                canMail = hello.features.contains("mail")
                 loadPluginsSoon()
                 keepPlugins()
                 if hello.features.contains("theme") { sendTheme(Palette.chosen) }
@@ -615,6 +623,8 @@ final class Store {
         canBoost = true
         canBoostAlways = true
         canArch = true
+        canMail = true
+        mail.loadFixture()
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
                       about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
@@ -1007,7 +1017,12 @@ final class Store {
                 // :markets: the Markets window says how the map stands.
                 NotificationCenter.default.post(name: .irieMarkets, object: nil)
             case "answered":
-                say(r.text, error: false, seconds: 8)
+                // :mail opens the Mail tab, which says more than words can.
+                if r.op == "mail", mailShown {
+                    openSide(.mail)
+                } else {
+                    say(r.text, error: false, seconds: 8)
+                }
             case "added":
                 // It went to the agent of the task just before, which gets
                 // it once the delay is over; until then New task takes it
