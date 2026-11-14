@@ -371,6 +371,7 @@ func TestParseNordVPN(t *testing.T) {
 		nordStatus:               {State: Connected, City: "Stockholm", Country: "Sweden", Host: "se123"},
 		"Status: Connecting\n":   {State: Connecting},
 		"Status: Disconnected\n": {State: Disconnected},
+
 		"Status: Paused\nPause time left: 4m 30s\n": {State: Disconnected, Cause: "paused, 4m 30s left"},
 		// NordVPN 5's lines, with the technology it no longer prints.
 		"\r-\r  \r\r-\r  \rStatus: Connected\nHostname: us4321.nordvpn.com\nCountry: United States\nCity: New York\nCurrent technology: NORDLYNX\n": {State: Connected, City: "New York", Country: "United States", Host: "us4321"},
