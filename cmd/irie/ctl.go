@@ -22,7 +22,7 @@ import (
 const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
 
   ` + brand.Slug + ` ctl list [--json]                 the sessions and their states
-  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
+  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
                                          starting ` + brand.Name + ` if needed. @REPO runs it in
                                          a new worktree of that repo, @REPO! in the
@@ -31,7 +31,11 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          reads the task from stdin. --wait waits
                                          until the agent is ready, and fails if it
                                          is not; --force spawns a local profile even
-                                         when its context or memory falls short
+                                         when its context or memory falls short;
+                                         --group puts it in the group of that name
+                                         or path, Work/Sidebar, made when none has it
+                                         (else it goes in the group of the session
+                                         this runs in)
   ` + brand.Slug + ` ctl input [--json] [--session SESSION] TEXT...
                                          type to ` + brand.Name + ` as into a task bar, and
                                          print what it says: a task with its @
@@ -53,7 +57,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
   ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
-  ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]
+  ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
                                          Gabriel: whether you are at the computer
                                          and it is busy, what is in your focus,
                                          and the sessions and apps he holds back
@@ -61,7 +65,10 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          (arch.gabriel.on); boost gives your focus
                                          the machine first for a while (an hour,
                                          arch.gabriel.boost) busy or not, and frees
-                                         idle local models; boost off ends it
+                                         idle local models; boost always puts it
+                                         first whenever you are at the computer
+                                         (arch.gabriel.always); boost off ends
+                                         either
   ` + brand.Slug + ` ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]
                                          Raphael (Raffi): what his last look over
                                          your Mac found, with his advice: what runs
@@ -104,6 +111,9 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          conversation and its raw terminal
   ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, as
                                          a person would; TEXT - reads stdin
+  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on: type
+                                         "continue" and Enter, only while its
+                                         prompt shows with nothing typed in it
   ` + brand.Slug + ` ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -131,6 +141,13 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          is still running at the timeout
   ` + brand.Slug + ` ctl rate SESSION good|bad         rate a session's work; the router learns
                                          each profile's accuracy from it
+  ` + brand.Slug + ` ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK...
+                                         run a task on several sessions of one
+                                         profile (default the first local one),
+                                         here or on HOST; a judge then scores
+                                         each, makes the one result and rewrites
+                                         the profile's playbook. With no task,
+                                         list the benches
   ` + brand.Slug + ` ctl perf [--json]                 the core's own counters since it started:
                                          each request and how long it took, waits
                                          on its lock, frames sent, ticks, and its
@@ -174,6 +191,8 @@ func ctl(args []string) error {
 		return ctlConversation(args[1:])
 	case "send":
 		return ctlSend(args[1:])
+	case "continue":
+		return ctlContinue(args[1:])
 	case "flip":
 		return ctlFlip(args[1:])
 	case "watch":
@@ -188,6 +207,8 @@ func ctl(args []string) error {
 		return ctlRoute(args[1:])
 	case "delegate":
 		return ctlDelegate(args[1:])
+	case "bench":
+		return ctlBench(args[1:])
 	case "rate":
 		return ctlRate(args[1:])
 	case "perf":
@@ -202,6 +223,12 @@ func ctl(args []string) error {
 		return ctlPark(args[1:], args[0] == "park")
 	case "pin", "unpin":
 		return ctlPin(args[1:], args[0] == "pin")
+	case "group":
+		return ctlGroup(args[1:])
+	case "ungroup":
+		return ctlUngroup(args[1:])
+	case "nest":
+		return ctlNest(args[1:])
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":
@@ -479,6 +506,7 @@ func ctlSpawn(args []string) error {
 	name := fs.String("name", "", "name the session")
 	wait := fs.Bool("wait", false, "wait until the agent is ready, and fail if it is not")
 	force := fs.Bool("force", false, "spawn a local profile even when its context or memory falls short")
+	group := fs.String("group", "", "put the session in the group of this name, made when none has it")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -498,7 +526,7 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...")
 	}
 	if *cwd != "" && a.Repo != "" {
 		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
@@ -519,7 +547,7 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.Task, a.Cwd, a.Name, a.Force = task, dir, *name, *force
+	a.Task, a.Cwd, a.Name, a.Force, a.Group = task, dir, *name, *force, strings.TrimSpace(*group)
 	// An agent's spawn goes beside its own session when ui.new_tabs is
 	// next.
 	a.After = os.Getenv(brand.Env("SESSION"))
@@ -713,6 +741,17 @@ func ctlSend(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+}
+
+func ctlContinue(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: " + brand.Slug + " ctl continue SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: args[0]}, nil)
 }
 
 // matchClosed are the closed sessions whose name or id holds every word of

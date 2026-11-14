@@ -1,14 +1,19 @@
 import AppKit
 import SwiftUI
 
-/// Starts the app, or with `--snapshot DIR` draws its window offscreen from
-/// fixture sessions and exits (Snapshot.swift), or with `--record OUT.mp4
-/// --reel FILE` films its window while a reel plays (Recording.swift).
+/// Starts the app, or with `--snapshot DIR` draws its window out of sight
+/// from fixture sessions and exits (Snapshot.swift), or with `--record
+/// OUT.mp4 --reel FILE` films its window while a reel plays
+/// (Recording.swift), or with `--away-helper` keeps a command's windows off
+/// the desktops the user can see, for `irie away` (Away.swift).
 @main
 enum Launch {
     static func main() {
         Preview.boot()
         let args = CommandLine.arguments
+        if args.contains("--away-helper") {
+            MainActor.assumeIsolated { Away.run(args) }
+        }
         if let i = args.firstIndex(of: "--snapshot") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { Snapshot.run(into: dir) }
@@ -61,6 +66,7 @@ struct IrieApp: App {
             LearnCommands(store: store)
             IrieCommands(store: store, menu: store.menu)
             PluginCommands(store: store, menu: store.menu)
+            MarketsCommands(menu: store.menu)
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
@@ -75,6 +81,15 @@ struct IrieApp: App {
                 .environment(store)
         }
         .defaultSize(ThemeMaker.size)
+        // Window › Markets (⇧⌘M) and :markets: the markets plugin's map
+        // (Markets.swift). Its item shows only while the plugin is on, so
+        // the one SwiftUI would add for the window goes.
+        Window("Markets", id: MarketsWindow.id) {
+            MarketsWindow()
+                .environment(store)
+        }
+        .defaultSize(width: 1280, height: 820)
+        .commandsRemoved()
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
@@ -90,6 +105,8 @@ struct IrieApp: App {
 final class KeyRouter {
     private var monitor: Any?
     private var middle: Any?
+    /// A double ↓ on an agent's empty prompt (ContinueKey.swift).
+    private let continueKey = ContinueKey()
     /// Irie's own window, where the sessions are (WindowReader).
     weak var window: NSWindow?
 
@@ -110,6 +127,10 @@ final class KeyRouter {
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             let irie = MainActor.assumeIsolated { event.window != nil && event.window === self.window }
+            // First, so a ↓ it holds back goes ahead of any other key.
+            if irie, MainActor.assumeIsolated({ self.continueKey.route(event, store: store) }) == nil {
+                return nil
+            }
             if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
@@ -123,6 +144,19 @@ final class KeyRouter {
                 }
                 return nil
             }
+            // ⌘1–9 shows that card. Go › Sessions lists only the cards
+            // there are, so this takes the key past the last one too,
+            // which the terminal would otherwise get.
+            if irie, mods == .command, let c = event.charactersIgnoringModifiers, let n = Int(c), (1...9).contains(n) {
+                MainActor.assumeIsolated { store.showRow(n) }
+                return nil
+            }
+            // ⇧⌘H shows the selected session's helpers, as View › Helpers
+            // (⌥⌘3) does.
+            if irie, mods == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "h" {
+                MainActor.assumeIsolated { store.toggleHelpers() }
+                return nil
+            }
             if mods == .control, event.charactersIgnoringModifiers == "]" {
                 MainActor.assumeIsolated { store.toggleFocus() }
                 return nil
@@ -130,7 +164,7 @@ final class KeyRouter {
             // In Irie's window ⌘W closes the selected session and ⇧⌘W the
             // window, even while the terminal has the keyboard. In any other
             // window, such as Settings or About, either closes that window:
-            // the menu's ⌘W is Close Session.
+            // the menu's ⌘W closes a session (MenuBar.swift).
             if event.charactersIgnoringModifiers?.lowercased() == "w", mods == .command || mods == [.command, .shift],
                let window = event.window {
                 MainActor.assumeIsolated {
@@ -151,12 +185,17 @@ final class KeyRouter {
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
 /// it quits with its window. `--background`, which `tools/live.sh` and the
 /// freeze dog pass when they open the app again, leaves the focus where it
-/// is. The freeze dog watches the app from the moment it has launched.
+/// is and puts the window back on the desktop it was on; `--away`, which
+/// hot.sh passes its preview, puts it on a desktop the user cannot see
+/// (WindowPlace, Desktops.swift). The freeze dog watches the app from the
+/// moment it has launched.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
         AppearanceChoice.apply()
-        if !CommandLine.arguments.contains("--background") {
+        // Before the window server first shows the window.
+        WindowPlace.shared.start()
+        if !WindowPlace.background && !WindowPlace.away {
             NSApp.activate(ignoringOtherApps: true)
         }
         FreezeDog.start(socketPath: CorePaths.socket())
@@ -173,6 +212,7 @@ extension Notification.Name {
 @MainActor
 struct ContentView: View {
     @Environment(Store.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @State private var keys = KeyRouter()
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
@@ -214,15 +254,18 @@ struct ContentView: View {
             // A drag of the sidebar's edge or the window's resizes the
             // terminal once, as it ends (ResizeHold.swift).
             ResizeHold.shared.watch(window)
+            // The desktop it opens on and keeps (Desktops.swift).
+            WindowPlace.shared.adopt(window)
             // A preview takes over the window of the build before (Preview.swift).
             PreviewState.shared.adopt(window, store: store)
         })
         .onAppear {
             keys.install(store)
-            WindowCloseItem.install()
             LookBook.shared.start(store)
         }
         .onChange(of: theme) { store.sendTheme(theme) }
+        // :markets in a task bar opens the Markets window (Markets.swift).
+        .onReceive(NotificationCenter.default.publisher(for: .irieMarkets)) { _ in openWindow(id: MarketsWindow.id) }
     }
 }
 

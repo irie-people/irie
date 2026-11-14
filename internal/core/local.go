@@ -162,9 +162,24 @@ func (c *Core) ollama(start bool) (localmodel.Ollama, bool, error) {
 	return o, true, c.startRuntime(o)
 }
 
+// runnerCaps bound what llama.cpp's llama-server keeps beside a model and
+// its context cache. It runs every model of Irie's own servers: Ollama 0.40
+// starts one for each model it loads. By default it keeps up to 8 GiB of
+// earlier prompts in memory (--cache-ram) and 32 checkpoints of a hybrid
+// model's state per slot (--ctx-checkpoints), so on an 18 GiB Mac a Qwen3.5
+// 4B's runner grew from 4.2 to 10.8 GB over ten Claude Code tasks in a row;
+// with these caps it stayed at 5.2 GB (DESIGN §6.3). They go in the
+// environment, which a build without them ignores, and a flag of the same
+// setting in local.llama_args wins over them.
+var runnerCaps = map[string]string{
+	"LLAMA_ARG_CACHE_RAM":       "512",
+	"LLAMA_ARG_CTX_CHECKPOINTS": "8",
+}
+
 // runtimeEnv is the environment of Irie's own server: its address,
-// context, cache type and slots, then local.env. One slot and one model at
-// a time keep its memory to one model and one context cache.
+// context, cache type and slots, its runners' caps, then local.env. One
+// slot and one model at a time keep its memory to one model and one context
+// cache.
 func (c *Core) runtimeEnv() []string {
 	l := c.cfg().Local
 	env := map[string]string{
@@ -178,6 +193,7 @@ func (c *Core) runtimeEnv() []string {
 		// A quantised cache needs flash attention.
 		env["OLLAMA_FLASH_ATTENTION"] = "1"
 	}
+	maps.Copy(env, runnerCaps)
 	maps.Copy(env, l.Env)
 	out := make([]string, 0, len(env))
 	for _, k := range slices.Sorted(maps.Keys(env)) {

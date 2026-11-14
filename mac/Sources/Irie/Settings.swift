@@ -228,6 +228,8 @@ struct CoreConfig: Decodable, Equatable {
     struct Route: Decodable, Equatable {
         var profiles: [String]
         var minAccuracy: Double
+        /// A local model's floor; nil from a core that has none.
+        var localMinAccuracy: Double?
         var failover: Bool
         var delegate: Bool
         var accuracy: [String: [String: Double]]
@@ -235,6 +237,7 @@ struct CoreConfig: Decodable, Equatable {
         enum CodingKeys: String, CodingKey {
             case profiles, failover, delegate, accuracy, cost
             case minAccuracy = "min_accuracy"
+            case localMinAccuracy = "local_min_accuracy"
         }
     }
 
@@ -820,8 +823,8 @@ private struct AppearanceSettings: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Arrange Layouts…") { make(.layouts(saving: false)) }
-                    Button("Save the Window’s Layout…") { make(.layouts(saving: true)) }
+                    Button("Edit Layouts…") { make(.layouts(saving: false)) }
+                    Button("Save Layout…") { make(.layouts(saving: true)) }
                 }
             } header: {
                 Text("Layouts")
@@ -850,8 +853,8 @@ private struct AppearanceSettings: View {
                 Text("Window")
             } footer: {
                 footnote((TerminalEngine.built.count > 1
-                    ? "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
-                    : "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
+                    ? "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
+                    : "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
                     + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
             }
             Section {
@@ -1066,6 +1069,8 @@ private struct RouteSection: View {
     let config: CoreConfig
     /// The floor while its slider is dragged; sent when it is let go.
     @State private var floor: Double?
+    /// The same for local models.
+    @State private var localFloor: Double?
 
     var body: some View {
         let c = config
@@ -1085,10 +1090,25 @@ private struct RouteSection: View {
                         .frame(width: 40, alignment: .trailing)
                 }
             }
+            if let local = c.route.localMinAccuracy {
+                LabeledContent("Floor for local models") {
+                    HStack {
+                        Slider(value: Binding(get: { localFloor ?? local }, set: { localFloor = $0 }), in: 0.3...1) { editing in
+                            guard !editing, let f = localFloor else { return }
+                            model.binding(local, "route.local_min_accuracy") { $0.route.localMinAccuracy = $1 }.wrappedValue = (f * 100).rounded() / 100
+                            localFloor = nil
+                        }
+                        .frame(width: 200)
+                        Text("\(Int(((localFloor ?? local) * 100).rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+            }
         } header: {
             Text("Auto")
         } footer: {
-            footnote("Auto runs each task on the agent with the lowest cost per success among those at least this accurate for the task’s size. At 90% medium work stays on the strongest.")
+            footnote("Auto runs each task on the agent with the lowest cost per success among those at least this accurate for the task’s size. At 90% medium work stays on the strongest. A local model costs no tokens, so it can have a lower floor and take more of the work.")
         }
         Section {
             ForEach(routable, id: \.self) { name in

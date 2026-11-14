@@ -39,6 +39,13 @@
 //	                  agent's process group, and a shell in a group of its
 //	                  own with a child of its own, as a tool's background
 //	                  job may be; the log records their pids
+//	box               while idle, draw Claude Code's prompt before each
+//	                  line, between two rules, with the cursor after its
+//	                  mark, so what is typed shows in it as the terminal
+//	                  echoes it
+//	box:away          the same, with the cursor under it instead, so what
+//	                  is typed never shows in the prompt, as when something
+//	                  else takes the keys
 //
 // Any other task runs the script "prompt". After the script the agent idles:
 // each line typed is a prompt and a turn, and EOF, Ctrl-D at the start of a
@@ -77,6 +84,10 @@
 //	                       is used, in percent, resetting in three days
 //	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
 //	                       the --settings file
+//	IRIE_FAKE_SCRIPT       the script a task that is not one runs, in place
+//	                       of "prompt"
+//	IRIE_FAKE_SAY          a file whose text a plain stop step's turn ends
+//	                       with, as its last message, when the file exists
 package main
 
 import (
@@ -493,6 +504,7 @@ type agent struct {
 	mu     sync.Mutex // one hook at a time
 	tools  int
 	writes int
+	box    string // the box step: idle, it draws Claude Code's prompt; "in" or "away", where the cursor waits
 }
 
 func newAgent(o options, version string) (*agent, error) {
@@ -593,6 +605,12 @@ func (a *agent) run() int {
 	steps, err := parseScript(first)
 	if err != nil {
 		steps = []step{{kind: "prompt"}}
+		if script := os.Getenv("IRIE_FAKE_SCRIPT"); script != "" {
+			if steps, err = parseScript(script); err != nil {
+				fmt.Fprintln(os.Stderr, "fakeagent: IRIE_FAKE_SCRIPT:", err)
+				return 2
+			}
+		}
 	}
 	if strings.TrimSpace(a.o.task) == "" {
 		steps = nil
@@ -606,6 +624,9 @@ func (a *agent) run() int {
 	}
 	fmt.Println("idle")
 	for {
+		if a.box != "" {
+			drawPrompt(a.box == "away")
+		}
 		line, ok := a.line()
 		if !ok {
 			a.end("other")
@@ -643,6 +664,8 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		a.fire("UserPromptSubmit", "", map[string]any{"prompt": a.o.task})
 	case "tool":
 		a.tool(s.arg, sub)
+	case "test":
+		a.test(s.arg == "pass", sub)
 	case "permission":
 		a.permission(sub)
 	case "stop":
@@ -682,8 +705,25 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		a.status(s.arg)
 	case "kids":
 		a.kids()
+	case "box":
+		a.box = "in"
+		if s.arg != "" {
+			a.box = s.arg
+		}
 	}
 	return 0, false
+}
+
+// drawPrompt draws Claude Code's prompt as it stands empty: a rule, its
+// mark, a rule and a hint, then puts the cursor after the mark, where the
+// terminal echoes what is typed, or away under it all.
+func drawPrompt(away bool) {
+	rule := strings.Repeat("─", 40)
+	cursor := "\x1b[2A\r\x1b[2C"
+	if away {
+		cursor = "\n"
+	}
+	fmt.Print(rule + "\n❯ \n" + rule + "\n  ? for shortcuts" + cursor)
 }
 
 // kids starts the children of the kids step.
@@ -769,12 +809,16 @@ func loadStatusLine(value string) string {
 // reference describes: the agent goes on, then stops again with
 // stop_hook_active set, at most 8 times in a row. how is "bg" for a turn
 // that leaves a shell task running in the background, "ask" for one whose
-// last message asks the user something, and "turn" for a teach-mode request
-// that the user write a part at a TODO(human), which ends in a full stop.
+// last message asks the user something, "turn" for a teach-mode request
+// that the user write a part at a TODO(human), which ends in a full stop,
+// and "passes" for one that says the tests pass and keeps saying so.
 func (a *agent) stop(how string) {
 	fmt.Println("✓ done")
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
 	msg, tasks := "Done: "+first, []any{}
+	if b, err := os.ReadFile(os.Getenv("IRIE_FAKE_SAY")); how == "" && err == nil {
+		msg = string(b)
+	}
 	switch how {
 	case "bg":
 		msg = "The install runs in the background; I'll report when it lands."
@@ -783,6 +827,8 @@ func (a *agent) stop(how string) {
 		msg = "It works. Shall I land it?"
 	case "turn":
 		msg = "Learn by doing\n\nThe notes file has its headings.\n\n**Your Task**: In notes.md, write the summary line under TODO(human).\n\nWeigh how short it can be and still be clear."
+	case "passes":
+		msg = "Done. All tests pass."
 	}
 	for i := range 8 {
 		out := a.fire("Stop", "", map[string]any{"stop_hook_active": i > 0, "last_assistant_message": msg, "background_tasks": tasks, "session_crons": []any{}})
@@ -792,7 +838,7 @@ func (a *agent) stop(how string) {
 		}
 		a.record(map[string]any{"t": "continued", "context": more})
 		fmt.Println("↻ " + strings.SplitN(more, "\n", 2)[0])
-		if how != "asks" {
+		if how != "asks" && how != "passes" {
 			msg = "I stopped on purpose."
 		}
 	}
@@ -901,6 +947,32 @@ func rawLines() {
 	cmd := exec.Command("stty", "-icanon", "min", "1", "time", "0")
 	cmd.Stdin = os.Stdin
 	cmd.Run()
+}
+
+// test runs the tests with a Bash call, as Claude Code reports one: a run
+// that passes ends with PostToolUse and its output in tool_response, and
+// one that fails, by its exit code, with PostToolUseFailure and an error
+// whose first line is "Exit code 1", then the output.
+func (a *agent) test(pass bool, sub *subagent) {
+	id := a.toolID()
+	input := map[string]any{"command": "go test ./...", "description": "Run the tests"}
+	fmt.Println("● Bash: go test ./...")
+	pre := a.fire("PreToolUse", "Bash", sub.fields(map[string]any{"tool_name": "Bash", "tool_input": input, "tool_use_id": id}))
+	if reason := denied(pre); reason != "" {
+		a.record(map[string]any{"t": "denied", "tool": "Bash", "reason": reason})
+		return
+	}
+	if pass {
+		a.fire("PostToolUse", "Bash", sub.fields(map[string]any{
+			"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": 12,
+			"tool_response": map[string]any{"stdout": "ok  \texample.com/fake\t0.012s\n", "stderr": "", "interrupted": false, "isImage": false},
+		}))
+		return
+	}
+	a.fire("PostToolUseFailure", "Bash", sub.fields(map[string]any{
+		"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": 12, "is_interrupt": false,
+		"error": "Exit code 1\n--- FAIL: TestFake (0.00s)\n    fake_test.go:9: got 1, want 2\nFAIL\nFAIL\texample.com/fake\t0.012s\nFAIL",
+	}))
 }
 
 func (a *agent) tool(name string, sub *subagent) {

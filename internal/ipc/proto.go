@@ -98,6 +98,10 @@ const (
 	// OpPlugins lists Irie's plugins, each with its parts and how far each
 	// is set up on this computer (DESIGN §4.17).
 	OpPlugins = "plugins"
+	// OpMarkets is the markets plugin's map (DESIGN §4.17): where the page
+	// in markets.folder is, for :markets and the Mac app's Markets window,
+	// or with a task, a session that works on the map in its folder.
+	OpMarkets = "markets"
 	// OpLearn gives what the Help menu shows: the learning resources, the
 	// user's own links and the glossary (docs/proposals/learning.md).
 	OpLearn = "learn"
@@ -108,6 +112,11 @@ const FeatureTutor = "spawn-tutor"
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
+
+// FeatureBoostAlways is in hello's features when the core boosts the
+// user's focus always with arch.gabriel.always, and its header says how
+// Gabriel boosts (Header.Boost).
+const FeatureBoostAlways = "boost-always"
 
 // FeatureWatch is in hello's features when subscribe takes ViewWatch: the
 // freeze dog watches the window that asks (DESIGN §2.4).
@@ -210,6 +219,7 @@ type Session struct {
 	Parked   bool       `json:"parked,omitempty"`   // in the Parked group at the end of the list
 	Pinned   bool       `json:"pinned,omitempty"`   // in the Pinned group at the top of the list
 	Space    string     `json:"space,omitempty"`    // the space it is in (spaces.go); "" for the first
+	Group    string     `json:"group,omitempty"`    // the group it is in (groups.go); "" for none
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
@@ -436,15 +446,24 @@ type GabrielResult struct {
 	// BoostUntil is when the boost ends, while one is on: the user's focus
 	// gets the machine first then whether it is busy or not.
 	BoostUntil *time.Time       `json:"boost_until,omitempty"`
+	Always     bool             `json:"always,omitempty"`    // arch.gabriel.always: a boost that never ends, while the user is at the computer
 	LowPower   bool             `json:"low_power,omitempty"` // macOS's Low Power Mode is on, which slows the whole machine
 	Freed      []string         `json:"freed,omitempty"`     // the idle local models the boost unloaded
 	CPUs       int              `json:"cpus"`
 	RunQueue   float64          `json:"run_queue"`
 	Pressure   int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
 	Front      string           `json:"front,omitempty"` // the app in front, when he read it
-	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
-	Held       []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
-	Apps       []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
+	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus, the top among them
+	// Top is the tab the user is on, first, with the subtasks it delegated:
+	// it never steps back, and while it works the machine (TopBusy) every
+	// other session but an install steps back for it, the rest of the focus
+	// too (Back).
+	Top     []GabrielSession `json:"top,omitempty"`
+	TopBusy bool             `json:"top_busy,omitempty"`
+	TopCPU  float64          `json:"top_cpu,omitempty"` // the top's share of the CPUs, in percent of one
+	Back    []GabrielSession `json:"back,omitempty"`    // the sessions of the focus that step back for the top now
+	Held    []GabrielSession `json:"held,omitempty"`    // the sessions he holds back, out of the focus
+	Apps    []GabrielApp     `json:"apps,omitempty"`    // the apps outside Irie he slowed
 }
 
 // GabrielSession is a session in Gabriel's report.
@@ -506,7 +525,15 @@ type Loose struct {
 	Land   string       `json:"land,omitempty"`   // that branch, when its repo has one (dog.land)
 	Where  []LoosePlace `json:"where"`            // the worktrees that hold them
 	Nudged int          `json:"nudged,omitempty"` // how often the dog sent it back to finish since your last prompt
+	// Unproven is what its last message says that its own record
+	// contradicts: UnprovenTests, that the tests pass while its latest
+	// test run failed.
+	Unproven string `json:"unproven,omitempty"`
 }
+
+// UnprovenTests is a jot whose last message says the tests pass while its
+// latest test run failed (Loose.Unproven).
+const UnprovenTests = "tests"
 
 // Words says what is left in plain words, such as "3 files not committed ·
 // 2 commits not in live".
@@ -517,6 +544,9 @@ func (l Loose) Words() string {
 	}
 	if l.Ahead > 0 {
 		parts = append(parts, counted(l.Ahead, "commit")+" not in "+l.Land)
+	}
+	if l.Unproven == UnprovenTests {
+		parts = append(parts, "says the tests pass, but the last run failed")
 	}
 	return strings.Join(parts, " · ")
 }
@@ -629,12 +659,25 @@ type Header struct {
 	Trod *TrodShift `json:"trod,omitempty"`
 	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
 	VPN *VPN `json:"vpn,omitempty"`
+	// Boost is Gabriel's boost while one is on (DESIGN §4.11), however it
+	// was started, so every client can say so.
+	Boost *Boost `json:"boost,omitempty"`
 	// Spaces are the spaces, in their order, the first first (spaces.go).
 	Spaces []Space `json:"spaces,omitempty"`
+	// Groups are your groups (groups.go), in the order they were made: a
+	// sidebar draws each where the first of its sessions is.
+	Groups []Group `json:"groups,omitempty"`
 	// Theme is the palette the Mac app draws in, once it has said (the
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
 	Theme *Theme `json:"theme,omitempty"`
+}
+
+// Boost is Gabriel's boost as the header gives it: the user's focus gets
+// the machine first, busy or not.
+type Boost struct {
+	Until  *time.Time `json:"until,omitempty"`  // when a boost started by hand ends
+	Always bool       `json:"always,omitempty"` // arch.gabriel.always: whenever the user is at the computer
 }
 
 // Load is how busy the machine is, which a core also advertises to the
@@ -873,6 +916,12 @@ type SpawnArgs struct {
 	// the session that started it (After, Parent or Continues), else the
 	// first.
 	Space string `json:"space,omitempty"`
+	// Group is the group the new session goes in: a group's id, or a name,
+	// which makes a group of that name when none has it. "" puts it in the
+	// group of the session whose agent started it (After, Parent or
+	// Continues), or, for a jot with ui.new_tabs = "next", the group of the
+	// session it goes beside; else in none.
+	Group string `json:"group,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that
@@ -1095,6 +1144,26 @@ const (
 	PartPluginOff = "plugin_off" // its plugin is off, so it is too
 	PartHeld      = "held"       // not in this build: the detail says why
 )
+
+// MarketsArgs ask the markets op where the market map is (DESIGN §4.17).
+// With Task, it starts that task in the map's folder instead: the core sets
+// its Repo to markets.folder and InPlace, so each rebuild of the page shows
+// in the Markets window.
+type MarketsArgs struct {
+	Task *SpawnArgs `json:"task,omitempty"`
+}
+
+// MarketsResult is the markets op's answer.
+type MarketsResult struct {
+	// State is the map's: ready, needs (Text says what it lacks) or
+	// plugin_off.
+	State   string    `json:"state"`
+	Folder  string    `json:"folder,omitempty"`  // markets.folder, ~ expanded
+	Page    string    `json:"page,omitempty"`    // the map: index.html in Folder
+	Changed time.Time `json:"changed,omitzero"`  // when the page last changed, while it is there
+	Text    string    `json:"text"`              // the answer in words, as :markets says it
+	Session *Session  `json:"session,omitempty"` // the session a task started
+}
 
 // AnonArgs ask the anon op for the state of anonymous research (DESIGN
 // §4.16); with Up, it first starts Irie's own Tor and SearXNG as the

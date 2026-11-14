@@ -36,6 +36,7 @@ type Config struct {
 	Profiles map[string]Profile `toml:"profiles"`
 	Local    Local              `toml:"local"`
 	Route    Route              `toml:"route"`
+	Bench    Bench              `toml:"bench"`
 	Repos    Repos              `toml:"repos"`
 	Worktree Worktree           `toml:"worktree"`
 	Tmux     Tmux               `toml:"tmux"`
@@ -56,6 +57,7 @@ type Config struct {
 	VPN      VPN                `toml:"vpn"`
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
+	Markets  Markets            `toml:"markets"`
 	Plugins  Plugins            `toml:"plugins"`
 }
 
@@ -70,7 +72,22 @@ type Plugins struct {
 	// Writing is writing in Variorum: :write and the skill its sessions run
 	// (docs/proposals/writers.md).
 	Writing bool `toml:"writing"`
+	// Markets is a map of your own market research: the page in
+	// markets.folder in the Mac app's Markets window, and :markets.
+	Markets bool `toml:"markets"`
 }
+
+// Markets is the markets plugin's map (DESIGN §4.17).
+type Markets struct {
+	// Folder holds the map: its index.html is the page the Markets window
+	// shows, and :markets TASK starts a session there. "" = none chosen
+	// yet.
+	Folder string `toml:"folder"`
+}
+
+// MarketsOn says whether the markets plugin runs: plugins.markets, with
+// the plugin built in.
+func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 
 // VPNOn says whether Mullvad VPN control runs: vpn.on, with the privacy
 // plugin built in and on.
@@ -217,18 +234,20 @@ type Mikael struct {
 // first: the session you are looking at or messaged lately, and the app in
 // front. Every other session's processes, and your other heavy apps, step
 // back into macOS's background state until it is calm again or you walk
-// away. macOS lets a process slow another of its user's down and undo it,
-// but not raise one, and gives no way to set memory aside, so the others
-// step back instead.
+// away. The tab you are on comes first of all: while it works the machine,
+// the rest of your focus steps back for it too. macOS lets a process slow
+// another of its user's down and undo it, but not raise one, and gives no
+// way to set memory aside, so the others step back instead.
 type Gabriel struct {
 	On      bool          `toml:"on"`      // give your focus the machine first while it is busy
 	Outside bool          `toml:"outside"` // slow your heavy apps outside Irie too, not only Irie's sessions
 	Away    time.Duration `toml:"away"`    // with no keyboard or mouse for this long you are away, and nothing is held back; 0 = always at the computer
 	Word    time.Duration `toml:"word"`    // a session you message or start stays in your focus this long
-	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
+	Heavy   float64       `toml:"heavy"`   // heavy from this share of one CPU, in percent: an app outside Irie, which is slowed, or the tab you are on, for which the rest of your focus steps back
 	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
 	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
-	Guard   bool          `toml:"guard"`   // turn away an agent's call that would bring an app or a page to the front while you look elsewhere
+	Always  bool          `toml:"always"`  // boost whenever you are at the computer, busy or not: the rest runs slower even when the machine has room to spare
+	Guard   bool          `toml:"guard"`   // turn away an agent's call that would put a window in front of you or on the desktop you are on
 }
 
 // Raphael is the arch agent who heals. He restarts a part of Irie that
@@ -285,16 +304,20 @@ const Auto = "auto"
 
 // Route is how auto picks a profile, and what goes with it (DESIGN §6.4).
 type Route struct {
-	Profiles     []string                      `toml:"profiles"`      // what auto chooses between
-	MinAccuracy  float64                       `toml:"min_accuracy"`  // a profile below this for a task's class is never chosen
-	PriorWeight  int                           `toml:"prior_weight"`  // how many outcomes the starting accuracies count as
-	Pressure     float64                       `toml:"pressure"`      // from this much of the plan's five hours used, in percent, cloud tokens cost more
-	Failover     bool                          `toml:"failover"`      // carry on a task on a cheaper profile when its session hits a usage limit
-	Delegate     bool                          `toml:"delegate"`      // tell Claude Code sessions they can hand subtasks to cheaper profiles
-	DelegateMode string                        `toml:"delegate_mode"` // the permission mode of a delegated session
-	Accuracy     map[string]map[string]float64 `toml:"accuracy"`      // starting guesses: first-time success, by profile and class
-	Cost         map[string]float64            `toml:"cost"`          // starting guesses: a task's cost relative to one on +claude
-	Words        route.Words                   `toml:"words"`         // what makes a task small, medium or hard
+	Profiles    []string `toml:"profiles"`     // what auto chooses between
+	MinAccuracy float64  `toml:"min_accuracy"` // a profile below this for a task's class is never chosen
+	// LocalMinAccuracy is min_accuracy for a local model's profile: a local
+	// model costs no tokens, so a miss costs only a retry, and its floor can
+	// sit lower to hand it more of the work.
+	LocalMinAccuracy float64                       `toml:"local_min_accuracy"`
+	PriorWeight      int                           `toml:"prior_weight"`  // how many outcomes the starting accuracies count as
+	Pressure         float64                       `toml:"pressure"`      // from this much of the plan's five hours used, in percent, cloud tokens cost more
+	Failover         bool                          `toml:"failover"`      // carry on a task on a cheaper profile when its session hits a usage limit
+	Delegate         bool                          `toml:"delegate"`      // tell Claude Code sessions they can hand subtasks to cheaper profiles
+	DelegateMode     string                        `toml:"delegate_mode"` // the permission mode of a delegated session
+	Accuracy         map[string]map[string]float64 `toml:"accuracy"`      // starting guesses: first-time success, by profile and class
+	Cost             map[string]float64            `toml:"cost"`          // starting guesses: a task's cost relative to one on +claude
+	Words            route.Words                   `toml:"words"`         // what makes a task small, medium or hard
 }
 
 // Prior returns where a profile starts, for the router.
@@ -320,6 +343,21 @@ func (r Route) Priors() map[string]route.Prior {
 	}
 	return out
 }
+
+// Bench is how a bench runs (DESIGN §6.6): several sessions of one
+// profile do the same task, each on its own, then a judge scores each,
+// makes the one result from the best of them, and rewrites the profile's
+// playbook, the rules its agents read at the start of every task.
+type Bench struct {
+	Runs    int           `toml:"runs"`    // how many sessions do the task
+	Judge   string        `toml:"judge"`   // the profile that judges them and makes the result
+	Pass    int           `toml:"pass"`    // a run scored this or more, of 100, is rated good
+	Timeout time.Duration `toml:"timeout"` // a run still at work after this is stopped and judged as it stands
+	Rules   int           `toml:"rules"`   // the most rules a playbook keeps
+}
+
+// MaxBenchRuns is the most sessions one bench runs.
+const MaxBenchRuns = 8
 
 // Permission modes Claude Code takes (--permission-mode).
 var PermissionModes = []string{"acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"}
@@ -435,6 +473,10 @@ type LocalModel struct {
 	Runtime    string `toml:"runtime"`     // ollama | llama-server
 	MinContext int    `toml:"min_context"` // a spawn is refused below this context, in tokens
 	Enforce    bool   `toml:"enforce"`     // false: spawn anyway, with a warning, when the context or memory is short
+	// Peer is a peer whose llama-server runs the model (DESIGN §6.5): the
+	// agent runs here and reaches it through an ssh tunnel, so this
+	// machine holds none of the model. "" = this machine's own server.
+	Peer string `toml:"peer"`
 }
 
 // DefaultMinContext is Ollama's guidance for coding agents: 64k tokens.
@@ -460,8 +502,12 @@ type Local struct {
 	LlamaServer string   `toml:"llama_server"` // the llama-server binary, any llama.cpp build; "" = PATH, then Homebrew's
 	LlamaPort   int      `toml:"llama_port"`   // it listens on 127.0.0.1 at this port
 	LlamaArgs   []string `toml:"llama_args"`   // more arguments for it, such as a build's own
+	LlamaSlots  int      `toml:"llama_slots"`  // how many sessions it serves at once, each with local.context of its own
 	Models      string   `toml:"models"`       // a folder of GGUF files it may run besides Ollama's models; "" = $XDG_DATA_HOME/irie/models
 }
+
+// MaxLlamaSlots is the most sessions Irie's llama-server serves at once.
+const MaxLlamaSlots = 16
 
 // KV cache types Ollama offers (DESIGN §6.3).
 var KVCaches = []string{"f16", "q8_0", "q4_0"}
@@ -748,8 +794,9 @@ func Default() Config {
 				Arch:           "mikael",
 			},
 		},
-		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}},
+		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
+		Bench: Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30},
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
 			Base:         "",
@@ -787,19 +834,21 @@ func Default() Config {
 
 // DefaultRoute is where routing starts (DESIGN §6.4). The accuracies are
 // guesses, which the user's own outcomes replace; with the floor at 85%
-// they keep hard work on claude. The costs follow Anthropic's list prices:
-// Sonnet 5.5 costs half as much as Opus 5.5 per token and spends fewer
-// thinking tokens at medium effort than at max, and Haiku 5.5 costs a
-// fortieth. A local model costs no tokens.
+// they keep hard work on claude, and a local model, at 60%, takes small
+// work. The costs follow Anthropic's list prices: Sonnet 5.5 costs half as
+// much as Opus 5.5 per token and spends fewer thinking tokens at medium
+// effort than at max, and Haiku 5.5 costs a fortieth. A local model costs
+// no tokens.
 func DefaultRoute() Route {
 	return Route{
-		Profiles:     []string{"local", "haiku", "sonnet", "claude"},
-		MinAccuracy:  0.85,
-		PriorWeight:  10,
-		Pressure:     80,
-		Failover:     true,
-		Delegate:     true,
-		DelegateMode: "acceptEdits",
+		Profiles:         []string{"local", "haiku", "sonnet", "claude"},
+		MinAccuracy:      0.85,
+		LocalMinAccuracy: 0.6,
+		PriorWeight:      10,
+		Pressure:         80,
+		Failover:         true,
+		Delegate:         true,
+		DelegateMode:     "acceptEdits",
 		Accuracy: map[string]map[string]float64{
 			"local":  {route.Small: 0.85, route.Medium: 0.40, route.Hard: 0.05},
 			"haiku":  {route.Small: 0.92, route.Medium: 0.70, route.Hard: 0.30},
@@ -872,6 +921,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Profiles map[string]toml.Primitive `toml:"profiles"`
 		Local    *Local                    `toml:"local"`
 		Route    *Route                    `toml:"route"`
+		Bench    *Bench                    `toml:"bench"`
 		Repos    *Repos                    `toml:"repos"`
 		Worktree *Worktree                 `toml:"worktree"`
 		Tmux     *Tmux                     `toml:"tmux"`
@@ -892,8 +942,9 @@ func Parse(data []byte, path string) (Config, error) {
 		VPN      *VPN                      `toml:"vpn"`
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
+		Markets  *Markets                  `toml:"markets"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1108,6 +1159,25 @@ func (c Config) Validate() error {
 	if r.MinAccuracy <= 0 || r.MinAccuracy > 1 {
 		bad("route.min_accuracy = %v: must be above 0 and at most 1", r.MinAccuracy)
 	}
+	if r.LocalMinAccuracy <= 0 || r.LocalMinAccuracy > 1 {
+		bad("route.local_min_accuracy = %v: must be above 0 and at most 1", r.LocalMinAccuracy)
+	}
+	b := c.Bench
+	if b.Runs < 1 || b.Runs > MaxBenchRuns {
+		bad("bench.runs = %d: must be from 1 to %d", b.Runs, MaxBenchRuns)
+	}
+	if _, ok := c.Profiles[b.Judge]; !ok {
+		bad("bench.judge = %q: must be a profile", b.Judge)
+	}
+	if b.Pass < 1 || b.Pass > 100 {
+		bad("bench.pass = %d: must be from 1 to 100", b.Pass)
+	}
+	if b.Timeout < time.Minute {
+		bad("bench.timeout = %v: must be at least a minute", b.Timeout)
+	}
+	if b.Rules < 1 || b.Rules > 200 {
+		bad("bench.rules = %d: must be from 1 to 200", b.Rules)
+	}
 	if r.PriorWeight < 0 {
 		bad("route.prior_weight = %d: must not be negative", r.PriorWeight)
 	}
@@ -1182,7 +1252,11 @@ func (c Config) Validate() error {
 				bad("profiles.%s.local: only the claude-code harness runs on a local model yet", name)
 			case l.MinContext < 1:
 				bad("profiles.%s.local.min_context = %d: must be positive", name, l.MinContext)
-			case (c.Local.URL == "" || l.Runtime == "llama-server") && l.MinContext > c.Local.Context:
+			case l.Peer != "" && l.Runtime != "llama-server":
+				bad("profiles.%s.local.peer: only a llama-server profile runs on a peer's server", name)
+			case l.Peer != "" && strings.ContainsAny(l.Peer, " /\t"):
+				bad("profiles.%s.local.peer = %q: must be a peer's name, as "+brand.Slug+" peer list shows it", name, l.Peer)
+			case l.Peer == "" && (c.Local.URL == "" || l.Runtime == "llama-server") && l.MinContext > c.Local.Context:
 				bad("profiles.%s.local.min_context = %d is above local.context = %d, so "+brand.Name+"'s own server could never run it", name, l.MinContext, c.Local.Context)
 			}
 		}
@@ -1221,12 +1295,15 @@ func (c Config) Validate() error {
 	for _, a := range c.Local.LlamaArgs {
 		for _, own := range []string{"-m", "--model", "--host", "--port", "-c", "--ctx-size", "-np", "--parallel", "--alias", "-a"} {
 			if a == own || strings.HasPrefix(a, own+"=") {
-				bad("local.llama_args: %s is "+brand.Name+"'s to set; use local.models, local.llama_port or local.context", own)
+				bad("local.llama_args: %s is "+brand.Name+"'s to set; use local.models, local.llama_port, local.context or local.llama_slots", own)
 			}
 		}
 	}
 	if c.Local.Context < 2048 {
 		bad("local.context = %d: must be at least 2048 tokens", c.Local.Context)
+	}
+	if c.Local.LlamaSlots < 1 || c.Local.LlamaSlots > MaxLlamaSlots {
+		bad("local.llama_slots = %d: must be from 1 to %d", c.Local.LlamaSlots, MaxLlamaSlots)
 	}
 	if !slices.Contains(KVCaches, c.Local.KVCache) {
 		bad("local.kv_cache = %q: must be one of %s", c.Local.KVCache, strings.Join(KVCaches, ", "))
@@ -1391,6 +1468,9 @@ func (c Config) Validate() error {
 	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
 		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
 	}
+	if f := c.Markets.Folder; f != "" && !pathLike(f) {
+		bad("markets.folder = %q: must be an absolute or ~ path to the folder that holds your map, or empty for none", f)
+	}
 	br := c.Browser
 	if !slices.Contains(BrowserConnectors, br.Connector) {
 		bad("browser.connector = %q: must be on or off", br.Connector)
@@ -1438,7 +1518,7 @@ func (c Config) Validate() error {
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
-	if PrivacyBuilt && WritingBuilt {
+	if PrivacyBuilt && WritingBuilt && MarketsBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1460,6 +1540,10 @@ func (c Config) Write(w io.Writer) error {
 	}
 	if !WritingBuilt {
 		delete(plugins, "writing")
+	}
+	if !MarketsBuilt {
+		delete(m, "markets")
+		delete(plugins, "markets")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

@@ -10,8 +10,9 @@
 #
 # A preview is a client of the running core, as Irie.app is: its sessions
 # are the real ones, and what you do in it happens to them. Its terminals
-# never size a window, so it never resizes an agent. It opens behind the app
-# in front and never takes the focus, though it keeps the focus it has.
+# never size a window, so it never resizes an agent. It opens on a desktop
+# you are not looking at, never the one you work on, and never takes the
+# focus, though it keeps the focus it has (DESIGN §4.11, "Out of sight").
 #
 #   tools/hot.sh                 open the preview, and build it again on each change
 #   tools/hot.sh --snapshot DIR  also draw the fixture into DIR after each build
@@ -89,11 +90,12 @@ name=${name#"$BRAND_SLUG"/}
 id=$BRAND_BUNDLE_ID.preview.$(printf %s "$root" | shasum | cut -c1-10)
 
 # A first preview takes the app's choices (palette, view, folds, sidebar
-# width, font size) but not its window's frame, so it opens beside the app
-# rather than over it. From then on it keeps its own, build after build.
+# width, font size) but not its window's frame or its desktop, so it never
+# opens over the app. From then on it keeps its own, build after build.
 if [ -n "$show" ] && ! defaults read "$id" >/dev/null 2>&1 &&
 	defaults export "$BRAND_BUNDLE_ID" "$dir/seed.plist" 2>/dev/null; then
 	plutil -remove 'NSWindow Frame main' "$dir/seed.plist" 2>/dev/null || true
+	plutil -remove windowDesktop "$dir/seed.plist" 2>/dev/null || true
 	defaults import "$id" "$dir/seed.plist"
 	rm -f "$dir/seed.plist"
 fi
@@ -179,14 +181,14 @@ shot() {
 	fi
 }
 
-# launch SLOT opens the build in SLOT as a preview, behind the app in front,
-# and waits for it to take over from the build before.
+# launch SLOT opens the build in SLOT as a preview, on a desktop out of
+# sight (--away), and waits for it to take over from the build before.
 launch() {
 	log=$dir/$1.log
 	: >"$log"
 	touch "$dir/launched"
 	/usr/bin/open -n -g -F --stdout "$log" --stderr "$log" "$(app "$1")" --args \
-		--background --preview "$name" --hot "$dir" --hot-pid $$ ${cur:+--replace "$cur"}
+		--background --away --preview "$name" --hot "$dir" --hot-pid $$ ${cur:+--replace "$cur"}
 	new= n=0
 	while [ -z "$new" ] && [ $n -lt 100 ]; do
 		new=$(pids "$1" | head -1)
