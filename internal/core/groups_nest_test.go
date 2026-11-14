@@ -291,3 +291,30 @@ func TestAWholeGroupSentToAnotherSpaceComesOutOfItsGroup(t *testing.T) {
 		t.Errorf("after undo, a = space %q, group %q", row.Space, row.Group)
 	}
 }
+
+func TestADropInItsOwnGroupMovesACardThereAndARenameRelabelsTheHistory(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("a", "b", "c")
+	sub := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "P/H", Sessions: []string{id["b"], id["c"]}}).Group
+	p := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "P", Sessions: []string{id["a"]}}).Group
+	if got := names(c.list()); !slices.Equal(got, []string{"b", "c", "a"}) {
+		t.Fatalf("order = %v", got)
+	}
+	// a, in P already, dropped on H's top edge goes just before H.
+	c.group(ipc.GroupArgs{Do: ipc.GroupMove, Into: p, Before: id["b"], Sessions: []string{id["a"]}})
+	if got := names(c.list()); !slices.Equal(got, []string{"a", "b", "c"}) {
+		t.Errorf("after the drop, order = %v", got)
+	}
+	if u := c.step(dirUndo); u.Label != `reorder "a"` {
+		t.Errorf("undo label %q", u.Label)
+	}
+	if got := names(c.list()); !slices.Equal(got, []string{"b", "c", "a"}) {
+		t.Errorf("after undo, order = %v", got)
+	}
+	// A group's step names it as it is named now.
+	c.group(ipc.GroupArgs{Do: ipc.GroupMove, Groups: []string{sub}})
+	c.group(ipc.GroupArgs{Do: ipc.GroupRename, Group: sub, Name: "Renamed"})
+	if h := c.history(); labels(h.Undo)[len(h.Undo)-1] != `move "Renamed" to the top` {
+		t.Errorf("history %v", labels(h.Undo))
+	}
+}

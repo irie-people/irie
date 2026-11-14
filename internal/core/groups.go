@@ -747,7 +747,7 @@ type groupStep struct {
 func stepIDs(steps []groupStep) []string {
 	var out []string
 	for _, s := range steps {
-		if s.kind != actNest {
+		if s.kind == actGroup || s.kind == actUngroup {
 			out = append(out, s.id)
 		}
 	}
@@ -798,20 +798,33 @@ func (c *Core) moveData(from, to string) map[string]any {
 // already stay where they are. It returns each step that undo needs. The
 // caller holds c.mu.
 func (c *Core) join(xs []*session, id, after, before string) []groupStep {
-	var moving []*session
+	var moving, staying []*session
 	for _, x := range xs {
 		if c.groupOf(x) != id || !inRest(x) {
 			moving = append(moving, x)
+		} else if before != "" || after != "" {
+			staying = append(staying, x)
+		}
+	}
+	// One in it already that a drag dropped elsewhere in it goes there, as
+	// a reorder.
+	var steps []groupStep
+	for _, x := range staying {
+		from := c.nextOf(x.id)
+		c.putIn([]string{x.id}, id, before, after)
+		if to := c.nextOf(x.id); !slices.Equal(from, to) {
+			steps = append(steps, groupStep{kind: actReorder, id: x.id, data: map[string]any{"from": from, "to": to}})
+			before, after = "", x.id
 		}
 	}
 	if len(moving) == 0 {
-		return nil
+		return steps
 	}
 	kind := actGroup
 	if id == "" {
 		kind = actUngroup
 	}
-	steps := make([]groupStep, len(moving))
+	joined := make([]groupStep, len(moving))
 	was := map[string][]string{}
 	var ids []string
 	for i, x := range moving {
@@ -825,15 +838,15 @@ func (c *Core) join(xs []*session, id, after, before string) []groupStep {
 			c.setParked(x.id, false)
 			d["parked"] = true
 		}
-		steps[i] = groupStep{kind: kind, id: x.id, data: d}
+		joined[i] = groupStep{kind: kind, id: x.id, data: d}
 		ids = append(ids, x.id)
 	}
 	for _, x := range moving {
 		c.setGroup(x, id, event.SourceUser)
 	}
 	c.putIn(ids, id, before, after)
-	c.notePlaces(steps, was)
-	return steps
+	c.notePlaces(joined, was)
+	return append(steps, joined...)
 }
 
 // leave takes the sessions xs, in the list's order, out of their groups,
@@ -957,7 +970,7 @@ func (c *Core) nest(gs []string, into, before, after string) []groupStep {
 func (c *Core) notePlaces(steps []groupStep, was map[string][]string) {
 	order := c.fullOrder()
 	for i, s := range steps {
-		if s.kind == actNest || slices.Equal(was[s.id], c.nextOf(s.id)) {
+		if s.kind == actNest || s.kind == actReorder || slices.Equal(was[s.id], c.nextOf(s.id)) {
 			continue
 		}
 		later := map[string]bool{}
@@ -997,7 +1010,8 @@ func (c *Core) fits(gs []string, depth int) error {
 func (c *Core) renameInHistory(id, name string) {
 	changed := false
 	for _, list := range [][]action{c.steps.hist.Undo, c.steps.hist.Redo} {
-		for _, a := range list {
+		for i := range list {
+			a := &list[i]
 			if a.Data == nil {
 				continue
 			}
@@ -1008,13 +1022,17 @@ func (c *Core) renameInHistory(id, name string) {
 				}
 			}
 			for _, k := range []string{"from_groups", "to_groups", "group_groups", "nest_groups"} {
-				list, _ := a.Data[k].([]any)
-				for _, e := range list {
+				shot, _ := a.Data[k].([]any)
+				for _, e := range shot {
 					if m, ok := e.(map[string]any); ok && m["id"] == id {
 						m["name"] = name
 						changed = true
 					}
 				}
+			}
+			// A label that names the group names it as it is now.
+			if k, ok := actionKinds[a.Kind]; ok && a.Kind == actNest {
+				a.Label = k.labelOf(*a)
 			}
 		}
 	}
@@ -1220,6 +1238,10 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 	c.mu.Unlock()
 	c.publish(frames)
 	c.publishHeader()
+	if a.Do == ipc.GroupRename {
+		// Its name in the history's labels.
+		c.publishHistory()
+	}
 	taken := make([]takenStep, len(steps))
 	for i, s := range steps {
 		if label != "" && len(steps) > 1 {
