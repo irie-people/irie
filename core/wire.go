@@ -301,6 +301,7 @@ const (
 	ArchDuration       = ipc.ArchDuration
 	ArchNumber         = ipc.ArchNumber
 	ArchLines          = ipc.ArchLines
+	UnprovenTests      = ipc.UnprovenTests
 	DidUndo            = ipc.DidUndo
 	DidRedo            = ipc.DidRedo
 	DidSettle          = ipc.DidSettle

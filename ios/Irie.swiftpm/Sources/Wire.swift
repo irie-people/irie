@@ -89,11 +89,13 @@ struct Tokens: Decodable, Equatable {
     }
 }
 
-/// What a jot left that has not landed (DESIGN §4.8).
+/// What a jot left that has not landed, or a claim its own record
+/// contradicts (DESIGN §4.8).
 struct Loose: Decodable, Equatable {
     var dirty: Int?
     var ahead: Int?
     var land: String?
+    var unproven: String?
 
     /// 2 files not committed · 1 commit not in main
     var words: String {
@@ -101,6 +103,7 @@ struct Loose: Decodable, Equatable {
         var parts: [String] = []
         if let d = dirty, d > 0 { parts.append(n(d, "file") + " not committed") }
         if let a = ahead, a > 0 { parts.append(n(a, "commit") + " not in " + (land.flatMap { $0.isEmpty ? nil : $0 } ?? "its branch")) }
+        if unproven == "tests" { parts.append("says the tests pass, but the last run failed") }
         return parts.joined(separator: " · ")
     }
 }

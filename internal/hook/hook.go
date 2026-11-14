@@ -170,6 +170,12 @@ func ask(socket string, a ipc.HookArgs, wait time.Duration) (ipc.HookResult, boo
 // journal still cuts it.
 var whole = map[string]bool{"last_assistant_message": true}
 
+// ends are the payload fields the shim cuts from the middle (event.CapEnds):
+// what a command printed, whose end says how it went, such as a test run's
+// FAIL lines, and a failed call's error, which starts with its exit code
+// (DESIGN §4.8).
+var ends = map[string]bool{"tool_response": true, "tool_response.stdout": true, "tool_response.stderr": true, "error": true}
+
 // shrink caps every string of a JSON payload at event.MaxString bytes, but
 // those in whole, and records, under irie_lengths, how many characters each
 // cut string had, by its dotted path. It also returns the payload's
@@ -200,6 +206,9 @@ func walk(v any, path string, lengths map[string]int) any {
 	case string:
 		if len(x) > event.MaxString {
 			lengths[path] = utf8.RuneCountInString(x)
+			if ends[path] {
+				return event.CapEnds(x)
+			}
 			return event.Cap(x)
 		}
 	case map[string]any:

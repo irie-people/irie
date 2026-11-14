@@ -245,7 +245,7 @@ func (x *session) wire() ipc.Session {
 	}
 	// Once its turn is over, a jot's row says what it left that has not
 	// landed (DESIGN §4.8).
-	if l := wireLoose(x.dog.loose, x.track.nudged); l != nil && dogShows(s.State) {
+	if l := wireLoose(x.dog.loose, x.track.nudged, x.track.unproven); l != nil && dogShows(s.State) {
 		s.Loose = l
 		if s.State == ipc.StateExited {
 			s.Detail += " · not through: " + l.Words()

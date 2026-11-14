@@ -133,6 +133,84 @@ func TestTheDogLeavesAJotThatWaits(t *testing.T) {
 	}
 }
 
+func TestTheDogHoldsAJotToItsWordOnItsTests(t *testing.T) {
+	c, repo := dogSetup(t, "")
+	// Its tests failed, it says they pass, and it keeps saying so.
+	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,test:fail,stop:passes", Repo: repo})
+	row := c.waitState(s.ID, ipc.StateDone)
+
+	// It was sent back once, told what its record shows, and then let stop.
+	said := c.sentOn(s.ID)
+	if len(said) != 1 || !strings.HasPrefix(said[0], "[Irie] The jot dog: your report says more than your work shows.") ||
+		!strings.Contains(said[0], "You said the tests pass, but the last test run, `go test ./...`, failed: --- FAIL: TestFake (0.00s).") ||
+		!strings.Contains(said[0], "Run the tests again before you say they pass") || strings.Contains(said[0], "commit your work") {
+		t.Errorf("the dog said %q", said)
+	}
+	var kinds []string
+	for _, e := range c.events(s.ID) {
+		switch e.Kind {
+		case event.ToolFailed:
+			if e.Data["tests"] != "failed" || e.Data["test_line"] != "--- FAIL: TestFake (0.00s)" {
+				t.Errorf("the run = %+v", e.Data)
+			}
+		case event.DogNudged, event.TurnEnded:
+			kinds = append(kinds, e.Kind)
+			if e.Data["unproven"] != ipc.UnprovenTests {
+				t.Errorf("%s = %+v", e.Kind, e.Data)
+			}
+		}
+	}
+	if !slices.Equal(kinds, []string{event.DogNudged, event.TurnEnded}) {
+		t.Errorf("events = %v", kinds)
+	}
+	// Its word stands against its record, so its row says so.
+	if l := row.Loose; l == nil || l.Unproven != ipc.UnprovenTests || l.Dirty != 0 || l.Ahead != 0 {
+		t.Errorf("loose = %+v", row.Loose)
+	}
+	if row.Detail != "Not through: says the tests pass, but the last run failed" {
+		t.Errorf("detail = %q", row.Detail)
+	}
+	if jots := c.dog(); len(jots) != 1 || jots[0].ID != s.ID || jots[0].Loose.Unproven != ipc.UnprovenTests {
+		t.Errorf("dog = %+v", jots)
+	}
+	// The journal keeps it across a restart.
+	c.restartCore()
+	if row, _ := c.row(s.ID); row.Loose == nil || row.Loose.Unproven != ipc.UnprovenTests {
+		t.Errorf("loose after a restart = %+v", row.Loose)
+	}
+}
+
+func TestTheDogQuotesNoRunWhenTheJournalKeepsNoToolInput(t *testing.T) {
+	c, repo := dogSetup(t, "\n[journal]\ntool_input = \"none\"\n")
+	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,test:fail,stop:passes", Repo: repo})
+	c.waitState(s.ID, ipc.StateDone)
+	if said := c.sentOn(s.ID); len(said) != 1 || !strings.Contains(said[0], "You said the tests pass, but the last test run failed.") {
+		t.Errorf("the dog said %q", said)
+	}
+	for _, e := range c.events(s.ID) {
+		if e.Kind == event.ToolFailed && (e.Data["tests"] != "failed" || e.Data["test_line"] != nil) {
+			t.Errorf("the run = %+v", e.Data)
+		}
+	}
+}
+
+func TestTheDogTakesTheLastRunsWord(t *testing.T) {
+	c, repo := dogSetup(t, "")
+	// The tests failed, then passed: its word holds.
+	fixed := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,test:fail,test:pass,stop:passes", Repo: repo, Name: "fixed"})
+	// The tests failed, and it does not say they pass.
+	honest := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,test:fail,stop", Repo: repo, Name: "honest"})
+	for _, s := range []ipc.Session{fixed, honest} {
+		row := c.waitState(s.ID, ipc.StateDone)
+		if said := c.sentOn(s.ID); len(said) != 0 {
+			t.Errorf("%s: the dog said %q", s.Name, said)
+		}
+		if row.Loose != nil {
+			t.Errorf("%s: loose = %+v", s.Name, row.Loose)
+		}
+	}
+}
+
 func TestNudgesZeroOnlyWatches(t *testing.T) {
 	c, repo := dogSetup(t, "nudges = 0\n")
 	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,write:notes.md,stop", Repo: repo})
@@ -141,6 +219,15 @@ func TestNudgesZeroOnlyWatches(t *testing.T) {
 		t.Errorf("the dog said %q", said)
 	}
 	if row.Loose == nil || row.Loose.Dirty != 1 {
+		t.Errorf("loose = %+v", row.Loose)
+	}
+	// Nor does it send back one whose word its tests contradict.
+	w := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,test:fail,stop:passes", Repo: repo, Name: "word"})
+	row = c.waitState(w.ID, ipc.StateDone)
+	if said := c.sentOn(w.ID); len(said) != 0 {
+		t.Errorf("the dog said %q", said)
+	}
+	if row.Loose == nil || row.Loose.Unproven != ipc.UnprovenTests {
 		t.Errorf("loose = %+v", row.Loose)
 	}
 }

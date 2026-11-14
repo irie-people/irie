@@ -664,6 +664,8 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		a.fire("UserPromptSubmit", "", map[string]any{"prompt": a.o.task})
 	case "tool":
 		a.tool(s.arg, sub)
+	case "test":
+		a.test(s.arg == "pass", sub)
 	case "permission":
 		a.permission(sub)
 	case "stop":
@@ -807,8 +809,9 @@ func loadStatusLine(value string) string {
 // reference describes: the agent goes on, then stops again with
 // stop_hook_active set, at most 8 times in a row. how is "bg" for a turn
 // that leaves a shell task running in the background, "ask" for one whose
-// last message asks the user something, and "turn" for a teach-mode request
-// that the user write a part at a TODO(human), which ends in a full stop.
+// last message asks the user something, "turn" for a teach-mode request
+// that the user write a part at a TODO(human), which ends in a full stop,
+// and "passes" for one that says the tests pass and keeps saying so.
 func (a *agent) stop(how string) {
 	fmt.Println("✓ done")
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
@@ -824,6 +827,8 @@ func (a *agent) stop(how string) {
 		msg = "It works. Shall I land it?"
 	case "turn":
 		msg = "Learn by doing\n\nThe notes file has its headings.\n\n**Your Task**: In notes.md, write the summary line under TODO(human).\n\nWeigh how short it can be and still be clear."
+	case "passes":
+		msg = "Done. All tests pass."
 	}
 	for i := range 8 {
 		out := a.fire("Stop", "", map[string]any{"stop_hook_active": i > 0, "last_assistant_message": msg, "background_tasks": tasks, "session_crons": []any{}})
@@ -833,7 +838,7 @@ func (a *agent) stop(how string) {
 		}
 		a.record(map[string]any{"t": "continued", "context": more})
 		fmt.Println("↻ " + strings.SplitN(more, "\n", 2)[0])
-		if how != "asks" {
+		if how != "asks" && how != "passes" {
 			msg = "I stopped on purpose."
 		}
 	}
@@ -942,6 +947,32 @@ func rawLines() {
 	cmd := exec.Command("stty", "-icanon", "min", "1", "time", "0")
 	cmd.Stdin = os.Stdin
 	cmd.Run()
+}
+
+// test runs the tests with a Bash call, as Claude Code reports one: a run
+// that passes ends with PostToolUse and its output in tool_response, and
+// one that fails, by its exit code, with PostToolUseFailure and an error
+// whose first line is "Exit code 1", then the output.
+func (a *agent) test(pass bool, sub *subagent) {
+	id := a.toolID()
+	input := map[string]any{"command": "go test ./...", "description": "Run the tests"}
+	fmt.Println("● Bash: go test ./...")
+	pre := a.fire("PreToolUse", "Bash", sub.fields(map[string]any{"tool_name": "Bash", "tool_input": input, "tool_use_id": id}))
+	if reason := denied(pre); reason != "" {
+		a.record(map[string]any{"t": "denied", "tool": "Bash", "reason": reason})
+		return
+	}
+	if pass {
+		a.fire("PostToolUse", "Bash", sub.fields(map[string]any{
+			"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": 12,
+			"tool_response": map[string]any{"stdout": "ok  \texample.com/fake\t0.012s\n", "stderr": "", "interrupted": false, "isImage": false},
+		}))
+		return
+	}
+	a.fire("PostToolUseFailure", "Bash", sub.fields(map[string]any{
+		"tool_name": "Bash", "tool_input": input, "tool_use_id": id, "duration_ms": 12, "is_interrupt": false,
+		"error": "Exit code 1\n--- FAIL: TestFake (0.00s)\n    fake_test.go:9: got 1, want 2\nFAIL\nFAIL\texample.com/fake\t0.012s\nFAIL",
+	}))
 }
 
 func (a *agent) tool(name string, sub *subagent) {
