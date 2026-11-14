@@ -487,3 +487,217 @@ func TestAnotherMachinesSessionsHaveAGroupOfTheirOwn(t *testing.T) {
 		t.Errorf("the parked card doesn't say where it runs:\n%s", view)
 	}
 }
+
+// Your groups, in the List view: each where the first of its sessions is,
+// under a header that folds it, with the rest of its sessions after it,
+// and the sessions of none between your groups with no header. A parked
+// session of a group waits in Parked; the Repo view groups by repo alone.
+func TestTheListViewDrawsYourGroups(t *testing.T) {
+	m := repoModel(t, 34, 80)
+	m = send(m, keyMsg("v"))
+	rows := repoSessions()
+	// web-fix, scratch-notes, irie-theme, fork-docs, web-copy, irie-tests:
+	// scratch-notes and web-copy in Steak, fork-docs in Gigbot, irie-tests
+	// in a group the header no longer lists.
+	rows[1].Group, rows[4].Group, rows[3].Group, rows[5].Group = "g1", "g1", "g2", "gone"
+	head := &ipc.Header{Groups: []ipc.Group{{ID: "g1", Name: "Steak"}, {ID: "g2", Name: "Gigbot"}}}
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	want := []string{"web-fix", "▾ Steak", "scratch-notes", "web-copy", "irie-theme", "▾ Gigbot", "fork-docs", "irie-tests"}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("outline %q, want %q", got, want)
+	}
+	if y := lineOf(t, m, "Steak"); !strings.Contains(screen(t, m)[y], "▾ Steak  2") {
+		t.Errorf("Steak's header %q", screen(t, m)[y])
+	}
+	m.fold(userKey("g1"))
+	if got := outline(m); !reflect.DeepEqual(got[:3], []string{"web-fix", "▸ Steak", "irie-theme"}) {
+		t.Errorf("folded: %q", got)
+	}
+	m.fold(userKey("g1"))
+	// A parked one waits in Parked, out of its group.
+	rows[4].Parked = true
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameUpsert, Session: &rows[4]}})
+	if got := outline(m); !reflect.DeepEqual(got[:4], []string{"web-fix", "▾ Steak", "scratch-notes", "irie-theme"}) || got[len(got)-1] != "▸ Parked" {
+		t.Errorf("with web-copy parked: %q", got)
+	}
+	// The Repo view leaves your groups out.
+	m = send(m, keyMsg("v"))
+	if got := strings.Join(outline(m), " "); strings.Contains(got, "Steak") || strings.Contains(got, "Gigbot") {
+		t.Errorf("the Repo view draws your groups: %q", got)
+	}
+}
+
+// treeRows are repoSessions in your groups, groups inside groups, in the
+// order the core keeps them: web-fix in none, scratch-notes in Clients,
+// irie-theme in Acme inside Clients, fork-docs in Clients after Acme,
+// web-copy in Garden inside Home, which holds nothing of its own, and
+// irie-tests in none.
+func treeRows() ([]ipc.Session, *ipc.Header) {
+	rows := repoSessions()
+	rows[1].Group, rows[2].Group, rows[3].Group, rows[4].Group = "g1", "g2", "g1", "g4"
+	return rows, &ipc.Header{Groups: []ipc.Group{
+		{ID: "g1", Name: "Clients"},
+		{ID: "g2", Name: "Acme", Parent: "g1"},
+		{ID: "g3", Name: "Home"},
+		{ID: "g4", Name: "Garden", Parent: "g3"},
+	}}
+}
+
+// treeOutline is the outline treeRows draw with every group open.
+var treeOutline = []string{"web-fix", "▾ Clients", "scratch-notes", "▾ Acme", "irie-theme", "fork-docs", "▾ Home", "▾ Garden", "web-copy", "irie-tests"}
+
+// treeModel is a w×h sidebar in the List view, showing treeRows.
+func treeModel(t *testing.T, w, h int) Model {
+	t.Helper()
+	m := repoModel(t, w, h)
+	m = send(m, keyMsg("v"))
+	rows, head := treeRows()
+	return send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+}
+
+// column is the screen column where s starts on the first line that
+// holds it.
+func column(t *testing.T, m Model, s string) int {
+	t.Helper()
+	line := screen(t, m)[lineOf(t, m, s)]
+	return len([]rune(line[:strings.Index(line, s)]))
+}
+
+// Your groups hold groups, as folders hold folders. Each is drawn where
+// the first session in it is, one of a group inside it too, under a header
+// a step in from the header of the group around it, with its own sessions
+// a step in from its header and the groups inside it where their first
+// sessions are. A group that holds only groups has a header all the same,
+// and a group's sessions after a group inside it go on after that group,
+// with no header of their own. Rows out of the core's order draw the same
+// tree.
+func TestTheListViewDrawsGroupsInsideGroups(t *testing.T) {
+	// How many steps in each entry is drawn.
+	steps := map[string]int{
+		"web-fix": 0, "Clients": 0, "scratch-notes": 1, "Acme": 1, "irie-theme": 2,
+		"fork-docs": 1, "Home": 0, "Garden": 1, "web-copy": 2, "irie-tests": 0,
+	}
+	for _, c := range []struct {
+		w, h        int
+		title, name int // where a header's title and a session's name start, at the top of the list
+	}{{34, 80, 4, 5}, {22, 40, 3, 3}} {
+		m := treeModel(t, c.w, c.h)
+		if m.compact() != (c.w < cardMinWidth) {
+			t.Fatalf("%d×%d: compact %v", c.w, c.h, m.compact())
+		}
+		if got := outline(m); !reflect.DeepEqual(got, treeOutline) {
+			t.Fatalf("%d×%d: outline %q, want %q", c.w, c.h, got, treeOutline)
+		}
+		for _, it := range m.items() {
+			name := entryName(m, it)
+			want := c.name + indentStep*steps[name]
+			if it.kind == itemGroup {
+				want = c.title + indentStep*steps[name]
+			}
+			if got := column(t, m, name); got != want {
+				t.Errorf("%d×%d: %s starts at column %d, want %d:\n%s", c.w, c.h, name, got, want, strings.Join(screen(t, m), "\n"))
+			}
+		}
+	}
+	m := treeModel(t, 34, 80)
+	rows, head := treeRows()
+	rows[3], rows[4] = rows[4], rows[3]
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	if got := outline(m); !reflect.DeepEqual(got, treeOutline) {
+		t.Errorf("with fork-docs after web-copy: outline %q, want %q", got, treeOutline)
+	}
+}
+
+// A header counts every session in its group, those of the groups inside
+// it too, and folded, how many of them need you. The details of a group
+// inside another are titled by its path, and name it by its name, or by
+// its path while a group nearer the top has the name.
+func TestAGroupCountsWhatIsInsideIt(t *testing.T) {
+	m := treeModel(t, 34, 80)
+	row := func(title string) string { return screen(t, m)[lineOf(t, m, title)] }
+	for title, want := range map[string]string{"Clients": "▾ Clients  3", "Acme": "▾ Acme  1", "Home": "▾ Home  1", "Garden": "▾ Garden  1"} {
+		if got := row(title); !strings.Contains(got, want) {
+			t.Errorf("header %q, want %q", got, want)
+		}
+	}
+	m.fold(userKey("g1"))
+	m.fold(userKey("g3"))
+	for title, want := range map[string]string{"Clients": "▸ Clients  3 · 1 needs you", "Home": "▸ Home  1 · 1 needs you"} {
+		if got := row(title); !strings.Contains(got, want) {
+			t.Errorf("folded header %q, want %q", got, want)
+		}
+	}
+	m.fold(userKey("g3"))
+	m = selectNamed(t, m, "Garden")
+	got := statusText(t, m)
+	for _, want := range []string{"Home / Garden", "1 session · 1 needs you", ":group Garden puts one in", ":nest NAME nests this group", "Enter folds it"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in the details: %q", want, got)
+		}
+	}
+	m = selectNamed(t, m, "Home")
+	if got := statusText(t, m); strings.Contains(got, " / ") || !strings.Contains(got, ":group Home puts one in") {
+		t.Errorf("the details of a group at the top: %q", got)
+	}
+	// Another Garden at the top of the list.
+	_, head := treeRows()
+	head.Groups = append(head.Groups, ipc.Group{ID: "g5", Name: "Garden"})
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameHeader, Header: head}})
+	m = selectNamed(t, m, "Garden")
+	if got := statusText(t, m); !strings.Contains(got, ":group Home/Garden ") {
+		t.Errorf("the details of a Garden inside Home, with another at the top: %q", got)
+	}
+	// The status strip of a shorter pane says the path too.
+	m = treeModel(t, 34, 16)
+	m = selectNamed(t, m, "Acme")
+	if got := statusText(t, m); !strings.HasPrefix(got, "Clients / Acme · 1 session") {
+		t.Errorf("the status strip on Acme says %q", got)
+	}
+}
+
+// Folding a group hides all it holds, the groups inside it too; a folded
+// group inside an open one shows just its header. A selection inside the
+// group folded goes to its header, the arrows walk only what shows, and
+// showing a session unfolds every group around it.
+func TestFoldingAGroupHidesTheGroupsInsideIt(t *testing.T) {
+	m := treeModel(t, 34, 80)
+	m.fold(userKey("g2"))
+	want := []string{"web-fix", "▾ Clients", "scratch-notes", "▸ Acme", "fork-docs", "▾ Home", "▾ Garden", "web-copy", "irie-tests"}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("Acme folded: %q, want %q", got, want)
+	}
+	m = selectNamed(t, m, "fork-docs")
+	m.fold(userKey("g1"))
+	want = []string{"web-fix", "▸ Clients", "▾ Home", "▾ Garden", "web-copy", "irie-tests"}
+	if got := outline(m); !reflect.DeepEqual(got, want) || selectedName(m) != "Clients" {
+		t.Errorf("Clients folded: %q, selection %s", got, selectedName(m))
+	}
+	m = send(m, keyMsg("down"))
+	if selectedName(m) != "Home" {
+		t.Errorf("down from folded Clients went to %s", selectedName(m))
+	}
+	// Open again, Clients shows Acme as it was, folded.
+	m = send(m, keyMsg("up"))
+	m = send(m, keyMsg("enter"))
+	if got := outline(m); !reflect.DeepEqual(got[:5], []string{"web-fix", "▾ Clients", "scratch-notes", "▸ Acme", "fork-docs"}) {
+		t.Errorf("Clients open again: %q", got)
+	}
+	// A session in a group inside the group folded.
+	m = selectNamed(t, m, "web-copy")
+	m.fold(userKey("g3"))
+	if selectedName(m) != "Home" {
+		t.Errorf("folded Home around web-copy, and the selection is on %s", selectedName(m))
+	}
+	m.fold(userKey("g1"))
+	m.unfoldFor("s3")
+	want = []string{"web-fix", "▾ Clients", "scratch-notes", "▾ Acme", "irie-theme", "fork-docs", "▸ Home", "irie-tests"}
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("after unfolding for irie-theme: %q, want %q", got, want)
+	}
+	// A frame from the core keeps a group folded.
+	rows, head := treeRows()
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	if got := outline(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("after a frame: %q, want %q", got, want)
+	}
+}

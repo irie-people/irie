@@ -219,6 +219,7 @@ type Session struct {
 	Parked   bool       `json:"parked,omitempty"`   // in the Parked group at the end of the list
 	Pinned   bool       `json:"pinned,omitempty"`   // in the Pinned group at the top of the list
 	Space    string     `json:"space,omitempty"`    // the space it is in (spaces.go); "" for the first
+	Group    string     `json:"group,omitempty"`    // the group it is in (groups.go); "" for none
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
@@ -644,6 +645,9 @@ type Header struct {
 	Boost *Boost `json:"boost,omitempty"`
 	// Spaces are the spaces, in their order, the first first (spaces.go).
 	Spaces []Space `json:"spaces,omitempty"`
+	// Groups are your groups (groups.go), in the order they were made: a
+	// sidebar draws each where the first of its sessions is.
+	Groups []Group `json:"groups,omitempty"`
 	// Theme is the palette the Mac app draws in, once it has said (the
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
@@ -893,6 +897,12 @@ type SpawnArgs struct {
 	// the session that started it (After, Parent or Continues), else the
 	// first.
 	Space string `json:"space,omitempty"`
+	// Group is the group the new session goes in: a group's id, or a name,
+	// which makes a group of that name when none has it. "" puts it in the
+	// group of the session whose agent started it (After, Parent or
+	// Continues), or, for a jot with ui.new_tabs = "next", the group of the
+	// session it goes beside; else in none.
+	Group string `json:"group,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that
