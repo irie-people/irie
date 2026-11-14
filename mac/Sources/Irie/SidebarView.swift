@@ -283,7 +283,6 @@ private struct SessionCard: View, Equatable {
                             .foregroundStyle(quiet ? Theme.muted : Theme.ink)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        if session.isPromoted { PromotedBadge() }
                         if let t = session.trod { TrodPrint(trod: t, now: now) }
                     }
                 }
@@ -304,11 +303,10 @@ private struct SessionCard: View, Equatable {
                 .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
                 .opacity(hovering ? 0 : 1)
                 // Only the card under the pointer has them: 30 hidden sets
-                // of AppKit buttons and menus cost every drawing.
-                if actionsShown {
-                    QuickActions(session: session, ink: deep != nil, first: first, last: last)
-                        .opacity(hovering ? 1 : 0)
-                        .allowsHitTesting(hovering)
+                // of AppKit buttons and menus cost every drawing. A promoted
+                // card has them too, for its promote button, which stays.
+                if actionsShown || session.isPromoted {
+                    QuickActions(session: session, ink: deep != nil, first: first, last: last, hovering: hovering)
                 }
             }
             .frame(width: Self.slot, alignment: .trailing)
@@ -488,6 +486,7 @@ private struct SessionCard: View, Equatable {
 
     private var spoken: String {
         var parts = [session.name, Look.label(session)]
+        if session.isPromoted { parts.append("promoted") }
         if let d = session.detail, !d.isEmpty { parts.append(d) }
         parts.append("started " + Age.spoken(session.created, now: now))
         if let t = session.tokens { parts.append("\(t.total) tokens") }
@@ -725,7 +724,11 @@ private struct ModeSwitch: View {
 
 /// What a hovered card offers. They sit in the card's fixed trailing slot,
 /// three icons 16 points wide and the menu 18, so the name keeps its room;
-/// VoiceOver gets them, and more, as the card's actions.
+/// VoiceOver gets them, and more, as the card's actions. A promoted card
+/// keeps its promote button, filled, where it is once the pointer leaves:
+/// the one mark that it is promoted, beside its age, and a click on it puts
+/// the card back among the rest. The others are there unseen, so it never
+/// moves.
 @MainActor
 private struct QuickActions: View {
     @Environment(Store.self) private var store
@@ -735,13 +738,16 @@ private struct QuickActions: View {
     /// First or last in its group (SessionCard).
     let first: Bool
     let last: Bool
+    /// Whether the pointer is on the card: the rest show only then.
+    let hovering: Bool
 
     var body: some View {
+        let promote = hovering || session.isPromoted
         HStack(spacing: 0) {
             // A click on the card types to it; the folder is in the menu.
-            PauseButton(session: session)
-            PromoteButton(session: session, ink: ink)
-            if store.canPark { ParkButton(session: session, onCard: true) }
+            PauseButton(session: session).modifier(Shown(on: hovering))
+            PromoteButton(session: session, ink: ink).modifier(Shown(on: promote))
+            if store.canPark { ParkButton(session: session, onCard: true).modifier(Shown(on: hovering)) }
             Menu {
                 Actions(session: session, first: first, last: last)
             } label: {
@@ -751,11 +757,22 @@ private struct QuickActions: View {
             .menuIndicator(.hidden)
             .frame(width: 18)
             .help("More")
+            .modifier(Shown(on: hovering))
         }
         .buttonStyle(.borderless)
         .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(ink ? Theme.ink : Theme.muted)
         .accessibilityHidden(true)
+    }
+
+    /// One of them, seen and clickable only while on; unseen, it still keeps
+    /// its room.
+    private struct Shown: ViewModifier {
+        let on: Bool
+
+        func body(content: Content) -> some View {
+            content.opacity(on ? 1 : 0).allowsHitTesting(on)
+        }
     }
 }
 
