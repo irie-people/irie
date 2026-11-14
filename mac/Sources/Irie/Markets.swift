@@ -57,6 +57,7 @@ struct MarketsCommands: Commands {
 /// open, and loads the page again once a rebuild has settled: a new change
 /// loads when two looks in a row agree on it, so a page half written never
 /// shows.
+@MainActor
 struct MarketsWindow: View {
     static let id = "markets"
 
@@ -144,6 +145,7 @@ struct MarketsWindow: View {
 }
 
 /// What the map lacks, in the window's own words, with what fixes it.
+@MainActor
 private struct MarketsLacking: View {
     let map: MarketsResult
     let changed: () async -> Void
