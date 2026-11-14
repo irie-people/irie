@@ -103,6 +103,10 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":vpn se-got-wg-001", "", "", OpVPN, VPNArgs{Do: VPNPlace, Args: []string{"se-got-wg-001"}}},
 		{":models", "", "", OpTool, ToolArgs{Name: ToolModels}},
 		{":route fix the typo", "", "", OpRoute, RouteArgs{Task: "fix the typo"}},
+		{":bench fix the typo", "", "", OpBench, BenchArgs{Task: "fix the typo"}},
+		// A bench reads its own ^HOST, besides its @ and + words, and runs
+		// on over more lines.
+		{":bench ^asahi +dory @web fix the typo\nin the README", "", "", OpBench, BenchArgs{Task: "fix the typo\nin the README", Profile: "dory", Repo: "web", Host: "asahi"}},
 		{":freeze", "s1", "", OpFreeze, FreezeArgs{Session: "s1"}},
 		{":freeze all", "", "", OpFreeze, FreezeArgs{All: true}},
 		{":thaw", "s2", "", OpThaw, FreezeArgs{Session: "s2"}},
@@ -159,6 +163,9 @@ func TestReadRefusesInWords(t *testing.T) {
 		{"hows the weather", "", "", CodeNotFound, "No agent matches “weather”."},
 		{"+a +b fix it", "", "", CodeBadArgs, "Only one +profile per task."},
 		{"@web", "", "", CodeBadArgs, "Empty task: type what you want done after the @ or + words."},
+		{":bench +dory", "", "", CodeBadArgs, "Empty task"},
+		{":bench @web! fix it", "", "", CodeBadArgs, "each need a worktree of their own"},
+		{":bench +anon fix it", "", "", CodeBadArgs, "no anonymous research"},
 		{":markets @web add the cloud market", "", "", CodeBadArgs, "takes no @repo"},
 		{":markets +a +b add it", "", "", CodeBadArgs, "Only one +profile per task."},
 	} {

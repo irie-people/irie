@@ -61,6 +61,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 | `:reopen`, `:undo`, `:redo` | The session closed last; the history's next step. Nothing to undo is an answer, not an error | `ran`, or `asked` |
 | `:move [NAME]` | Brings in the session outside Irie by its id or name, else the selected one (`outside`) | `ran`, with `session` |
 | `:route TASK` | Says where `+auto` would run the task, and why | `answered` |
+| `:bench [^HOST] [+PROFILE] [@REPO] TASK` | `bench`: the task on several sessions of one profile, here or on HOST, then a judge (DESIGN §6.6). `^HOST` is the bench's own word, not passed on: the bench runs its sessions there and judges them from here. The task may run on over more lines | `ran` |
 | `:setup [local]`, `:models` | Starts a tool session, which waits on its user | `ran`, with `session` and `show` |
 | `:setup switch` | Starts the dead man's switch guide: a Claude Code session on `+claude` with Irie's skill `/irie:dead-mans-switch` ([extensions.md](proposals/extensions.md) §2.2) | `ran`, with `session` and `show` |
 | `:setup anon`, `:setup browser`, `:setup privacy` | Starts a tool session that runs `irie setup NAME`: a part of the privacy plugin, or each part in turn (DESIGN §4.17) | `ran`, with `session` and `show` |

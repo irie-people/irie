@@ -77,6 +77,10 @@
 //	                       is used, in percent, resetting in three days
 //	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
 //	                       the --settings file
+//	IRIE_FAKE_SCRIPT       the script a task that is not one runs, in place
+//	                       of "prompt"
+//	IRIE_FAKE_SAY          a file whose text a plain stop step's turn ends
+//	                       with, as its last message, when the file exists
 package main
 
 import (
@@ -593,6 +597,12 @@ func (a *agent) run() int {
 	steps, err := parseScript(first)
 	if err != nil {
 		steps = []step{{kind: "prompt"}}
+		if script := os.Getenv("IRIE_FAKE_SCRIPT"); script != "" {
+			if steps, err = parseScript(script); err != nil {
+				fmt.Fprintln(os.Stderr, "fakeagent: IRIE_FAKE_SCRIPT:", err)
+				return 2
+			}
+		}
 	}
 	if strings.TrimSpace(a.o.task) == "" {
 		steps = nil
@@ -778,6 +788,9 @@ func (a *agent) stop(how string) {
 	fmt.Println("✓ done")
 	first, _, _ := strings.Cut(strings.TrimSpace(a.o.task), "\n")
 	msg, tasks := "Done: "+first, []any{}
+	if b, err := os.ReadFile(os.Getenv("IRIE_FAKE_SAY")); how == "" && err == nil {
+		msg = string(b)
+	}
 	switch how {
 	case "bg":
 		msg = "The install runs in the background; I'll report when it lands."

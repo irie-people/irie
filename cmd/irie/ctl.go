@@ -138,6 +138,13 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          is still running at the timeout
   ` + brand.Slug + ` ctl rate SESSION good|bad         rate a session's work; the router learns
                                          each profile's accuracy from it
+  ` + brand.Slug + ` ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK...
+                                         run a task on several sessions of one
+                                         profile (default the first local one),
+                                         here or on HOST; a judge then scores
+                                         each, makes the one result and rewrites
+                                         the profile's playbook. With no task,
+                                         list the benches
   ` + brand.Slug + ` ctl perf [--json]                 the core's own counters since it started:
                                          each request and how long it took, waits
                                          on its lock, frames sent, ticks, and its
@@ -195,6 +202,8 @@ func ctl(args []string) error {
 		return ctlRoute(args[1:])
 	case "delegate":
 		return ctlDelegate(args[1:])
+	case "bench":
+		return ctlBench(args[1:])
 	case "rate":
 		return ctlRate(args[1:])
 	case "perf":

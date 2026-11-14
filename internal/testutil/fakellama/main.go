@@ -44,7 +44,14 @@ func main() {
 		return ""
 	}
 	model, alias, port := flag("-m", "--model"), flag("--alias", "-a"), flag("--port")
+	// Like llama-server, it splits its context evenly between its slots.
 	ctx, _ := strconv.Atoi(flag("-c", "--ctx-size"))
+	slots, _ := strconv.Atoi(flag("-np", "--parallel"))
+	if slots > 0 {
+		ctx /= slots
+	} else {
+		slots = 1
+	}
 	if _, err := os.Stat(model); err != nil {
 		fmt.Fprintln(os.Stderr, "fakellama: failed to load model:", err)
 		os.Exit(1)
@@ -62,7 +69,7 @@ func main() {
 		reply(w, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /props", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, map[string]any{"default_generation_settings": map[string]any{"n_ctx": ctx}, "total_slots": 1, "model_path": model, "build_info": "b" + build + "-fake"})
+		reply(w, map[string]any{"default_generation_settings": map[string]any{"n_ctx": ctx}, "total_slots": slots, "model_path": model, "build_info": "b" + build + "-fake"})
 	})
 	mux.HandleFunc("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]any{"id": "msg_fake", "type": "message", "role": "assistant", "model": alias,
