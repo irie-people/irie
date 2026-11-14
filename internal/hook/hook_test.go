@@ -113,6 +113,25 @@ func TestForwardsAndCapsStrings(t *testing.T) {
 	}
 }
 
+func TestACommandsOutputKeepsItsHeadAndTail(t *testing.T) {
+	// What a command printed says how it went at its end, and a failure's
+	// error starts with its exit code (DESIGN §4.8).
+	c := &core{}
+	sock := serve(t, c)
+	failure := "Exit code 1\n" + strings.Repeat("ok  \texample.com/pkg\t0.1s\n", 200) + "FAIL\texample.com/last\t0.2s\nFAIL"
+	post, _ := json.Marshal(map[string]any{
+		"session_id": "6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f", "hook_event_name": "PostToolUseFailure", "tool_name": "Bash",
+		"tool_input": map[string]any{"command": "go test ./..."}, "tool_use_id": "toolu_01", "error": failure,
+	})
+	run(t, sock, string(post))
+	var p map[string]any
+	json.Unmarshal((<-c.got).Payload, &p)
+	e, _ := p["error"].(string)
+	if len(e) > event.MaxString || !strings.HasPrefix(e, "Exit code 1\n") || !strings.HasSuffix(e, "FAIL\texample.com/last\t0.2s\nFAIL") {
+		t.Errorf("error is %d bytes: %.40q … %q", len(e), e, e[max(0, len(e)-40):])
+	}
+}
+
 func TestATurnsLastMessageGoesWhole(t *testing.T) {
 	// A delegated session reports it back whole; the journal cuts it.
 	c := &core{}

@@ -138,6 +138,8 @@ type Core struct {
 	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
 	peers      map[string]*peerState // the other machines' cores this one is paired with, by name (peers.go)
+	benches    benchState            // the benches this core started, and the playbooks (bench.go); a lock of its own, but its playbooks are under mu
+	tunnelAt   map[string]time.Time  // when each peer's tunnel last started (tunnel.go)
 	raw        bool                  // the slot shows the picked session's raw terminal, not its conversation
 	split      string                // the session the Mac app shows beside its teammates, in the view session (view.go)
 	team       *tmux.Runner          // the team server, where sessions' teammates run (team.go)
@@ -244,7 +246,7 @@ func (x *session) wire() ipc.Session {
 	}
 	// Once its turn is over, a jot's row says what it left that has not
 	// landed (DESIGN §4.8).
-	if l := wireLoose(x.dog.loose, x.track.nudged); l != nil && dogShows(s.State) {
+	if l := wireLoose(x.dog.loose, x.track.nudged, x.track.unproven); l != nil && dogShows(s.State) {
 		s.Loose = l
 		if s.State == ipc.StateExited {
 			s.Detail += " · not through: " + l.Words()
@@ -345,6 +347,7 @@ func Run(o Options) error {
 	c.loadRecent()
 	c.loadLocal()
 	c.loadOutcomes()
+	c.loadBenches()
 	c.loadOrder()
 	c.loadSpaces()
 	c.loadGroups()
@@ -427,6 +430,9 @@ func Run(o Options) error {
 			if n%trodEvery == 0 {
 				go c.trodSweep()
 			}
+			if n%benchEvery == 0 {
+				go c.benchSweep()
+			}
 			if n%lidEvery == 0 {
 				go c.lidSweep()
 			}
@@ -479,6 +485,7 @@ func (c *Core) tick() {
 	c.followTitles()
 	c.followConversations()
 	c.keepRemote()
+	c.keepTunnels()
 	c.keepVPN()
 	frames := c.changes()
 	c.mu.Unlock()
@@ -772,16 +779,22 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: builtFeatures([]string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpRename, ipc.OpFlip,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
+	case ipc.OpBench:
+		var a ipc.BenchArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.benchOp(a)
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
 		// refreshed when they are old; a problem is in the result.
@@ -989,6 +1002,16 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if err := c.send(a); err != nil {
+			return nil, err
+		}
+		c.markWord(a.Session)
+		return nil, nil
+	case ipc.OpContinue:
+		var a ipc.ContinueArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if err := c.continueAgent(a); err != nil {
 			return nil, err
 		}
 		c.markWord(a.Session)

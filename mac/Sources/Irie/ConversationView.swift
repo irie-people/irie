@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The right side by default: the shown session's conversation. You and
@@ -728,6 +729,10 @@ struct Composer: View {
     @State private var text = ""
     @State private var problem: String?
     @FocusState private var focused: Bool
+    /// A double ↓ on the note that stands for the box sends the agent on,
+    /// as on its empty prompt (ContinueKey.swift; the box's own ↓ is the
+    /// key router's).
+    @State private var downs = DoublePress()
 
     /// It waits on you in its terminal. Your turn in teach mode waits at its
     /// prompt instead, so the box takes your word that the part is written.
@@ -770,7 +775,23 @@ struct Composer: View {
         .frame(maxWidth: .infinity)
         .background(Theme.ground)
         .onChange(of: store.focusMessage) { focused = true }
-        .onChange(of: focused) { store.messageHasKeys = focused }
+        .onChange(of: focused) {
+            store.messageHasKeys = focused
+            store.messageField = nil
+            // The field the window's field editor edits once AppKit has
+            // handed it the keyboard: the box's, which ContinueKey knows
+            // from the find field and the task bar by it.
+            if focused {
+                DispatchQueue.main.async {
+                    guard store.messageHasKeys, let editor = WindowPanes.window?.firstResponder as? NSTextView, editor.isFieldEditor else { return }
+                    store.messageField = editor.delegate as? NSTextField
+                }
+            }
+        }
+        .onDisappear {
+            store.messageHasKeys = false
+            store.messageField = nil
+        }
         .onChange(of: session.id) {
             text = ""
             problem = nil
@@ -858,6 +879,12 @@ struct Composer: View {
         }
         .onKeyPress(.space) {
             store.showTerminal = true
+            return .handled
+        }
+        .onKeyPress(.downArrow, phases: .down) { press in
+            guard waits, store.canContinue, press.modifiers.intersection([.shift, .control, .option, .command]).isEmpty,
+                  downs.press(at: ProcessInfo.processInfo.systemUptime) else { return .ignored }
+            store.continueAgent(session.id)
             return .handled
         }
         .accessibilityElement(children: .combine)

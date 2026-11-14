@@ -14,10 +14,12 @@ import SwiftUI
 /// - It leaves the palette the agents' colours follow to the installed app.
 /// - The phrase bar says it is a preview, of which checkout, and how the
 ///   next build is going (PreviewBadge).
+/// - It opens on a desktop the user cannot see, never the one they work on
+///   (`--away`, WindowPlace in Desktops.swift).
 /// - A new build keeps its window out of sight until it has drawn, then
-///   gives it the frame of the window of the build before and ends that
-///   build, so a rebuild looks like the window changing in place
-///   (PreviewState).
+///   gives it the frame and the desktop of the window of the build before
+///   and ends that build, so a rebuild looks like the window changing in
+///   place (PreviewState).
 /// - It quits when the hot.sh that runs it ends.
 ///
 /// The installed app gets none of hot.sh's arguments, and none of this.
@@ -93,11 +95,14 @@ final class PreviewState: ObservableObject {
     }
 
     /// Shows the window once it has drawn the sessions, in the frame of the
-    /// window of the build before, then ends that build. A core that does
-    /// not answer leaves the window to show what it has. The window keeps
-    /// the place in front or behind that it opened in, behind the app in
-    /// front: ordering it against another app's window would put it in
-    /// front of every window.
+    /// window of the build before and on its desktop, then ends that build.
+    /// The new window waited out of sight (WindowPlace), and the old one is
+    /// out of sight too unless the user went to look at it, so it changes
+    /// in place where they look and nowhere else. A core that does not
+    /// answer leaves the window to show what it has. The window keeps the
+    /// place in front or behind that it opened in, behind the app in front:
+    /// ordering it against another app's window would put it in front of
+    /// every window.
     private func takeOver(from old: pid_t, window: NSWindow, store: Store) async {
         var waited = 0
         while store.sessions.isEmpty, waited < 40 {
@@ -107,8 +112,10 @@ final class PreviewState: ObservableObject {
         // The terminal's first frame.
         try? await Task.sleep(nanoseconds: 500_000_000)
         let front = NSRunningApplication(processIdentifier: old)?.isActive ?? false
-        if let frame = Self.largestWindow(of: old) {
+        if let (frame, number) = Self.largestWindow(of: old) {
             window.setFrame(frame, display: true)
+            let there = Desktops.desktops(of: number)
+            if there.count == 1 { Desktops.move(window.windowNumber, to: there[0]) }
         }
         window.alphaValue = 1
         if front {
@@ -118,26 +125,29 @@ final class PreviewState: ObservableObject {
         kill(old, SIGTERM)
     }
 
-    /// The frame, in AppKit's coordinates, of a process's largest window on
-    /// screen. Bounds and owners need no screen-recording permission; only
-    /// titles would.
-    private static func largestWindow(of pid: pid_t) -> NSRect? {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]],
+    /// The frame, in AppKit's coordinates, and the number of a process's
+    /// largest window: one the user can see if there is one, else one on a
+    /// desktop out of sight, which "on screen" leaves out. Bounds and owners
+    /// need no screen-recording permission; only titles would.
+    private static func largestWindow(of pid: pid_t) -> (NSRect, Int)? {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]],
               let main = NSScreen.screens.first else { return nil }
-        var best: NSRect?
+        var best: (frame: NSRect, number: Int, seen: Bool)?
         for w in list {
             guard (w[kCGWindowOwnerPID as String] as? Int) == Int(pid),
                   (w[kCGWindowLayer as String] as? Int) == 0,
+                  let number = w[kCGWindowNumber as String] as? Int,
+                  !Desktops.desktops(of: number).isEmpty,
                   let bounds = w[kCGWindowBounds as String] as? NSDictionary,
                   let r = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { continue }
+            let seen = w[kCGWindowIsOnscreen as String] as? Bool ?? false
             // Quartz counts from the top of the main screen, AppKit from its
             // bottom.
             let frame = NSRect(x: r.minX, y: main.frame.maxY - r.maxY, width: r.width, height: r.height)
-            if best.map({ $0.width * $0.height < frame.width * frame.height }) ?? true {
-                best = frame
-            }
+            let better = best.map { b in seen != b.seen ? seen : b.frame.width * b.frame.height < frame.width * frame.height } ?? true
+            if better { best = (frame, number, seen) }
         }
-        return best
+        return best.map { ($0.frame, $0.number) }
     }
 
     /// hot.sh keeps one line in `status`: `building`, `ok TIME` or

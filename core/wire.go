@@ -7,6 +7,10 @@ import "github.com/irie-people/irie/internal/ipc"
 // The wire's types: the requests and replies, every op's args and result,
 // the frames of a subscription and the rows they carry (DESIGN §2.4).
 type (
+	BenchArgs        = ipc.BenchArgs
+	BenchResult      = ipc.BenchResult
+	Bench            = ipc.Bench
+	BenchRun         = ipc.BenchRun
 	ContextArgs      = ipc.ContextArgs
 	ContextResult    = ipc.ContextResult
 	ContextTurn      = ipc.ContextTurn
@@ -22,6 +26,7 @@ type (
 	Conversation     = ipc.Conversation
 	Item             = ipc.Item
 	SendArgs         = ipc.SendArgs
+	ContinueArgs     = ipc.ContinueArgs
 	FlipResult       = ipc.FlipResult
 	DockArgs         = ipc.DockArgs
 	DockResult       = ipc.DockResult
@@ -169,6 +174,11 @@ type (
 // The wire's constants: the API version, the op and frame names, the
 // states, the error codes and the other values its fields take.
 const (
+	OpBench            = ipc.OpBench
+	BenchRunning       = ipc.BenchRunning
+	BenchJudging       = ipc.BenchJudging
+	BenchDone          = ipc.BenchDone
+	BenchFailed        = ipc.BenchFailed
 	OpContext          = ipc.OpContext
 	OpFork             = ipc.OpFork
 	ContextLog         = ipc.ContextLog
@@ -200,6 +210,7 @@ const (
 	ItemError          = ipc.ItemError
 	ItemStopped        = ipc.ItemStopped
 	OpSend             = ipc.OpSend
+	OpContinue         = ipc.OpContinue
 	OpFlip             = ipc.OpFlip
 	OpDock             = ipc.OpDock
 	DockStateUntrusted = ipc.DockStateUntrusted
@@ -323,6 +334,7 @@ const (
 	ArchDuration       = ipc.ArchDuration
 	ArchNumber         = ipc.ArchNumber
 	ArchLines          = ipc.ArchLines
+	UnprovenTests      = ipc.UnprovenTests
 	DidUndo            = ipc.DidUndo
 	DidRedo            = ipc.DidRedo
 	DidSettle          = ipc.DidSettle

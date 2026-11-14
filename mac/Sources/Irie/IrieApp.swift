@@ -1,14 +1,19 @@
 import AppKit
 import SwiftUI
 
-/// Starts the app, or with `--snapshot DIR` draws its window offscreen from
-/// fixture sessions and exits (Snapshot.swift), or with `--record OUT.mp4
-/// --reel FILE` films its window while a reel plays (Recording.swift).
+/// Starts the app, or with `--snapshot DIR` draws its window out of sight
+/// from fixture sessions and exits (Snapshot.swift), or with `--record
+/// OUT.mp4 --reel FILE` films its window while a reel plays
+/// (Recording.swift), or with `--away-helper` keeps a command's windows off
+/// the desktops the user can see, for `irie away` (Away.swift).
 @main
 enum Launch {
     static func main() {
         Preview.boot()
         let args = CommandLine.arguments
+        if args.contains("--away-helper") {
+            MainActor.assumeIsolated { Away.run(args) }
+        }
         if let i = args.firstIndex(of: "--snapshot") {
             let dir = i + 1 < args.count ? args[i + 1] : FileManager.default.currentDirectoryPath
             MainActor.assumeIsolated { Snapshot.run(into: dir) }
@@ -111,6 +116,8 @@ struct IrieApp: App {
 final class KeyRouter {
     private var monitor: Any?
     private var middle: Any?
+    /// A double ↓ on an agent's empty prompt (ContinueKey.swift).
+    private let continueKey = ContinueKey()
     /// Irie's own window, where the sessions are (WindowReader).
     weak var window: NSWindow?
 
@@ -131,6 +138,10 @@ final class KeyRouter {
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             let irie = MainActor.assumeIsolated { event.window != nil && event.window === self.window }
+            // First, so a ↓ it holds back goes ahead of any other key.
+            if irie, MainActor.assumeIsolated({ self.continueKey.route(event, store: store) }) == nil {
+                return nil
+            }
             if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
@@ -185,12 +196,17 @@ final class KeyRouter {
 /// Run from a plain binary the app still gets a Dock icon and the focus, and
 /// it quits with its window. `--background`, which `tools/live.sh` and the
 /// freeze dog pass when they open the app again, leaves the focus where it
-/// is. The freeze dog watches the app from the moment it has launched.
+/// is and puts the window back on the desktop it was on; `--away`, which
+/// hot.sh passes its preview, puts it on a desktop the user cannot see
+/// (WindowPlace, Desktops.swift). The freeze dog watches the app from the
+/// moment it has launched.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         NSApp.setActivationPolicy(.regular)
         AppearanceChoice.apply()
-        if !CommandLine.arguments.contains("--background") {
+        // Before the window server first shows the window.
+        WindowPlace.shared.start()
+        if !WindowPlace.background && !WindowPlace.away {
             NSApp.activate(ignoringOtherApps: true)
         }
         FreezeDog.start(socketPath: CorePaths.socket())
@@ -249,6 +265,8 @@ struct ContentView: View {
             // A drag of the sidebar's edge or the window's resizes the
             // terminal once, as it ends (ResizeHold.swift).
             ResizeHold.shared.watch(window)
+            // The desktop it opens on and keeps (Desktops.swift).
+            WindowPlace.shared.adopt(window)
             // A preview takes over the window of the build before (Preview.swift).
             PreviewState.shared.adopt(window, store: store)
         })
