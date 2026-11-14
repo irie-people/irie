@@ -78,16 +78,27 @@ enum Snapshot {
             store.loadFixture(Fixture.sessions, selection: Fixture.selected)
 
             // The right sidebar (RightSidebar.swift), inline after the
-            // terminal: its Dock in both modes, Helpers and Review.
+            // terminal: its Dock in both modes, Helpers and Review, then
+            // Variorum's note in both modes and half set up, last, since
+            // its tab shows only once Variorum is there.
             for (base, tab, dark) in [("side-dock", SideTab.dock, false), ("side-dock-dark", SideTab.dock, true),
                                       ("side-helpers", SideTab.helpers, false), ("side-review", SideTab.review, false),
                                       ("side-notices", SideTab.notices, false), ("side-notices-dark", SideTab.notices, true),
-                                      ("side-narrow", SideTab.review, false)] {
+                                      ("side-narrow", SideTab.review, false),
+                                      ("side-variorum", SideTab.variorum, false), ("side-variorum-dark", SideTab.variorum, true),
+                                      ("side-variorum-setup", SideTab.variorum, false)] {
                 // At its narrowest, with a count on every tab, the tabs
                 // draw tighter and × stays in sight.
                 let narrow = base == "side-narrow"
                 store.side = SideState(open: true, width: narrow ? SideState.minWidth : SideState.startWidth, tab: tab)
                 if narrow { store.noticesSeen = .distantPast }
+                if tab == .variorum {
+                    // No notice on show, and none unseen.
+                    store.notice = nil
+                    store.noticesSeen = Date()
+                    store.variorum.useFixture(base == "side-variorum-setup" ? VariorumFixture.setup : VariorumFixture.ready,
+                                              session: Fixture.selected, fresh: VariorumFixture.fresh, opened: VariorumFixture.opened)
+                }
                 if tab == .notices || narrow {
                     // The notices kept, and an error on show at the top of
                     // the working area, clear of the task bar.

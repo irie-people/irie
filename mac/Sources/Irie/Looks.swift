@@ -207,7 +207,7 @@ struct PaneLayout: Codable, Equatable, Identifiable {
         }
         if let r = drawer {
             if let w = r.width { store.setSideWidth(w) }
-            let tab = r.tab.flatMap(SideTab.init(rawValue:)).flatMap { SideTab.built.contains($0) ? $0 : nil } ?? store.side.tab
+            let tab = r.tab.flatMap(SideTab.init(rawValue:)).flatMap { store.sideTabs.contains($0) ? $0 : nil } ?? store.side.tab
             if r.open { store.openSide(tab) } else { store.closeSide() }
         }
         if let t = textSize { store.setFontSize(CGFloat(t)) }

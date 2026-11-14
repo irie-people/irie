@@ -35,6 +35,8 @@ final class MenuState {
         var canPlugins = false
         var plugins: [PluginInfo] = []
         var canVPN = false
+        /// The right sidebar's tabs, each with its key (Store.sideTabs).
+        var sideTabs = SideTab.built(variorum: false)
 
         /// Whether the core's build has the plugin called name (DESIGN
         /// §4.17), so its menu items show; a core from before plugins has
@@ -61,7 +63,7 @@ extension Store {
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
-            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins, canVPN: canVPN)
+            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins, canVPN: canVPN, sideTabs: sideTabs)
     }
 
     /// Keeps the menu's facts up to date: whenever what they are read from
@@ -240,7 +242,7 @@ struct IrieCommands: Commands {
             // the key cmux and VS Code give a right side bar.
             Button(f.sideOpen ? "Hide Right Sidebar" : "Show Right Sidebar", action: run { store.toggleSide() })
                 .keyboardShortcut("b", modifiers: [.command, .option])
-            ForEach(SideTab.built) { t in
+            ForEach(f.sideTabs) { t in
                 Button(t.title, action: run { store.toggleSideTab(t) })
                     .keyboardShortcut(t.key, modifiers: [.command, .option])
             }

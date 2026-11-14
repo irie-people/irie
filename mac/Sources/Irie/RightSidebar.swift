@@ -15,9 +15,10 @@ import SwiftUI
 // helper starting only puts a count on a tab.
 
 /// A tab of the right sidebar, in the order the proposal gives them, then
-/// Notices, which also gives each its key: ⌥⌘1 to ⌥⌘6.
+/// Notices, then Variorum, the Writing plugin's (VariorumTab.swift), which
+/// also gives each its key: ⌥⌘1 to ⌥⌘7.
 enum SideTab: String, CaseIterable, Identifiable {
-    case dock, changes, helpers, plan, review, notices
+    case dock, changes, helpers, plan, review, notices, variorum
 
     var id: String { rawValue }
 
@@ -29,6 +30,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "Plan"
         case .review: return "Review"
         case .notices: return "Notices"
+        case .variorum: return "Variorum"
         }
     }
 
@@ -41,12 +43,16 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "list.bullet"
         case .review: return "checkmark.circle"
         case .notices: return "bell"
+        case .variorum: return "text.book.closed"
         }
     }
 
-    /// The tabs this build has, in their order. The others come with the
-    /// core features they need.
-    static let built: [SideTab] = [.dock, .helpers, .review, .notices]
+    /// The tabs this build has, in their order, with Variorum while the
+    /// core can answer it (Store.sideTabs). The others come with the core
+    /// features they need.
+    static func built(variorum: Bool) -> [SideTab] {
+        [.dock, .helpers, .review, .notices] + (variorum ? [.variorum] : [])
+    }
 
     /// Its key with ⌥⌘, by its place among all the tabs, so a key keeps its
     /// tab as more tabs arrive.
@@ -77,7 +83,8 @@ struct SideState: Equatable {
         s.open = d.bool(forKey: openKey)
         let w = d.double(forKey: widthKey)
         if w > 0 { s.width = clamp(w) }
-        if let t = d.string(forKey: tabKey).flatMap(SideTab.init(rawValue:)), SideTab.built.contains(t) { s.tab = t }
+        // Variorum's too: until the core's hello is in, it stays.
+        if let t = d.string(forKey: tabKey).flatMap(SideTab.init(rawValue:)), SideTab.built(variorum: true).contains(t) { s.tab = t }
         return s
     }
 
@@ -95,7 +102,7 @@ extension Store {
         if side.open { closeSide() } else { openSide(side.tab) }
     }
 
-    /// A tab's own key (⌥⌘1 to ⌥⌘6): shows the sidebar on that tab, or
+    /// A tab's own key (⌥⌘1 to ⌥⌘7): shows the sidebar on that tab, or
     /// closes it when that tab already shows.
     func toggleSideTab(_ tab: SideTab) {
         if side.open && side.tab == tab { closeSide() } else { openSide(tab) }
@@ -108,11 +115,29 @@ extension Store {
     /// while it is open and not sliding.
     var sideDocked: Bool { side.open && !sideSliding }
 
+    /// The right sidebar's tabs: those every core serves, and Variorum
+    /// while the core can answer it and Variorum is installed or set up
+    /// (VariorumTab.swift). Until the core has said, a Variorum tab kept
+    /// from the last run stays.
+    var sideTabs: [SideTab] {
+        let known = knowsFeatures ? (canVariorum ? variorum.wanted : false) : nil
+        return SideTab.built(variorum: known ?? (side.tab == .variorum))
+    }
+
+    /// Moves the right sidebar off a tab the core no longer serves, to the
+    /// first. It doesn't move back: only the user switches its tab.
+    func keepSideTab() {
+        guard !sideTabs.contains(side.tab) else { return }
+        var s = side
+        s.tab = SideTab.built(variorum: false)[0]
+        change(s)
+    }
+
     /// Opens the right sidebar on a tab: a closed one slides in.
     func openSide(_ tab: SideTab) {
         var s = side
         s.open = true
-        s.tab = SideTab.built.contains(tab) ? tab : SideTab.built[0]
+        s.tab = sideTabs.contains(tab) ? tab : SideTab.built(variorum: false)[0]
         if side.open { change(s) } else { slide(to: s) }
     }
 
@@ -256,7 +281,7 @@ struct RightSidebar: View {
 
     private func tabs(tight: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(SideTab.built) { t in tabButton(t, tight: tight) }
+            ForEach(store.sideTabs) { t in tabButton(t, tight: tight) }
         }
     }
 
@@ -332,6 +357,7 @@ struct RightSidebar: View {
         case .dock: DockTab()
         case .review: ReviewTab()
         case .notices: NoticesTab()
+        case .variorum: VariorumTab()
         default: HelpersTab()
         }
     }
