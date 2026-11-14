@@ -12,23 +12,8 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/dms"
 	"github.com/irie-people/irie/internal/ipc"
-	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/skills"
 )
-
-// env is a computer with nothing of the privacy plugin's on it: every
-// program it looks for is configured to a path that isn't there, so the
-// machine the tests run on doesn't matter.
-func env(t *testing.T) Env {
-	t.Helper()
-	dir := t.TempDir()
-	p := paths.Paths{Config: filepath.Join(dir, "config"), State: filepath.Join(dir, "state"), Data: filepath.Join(dir, "data"), Runtime: filepath.Join(dir, "run")}
-	cfg := config.Default()
-	cfg.VPN.Mullvad = filepath.Join(dir, "none", "mullvad")
-	cfg.Anon.Tor = filepath.Join(dir, "none", "tor")
-	cfg.Browser.Path = filepath.Join(dir, "none", "mullvad-browser")
-	return Env{Config: cfg, Paths: p}
-}
 
 // program makes an executable file in the test's folder and returns it.
 func program(t *testing.T, name string) string {
@@ -49,17 +34,6 @@ func privacyStatus(t *testing.T, e Env) ipc.Plugin {
 	}
 	t.Fatal("no privacy plugin")
 	return ipc.Plugin{}
-}
-
-func part(t *testing.T, p ipc.Plugin, name string) ipc.PluginPart {
-	t.Helper()
-	for _, x := range p.Parts {
-		if x.Name == name {
-			return x
-		}
-	}
-	t.Fatalf("no part %q", name)
-	return ipc.PluginPart{}
 }
 
 func TestPrivacyIsOnByDefaultWithItsPartsOff(t *testing.T) {

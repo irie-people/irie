@@ -54,9 +54,10 @@ struct MarketsCommands: Commands {
 
 /// The Markets window: the map, or what it lacks with what fixes it. It asks
 /// the core how the map stands as it opens and every few seconds while it is
-/// open, and loads the page again once a rebuild has settled: a new change
-/// loads when two looks in a row agree on it, so a page half written never
-/// shows.
+/// open. In the same folder a change shows once two looks in a row agree on
+/// it, so a page being written, or taken away and written again, never shows
+/// half done; a look that fails, as while the core restarts, changes
+/// nothing.
 @MainActor
 struct MarketsWindow: View {
     static let id = "markets"
@@ -64,9 +65,15 @@ struct MarketsWindow: View {
     @Environment(Store.self) private var store
     @State private var map: MarketsResult?
     @State private var loaded = false
-    /// The change of the page on show, and the one the last look saw.
-    @State private var shown: Date?
-    @State private var seen: Date?
+    /// What decides what shows: the map's state and when its page changed,
+    /// as on show and as the last look saw them.
+    private struct Seen: Equatable {
+        var state: String
+        var changed: Date?
+    }
+
+    @State private var shown: Seen?
+    @State private var seen: Seen?
     @State private var reloads = 0
 
     var body: some View {
@@ -120,27 +127,28 @@ struct MarketsWindow: View {
     }
 
     private func look() async {
-        let m = await store.markets()
+        let answer = await store.markets()
         loaded = true
-        guard let m else {
-            map = nil
-            return
-        }
-        // Another page, or a change of state, shows as it is.
-        if m.page != map?.page || m.state != map?.state {
+        guard let m = answer else { return }
+        let now = Seen(state: m.state, changed: m.changed)
+        // The first look, another folder, or the plugin turned on or off
+        // shows at once.
+        guard let old = map, m.folder == old.folder, (m.state == "plugin_off") == (old.state == "plugin_off") else {
             map = m
-            shown = m.changed
-            seen = m.changed
+            shown = now
+            seen = now
             return
         }
-        if m.changed != shown {
-            if m.changed == seen {
-                shown = m.changed
-                reloads += 1
-            }
-            seen = m.changed
+        if now == shown {
+            if m != old { map = m }
+        } else if now == seen {
+            map = m
+            shown = now
+            // A page rebuilt where one showed loads again; one that appears
+            // where none was loads as the window draws it.
+            if m.state == "ready", old.state == "ready" { reloads += 1 }
         }
-        if m != map { map = m }
+        seen = now
     }
 }
 
@@ -240,9 +248,11 @@ private struct MarketsLacking: View {
 // MARK: Page
 
 /// The map's page: a web view that reads only the map's folder and loads
-/// nothing from the network, so the research in it stays on this Mac. A
-/// link elsewhere, and any new window, opens in the browser; the page has no
-/// bridge to the app.
+/// nothing from the network, so the research in it stays on this Mac. A link
+/// out opens in the browser only when the person clicks it, never at the
+/// page's own word: a script can open no window, and one that follows a link
+/// itself, at load or on a timer, goes nowhere. Without its block on the
+/// network the page doesn't load at all. The page has no bridge to the app.
 private struct MarketsWeb: NSViewRepresentable {
     let page: URL
     let folder: URL
@@ -252,7 +262,9 @@ private struct MarketsWeb: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        let web = WKWebView(frame: .zero, configuration: config)
+        // On the Mac, unlike iOS, a script may open windows unless told not to.
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        let web = MarketsWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
         web.allowsMagnification = true
@@ -260,11 +272,21 @@ private struct MarketsWeb: NSViewRepresentable {
         context.coordinator.page = page
         context.coordinator.reloads = reload
         Self.offline { list in
-            if let list { config.userContentController.add(list) }
+            guard let list else {
+                web.loadHTMLString(Self.unblocked, baseURL: nil)
+                return
+            }
+            config.userContentController.add(list)
             web.loadFileURL(page, allowingReadAccessTo: folder)
         }
         return web
     }
+
+    /// What shows instead of the page when the network can't be blocked.
+    private static let unblocked = """
+    <p style="font: 13px -apple-system, sans-serif; color: #888; text-align: center; margin-top: 30vh">\
+    The map isn’t shown: this window couldn’t keep the page off the network. Open it from the toolbar’s More menu instead.</p>
+    """
 
     func updateNSView(_ web: WKWebView, context: Context) {
         let c = context.coordinator
@@ -293,9 +315,11 @@ private struct MarketsWeb: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var page: URL?
         var reloads = 0
+        /// Opens a link out in the browser.
+        var open: (URL) -> Void = { NSWorkspace.shared.open($0) }
 
         /// The page moves within itself (its #explore links); a link out
-        /// opens in the browser and the page stays.
+        /// that the person clicked opens in the browser, and the page stays.
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let target = action.request.url else { return decisionHandler(.cancel) }
@@ -303,19 +327,48 @@ private struct MarketsWeb: NSViewRepresentable {
                 decisionHandler(.allow)
                 return
             }
-            if action.navigationType == .linkActivated, Self.outside(target) { NSWorkspace.shared.open(target) }
+            if action.navigationType == .linkActivated, Self.outside(target), Self.pressed(webView) { open(target) }
             decisionHandler(.cancel)
         }
 
+        /// A link meant for a new window, as target="_blank" makes one.
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                      for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if let target = action.request.url, Self.outside(target) { NSWorkspace.shared.open(target) }
+            if let target = action.request.url, Self.outside(target), Self.pressed(webView) { open(target) }
             return nil
         }
 
         private static func outside(_ url: URL) -> Bool {
             ["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "")
         }
+
+        /// Whether the person just pressed in the page, as no script can.
+        private static func pressed(_ web: WKWebView) -> Bool {
+            (web as? MarketsWebView)?.justPressed == true
+        }
+    }
+}
+
+/// The map's web view, which knows when the person last pressed a mouse
+/// button or a key in it: only the system's own events say so.
+private final class MarketsWebView: WKWebView {
+    private var pressed = Date.distantPast
+
+    var justPressed: Bool { Date().timeIntervalSince(pressed) < 2 }
+
+    override func mouseDown(with event: NSEvent) {
+        pressed = Date()
+        super.mouseDown(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        pressed = Date()
+        super.otherMouseDown(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        pressed = Date()
+        super.keyDown(with: event)
     }
 }
 
