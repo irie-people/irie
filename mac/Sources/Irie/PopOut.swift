@@ -78,7 +78,7 @@ enum PopOut {
     /// preview starts sizing nothing (Preview.swift).
     nonisolated static func arguments(_ a: AttachInfo, cells: (cols: Int, rows: Int)?, fontSize: CGFloat, colours: TerminalColors) -> [String] {
         var args = [
-            "--title=Irie terminal",
+            "--title=\(Brand.name) terminal",
             "--font-size=" + String(format: "%g", Double(fontSize)),
             "--background=" + String(format: "%06X", colours.ground),
             "--foreground=" + String(format: "%06X", colours.ink),
@@ -208,7 +208,7 @@ extension Store {
     func popBackIn() {
         guard let p = poppedOut else { return }
         guard let a = attach else {
-            say("The terminal comes back once Irie is connected. Closing its Ghostty window brings it back too.", error: true)
+            say("The terminal comes back once \(Brand.name) is connected. Closing its Ghostty window brings it back too.", error: true)
             return
         }
         endPopOut()
