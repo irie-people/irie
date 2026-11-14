@@ -379,15 +379,26 @@ func TestEndOutsideStopsTheOutsideCopy(t *testing.T) {
 }
 
 func TestEndOutsideNeverForcesAProcess(t *testing.T) {
-	cmd, done := sleeper(t, "/bin/sh", "-c", "trap '' TERM; while :; do sleep 1; done")
-	time.Sleep(200 * time.Millisecond) // the trap is set
+	// The shell says when its trap is set: a busy machine can take far
+	// longer to get there than any fixed wait, and a TERM that comes first
+	// ends it.
+	ready := filepath.Join(t.TempDir(), "ready")
+	cmd, done := sleeper(t, "/bin/sh", "-c", "trap '' TERM; : > '"+ready+"'; while :; do sleep 1; done")
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the shell never set its trap")
+		}
+	}
 	o := ipc.OutsideSession{VendorID: idleID, Name: "stubborn", Kind: ipc.KindInteractive, Status: ipc.StatusIdle, PID: cmd.Process.Pid}
 	start := time.Now()
 	err := endOutside(o, nil, 500*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "did not exit") || !strings.Contains(err.Error(), "nothing was moved") {
 		t.Errorf("err = %v", err)
 	}
-	if d := time.Since(start); d < 500*time.Millisecond || d > 3*time.Second {
+	if d := time.Since(start); d < 500*time.Millisecond || d > 3*time.Second && !slow(t) {
 		t.Errorf("waited %v", d)
 	}
 	if !runs(done) {

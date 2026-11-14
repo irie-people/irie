@@ -259,7 +259,9 @@ if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x "$BRAND_
 		appsrc=$(git rev-parse HEAD:mac HEAD:tools/mkicon 2>/dev/null | paste -sd ' ' -)
 		if [ "$(cat mac/build/Irie.sources 2>/dev/null)" != "$appsrc" ] || [ ! -d "$newapp" ]; then
 			rm -f mac/build/Irie.sources
-			mac/build.sh >"$work/mac.log" 2>&1 &
+			# A build to install, numbered after every earlier one, so
+			# macOS opens it rather than another copy (mac/build.sh).
+			IRIE_MAC_INSTALL=1 mac/build.sh >"$work/mac.log" 2>&1 &
 			macpid=$!
 		fi
 	fi
