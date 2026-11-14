@@ -181,4 +181,9 @@ func TestListen(t *testing.T) {
 	if strings.Join(got, ",") != "disconnected,connecting,connected" || len(lockdown) != 1 || !lockdown[0] {
 		t.Errorf("states %v, lockdown %v", got, lockdown)
 	}
+	// --json is status's option, before listen: mullvad-cli 2026.3
+	// refuses `status listen --json`.
+	if b, _ := os.ReadFile(filepath.Join(filepath.Dir(c.Bin), "args")); string(b) != "status --json listen\n" {
+		t.Errorf("ran %q", b)
+	}
 }

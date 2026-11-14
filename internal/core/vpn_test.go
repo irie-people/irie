@@ -34,11 +34,11 @@ func vpnCore(t *testing.T) (*Core, string) {
 	log := filepath.Join(dir, "args")
 	script := `#!/bin/sh
 echo "$*" >> ` + log + `
-case "$1 $2" in
-"status --json") echo '` + testConnected + `';;
-"account get") printf 'Mullvad account:    1234123412341234\nExpires at:         2099-01-01 00:00:00 +00:00\n';;
-"lockdown-mode get") echo 'Block traffic when the VPN is disconnected: on';;
-"status listen") echo '` + testConnected + `'; sleep 30;;
+case "$1 $2 $3" in
+"status --json listen") echo '` + testConnected + `'; sleep 30;;
+"status --json "*) echo '` + testConnected + `';;
+"account get "*) printf 'Mullvad account:    1234123412341234\nExpires at:         2099-01-01 00:00:00 +00:00\n';;
+"lockdown-mode get "*) echo 'Block traffic when the VPN is disconnected: on';;
 esac
 `
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
