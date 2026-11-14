@@ -53,6 +53,18 @@ say() { echo "live: $*" >&2; }
 # Launch Services lists it.
 app_in_front() { lsappinfo list 2>/dev/null | grep -F "\"$BRAND_NAME\" ASN:" | grep -q '(in front)'; }
 
+# app_pids prints the pids of the running app. irie away runs the same
+# executable with --away-helper for an agent's command, which is no app to
+# stop: stopping it would stop the command (DESIGN §2.1, principle 6).
+app_pids() {
+	for p in $(pgrep -x "$BRAND_EXE"); do
+		case $(ps -o args= -p "$p" 2>/dev/null) in
+		*--away-helper*) ;;
+		*) echo "$p" ;;
+		esac
+	done
+}
+
 # rev prints the commit a Go binary was built from.
 rev() { go version -m "$1" 2>/dev/null | sed -n 's/^[[:space:]]*build[[:space:]]*vcs\.revision=//p'; }
 
@@ -248,7 +260,7 @@ if [ -n "$code" ]; then take_slot; fi
 
 # Irie.app builds while the tests run, not after them.
 newapp=
-if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || pgrep -x "$BRAND_EXE" >/dev/null; }; then
+if [ "$(uname)" = Darwin ] && [ -d mac ] && { [ -d "$app" ] || [ -n "$(app_pids)" ]; }; then
 	built=$(cat "$appstamp" 2>/dev/null || true)
 	if [ ! -d "$app" ] || [ -z "$built" ] || ! git diff --quiet "$built" HEAD -- mac tools/mkicon 2>/dev/null; then
 		newapp="mac/build/$BRAND_NAME.app"
@@ -355,7 +367,7 @@ pids=
 # waits beside the old one, and the core swaps it in once another app is in
 # front or you step away (Gabriel, DESIGN §4.11).
 inuse=
-if [ -n "$newapp" ] && pgrep -x "$BRAND_EXE" >/dev/null && app_in_front; then
+if [ -n "$newapp" ] && [ -n "$(app_pids)" ] && app_in_front; then
 	idle=$(ioreg -c IOHIDSystem -d 4 -k HIDIdleTime 2>/dev/null | awk '/HIDIdleTime/ {print int($NF / 1000000000); exit}')
 	if [ "${idle:-999}" -lt 60 ]; then inuse=1; fi
 fi
@@ -371,17 +383,17 @@ if [ -n "$newapp" ]; then
 	# The app keeps no state of its own (docs/MAC.md), so it is stopped, not
 	# asked to quit. Launch Services would bring back an Irie that is still
 	# running instead of starting the new one, so it waits for the exit.
-	pids=$(pgrep -x "$BRAND_EXE" || true)
+	pids=$(app_pids)
 	front=
 	if [ -n "$pids" ]; then
 		if app_in_front; then front=1; fi
 		kill $pids 2>/dev/null || true
 		n=0
-		while pgrep -x "$BRAND_EXE" >/dev/null && [ $n -lt 30 ]; do
+		while [ -n "$(app_pids)" ] && [ $n -lt 30 ]; do
 			sleep 0.1
 			n=$((n + 1))
 		done
-		pkill -9 -x "$BRAND_EXE" || true
+		for p in $(app_pids); do kill -9 "$p" 2>/dev/null || true; done
 	fi
 	mkdir -p "$(dirname "$app")"
 	rm -rf "$app"
