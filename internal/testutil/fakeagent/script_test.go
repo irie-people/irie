@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseScript(t *testing.T) {
-	got, err := parseScript("prompt, tool:Bash,ask,permission,sub:a1b2c3:tool:Read+ask+sleep:10ms,stopfail:rate_limit,sleep:1s,stop,write:notes.md,commit,stop:bg,stop:ask,test:pass,test:fail,stop:passes,exit:3")
+	got, err := parseScript("prompt, tool:Bash,ask,permission,sub:a1b2c3:tool:Read+ask+sleep:10ms,stopfail:rate_limit,sleep:1s,stop,write:notes.md,commit,stop:bg,stop:ask,test:pass,test:fail,stop:passes,box,box:away,exit:3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +27,8 @@ func TestParseScript(t *testing.T) {
 		{kind: "test", arg: "pass"},
 		{kind: "test", arg: "fail"},
 		{kind: "stop", arg: "passes"},
+		{kind: "box"},
+		{kind: "box", arg: "away"},
 		{kind: "exit", n: 3},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -38,7 +40,7 @@ func TestParseScriptRefusesWhatIsNotAScript(t *testing.T) {
 	for _, s := range []string{
 		"", "describe this repo in one paragraph", "say hello", "keep running", "prompt,", "tool:", "tool:a b",
 		"sleep:soon", "exit:x", "exit:300", "stopfail:", "sub:a1", "sub:a1:prompt", "sub:a1:sub:a2:tool:Bash",
-		"sub:a1:stop", "sub:a1:exit:1", "prompt:now", "stop:now", "write:", "write:../x", "write:a/b", "commit:all", "sub:a1:write:x", "test", "test:maybe",
+		"sub:a1:stop", "sub:a1:exit:1", "prompt:now", "stop:now", "write:", "write:../x", "write:a/b", "commit:all", "sub:a1:write:x", "test", "test:maybe", "box:on", "box:", "sub:a1:box",
 	} {
 		if steps, err := parseScript(s); err == nil {
 			t.Errorf("%q parsed as %+v", s, steps)

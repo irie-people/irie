@@ -108,6 +108,21 @@ type SendArgs struct {
 	Text    string `json:"text"`
 }
 
+// OpContinue is an addition to the ops of DESIGN §2.4: it types
+// "continue" and Enter to a session's agent, as send does, but only while
+// the agent's own prompt shows with nothing typed in it, and presses Enter
+// only once the prompt holds the word (DESIGN §4.7). It is the quick way
+// on for an agent that stopped, as at an API error, and the Mac app sends
+// it for a double ↓ on an empty prompt. It refuses with CodeBusy when the
+// prompt has text, when no prompt shows, as while a menu waits on you, and
+// as send does.
+const OpContinue = "continue"
+
+// ContinueArgs name the session whose agent to send on.
+type ContinueArgs struct {
+	Session string `json:"session"`
+}
+
 // OpFlip is an addition to the ops of DESIGN §2.4: it turns the slot's view
 // of the session you picked between its conversation and its raw terminal
 // (DESIGN §4.7), and gives the slot the keyboard.

@@ -670,7 +670,7 @@ func (c *Core) trodSweep() bool {
 	c.keepAwake(s.in && s.n.KeepAwake && work && !overWeek)
 	c.publishHeader()
 	for _, d := range dues {
-		if err := c.typeTo(d.id, d.text, c.trodTypes(d)); err != nil {
+		if err := c.typeTo(d.id, d.text, c.trodTypes(d), nil); err != nil {
 			c.log.Info("trod bot", "session", d.id, "reason", d.reason, "err", err)
 		}
 	}
