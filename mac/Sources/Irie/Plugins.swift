@@ -96,7 +96,9 @@ struct PluginCommands: Commands {
     /// What a part's words do: :setup words set it up, and others start
     /// its own session, as :write starts Writing in Variorum.
     static func setupTitle(_ x: PluginInfo.Part, _ words: String) -> String {
-        words.hasPrefix(":setup") ? "Set Up…" : "Start \(x.title)…"
+        // :mail opens the Mail tab, where an account is added.
+        if words == ":mail" { return "Show Mail" }
+        return words.hasPrefix(":setup") ? "Set Up…" : "Start \(x.title)…"
     }
 
     /// The core's sentence on a part, a line each, so the submenu stays

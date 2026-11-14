@@ -39,7 +39,6 @@ func mailPlugin() Plugin {
 		Name:    "mail",
 		Title:   "Mail",
 		Summary: "Your Gmail and Proton Mail inboxes in one list inside " + brand.Name + ", each account in a colour of its own. What it reads stays in memory, and agents can't reach it.",
-		Setup:   ":mail",
 		key:     "plugins.mail",
 		on:      func(c config.Config) bool { return c.Plugins.Mail },
 		Parts: []Part{
