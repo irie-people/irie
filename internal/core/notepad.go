@@ -432,15 +432,15 @@ func changeNotes(notes, deleted *[]padNote, a ipc.NotepadArgs, now time.Time) (s
 		// An edit that crossed a delete keeps what was typed: the note
 		// comes back with it. One the core never had, as when the add was
 		// lost on the way, is added.
+		if len(*notes) >= ipc.MaxNotes {
+			return "", ipc.Errorf(ipc.CodeBadArgs, "The notepad holds at most %d notes. Delete some you have done first.", ipc.MaxNotes)
+		}
 		if j := indexNote(*deleted, a.ID); j >= 0 {
 			n := (*deleted)[j]
 			*deleted = slices.Delete(*deleted, j, j+1)
 			n.Text, n.Changed = a.Text, now
 			*notes = putBack(*notes, n)
 			return a.ID, nil
-		}
-		if len(*notes) >= ipc.MaxNotes {
-			return "", ipc.Errorf(ipc.CodeBadArgs, "The notepad holds at most %d notes. Delete some you have done first.", ipc.MaxNotes)
 		}
 		*notes = append(*notes, padNote{Note: ipc.Note{ID: a.ID, Text: a.Text, Created: now, Changed: now}})
 		return a.ID, nil
@@ -524,10 +524,14 @@ func changeNotes(notes, deleted *[]padNote, a ipc.NotepadArgs, now time.Time) (s
 				j++
 				continue
 			}
-			*deleted = slices.Delete(*deleted, j, j+1)
 			if indexNote(*notes, n.ID) >= 0 {
+				*deleted = slices.Delete(*deleted, j, j+1)
 				continue
 			}
+			if len(*notes) >= ipc.MaxNotes {
+				return "", ipc.Errorf(ipc.CodeBadArgs, "The notepad holds at most %d notes, so nothing came back. Delete some you have done first.", ipc.MaxNotes)
+			}
+			*deleted = slices.Delete(*deleted, j, j+1)
 			n.Changed = now
 			*notes = putBack(*notes, n)
 		}
@@ -568,20 +572,26 @@ func (c *Core) notepadView() ipc.Notepad {
 	return v
 }
 
-// noteSent marks note id sent, as its input went through: ticked off, with
-// when it went and the session it started or went to. A note that is gone
-// changes nothing.
-func (c *Core) noteSent(id string, res ipc.InputResult) {
+// noteSent marks note id sent, as its input of text went through: ticked
+// off, with when it went and the session it started or went to. A note the
+// core never had, as when the client sent it before its add came, is added
+// with the text, sent; the add, when it comes, then leaves it be. A note
+// deleted meanwhile stays deleted.
+func (c *Core) noteSent(id, text string, res ipc.InputResult) {
 	p := &c.pad
 	p.mu.Lock()
 	i := indexNote(p.notes, id)
-	if p.readOnly || i < 0 {
+	if p.readOnly || i < 0 && (indexNote(p.deleted, id) >= 0 || !noteID.MatchString(id) || len(p.notes) >= ipc.MaxNotes || len(text) > ipc.MaxNoteText) {
 		p.mu.Unlock()
 		c.log.Info("notepad: a sent note is not there to mark", "id", id)
 		return
 	}
 	notes := slices.Clone(p.notes)
 	now := p.clock().UTC().Truncate(time.Millisecond)
+	if i < 0 {
+		notes = append(notes, padNote{Note: ipc.Note{ID: id, Text: text, Created: now}})
+		i = len(notes) - 1
+	}
 	session := ""
 	if res.Session != nil {
 		session = res.Session.ID

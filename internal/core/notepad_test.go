@@ -288,7 +288,7 @@ func TestANewerNotepadFileIsOnlyShown(t *testing.T) {
 	if _, err := c.notepadOp(ipc.NotepadArgs{Do: ipc.NotepadAdd, Text: "x"}); code(err) != ipc.CodeBusy {
 		t.Errorf("an add to a newer file: %v", err)
 	}
-	c.noteSent("a", ipc.InputResult{Did: ipc.InputSpawned})
+	c.noteSent("a", "from a newer core", ipc.InputResult{Did: ipc.InputSpawned})
 	if b, _ := os.ReadFile(c.paths.Notepad()); !bytes.Equal(b, newer) {
 		t.Errorf("the newer file was written: %s", b)
 	}
@@ -339,10 +339,20 @@ func TestNotepadFramesComeAfterTheSnapshotAndEachChange(t *testing.T) {
 	// A sent note is ticked off and says when it went, and where.
 	c.padDo(t, ipc.NotepadArgs{Do: ipc.NotepadAdd, ID: "b", Text: "second"})
 	pad("after an add")
-	c.noteSent("b", ipc.InputResult{Did: ipc.InputSpawned, Session: &ipc.Session{ID: "s0000000000ab"}})
+	c.noteSent("b", "second", ipc.InputResult{Did: ipc.InputSpawned, Session: &ipc.Session{ID: "s0000000000ab"}})
 	n := pad("after a send")
 	if b := n.Notes[1]; !b.Done || b.Sent.IsZero() || b.Session != "s0000000000ab" {
 		t.Errorf("a sent note: %+v", b)
+	}
+	// A note sent before its add came is taken in from the text that went,
+	// and the add, when it comes, leaves it be.
+	c.noteSent("early", "sent before its add", ipc.InputResult{Did: ipc.InputSpawned})
+	n = pad("after a send of a note the core never had")
+	if e := n.Notes[2]; e.ID != "early" || e.Text != "sent before its add" || !e.Done || e.Sent.IsZero() {
+		t.Errorf("a note sent before its add: %+v", e)
+	}
+	if r := c.padDo(t, ipc.NotepadArgs{Do: ipc.NotepadAdd, ID: "early", Text: "sent befo"}); len(r.Notes) != 3 || r.Notes[2].Text != "sent before its add" {
+		t.Errorf("its add, late: %+v", r.Notes)
 	}
 }
 

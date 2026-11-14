@@ -21,10 +21,10 @@ import (
 // Words sent from a note of the notepad mark the note sent once they went
 // through, whatever they did but ask (notepad.go).
 func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error) {
-	if a.Note != "" {
+	if note, typed := a.Note, a.Text; note != "" {
 		defer func() {
 			if err == nil && out.Did != ipc.InputAsked {
-				c.noteSent(a.Note, out)
+				c.noteSent(note, typed, out)
 			}
 		}()
 	}

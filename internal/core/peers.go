@@ -662,7 +662,8 @@ func (c *Core) inputOn(p *peerState, a ipc.InputArgs) (ipc.InputResult, error) {
 	if cl == nil || !up {
 		return ipc.InputResult{}, ipc.Errorf(ipc.CodePeerDown, "%s isn't answering just now, so the task didn't start anywhere", name)
 	}
-	a.Session, a.Outside = "", ""
+	// Its notes are this machine's, which ticks the note off (notepad.go).
+	a.Session, a.Outside, a.Note = "", "", ""
 	ctx, cancel := context.WithTimeout(context.Background(), peerCallTimeout)
 	defer cancel()
 	var raw json.RawMessage

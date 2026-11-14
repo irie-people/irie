@@ -48,6 +48,10 @@ final class NotesModel {
     /// Where notes deleted here were, so Undo shows them back in place
     /// before the core says.
     @ObservationIgnored private var places: [String: (prev: String?, at: Int)] = [:]
+    /// What a note said before an edit emptied it: deleted empty, it keeps
+    /// those words in Recently Deleted, as the core keeps them.
+    @ObservationIgnored private var emptied: [String: String] = [:]
+    @ObservationIgnored private var copying: Task<Void, Never>?
 
     static let copyKey = "notepadCopy"
     static let pendingKey = "notepadPending"
@@ -97,10 +101,23 @@ final class NotesModel {
         base = n
         heard = true
         shown = true
-        if let b = try? JSONEncoder().encode(n), b.count <= Self.copyMost {
-            UserDefaults.standard.set(b, forKey: Self.copyKey)
-        }
+        keepCopy()
         redraw()
+    }
+
+    /// Keeps a copy of the core's notepad in the defaults a second after it
+    /// last changed, so the notes show while the core is away; typing never
+    /// waits on it. The core's file is what keeps them.
+    private func keepCopy() {
+        guard !fixture else { return }
+        copying?.cancel()
+        copying = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            if let b = try? JSONEncoder().encode(self.base), b.count <= Self.copyMost {
+                UserDefaults.standard.set(b, forKey: Self.copyKey)
+            }
+        }
     }
 
     /// Fixture notes, for --snapshot: nothing is saved or sent.
@@ -132,6 +149,11 @@ final class NotesModel {
         // A note gone from the list, as one just deleted whose field ends
         // its editing, takes no edit: it would bring the note back.
         guard let n = note(id), n.text != text else { return }
+        if text.isBlank, !n.text.isBlank {
+            emptied[id] = n.text
+        } else if !text.isBlank {
+            emptied[id] = nil
+        }
         if let i = pending.indices.last, pending[i].uid != inFlight, pending[i].args.id == id,
            pending[i].args.action == "edit" || pending[i].args.action == "add" {
             pending[i].args.text = text
@@ -152,15 +174,21 @@ final class NotesModel {
         queue(NotepadArgs(action: "move", id: id, before: before))
     }
 
-    /// Moves notes to Recently Deleted, where the core keeps them 30 days.
-    func delete(_ ids: [String]) {
-        guard !ids.isEmpty else { return }
+    /// Moves notes to Recently Deleted, where the core keeps them 30 days,
+    /// and returns what they said: a line never written in keeps nothing,
+    /// and one emptied keeps the words it had.
+    @discardableResult
+    func delete(_ ids: [String]) -> [String] {
+        guard !ids.isEmpty else { return [] }
+        var kept: [String] = []
         for id in ids {
-            if let i = pad.notes.firstIndex(where: { $0.id == id }) {
-                places[id] = (i > 0 ? pad.notes[i - 1].id : nil, i)
-            }
+            guard let i = pad.notes.firstIndex(where: { $0.id == id }) else { continue }
+            places[id] = (i > 0 ? pad.notes[i - 1].id : nil, i)
+            let words = pad.notes[i].text.isBlank ? emptied[id] : pad.notes[i].text
+            if let words, !words.isBlank { kept.append(words) }
         }
         queue(NotepadArgs(action: "delete", ids: ids))
+        return kept
     }
 
     /// Brings notes back from Recently Deleted, to where they were.
@@ -214,7 +242,9 @@ final class NotesModel {
             }
             return
         }
-        guard served, !flushing, let head = pending.first, let store else { return }
+        // While the core's file is a newer version's, the changes wait,
+        // kept, for a core that can take them.
+        guard served, !(base.readOnly ?? false), !flushing, let head = pending.first, let store else { return }
         flushing = true
         inFlight = head.uid
         Task { [weak self] in
@@ -234,6 +264,12 @@ final class NotesModel {
                 self.redraw()
                 if e.code == "bad_args" { store.say(e.msg, error: true) }
                 self.flush()
+            } catch where (error as? WireError)?.code == "busy" {
+                // The file is read only: the frame says so, the panel shows
+                // why, and the changes wait for a core that can take them.
+                guard let self else { return }
+                self.flushing = false
+                self.inFlight = nil
             } catch {
                 // Away, busy or unable to write: it waits, kept.
                 guard let self else { return }
@@ -317,7 +353,10 @@ final class NotesModel {
             for id in ids {
                 guard let i = at(id) else { continue }
                 var x = n.notes.remove(at: i)
-                guard !x.text.isBlank else { continue }
+                if x.text.isBlank {
+                    guard let words = emptied[id], !words.isBlank else { continue }
+                    x.text = words
+                }
                 x.deleted = now
                 n.deleted.insert(x, at: 0)
             }

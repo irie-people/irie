@@ -263,7 +263,7 @@ struct NotesPanel: View {
                     // A paste of several lines is a note a line; a line
                     // broken with ⇧Return adds one character, and stays.
                     let breaks = { (t: String) in t.filter(\.isNewline).count }
-                    if new.count > old.count + 1, breaks(new) > breaks(old) { commitDraft(split: true, keepFocus: true) }
+                    if new.count > old.count + 1, breaks(new) > breaks(old) { pasted(old: old, new: new) }
                 }
                 .accessibilityLabel("New note")
                 .accessibilityHint("Return keeps it as a note for later.")
@@ -295,17 +295,32 @@ struct NotesPanel: View {
         }
     }
 
-    /// Makes what is typed in the last line a note, or a note of each line
-    /// when it was pasted; lines broken with ⇧Return stay in one note.
-    private func commitDraft(split: Bool = false, keepFocus: Bool = false) {
+    /// Makes what is typed in the last line a note, its lines broken with
+    /// ⇧Return kept in it.
+    private func commitDraft(keepFocus: Bool = false) {
         guard store.notes.canChange else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let notes = split
-            ? text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            : [text].filter { !$0.isEmpty }
         if !draft.isEmpty { draft = "" }
-        for n in notes { store.notes.add(n) }
+        if !text.isEmpty { store.notes.add(text) }
         if keepFocus { focusEnd(.draft) }
+    }
+
+    /// A paste of several lines in the last line: what was typed there
+    /// before is a note, as it was, then each line pasted is one.
+    private func pasted(old: String, new: String) {
+        guard store.notes.canChange else { return }
+        let o = Array(old), n = Array(new)
+        var head = 0
+        while head < o.count, head < n.count, o[head] == n[head] { head += 1 }
+        var tail = 0
+        while tail < o.count - head, tail < n.count - head, o[o.count - 1 - tail] == n[n.count - 1 - tail] { tail += 1 }
+        let typed = String(o[..<head]) + String(o[(o.count - tail)...])
+        let lines = String(n[head..<(n.count - tail)]).split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        draft = ""
+        if !typed.isBlank { store.notes.add(typed.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        for line in lines { store.notes.add(line) }
+        focusEnd(.draft)
     }
 
     /// Return in a note: an empty note under it, as in Notes, or the last
@@ -314,7 +329,7 @@ struct NotesPanel: View {
         let model = store.notes
         guard let note = model.note(id) else { return }
         if note.text.isBlank {
-            model.delete([id])
+            remove([id])
             focusEnd(.draft)
             return
         }
@@ -331,7 +346,7 @@ struct NotesPanel: View {
         let model = store.notes
         guard let note = model.note(id), note.text.isEmpty else { return .ignored }
         let i = notes.firstIndex { $0.id == id } ?? 0
-        model.delete([id])
+        remove([id])
         focusEnd(i > 0 ? .note(notes[i - 1].id) : (notes.count > 1 ? .note(notes[1].id) : .draft))
         return .handled
     }
@@ -364,24 +379,22 @@ struct NotesPanel: View {
         return .handled
     }
 
-    /// When a line loses the keyboard: what was typed in the last line is a
-    /// note, and a note left empty goes.
+    /// When a note loses the keyboard empty, it goes. What is typed in the
+    /// last line stays there, kept, until Return makes it a note: Esc or a
+    /// click elsewhere never makes a half-written one.
     private func left(_ old: NoteFocus?) {
-        switch old {
-        case .draft:
-            commitDraft()
-        case let .note(id):
-            if let n = store.notes.note(id), n.text.isBlank { store.notes.delete([id]) }
-        case nil:
-            break
+        if case let .note(id) = old, let n = store.notes.note(id), n.text.isBlank {
+            remove([id])
         }
     }
 
-    private func delete(_ n: Note) {
-        store.notes.delete([n.id])
-        if !n.text.isBlank {
-            store.say("Deleted “\(n.text.firstLine.cut(40))”. It waits in Recently Deleted for 30 days.", error: false, seconds: 6, restore: [n.id])
-        }
+    /// Deletes notes, and when they had words, says so with Undo, which
+    /// brings them back from Recently Deleted.
+    private func remove(_ ids: [String]) {
+        let kept = store.notes.delete(ids)
+        guard !kept.isEmpty else { return }
+        let what = kept.count == 1 ? "“\(kept[0].firstLine.cut(40))”. It waits" : "\(kept.count) notes. They wait"
+        store.say("Deleted \(what) in Recently Deleted for 30 days.", error: false, seconds: 6, restore: ids)
     }
 
     @ViewBuilder private func rowMenu(_ n: Note, in notes: [Note]) -> some View {
@@ -399,7 +412,7 @@ struct NotesPanel: View {
         Button("Move Down (⌃⌘↓)") { _ = move(n.id, by: 1, in: notes) }
             .disabled(i >= notes.count - 1)
         Divider()
-        Button("Delete") { delete(n) }
+        Button("Delete") { remove([n.id]) }
     }
 }
 
