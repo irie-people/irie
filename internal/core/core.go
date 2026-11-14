@@ -365,6 +365,12 @@ func Run(o Options) error {
 	for _, x := range c.sessions {
 		x.demoted = true
 	}
+	// Until Gabriel first looks, the session on show is the tab on top: a
+	// promotion a core before this one left must not put it in the
+	// background for the seconds until he does (gabriel.go).
+	if x := c.sessions[c.selected]; x != nil && gabrielOn(c.cfg().Arch.Gabriel) {
+		c.gab.top = map[string]bool{x.id: true}
+	}
 	c.mu.Unlock()
 	c.releaseOutside()
 	c.tick()

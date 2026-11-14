@@ -75,11 +75,9 @@ func (c *Core) setLevel(x *session, level int, reason string) {
 			data["reason"] = reason
 		}
 		c.record(x, event.Event{Source: event.SourceUser, Kind: event.PrioritySet, Data: data})
-		// The tab the user is on never steps back for a promotion: Gabriel
-		// looks at what is in front at once, which he reads only while
-		// anything steps back.
-		go c.gabrielSweep()
 	}
+	// The tab the user is on, Gabriel's top, stays out: he keeps it known
+	// whenever they are at the computer.
 	c.background()
 }
 
@@ -254,8 +252,8 @@ func (c *Core) background() {
 
 // stepsBack says whether session id's tree belongs in the background, by
 // the order of the user's focus (gabriel.go): never the tab they are on,
-// Gabriel's top; every other session but an install while the top works
-// the machine, the rest of the focus and the promoted ones too; while a
+// Gabriel's top; while the top works the machine, every other session but
+// an install, the rest of the focus and the promoted ones too; while a
 // session is promoted, every one not raised (the promoted, with the
 // subtasks they delegated); and while Gabriel holds back, every one out of
 // the user's focus. The caller holds c.mu.
@@ -264,8 +262,10 @@ func (c *Core) stepsBack(id string, raised map[string]bool) bool {
 	switch {
 	case g.top[id]:
 		return false
-	case g.topBusy && !g.installs[id]:
-		return true
+	case g.topBusy:
+		// The tab on top decides while it works, a promotion's claim
+		// included: everything but an install steps back for it.
+		return !g.installs[id]
 	case len(raised) > 0:
 		return !raised[id]
 	}

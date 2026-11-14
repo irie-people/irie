@@ -47,12 +47,14 @@ func TestParseProcs(t *testing.T) {
 	out := `    1     0     0   0.0 /sbin/launchd
  1102     1   501  12.5 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
 40169 39945   501 154.1 go
+40170 39945   501  87,5 cargo
  bad line
 `
 	want := []Proc{
 		{PID: 1, PPID: 0, UID: 0, CPU: 0, Path: "/sbin/launchd"},
 		{PID: 1102, PPID: 1, UID: 501, CPU: 12.5, Path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"},
 		{PID: 40169, PPID: 39945, UID: 501, CPU: 154.1, Path: "go"},
+		{PID: 40170, PPID: 39945, UID: 501, CPU: 87.5, Path: "cargo"}, // a locale that writes 87,5
 	}
 	if got := ParseProcs(out); !reflect.DeepEqual(got, want) {
 		t.Errorf("procs = %+v\nwant %+v", got, want)

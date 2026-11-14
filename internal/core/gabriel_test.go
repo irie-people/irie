@@ -99,34 +99,56 @@ func TestAShowComesIntoTheFocusAtOnce(t *testing.T) {
 		"s-install": {id: "s-install"},
 	}, selected: "s-shown", log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	c.useConfig(config.Default())
-	// Not holding back: a show leaves Gabriel's focus be.
+	// With Gabriel off, as in a test core, a show leaves his state be.
+	t.Setenv("IRIE_GABRIEL", "off")
 	c.gab.focus = map[string]bool{"s-before": true}
 	c.refocus()
-	if want := map[string]bool{"s-before": true}; !reflect.DeepEqual(c.gab.focus, want) {
-		t.Errorf("not holding back: focus %v, want %v", c.gab.focus, want)
+	if want := map[string]bool{"s-before": true}; !reflect.DeepEqual(c.gab.focus, want) || c.gab.top != nil {
+		t.Errorf("Gabriel off: focus %v, top %v", c.gab.focus, c.gab.top)
 	}
-	// Holding back with Irie in front: the session now on show is in the
-	// focus, and the one before steps back with the rest, before the show
-	// returns rather than at the next sweep. An install stays in it.
-	c.gab.holding, c.gab.irieFront = true, true
+	// Holding back: the session now on show is in the focus, and the one
+	// before steps back with the rest, before the show returns rather than
+	// at the next sweep. An install stays in it. The session on show is
+	// the top of the focus at once too.
+	t.Setenv("IRIE_GABRIEL", "")
+	c.gab.holding, c.gab.present, c.gab.irieFront = true, true, true
 	c.gab.installs = map[string]bool{"s-install": true}
 	c.refocus()
 	if want := map[string]bool{"s-shown": true, "s-install": true}; !reflect.DeepEqual(c.gab.focus, want) {
 		t.Errorf("holding back: focus %v, want %v", c.gab.focus, want)
 	}
-	// It is the top of the focus at once too.
 	if want := map[string]bool{"s-shown": true}; !reflect.DeepEqual(c.gab.top, want) || c.gab.topOf != "s-shown" {
 		t.Errorf("holding back: top %v of %q, want s-shown", c.gab.top, c.gab.topOf)
 	}
-	// Not holding back, but with a session promoted and the user at the
-	// computer: the tab they turn to goes on top, so the promotion never
-	// puts it in the background.
-	c.gab = gabState{present: true, irieFront: true}
+	// A show is the user's own doing. Back from away, or from another app,
+	// the tab they turn to goes on top at once, so a promotion never keeps
+	// it in the background, and the next sweep reads the idle time afresh.
+	read := time.Now()
+	c.gab = gabState{idleRead: read}
 	c.sessions["s-before"].track.priority = 1
 	c.selected = "s-install"
 	c.refocus()
-	if want := map[string]bool{"s-install": true}; !reflect.DeepEqual(c.gab.top, want) {
-		t.Errorf("promoted: top %v, want the session on show", c.gab.top)
+	if want := map[string]bool{"s-install": true}; !reflect.DeepEqual(c.gab.top, want) || !c.gab.present || !c.gab.irieFront || c.gab.shownAt.IsZero() {
+		t.Errorf("back from away: top %v, present %v, Irie in front %v", c.gab.top, c.gab.present, c.gab.irieFront)
+	}
+	if !c.gab.idleRead.IsZero() {
+		t.Error("back from away: the idle time is not read afresh")
+	}
+	if c.gab.holding {
+		t.Error("back from away: holding back before a sweep said so")
+	}
+}
+
+func TestShowingAPeerRowTakesTheTopAway(t *testing.T) {
+	t.Setenv("IRIE_GABRIEL", "")
+	c := &Core{sessions: map[string]*session{"s-shown": {id: "s-shown"}}, selected: "s-shown",
+		log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	c.useConfig(config.Default())
+	c.gab = gabState{present: true, irieFront: true, holding: true, topBusy: true, topOf: "s-shown", top: map[string]bool{"s-shown": true}}
+	c.selected = "peer:s-elsewhere"
+	c.refocus()
+	if c.gab.top != nil || c.gab.topBusy {
+		t.Errorf("a peer's row on show: top %v, busy %v", c.gab.top, c.gab.topBusy)
 	}
 }
 
@@ -202,55 +224,55 @@ func TestPlaceTopReadsWhetherTheTabWorks(t *testing.T) {
 		"s-next":  {id: "s-next", cpu: 5},
 	}, selected: "s-shown"}
 	c.useConfig(config.Default())
-	// With nothing stepping back there is no top.
+	// At the computer there is a top, so a promotion never puts it in the
+	// background; while Gabriel holds nothing back, no one steps back for
+	// it however it works.
 	st := gabState{present: true, irieFront: true}
-	c.placeTop(&st, false, now)
-	if st.top != nil || st.topBusy {
-		t.Errorf("nothing steps back: top %v, busy %v", st.top, st.topBusy)
+	c.placeTop(&st, now)
+	if len(st.top) != 2 || st.topBusy {
+		t.Errorf("not holding back: top %v, busy %v", st.top, st.topBusy)
 	}
 	// Holding back: the tab and its subtask use 60% of a CPU between them,
 	// over arch.gabriel.heavy.
 	st.holding = true
-	c.placeTop(&st, false, now)
+	c.placeTop(&st, now)
 	if len(st.top) != 2 || !st.topBusy || st.topOf != "s-shown" {
 		t.Errorf("holding back: top %v, busy %v, of %q", st.top, st.topBusy, st.topOf)
 	}
 	// Running light, it stays at work until it has been light a while.
 	c.sessions["s-sub"].cpu = 0
-	c.placeTop(&st, false, now.Add(5*time.Second))
+	c.placeTop(&st, now.Add(5*time.Second))
 	if !st.topBusy {
 		t.Error("light for a moment, the rest came back at once")
 	}
-	c.placeTop(&st, false, now.Add(5*time.Second+gabrielCalm))
+	c.placeTop(&st, now.Add(5*time.Second+gabrielCalm))
 	if st.topBusy {
 		t.Error("light for long enough, still at work")
 	}
 	// A tab the user turns to starts afresh, light as it is.
 	c.sessions["s-shown"].cpu = 300
-	c.placeTop(&st, false, now.Add(time.Minute))
+	c.placeTop(&st, now.Add(time.Minute))
 	c.selected = "s-next"
-	c.placeTop(&st, false, now.Add(time.Minute+5*time.Second))
+	c.placeTop(&st, now.Add(time.Minute+5*time.Second))
 	if st.topBusy || st.topOf != "s-next" {
 		t.Errorf("turned to a light tab: busy %v, of %q", st.topBusy, st.topOf)
 	}
 	// Memory critically short: the tab on top comes first, light or not.
 	c.load.Pressure = sysload.PressureCritical
-	c.placeTop(&st, false, now.Add(2*time.Minute))
+	c.placeTop(&st, now.Add(2*time.Minute))
 	if !st.topBusy {
 		t.Error("memory critically short, the tab on top does not come first")
 	}
-	// A promotion with Gabriel not holding back puts the tab on top, which
-	// never steps back for it, but no one steps back for the tab.
-	st = gabState{present: true, irieFront: true}
-	c.placeTop(&st, true, now)
-	if len(st.top) != 1 || st.topBusy {
-		t.Errorf("promoted: top %v, busy %v", st.top, st.topBusy)
-	}
-	// The user away: nothing is on top.
+	// The user away, or another app in front: nothing is on top.
 	st.present = false
-	c.placeTop(&st, true, now)
+	c.placeTop(&st, now)
+	if st.top != nil || st.topBusy {
+		t.Errorf("away: top %v, busy %v", st.top, st.topBusy)
+	}
+	st = gabState{present: true, holding: true}
+	c.placeTop(&st, now)
 	if st.top != nil {
-		t.Errorf("away: top %v", st.top)
+		t.Errorf("another app in front: top %v", st.top)
 	}
 }
 
@@ -270,11 +292,11 @@ func TestTheOrderOfTheFocus(t *testing.T) {
 		{"the tab on top at work", gabState{holding: true, topBusy: true, focus: map[string]bool{"s-top": true, "s-told": true, "s-install": true},
 			top: map[string]bool{"s-top": true}, installs: map[string]bool{"s-install": true}},
 			none, []string{"s-told", "s-other", "s-raised", "s-raised-sub"}},
-		// The promoted step back for the tab on top; an install never does
-		// for the tab, only for a promotion, as without one.
+		// The promoted step back for the tab on top, and while it works an
+		// install does not step back for them either.
 		{"the tab on top at work, with a promotion", gabState{holding: true, topBusy: true, focus: map[string]bool{"s-top": true, "s-told": true, "s-install": true, "s-raised": true},
 			top: map[string]bool{"s-top": true}, installs: map[string]bool{"s-install": true}},
-			raised, []string{"s-told", "s-other", "s-install", "s-raised", "s-raised-sub"}},
+			raised, []string{"s-told", "s-other", "s-raised", "s-raised-sub"}},
 		{"a promotion", gabState{top: map[string]bool{"s-top": true}}, raised, []string{"s-told", "s-other", "s-install"}},
 		{"a promotion, no tab on top", gabState{}, raised, []string{"s-top", "s-told", "s-other", "s-install"}},
 	} {

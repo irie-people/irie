@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"os"
 	"os/exec"
 	"reflect"
 	"slices"
@@ -107,7 +108,10 @@ func treeUsage(roots map[string]int) map[string]treeUse {
 	if len(roots) == 0 {
 		return out
 	}
-	b, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,rss=,%cpu=").Output()
+	ps := exec.Command("ps", "-A", "-o", "pid=,ppid=,rss=,%cpu=")
+	// ps writes %cpu in the locale's numbers, such as 0,5 in German.
+	ps.Env = append(os.Environ(), "LC_ALL=C")
+	b, err := ps.Output()
 	if err != nil {
 		return out
 	}
@@ -127,6 +131,8 @@ func treeUsage(roots map[string]int) map[string]treeUse {
 
 // parsePS reads `ps -o pid=,ppid=,rss=,%cpu=`: each process's resident size
 // in bytes (ps gives KiB) and share of a CPU, and each process's children.
+// A share it cannot read, as in a locale that writes 0,5, counts as none,
+// and the process's memory still counts.
 func parsePS(b []byte) (procs map[int]treeUse, kids map[int][]int) {
 	procs, kids = map[int]treeUse{}, map[int][]int{}
 	sc := bufio.NewScanner(bytes.NewReader(b))
@@ -138,10 +144,10 @@ func parsePS(b []byte) (procs map[int]treeUse, kids map[int][]int) {
 		pid, err1 := strconv.Atoi(f[0])
 		ppid, err2 := strconv.Atoi(f[1])
 		kb, err3 := strconv.ParseInt(f[2], 10, 64)
-		cpu, err4 := strconv.ParseFloat(f[3], 64)
-		if err1 != nil || err2 != nil || err3 != nil || err4 != nil || pid == ppid {
+		if err1 != nil || err2 != nil || err3 != nil || pid == ppid {
 			continue
 		}
+		cpu, _ := strconv.ParseFloat(strings.Replace(f[3], ",", ".", 1), 64)
 		procs[pid] = treeUse{mem: kb << 10, cpu: cpu}
 		kids[ppid] = append(kids[ppid], pid)
 	}

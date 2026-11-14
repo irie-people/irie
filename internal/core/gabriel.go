@@ -88,6 +88,9 @@ type gabState struct {
 	topBusy bool
 	topCalm time.Time // since when the top has run light, while topBusy
 	topOf   string    // the session on show that topBusy was read for
+	// shownAt is when the user last turned to a tab in Irie (refocus): they
+	// were at the computer then, with Irie in front.
+	shownAt time.Time
 	// boostUntil is when the boost on ends: until then the user's focus
 	// gets the machine first whether it is busy or not.
 	boostUntil time.Time
@@ -104,6 +107,10 @@ type outProc struct {
 // (IRIE_GABRIEL=off, internal/testutil) would take the user's own agents
 // for apps outside it.
 func gabrielOff() bool { return os.Getenv(brand.Env("GABRIEL")) == "off" }
+
+// gabrielOn reports whether Gabriel works in this core: he is on, the
+// system has a background state, and it is not a test core.
+func gabrielOn(g config.Gabriel) bool { return g.On && proc.CanBackground && !gabrielOff() }
 
 // holds says whether Gabriel holds back: while he is on and the user is at
 // the computer, when the machine is busy or a boost is on, and at all times
@@ -204,14 +211,14 @@ func topBusyNext(cpu, heavy float64, critical, was bool, calmSince, now time.Tim
 	return true, calmSince
 }
 
-// placeTop works out st's top and whether it works the machine. The top
-// counts while anything steps back: while Gabriel holds back, or while a
-// session is promoted and the user is at the computer; whether it works
-// the machine only while he holds back. A tab the user turns to starts
-// afresh. The caller holds c.mu.
-func (c *Core) placeTop(st *gabState, promoted bool, now time.Time) {
+// placeTop works out st's top and whether it works the machine. There is a
+// top whenever the user is at the computer, so that a promotion, which
+// puts the others in the background at once, never puts it there; whether
+// it works the machine counts only while Gabriel holds back. A tab the user
+// turns to starts afresh. The caller holds c.mu.
+func (c *Core) placeTop(st *gabState, now time.Time) {
 	st.top = nil
-	if st.holding || st.present && promoted {
+	if st.present {
 		st.top = c.onTop(st.irieFront)
 	}
 	if !st.holding || len(st.top) == 0 {
@@ -228,30 +235,26 @@ func (c *Core) placeTop(st *gabState, promoted bool, now time.Time) {
 	st.topBusy, st.topCalm = topBusyNext(cpu, c.cfg().Arch.Gabriel.Heavy, c.load.Pressure >= sysload.PressureCritical, st.topBusy, st.topCalm, now)
 }
 
-// promoted reports whether a live session is promoted. The caller holds
-// c.mu.
-func (c *Core) promoted() bool {
-	for _, x := range c.sessions {
-		if x.track.priority > 0 && !x.dead {
-			return true
-		}
-	}
-	return false
-}
-
 // refocus takes the session now on show into the user's focus, and to the
-// top of it, at once while anything steps back, and moves the trees before
-// it returns: a show never waits for Gabriel's next sweep, up to
-// sampleEvery ticks away, with the session the user turned to still in the
-// background. The caller holds c.mu.
+// top of it, and moves the trees before it returns: a show never waits for
+// Gabriel's next sweep, up to sampleEvery ticks away, with the session the
+// user turned to still in the background. A show is the user's own doing:
+// they are at the computer, with Irie in front, whatever the last sweep
+// read. The caller holds c.mu.
 func (c *Core) refocus() {
-	promoted := c.promoted()
-	if !c.gab.holding && !(c.gab.present && promoted) {
+	g := c.cfg().Arch.Gabriel
+	if !gabrielOn(g) {
 		return
 	}
 	now := time.Now()
-	c.gab.focus = c.focusNow(c.gab.irieFront, c.gab.installs, c.cfg().Arch.Gabriel.Word, now)
-	c.placeTop(&c.gab, promoted, now)
+	if !c.gab.present {
+		// Back from away: the next sweep reads the idle time afresh, and
+		// holds back again as it says.
+		c.gab.idleRead = time.Time{}
+	}
+	c.gab.shownAt, c.gab.present, c.gab.irieFront = now, true, true
+	c.gab.focus = c.focusNow(true, c.gab.installs, g.Word, now)
+	c.placeTop(&c.gab, now)
 	c.background()
 }
 
@@ -288,10 +291,9 @@ func (c *Core) gabrielSweep() {
 	c.mu.Lock()
 	st := c.gab
 	load := c.load
-	promoted := c.promoted()
 	c.mu.Unlock()
 
-	on := g.On && proc.CanBackground && !gabrielOff()
+	on := gabrielOn(g)
 	if on {
 		if now.Sub(st.idleRead) >= gabrielIdleEvery {
 			if idle, ok := machineIdle(); ok {
@@ -311,9 +313,10 @@ func (c *Core) gabrielSweep() {
 	// the rest.
 	st.holding = holds(on, st.present, st.busy, now.Before(st.boostUntil), g.Always)
 	st.frontOK, st.irieFront = false, false
-	// What is in front says what the user looks at, which matters while
-	// anything steps back: the tab they are on never does (placeTop).
-	if st.holding || st.present && promoted {
+	// What is in front says what the user looks at: the tab they are on
+	// never steps back (placeTop), not even for a promotion, which comes at
+	// once and needs it known.
+	if st.present {
 		if a, ok, err := focus.Front(); err == nil && ok {
 			st.front, st.frontOK = a, true
 			st.irieFront = a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)
@@ -337,10 +340,17 @@ func (c *Core) gabrielSweep() {
 	outside := c.slowOutside(held, st, g, trees)
 
 	c.mu.Lock()
-	// The focus and its top are read last, so a show made during the sweep
-	// keeps the session it brought into the focus (refocus).
+	// A show made during the sweep wins: the user turned to a tab in Irie,
+	// so they are at the computer with Irie in front, and the idle time is
+	// read afresh next time (refocus). The focus and its top are read last,
+	// so it keeps the session it brought there, and the top goes on from
+	// where the show left it.
+	if c.gab.shownAt.After(st.shownAt) {
+		st.shownAt, st.present, st.irieFront, st.idleRead = c.gab.shownAt, true, true, time.Time{}
+	}
+	st.topBusy, st.topCalm, st.topOf = c.gab.topBusy, c.gab.topCalm, c.gab.topOf
 	st.focus = c.focusNow(st.irieFront, st.installs, g.Word, now)
-	c.placeTop(&st, c.promoted(), now)
+	c.placeTop(&st, now)
 	st.outside = outside
 	// A boost started or stopped meanwhile wins; one whose time is up ends.
 	st.boostUntil = c.gab.boostUntil
@@ -638,7 +648,7 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 	defer c.mu.Unlock()
 	st := c.gab
 	r := ipc.GabrielResult{
-		On: g.On && proc.CanBackground && !gabrielOff(), Outside: g.Outside, Present: st.present, Idle: st.idle.Round(time.Second).String(),
+		On: gabrielOn(g), Outside: g.Outside, Present: st.present, Idle: st.idle.Round(time.Second).String(),
 		Busy: st.busy, Holding: st.holding, Always: g.Always, CPUs: c.load.CPUs, RunQueue: c.load.RunQueue, Pressure: c.load.Pressure,
 	}
 	if st.frontOK {
