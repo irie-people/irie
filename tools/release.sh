@@ -50,7 +50,9 @@ done
 
 if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
 	say "$BRAND_NAME.app, for Apple silicon and Intel"
-	IRIE_MAC_UNIVERSAL=1 mac/build.sh
+	# A build to install: its version is internal/version's, checked
+	# above, and its build number orders it after earlier ones.
+	IRIE_MAC_INSTALL=1 IRIE_MAC_UNIVERSAL=1 mac/build.sh
 	app="$work/$BRAND_NAME.app"
 	ditto "mac/build/$BRAND_NAME.app" "$app"
 	# irie inside the app, so the app alone can start Irie (docs/MAC.md).
@@ -58,7 +60,6 @@ if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
 	# the app's own Irie would be one file.
 	mkdir -p "$app/Contents/Helpers"
 	lipo -create "$work/$BRAND_SLUG-darwin-arm64/$BRAND_SLUG" "$work/$BRAND_SLUG-darwin-amd64/$BRAND_SLUG" -output "$app/Contents/Helpers/$BRAND_SLUG"
-	plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 	# Signed again from the inside out, so the app's signature covers its
 	# helper, with the identity mac/build.sh signs with: ad hoc unless
 	# IRIE_SIGN_IDENTITY or `git config irie.sign` names one (docs/MAC.md).
