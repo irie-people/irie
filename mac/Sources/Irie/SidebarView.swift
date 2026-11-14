@@ -150,6 +150,22 @@ private struct SessionList: View {
                 .onChange(of: store.outsideSelection) {
                     if let k = store.outsideSelection { proxy.scrollTo("outside:" + k) }
                 }
+                // A list drawn afresh starts at its top: at launch, when the
+                // core's first rows bring the shown session with them, and
+                // when a palette draws the sidebar anew. The selected card
+                // comes into sight then too, or its edge and the lines from
+                // it to the terminal stay out of sight below the others
+                // until the selection moves (TabLink.swift). After this
+                // drawing, once the cards are laid out.
+                .onAppear {
+                    DispatchQueue.main.async {
+                        if let k = store.outsideSelection {
+                            proxy.scrollTo("outside:" + k)
+                        } else if let id = store.selection {
+                            proxy.scrollTo(id)
+                        }
+                    }
+                }
             }
             .focusable()
             .focusEffectDisabled()
