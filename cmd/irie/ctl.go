@@ -17,6 +17,7 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
+	"github.com/irie-people/irie/internal/rebuild"
 )
 
 const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
@@ -54,7 +55,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
-  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -175,6 +176,8 @@ func ctl(args []string) error {
 		return ctlReopen(args[1:])
 	case "dog":
 		return ctlDog(args[1:])
+	case "rebuilds":
+		return ctlRebuilds(args[1:])
 	case "trod":
 		return ctlTrod(args[1:])
 	case "gabriel":
@@ -282,7 +285,12 @@ func printList(w io.Writer, r ipc.ListResult) error {
 	rows := func(list []ipc.Session) {
 		fmt.Fprintln(tw, "SESSION\tSTATE\tNAME\tDETAIL")
 		for _, s := range list {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, s.Detail)
+			detail := s.Detail
+			// What its card says of its prompt-cache rebuilds today.
+			if r := s.Rebuilds; r != nil && r.Words != "" {
+				detail = strings.TrimPrefix(detail+" · "+r.Words, " · ")
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, detail)
 		}
 	}
 	var rest, parked []ipc.Session
@@ -830,16 +838,24 @@ func ctlReopen(args []string) error {
 	if *lost {
 		return reopenLost(sock)
 	}
+	// The closed list finds a session by name, and says what its next turn
+	// will cost; with none named, reopen needs it only for the price.
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil && len(args) == 1 {
+		return err
+	}
+	// With none named, the core reopens the session closed last, which the
+	// closed list has first.
 	id := ""
+	var cold *ipc.Cold
+	if len(args) == 0 && len(l.Closed) > 0 {
+		cold = l.Closed[0].Cold
+	}
 	if len(args) == 1 {
-		var l ipc.ListResult
-		if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
-			return err
-		}
 		id = args[0]
 		for _, c := range l.Closed {
 			if c.ID == args[0] || strings.EqualFold(c.Name, args[0]) {
-				id = c.ID
+				id, cold = c.ID, c.Cold
 				break
 			}
 		}
@@ -849,6 +865,11 @@ func ctlReopen(args []string) error {
 		return err
 	}
 	fmt.Println(r.Session.ID)
+	// What its next turn costs: its prompt cache has run out (DESIGN §6.3).
+	if cold != nil {
+		fmt.Fprintf(os.Stderr, "%s: its prompt cache has run out, so its next turn writes %s tokens into it again, ~%s\n",
+			r.Session.Name, rebuild.Tokens(cold.Tokens), rebuild.Dollars(cold.USD))
+	}
 	return nil
 }
 

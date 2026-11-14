@@ -7,12 +7,15 @@ import Foundation
 // Window, which takes the place of the window's own Close (MenuBar.swift).
 
 /// A closed session that reopen can bring back. `auto` says it closed on
-/// its own, by close_when_done; one you closed is done.
+/// its own, by close_when_done; one you closed is done. `cold` is what its
+/// next turn costs once reopened, now that its prompt cache has run out
+/// (DESIGN §6.3).
 struct ClosedSession: Decodable, Equatable, Identifiable {
     var id: String
     var name: String
     var closed: Date
     var auto: Bool?
+    var cold: Cold?
 }
 
 /// One session to close, or several (sessions), or every finished one,
