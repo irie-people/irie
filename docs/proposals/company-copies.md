@@ -7,7 +7,7 @@ Date: 2026-11-14, with R20 (the company's VPN) added the same day. Status: requi
 | | Before | Now |
 |---|---|---|
 | Rename Irie | About 2,000 places, by hand | One file, `internal/brand/brand.go`, and `tools/brand.sh --swift` |
-| The privacy, writing and markets plugins in a copy | Compiled in, with their commands, menus and settings | `Tags = "noprivacy,nowriting,nomarkets"` leaves every line of them out |
+| The privacy, writing, markets and mail plugins in a copy | Compiled in, with their commands, menus and settings | `Tags = "noprivacy,nowriting,nomarkets,nomail"` leaves every line of them out |
 | The company's VPN | None: VPN control was Mullvad's alone, and left with the privacy plugin | The VPN plugin stays in a copy and drives the VPN the company approves, named in `VPNs`, such as Cisco Secure Client, GlobalProtect, FortiClient, Cloudflare WARP, Tailscale or NetBird, or any VPN through its own commands; `VPNServer` presets what it connects to |
 | A long name | Pushed the title bar's counts out, wrapped buttons | Up to 30 characters fit: it shrinks, trails off or is left out of a tight button |
 | The strip under the terminal | Irie's phrases of encouragement | `Bar = "tips"`: tips for those new to it |
