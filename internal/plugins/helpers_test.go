@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -37,4 +38,14 @@ func part(t *testing.T, p ipc.Plugin, name string) ipc.PluginPart {
 	}
 	t.Fatalf("no part %q", name)
 	return ipc.PluginPart{}
+}
+
+// program makes an executable file in the test's folder and returns it.
+func program(t *testing.T, name string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

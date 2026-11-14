@@ -222,7 +222,7 @@ func tail(p string, n int) string {
 // into Parked with the rest. In the List view the rest is the tree of your
 // groups (tree). A header's count takes in every session in its group,
 // those of the groups inside it too. Only the user moves a session, by
-// dragging, promoting or parking it, so a state change never does.
+// dragging or parking it, so neither a state change nor a boost does.
 func (m Model) groups() ([]*group, [][]int) {
 	var keys, hosts []string
 	var rest []int // the List view's sessions neither pinned, parked nor another machine's

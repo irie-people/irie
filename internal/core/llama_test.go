@@ -133,6 +133,15 @@ func TestBigRunsAModelOnIriesOwnLlamaServer(t *testing.T) {
 	if args[len(args)-1] != "--flash-attn-extra" {
 		t.Errorf("local.llama_args are not last: %q", args)
 	}
+	// Its prompt cache and checkpoints are capped in its environment, so
+	// it holds little more than its model and context cache.
+	var env map[string]string
+	if b, err := os.ReadFile(log + ".env"); err != nil || json.Unmarshal(b, &env) != nil {
+		t.Fatalf("llama-server environment: %v", err)
+	}
+	if env["LLAMA_ARG_CACHE_RAM"] != "512" || env["LLAMA_ARG_CTX_CHECKPOINTS"] != "8" {
+		t.Errorf("llama-server environment = %v", env)
+	}
 	var server map[string]string
 	for _, p := range c.panes() {
 		if p["@irie_role"] == "llama" {

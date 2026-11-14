@@ -111,6 +111,9 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          conversation and its raw terminal
   ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, as
                                          a person would; TEXT - reads stdin
+  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on: type
+                                         "continue" and Enter, only while its
+                                         prompt shows with nothing typed in it
   ` + brand.Slug + ` ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -188,6 +191,8 @@ func ctl(args []string) error {
 		return ctlConversation(args[1:])
 	case "send":
 		return ctlSend(args[1:])
+	case "continue":
+		return ctlContinue(args[1:])
 	case "flip":
 		return ctlFlip(args[1:])
 	case "watch":
@@ -210,8 +215,8 @@ func ctl(args []string) error {
 		return ctlPerf(args[1:])
 	case "freeze", "thaw":
 		return ctlFreeze(args[1:], args[0] == "freeze")
-	case "promote", "unpromote":
-		return ctlPromote(args[1:], map[string]int{"promote": 1}[args[0]])
+	case "boost", "unboost", "promote", "unpromote":
+		return ctlPromote(args[0], args[1:])
 	case "reorder":
 		return ctlReorder(args[1:])
 	case "park", "unpark":
@@ -736,6 +741,17 @@ func ctlSend(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+}
+
+func ctlContinue(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: " + brand.Slug + " ctl continue SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: args[0]}, nil)
 }
 
 // matchClosed are the closed sessions whose name or id holds every word of

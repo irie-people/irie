@@ -316,8 +316,8 @@ func TestAGroupStaysTogetherAndInPlace(t *testing.T) {
 	}
 	c.step(dirUndo)
 
-	// Unpinned, unparked or promoted, a card of a group comes back into
-	// it, and the group stays where it is.
+	// Unpinned or unparked, a card of a group comes back into it, last,
+	// and the group stays where it is; a boost moves no card at all.
 	c.pin(id["gamma"], true)
 	c.pin(id["gamma"], false)
 	c.park(id["beta"], true)
@@ -327,7 +327,7 @@ func TestAGroupStaysTogetherAndInPlace(t *testing.T) {
 	}
 	rows := c.list()
 	if got := names(rows); !slices.Equal(got, []string{"x", "y", "alpha", "delta", "gamma", "beta", "eps"}) {
-		t.Errorf("after unpin, unpark and promote, order = %v", got)
+		t.Errorf("after unpin, unpark and boost, order = %v", got)
 	}
 	if got := inGroup(rows, g); !slices.Equal(got, []string{"delta", "gamma", "beta"}) {
 		t.Errorf("in the group: %v", got)

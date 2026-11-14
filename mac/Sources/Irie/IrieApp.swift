@@ -67,6 +67,7 @@ struct IrieApp: App {
             IrieCommands(store: store, menu: store.menu)
             PluginCommands(store: store, menu: store.menu)
             MarketsCommands(menu: store.menu)
+            MailCommands(menu: store.menu)
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
@@ -90,6 +91,16 @@ struct IrieApp: App {
         }
         .defaultSize(width: 1280, height: 820)
         .commandsRemoved()
+        // Window › Mail (⇧⌘E): the mail plugin's accounts, list and message
+        // side by side (MailViews.swift). As with Markets, its item shows
+        // only while the plugin is on.
+        Window("Mail", id: MailWindow.id) {
+            MailWindow()
+                .environment(store)
+                .frame(minWidth: 760, minHeight: 420)
+        }
+        .defaultSize(width: 1080, height: 700)
+        .commandsRemoved()
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
@@ -105,6 +116,8 @@ struct IrieApp: App {
 final class KeyRouter {
     private var monitor: Any?
     private var middle: Any?
+    /// A double ↓ on an agent's empty prompt (ContinueKey.swift).
+    private let continueKey = ContinueKey()
     /// Irie's own window, where the sessions are (WindowReader).
     weak var window: NSWindow?
 
@@ -125,6 +138,10 @@ final class KeyRouter {
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             let irie = MainActor.assumeIsolated { event.window != nil && event.window === self.window }
+            // First, so a ↓ it holds back goes ahead of any other key.
+            if irie, MainActor.assumeIsolated({ self.continueKey.route(event, store: store) }) == nil {
+                return nil
+            }
             if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil

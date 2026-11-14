@@ -5,7 +5,8 @@
 //
 // Environment:
 //
-//	IRIE_FAKE_LLAMA_LOG    a file it writes its arguments to, as JSON
+//	IRIE_FAKE_LLAMA_LOG    a file it writes its arguments to, as JSON, and
+//	                       FILE.env its LLAMA_ARG_* environment
 //	IRIE_FAKE_LLAMA_BUILD  the build number --version gives (default 12000)
 package main
 
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -32,6 +34,15 @@ func main() {
 	if f := os.Getenv("IRIE_FAKE_LLAMA_LOG"); f != "" {
 		b, _ := json.Marshal(args)
 		os.WriteFile(f, b, 0o600)
+		// The settings llama-server reads from its environment, beside it.
+		env := map[string]string{}
+		for _, kv := range os.Environ() {
+			if k, v, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "LLAMA_ARG_") {
+				env[k] = v
+			}
+		}
+		b, _ = json.Marshal(env)
+		os.WriteFile(f+".env", b, 0o600)
 	}
 	flag := func(names ...string) string {
 		for i := 0; i+1 < len(args); i++ {

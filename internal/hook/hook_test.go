@@ -113,6 +113,25 @@ func TestForwardsAndCapsStrings(t *testing.T) {
 	}
 }
 
+func TestACommandsOutputKeepsItsHeadAndTail(t *testing.T) {
+	// What a command printed says how it went at its end, and a failure's
+	// error starts with its exit code (DESIGN §4.8).
+	c := &core{}
+	sock := serve(t, c)
+	failure := "Exit code 1\n" + strings.Repeat("ok  \texample.com/pkg\t0.1s\n", 200) + "FAIL\texample.com/last\t0.2s\nFAIL"
+	post, _ := json.Marshal(map[string]any{
+		"session_id": "6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f", "hook_event_name": "PostToolUseFailure", "tool_name": "Bash",
+		"tool_input": map[string]any{"command": "go test ./..."}, "tool_use_id": "toolu_01", "error": failure,
+	})
+	run(t, sock, string(post))
+	var p map[string]any
+	json.Unmarshal((<-c.got).Payload, &p)
+	e, _ := p["error"].(string)
+	if len(e) > event.MaxString || !strings.HasPrefix(e, "Exit code 1\n") || !strings.HasSuffix(e, "FAIL\texample.com/last\t0.2s\nFAIL") {
+		t.Errorf("error is %d bytes: %.40q … %q", len(e), e, e[max(0, len(e)-40):])
+	}
+}
+
 func TestATurnsLastMessageGoesWhole(t *testing.T) {
 	// A delegated session reports it back whole; the journal cuts it.
 	c := &core{}
@@ -397,4 +416,102 @@ func TestAnAnonymousSessionsShellTakesItsExit(t *testing.T) {
 	if b, _ := os.ReadFile(envFile); string(b) != "export A=1\n"+exports {
 		t.Errorf("CLAUDE_ENV_FILE grew: %q", b)
 	}
+}
+
+// An event no core takes, while none listens, goes in the session's
+// missed.ndjson with when it came, for the core to take when it is back. A
+// core that answers takes it then and there, and a session with no folder
+// keeps nothing. Past maxMissed, tool calls no longer go in, but the end of
+// a turn still does.
+func TestAnEventNoCoreTakesIsKeptForIt(t *testing.T) {
+	state := t.TempDir()
+	dir := filepath.Join(state, "irie", "sessions", session)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	missed := filepath.Join(dir, "missed.ndjson")
+	none := filepath.Join(testutil.ShortDir(t), "none.sock")
+	vars := func(sock, id string) func(string) string {
+		return env(map[string]string{"IRIE_SOCKET": sock, "IRIE_SESSION": id, "HOME": "/home/alice", "XDG_STATE_HOME": state})
+	}
+	stopFailure := `{"session_id":"6f1c2b4e-8a9d-4c3b-9e7f-0a1b2c3d4e5f","hook_event_name":"StopFailure","error":"server_error","last_assistant_message":"API Error: The response stopped arriving"}`
+	read := func() []Missed {
+		t.Helper()
+		f, err := os.Open(missed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		return ReadMissed(f)
+	}
+	hookOf := func(m Missed) string {
+		var p struct {
+			Event string `json:"hook_event_name"`
+		}
+		json.Unmarshal(m.Payload, &p)
+		return p.Event
+	}
+
+	before := time.Now()
+	for _, in := range []string{preToolUse, stopFailure} {
+		if out, _ := runWith(t, vars(none, session), in); out != "" {
+			t.Errorf("printed %q", out)
+		}
+	}
+	got := read()
+	if len(got) != 2 || hookOf(got[0]) != "PreToolUse" || hookOf(got[1]) != "StopFailure" || got[0].Harness != "claude-code" {
+		t.Fatalf("kept %+v", got)
+	}
+	if got[0].At.Before(before) || got[1].At.After(time.Now()) || got[1].At.Before(got[0].At) {
+		t.Errorf("kept at %v and %v, the test ran from %v", got[0].At, got[1].At, before)
+	}
+	// Capped as the core gets it.
+	if strings.Contains(string(got[0].Payload), "CONTENT") != true {
+		t.Errorf("payload %s", got[0].Payload)
+	}
+
+	c := &core{}
+	runWith(t, vars(serve(t, c), session), preToolUse)
+	if n := len(read()); n != 2 {
+		t.Errorf("a core that answers: %d kept, want the 2 from before", n)
+	}
+	runWith(t, vars(none, "s0000000000zz"), preToolUse)
+	if _, err := os.Stat(filepath.Join(state, "irie", "sessions", "s0000000000zz")); err == nil {
+		t.Error("a session with no folder got one")
+	}
+
+	if err := os.WriteFile(missed, append(bytes.Repeat([]byte("x"), maxMissed), '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runWith(t, vars(none, session), preToolUse)
+	runWith(t, vars(none, session), stopFailure)
+	if got := read(); len(got) != 1 || hookOf(got[0]) != "StopFailure" {
+		t.Errorf("past the cap, kept %d: %+v", len(got), got)
+	}
+}
+
+// ReadMissed puts the lines in the order their events came, and leaves out
+// one it cannot read.
+func TestReadMissedOrdersByWhenEventsCame(t *testing.T) {
+	at := time.Date(2026, 11, 14, 15, 14, 7, 0, time.UTC)
+	line := func(d time.Duration, hook string) string {
+		b, _ := json.Marshal(Missed{At: at.Add(d), Harness: "claude-code", Payload: json.RawMessage(`{"hook_event_name":"` + hook + `"}`)})
+		return string(b)
+	}
+	in := strings.Join([]string{line(time.Second, "Stop"), "not json", line(0, "UserPromptSubmit"), `{"at":"2026-11-14T15:14:07Z"}`}, "\n") + "\n"
+	got := ReadMissed(strings.NewReader(in))
+	if len(got) != 2 || !got[0].At.Equal(at) || !strings.Contains(string(got[1].Payload), "Stop") {
+		t.Errorf("read %+v", got)
+	}
+}
+
+// runWith runs the shim with vars, as run does with a socket alone.
+func runWith(t *testing.T, vars func(string) string, stdin string) (string, time.Duration) {
+	t.Helper()
+	var out bytes.Buffer
+	start := time.Now()
+	if code := Run(strings.NewReader(stdin), &out, vars); code != 0 {
+		t.Errorf("exit code %d, want 0", code)
+	}
+	return out.String(), time.Since(start)
 }

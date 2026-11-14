@@ -81,6 +81,9 @@ final class Store {
     var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
     private(set) var canConfigure = false
+    /// Whether the core sends an agent on with "continue" (op continue), for
+    /// a double ↓ on its empty prompt (ContinueKey.swift).
+    private(set) var canContinue = false
     /// Whether the core parks sessions (Controls.swift).
     private(set) var canPark = false
     /// Whether the core pins sessions (Tabs.swift).
@@ -101,6 +104,9 @@ final class Store {
     /// The core serves the vpn op: its build has the privacy plugin
     /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
     private(set) var canVPN = false
+    /// The core serves the mail op: its build has the mail plugin
+    /// (docs/proposals/mail.md), whose Mail tab and window show only then.
+    private(set) var canMail = false
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
     var plugins: [PluginInfo] = []
@@ -177,6 +183,9 @@ final class Store {
     private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
     @ObservationIgnored weak var terminalView: NSView?
+    /// The split's lead pane, the picked session's own terminal while it
+    /// shows beside its teammates (TeamSplit.swift).
+    @ObservationIgnored weak var leadView: NSView?
     /// Whether the rows are `--snapshot`'s, which draws the terminal's frame
     /// round an empty terminal, as no core attaches one.
     private(set) var isFixture = false
@@ -206,6 +215,10 @@ final class Store {
     var focusMessage = 0
     /// Whether the message box has the keyboard.
     @ObservationIgnored var messageHasKeys = false
+    /// The message box's own field while it has the keyboard. The window
+    /// has one field editor for all its fields, so the field it edits tells
+    /// the box from the find field and the task bar (ContinueKey.swift).
+    @ObservationIgnored weak var messageField: NSTextField?
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     var outside: [OutsideSession] = []
@@ -254,11 +267,15 @@ final class Store {
     /// What the menu bar shows, which changes far less often than the
     /// store does (MenuBar.swift).
     let menu = MenuState()
+    /// The mail plugin's accounts and list, which the Mail tab and window
+    /// share (Mail.swift).
+    let mail: MailModel
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
+        mail = MailModel(client: client)
         settings.changed = { [weak self] in
             self?.loadChoices()
             self?.loadPluginsSoon()
@@ -315,6 +332,7 @@ final class Store {
                 canLearn = hello.features.contains("learn")
                 canDock = hello.features.contains("dock")
                 canConfigure = hello.features.contains("config")
+                canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
                 canPin = hello.features.contains("pin")
                 canGroup = hello.features.contains("group")
@@ -325,6 +343,7 @@ final class Store {
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
+                canMail = hello.features.contains("mail")
                 loadPluginsSoon()
                 keepPlugins()
                 if hello.features.contains("theme") { sendTheme(Palette.chosen) }
@@ -604,6 +623,8 @@ final class Store {
         canBoost = true
         canBoostAlways = true
         canArch = true
+        canMail = true
+        mail.loadFixture()
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
                       about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
@@ -639,8 +660,8 @@ final class Store {
     }
 
     /// The list's order, which the core keeps and the user sets: a new
-    /// session goes last, Promote puts one first, and a drag puts one where
-    /// it is dropped. A core without it sends no order: the order they
+    /// session goes last, and a drag puts one where it is dropped; a boost
+    /// moves none. A core without it sends no order: the order they
     /// started.
     static func before(_ a: Session, _ b: Session) -> Bool {
         if let x = a.order, let y = b.order, x != y { return x < y }
@@ -786,6 +807,37 @@ final class Store {
         let order = drawnOrder
         guard n >= 1, n <= order.count else { return }
         show(order[n - 1].id)
+    }
+
+    /// The session a terminal view types to, while it is the picked
+    /// session's own: the main terminal, or the split's lead pane. A
+    /// session of another machine's has no terminal here (ContinueTarget).
+    func continueSession(for view: NSView) -> String? {
+        guard let s = selectedRow, s.host == nil, outsideSelection == nil else { return nil }
+        if view === terminalView, showTerminal, splitSession == nil { return s.id }
+        if view === leadView, splitSession?.id == s.id { return s.id }
+        return nil
+    }
+
+    /// Whether the field editor edits the message box.
+    func isMessageBox(_ editor: NSTextView) -> Bool {
+        guard messageHasKeys, let field = messageField else { return false }
+        return (editor.delegate as AnyObject?) === field
+    }
+
+    /// Sends a session's agent on: the core types "continue" and Enter
+    /// into its prompt while the prompt is empty (op continue), for a
+    /// double ↓ on it (ContinueKey.swift). When it can't, as when the
+    /// prompt has something typed in it, a notice says why.
+    func continueAgent(_ id: String) {
+        guard canContinue else { return }
+        Task {
+            do {
+                _ = try await client.call("continue", ContinueArgs(session: id), as: Empty.self)
+            } catch {
+                say(error.localizedDescription, error: true)
+            }
+        }
     }
 
     /// Moves the keyboard between the session list and the terminal.
@@ -965,7 +1017,12 @@ final class Store {
                 // :markets: the Markets window says how the map stands.
                 NotificationCenter.default.post(name: .irieMarkets, object: nil)
             case "answered":
-                say(r.text, error: false, seconds: 8)
+                // :mail opens the Mail tab, which says more than words can.
+                if r.op == "mail", mailShown {
+                    openSide(.mail)
+                } else {
+                    say(r.text, error: false, seconds: 8)
+                }
             case "added":
                 // It went to the agent of the task just before, which gets
                 // it once the delay is over; until then New task takes it
@@ -1347,3 +1404,6 @@ extension String {
     /// last folder.
     var repoLabel: String { hasPrefix("/") || hasPrefix("~") ? (self as NSString).lastPathComponent : self }
 }
+
+/// The double ↓ on an empty prompt asks the store (ContinueKey.swift).
+extension Store: ContinueTarget {}

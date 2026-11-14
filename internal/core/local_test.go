@@ -93,6 +93,9 @@ func TestALocalSpawnRunsOnIriesOwnServer(t *testing.T) {
 	for k, want := range map[string]string{
 		"OLLAMA_HOST": fmt.Sprintf("127.0.0.1:%d", port), "OLLAMA_CONTEXT_LENGTH": "65536", "OLLAMA_KV_CACHE_TYPE": "q8_0",
 		"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_NUM_PARALLEL": "1", "OLLAMA_MAX_LOADED_MODELS": "1",
+		// Its runners, llama-servers, keep at most 512 MiB of earlier
+		// prompts and 8 checkpoints a slot.
+		"LLAMA_ARG_CACHE_RAM": "512", "LLAMA_ARG_CTX_CHECKPOINTS": "8",
 	} {
 		if env[k] != want {
 			t.Errorf("server %s = %q, want %q", k, env[k], want)
@@ -189,6 +192,41 @@ func TestALocalSpawnRunsOnIriesOwnServer(t *testing.T) {
 	}
 	if servers != 1 {
 		t.Errorf("%d servers after a restart, want 1", servers)
+	}
+}
+
+func TestALocalProfileSkipsAModelOnOllamasMLXEngine(t *testing.T) {
+	a := agentConfig{extra: localProfile(t)}
+	// The better suggestion runs on Ollama's MLX engine, as the nvfp4 builds
+	// Ollama pulls on Apple silicon do; the other is a GGUF build.
+	ownServerWith(t, &a, []ollamafake.Model{
+		{Name: "qwen3.5:9b", Size: 90 << 20, Tools: true, Runner: "mlx"},
+		{Name: "bonsai-2:4b", Size: 80 << 20, Tools: true},
+	})
+	c := setupWith(t, a)
+
+	var lr ipc.LocalResult
+	if err := c.call("local", ipc.LocalArgs{Start: true}, &lr); err != nil {
+		t.Fatal(err)
+	}
+	why := map[string]string{}
+	for _, m := range lr.Models {
+		why[m.Name] = m.Why
+	}
+	if !strings.Contains(why["qwen3.5:9b"], "MLX engine") || why["bonsai-2:4b"] != "" {
+		t.Errorf("models = %v", why)
+	}
+	// +local runs the GGUF one, and the MLX one is refused by name.
+	if lr.Pick != "bonsai-2:4b" {
+		t.Errorf("pick = %q, want bonsai-2:4b", lr.Pick)
+	}
+	n := c.agentPanes()
+	err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "ollama:qwen3.5:9b"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "MLX engine") {
+		t.Errorf("+ollama:qwen3.5:9b: %v", err)
+	}
+	if c.agentPanes() != n {
+		t.Error("a refused spawn made a pane")
 	}
 }
 

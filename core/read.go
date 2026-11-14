@@ -17,7 +17,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -145,10 +145,14 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpTool, ToolArgs{Name: ToolSetup}, nil)
 	case name == "setup" && arg == "switch":
 		return step(OpTool, ToolArgs{Name: ToolSwitch}, nil)
-	case name == "setup" && (arg == ToolAnon || arg == ToolBrowser || arg == ToolPrivacy):
+	case name == "setup" && (arg == ToolAnon || arg == ToolBrowser || arg == ToolPrivacy || arg == ToolVPN):
 		return step(OpTool, ToolArgs{Name: arg}, nil)
 	case name == "plugins" && arg == "":
 		return step(OpPlugins, PluginsArgs{}, nil)
+	case name == "mail" && arg == "":
+		// :mail says how the mail accounts stand; the Mac app also opens
+		// its Mail (docs/proposals/mail.md).
+		return step(OpMail, MailArgs{}, nil)
 	case name == "write":
 		// :write [TASK] starts a writing session in Variorum
 		// (docs/proposals/writers.md). The task may run on over more
@@ -312,8 +316,8 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 	return Step{}, Errorf(CodeBadArgs, brand.Name+" has no :%s. The commands are %s.", name, Commands)
 }
 
-// vpnArgs reads the words after :vpn (docs/proposals/extensions.md §4.1):
-// nothing for the state, on, off, time, lockdown on or off, or else a place
+// vpnArgs reads the words after :vpn (DESIGN §4.18): nothing for the
+// state, on, off, time, use and a VPN, lockdown on or off, or else a place
 // such as se, se got or se-got-wg-001, which the core checks.
 func vpnArgs(arg string) VPNArgs {
 	words := strings.Fields(strings.ToLower(arg))
@@ -322,6 +326,8 @@ func vpnArgs(arg string) VPNArgs {
 		return VPNArgs{}
 	case len(words) == 1 && (words[0] == VPNOn || words[0] == VPNOff || words[0] == VPNTime):
 		return VPNArgs{Do: words[0]}
+	case words[0] == VPNUse:
+		return VPNArgs{Do: VPNUse, Args: words[1:]}
 	case words[0] == VPNLockdown:
 		return VPNArgs{Do: VPNLockdown, Args: words[1:]}
 	}
@@ -482,6 +488,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 			break
 		}
 		r.Did, r.Text = InputAnswered, m.Text
+	case OpMail:
+		r.Did, r.Text = InputAnswered, strings.TrimRight(as[MailResult](result).Text, "\n")
 	case OpUndo, OpRedo:
 		u := as[UndoResult](result)
 		r.Text = undone(st.Op, u)

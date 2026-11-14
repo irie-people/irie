@@ -152,6 +152,7 @@ type Core struct {
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
+	mail       mailState             // the mail plugin's accounts and connections (mail.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -209,6 +210,9 @@ type session struct {
 	// and whether that is under way (follow.go).
 	followUps []followUp
 	sending   bool
+	// keptOut says its agent and Irie's helpers came out of the background
+	// once since this core found the session (keepup.go).
+	keptOut bool
 }
 
 func (x *session) wire() ipc.Session {
@@ -245,7 +249,7 @@ func (x *session) wire() ipc.Session {
 	}
 	// Once its turn is over, a jot's row says what it left that has not
 	// landed (DESIGN §4.8).
-	if l := wireLoose(x.dog.loose, x.track.nudged); l != nil && dogShows(s.State) {
+	if l := wireLoose(x.dog.loose, x.track.nudged, x.track.unproven); l != nil && dogShows(s.State) {
 		s.Loose = l
 		if s.State == ipc.StateExited {
 			s.Detail += " · not through: " + l.Words()
@@ -414,6 +418,8 @@ func Run(o Options) error {
 		select {
 		case <-t.C:
 			c.tick()
+			// What the agents' hooks kept while no core listened.
+			c.takeMissed(time.Now())
 			c.beat()
 			if n%raphaelEvery == 0 {
 				go c.raphaelSweep()
@@ -443,11 +449,16 @@ func Run(o Options) error {
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
+			// A hook from here on finds no core, so its shim keeps its event
+			// for the next one (missed.go), rather than this one taking it
+			// and stopping before it is recorded.
+			l.Close()
 			// Nothing stays slowed after the core is gone: its agents run on.
 			c.letGo()
 			// Nor does the Mac stay awake with its lid closed for a core that
 			// is gone; the next one keeps it awake again if there is work.
 			c.lidLetGo()
+			c.mailClose()
 			return nil
 		}
 	}
@@ -478,6 +489,7 @@ func (c *Core) tick() {
 	c.sendFollowUps(time.Now())
 	c.keepFrozen()
 	c.refreezeLost()
+	c.endBoosts(time.Now())
 	c.background()
 	c.countTokens()
 	c.followTitles()
@@ -745,6 +757,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.raphaelOp(peer, a)
+	case ipc.OpMail:
+		var a ipc.MailArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.mailOp(peer, a)
 	}
 	return c.Call(op, raw)
 }
@@ -771,12 +789,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: builtFeatures([]string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpRename, ipc.OpFlip,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins, ipc.OpMarkets,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench,
 		})}, nil
 	case ipc.OpPerf:
@@ -972,6 +990,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.marketsOp(a)
+	case ipc.OpMail:
+		// A call with no process to it, such as one from within the core.
+		var a ipc.MailArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.mailOp(0, a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {
@@ -987,6 +1012,16 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if err := c.send(a); err != nil {
+			return nil, err
+		}
+		c.markWord(a.Session)
+		return nil, nil
+	case ipc.OpContinue:
+		var a ipc.ContinueArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if err := c.continueAgent(a); err != nil {
 			return nil, err
 		}
 		c.markWord(a.Session)

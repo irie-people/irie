@@ -369,8 +369,8 @@ func (c *coreEnv) park(id string, on bool) {
 
 // Parking a session puts it last, in Parked, and unparking it puts it last
 // among the rest, just above Parked, not back where it was. Both last
-// through a restart, and promoting a parked session unparks it at the top.
-func TestParkAndUnparkPutASessionLastAndPromoteUnparks(t *testing.T) {
+// through a restart, and boosting a parked session leaves it where it is.
+func TestParkAndUnparkPutASessionLastAndABoostMovesNone(t *testing.T) {
 	c := setup(t)
 	for _, n := range []string{"alpha", "beta", "gamma", "delta"} {
 		c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: n})
@@ -411,16 +411,17 @@ func TestParkAndUnparkPutASessionLastAndPromoteUnparks(t *testing.T) {
 	if got := unparked(rows); !slices.Equal(got, []string{"gamma", "delta", "beta"}) {
 		t.Errorf("after unparking beta, the rest = %v", got)
 	}
-	// Promoting a parked session unparks it, at the top (DESIGN §4.3).
+	// Boosting a parked session leaves it parked, where it is (DESIGN §4.3).
+	before := names(c.list())
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["alpha"], Level: 1}, nil); err != nil {
 		t.Fatal(err)
 	}
 	rows = c.list()
-	if got := parked(rows); len(got) > 0 {
-		t.Errorf("after promoting alpha, parked = %v", got)
+	if got := parked(rows); !slices.Equal(got, []string{"alpha"}) {
+		t.Errorf("after boosting alpha, parked = %v", got)
 	}
-	if got := names(rows); !slices.Equal(got, []string{"alpha", "gamma", "delta", "beta"}) {
-		t.Errorf("after promoting alpha: %v", got)
+	if got := names(rows); !slices.Equal(got, before) {
+		t.Errorf("after boosting alpha: %v, want %v", got, before)
 	}
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["alpha"], Level: 0}, nil); err != nil {
 		t.Fatal(err)
@@ -476,12 +477,36 @@ func skipIfDemoted(t *testing.T) {
 	}
 }
 
-func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
+// backState is where a session's processes run, by ps: whether its agent
+// is in the background, and which of the rest are and are not. The hook
+// shims the agent runs are left out, as they come and go.
+func (c *coreEnv) backState(s ipc.Session, agent int) (agentBack bool, back, up []string) {
+	c.t.Helper()
+	for _, p := range tree(c.t, c.hostPID(s)) {
+		in := pri(c.t, p.PID) == "4"
+		switch {
+		case p.PID == agent:
+			agentBack = in
+		case p.Name == filepath.Base(c.bin):
+		case in:
+			back = append(back, p.Name)
+		default:
+			up = append(up, p.Name)
+		}
+	}
+	return agentBack, back, up
+}
+
+// A boost gives a session's tree the machine first and moves no card. The
+// other sessions' tools step back, a session's that starts meanwhile too,
+// but never their agents, which keep their network (DESIGN §4.3).
+func TestABoostMovesNoCardAndPutsTheOthersToolsInTheBackground(t *testing.T) {
 	c := setup(t)
 	var all []ipc.Session
+	agents := map[string]int{}
 	for _, n := range []string{"alpha", "beta", "gamma"} {
 		s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,kids", Name: n})
-		c.kids(s)
+		agents[s.ID] = c.kids(s)
 		all = append(all, s)
 	}
 	gamma := all[2]
@@ -489,47 +514,42 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := c.list()
-	if got := names(rows); !slices.Equal(got, []string{"gamma", "alpha", "beta"}) {
-		t.Errorf("order = %v, want gamma on top", got)
+	if got := names(rows); !slices.Equal(got, []string{"alpha", "beta", "gamma"}) {
+		t.Errorf("order = %v, want it as it was: a boost moves no card", got)
 	}
-	if rows[0].Priority != 1 || rows[1].Priority != 0 {
-		t.Errorf("priorities = %d, %d", rows[0].Priority, rows[1].Priority)
+	if rows[2].Priority != 1 || rows[0].Priority != 0 {
+		t.Errorf("priorities = %d, %d", rows[2].Priority, rows[0].Priority)
 	}
 	if !proc.CanBackground {
 		t.Skip("no background state here")
 	}
-	// While a session is promoted, the running Irie keeps the others' trees
+	// While a session is boosted, the running Irie keeps the others' tools
 	// in the background, a test one of them runs and all it starts as well,
 	// so nothing here could show a difference.
 	if pri(t, os.Getpid()) == "4" {
-		t.Skip("the test runs in the background, as a session's processes do while another is promoted")
+		t.Skip("the test runs in the background, as a session's processes do while another is boosted")
 	}
 	// At once: the call returns once it is done.
-	inBackground := func(s ipc.Session) (in, out []string) {
-		for _, p := range tree(t, c.hostPID(s)) {
-			if pri(t, p.PID) == "4" {
-				in = append(in, p.Name)
-			} else {
-				out = append(out, p.Name)
-			}
-		}
-		return in, out
-	}
 	for _, s := range all[:2] {
-		if _, out := inBackground(s); len(out) > 0 {
-			t.Errorf("%s: %v not in the background", s.Name, out)
+		agentBack, _, up := c.backState(s, agents[s.ID])
+		if agentBack {
+			t.Errorf("%s: its agent is in the background", s.Name)
+		}
+		if len(up) > 0 {
+			t.Errorf("%s: %v not in the background", s.Name, up)
 		}
 	}
 	skipIfDemoted(t)
-	if in, _ := inBackground(gamma); len(in) > 0 {
-		t.Errorf("the promoted session's %v are in the background", in)
+	if agentBack, back, _ := c.backState(gamma, agents[gamma.ID]); agentBack || len(back) > 0 {
+		t.Errorf("the boosted session's %v are in the background (its agent: %v)", back, agentBack)
 	}
-	// A session that starts meanwhile goes in the background too.
+	// A session that starts meanwhile: its tools, which its agent starts
+	// at normal priority, step back at the core's next tick.
 	delta := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,kids", Name: "delta"})
-	c.kids(delta)
-	testutil.Eventually(t, 3*time.Second, "a new session is not in the background", func() bool {
-		_, out := inBackground(delta)
-		return len(out) == 0
+	agents[delta.ID] = c.kids(delta)
+	testutil.Eventually(t, 3*time.Second, "a new session's tools are not in the background", func() bool {
+		agentBack, back, up := c.backState(delta, agents[delta.ID])
+		return !agentBack && len(back) > 0 && len(up) == 0
 	})
 
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 0}, nil); err != nil {
@@ -537,11 +557,11 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	}
 	skipIfDemoted(t)
 	for _, s := range append(all, delta) {
-		if in, _ := inBackground(s); len(in) > 0 {
-			t.Errorf("%s: %v still in the background", s.Name, in)
+		if agentBack, back, _ := c.backState(s, agents[s.ID]); agentBack || len(back) > 0 {
+			t.Errorf("%s: %v still in the background (its agent: %v)", s.Name, back, agentBack)
 		}
 	}
-	if got := names(c.list()); !slices.Equal(got, []string{"gamma", "alpha", "beta", "delta"}) {
+	if got := names(c.list()); !slices.Equal(got, []string{"alpha", "beta", "gamma", "delta"}) {
 		t.Errorf("putting it back moved it: %v", got)
 	}
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 2}, nil); err == nil {
