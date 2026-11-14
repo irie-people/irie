@@ -153,7 +153,10 @@ enum Snapshot {
     }
 
     /// The window as the app draws it, at 2x, and its title bar's height in
-    /// points. It is ordered in far off any screen, so it never shows.
+    /// points. It has to be ordered in for SwiftUI to lay it out, and macOS
+    /// brings any titled window ordered in onto a screen, however far off
+    /// it was placed, so it is see-through, takes no clicks and goes to a
+    /// desktop the user cannot see first (Desktops.swift): it never shows.
     private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat) -> (NSBitmapImageRep, CGFloat) {
         let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: height),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -161,6 +164,7 @@ enum Snapshot {
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         w.toolbarStyle = IrieApp.toolbarStyle
         w.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
+        Desktops.drawUnseen(w)
         let host = NSHostingView(rootView: root)
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
