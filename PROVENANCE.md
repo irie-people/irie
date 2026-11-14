@@ -534,6 +534,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-10 | RFC 9110, HTTP Semantics, §7.6.1 and §9.3.6, https://www.rfc-editor.org/rfc/rfc9110 | the forwarder's HTTP proxy: CONNECT's 2xx and tunnel, and the hop-by-hop headers it drops from a plain request and its response |
 | 2026-11-14 | https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/LaunchServicesConcepts/LSCConcepts/LSCConcepts.html | Launch Services picks the copy with the latest CFBundleVersion among copies of one app, and any among equal ones: mac/build.sh gives a build to install a build number so macOS opens it rather than an old copy (docs/MAC.md §3) |
 | 2026-11-14 | https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion | CFBundleVersion's format, one to three period-separated integers: the build number mac/build.sh stamps, as 20261114.153012 (docs/MAC.md §3) |
+| 2026-11-14 | ps(1) manual page (local man ps, macOS 14): -o %cpu, run here | Each session tree's share of the CPUs in the core's 5 s memory sample, beside its resident size, for Gabriel's tab on top: when the tab the user is on works the machine, the rest of the focus steps back for it (DESIGN §4.11) |
 
 ## Third-party code
 

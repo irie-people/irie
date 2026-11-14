@@ -21,3 +21,22 @@ func TestShownMemoryKeepsTwoFiguresRoundedDown(t *testing.T) {
 		t.Error("a few pages more changed the row")
 	}
 }
+
+func TestParsePSReadsMemoryAndCPU(t *testing.T) {
+	ps := []byte(`    1     0   9664   0.1
+  100     1  20480  12.5
+  101   100  10240 230.0
+  junk
+  102   100   bad    1.0
+`)
+	procs, kids := parsePS(ps)
+	if got := procs[101]; got.mem != 10240<<10 || got.cpu != 230 {
+		t.Errorf("101: %+v", got)
+	}
+	if got := procs[100]; got.mem != 20480<<10 || got.cpu != 12.5 {
+		t.Errorf("100: %+v", got)
+	}
+	if _, ok := procs[102]; ok || len(kids[100]) != 1 || kids[100][0] != 101 {
+		t.Errorf("unreadable lines were taken: %v, kids %v", procs, kids)
+	}
+}

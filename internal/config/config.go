@@ -217,15 +217,16 @@ type Mikael struct {
 // first: the session you are looking at or messaged lately, and the app in
 // front. Every other session's processes, and your other heavy apps, step
 // back into macOS's background state until it is calm again or you walk
-// away. macOS lets a process slow another of its user's down and undo it,
-// but not raise one, and gives no way to set memory aside, so the others
-// step back instead.
+// away. The tab you are on comes first of all: while it works the machine,
+// the rest of your focus steps back for it too. macOS lets a process slow
+// another of its user's down and undo it, but not raise one, and gives no
+// way to set memory aside, so the others step back instead.
 type Gabriel struct {
 	On      bool          `toml:"on"`      // give your focus the machine first while it is busy
 	Outside bool          `toml:"outside"` // slow your heavy apps outside Irie too, not only Irie's sessions
 	Away    time.Duration `toml:"away"`    // with no keyboard or mouse for this long you are away, and nothing is held back; 0 = always at the computer
 	Word    time.Duration `toml:"word"`    // a session you message or start stays in your focus this long
-	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
+	Heavy   float64       `toml:"heavy"`   // heavy from this share of one CPU, in percent: an app outside Irie, which is slowed, or the tab you are on, for which the rest of your focus steps back
 	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
 	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
 	Always  bool          `toml:"always"`  // boost whenever you are at the computer, busy or not: the rest runs slower even when the machine has room to spare

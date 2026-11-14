@@ -188,6 +188,7 @@ type session struct {
 	anonPorts [2]int                 // its forwarder's SOCKS5 and HTTP ports on 127.0.0.1, while anon is set
 	usage     statusline.Usage       // its last status line update
 	memory    int64                  // what its processes take, last measured
+	cpu       float64                // its processes' share of the CPUs, last measured, in percent of one (memory.go)
 	out       *outcome               // its route and how it went, shared with Core.outcomes
 	conv      *conversation          // its conversation, read while clients follow it (conversation.go)
 	note      string                 // what its agent is told at its next tool call, once (freeze.go)

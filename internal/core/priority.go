@@ -7,12 +7,14 @@ package core
 // session's tree runs in macOS's background state (proc.SetBackground), with
 // the least CPU priority and throttled disk and network I/O, and what those
 // trees start from then on inherits it. The promoted trees stay as they
-// are. A raised nice value would serve CPU alone, and only root can lower
-// it again. Putting a session back, or closing it, takes the others out of
-// the background. What Irie hands out in turn, spawns with their worktrees
-// and messages typed to agents, serves a promoted session first (turns.go).
-// Memory cannot be set aside: macOS gives a process no way to reserve it
-// for another, and the background processes are the ones it slows first.
+// are, and so does the tab the user is on while they are at the computer
+// (Gabriel's top, gabriel.go), which comes first of all. A raised nice
+// value would serve CPU alone, and only root can lower it again. Putting a
+// session back, or closing it, takes the others out of the background.
+// What Irie hands out in turn, spawns with their worktrees and messages
+// typed to agents, serves a promoted session first (turns.go). Memory
+// cannot be set aside: macOS gives a process no way to reserve it for
+// another, and the background processes are the ones it slows first.
 
 import (
 	"fmt"
@@ -73,6 +75,10 @@ func (c *Core) setLevel(x *session, level int, reason string) {
 			data["reason"] = reason
 		}
 		c.record(x, event.Event{Source: event.SourceUser, Kind: event.PrioritySet, Data: data})
+		// The tab the user is on never steps back for a promotion: Gabriel
+		// looks at what is in front at once, which he reads only while
+		// anything steps back.
+		go c.gabrielSweep()
 	}
 	c.background()
 }
@@ -171,23 +177,31 @@ func doLevel(level int) func(c *Core, a action) (action, error) {
 }
 
 // background puts each session's process tree in the background, or takes
-// it out, as the promotions and Gabriel want: while a live session is
-// promoted, the others' trees are in the background; while Gabriel holds
-// back (gabriel.go), so are those of the sessions out of the user's focus.
-// A promoted tree never is. A process Irie put there that left every tree,
+// it out, as the promotions and Gabriel want (stepsBack): while a live
+// session is promoted, the others' trees are in the background; while
+// Gabriel holds back (gabriel.go), so are those of the sessions out of the
+// user's focus, and while the tab the user is on works the machine, every
+// other but an install's. The tab they are on never is, nor a promoted
+// tree but for that tab. A process Irie put there that left every tree,
 // such as a daemon, comes out. The caller holds c.mu.
 func (c *Core) background() {
 	if !proc.CanBackground {
 		return
 	}
-	promoted, demoted := false, len(c.bg) > 0
-	for _, x := range c.sessions {
-		promoted = promoted || x.track.priority > 0 && !x.dead
+	raised, demoted := map[string]bool{}, len(c.bg) > 0
+	for id, x := range c.sessions {
+		if x.track.priority > 0 && !x.dead {
+			raised[id] = true
+		}
 		demoted = demoted || x.demoted
 	}
-	holding := c.gab.holding
-	if !promoted && !demoted && !holding {
+	if len(raised) == 0 && !demoted && !c.gab.holding {
 		return
+	}
+	if len(raised) > 0 {
+		// A promoted session waits on the subtasks it delegated as on its
+		// own work.
+		raised = c.withDelegates(raised)
 	}
 	t, err := proc.Read()
 	if err != nil {
@@ -208,7 +222,7 @@ func (c *Core) background() {
 			x.demoted = false
 			continue
 		}
-		want := x.track.priority == 0 && (promoted || holding && !c.gab.focus[x.id])
+		want := c.stepsBack(x.id, raised)
 		for _, q := range t.Tree(p.PID) {
 			inTree[q.PID] = true
 			b, ok := c.bg[q.PID]
@@ -236,6 +250,26 @@ func (c *Core) background() {
 			delete(c.bg, pid)
 		}
 	}
+}
+
+// stepsBack says whether session id's tree belongs in the background, by
+// the order of the user's focus (gabriel.go): never the tab they are on,
+// Gabriel's top; every other session but an install while the top works
+// the machine, the rest of the focus and the promoted ones too; while a
+// session is promoted, every one not raised (the promoted, with the
+// subtasks they delegated); and while Gabriel holds back, every one out of
+// the user's focus. The caller holds c.mu.
+func (c *Core) stepsBack(id string, raised map[string]bool) bool {
+	g := &c.gab
+	switch {
+	case g.top[id]:
+		return false
+	case g.topBusy && !g.installs[id]:
+		return true
+	case len(raised) > 0:
+		return !raised[id]
+	}
+	return g.holding && !g.focus[id]
 }
 
 // letGo takes every tree Irie put in the background out of it, and what
