@@ -383,9 +383,10 @@ func TestAGroupByNameIsOneOfTheSessionsSpace(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Docs is the first space's: in the other, the name makes a group of
-	// its own.
+	// its own, of the same name, as each space names its groups on its
+	// own, so the next "docs" there finds it.
 	r := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "docs", Sessions: []string{id["beta"]}})
-	if r.Group == docs || !slices.Equal(groupNames(r), []string{"Docs", "docs 2"}) {
+	if r.Group == docs || !slices.Equal(groupNames(r), []string{"Docs", "docs"}) {
 		t.Errorf("beta went in %q; groups %v", r.Group, groupNames(r))
 	}
 	// Nor can a session join another space's group by its id.

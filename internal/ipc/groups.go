@@ -66,12 +66,15 @@ type GroupArgs struct {
 	After    string   `json:"after,omitempty"`
 }
 
-// GroupResult is your groups as they then are, the group new or add put
-// sessions in, and the sessions the op moved.
+// GroupResult is your groups as they then are, the group new, add or move
+// put what it moved in, the sessions whose group the op changed, and how
+// many steps of the history it took: none when it changed nothing, so
+// there is nothing for undo to take back.
 type GroupResult struct {
 	Groups   []Group  `json:"groups"`
 	Group    string   `json:"group,omitempty"`
 	Sessions []string `json:"sessions,omitempty"`
+	Steps    int      `json:"steps,omitempty"`
 }
 
 // GroupPath is group id and the groups around it, the outermost first;

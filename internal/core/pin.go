@@ -80,11 +80,11 @@ func (c *Core) setPinned(id string, on bool) bool {
 
 // toFirstUnpinned puts session id first among this machine's sessions that
 // are neither pinned nor parked: just under Pinned; one of a group of
-// yours, last in its group, where the group is (groups.go). The caller
-// holds c.mu.
+// yours, last in the innermost group around it that holds another card,
+// where the group is (groups.go). The caller holds c.mu.
 func (c *Core) toFirstUnpinned(id string) {
 	if x := c.sessions[id]; x != nil {
-		if last := c.lastIn(c.groupOf(x), map[string]bool{id: true}); last != "" {
+		if last := c.edgeIn(x, true); last != "" {
 			c.gather([]string{id}, last, "")
 			return
 		}

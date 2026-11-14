@@ -458,6 +458,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		g := as[GroupResult](result)
 		in := GroupTitle(g.Groups, g.Group, " / ")
 		switch a := as[GroupArgs](st.Args); {
+		case a.Do == GroupMove && len(a.Groups) > 0 && g.Steps == 0:
+			r.Did, r.Text = InputAnswered, "That group is there already."
 		case a.Do == GroupMove && len(a.Groups) > 0:
 			moved := g.Groups[max(0, FindGroup(g.Groups, a.Groups[0]))].ID
 			if in == "" {

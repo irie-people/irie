@@ -318,3 +318,99 @@ func TestADropInItsOwnGroupMovesACardThereAndARenameRelabelsTheHistory(t *testin
 		t.Errorf("history %v", labels(h.Undo))
 	}
 }
+
+func TestANewSessionInANewGroupInsideAnotherLeavesTheOuterGroupWhereItIs(t *testing.T) {
+	c := setupWith(t, agentConfig{extra: "[ui]\nnew_tabs = \"first\"\n"})
+	id := c.spawnNamed("x", "a1", "a2")
+	// new_tabs = first: a2, a1, x. Work holds a1 and a2, below nothing.
+	c.group(ipc.GroupArgs{Do: ipc.GroupMove, Into: "", Before: id["x"], Sessions: []string{id["x"]}})
+	work := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work", Sessions: []string{id["a1"], id["a2"]}}).Group
+	c.group(ipc.GroupArgs{Do: ipc.GroupMove, Into: "", Before: id["a2"], Sessions: []string{id["x"]}})
+	if got := names(c.list()); !slices.Equal(got, []string{"x", "a2", "a1"}) {
+		t.Fatalf("order = %v", got)
+	}
+	// A spawn into a new group inside Work goes last in Work, where Work
+	// is, as one into Work would, and x stays first in the list.
+	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "kid", Group: "Work/Irie"})
+	rows := c.list()
+	if got := names(rows); !slices.Equal(got, []string{"x", "a2", "a1", "kid"}) {
+		t.Errorf("order = %v, want kid last in Work, below x", got)
+	}
+	r := c.group(ipc.GroupArgs{})
+	if row, _ := c.row(s.ID); ipc.GroupTitle(r.Groups, row.Group, "/") != "Work/Irie" {
+		t.Errorf("kid is in %q", ipc.GroupTitle(r.Groups, row.Group, "/"))
+	}
+	// Unpinned, the only card of Irie goes last in Work, not first in the
+	// list.
+	c.pin(s.ID, true)
+	c.pin(s.ID, false)
+	if got := names(c.list()); !slices.Equal(got, []string{"x", "a2", "a1", "kid"}) {
+		t.Errorf("after pin and unpin, order = %v, want kid last in Work", got)
+	}
+	_ = work
+}
+
+func TestEachSpaceNamesItsGroupsAtTheTopOnItsOwn(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("a", "b")
+	c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work", Sessions: []string{id["a"]}})
+	other := c.spaces(ipc.SpacesArgs{Do: ipc.SpacesNew, Name: "Elsewhere"}).Space
+	if err := c.call(ipc.OpSpace, ipc.SpaceArgs{Sessions: []string{id["b"]}, Space: other}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Work of the other space is Work too, and the next spawn finds it.
+	g := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work", Sessions: []string{id["b"]}})
+	s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "kid", Space: other, Group: "Work"})
+	if row, _ := c.row(s.ID); row.Group != g.Group {
+		t.Errorf("kid is in %q, want the other space's Work %q", row.Group, g.Group)
+	}
+	if got := groupNames(c.group(ipc.GroupArgs{})); !slices.Equal(got, []string{"Work", "Work"}) {
+		t.Errorf("groups = %v, want one Work per space", got)
+	}
+	// A new group of groups of two spaces is refused.
+	r := c.group(ipc.GroupArgs{})
+	var ids []string
+	for _, x := range r.Groups {
+		ids = append(ids, x.ID)
+	}
+	if e := c.groupFails(ipc.GroupArgs{Do: ipc.GroupNew, Groups: ids}); !strings.Contains(e, "different spaces") {
+		t.Errorf("a group of two spaces' groups: %s", e)
+	}
+	if e := c.groupFails(ipc.GroupArgs{Do: ipc.GroupAdd, Name: " / ", Sessions: []string{id["a"]}}); !strings.Contains(e, "needs a name") {
+		t.Errorf("a name of no words: %s", e)
+	}
+}
+
+func TestUndoingAnUngroupPutsBackAGroupOfPinnedCardsAndNames(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("a", "b", "c")
+	inner := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work/Irie", Sessions: []string{id["b"]}}).Group
+	work := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work", Sessions: []string{id["a"]}}).Group
+	c.pin(id["b"], true)
+	c.group(ipc.GroupArgs{Do: ipc.GroupRename, Group: work, Name: "Projects"})
+	r := c.group(ipc.GroupArgs{Do: ipc.GroupUngroup, Group: work})
+	if p, _ := parentIn(r, inner); p != "" {
+		t.Fatalf("after ungroup, Irie is in %q", p)
+	}
+	if u := c.step(dirUndo); u.Label != `ungroup "Projects"` {
+		t.Errorf("undo label %q", u.Label)
+	}
+	if p, _ := parentIn(c.group(ipc.GroupArgs{}), inner); p != work {
+		t.Errorf("after undo, Irie is in %q, want Work", p)
+	}
+
+	// A group numbered beside one of its name gets its name back with undo.
+	other := c.group(ipc.GroupArgs{Do: ipc.GroupNew, Name: "Irie", Sessions: []string{id["c"]}}).Group
+	r = c.group(ipc.GroupArgs{Do: ipc.GroupMove, Groups: []string{other}, Into: work})
+	if got := ipc.GroupTitle(r.Groups, other, "/"); got != "Projects/Irie 2" || r.Steps == 0 {
+		t.Errorf("moved beside Irie, it is %q, %d steps", got, r.Steps)
+	}
+	c.step(dirUndo)
+	if got := ipc.GroupTitle(c.group(ipc.GroupArgs{}).Groups, other, "/"); got != "Irie" {
+		t.Errorf("after undo, it is %q, want Irie", got)
+	}
+	// A move that changes nothing takes no step.
+	if r := c.group(ipc.GroupArgs{Do: ipc.GroupMove, Groups: []string{inner}, Into: work}); r.Steps != 0 {
+		t.Errorf("a move into its own group took %d steps", r.Steps)
+	}
+}

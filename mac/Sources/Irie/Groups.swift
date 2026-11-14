@@ -61,6 +61,9 @@ struct GroupResult: Decodable {
     var groups: [GroupInfo]
     var group: String?
     var sessions: [String]?
+    /// How many steps of the history it took: none when nothing moved, so
+    /// ⌘Z has nothing of it to take back.
+    var steps: Int?
 }
 
 /// One of your groups as the List view draws it: its header, then what it
@@ -312,8 +315,13 @@ extension Store {
         pickNone()
         let what = cards.count == 1 ? cards[0].name : "\(cards.count) sessions"
         let to = into.map(groupTitle) ?? "the top of the list"
-        groupCall(GroupArgs(action: "move", sessions: cards.map(\.id), into: into ?? "", before: before, after: after), failed: "move \(what)") { _ in
-            if notice { self.say("Moved \(what) to \(to). ⌘Z takes it back.", error: false, seconds: 6, undo: true) }
+        groupCall(GroupArgs(action: "move", sessions: cards.map(\.id), into: into ?? "", before: before, after: after), failed: "move \(what)") { r in
+            guard notice else { return }
+            if (r.steps ?? 0) == 0 {
+                self.say("\(what) \(cards.count == 1 ? "is" : "are") there already.", error: false)
+            } else {
+                self.say("Moved \(what) to \(to). ⌘Z takes it back.", error: false, seconds: 6, undo: true)
+            }
         }
     }
 
@@ -351,7 +359,11 @@ extension Store {
         guard canGroup else { return }
         let name = groupName(id)
         let to = into.map(groupTitle) ?? "the top of the list"
-        groupCall(GroupArgs(action: "move", groups: [id], into: into ?? "", before: before, after: after), failed: "move \(name)") { _ in
+        groupCall(GroupArgs(action: "move", groups: [id], into: into ?? "", before: before, after: after), failed: "move \(name)") { r in
+            if (r.steps ?? 0) == 0 {
+                self.say("\(name) is there already.", error: false)
+                return
+            }
             if let into { self.folded.remove(SessionGroup.userID(into)) }
             self.say("Moved \(name) \(into == nil ? "to" : "into") \(to). ⌘Z takes it back.", error: false, seconds: 6, undo: true)
         }
@@ -408,7 +420,8 @@ extension Store {
     func canDropOnHeader(_ g: SessionGroup, before: Bool) -> Bool {
         guard canGroup, mode == .list, let id = g.userGroup else { return false }
         if let held = draggingGroup {
-            return held != id && !isWithin(before ? parentGroup(id) : id, held)
+            // Inside the group it is in already, it would stay as it is.
+            return held != id && !isWithin(before ? parentGroup(id) : id, held) && (before || parentGroup(held) != id)
         }
         guard let held = dragging, let s = sessions.first(where: { $0.id == held }) else { return false }
         return s.peerName == nil

@@ -180,7 +180,17 @@ func ctlNest(args []string) error {
 	if err != nil {
 		return err
 	}
-	a := ipc.GroupArgs{Do: ipc.GroupMove, Groups: args[:1]}
+	// The group by its id, so that what this prints is the group that
+	// moved, numbered should its new group have its name already.
+	var l ipc.GroupResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpGroup, ipc.GroupArgs{}, &l); err != nil {
+		return err
+	}
+	id := args[0]
+	if i := ipc.FindGroup(l.Groups, id); i >= 0 {
+		id = l.Groups[i].ID
+	}
+	a := ipc.GroupArgs{Do: ipc.GroupMove, Groups: []string{id}}
 	if len(args) == 2 {
 		a.Into = args[1]
 	}
@@ -188,9 +198,11 @@ func ctlNest(args []string) error {
 	if err := ipc.Call(sock, 10*time.Second, ipc.OpGroup, a, &r); err != nil {
 		return err
 	}
-	if i := ipc.FindGroup(r.Groups, args[0]); i >= 0 {
-		fmt.Println(ipc.GroupTitle(r.Groups, r.Groups[i].ID, "/"))
+	if r.Steps == 0 {
+		fmt.Println("there already: " + ipc.GroupTitle(r.Groups, id, "/"))
+		return nil
 	}
+	fmt.Println(ipc.GroupTitle(r.Groups, id, "/"))
 	return nil
 }
 

@@ -269,10 +269,11 @@ func (c *Core) placeNew(id string, a ipc.SpawnArgs) {
 }
 
 // toTop puts session id first in the list; one of a group of yours, first
-// in its group, where the group is (groups.go). The caller holds c.mu.
+// in the innermost group around it that holds another card, where the
+// group is (groups.go). The caller holds c.mu.
 func (c *Core) toTop(id string) {
 	if x := c.sessions[id]; x != nil && !x.track.pinned {
-		if first := c.firstIn(c.groupOf(x), map[string]bool{id: true}); first != "" {
+		if first := c.edgeIn(x, false); first != "" {
 			c.gather([]string{id}, "", first)
 			return
 		}

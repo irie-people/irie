@@ -157,6 +157,36 @@ func (c *Core) groupIn(id, space string, except map[string]bool) bool {
 	return true
 }
 
+// spaceOfAll is the one space of sessions xs, of the open sessions of
+// groups gs, and of group into's: each space has its own groups, so a
+// group op may not join two. It refuses them when they are in more than
+// one. The caller holds c.mu.
+func (c *Core) spaceOfAll(xs []*session, gs []string, into string) (string, error) {
+	space, seen, what := "", false, ""
+	take := func(s, name string) error {
+		switch {
+		case !seen:
+			space, seen, what = s, true, name
+		case s != space:
+			return ipc.Errorf(ipc.CodeBadArgs, "%q and %q are in different spaces: each space has its own groups", what, name)
+		}
+		return nil
+	}
+	for _, x := range xs {
+		if err := take(c.spaceOf(x), x.name); err != nil {
+			return "", err
+		}
+	}
+	for _, g := range append(slices.Clone(gs), into) {
+		if s, ok := c.spaceOfGroup(g); ok && g != "" {
+			if err := take(s, c.groupNameOf(g)); err != nil {
+				return "", err
+			}
+		}
+	}
+	return space, nil
+}
+
 // oneSpace refuses sessions xs of more than one space, or, for a group id
 // to join, of a space other than its sessions': each space has its own
 // groups. The caller holds c.mu.
@@ -287,13 +317,15 @@ func (c *Core) setGroup(x *session, id, source string) bool {
 // groups. The caller holds c.mu.
 func (c *Core) ensureGroup(id, name string) {
 	if id != "" && c.groupIndex(id) < 0 {
-		c.groups = append(c.groups, ipc.Group{ID: id, Name: c.groupName(name, id, "")})
+		c.groups = append(c.groups, ipc.Group{ID: id, Name: c.groupName(name, id, "", "")})
 	}
 }
 
 // restoreGroups makes the groups of shot, the outermost first, as a step
-// kept them: each in the group shot says, made again with its id and name
-// should it be gone. The caller holds c.mu.
+// kept them: each in the group shot says, under the name shot gives it,
+// made again with its id should it be gone. A group stays where it is
+// rather than go in a group of another space, or deeper than
+// ipc.MaxGroupDepth. The caller holds c.mu.
 func (c *Core) restoreGroups(shot []ipc.Group) {
 	for _, g := range shot {
 		if g.ID == "" {
@@ -303,21 +335,35 @@ func (c *Core) restoreGroups(shot []ipc.Group) {
 		if p != "" && (c.groupIndex(p) < 0 || c.within(p, g.ID)) {
 			p = ""
 		}
+		sp, held := c.spaceOfGroup(g.ID)
+		if p != "" {
+			if ps, ok := c.spaceOfGroup(p); held && ok && ps != sp || c.depthOf(p)+1+c.heightOf(g.ID) > ipc.MaxGroupDepth {
+				continue
+			}
+		}
 		if i := c.groupIndex(g.ID); i >= 0 {
 			if c.groups[i].Parent != p {
 				c.groups[i].Parent = p
-				c.groups[i].Name = c.groupName(c.groups[i].Name, g.ID, p)
+				c.groups[i].Name = c.groupName(cmp.Or(g.Name, c.groups[i].Name), g.ID, p, sp)
 			}
 			continue
 		}
-		c.groups = append(c.groups, ipc.Group{ID: g.ID, Name: c.groupName(g.Name, g.ID, p), Parent: p})
+		c.groups = append(c.groups, ipc.Group{ID: g.ID, Name: c.groupName(g.Name, g.ID, p, sp), Parent: p})
 	}
 }
 
-// newGroup makes a group in group parent, named name or a name of its own,
-// and returns its id. The caller holds c.mu.
-func (c *Core) newGroup(name, parent string) string {
-	g := ipc.Group{ID: newGroupID(), Name: c.groupName(name, "", parent), Parent: parent}
+// groupSpace is the space of group id's open sessions, those of the
+// groups inside it too; the first space when it has none open. The caller
+// holds c.mu.
+func (c *Core) groupSpace(id string) string {
+	sp, _ := c.spaceOfGroup(id)
+	return sp
+}
+
+// newGroup makes a group in group parent of space, named name or a name of
+// its own, and returns its id. The caller holds c.mu.
+func (c *Core) newGroup(name, parent, space string) string {
+	g := ipc.Group{ID: newGroupID(), Name: c.groupName(name, "", parent, space), Parent: parent}
 	c.groups = append(c.groups, g)
 	return g.ID
 }
@@ -332,15 +378,16 @@ func cleanGroupName(name string) string {
 	return name
 }
 
-// groupName makes name fit to name group id in group parent: one line, cut
-// to maxGroupName, and numbered when another group beside it has it in any
-// case, as files in a folder are; a name of its own, "Group 2", when
-// empty. The caller holds c.mu.
-func (c *Core) groupName(name, id, parent string) string {
+// groupName makes name fit to name group id in group parent, of space:
+// one line, cut to maxGroupName, and numbered when another group beside it
+// has it in any case, as files in a folder are; at the top of the list,
+// beside it means in the same space, as each space has its own groups. A
+// name of its own, "Group 2", when empty. The caller holds c.mu.
+func (c *Core) groupName(name, id, parent, space string) string {
 	name = cleanGroupName(name)
 	taken := func(n string) bool {
 		return slices.ContainsFunc(c.groups, func(g ipc.Group) bool {
-			return g.ID != id && g.Parent == parent && strings.EqualFold(g.Name, n)
+			return g.ID != id && g.Parent == parent && strings.EqualFold(g.Name, n) && (parent != "" || c.groupIn(g.ID, space, nil))
 		})
 	}
 	if name == "" {
@@ -372,6 +419,9 @@ func (c *Core) groupFor(ref, space string) (string, error) {
 		return "", nil
 	}
 	words := ipc.GroupWords(ref)
+	if len(words) == 0 {
+		return "", ipc.Errorf(ipc.CodeBadArgs, "a group needs a name")
+	}
 	if len(words) > ipc.MaxGroupDepth {
 		return "", ipc.Errorf(ipc.CodeBadArgs, "groups go %d deep at most", ipc.MaxGroupDepth)
 	}
@@ -385,7 +435,7 @@ func (c *Core) groupFor(ref, space string) (string, error) {
 			parent = c.groups[i].ID
 			continue
 		}
-		parent = c.newGroup(w, parent)
+		parent = c.newGroup(w, parent, space)
 	}
 	return parent, nil
 }
@@ -432,6 +482,26 @@ func (c *Core) firstIn(id string, skip map[string]bool) string {
 func (c *Core) lastIn(id string, skip map[string]bool) string {
 	if b := c.blockOf(id, skip); id != "" && len(b) > 0 {
 		return b[len(b)-1]
+	}
+	return ""
+}
+
+// edgeIn is the first session (or the last) in the rest of the list
+// within the innermost group around x that holds one besides x: where x
+// goes first or last in its group without moving the group, as promote,
+// unpin, unpark and a new tab put it. A group of x's alone has no place of
+// its own, so the one around it gives it. "" when no group around x holds
+// another. The caller holds c.mu.
+func (c *Core) edgeIn(x *session, last bool) string {
+	skip := map[string]bool{x.id: true}
+	path := c.pathOf(c.groupOf(x))
+	for i := len(path) - 1; i >= 0; i-- {
+		if b := c.blockOf(path[i], skip); len(b) > 0 {
+			if last {
+				return b[len(b)-1]
+			}
+			return b[0]
+		}
 	}
 	return ""
 }
@@ -904,6 +974,22 @@ func (c *Core) leave(xs []*session, after, before string) []groupStep {
 	return steps
 }
 
+// anchorOf is the session a step of group id's is kept by: the first of
+// its open sessions in the list, those of the groups inside it too, one in
+// the rest of the list first; "" when it has none open. The caller holds
+// c.mu.
+func (c *Core) anchorOf(id string) string {
+	if b := c.blockOf(id, nil); len(b) > 0 {
+		return b[0]
+	}
+	for _, s := range c.fullOrder() {
+		if x := c.sessions[s]; x != nil && c.within(c.groupOf(x), id) {
+			return s
+		}
+	}
+	return ""
+}
+
 // nest puts the groups gs, in the list's order, in group into, "" for the
 // top of the list, each with its sessions: last in it, or just before what
 // of into's holds session before or just after what holds session after,
@@ -936,25 +1022,14 @@ func (c *Core) nest(gs []string, into, before, after string) []groupStep {
 		}
 		if from != into {
 			c.groups[i].Parent = into
-			c.groups[i].Name = c.groupName(c.groups[i].Name, g, into)
+			c.groups[i].Name = c.groupName(c.groups[i].Name, g, into, c.groupSpace(g))
 		}
 		d["to_groups"] = shotOf(append(c.chainOf(into), c.groups[i]))
 		c.putIn(ids, into, before, after)
 		if len(ids) > 0 {
 			before, after = "", ids[len(ids)-1]
 		}
-		anchor := ""
-		if len(ids) > 0 {
-			anchor = ids[0]
-		} else {
-			for _, s := range c.fullOrder() {
-				if x := c.sessions[s]; x != nil && c.within(c.groupOf(x), g) {
-					anchor = s
-					break
-				}
-			}
-		}
-		if anchor != "" {
+		if anchor := c.anchorOf(g); anchor != "" {
 			steps = append(steps, groupStep{kind: actNest, id: anchor, data: d})
 		}
 	}
@@ -1034,6 +1109,10 @@ func (c *Core) renameInHistory(id, name string) {
 			if k, ok := actionKinds[a.Kind]; ok && a.Kind == actNest {
 				a.Label = k.labelOf(*a)
 			}
+			if a.str("batch_group") == id {
+				a.Data["batch_label"] = fmt.Sprintf("%s %q", a.str("batch_verb"), name)
+				changed = true
+			}
 		}
 	}
 	if changed {
@@ -1049,7 +1128,9 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 	c.mu.Lock()
 	res := ipc.GroupResult{}
 	var steps []groupStep
-	label := ""
+	// A batch's label, its verb and the group it names, by its id and as it
+	// was named: `ungroup "Work"`.
+	verb, named, was, label := "", "", "", ""
 	if a.Do != ipc.GroupList {
 		c.tidyOrder()
 	}
@@ -1070,13 +1151,9 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 			if len(xs) == 0 && len(gs) == 0 {
 				return ipc.Errorf(ipc.CodeBadArgs, "a new group needs one of this machine's sessions, or a group")
 			}
-			if err := c.oneSpace(xs, ""); err != nil {
+			space, err := c.spaceOfAll(xs, gs, "")
+			if err != nil {
 				return err
-			}
-			for _, g := range gs {
-				if s, ok := c.spaceOfGroup(g); ok && len(xs) > 0 && s != c.spaceOf(xs[0]) {
-					return ipc.Errorf(ipc.CodeBadArgs, "%q is in another space: each space has its own groups", c.groupNameOf(g))
-				}
 			}
 			// It goes in the innermost group that holds all of what it
 			// holds, as a new folder of files picked in a folder goes in
@@ -1092,11 +1169,11 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 			if err := c.fits(gs, c.depthOf(parent)+1); err != nil {
 				return err
 			}
-			res.Group = c.newGroup(a.Name, parent)
+			res.Group = c.newGroup(a.Name, parent, space)
 			// It forms where the first of what it holds is (tidyOrder).
 			steps = append(c.nest(gs, res.Group, "", ""), c.joinInPlace(xs, res.Group)...)
 			if len(gs) > 0 {
-				label = fmt.Sprintf("group %q", c.groupNameOf(res.Group))
+				verb, named, was = "group", res.Group, c.groupNameOf(res.Group)
 			}
 		case ipc.GroupAdd:
 			at := c.groupIndex(a.Group)
@@ -1137,7 +1214,7 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 			if strings.TrimSpace(a.Name) == "" {
 				return ipc.Errorf(ipc.CodeBadArgs, "a group needs a name")
 			}
-			c.groups[at].Name = c.groupName(a.Name, a.Group, c.groups[at].Parent)
+			c.groups[at].Name = c.groupName(a.Name, a.Group, c.groups[at].Parent, c.groupSpace(a.Group))
 			c.renameInHistory(a.Group, c.groups[at].Name)
 		case ipc.GroupUngroup:
 			at := c.groupIndex(a.Group)
@@ -1146,7 +1223,7 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 			}
 			// What it held goes in the group around it, where it is.
 			g := c.groups[at]
-			label = fmt.Sprintf("ungroup %q", g.Name)
+			verb, named, was = "ungroup", g.ID, g.Name
 			for _, id := range c.fullOrder() {
 				if x := c.sessions[id]; x != nil && c.groupOf(x) == g.ID {
 					d := c.moveData(g.ID, g.Parent)
@@ -1197,16 +1274,11 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 				if c.within(into, g) {
 					return ipc.Errorf(ipc.CodeBadArgs, "%q can't go inside itself", c.groupNameOf(g))
 				}
-				if s, ok := c.spaceOfGroup(g); ok && into != "" {
-					if t, ok := c.spaceOfGroup(into); ok && s != t {
-						return ipc.Errorf(ipc.CodeBadArgs, "%q is in another space: each space has its own groups", c.groupNameOf(into))
-					}
-				}
 			}
 			if err := c.fits(gs, c.depthOf(into)); err != nil {
 				return err
 			}
-			if err := c.oneSpace(xs, into); err != nil {
+			if _, err := c.spaceOfAll(xs, gs, into); err != nil {
 				return err
 			}
 			res.Group = into
@@ -1216,9 +1288,9 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 				if b := c.blockOf(gs[len(gs)-1], nil); len(b) > 0 {
 					before, after = "", b[len(b)-1]
 				}
-				label = fmt.Sprintf("move %q", c.groupNameOf(gs[0]))
+				verb, named, was = "move", gs[0], c.groupNameOf(gs[0])
 				if len(gs) > 1 || len(xs) > 0 {
-					label = fmt.Sprintf("move %d groups and sessions", len(gs)+len(xs))
+					verb, named, label = "", "", fmt.Sprintf("move %d groups and sessions", len(gs)+len(xs))
 				}
 			}
 			steps = append(steps, c.join(xs, into, after, before)...)
@@ -1227,13 +1299,16 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 		}
 		return nil
 	}()
+	if named != "" {
+		label = fmt.Sprintf("%s %q", verb, cmp.Or(c.groupNameOf(named), was))
+	}
 	if err == nil && a.Do != ipc.GroupList {
 		c.tidyOrder()
 		c.saveGroups()
 		c.log.Info("group", "do", a.Do, "group", cmp.Or(res.Group, a.Group), "steps", len(steps))
 	}
 	res.Groups = slices.Clone(c.groups)
-	res.Sessions = stepIDs(steps)
+	res.Sessions, res.Steps = stepIDs(steps), len(steps)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -1246,6 +1321,9 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 	for i, s := range steps {
 		if label != "" && len(steps) > 1 {
 			s.data["batch_label"] = label
+			if named != "" {
+				s.data["batch_group"], s.data["batch_verb"] = named, verb
+			}
 		}
 		taken[i] = takenStep{kind: s.kind, session: s.id, data: s.data}
 	}
@@ -1286,17 +1364,13 @@ func (c *Core) nestInPlace(gs []string, into string) []groupStep {
 	var steps []groupStep
 	for _, g := range gs {
 		i := c.groupIndex(g)
-		ids := c.blockOf(g, nil)
-		anchor := ""
-		if len(ids) > 0 {
-			anchor = ids[0]
-		}
+		anchor := c.anchorOf(g)
 		from := c.groups[i].Parent
 		d := map[string]any{"group": g, "group_name": c.groups[i].Name, "from": from, "to": into,
 			"from_name": c.groupNameOf(from), "to_name": c.groupNameOf(into),
 			"from_groups": shotOf(append(c.chainOf(from), c.groups[i]))}
 		c.groups[i].Parent = into
-		c.groups[i].Name = c.groupName(c.groups[i].Name, g, into)
+		c.groups[i].Name = c.groupName(c.groups[i].Name, g, into, c.groupSpace(g))
 		d["to_groups"] = shotOf(append(c.chainOf(into), c.groups[i]))
 		if anchor != "" {
 			steps = append(steps, groupStep{kind: actNest, id: anchor, data: d})
@@ -1492,7 +1566,7 @@ func (c *Core) leaveForSpace(x *session, to string, moved map[string]bool) (stri
 	}
 	out := c.groups[i]
 	c.groups[i].Parent = ""
-	c.groups[i].Name = c.groupName(out.Name, top, "")
+	c.groups[i].Name = c.groupName(out.Name, top, "", to)
 	return "", out
 }
 

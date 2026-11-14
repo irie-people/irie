@@ -324,7 +324,7 @@ func doSpace(k string) func(c *Core, a action) (action, error) {
 				c.restoreGroups(a.shot("nest_groups"))
 			} else if c.groups[i].Parent != "" {
 				c.groups[i].Parent = ""
-				c.groups[i].Name = c.groupName(c.groups[i].Name, nest, "")
+				c.groups[i].Name = c.groupName(c.groups[i].Name, nest, "", c.spaceOf(x))
 			}
 		}
 		if g != "" || nest != "" {

@@ -23,7 +23,8 @@ extension Store {
         guard canPin, s.peerName == nil, s.isPinned != on else { return }
         let was = sessions
         withAnimation(.easeOut(duration: 0.18)) {
-            preview { rows in Self.putPinned(&rows, s.id, on, within: { self.isWithin($0, $1) }) }
+            let around = groupPath(s.groupKey).reversed().map(\.id)
+            preview { rows in Self.putPinned(&rows, s.id, on, around: around, within: { self.isWithin($0, $1) }) }
         }
         Task { await pin(s, on, was: was) }
     }
@@ -52,18 +53,22 @@ extension Store {
     /// Pins (on) or unpins session id in rows, in the list's order, as the
     /// core does: a pin goes last, and unparks; an unpin goes first among
     /// this Mac's sessions that are neither pinned nor parked, or, for a
-    /// card of a group of yours, last in its group, after the groups inside
-    /// it too, which within says (Groups.swift).
-    static func putPinned(_ rows: inout [Session], _ id: String, _ on: Bool,
+    /// card of a group of yours, last in the innermost group around it that
+    /// holds another card, after the groups inside it too: around are its
+    /// group and those around it, the innermost first, and within says
+    /// whether a group is inside another (Groups.swift).
+    static func putPinned(_ rows: inout [Session], _ id: String, _ on: Bool, around: [String] = [],
                           within: (String?, String) -> Bool = { a, b in a == b }) {
         guard let i = rows.firstIndex(where: { $0.id == id }) else { return }
         var s = rows.remove(at: i)
         s.pinned = on
         if on { s.parked = false }
-        let g = s.groupKey
-        let inGroup = { (r: Session) in g != nil && within(r.groupKey, g ?? "") && !r.isPinned && !r.isParked }
+        var last: Int?
+        for g in around where last == nil {
+            last = rows.lastIndex(where: { within($0.groupKey, g) && !$0.isPinned && !$0.isParked })
+        }
         let at = on ? rows.count
-            : rows.lastIndex(where: inGroup).map { $0 + 1 }
+            : last.map { $0 + 1 }
             ?? rows.firstIndex(where: { !$0.isPinned && !$0.isParked && $0.peerName == nil }) ?? rows.count
         rows.insert(s, at: at)
         for j in rows.indices { rows[j].order = j }
