@@ -7,6 +7,7 @@ Date: 2026-10-27. Status: proposed, for the maintainer to decide. There is no is
 - The probe checks that the CLI loads a plugin passed that way, with `claude --plugin-dir <probe> plugin list --json`. The same list shows a plugin of the user's own named `irie` (§1.2) and a refusal by `disableSideloadFlags`; either leaves the skills out, and the session's warnings say why.
 - `[skills] enabled` and `disabled`, `profiles.<name>.skills` and `irie skills` work as §5 says. `fetch`, `mirror`, `follow_upstream`, `cooldown`, the other commands and the tracked list do not exist yet.
 - The first skill is Irie's own: `present`, run as `/irie:present`, which tells an agent how to show its work so that Irie can draw it (docs/proposals/generative-ui.md).
+- The second is Irie's own too: `chaos`, run as `/irie:chaos`, a chaos monkey that stress tests what an agent is pointed at, and the built-in `+chaos` profile, whose sessions start on it (DESIGN §4.18).
 - Not built: stepping aside for a user's own skill of the same name (§1.2, decision 4). It reads the folders where Claude Code keeps personal and project skills, and the agent that built this was not allowed to read or name them in code, so it waits for a maintainer. Until then both load: Irie's as `/irie:<name>`, the user's under its own name.
 
 ## Goal

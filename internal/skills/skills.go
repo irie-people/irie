@@ -46,7 +46,7 @@ type Skill struct {
 // bundled_writing.go add theirs to plugged, so a build tag that leaves a
 // plugin out leaves its skills out too.
 //
-//go:embed bundled/present
+//go:embed bundled/present bundled/chaos
 var bundled embed.FS
 
 // plugged are the bundled skills of the plugins this build has.
