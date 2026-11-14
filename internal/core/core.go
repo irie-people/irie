@@ -414,6 +414,8 @@ func Run(o Options) error {
 		select {
 		case <-t.C:
 			c.tick()
+			// What the agents' hooks kept while no core listened.
+			c.takeMissed(time.Now())
 			c.beat()
 			if n%raphaelEvery == 0 {
 				go c.raphaelSweep()
@@ -478,6 +480,7 @@ func (c *Core) tick() {
 	c.sendFollowUps(time.Now())
 	c.keepFrozen()
 	c.refreezeLost()
+	c.endBoosts(time.Now())
 	c.background()
 	c.countTokens()
 	c.followTitles()

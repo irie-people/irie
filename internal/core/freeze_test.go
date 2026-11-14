@@ -476,12 +476,36 @@ func skipIfDemoted(t *testing.T) {
 	}
 }
 
-func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
+// backState is where a session's processes run, by ps: whether its agent
+// is in the background, and which of the rest are and are not. The hook
+// shims the agent runs are left out, as they come and go.
+func (c *coreEnv) backState(s ipc.Session, agent int) (agentBack bool, back, up []string) {
+	c.t.Helper()
+	for _, p := range tree(c.t, c.hostPID(s)) {
+		in := pri(c.t, p.PID) == "4"
+		switch {
+		case p.PID == agent:
+			agentBack = in
+		case p.Name == filepath.Base(c.bin):
+		case in:
+			back = append(back, p.Name)
+		default:
+			up = append(up, p.Name)
+		}
+	}
+	return agentBack, back, up
+}
+
+// The other sessions' tools step back for a promoted session, a session's
+// that starts meanwhile too, but never their agents, which keep their
+// network (DESIGN §4.3).
+func TestPromoteGoesToTheTopAndPutsTheOthersToolsInTheBackground(t *testing.T) {
 	c := setup(t)
 	var all []ipc.Session
+	agents := map[string]int{}
 	for _, n := range []string{"alpha", "beta", "gamma"} {
 		s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,kids", Name: n})
-		c.kids(s)
+		agents[s.ID] = c.kids(s)
 		all = append(all, s)
 	}
 	gamma := all[2]
@@ -498,38 +522,33 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	if !proc.CanBackground {
 		t.Skip("no background state here")
 	}
-	// While a session is promoted, the running Irie keeps the others' trees
+	// While a session is promoted, the running Irie keeps the others' tools
 	// in the background, a test one of them runs and all it starts as well,
 	// so nothing here could show a difference.
 	if pri(t, os.Getpid()) == "4" {
 		t.Skip("the test runs in the background, as a session's processes do while another is promoted")
 	}
 	// At once: the call returns once it is done.
-	inBackground := func(s ipc.Session) (in, out []string) {
-		for _, p := range tree(t, c.hostPID(s)) {
-			if pri(t, p.PID) == "4" {
-				in = append(in, p.Name)
-			} else {
-				out = append(out, p.Name)
-			}
-		}
-		return in, out
-	}
 	for _, s := range all[:2] {
-		if _, out := inBackground(s); len(out) > 0 {
-			t.Errorf("%s: %v not in the background", s.Name, out)
+		agentBack, _, up := c.backState(s, agents[s.ID])
+		if agentBack {
+			t.Errorf("%s: its agent is in the background", s.Name)
+		}
+		if len(up) > 0 {
+			t.Errorf("%s: %v not in the background", s.Name, up)
 		}
 	}
 	skipIfDemoted(t)
-	if in, _ := inBackground(gamma); len(in) > 0 {
-		t.Errorf("the promoted session's %v are in the background", in)
+	if agentBack, back, _ := c.backState(gamma, agents[gamma.ID]); agentBack || len(back) > 0 {
+		t.Errorf("the promoted session's %v are in the background (its agent: %v)", back, agentBack)
 	}
-	// A session that starts meanwhile goes in the background too.
+	// A session that starts meanwhile: its tools, which its agent starts
+	// at normal priority, step back at the core's next tick.
 	delta := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,kids", Name: "delta"})
-	c.kids(delta)
-	testutil.Eventually(t, 3*time.Second, "a new session is not in the background", func() bool {
-		_, out := inBackground(delta)
-		return len(out) == 0
+	agents[delta.ID] = c.kids(delta)
+	testutil.Eventually(t, 3*time.Second, "a new session's tools are not in the background", func() bool {
+		agentBack, back, up := c.backState(delta, agents[delta.ID])
+		return !agentBack && len(back) > 0 && len(up) == 0
 	})
 
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: gamma.ID, Level: 0}, nil); err != nil {
@@ -537,8 +556,8 @@ func TestPromoteGoesToTheTopAndPutsTheOthersInTheBackground(t *testing.T) {
 	}
 	skipIfDemoted(t)
 	for _, s := range append(all, delta) {
-		if in, _ := inBackground(s); len(in) > 0 {
-			t.Errorf("%s: %v still in the background", s.Name, in)
+		if agentBack, back, _ := c.backState(s, agents[s.ID]); agentBack || len(back) > 0 {
+			t.Errorf("%s: %v still in the background (its agent: %v)", s.Name, back, agentBack)
 		}
 	}
 	if got := names(c.list()); !slices.Equal(got, []string{"gamma", "alpha", "beta", "delta"}) {

@@ -82,6 +82,10 @@
 //	IRIE_FAKE_PACE         a pause before each step, such as 300ms
 //	IRIE_FAKE_WEEK         how much of the plan's week the status line says
 //	                       is used, in percent, resetting in three days
+//	IRIE_FAKE_TURNS        how the turns of typed lines go, in order, comma
+//	                       separated, each a script whose steps are joined
+//	                       by +, such as stopfail:server_error,sleep:3s+stop;
+//	                       the turns after them stop, as by default
 //	IRIE_FAKE_LOG          the log file; by default fakeagent.ndjson next to
 //	                       the --settings file
 //	IRIE_FAKE_SCRIPT       the script a task that is not one runs, in place
@@ -500,6 +504,7 @@ type agent struct {
 	model      string
 	in         *bufio.Reader
 	pace       time.Duration
+	turns      int // the turns of typed lines that IRIE_FAKE_TURNS scripted so far
 
 	mu     sync.Mutex // one hook at a time
 	tools  int
@@ -637,8 +642,35 @@ func (a *agent) run() int {
 		}
 		fmt.Println("› " + line)
 		a.fire("UserPromptSubmit", "", map[string]any{"prompt": line})
-		a.stop("")
+		steps := a.nextTurn()
+		if steps == nil {
+			a.stop("")
+			continue
+		}
+		for _, s := range steps {
+			if code, exit := a.do(s, nil); exit {
+				return code
+			}
+		}
 	}
+}
+
+// nextTurn is the script of the next turn of a typed line, from
+// IRIE_FAKE_TURNS; nil once those are used up, or when a script does not
+// read.
+func (a *agent) nextTurn() []step {
+	turns := strings.Split(os.Getenv("IRIE_FAKE_TURNS"), ",")
+	if a.turns >= len(turns) || strings.TrimSpace(turns[a.turns]) == "" {
+		return nil
+	}
+	script := strings.ReplaceAll(turns[a.turns], "+", ",")
+	a.turns++
+	steps, err := parseScript(script)
+	if err != nil {
+		return nil
+	}
+	a.record(map[string]any{"t": "turn", "n": a.turns, "script": script})
+	return steps
 }
 
 func (a *agent) end(reason string) {

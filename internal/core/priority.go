@@ -210,6 +210,7 @@ func (c *Core) background() {
 		c.bg = map[int]bgProc{}
 	}
 	inTree := map[int]bool{}
+	own := c.ownName()
 	for _, x := range c.sessions {
 		p := c.snap.Pane(x.pane)
 		if p == nil || p.Dead || p.PID <= 1 {
@@ -225,12 +226,15 @@ func (c *Core) background() {
 			inTree[q.PID] = true
 			b, ok := c.bg[q.PID]
 			ok = ok && b.start == q.Start
+			// The agent keeps its network, and its own helpers theirs:
+			// only the rest of the tree steps back (keepup.go).
+			back := want && !keepsUp(t, p.PID, own, q)
 			switch {
-			case want && !ok:
+			case back && !ok:
 				if err := proc.SetBackground(q.PID, true); err == nil {
 					c.bg[q.PID] = bgProc{start: q.Start, session: x.id}
 				}
-			case !want && (ok || x.demoted):
+			case !back && (ok || x.demoted):
 				// What it started while in the background inherited that,
 				// so every process of a tree that was there comes out.
 				proc.SetBackground(q.PID, false)
@@ -266,6 +270,10 @@ func (c *Core) stepsBack(id string, raised map[string]bool) bool {
 		// The tab on top decides while it works, a promotion's claim
 		// included: everything but an install steps back for it.
 		return !g.installs[id]
+	case c.boosted(id):
+		// Boosted after its API errors (boost.go): with the rest of the
+		// focus, whatever is promoted or held back, and pushing back none.
+		return false
 	case len(raised) > 0:
 		return !raised[id]
 	}

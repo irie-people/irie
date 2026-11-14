@@ -56,6 +56,17 @@ type track struct {
 	trodTyped    time.Time
 	trodAnswered bool
 
+	// For the boost after API errors (boost.go): how many of its turns in
+	// a row failed on an API error that may pass, and the boost.on of the
+	// boost it has now.
+	apiFails int
+	boost    *event.Event
+
+	// heard is when its agent last reported by a hook: a hook event the
+	// shim kept while the core was down counts only if it came later
+	// (missed.go).
+	heard time.Time
+
 	// What the user did to the session as a whole (freeze.go, priority.go,
 	// order.go).
 	frozen   *event.Event // freeze.on, until freeze.off
@@ -85,6 +96,9 @@ func (t *track) apply(e event.Event) {
 	if e.Source == event.SourceHook && e.Kind != event.SessionEnded {
 		// After /clear, Claude Code ends one session and starts the next.
 		t.ended = nil
+	}
+	if at := e.Time(); e.Source == event.SourceHook && at.After(t.heard) {
+		t.heard = at
 	}
 	switch e.Kind {
 	case event.SpawnRequested:
@@ -155,6 +169,7 @@ func (t *track) apply(e event.Event) {
 		delete(t.needs, event.Main)
 		t.stopTools(event.Main)
 		if e.Agent == event.Main {
+			t.apiFails = 0
 			t.waiting, _ = e.Int("waiting")
 			t.waitingOn = e.Str("waiting_on")
 			t.stopped, t.asked = e.Time(), e.Data["asks"] == true
@@ -168,9 +183,11 @@ func (t *track) apply(e event.Event) {
 			}
 		}
 	case event.DogNudged:
-		// The turn goes on: the dog sent the agent back to finish.
+		// The turn goes on: the dog sent the agent back to finish. It came
+		// to its stop without an API error all the same.
 		t.nudged++
 		t.unproven = ""
+		t.apiFails = 0
 		t.busy(e)
 	case event.TrodSent:
 		t.trod = append(t.trod, trodSend{at: e.Time(), reason: e.Str("reason"), how: e.Str("how")})
@@ -184,12 +201,26 @@ func (t *track) apply(e event.Event) {
 			break
 		}
 		// The turn goes on: at its end, or past a question turned away.
+		if e.Str("how") == trodAtStop {
+			t.apiFails = 0
+		}
 		t.busy(e)
 	case event.TurnFailed:
 		t.activity, t.viewed = done, false
 		t.stopTools(event.Main)
 		t.need(e)
 		t.stopped, t.asked = e.Time(), false
+		// An API error that may pass counts toward a boost; one that only
+		// the user can mend, such as a usage limit or a login, ends the run.
+		if passing[e.Str("error")] {
+			t.apiFails++
+		} else {
+			t.apiFails = 0
+		}
+	case event.BoostOn:
+		t.boost, t.apiFails = &e, 0
+	case event.BoostOff:
+		t.boost = nil
 	case event.SubagentStarted:
 		// A helper that starts once the turn is over, as an in-process
 		// teammate's does for each message, leaves it over.
@@ -458,6 +489,9 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	}
 	if s.State == ipc.StateFrozen && t.frozen.Str("by") == trodBy {
 		s.Detail = joinDetail("Frozen by the trod bot: "+t.frozen.Str("reason"), s.Detail)
+	}
+	if t.boost != nil && s.State != ipc.StateExited && s.State != ipc.StateFailed {
+		s.Detail = joinDetail(boostedLine, s.Detail)
 	}
 	if s.State != ipc.StateExited && s.State != ipc.StateFailed {
 		s.Subagents = t.subagents()

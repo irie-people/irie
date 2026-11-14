@@ -2,15 +2,21 @@
 // (DESIGN §2.2, §3.3). It reads the event from stdin, caps its strings at
 // 2 KiB, forwards it to the core and prints the core's reply in the harness's
 // own dialect. It always exits 0: when Irie is down, agents keep working.
+// An event the core cannot take then, as for the seconds an install takes to
+// restart it, goes in the session's missed.ndjson, which the core takes when
+// it is back (Missed).
 package hook
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -101,9 +107,13 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 	if hookEvent == "Stop" {
 		wait = stopReplyTimeout
 	}
-	r, ok := ask(socket, ipc.HookArgs{Harness: h.ID(), Session: session, Payload: payload}, wait)
+	args := ipc.HookArgs{Harness: h.ID(), Session: session, Payload: payload}
+	r, err := ask(socket, args, wait)
+	if errors.Is(err, errNoCore) {
+		keep(getenv, args, hookEvent, time.Now())
+	}
 	hold(getenv, session, hookEvent)
-	if !ok {
+	if err != nil {
 		return 0
 	}
 	// Respond needs only the event's name to pick the dialect.
@@ -149,20 +159,77 @@ func hold(getenv func(string) string, session, hookEvent string) {
 	}
 }
 
+// errNoCore is ask's error when no core took the event: none listens on
+// the socket.
+var errNoCore = errors.New("no core listens")
+
 // ask forwards a hook event to the core and returns its reply, waiting at
 // most wait for it.
-func ask(socket string, a ipc.HookArgs, wait time.Duration) (ipc.HookResult, bool) {
+func ask(socket string, a ipc.HookArgs, wait time.Duration) (ipc.HookResult, error) {
 	var r ipc.HookResult
 	c, err := ipc.Dial(socket, connectTimeout)
 	if err != nil {
-		return r, false
+		return r, errNoCore
 	}
 	defer c.Close()
 	c.Timeout = wait
-	if err := c.Call(ipc.OpHook, a, &r); err != nil {
-		return r, false
+	return r, c.Call(ipc.OpHook, a, &r)
+}
+
+// Missed is one line of a session's missed.ndjson: a hook event the core
+// could not take, and when it came.
+type Missed struct {
+	At      time.Time       `json:"at"`
+	Harness string          `json:"harness"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// maxMissed is how big a missed.ndjson grows with tool calls: past it,
+// while Irie stays down, only the events that change a session's state go
+// in.
+const maxMissed = 1 << 20
+
+// toolHooks are the hook events of tool calls.
+var toolHooks = map[string]bool{"PreToolUse": true, "PostToolUse": true, "PostToolUseFailure": true}
+
+// keep appends a hook event the core could not take to the session's
+// missed.ndjson, with when it came. One write appends the whole line, so
+// the shims of hooks that run at once never mix their lines.
+func keep(getenv func(string) string, a ipc.HookArgs, hookEvent string, at time.Time) {
+	p, err := paths.New(getenv, os.Getuid())
+	if err != nil {
+		return
 	}
-	return r, true
+	file := p.MissedFile(a.Session)
+	if fi, err := os.Stat(file); err == nil && fi.Size() > maxMissed && toolHooks[hookEvent] {
+		return
+	}
+	line, err := json.Marshal(Missed{At: at.UTC(), Harness: a.Harness, Payload: a.Payload})
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.Write(append(line, '\n'))
+}
+
+// ReadMissed reads the events of a missed.ndjson in the order they came,
+// leaving out a line it cannot read.
+func ReadMissed(r io.Reader) []Missed {
+	var out []Missed
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64<<10), maxPayload)
+	for sc.Scan() {
+		var m Missed
+		if json.Unmarshal(sc.Bytes(), &m) == nil && !m.At.IsZero() && len(m.Payload) > 0 {
+			out = append(out, m)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b Missed) int { return a.At.Compare(b.At) })
+	return out
 }
 
 // whole are the payload fields the shim does not cap: a turn's last
