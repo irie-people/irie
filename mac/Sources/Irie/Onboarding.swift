@@ -476,7 +476,7 @@ struct Offline: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 HStack {
-                    Button("Set Up \(Brand.name)…") { IrieLauncher.openSetup(bin) }
+                    Button(Brand.isLong ? "Set Up…" : "Set Up \(Brand.name)…") { IrieLauncher.openSetup(bin) }
                         .buttonStyle(SoftButton(prominent: true))
                     Button("Try Again") { Task { await store.startIrie() } }
                         .buttonStyle(SoftButton())
@@ -497,7 +497,7 @@ struct Offline: View {
                     .buttonStyle(SoftButton(prominent: true))
             case (false, nil):
                 Text(why).font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
-                Button("Start \(Brand.name)") { Task { await store.startIrie() } }
+                Button(Brand.isLong ? "Start" : "Start \(Brand.name)") { Task { await store.startIrie() } }
                     .buttonStyle(SoftButton(prominent: true))
                 Text("Or type `\(Brand.slug) up` in a terminal. The app connects by itself once it’s running.")
                     .font(.system(size: 12)).foregroundStyle(Theme.muted)
