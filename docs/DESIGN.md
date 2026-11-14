@@ -477,9 +477,10 @@ claude --model claude-opus-5-5 --effort max --permission-mode auto \
 | Notification | none | 10 s | none | `permission_prompt` and `agent_needs_input` mean "needs you" |
 | Elicitation | none | 10 s | none | Needs you |
 | Stop | none | 10 s | none | Turn ended; the jot dog may send it on (§4.8) |
-| StopFailure | none | 10 s | none | Turn failed: `rate_limit`, `authentication_failed`, `billing_error`, … |
+| StopFailure | none | 10 s | none | Turn failed: `rate_limit`, `authentication_failed`, `billing_error`, …; a model's own usage limit may switch the session's model (§6.4) |
 | SubagentStart, SubagentStop | none | 10 s | none | Child rows and mirror paths |
 | SessionEnd | none | 1 s | none | Session ended (Claude Code allows 1.5 s by default) |
+| PreModelSwitch, PostModelSwitch | none | 10 s | none | Irie's own switch at a usage limit skips the confirmation; the model a session runs (§6.4). Only for a Claude Code of 2.1.295 or later |
 
 An arch agent's door (§4.11) adds prompt hooks to PreToolUse beside Irie's own: one per rule, such as `{"type":"prompt","if":"Bash(curl *)","prompt":"…$ARGUMENTS…","timeout":20,"continueOnBlock":true}`, grouped by the tool the rule names.
 
@@ -491,7 +492,8 @@ An arch agent's door (§4.11) adds prompt hooks to PreToolUse beside Irie's own:
 | `agent_id`, `agent_type` | Tool events fired inside a subagent; SubagentStart/Stop | Per-subagent hold, child rows |
 | `tool_name`, `tool_input`, `tool_use_id` | PreToolUse, PostToolUse | Detail line; question detection |
 | `notification_type`, `message` | Notification | Reasons for "needs you" |
-| `error`, `error_details`, `last_assistant_message` | StopFailure | Error reason; what the API said of it, and the error as the conversation shows it ("API Error: …"), kept in the journal |
+| `error`, `error_details`, `last_assistant_message` | StopFailure | Error reason; what the API said of it, and the error as the conversation shows it ("API Error: …", "You've reached your Fable limit. …"), kept in the journal |
+| `from_model`, `to_model`, `requested_model`, `source` | PreModelSwitch, PostModelSwitch | Whether a switch is Irie's own; the model a session runs from then on |
 | `tool_response` (`stdout`, `stderr`, `interrupted`); `error`, `is_interrupt` | PostToolUse; PostToolUseFailure | What a shell command's tests showed (§4.8). The shim keeps their head and tail |
 | `last_assistant_message`, `stop_hook_active`, `background_tasks`, `session_crons` | Stop | The turn's result (§6.4); whether the jot dog may send it on (§4.8) |
 | `agent_transcript_path` | SubagentStop | Confirms the mirror's path |
@@ -501,7 +503,8 @@ An arch agent's door (§4.11) adds prompt hooks to PreToolUse beside Irie's own:
 - **PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, SessionStart, SubagentStart:** print `{"hookSpecificOutput":{"hookEventName":"<event>","additionalContext":"<notes>"}}` only when there is something to say; otherwise print nothing.
 - **PreToolUse after `hold.max`:** print `permissionDecision: "deny"` with a `permissionDecisionReason`.
 - **Stop:** when the jot dog sends the turn on (§4.8), print `{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"<what is left>"}}`: feedback that goes on with the turn, under Claude Code's own loop guards. Otherwise print nothing.
-- **Never `"allow"`:** that would bypass the user's permission rules.
+- **PreModelSwitch:** `permissionDecision: "allow"` for the switch Irie makes at a usage limit (§6.4), so it goes ahead without the confirmation Claude Code asks while the prompt cache is warm. Any other switch, such as the user's own `/model`, gets nothing, and Claude Code decides as it would.
+- **Never `"allow"` a tool call:** that would bypass the user's permission rules.
 - **All other events:** print nothing.
 
 **While no core listens.** For the seconds an install takes to restart the core (10 to 30 s with some 40 sessions), the shim cannot connect, and an event it dropped then was lost: a turn that failed in that window left its row "working" while its agent waited at its prompt. So when the shim cannot connect it appends the event, as the core would have got it, to `sessions/<id>/missed.ndjson`, one line each, `{"at","harness","payload"}`, in one write, and only when the session's folder is there. Past 1 MiB it keeps only the events that change the session's state, not its tool calls. Each tick the core takes each live session's file once nothing has been added to it for a second, and records its events in the order they came, at the time they came and with `late` in their data: the same as a hook, but for what only a reply carries (the jot dog's nudge, the trod bot's answer, the arch agents' word, Gabriel's guard, a note), which reaches no agent now. An event no later than the last one the core heard from the session's agent is left out, as the agent went on since, and so is one from before the session last started, as a reopen starts it again; the core weighs that as it records the event. A core that stops closes its socket first, so a hook that comes then is kept too. An event whose reply the shim waited for in vain, the core has; only one the shim could not hand over is kept.
@@ -1321,6 +1324,8 @@ One JSON object per journal line and per `event` frame:
 | `outcome.rated` | `verdict`: `good` or `bad` | user (M10, §6.4) | none |
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
 | `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |
+| `route.fallback` | `from` and `to`, the models of a switch at a model's own usage limit, `limit`, what the failed turn said, and `reason` when the session waits for the reset instead | irie (§6.4) | none |
+| `model.switched` | `model`, the one it runs from then on; `from`, `requested` and `source` (`command`, `picker`, `sdk`, `auto`, `resume`) | PostModelSwitch | none |
 | `dog.nudged` | `dirty`, `ahead`, `land`, `unproven`, `message`: what the jot left, what its record contradicts, and what its agent had said. It stands in for that stop's `turn.ended`, since the turn goes on | irie (§4.8) | none |
 | `trod.sent` | `reason`: `question`, `error` (with `error`), `limit` or `loose`; `how`: `stop`, standing in for that stop's `turn.ended` (with `message`), `ask`, standing in for the question's `tool.started` and `input.needed` (with `question`), or `typed`, followed by the message's `prompt.submitted` | irie (§4.10) | none |
 | `boost.on`, `boost.off` | `boost.on`: `error`, the API error of the second failed turn in a row, `turns` and `until`; `boost.off`: `why`, `turn` (a turn ended without an API error) or `time` (15 minutes passed) | irie (§4.3) | none |
@@ -1429,6 +1434,7 @@ args = []
 env = {}
 cost = ""                     # what the + list says it costs; "" = Irie's own reading (§6.3)
 sdk = false                   # true: the session runs on the Agent SDK, in Irie's own pane (§3.5), for a key whose credits cover the SDK but not Claude Code
+fallback_model = ""           # a model outside the profile's own family, such as "claude-opus-5-5" for a Fable profile: at the model's own usage limit its sessions switch to it in place (§6.4); "" = they wait for the reset
 
 [profiles.sonnet]             # built in: fewer tokens for most coding tasks
 harness = "claude-code"
@@ -1855,7 +1861,14 @@ With a weight of 10, a profile's own record outweighs the guess after about ten 
 - **Exit codes.** 3 when no cheaper profile is accurate enough ("do it yourself"); 4 when the session is still at work at `--timeout` (10 minutes), where it goes on as a row marked `↳ delegated`.
 - **Choosing what to hand on.** The note asks for self-contained, mechanical subtasks on files the caller is not editing, and keeps planning, design and review with the caller. It names the local profiles among those it may hand work to, which cost no tokens, and asks it to prefer them for every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and to check what comes back.
 
-**Failover.** With `route.failover`, a turn that stops with `rate_limit` makes the core route the task again among profiles cheaper than the session's, keeping its class.
+**Fallback models.** Beside the plan's session and weekly limits, which every model shares, a model family can have a usage limit of its own, as Fable has. Claude Code stops the turn with `rate_limit` and says whose limit it was ("You've reached your Fable limit. Run /usage-credits to continue or switch models with /model."), and a model outside that family keeps working. A profile with `fallback_model` makes that switch on its own, in the same session:
+- **The switch.** A turn whose message names its own model's family (`<family> limit`, for fable, opus, sonnet or haiku) makes the core type `/model <fallback_model>` into the agent's prompt, as continue types its word: only into the agent's own prompt with nothing typed in it, and Enter only once the prompt shows it. Its PreModelSwitch hook allows that switch, so it goes without the confirmation Claude Code asks while the prompt cache is warm. The agent's process goes on, with its work in the background and its teammates; the next request reads the whole conversation again on the new model.
+- **Carrying on.** Once PostModelSwitch reports the new model (`model.switched`), the core waits 2 s and types the agent a note to carry on from where it stopped, unless Claude Code carried on by itself, as it does when the switch ends its own wait for a reset. The card shows the model it runs now, and a fork carries that model on.
+- **The user's default.** `/model <name>` also saves the name as the default for new sessions, in the `model` key of the user's `settings.json`. The core reads the key before it types and puts it back as it was afterwards, or takes it out when there was none, changing that value alone, byte for byte, and keeping a link to the file. A session keeps the model it switched to when the key changes under it (checked with Claude Code 2.1.325). One switch runs at a time, so none puts back a default another saved.
+- **New sessions.** For an hour after a model's own limit last stopped a turn (`limitHold`), a launch of a profile with a fallback starts on the fallback, with a warning that says why; a model asked for by name, as for a fork, stays. The journal's `route.fallback` events carry the hour over a restart. After it, a session that finds the limit still there switches in place.
+- **When it can't.** A session started with `--disable-slash-commands` has no `/model`, so a profile with `fallback_model` may not pass it, and an older session waits for the reset. So does one whose prompt holds something typed, whose terminal is scrolled back, or whose Claude Code reports no new model within 30 s; its `route.fallback` says why. The plan's own limits switch nothing: they are shared, so failover (below) and the trod bot handle them. A switch never buys usage credits.
+
+**Failover.** With `route.failover`, a turn that stops with `rate_limit` makes the core route the task again among profiles cheaper than the session's, keeping its class. A turn its model's own limit stopped, on a profile with a fallback, switches models instead.
 - **Carrying on.** A profile accurate enough carries it on in the same directory. Its task opens with a note that the earlier session stopped at its limit and that its work so far is there to check.
 - **Waiting.** When none is accurate enough, as for hard work after Opus's limit, the task waits for the reset, as Claude Code does, and the session's `route.failover` event says so.
 - **When the plan is out.** At a window's limit, every profile on the plan is unusable, so only a local model can carry the task on.

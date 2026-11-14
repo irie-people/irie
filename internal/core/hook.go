@@ -24,13 +24,14 @@ var toolInputKeys = []string{"summary", "question", "test_line"}
 // hook takes one hook event from the shim (DESIGN §3.3) and records it.
 // Nothing holds a call yet. A session that starts may be told it can
 // delegate (DESIGN §6.4); a turn's last message is kept whole for
-// delegation; a turn stopped at a usage limit may fail over; a jot whose
-// turn ends before its work has landed may be sent back to finish it
-// (DESIGN §4.8); while you are away at night, an agent that asks you
-// something is told to decide itself (DESIGN §4.10); and a session or
-// subagent that starts hears the word of the arch agents with it (DESIGN
-// §4.11). Two turns in a row that fail on an API error boost the session
-// (boost.go).
+// delegation; a turn stopped at its model's own usage limit may switch
+// models, and one at the plan's may fail over, and a model switch Irie
+// makes goes ahead without asking (DESIGN §6.4); a jot whose turn ends
+// before its work has landed may be sent back to finish it (DESIGN §4.8);
+// while you are away at night, an agent that asks you something is told to
+// decide itself (DESIGN §4.10); and a session or subagent that starts
+// hears the word of the arch agents with it (DESIGN §4.11). Two turns in a
+// row that fail on an API error boost the session (boost.go).
 func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 	return c.takeHook(a, time.Time{})
 }
@@ -90,7 +91,11 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 	}
 	var reply ipc.HookResult
 	failover, turnEnded, boosts := false, false, false
+	var fall *modelSwitch
 	x.quiet++
+	// A model switch that Irie is making goes ahead without asking
+	// (fallback.go).
+	reply.Allow = modelSwitchAsk(x, a.Payload)
 	for _, e := range evs {
 		if late {
 			if e.Data == nil {
@@ -153,8 +158,11 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 		}
 		c.record(x, e)
 		boosts = c.boostTurn(x, e) || boosts
-		if e.Kind == event.SubagentFinished {
+		switch e.Kind {
+		case event.SubagentFinished:
 			delete(x.stopped, e.Agent)
+		case event.ModelSwitched:
+			modelSwitched(x, e)
 		}
 		// A teach-mode turn that asks the user to write a part is theirs:
 		// the agent waits at its prompt (docs/proposals/learning.md §4.4).
@@ -170,8 +178,15 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 			reply.Context = joinNotes(word, c.startNote(x))
 		case e.Kind == event.SubagentStarted:
 			reply.Context = joinNotes(reply.Context, word)
-		case e.Kind == event.TurnFailed && e.Str("error") == "rate_limit" && c.cfg().Route.Failover:
-			failover = true
+		case e.Kind == event.TurnFailed:
+			// A model's own usage limit switches the session to its
+			// profile's fallback model, in place (fallback.go); the plan's
+			// may carry its task on elsewhere.
+			if sw := c.fallbackFor(x, e); sw != nil {
+				fall = sw
+			} else if e.Str("error") == "rate_limit" && c.cfg().Route.Failover {
+				failover = true
+			}
 		}
 	}
 	if boosts {
@@ -191,7 +206,10 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	if failover {
+	switch {
+	case fall != nil:
+		go c.fallBack(a.Session, fall)
+	case failover:
 		go c.failover(a.Session)
 	}
 	return reply, nil

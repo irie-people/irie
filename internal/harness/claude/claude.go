@@ -286,20 +286,24 @@ var hooks = []struct {
 	event, matcher string
 	timeout        time.Duration
 	block          bool // onFailure: "block", so a failed or timed-out hook never lets the call through
+	recent         bool // only for a Claude Code of MinVersion or later, which has the event
 }{
-	{"SessionStart", "", 10 * time.Second, false},
-	{"UserPromptSubmit", "", 10 * time.Second, false},
-	{"PreToolUse", "*", 0, true},
-	{"PostToolUse", "*", 0, false},
-	{"PostToolUseFailure", "*", 0, false},
-	{"PermissionRequest", "*", 10 * time.Second, false},
-	{"Notification", "", 10 * time.Second, false},
-	{"Elicitation", "", 10 * time.Second, false},
-	{"Stop", "", 10 * time.Second, false},
-	{"StopFailure", "", 10 * time.Second, false},
-	{"SubagentStart", "", 10 * time.Second, false},
-	{"SubagentStop", "", 10 * time.Second, false},
-	{"SessionEnd", "", time.Second, false},
+	{"SessionStart", "", 10 * time.Second, false, false},
+	{"UserPromptSubmit", "", 10 * time.Second, false, false},
+	{"PreToolUse", "*", 0, true, false},
+	{"PostToolUse", "*", 0, false, false},
+	{"PostToolUseFailure", "*", 0, false, false},
+	{"PermissionRequest", "*", 10 * time.Second, false, false},
+	{"Notification", "", 10 * time.Second, false, false},
+	{"Elicitation", "", 10 * time.Second, false, false},
+	{"Stop", "", 10 * time.Second, false, false},
+	{"StopFailure", "", 10 * time.Second, false, false},
+	{"SubagentStart", "", 10 * time.Second, false, false},
+	{"SubagentStop", "", 10 * time.Second, false, false},
+	{"SessionEnd", "", time.Second, false, false},
+	// A model switch, for Irie's own at a usage limit (DESIGN §6.4).
+	{"PreModelSwitch", "", 10 * time.Second, false, true},
+	{"PostModelSwitch", "", 10 * time.Second, false, true},
 }
 
 // hookHandler is one handler of the settings file: Irie's own command, or
@@ -403,14 +407,15 @@ type spinnerTip struct {
 }
 
 // Settings returns the settings file that sends every hook of the table to
-// `<bin> hook`. onFailure goes only to a Claude Code that knows it. With
+// `<bin> hook`. recent says the Claude Code is of MinVersion or later: only
+// such a one gets onFailure and the table's recent events. With
 // x.Status, Irie is the session's status line. With x.Teams, agent teams
 // open their teammates in tmux panes, which the shim on the agent's PATH
 // takes to Irie's team server. Each of x.Doors, an arch agent's door, adds
 // a prompt hook before each tool call its rules match (doorHooks). x.Style
 // sets the session's output style above the user's own files, and x.Tips go
 // under the spinner.
-func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byte, error) {
+func Settings(bin string, holdMax time.Duration, recent bool, x Extra) ([]byte, error) {
 	command := shellQuote(bin) + " hook"
 	file := struct {
 		Hooks        map[string][]matcherGroup `json:"hooks"`
@@ -435,12 +440,15 @@ func Settings(bin string, holdMax time.Duration, onFailure bool, x Extra) ([]byt
 		}
 	}
 	for _, h := range hooks {
+		if h.recent && !recent {
+			continue
+		}
 		timeout := h.timeout
 		if timeout == 0 {
 			timeout = holdMax + heldExtra
 		}
 		c := hookHandler{Type: "command", Command: command, Timeout: int(timeout / time.Second)}
-		if h.block && onFailure {
+		if h.block && recent {
 			c.OnFailure = "block"
 		}
 		file.Hooks[h.event] = []matcherGroup{{Matcher: h.matcher, Hooks: []hookHandler{c}}}

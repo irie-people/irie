@@ -160,6 +160,8 @@ func TestSettingsHooksFollowTheDesign(t *testing.T) {
 		"SubagentStart":      {"", "", 10, ""},
 		"SubagentStop":       {"", "", 10, ""},
 		"SessionEnd":         {"", "", 1, ""},
+		"PreModelSwitch":     {"", "", 10, ""},
+		"PostModelSwitch":    {"", "", 10, ""},
 	}
 	if len(got) != len(want) {
 		t.Errorf("events %v, want the %d of the design", slices.Sorted(maps.Keys(got)), len(want))
@@ -734,4 +736,22 @@ func TestAnonymousResearchRunsInASandbox(t *testing.T) {
 	os.Remove(filepath.Join(home, ".claude", "settings.json"))
 	s.Probe.Version = "2.1.200"
 	refused("2.1.295")
+}
+
+// A Claude Code older than MinVersion gets no hooks for events it may not
+// have, such as a model switch's.
+func TestSettingsForAnOlderClaudeCodeLeaveTheRecentHooksOut(t *testing.T) {
+	b, err := Settings("/home/alice/.local/bin/irie", time.Hour, false, Extra{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := settingsHooks(t, b)
+	for _, ev := range []string{"PreModelSwitch", "PostModelSwitch"} {
+		if _, ok := got[ev]; ok {
+			t.Errorf("an older Claude Code has a %s hook", ev)
+		}
+	}
+	if _, ok := got["StopFailure"]; !ok {
+		t.Error("an older Claude Code has no StopFailure hook")
+	}
 }

@@ -495,6 +495,11 @@ func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d 
 		case passing[err]:
 			return due(trodError, map[string]any{"error": err})
 		case err == "rate_limit":
+			// A session switching to its fallback model is sent on by
+			// that switch (fallback.go).
+			if x.switching != nil {
+				return nil, true, ""
+			}
 			// While the plan is at its limit the session waits for the
 			// reset, at which Claude Code carries the task on itself; the
 			// shift steps in only when it stays stopped after that.
