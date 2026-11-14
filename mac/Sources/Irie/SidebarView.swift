@@ -1170,10 +1170,10 @@ private struct Counts: View {
             .accessibilityLabel(words)
     }
 
-    /// Mullvad VPN (docs/proposals/extensions.md §4.1): a shield, green while
-    /// connected, yellow while it comes or goes, red in error or while
-    /// lockdown blocks the network, and muted when off. A click says the
-    /// state in a notice; Plugins › Mullvad VPN changes it.
+    /// The VPN (DESIGN §4.18), whichever vpn.provider names: a shield,
+    /// green while connected, yellow while it comes or goes, red in error
+    /// or while lockdown blocks the network, and muted when off. A click
+    /// says the state in a notice; Plugins › VPN changes it.
     private func vpnMark(_ v: VPNMark) -> some View {
         let color: Color
         switch v.state {

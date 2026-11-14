@@ -127,7 +127,7 @@ struct CoreConfig: Decodable, Equatable {
     var dog: Dog
     /// The trod bot; nil from a core from before it.
     var trod: Trod?
-    /// Mullvad VPN control; nil from a core from before it.
+    /// VPN control (DESIGN §4.18); nil from a core from before it.
     var vpn: VPN?
     /// The context store (DESIGN §4.13); nil from a core from before it.
     var context: Context?
