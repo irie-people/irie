@@ -56,6 +56,7 @@ type Config struct {
 	VPN      VPN                `toml:"vpn"`
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
+	Markets  Markets            `toml:"markets"`
 	Plugins  Plugins            `toml:"plugins"`
 }
 
@@ -70,7 +71,22 @@ type Plugins struct {
 	// Writing is writing in Variorum: :write and the skill its sessions run
 	// (docs/proposals/writers.md).
 	Writing bool `toml:"writing"`
+	// Markets is a map of your own market research: the page in
+	// markets.folder in the Mac app's Markets window, and :markets.
+	Markets bool `toml:"markets"`
 }
+
+// Markets is the markets plugin's map (DESIGN §4.17).
+type Markets struct {
+	// Folder holds the map: its index.html is the page the Markets window
+	// shows, and :markets TASK starts a session there. "" = none chosen
+	// yet.
+	Folder string `toml:"folder"`
+}
+
+// MarketsOn says whether the markets plugin runs: plugins.markets, with
+// the plugin built in.
+func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 
 // VPNOn says whether Mullvad VPN control runs: vpn.on, with the privacy
 // plugin built in and on.
@@ -893,8 +909,9 @@ func Parse(data []byte, path string) (Config, error) {
 		VPN      *VPN                      `toml:"vpn"`
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
+		Markets  *Markets                  `toml:"markets"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1392,6 +1409,9 @@ func (c Config) Validate() error {
 	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
 		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
 	}
+	if f := c.Markets.Folder; f != "" && !pathLike(f) {
+		bad("markets.folder = %q: must be an absolute or ~ path to the folder that holds your map, or empty for none", f)
+	}
 	br := c.Browser
 	if !slices.Contains(BrowserConnectors, br.Connector) {
 		bad("browser.connector = %q: must be on or off", br.Connector)
@@ -1439,7 +1459,7 @@ func (c Config) Validate() error {
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
-	if PrivacyBuilt && WritingBuilt {
+	if PrivacyBuilt && WritingBuilt && MarketsBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1461,6 +1481,10 @@ func (c Config) Write(w io.Writer) error {
 	}
 	if !WritingBuilt {
 		delete(plugins, "writing")
+	}
+	if !MarketsBuilt {
+		delete(m, "markets")
+		delete(plugins, "markets")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

@@ -61,6 +61,7 @@ struct IrieApp: App {
             LearnCommands(store: store)
             IrieCommands(store: store, menu: store.menu)
             PluginCommands(store: store, menu: store.menu)
+            MarketsCommands(menu: store.menu)
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
@@ -75,6 +76,15 @@ struct IrieApp: App {
                 .environment(store)
         }
         .defaultSize(ThemeMaker.size)
+        // Window › Markets (⇧⌘M) and :markets: the markets plugin's map
+        // (Markets.swift). Its item shows only while the plugin is on, so
+        // the one SwiftUI would add for the window goes.
+        Window("Markets", id: MarketsWindow.id) {
+            MarketsWindow()
+                .environment(store)
+        }
+        .defaultSize(width: 1280, height: 820)
+        .commandsRemoved()
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
@@ -186,6 +196,7 @@ extension Notification.Name {
 @MainActor
 struct ContentView: View {
     @Environment(Store.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @State private var keys = KeyRouter()
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
@@ -235,6 +246,8 @@ struct ContentView: View {
             LookBook.shared.start(store)
         }
         .onChange(of: theme) { store.sendTheme(theme) }
+        // :markets in a task bar opens the Markets window (Markets.swift).
+        .onReceive(NotificationCenter.default.publisher(for: .irieMarkets)) { _ in openWindow(id: MarketsWindow.id) }
     }
 }
 

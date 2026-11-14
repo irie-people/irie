@@ -119,6 +119,8 @@ type (
 	PluginsResult    = ipc.PluginsResult
 	Plugin           = ipc.Plugin
 	PluginPart       = ipc.PluginPart
+	MarketsArgs      = ipc.MarketsArgs
+	MarketsResult    = ipc.MarketsResult
 	AnonArgs         = ipc.AnonArgs
 	AnonResult       = ipc.AnonResult
 	VPNArgs          = ipc.VPNArgs
@@ -253,6 +255,7 @@ const (
 	OpVPN              = ipc.OpVPN
 	OpAnon             = ipc.OpAnon
 	OpPlugins          = ipc.OpPlugins
+	OpMarkets          = ipc.OpMarkets
 	OpLearn            = ipc.OpLearn
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel

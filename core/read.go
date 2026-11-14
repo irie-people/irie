@@ -17,7 +17,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -158,6 +158,35 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			task = strings.TrimSpace(task + "\n" + more)
 		}
 		return step(OpTool, ToolArgs{Name: ToolWrite, Task: Unpaste(task, in.Pastes)}, nil)
+	case name == "markets":
+		// :markets shows the market map, and :markets TASK starts the task
+		// in the map's folder (DESIGN §4.17). The task may run on over
+		// more lines, and takes +agent words as any task does; its folder
+		// is the map's, so it takes no @repo.
+		task := arg
+		if _, more, ok := strings.Cut(in.Text, "\n"); ok {
+			task = strings.TrimSpace(task + "\n" + more)
+		}
+		if task == "" {
+			return step(OpMarkets, MarketsArgs{}, nil)
+		}
+		a, err := ParseTask(task, v.Home)
+		if err != nil {
+			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
+		}
+		if a.Repo != "" || a.Cwd != "" {
+			return Step{}, Errorf(CodeBadArgs, ":markets runs its task in the map's folder, so it takes no @repo.")
+		}
+		a.Task = Unpaste(a.Task, in.Pastes)
+		if a.Profile == "" {
+			a.Profile = in.Profile
+		}
+		if a.Tutor == "" {
+			a.Tutor = in.Tutor
+		}
+		a.Model = in.Model
+		a.Space, a.After = in.Space, in.Session
+		return step(OpMarkets, MarketsArgs{Task: &a}, nil)
 	case name == "models" && arg == "":
 		return step(OpTool, ToolArgs{Name: ToolModels}, nil)
 	case name == "vpn":
@@ -432,6 +461,15 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		}
 	case OpPlugins:
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[PluginsResult](result).Text, "\n")
+	case OpMarkets:
+		// The Mac app opens its Markets window for the answer; a client
+		// without one says it.
+		m := as[MarketsResult](result)
+		if m.Session != nil {
+			r.Did, r.Session, r.Text = InputSpawned, m.Session, started(*m.Session)
+			break
+		}
+		r.Did, r.Text = InputAnswered, m.Text
 	case OpUndo, OpRedo:
 		u := as[UndoResult](result)
 		r.Text = undone(st.Op, u)
