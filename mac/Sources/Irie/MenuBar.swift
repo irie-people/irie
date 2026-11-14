@@ -35,6 +35,8 @@ final class MenuState {
         var canPlugins = false
         var plugins: [PluginInfo] = []
         var canVPN = false
+        /// The notepad shows (NotesPanel.swift).
+        var notes = false
 
         /// Whether the core's build has the plugin called name (DESIGN
         /// §4.17), so its menu items show; a core from before plugins has
@@ -61,7 +63,7 @@ extension Store {
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
-            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins, canVPN: canVPN)
+            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins, canVPN: canVPN, notes: notes.shown)
     }
 
     /// Keeps the menu's facts up to date: whenever what they are read from
@@ -108,6 +110,10 @@ struct IrieCommands: Commands {
                 .keyboardShortcut("n")
             Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                 .keyboardShortcut("n", modifiers: [.command, .option])
+            // A note for later, in the notepad above the task bar.
+            Button("New Note") { NotificationCenter.default.post(name: .irieNewNote, object: nil) }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(!f.notes)
             // A guided session of Irie's own, as :setup switch starts
             // from any task bar (docs/proposals/extensions.md §2.2), with
             // the privacy plugin in the core's build.

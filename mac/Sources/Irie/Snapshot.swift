@@ -15,6 +15,8 @@ enum Snapshot {
         UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)
         let store = Store(socketPath: "/nonexistent/\(Brand.slug)-snapshot.sock")
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
+        // Notes of the fixture's own, never the app's saved copy.
+        store.notes.loadFixture(Fixture.notes)
         // A theme and layouts of the fixture's own, never the files in
         // the config folder (Looks.swift).
         LookBook.shared.useFixture()
@@ -39,9 +41,13 @@ enum Snapshot {
             let details: [String: [String: Any]] = [
                 "details-minimized": [DetailsPanel.minimizedKey: true],
                 "details-tall": [DetailsPanel.heightKey: 2000.0],
+                "notes-folded": [NotesPanel.openKey: false],
+                "notes-folded-dark": [NotesPanel.openKey: false],
             ]
             shots.append(("details-minimized", Palette.standard.id, 1100, false, .repo))
             shots.append(("details-tall", Palette.standard.id, 1100, false, .repo))
+            shots.append(("notes-folded", Palette.standard.id, 1100, false, .repo))
+            shots.append(("notes-folded-dark", Palette.standard.id, 1100, true, .repo))
             for (base, palette, width, dark, mode) in shots {
                 // Set directly, so the app's saved view and folds are untouched.
                 // Parked is open but in the List view, which shows it folded,
@@ -49,7 +55,7 @@ enum Snapshot {
                 store.mode = mode
                 store.folded = []
                 store.parkedOpen = mode != .list
-                var domain: [String: Any] = [Palette.defaultsKey: palette, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false]
+                var domain: [String: Any] = [Palette.defaultsKey: palette, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false, NotesPanel.openKey: true, NotesPanel.draftKey: ""]
                 domain.merge(details[base] ?? [:]) { $1 }
                 UserDefaults.standard.setVolatileDomain(domain, forName: UserDefaults.argumentDomain)
                 Theme.use(palette)
@@ -69,7 +75,7 @@ enum Snapshot {
             }, selection: Fixture.selected)
             Theme.use(Palette.standard.id)
             for (base, width, dark) in [("team-split", 1100.0, false), ("team-split-dark", 1100.0, true), ("team-split-wide", 1500.0, false), ("team-split-narrow", 820.0, false)] {
-                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false, NotesPanel.openKey: true, NotesPanel.draftKey: ""], forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: CGFloat(width), height: 720)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
@@ -99,7 +105,7 @@ enum Snapshot {
                     ]
                     store.notice = Store.Notice(text: "Couldn’t start the task: no space left on device", isError: true)
                 }
-                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false, NotesPanel.openKey: true, NotesPanel.draftKey: ""], forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
@@ -210,6 +216,19 @@ enum Snapshot {
 /// helper and teammates.
 enum Fixture {
     static let selected = "s02docsguide"
+
+    /// The notepad's notes (NotesPanel.swift): two to do, one ticked off by
+    /// hand, and one sent as a jot to the selected session.
+    static let notes: [Note] = {
+        let now = Date()
+        return [
+            Note(id: "n1", text: "Try the new parser on the big repo", created: now.addingTimeInterval(-86400)),
+            Note(id: "n2", text: "Ask for a review of the login fix", done: true, created: now.addingTimeInterval(-7200),
+                 sent: now.addingTimeInterval(-1800), session: selected),
+            Note(id: "n3", text: "Write the release notes for 1.2, with the screenshots from the docs", created: now.addingTimeInterval(-3600)),
+            Note(id: "n4", text: "Rename the settings tab", done: true, created: now.addingTimeInterval(-600)),
+        ]
+    }()
 
     /// The selected session's teammates, for the split.
     static let team = [

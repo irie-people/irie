@@ -227,6 +227,9 @@ final class Store {
         var isError: Bool
         /// It offers Undo, which takes back the step it reports.
         var undo = false
+        /// It reports notes deleted, and offers Undo, which brings these
+        /// back from Recently Deleted (Notes.swift).
+        var restore: [String]?
         /// It reports a task added to the one before, and offers New task:
         /// this input, which takes it back and starts it apart.
         var apart: InputArgs?
@@ -238,11 +241,14 @@ final class Store {
     /// What the menu bar shows, which changes far less often than the
     /// store does (MenuBar.swift).
     let menu = MenuState()
+    /// The notepad, the person's notes for later (Notes.swift).
+    let notes = NotesModel()
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
+        notes.store = self
         settings.changed = { [weak self] in
             self?.loadChoices()
             self?.loadPluginsSoon()
@@ -307,6 +313,7 @@ final class Store {
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
+                notes.connected(serves: hello.features.contains("notepad"))
                 loadPluginsSoon()
                 keepPlugins()
                 if hello.features.contains("theme") { sendTheme(Palette.chosen) }
@@ -434,6 +441,8 @@ final class Store {
                 let redo = f.redo.flatMap { $0.isEmpty ? nil : $0 }
                 if undo != undoLabel { undoLabel = undo }
                 if redo != redoLabel { redoLabel = redo }
+            case "notepad":
+                if let n = f.notepad { notes.take(frame: n) }
             default:
                 continue
             }
@@ -876,10 +885,28 @@ final class Store {
         await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil)
     }
 
+    /// Shows the session a note was sent to, or says it is closed.
+    func showNoteSession(_ id: String) {
+        if sessions.contains(where: { $0.id == id }) {
+            show(id, focus: true)
+        } else {
+            say("That note’s session is closed. Reopen it from History.", error: false)
+        }
+    }
+
+    /// Sends a note's text as the task bar would, typed and sent, naming the
+    /// note so the core ticks it off once it goes (Notes.swift). The bar's
+    /// history takes it too, as if typed there.
+    func sendNote(_ text: String, note: String) async -> Bool {
+        TaskHistory.remember(text)
+        return await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil, note: note)
+    }
+
     /// Sends text from the bar or the new-task sheet. The @repo, +agent and
     /// tutor words in it win over the menus' repo, agent and tutor mode.
-    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?) async -> Bool {
+    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?, note: String? = nil) async -> Bool {
         var args = InputArgs(text: text)
+        args.note = note
         // A : command acts on the selected card, or :move on the selected
         // row outside Irie.
         if let o = selectedOutside {
@@ -1098,8 +1125,8 @@ final class Store {
     /// pointer rests on it. Its × closes it at once, and an error goes as
     /// the user edits or submits too. The tab keeps each one, so nothing is
     /// lost as it goes (WCAG 2.2.1).
-    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false, apart: InputArgs? = nil) {
-        let n = Notice(text: text, isError: error, undo: undo && canUndo, apart: apart)
+    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false, apart: InputArgs? = nil, restore: [String]? = nil) {
+        let n = Notice(text: text, isError: error, undo: undo && canUndo, restore: restore, apart: apart)
         notice = n
         noticeHeld = false
         log(n)
