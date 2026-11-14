@@ -115,6 +115,24 @@ func TestFiveMinutesCache(t *testing.T) {
 	}
 }
 
+func TestColdAllowsForLongReplies(t *testing.T) {
+	if got := ColdAfter(5 * time.Minute); got != 3*time.Minute {
+		t.Errorf("five minutes' cache: cold after %v, want 3m", got)
+	}
+	if got := ColdAfter(time.Hour); got != 54*time.Minute {
+		t.Errorf("an hour's cache: cold after %v, want 54m", got)
+	}
+	// A reply that took two minutes to write makes the idle read short.
+	var tr Transcript
+	got := read(&tr,
+		reply("m1", t0, 3, 0, 80_000, 0, 500),
+		reply("m2", t0.Add(3*time.Minute+30*time.Second), 3, 0, 80_600, 0, 100),
+	)
+	if len(got) != 1 || !got[0].Cold {
+		t.Errorf("rebuilds %+v, want one that is cold", got)
+	}
+}
+
 func TestAChangedPromptIsNotCold(t *testing.T) {
 	var tr Transcript
 	got := read(&tr,

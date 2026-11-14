@@ -340,6 +340,7 @@ const (
 	RebuildReopen      = ipc.RebuildReopen
 	RebuildBackground  = ipc.RebuildBackground
 	RebuildLimit       = ipc.RebuildLimit
+	RebuildBoost       = ipc.RebuildBoost
 	RebuildTool        = ipc.RebuildTool
 	RebuildChanged     = ipc.RebuildChanged
 	ArchOK             = ipc.ArchOK

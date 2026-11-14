@@ -285,6 +285,7 @@ const (
 	RebuildReopen     = "reopen"     // a reopen
 	RebuildBackground = "background" // work of its own in the background, or a wakeup
 	RebuildLimit      = "limit"      // Claude Code carried it on at a usage limit's reset
+	RebuildBoost      = "boost"      // Irie's carry-on after its turns failed on API errors (boost.on)
 	RebuildTool       = "tool"       // one of its tool calls ran longer than the cache lives
 	RebuildChanged    = "changed"    // not cold: the start of its prompt changed, as for another model or other tools
 )

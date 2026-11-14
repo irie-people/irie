@@ -838,8 +838,10 @@ func ctlReopen(args []string) error {
 	if *lost {
 		return reopenLost(sock)
 	}
+	// The closed list finds a session by name, and says what its next turn
+	// will cost; with none named, reopen needs it only for the price.
 	var l ipc.ListResult
-	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil && len(args) == 1 {
 		return err
 	}
 	// With none named, the core reopens the session closed last, which the

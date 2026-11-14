@@ -32,49 +32,63 @@ const rebuildKeep = 8 * 24 * time.Hour
 // keeps, which reach back a few days for a busy session.
 const maxWakes = 256
 
+// longTool is how long a tool call must run for the meter to note it: as
+// long as the shortest cache lives, less its slack (rebuild.ColdAfter).
+var longTool = rebuild.ColdAfter(rebuild.DefaultTTL)
+
 // wakeMark is one thing that woke a session, or that leaves it to wake:
 // your message or your answer at a prompt, a message the trod bot typed, the
 // jot dog's nudge, a thaw in the middle of its work, a reopen, the end of a
-// turn that left work of its own in the background, a usage limit. by is
-// who thawed it, trod for the trod bot.
+// turn that left work of its own in the background, a usage limit, Irie's
+// carry-on after API errors, or a tool call that ran long. by is who
+// thawed it, trod for the trod bot; agent is whose tool call it was, and
+// dur how long it ran.
 type wakeMark struct {
 	at        time.Time
 	cause, by string
+	agent     string
+	dur       time.Duration
 }
 
 // woke notes e as what woke the session, or will.
 func (t *track) woke(e event.Event, cause, by string) {
-	at := e.Time()
-	if at.IsZero() {
+	t.mark(e, wakeMark{cause: cause, by: by, agent: e.Agent})
+}
+
+// wokeAfter notes e, the end of a tool call that ran for dur, after which
+// its agent went on.
+func (t *track) wokeAfter(e event.Event, dur time.Duration) {
+	t.mark(e, wakeMark{cause: ipc.RebuildTool, agent: e.Agent, dur: dur})
+}
+
+func (t *track) mark(e event.Event, m wakeMark) {
+	if m.at = e.Time(); m.at.IsZero() {
 		return
 	}
-	t.wakes = append(t.wakes, wakeMark{at: at, cause: cause, by: by})
+	t.wakes = append(t.wakes, m)
 	if n := len(t.wakes) - maxWakes; n > 0 {
 		t.wakes = slices.Delete(t.wakes, 0, n)
 	}
 }
 
-// thawedSince reports whether a thaw woke the session after t.
-func (t *track) thawedSince(at time.Time) bool {
-	for _, m := range t.wakes {
-		if m.cause == ipc.RebuildThaw && m.at.After(at) {
-			return true
-		}
-	}
-	return false
-}
-
 // causeOf is what woke the session for rebuild b, by what came after the
 // request before b's and up to b's: a reopen, else a thaw, else the latest.
-// With nothing there, a request before that stopped to call a tool ran that
-// tool all the time between. A rebuild that is not cold is no wake: the
-// start of the prompt changed. "" when Irie cannot tell, as for a rebuild
-// older than what the session's state keeps.
+// A tool call counts when it ran about as long as the cache lives, and a
+// helper's own conversation counts only those and its own tool calls: your
+// messages and the bots' go to the session's agent. With nothing there, a
+// request before that stopped to call a tool ran that tool all the time
+// between. A rebuild that is not cold is no wake: the start of the prompt
+// changed. "" when Irie cannot tell, as for a rebuild older than what the
+// session's state keeps.
 func (t *track) causeOf(b rebuild.Rebuild) (cause, by string) {
 	if !b.Cold {
 		return ipc.RebuildChanged, ""
 	}
 	from, to := b.Before.At, b.At
+	agent := event.Main
+	if b.Agent != "" {
+		agent = event.Agent(b.Agent)
+	}
 	var latest, thaw *wakeMark
 	for i := range t.wakes {
 		m := &t.wakes[i]
@@ -86,6 +100,14 @@ func (t *track) causeOf(b rebuild.Rebuild) (cause, by string) {
 			return m.cause, m.by
 		case ipc.RebuildThaw:
 			thaw = m
+		case ipc.RebuildTool:
+			if m.agent != agent || m.dur < rebuild.ColdAfter(b.TTL) {
+				continue
+			}
+		default:
+			if agent != event.Main {
+				continue
+			}
 		}
 		latest = m
 	}
@@ -98,6 +120,28 @@ func (t *track) causeOf(b rebuild.Rebuild) (cause, by string) {
 		return ipc.RebuildTool, ""
 	}
 	return "", ""
+}
+
+// lastThaw is when a thaw last woke the session; zero if none did.
+func (t *track) lastThaw() time.Time {
+	for i := len(t.wakes) - 1; i >= 0; i-- {
+		if t.wakes[i].cause == ipc.RebuildThaw {
+			return t.wakes[i].at
+		}
+	}
+	return time.Time{}
+}
+
+// conversation is the transcript of the conversation x's agent runs now:
+// the one its last SessionStart named, else its newest own one.
+func (x *session) conversation() string {
+	if x.track.current != "" {
+		return x.track.current
+	}
+	if n := len(x.track.own); n > 0 {
+		return x.track.own[n-1]
+	}
+	return ""
 }
 
 // meter is the prompt-cache meter's record of the last rebuildKeep: every
@@ -297,7 +341,7 @@ func (c *Core) wakePrice(x *session, now time.Time) (rebuild.Wake, bool) {
 	if x.local || !c.cfg().Usage.Rebuilds {
 		return rebuild.Wake{}, false
 	}
-	w, ok := x.tally.wake(x.track.own)
+	w, ok := x.tally.wake(x.conversation())
 	if !ok || !w.Priced || w.Tokens < rebuild.MinTokens || !w.IsCold(now) {
 		return rebuild.Wake{}, false
 	}
@@ -464,6 +508,8 @@ func causeWords(cause string) string {
 		return "its own work in the background"
 	case ipc.RebuildLimit:
 		return "a usage limit's reset"
+	case ipc.RebuildBoost:
+		return "Irie's carry-on after API errors"
 	case ipc.RebuildTool:
 		return "a long tool call"
 	case ipc.RebuildChanged:

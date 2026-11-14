@@ -301,18 +301,21 @@ func (c *Core) dogAtStop(id string, evs []event.Event) dogStop {
 // than a nudge is worth (usage.wake_most). A turn ends just after its last
 // request, while its cache is warm, so this holds only for a turn whose
 // end comes late, as one frozen at its end and thawed hours later: its
-// cache has run out since its last request, and a thaw came after that.
-// Claude Code writes a turn's last reply only after its Stop hooks, so the
-// last request read may be the one before; without a thaw since, the turn
-// only ran a long tool call, and its last request warmed the cache again.
-// The caller holds c.mu.
+// cache has run out since its last request, a thaw came after that, and
+// its agent called no tool since the thaw. Claude Code writes a turn's
+// last reply only after its Stop hooks, so the last request read may be
+// the one before: without a thaw since, the turn only ran a long tool
+// call, and a tool call after the thaw means the turn went on and made
+// its last request after it, which warmed the cache again. The caller
+// holds c.mu.
 func (c *Core) dogDear(x *session, now time.Time) bool {
 	x.tally.update(x.track.transcripts)
 	w, cold := c.wakePrice(x, now)
 	if _, dear := c.tooDear(x, now); !cold || !dear {
 		return false
 	}
-	return x.track.thawedSince(w.Last)
+	thawed := x.track.lastThaw()
+	return thawed.After(w.Last) && !x.track.lastTool.After(thawed)
 }
 
 // nudgeEvent stands in for a turn's end when the dog sends the agent back:

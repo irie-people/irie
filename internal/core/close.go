@@ -342,7 +342,7 @@ func (c *Core) closeLocked(id string, auto bool) error {
 		}
 	}
 	// What reopening it will cost, once its cache has run out.
-	if w, ok := x.tally.wake(x.track.own); ok && !x.local {
+	if w, ok := x.tally.wake(x.conversation()); ok && !x.local {
 		r.Wake = w
 		wakeData(data, w)
 	}

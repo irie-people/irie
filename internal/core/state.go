@@ -82,10 +82,16 @@ type track struct {
 	// session's own, whose titles name it (title.go).
 	transcripts []string
 	own         []string
+	// current is the transcript of the conversation its agent runs now, as
+	// its last SessionStart named it: a new one after /clear, an older one
+	// after /resume. The meter prices waking it by this one alone.
+	current string
 
 	// What woke the session lately, the newest last, from which the
-	// prompt-cache meter tells what woke it for a rebuild (rebuilds.go).
-	wakes []wakeMark
+	// prompt-cache meter tells what woke it for a rebuild (rebuilds.go),
+	// and when its agent last called a tool, for the jot dog (dogDear).
+	wakes    []wakeMark
+	lastTool time.Time
 }
 
 const (
@@ -108,7 +114,7 @@ func (t *track) apply(e event.Event) {
 	case event.SpawnRequested:
 		// A reopened session starts over, but its tokens still count, and
 		// what woke it lately still tells the meter what woke it.
-		*t = track{requested: e.Time(), transcripts: t.transcripts, own: t.own, resumed: e.Str("resume") != "", wakes: t.wakes}
+		*t = track{requested: e.Time(), transcripts: t.transcripts, own: t.own, current: t.current, resumed: e.Str("resume") != "", wakes: t.wakes}
 		if t.resumed {
 			t.woke(e, ipc.RebuildReopen, "")
 		}
@@ -121,6 +127,9 @@ func (t *track) apply(e event.Event) {
 		t.addTranscript(e.Str("transcript"))
 		if p := e.Str("transcript"); p != "" && !slices.Contains(t.own, p) {
 			t.own = append(t.own, p)
+		}
+		if p := e.Str("transcript"); p != "" {
+			t.current = p
 		}
 		if e.Vendor != nil && e.Vendor.SessionID != "" {
 			t.vendorID = e.Vendor.SessionID
@@ -148,6 +157,9 @@ func (t *track) apply(e event.Event) {
 			t.nudged, t.trodAnswered = 0, false
 		}
 	case event.ToolStarted:
+		if e.Agent == event.Main {
+			t.lastTool = e.Time()
+		}
 		t.busy(e)
 		if e.Str("tool") != "AskUserQuestion" {
 			t.trodAnswered = false
@@ -158,6 +170,13 @@ func (t *track) apply(e event.Event) {
 		}
 		t.tools[toolUseID(e)] = e
 	case event.ToolFinished, event.ToolFailed:
+		if e.Agent == event.Main {
+			t.lastTool = e.Time()
+		}
+		// A tool call that ran long enough for a cache to run out.
+		if ms, ok := e.Int("ms"); ok && time.Duration(ms)*time.Millisecond >= longTool {
+			t.wokeAfter(e, time.Duration(ms)*time.Millisecond)
+		}
 		if o := e.Str("tests"); o != "" {
 			t.test = testRun{outcome: o, line: e.Str("test_line"), cmd: t.tools[toolUseID(e)].Str("summary")}
 		}
@@ -244,6 +263,7 @@ func (t *track) apply(e event.Event) {
 		}
 	case event.BoostOn:
 		t.boost, t.apiFails = &e, 0
+		t.woke(e, ipc.RebuildBoost, "")
 		// The carry-on Irie types next is no prompt of the user's, as
 		// the trod bot's messages are not.
 		t.trodTyped = e.Time()

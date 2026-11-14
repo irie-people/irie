@@ -113,20 +113,14 @@ func (t *tokenTally) rebuilds(paths []string) []rebuild.Rebuild {
 	return out
 }
 
-// wake is what the next request of the session's own conversation would
-// cost in its cache, by the transcript at paths whose conversation made a
-// request last; false when none has said.
-func (t *tokenTally) wake(paths []string) (rebuild.Wake, bool) {
-	var best rebuild.Wake
-	ok := false
-	for _, p := range paths {
-		if f := t.files[p]; f != nil {
-			if w, has := f.meter.Wake(); has && (!ok || w.Last.After(best.Last)) {
-				best, ok = w, true
-			}
-		}
+// wake is what the next request of the conversation in the transcript at
+// path would cost in its cache; false while it has made no request, as
+// just after /clear.
+func (t *tokenTally) wake(path string) (rebuild.Wake, bool) {
+	if f := t.files[path]; f != nil {
+		return f.meter.Wake()
 	}
-	return best, ok
+	return rebuild.Wake{}, false
 }
 
 // title returns the newest title that the transcripts at paths gained since

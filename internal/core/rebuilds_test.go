@@ -155,7 +155,7 @@ func TestALocalModelsCacheIsNotMetered(t *testing.T) {
 func TestWhatWokeASession(t *testing.T) {
 	t0 := time.Date(2026, 11, 14, 1, 0, 0, 0, time.UTC)
 	cold := func(before time.Time, tool bool, at time.Time) rebuild.Rebuild {
-		return rebuild.Rebuild{Request: rebuild.Request{At: at}, Before: rebuild.Request{At: before, Tool: tool}, Cold: true}
+		return rebuild.Rebuild{Request: rebuild.Request{At: at}, Before: rebuild.Request{At: before, Tool: tool}, Cold: true, TTL: time.Hour}
 	}
 	base := func() *track {
 		var t track
@@ -211,6 +211,20 @@ func TestWhatWokeASession(t *testing.T) {
 			apply(t, t0.Add(time.Minute), event.TurnFailed, map[string]any{"error": "rate_limit"})
 		}, false, ipc.RebuildLimit, ""},
 		{"a long tool call", func(t *track) {}, true, ipc.RebuildTool, ""},
+		{"a quick answer to a permission prompt, then a long tool call", func(t *track) {
+			apply(t, t0.Add(time.Minute), event.ToolStarted, map[string]any{"tool": "Bash"})
+			apply(t, t0.Add(time.Minute+time.Second), event.InputNeeded, map[string]any{"reason": "permission"})
+			apply(t, t0.Add(2*time.Hour), event.ToolFinished, map[string]any{"tool": "Bash", "ms": (2*time.Hour - 2*time.Minute).Milliseconds()})
+		}, true, ipc.RebuildTool, ""},
+		{"a slow answer to a permission prompt, then a short tool call", func(t *track) {
+			apply(t, t0.Add(time.Minute), event.InputNeeded, map[string]any{"reason": "permission"})
+			apply(t, t0.Add(2*time.Hour), event.ToolFinished, map[string]any{"tool": "Bash", "ms": 4000})
+		}, true, ipc.RebuildYou, ""},
+		{"Irie's carry-on after API errors", func(t *track) {
+			apply(t, t0.Add(time.Minute), event.TurnFailed, map[string]any{"error": "overloaded"})
+			apply(t, t0.Add(2*time.Hour), event.BoostOn, map[string]any{"error": "overloaded"})
+			apply(t, t0.Add(2*time.Hour+time.Second), event.PromptSubmitted, nil)
+		}, false, ipc.RebuildBoost, ""},
 		{"nothing Irie knows", func(t *track) {}, false, "", ""},
 	}
 	for _, k := range cases {
@@ -220,6 +234,20 @@ func TestWhatWokeASession(t *testing.T) {
 		if c, w := tr.causeOf(b); c != k.cause || w != k.by {
 			t.Errorf("%s: %q by %q, want %q by %q", k.name, c, w, k.cause, k.by)
 		}
+	}
+	// A helper's conversation is woken by its own tool calls and a thaw,
+	// not by your messages to the session's agent.
+	tr := base()
+	apply(tr, t0.Add(2*time.Hour), event.PromptSubmitted, nil)
+	helper := cold(t0, true, t0.Add(3*time.Hour))
+	helper.Agent = "h1"
+	if c, _ := tr.causeOf(helper); c != ipc.RebuildTool {
+		t.Errorf("a helper's rebuild after your message: %q, want its long tool call", c)
+	}
+	tr.apply(event.Event{TS: event.Stamp(t0.Add(2*time.Hour + time.Minute)), Kind: event.ToolFinished, Agent: "sub:h2", Data: map[string]any{"tool": "Bash", "ms": time.Hour.Milliseconds()}})
+	tr.apply(event.Event{TS: event.Stamp(t0.Add(2*time.Hour + 2*time.Minute)), Kind: event.ToolFinished, Agent: "sub:h1", Data: map[string]any{"tool": "Bash", "ms": time.Hour.Milliseconds()}})
+	if c, _ := tr.causeOf(helper); c != ipc.RebuildTool {
+		t.Errorf("a helper's rebuild after its own long tool call: %q", c)
 	}
 	// A rebuild that is not cold is the prompt's start changing.
 	if c, _ := base().causeOf(rebuild.Rebuild{Request: rebuild.Request{At: t0.Add(time.Minute)}, Before: rebuild.Request{At: t0}}); c != ipc.RebuildChanged {
@@ -441,8 +469,43 @@ func TestTheDogWeighsOnlyATurnThatEndsLate(t *testing.T) {
 	}
 	// Frozen at its turn's end and thawed now: its cache ran out.
 	m.ev(t0.Add(time.Minute), event.FreezeOn, map[string]any{"working": true})
-	m.ev(now.Add(-time.Second), event.FreezeOff, map[string]any{})
+	m.ev(now.Add(-2*time.Second), event.FreezeOff, map[string]any{})
 	if !c.dogDear(m.x, now) {
 		t.Error("not dear after a thaw")
+	}
+	// Frozen in its last tool call instead: the call ends after the thaw,
+	// and the turn's last request, not read yet, warmed the cache again.
+	m.ev(now.Add(-time.Second), event.ToolFinished, map[string]any{"tool": "Bash", "ms": 1000})
+	if c.dogDear(m.x, now) {
+		t.Error("dear after a tool call that ended after the thaw")
+	}
+}
+
+func TestThePriceIsTheConversationsItRunsNow(t *testing.T) {
+	c := historyCore(t)
+	t0 := time.Now().Add(-3 * time.Hour)
+	m := meteredSession(t, c, "s0000000000a3", t0.Add(-time.Minute))
+	m.write(cachedReply("m1", t0, 599_000, 0, 997, false))
+	count(c)
+	c.mu.Lock()
+	if w, ok := c.wakePrice(m.x, time.Now()); !ok || w.Tokens != 600_000 {
+		t.Errorf("before /clear: %+v, %v", w, ok)
+	}
+	c.mu.Unlock()
+	// /clear starts a new conversation, which has sent nothing yet.
+	cleared := filepath.Join(filepath.Dir(m.path), "cleared.jsonl")
+	m.ev(time.Now(), event.SessionStarted, map[string]any{"transcript": cleared, "source": "clear"})
+	count(c)
+	c.mu.Lock()
+	if w, ok := c.wakePrice(m.x, time.Now()); ok {
+		t.Errorf("after /clear, the old conversation's price: %+v", w)
+	}
+	c.mu.Unlock()
+	// /resume of the first conversation prices that one again.
+	m.ev(time.Now(), event.SessionStarted, map[string]any{"transcript": m.path, "source": "resume"})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if w, ok := c.wakePrice(m.x, time.Now()); !ok || w.Tokens != 600_000 {
+		t.Errorf("after /resume: %+v, %v", w, ok)
 	}
 }

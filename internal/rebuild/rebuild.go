@@ -106,12 +106,15 @@ type Rebuild struct {
 	Priced bool    // false for a model whose prices are not known
 }
 
-// coldShare is how much of its cache's life a conversation must have been
-// idle for a rebuild to count as cold. A cache's life runs from the start
-// of the request that last read it, and a transcript dates a reply when it
-// was written, after the request's start, so the idle time read is a
-// little short.
-const coldShare = 0.9
+// ColdAfter is how long a conversation must have been idle, by its
+// transcript, for a rebuild to count as cold: its cache's life, less some
+// slack. A cache's life runs from the start of the request that last read
+// it, and a transcript dates a reply when it was written, so a long reply
+// before makes the idle time read short: two minutes of slack, or a tenth
+// of an hour's cache.
+func ColdAfter(ttl time.Duration) time.Duration {
+	return ttl - max(2*time.Minute, ttl/10)
+}
 
 // Chain is one conversation's requests in order, as a transcript holds
 // them.
@@ -149,7 +152,7 @@ func (c *Chain) Add(r Request) (Rebuild, bool) {
 		return Rebuild{}, false
 	}
 	b := Rebuild{Request: r, Tokens: min(r.Write, lost), Idle: r.At.Sub(prev.At), TTL: life, Before: prev}
-	b.Cold = float64(b.Idle) >= coldShare*float64(life)
+	b.Cold = b.Idle >= ColdAfter(life)
 	b.USD, b.Priced = r.writeCost(b.Tokens)
 	return b, true
 }
