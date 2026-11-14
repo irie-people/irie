@@ -274,6 +274,15 @@ func TestStealsFocus(t *testing.T) {
 		`exec "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir=/tmp/p`:                           true,
 		`nohup /Applications/Simulator.app/Contents/MacOS/Simulator & sleep 1`:                                                 true,
 		`IRIE_X=1 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9334 >/dev/null 2>&1`: true,
+		// Commands inside others run; quoted text and redirects do not.
+		"ls *.pdf | xargs open":                                             true,
+		`eval "open report.pdf"`:                                            true,
+		`bash -lc "cd /tmp && open report.pdf"`:                             true,
+		"/usr/bin/open --help 2>&1 | sed -n 1,40p":                          false,
+		`git commit -m "fix: x; open -a Safari"`:                            false,
+		"git commit -F - <<'EOF'\nfix: x\n\nopen -a Safari, then quit\nEOF": false,
+		"PATH=/usr/bin:/bin open -a Safari":                                 true,
+		"/Applications/Simulator.app/Contents/MacOS/Simulator --background": true, // only Irie.app's own flags keep a window away
 	} {
 		if got := stealsFocus(cmd); got != want {
 			t.Errorf("stealsFocus(%q) = %v, want %v", cmd, got, want)
@@ -295,13 +304,36 @@ func TestOpensInSight(t *testing.T) {
 		"open -g mac/build/Irie.app --args --background":                            false,
 		"open -g -n -W --stdout /tmp/b.txt -a Irie.app --args --background --bench": false,
 		"open -n -g 'mac/build/hot/A/Irie Preview.app' --args --background --away":  false,
-		"open -g -a 'Google Chrome' --args --headless=new":                          false,
-		"open -gj -a Safari":                                                        false,
-		"open -j report.pdf":                                                        false,
-		"open -g":                                                                   false,
-		"open -a Safari":                                                            false, // in front, which stealsFocus says
-		`"$IRIE_BIN" away -- open -g -a Simulator`:                                  false,
-		"irie away --for 30s --app Simulator -- xcrun simctl boot 'iPhone 15'":      false,
+		// A browser that runs already drops the arguments: headless needs -n.
+		"open -g -a 'Google Chrome' --args --headless=new":  true,
+		"open -gn -a 'Google Chrome' --args --headless=new": false,
+		// Only Irie.app's own flags keep its window away.
+		"open -g -a Simulator --args --background": true,
+		// Inside loops, conditionals, pipes, subshells and other commands.
+		"for f in *.png; do open -g $f; done":                                  true,
+		"if true; then open -g report.pdf; fi":                                 true,
+		"ls *.pdf | xargs open -g":                                             true,
+		"(open -g report.pdf)":                                                 true,
+		"{ open -g report.pdf; }":                                              true,
+		"nice -n 5 open -g report.pdf":                                         true,
+		"timeout 30 open -g report.pdf":                                        true,
+		"caffeinate -i open -g report.pdf":                                     true,
+		"sudo -u alice open -g report.pdf":                                     true,
+		`sh -c 'open -g -a Safari'`:                                            true,
+		`echo "$(open -g report.pdf)"`:                                         true,
+		"sh <<EOF\nopen -g report.pdf\nEOF":                                    true,
+		"open --background report.pdf":                                         true,
+		"open -g -a Safari >/tmp/--help.log":                                   true,
+		"open --hide report.pdf":                                               false,
+		`git commit -m "fix: x; open -g -a Safari"`:                            false,
+		"git commit -m \"subject\n\nopen -g -a Safari\"":                       false,
+		"cat > notes.md <<'EOF'\nopen -g -a Safari\nEOF":                       false,
+		"open -gj -a Safari":                                                   false,
+		"open -j report.pdf":                                                   false,
+		"open -g":                                                              false,
+		"open -a Safari":                                                       false, // in front, which stealsFocus says
+		`"$IRIE_BIN" away -- open -g -a Simulator`:                             false,
+		"irie away --for 30s --app Simulator -- xcrun simctl boot 'iPhone 15'": false,
 		"irie away -- open -g -n -a 'Google Chrome' --args --user-data-dir=/tmp/p http://localhost:3000": false,
 	} {
 		if got := opensInSight(cmd); got != want {

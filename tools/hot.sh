@@ -90,11 +90,12 @@ name=${name#"$BRAND_SLUG"/}
 id=$BRAND_BUNDLE_ID.preview.$(printf %s "$root" | shasum | cut -c1-10)
 
 # A first preview takes the app's choices (palette, view, folds, sidebar
-# width, font size) but not its window's frame, so it opens beside the app
-# rather than over it. From then on it keeps its own, build after build.
+# width, font size) but not its window's frame or its desktop, so it never
+# opens over the app. From then on it keeps its own, build after build.
 if [ -n "$show" ] && ! defaults read "$id" >/dev/null 2>&1 &&
 	defaults export "$BRAND_BUNDLE_ID" "$dir/seed.plist" 2>/dev/null; then
 	plutil -remove 'NSWindow Frame main' "$dir/seed.plist" 2>/dev/null || true
+	plutil -remove windowDesktop "$dir/seed.plist" 2>/dev/null || true
 	defaults import "$id" "$dir/seed.plist"
 	rm -f "$dir/seed.plist"
 fi

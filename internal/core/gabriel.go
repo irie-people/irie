@@ -567,16 +567,35 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 var focusNote = "[" + brand.Name + "] Gabriel turned this call away: it would put a window where your user works, in front of what they look at, or on the desktop they are on even behind it. Work without a window where you can: a browser headless (--headless=new keeps the profile and its logins), pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. A window you must open goes through \"$" + brand.Env("BIN") + "\" away -- COMMAND, with open -g inside it, which puts each window it opens on a desktop they are not looking at; never a tab in their own browser. The " + skills.Plugin + ":out-of-sight skill says more. If your user must see it, say so in a line and let them open it."
 
 var (
-	// shellSplit cuts a shell command at the places a new one starts.
-	shellSplit = regexp.MustCompile("[;&|\\n]+|\\$\\(|`")
 	// appActivates is AppleScript that brings an app forward or types into
 	// one.
 	appActivates = regexp.MustCompile(`(?i)\b(activate|reopen|keystroke|key code|open location)\b`)
-	// quietFlags keep an app started straight, or one open(1) passes them
-	// to, from showing a window where the user works: a browser headless,
-	// and Irie.app's own runs that draw out of sight (Desktops.swift).
-	quietFlags = []string{"--headless", "--snapshot", "--render-conversation", "--record", "--bench", "--background", "--away", "--version", "--help"}
+	// hereDoc starts a here-document: <<END, <<-END, <<'END' or <<"END".
+	hereDoc = regexp.MustCompile(`<<-?[ \t]*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?`)
+	// redirect is a word that sends a stream to a file or reads one: >,
+	// 2>, >>out, <in, &>out, 2>&1.
+	redirect = regexp.MustCompile(`^(\d*|&)(>>?|<)`)
+	// assignment sets a variable for the command after it: PATH=/usr/bin.
+	assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 )
+
+// shells run the script they are given with -c.
+var shells = []string{"sh", "bash", "zsh", "dash", "ksh"}
+
+// quietFlags keep an app started as the command, or that open(1) passes
+// them to, from showing a window where the user works: Irie.app's own runs,
+// which draw out of sight or put the window back on its desktop
+// (Desktops.swift), and a browser headless.
+var quietFlags = []string{"--snapshot", "--render-conversation", "--render-onboarding", "--record", "--bench", "--background", "--away", "--away-helper", "--version", "--help", "--headless"}
+
+// prefixes run the command after them, as sudo or nice do, or start a
+// compound command, as then or { do. Each maps to the letters of its
+// options that take a value, which is skipped with the option.
+var prefixes = map[string]string{
+	"sudo": "ughpCDrtUT", "env": "uSP", "nice": "n", "timeout": "sk", "caffeinate": "tw", "xargs": "nILPsEJR",
+	"nohup": "", "exec": "a", "command": "", "time": "", "!": "", "{": "",
+	"do": "", "then": "", "else": "", "elif": "", "if": "", "while": "", "until": "",
+}
 
 // windowEffect is where a shell command would put a window, from best to
 // worst.
@@ -590,9 +609,9 @@ const (
 
 // stealsFocus reports whether a shell command would bring an app, a window
 // or a page to the front: open(1) without -g or -j, AppleScript that
-// activates an app or types into it, or an app's own executable started
-// straight, short of a headless browser, Irie.app's --snapshot, --record,
-// --background or --away, and the like.
+// activates an app or types into it, or an app's own executable started as
+// the command, short of a headless browser and Irie.app's --snapshot,
+// --record, --background, --away and the like.
 func stealsFocus(cmd string) bool { return windowOf(cmd) == inFront }
 
 // opensInSight reports whether a shell command would open a window on the
@@ -602,83 +621,277 @@ func stealsFocus(cmd string) bool { return windowOf(cmd) == inFront }
 // of sight").
 func opensInSight(cmd string) bool { return windowOf(cmd) == inSight }
 
-// windowOf is the worst any part of a shell command does with a window. It
-// reads the command roughly, as a person would, and errs toward letting it
-// run.
+// windowOf is the worst any command a shell command runs does with a
+// window. It reads the command as a person would, not as a full shell
+// grammar, and errs toward letting it run: the guard stops a reflex, and a
+// wrong refusal costs the agent a retry.
 func windowOf(cmd string) windowEffect {
 	worst := outOfSight
-	for _, seg := range shellSplit.Split(cmd, -1) {
-		words := strings.Fields(seg)
-		for len(words) > 0 && (strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") || slices.Contains([]string{"sudo", "env", "nohup", "exec", "command", "time", "("}, words[0])) {
-			words = words[1:]
-		}
+	for _, ws := range commands(withoutText(cmd)) {
+		words, piped := command(ws)
 		if len(words) == 0 {
 			continue
 		}
-		prog := strings.Trim(words[0], `"'`)
+		prog, base := words[0], filepath.Base(words[0])
 		e := outOfSight
 		switch {
 		case prog == "open" || prog == "/usr/bin/open":
-			e = openEffect(words[1:])
-		case filepath.Base(prog) == "osascript":
-			if appActivates.MatchString(seg) {
+			e = openEffect(words[1:], piped)
+		case base == "osascript":
+			if appActivates.MatchString(strings.Join(words, " ")) {
 				e = inFront
 			}
-		case strings.Contains(program(words), ".app/Contents/MacOS/") && !quietRun(seg):
-			e = inFront
+		case slices.Contains(shells, base):
+			// sh -c 'open …': the script it is given.
+			for i, w := range words[1:] {
+				if strings.HasPrefix(w, "-") && !strings.HasPrefix(w, "--") && strings.HasSuffix(w, "c") {
+					if i+2 < len(words) {
+						e = windowOf(words[i+2])
+					}
+					break
+				}
+			}
+		case base == "eval":
+			e = windowOf(strings.Join(words[1:], " "))
+		case strings.Contains(prog, ".app/Contents/MacOS/"):
+			irie := strings.Contains("/"+prog, "/"+brand.Name+".app/") || strings.Contains("/"+prog, "/"+brand.Name+" Preview.app/")
+			if !(irie && quietWords(words[1:]) || slices.ContainsFunc(words[1:], headless)) {
+				e = inFront
+			}
 		}
 		worst = max(worst, e)
 	}
 	return worst
 }
 
-// program is the program a command's words start with, whole when it is a
-// quoted path with spaces, as "/Applications/Google Chrome.app/Contents/
-// MacOS/Google Chrome" is. A path that is only an argument, as to cp or
-// ls, is not one.
-func program(words []string) string {
-	first := words[0]
-	if q := first[:1]; q == `"` || q == `'` {
-		rest := strings.Join(words, " ")[1:]
-		if i := strings.Index(rest, q); i >= 0 {
-			return rest[:i]
+// commands splits a shell command into the commands it runs, each as its
+// words with the shell's quotes taken off. It splits at ; & | ( ) and new
+// lines outside quotes, and where $( and backticks start a command, even
+// inside double quotes. Quoted text stays one word, so a message that holds
+// "; open -a" is an argument and runs nothing.
+func commands(cmd string) [][]string {
+	var out [][]string
+	var cur []string
+	var word strings.Builder
+	in := false // a word is under way
+	endWord := func() {
+		if in {
+			cur = append(cur, word.String())
+			word.Reset()
+			in = false
 		}
-		return rest
 	}
-	return first
+	endCommand := func() {
+		endWord()
+		if len(cur) > 0 {
+			out = append(out, cur)
+			cur = nil
+		}
+	}
+	for i := 0; i < len(cmd); i++ {
+		c := cmd[i]
+		switch {
+		case c == '\\' && i+1 < len(cmd):
+			i++
+			if cmd[i] != '\n' {
+				word.WriteByte(cmd[i])
+				in = true
+			}
+		case c == '\'':
+			j := strings.IndexByte(cmd[i+1:], '\'')
+			if j < 0 {
+				j = len(cmd) - i - 1
+			}
+			word.WriteString(cmd[i+1 : i+1+j])
+			in = true
+			i += j + 1
+		case c == '"':
+			j := i + 1
+			for j < len(cmd) && cmd[j] != '"' && cmd[j] != '`' && !(cmd[j] == '$' && j+1 < len(cmd) && cmd[j+1] == '(') {
+				if cmd[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			j = min(j, len(cmd))
+			word.WriteString(cmd[i+1 : j])
+			in = true
+			if j < len(cmd) && cmd[j] != '"' {
+				i = j - 1 // a command inside the quotes: read on from it
+				continue
+			}
+			i = j
+		case c == '&' && (i > 0 && (cmd[i-1] == '>' || cmd[i-1] == '<') || i+1 < len(cmd) && cmd[i+1] == '>'):
+			word.WriteByte(c) // 2>&1, &>out: a redirect, not a new command
+			in = true
+		case c == '$' && i+1 < len(cmd) && cmd[i+1] == '(':
+			endCommand()
+			i++
+		case strings.IndexByte(";&|\n()`", c) >= 0:
+			endCommand()
+		case c == ' ' || c == '\t' || c == '\r':
+			endWord()
+		default:
+			word.WriteByte(c)
+			in = true
+		}
+	}
+	endCommand()
+	return out
 }
 
-// quietRun reports whether text holds a flag that keeps the window out of
-// sight.
-func quietRun(text string) bool {
-	return slices.ContainsFunc(quietFlags, func(q string) bool { return strings.Contains(text, q) })
+// command strips what runs a command, such as sudo -u alice, nice, timeout
+// 30s or xargs, what starts a compound one, such as then or {, and the
+// variables set for it, down to the command itself. piped says xargs runs
+// it, with arguments of its own.
+func command(words []string) (rest []string, piped bool) {
+	for len(words) > 0 {
+		w := words[0]
+		if assignment.MatchString(w) {
+			words = words[1:]
+			continue
+		}
+		takes, ok := prefixes[w]
+		if !ok {
+			return words, piped
+		}
+		piped = piped || w == "xargs"
+		words = words[1:]
+		for len(words) > 0 && strings.HasPrefix(words[0], "-") && words[0] != "-" {
+			o := words[0]
+			words = words[1:]
+			if o == "--" {
+				break
+			}
+			if len(o) == 2 && strings.ContainsRune(takes, rune(o[1])) && len(words) > 0 {
+				words = words[1:]
+			}
+		}
+		if w == "timeout" && len(words) > 0 {
+			words = words[1:] // its duration
+		}
+	}
+	return words, piped
 }
+
+// withoutText drops here-documents, whose lines are text such as a commit
+// message, not commands, and may start with words like open. A
+// here-document fed to a shell is commands, and stays.
+func withoutText(cmd string) string {
+	for from := 0; from < len(cmd); {
+		m := hereDoc.FindStringSubmatchIndex(cmd[from:])
+		if m == nil {
+			break
+		}
+		for i := range m {
+			m[i] += from
+		}
+		// <<< is a here-string, on its own line.
+		if m[0] > 0 && cmd[m[0]-1] == '<' {
+			from = m[1]
+			continue
+		}
+		delim := cmd[m[2]:m[3]]
+		nl := strings.IndexByte(cmd[m[1]:], '\n')
+		if nl < 0 {
+			cmd = cmd[:m[0]] + cmd[m[1]:]
+			from = m[0]
+			continue
+		}
+		body := m[1] + nl + 1
+		stop, end := len(cmd), len(cmd)
+		for at := body; at < len(cmd); {
+			line, next := cmd[at:], len(cmd)
+			if i := strings.IndexByte(line, '\n'); i >= 0 {
+				line, next = line[:i], at+i+1
+			}
+			if strings.TrimLeft(line, "\t") == delim {
+				stop, end = at, next
+				break
+			}
+			at = next
+		}
+		fed := false
+		if cs := commands(cmd[strings.LastIndexByte(cmd[:m[0]], '\n')+1 : m[0]]); len(cs) > 0 {
+			if w, _ := command(cs[len(cs)-1]); len(w) > 0 {
+				fed = slices.Contains(shells, filepath.Base(w[0]))
+			}
+		}
+		if fed {
+			cmd = cmd[:m[0]] + cmd[m[1]:stop] + cmd[end:]
+		} else {
+			cmd = cmd[:m[0]] + cmd[m[1]:body] + cmd[end:]
+		}
+		from = m[0]
+	}
+	return cmd
+}
+
+// quietWords reports whether words hold a flag that keeps the window out
+// of sight, as a word of its own, such as --snapshot or --headless=new.
+func quietWords(words []string) bool {
+	return slices.ContainsFunc(words, func(w string) bool {
+		return slices.ContainsFunc(quietFlags, func(q string) bool { return w == q || strings.HasPrefix(w, q+"=") })
+	})
+}
+
+// headless reports whether a word starts a browser without a window.
+func headless(w string) bool { return w == "--headless" || strings.HasPrefix(w, "--headless=") }
 
 // openEffect is where open(1) with args puts a window: nowhere without
-// something to open, or with -j (hidden); in front without -g; else on the
-// desktop the user is on, behind the app in front, unless it opens Irie.app
-// with a flag that keeps the window out of sight, such as --background.
-func openEffect(args []string) windowEffect {
-	target, background, hidden := false, false, false
+// something to open, or hidden (-j); in front without -g; else on the
+// desktop the user is on, behind the app in front. Short of that are
+// Irie.app given a flag of its own that keeps its window out of sight, as
+// tools/live.sh gives it --background, and a new browser (-n) started
+// headless; a browser that runs already drops the arguments. piped says
+// xargs gives it what to open.
+func openEffect(args []string, piped bool) windowEffect {
+	target, background, hidden, fresh, irie := piped, false, false, false, false
+	var passed []string // what --args hands the app
+	opens := func(v string) {
+		target = true
+		v = strings.TrimSuffix(v, "/")
+		base := strings.TrimSuffix(filepath.Base(v), ".app")
+		irie = irie || base == brand.Name || base == brand.Name+" Preview" || strings.HasPrefix(v, brand.BundleID)
+	}
 	for i := 0; i < len(args); i++ {
-		a := strings.Trim(args[i], `"'`)
+		a := args[i]
 		switch {
 		case a == "--args":
-			if target && background && !hidden && quietRun(strings.Join(args[i+1:], " ")) {
-				return outOfSight
-			}
+			passed = args[i+1:]
 			i = len(args)
-		case a == "-a" || a == "-b" || a == "-s" || a == "-u" || a == "--env" || a == "--stdin" || a == "--stdout" || a == "--stderr":
-			i++ // its value
-			if a == "-a" || a == "-b" || a == "-u" {
-				target = true
+		case redirect.MatchString(a):
+			if op := strings.TrimLeft(a, "0123456789"); op == ">" || op == ">>" || op == "<" || op == "&>" || op == "&>>" {
+				i++ // the file follows
 			}
+		case a == "--background":
+			background = true
+		case a == "--hide":
+			hidden = true
+		case a == "--new":
+			fresh = true
+		case a == "--url":
+			if i+1 < len(args) {
+				i++
+				opens(args[i])
+			}
+		case a == "--arch" || a == "--stdin" || a == "--stdout" || a == "--stderr" || a == "--env":
+			i++ // its value
 		case strings.HasPrefix(a, "--"):
 		case strings.HasPrefix(a, "-") && len(a) > 1:
-			hidden = hidden || strings.Contains(a[1:], "j")
-			background = background || strings.Contains(a[1:], "g")
+			flags := a[1:]
+			hidden = hidden || strings.Contains(flags, "j")
+			background = background || strings.Contains(flags, "g")
+			fresh = fresh || strings.Contains(flags, "n")
+			// The last of -absuio takes a value, as -na Safari does.
+			if last := flags[len(flags)-1:]; strings.Contains("absuio", last) && i+1 < len(args) {
+				i++
+				if strings.Contains("abu", last) {
+					opens(args[i])
+				}
+			}
 		default:
-			target = true
+			opens(a)
 		}
 	}
 	switch {
@@ -686,6 +899,8 @@ func openEffect(args []string) windowEffect {
 		return outOfSight
 	case !background:
 		return inFront
+	case irie && quietWords(passed), fresh && slices.ContainsFunc(passed, headless):
+		return outOfSight
 	}
 	return inSight
 }

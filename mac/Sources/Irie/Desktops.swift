@@ -12,7 +12,8 @@ import Darwin
 /// macOS has no public interface to desktops, so this one calls SkyLight,
 /// the window server's private framework, by name as the app runs, as yabai
 /// does (MIT, PROVENANCE.md). A macOS that lacks a call, or refuses it,
-/// gets the hidden window instead.
+/// gets the hidden window instead. Not yet: macOS 26's own move operation,
+/// which SkyLight does not export, so dlsym cannot find it.
 @MainActor
 enum Desktops {
     /// One desktop of one display, as Mission Control shows them.
@@ -45,8 +46,9 @@ enum Desktops {
         return (all, seen)
     }
 
-    /// The desktops a window is on: none before it first shows, and every
-    /// one for a window that shows on all desktops.
+    /// The desktops a window is on: none before it first shows, unless it
+    /// was moved to one, which it then opens on; every one for a window
+    /// that shows on all desktops.
     static func desktops(of window: Int) -> [UInt64] {
         guard let cid = connection, let copy = sky("SLSCopySpacesForWindows", CopyForWindows.self),
               let ids = copy(cid, 0x7, list(window))?.takeRetainedValue() as? [NSNumber] else { return [] }
@@ -67,26 +69,31 @@ enum Desktops {
     /// The window server's name for a screen's display, as the layout's
     /// desktops carry it.
     static func display(of screen: NSScreen?) -> String? {
-        guard let n = screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
-              let uuid = CGDisplayCreateUUIDFromDisplayID(n.uint32Value)?.takeRetainedValue() else { return nil }
+        guard let n = screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
+        return display(id: n.uint32Value)
+    }
+
+    /// The window server's name for a display, by its Core Graphics id.
+    /// Unlike NSScreen, it signs no process in with Launch Services, which
+    /// the away helper must never be (Away.swift).
+    static func display(id: CGDirectDisplayID) -> String? {
+        guard let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue() else { return nil }
         return CFUUIDCreateString(nil, uuid) as String
     }
 
     /// Moves a window to a desktop and says whether the window server has it
     /// there, on that desktop alone. Each macOS takes its own call, as
-    /// yabai's space_manager.c finds: an operation object where macOS has
-    /// one; a tag the desktop wears for a moment on 12.7, 13.6, 14.5 and from
-    /// 15; the plain move before those.
+    /// yabai's space_manager.c finds: a tag the desktop wears for a moment
+    /// on 12.7, 13.6, 14.5 and from 15, the plain move before those; the
+    /// other is tried when the first does not land.
     @discardableResult
     static func move(_ window: Int, to desktop: UInt64) -> Bool {
         guard connection != nil else { return false }
         if desktops(of: window) == [desktop] { return true }
-        var ways: [@MainActor (Int, UInt64) -> Void] = tagged ? [moveByTag, moveStraight] : [moveStraight, moveByTag]
-        if operation != nil { ways.insert(moveByOperation, at: 0) }
+        let ways: [@MainActor (Int, UInt64) -> Void] = tagged ? [moveByTag, moveStraight] : [moveStraight, moveByTag]
         for way in ways {
             way(window, desktop)
-            // An operation lands a moment later.
-            for _ in 0..<10 {
+            for _ in 0..<5 {
                 if desktops(of: window) == [desktop] { return true }
                 usleep(20000)
             }
@@ -123,8 +130,6 @@ enum Desktops {
     private typealias MoveWindows = @convention(c) (Int32, CFArray, UInt64) -> Void
     private typealias SetTag = @convention(c) (Int32, UInt64, Int32) -> Int32
     private typealias FollowTag = @convention(c) (Int32, UnsafePointer<UInt32>, Int32, Int32) -> Int32
-    private typealias Perform = @convention(c) (UnsafeRawPointer) -> Void
-    private typealias MakeOperation = @convention(c) (UnsafeMutableRawPointer, Selector, CFArray, UInt64) -> UnsafeMutableRawPointer?
 
     private static let framework = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY)
 
@@ -151,8 +156,6 @@ enum Desktops {
     /// The tag a desktop wears while a window follows it: "irie" in ASCII.
     private static let tag: Int32 = 0x6972_6965
 
-    private static let operation = sky("SLSPerformAsynchronousBridgedWindowManagementOperation", Perform.self)
-
     private static func list(_ window: Int) -> CFArray {
         [NSNumber(value: Int32(truncatingIfNeeded: window))] as CFArray
     }
@@ -165,7 +168,7 @@ enum Desktops {
            let match = names.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
             return match
         }
-        return display(of: NSScreen.main).flatMap { d in names.first { $0.caseInsensitiveCompare(d) == .orderedSame } } ?? names.sorted().first
+        return display(id: CGMainDisplayID()).flatMap { d in names.first { $0.caseInsensitiveCompare(d) == .orderedSame } } ?? names.sorted().first
     }
 
     private static func moveStraight(_ window: Int, _ desktop: UInt64) {
@@ -181,21 +184,6 @@ enum Desktops {
         _ = follow(cid, &id, 1, tag)
         _ = wear(cid, desktop, 0)
     }
-
-    /// The operation object that the newest macOS moves windows with. Its
-    /// alloc hands over the object its init takes; the init hands back the
-    /// operation, released once it has been performed.
-    private static func moveByOperation(_ window: Int, _ desktop: UInt64) {
-        guard let perform = operation,
-              let type = NSClassFromString("SLSBridgedMoveWindowsToManagedSpaceOperation") as? NSObject.Type,
-              let send = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "objc_msgSend") else { return }
-        let make = NSSelectorFromString("initWithWindows:spaceID:")
-        guard type.instancesRespond(to: make),
-              let blank = (type as AnyObject).perform(NSSelectorFromString("alloc"))?.toOpaque(),
-              let made = unsafeBitCast(send, to: MakeOperation.self)(blank, make, list(window), desktop) else { return }
-        let op = Unmanaged<AnyObject>.fromOpaque(made).takeRetainedValue()
-        withExtendedLifetime(op) { perform(UnsafeRawPointer(made)) }
-    }
 }
 
 /// Where the app's own window opens, and the desktop it remembers
@@ -206,8 +194,9 @@ enum Desktops {
 ///   another out of sight; with every desktop in sight, the app hides.
 /// - With `--background`, which an install and the freeze dog give the app
 ///   they open again behind the user's work, back on the desktop it was
-///   on, which it remembers as it goes; with none remembered, where macOS
-///   puts it.
+///   on, which it remembers as it goes; with none remembered, or where
+///   macOS will not move it, where macOS puts it, behind the app in front,
+///   since hiding the user's own app would lose it.
 /// - Otherwise the user opened it, and macOS puts it where they are.
 ///
 /// Only the app's own run keeps a desktop: `--snapshot`, `--bench` and
@@ -265,8 +254,19 @@ final class WindowPlace {
         defer { window.alphaValue = alpha }
         if Desktops.move(window.windowNumber, to: target.id) {
             say("the window is on desktop \(target.number), out of sight")
-        } else {
+            // A first preview waits behind what is on that desktop, so whoever
+            // goes there finds their own windows on top. Ordered once it has
+            // shown: an order now would be undone as it first shows.
+            if Self.away && Preview.replaces == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak window] in
+                    guard let window, !NSApp.isActive, window.isVisible, !window.isOnActiveSpace else { return }
+                    window.orderBack(nil)
+                }
+            }
+        } else if Self.away {
             hide("macOS would not move the window to desktop \(target.number)")
+        } else {
+            say("macOS would not move the window to desktop \(target.number), so it stays where macOS put it")
         }
     }
 
