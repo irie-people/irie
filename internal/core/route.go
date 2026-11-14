@@ -379,6 +379,13 @@ func (c *Core) escalate(hash, class, profile string, now time.Time) {
 // the profiles it can hand work to.
 const delegateNote = `[` + brand.Name + `] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run ` + "`" + `"$` + brand.EnvPrefix + `_BIN" ctl delegate "<subtask>"` + "`" + ` with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (%s), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.`
 
+// localOne and localMany follow delegateNote when local models are among
+// the profiles a session can hand work to: they cost no tokens at all.
+const (
+	localOne  = ` %s runs on a local model, which costs no tokens: prefer handing it every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and check what comes back.`
+	localMany = ` %s run on local models, which cost no tokens: prefer handing them every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and check what comes back.`
+)
+
 // delegateHint is the note for a session that may delegate: a Claude Code
 // session on a cloud profile with cheaper ones to hand work to, which was
 // not delegated itself. The caller holds c.mu.
@@ -393,10 +400,22 @@ func (c *Core) delegateHint(x *session) string {
 		return ""
 	}
 	names := make([]string, len(cheaper))
+	var local []string
 	for i, p := range cheaper {
 		names[i] = "+" + p
+		if q, ok := c.cfg().Profiles[p]; ok && q.Local != nil {
+			local = append(local, "+"+p)
+		}
 	}
-	return fmt.Sprintf(delegateNote, strings.Join(names, ", "))
+	note := fmt.Sprintf(delegateNote, strings.Join(names, ", "))
+	switch len(local) {
+	case 0:
+	case 1:
+		note += fmt.Sprintf(localOne, local[0])
+	default:
+		note += fmt.Sprintf(localMany, strings.Join(local[:len(local)-1], ", ")+" and "+local[len(local)-1])
+	}
+	return note
 }
 
 // failoverNote opens the task a failover carries on.
