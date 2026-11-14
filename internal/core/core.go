@@ -754,7 +754,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: builtFeatures([]string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
-			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpRename, ipc.OpFlip,
+			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
@@ -952,6 +952,16 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if err := c.send(a); err != nil {
+			return nil, err
+		}
+		c.markWord(a.Session)
+		return nil, nil
+	case ipc.OpContinue:
+		var a ipc.ContinueArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if err := c.continueAgent(a); err != nil {
 			return nil, err
 		}
 		c.markWord(a.Session)

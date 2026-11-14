@@ -39,6 +39,13 @@
 //	                  agent's process group, and a shell in a group of its
 //	                  own with a child of its own, as a tool's background
 //	                  job may be; the log records their pids
+//	box               while idle, draw Claude Code's prompt before each
+//	                  line, between two rules, with the cursor after its
+//	                  mark, so what is typed shows in it as the terminal
+//	                  echoes it
+//	box:away          the same, with the cursor under it instead, so what
+//	                  is typed never shows in the prompt, as when something
+//	                  else takes the keys
 //
 // Any other task runs the script "prompt". After the script the agent idles:
 // each line typed is a prompt and a turn, and EOF, Ctrl-D at the start of a
@@ -493,6 +500,7 @@ type agent struct {
 	mu     sync.Mutex // one hook at a time
 	tools  int
 	writes int
+	box    string // the box step: idle, it draws Claude Code's prompt; "in" or "away", where the cursor waits
 }
 
 func newAgent(o options, version string) (*agent, error) {
@@ -606,6 +614,9 @@ func (a *agent) run() int {
 	}
 	fmt.Println("idle")
 	for {
+		if a.box != "" {
+			drawPrompt(a.box == "away")
+		}
 		line, ok := a.line()
 		if !ok {
 			a.end("other")
@@ -682,8 +693,25 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 		a.status(s.arg)
 	case "kids":
 		a.kids()
+	case "box":
+		a.box = "in"
+		if s.arg != "" {
+			a.box = s.arg
+		}
 	}
 	return 0, false
+}
+
+// drawPrompt draws Claude Code's prompt as it stands empty: a rule, its
+// mark, a rule and a hint, then puts the cursor after the mark, where the
+// terminal echoes what is typed, or away under it all.
+func drawPrompt(away bool) {
+	rule := strings.Repeat("─", 40)
+	cursor := "\x1b[2A\r\x1b[2C"
+	if away {
+		cursor = "\n"
+	}
+	fmt.Print(rule + "\n❯ \n" + rule + "\n  ? for shortcuts" + cursor)
 }
 
 // kids starts the children of the kids step.

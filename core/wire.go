@@ -22,6 +22,7 @@ type (
 	Conversation     = ipc.Conversation
 	Item             = ipc.Item
 	SendArgs         = ipc.SendArgs
+	ContinueArgs     = ipc.ContinueArgs
 	FlipResult       = ipc.FlipResult
 	DockArgs         = ipc.DockArgs
 	DockResult       = ipc.DockResult
@@ -186,6 +187,7 @@ const (
 	ItemError          = ipc.ItemError
 	ItemStopped        = ipc.ItemStopped
 	OpSend             = ipc.OpSend
+	OpContinue         = ipc.OpContinue
 	OpFlip             = ipc.OpFlip
 	OpDock             = ipc.OpDock
 	DockStateUntrusted = ipc.DockStateUntrusted

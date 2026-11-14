@@ -107,6 +107,9 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          conversation and its raw terminal
   ` + brand.Slug + ` ctl send SESSION TEXT...          type a message to a session's agent, as
                                          a person would; TEXT - reads stdin
+  ` + brand.Slug + ` ctl continue SESSION              send a session's agent on: type
+                                         "continue" and Enter, only while its
+                                         prompt shows with nothing typed in it
   ` + brand.Slug + ` ctl conversation [--json] [--follow] SESSION
                                          print a session's conversation, read
                                          from its transcript; --follow keeps
@@ -177,6 +180,8 @@ func ctl(args []string) error {
 		return ctlConversation(args[1:])
 	case "send":
 		return ctlSend(args[1:])
+	case "continue":
+		return ctlContinue(args[1:])
 	case "flip":
 		return ctlFlip(args[1:])
 	case "watch":
@@ -716,6 +721,17 @@ func ctlSend(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpSend, ipc.SendArgs{Session: args[0], Text: text}, nil)
+}
+
+func ctlContinue(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: " + brand.Slug + " ctl continue SESSION")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpContinue, ipc.ContinueArgs{Session: args[0]}, nil)
 }
 
 // matchClosed are the closed sessions whose name or id holds every word of
