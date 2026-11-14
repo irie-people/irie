@@ -14,7 +14,7 @@ import GhosttyKit
 // (SurfaceView_AppKit.swift, MIT; PROVENANCE.md).
 
 /// What draws the app's terminals: Ghostty's engine when this build has it
-/// and it starts, else SwiftTerm (View > Terminal Engine, Settings).
+/// and it starts, else SwiftTerm (Settings › Appearance, Terminal drawn by).
 enum TerminalEngine: String, CaseIterable, Identifiable {
     case ghostty, swiftterm
 
@@ -262,7 +262,7 @@ final class GhosttySurfaceBox {
 }
 
 /// One terminal: a Ghostty surface running a tmux client of `target`.
-final class GhosttyTerminalView: NSView, NSTextInputClient {
+final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
     struct Attach: Equatable {
         var tmux: String
         var socket: String
@@ -405,6 +405,26 @@ final class GhosttyTerminalView: NSView, NSTextInputClient {
         let s = ghostty_surface_size(surface)
         return (Int(s.columns), Int(s.rows))
     }
+
+    /// The lines the terminal shows, a row each, read as a block so that
+    /// no wrapped line joins the next (TerminalScreen).
+    func screenLines() -> [String]? {
+        guard let surface else { return nil }
+        let size = ghostty_surface_size(surface)
+        guard size.columns > 0, size.rows > 0 else { return nil }
+        func point(_ x: Int, _ y: Int) -> ghostty_point_s {
+            ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: UInt32(x), y: UInt32(y))
+        }
+        let all = ghostty_selection_s(top_left: point(0, 0), bottom_right: point(Int(size.columns) - 1, Int(size.rows) - 1), rectangle: true)
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, all, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let start = text.text else { return nil }
+        let s = String(decoding: UnsafeRawBufferPointer(start: start, count: Int(text.text_len)), as: UTF8.self)
+        return s.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    var composing: Bool { hasMarkedText() }
 
     private func sizeDidChange(_ size: CGSize) {
         guard let surface, size.width > 0, size.height > 0 else { return }

@@ -445,7 +445,7 @@ struct CoachCard: View {
     /// What to do when the task can't go on by itself.
     private func stuck(_ s: Session) -> String? {
         switch s.state {
-        case "stalled": return "It’s waiting at the start, usually for a sign-in or to trust its folder. Answer it in its terminal: View > Terminal (⌥⌘T)."
+        case "stalled": return "It’s waiting at the start, usually for a sign-in or to trust its folder. Answer it in its terminal: View › Show Terminal (⌥⌘T)."
         case "failed": return "It couldn’t start: \(s.reason ?? "see its terminal"). Try the task again once that is fixed."
         default: return nil
         }

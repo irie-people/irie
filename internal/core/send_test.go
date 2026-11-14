@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -108,4 +109,29 @@ func TestPendingMessagesGoOnceTaken(t *testing.T) {
 	if len(cv.pending) != 0 {
 		t.Errorf("an hour on: %+v", cv.pending)
 	}
+}
+
+// A turn that failed leaves its agent at its own prompt, so a message goes
+// through as a new turn. At a usage limit with Claude Code's own continue
+// turned off, its menu waits on the user instead, which Enter would answer.
+func TestSendReachesASessionWhoseTurnFailed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"autoContinueAtUsageLimit": false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := setupWith(t, agentConfig{env: map[string]string{"CLAUDE_CONFIG_DIR": dir}})
+	failed := c.spawn("prompt,stopfail:overloaded")
+	limited := c.spawn("prompt,stopfail:rate_limit")
+	c.waitState(failed.ID, ipc.StateNeedsYou)
+	c.waitState(limited.ID, ipc.StateNeedsYou)
+
+	err := c.call(ipc.OpSend, ipc.SendArgs{Session: limited.ID, Text: "carry on"}, nil)
+	var e *ipc.Error
+	if !errors.As(err, &e) || e.Code != ipc.CodeBusy || !strings.Contains(e.Msg, "waiting for you in its terminal") {
+		t.Errorf("send at the usage-limit menu: %v", err)
+	}
+	if err := c.call(ipc.OpSend, ipc.SendArgs{Session: failed.ID, Text: "carry on"}, nil); err != nil {
+		t.Fatalf("send to a turn that failed: %v", err)
+	}
+	c.waitState(failed.ID, ipc.StateDone)
 }

@@ -91,7 +91,7 @@ The rhythm is the user's: 14, 2 and 16 days are what the guide suggests.
 
 ### 2.2 The session
 
-The user types `:setup switch` in any task bar, or picks **File › Set Up a Dead Man's Switch…** in the Mac app. The core starts a Claude Code session called "Dead Man's Switch" on `+claude`, in a folder of its own, `<data>/guides/dead-mans-switch`, with `/irie:dead-mans-switch` as its task. The folder is the same every time, so Claude Code asks only once whether to trust it, and the reply says to choose Yes; the guide's files go in the folder the user picks. `+claude` is the most careful profile, and this session decides who can reach everything a person owns. The skill then takes the user through it, a step at a time, and they can stop after any step and reopen the session later:
+The user types `:setup switch` in any task bar, or picks **Plugins › Dead man's switch › Set Up…** in the Mac app. The core starts a Claude Code session called "Dead Man's Switch" on `+claude`, in a folder of its own, `<data>/guides/dead-mans-switch`, with `/irie:dead-mans-switch` as its task. The folder is the same every time, so Claude Code asks only once whether to trust it, and the reply says to choose Yes; the guide's files go in the folder the user picks. `+claude` is the most careful profile, and this session decides who can reach everything a person owns. The skill then takes the user through it, a step at a time, and they can stop after any step and reopen the session later:
 
 1. **Ask.** Who should be told, and for each of them an email address and whether they get full access or only a view; any number of people. Which password manager, and its plan. Which phone. Whether they have Google and Apple accounts. The rhythm. Where to keep the files, by default `~/Documents/Dead Man's Switch`.
 2. **Plan.** The agent writes `switch.md`, every step marked *agent* or *you*, and shows it.
@@ -175,7 +175,7 @@ The guide asks which one the user has, and follows that vendor's own page, read 
 | The skill, `internal/skills/builtin/dead-mans-switch/` | `SKILL.md`: the rules of §1.3 for this guide and the steps of §2.2, `disable-model-invocation: true`, no grants. `reference/`: `letter.md` (the outline of READ ME FIRST), `healthchecks.md`, `phone.md`, `password-managers.md`, `backups.md`, `helpers.md`. Markdown only, no personal data, and every vendor page by its URL |
 | `irie dms` | `key [--paste] [--api URL]`; `checks --alarm-name … [--alarm-desc-file …] [--every 14] [--remind 2] [--alarm 16]`; `status`; `ping`; `pause`, `resume`; `calendar --out FILE`; `shortcut --out FILE [--sign]`; `contact --out FILE` |
 | The core | `:setup switch`, a tool of its own that starts a Claude Code session on `+claude` with `/irie:dead-mans-switch` and Irie's plugin folder, again when it is reopened (§1.2) |
-| The Mac app | File › Set Up a Dead Man's Switch…, which sends `:setup switch` |
+| The Mac app | Plugins › Dead man's switch › Set Up…, which sends `:setup switch` |
 | The phone apps | Nothing new: their task bars send `:setup switch` too, and the session is theirs to follow and answer |
 
 ### 2.8 What it needs from the user
@@ -278,6 +278,8 @@ The review found sound: request ids from `crypto/rand`, each answered once and d
 
 ## 4. Mullvad VPN control
 
+**Since 2026-11-14** VPN control is a plugin of its own, the VPN plugin, for any VPN with a command line, and Mullvad VPN is the first of its kinds (DESIGN §4.18): `vpn.provider` chooses, and Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and commands of the person's own drive it the same way. What follows is Mullvad's part, which stands as it was.
+
 ### 4.1 What it lets a user do
 
 Mullvad's own app and its `mullvad` CLI drive the VPN. With this extension Irie shows the VPN's state where the user already looks, and changes it from any Irie client, the phone included, so a phone can turn the Mac's VPN on or move it to another country.
@@ -297,7 +299,7 @@ The status strip and the Mac app show a small mark: green with the city when con
 | Item | Rule |
 |---|---|
 | Finding it | `vpn.mullvad`, else `mullvad` on the PATH, else `/usr/local/bin/mullvad` (macOS) and `/usr/bin/mullvad` (Linux) |
-| State | `mullvad status listen --json`, kept running by the core while `[vpn] on`, prints the state, then a JSON line for each event of the daemon: each change of the tunnel's state, and also new settings, a new relay list (a long line), device and version events, which Irie skips, as it does the warning line printed when the device is logged out. The core restarts it with backoff if it ends |
+| State | `mullvad status --json listen` (`--json` before `listen`: mullvad-cli 2026.3 refuses it after), kept running by the core while `[vpn] on`, prints the state, then a JSON line for each event of the daemon: each change of the tunnel's state, and also new settings, a new relay list (a long line), device and version events, which Irie skips, as it does the warning line printed when the device is logged out. The core restarts it with backoff if it ends |
 | Account time | `mullvad account get`, once an hour. Only its `Expires at:` line is read |
 | Lockdown | `mullvad lockdown-mode get`, at start and after each change |
 | Changes | Each word runs its command with a 30-second limit, and the reply is the command's own message when it fails |

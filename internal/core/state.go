@@ -39,6 +39,10 @@ type track struct {
 	nudged    int
 	waiting   int
 	waitingOn string
+	// The latest test run of its agents, as the hooks read it, and what
+	// its last turn's message said that this run contradicts (dog.go).
+	test     testRun
+	unproven string
 
 	// For the trod bot (trod.go): when its last turn ended or failed,
 	// and whether its last message asked the user something; what the
@@ -49,8 +53,19 @@ type track struct {
 	stopped      time.Time
 	asked        bool
 	trod         []trodSend
-	trodTyped    time.Time
+	trodTyped    time.Time // also a boost's carry-on (boost.go)
 	trodAnswered bool
+
+	// For the boost after API errors (boost.go): how many of its turns in
+	// a row failed on an API error that may pass, and the boost.on of the
+	// boost it has now.
+	apiFails int
+	boost    *event.Event
+
+	// heard is when its agent last reported by a hook: a hook event the
+	// shim kept while the core was down counts only if it came later
+	// (missed.go).
+	heard time.Time
 
 	// What the user did to the session as a whole (freeze.go, priority.go,
 	// order.go).
@@ -60,6 +75,7 @@ type track struct {
 	parked   bool         // ui.parked, until ui.unparked
 	pinned   bool         // ui.pinned, until ui.unpinned
 	space    string       // the space of the last ui.spaced (spaces.go)
+	group    string       // the group of the last ui.grouped (groups.go)
 
 	// The session's transcripts, then its finished subagents', in the
 	// order the hooks named them: what the token tally reads. own are the
@@ -80,6 +96,9 @@ func (t *track) apply(e event.Event) {
 	if e.Source == event.SourceHook && e.Kind != event.SessionEnded {
 		// After /clear, Claude Code ends one session and starts the next.
 		t.ended = nil
+	}
+	if at := e.Time(); e.Source == event.SourceHook && at.After(t.heard) {
+		t.heard = at
 	}
 	switch e.Kind {
 	case event.SpawnRequested:
@@ -113,7 +132,7 @@ func (t *track) apply(e event.Event) {
 		// the dog and the shift did since the user's last one still counts.
 		shifts := !t.trodTyped.IsZero() && e.Time().Sub(t.trodTyped) < trodTypedFor
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
-		t.waiting, t.waitingOn, t.asked, t.trodTyped = 0, "", false, time.Time{}
+		t.waiting, t.waitingOn, t.asked, t.trodTyped, t.unproven = 0, "", false, time.Time{}, ""
 		if !shifts {
 			t.nudged, t.trodAnswered = 0, false
 		}
@@ -128,6 +147,9 @@ func (t *track) apply(e event.Event) {
 		}
 		t.tools[toolUseID(e)] = e
 	case event.ToolFinished, event.ToolFailed:
+		if o := e.Str("tests"); o != "" {
+			t.test = testRun{outcome: o, line: e.Str("test_line"), cmd: t.tools[toolUseID(e)].Str("summary")}
+		}
 		t.busy(e)
 		t.held = t.held || t.frozen != nil
 		delete(t.tools, toolUseID(e))
@@ -147,9 +169,11 @@ func (t *track) apply(e event.Event) {
 		delete(t.needs, event.Main)
 		t.stopTools(event.Main)
 		if e.Agent == event.Main {
+			t.apiFails = 0
 			t.waiting, _ = e.Int("waiting")
 			t.waitingOn = e.Str("waiting_on")
 			t.stopped, t.asked = e.Time(), e.Data["asks"] == true
+			t.unproven = e.Str("unproven")
 			// Only a helper in the background outlives its session's
 			// turn, so when the Stop lists none, every helper still listed
 			// here has stopped: its SubagentStop never came, as while the
@@ -159,8 +183,11 @@ func (t *track) apply(e event.Event) {
 			}
 		}
 	case event.DogNudged:
-		// The turn goes on: the dog sent the agent back to finish.
+		// The turn goes on: the dog sent the agent back to finish. It came
+		// to its stop without an API error all the same.
 		t.nudged++
+		t.unproven = ""
+		t.apiFails = 0
 		t.busy(e)
 	case event.TrodSent:
 		t.trod = append(t.trod, trodSend{at: e.Time(), reason: e.Str("reason"), how: e.Str("how")})
@@ -174,12 +201,32 @@ func (t *track) apply(e event.Event) {
 			break
 		}
 		// The turn goes on: at its end, or past a question turned away.
+		if e.Str("how") == trodAtStop {
+			t.apiFails = 0
+		}
 		t.busy(e)
 	case event.TurnFailed:
 		t.activity, t.viewed = done, false
 		t.stopTools(event.Main)
 		t.need(e)
 		t.stopped, t.asked = e.Time(), false
+		// The main agent's API error that may pass counts toward a boost,
+		// but not during one; one that only the user can mend, such as a
+		// usage limit or a login, ends the run.
+		switch {
+		case e.Agent != event.Main || t.boost != nil:
+		case passing[e.Str("error")]:
+			t.apiFails++
+		default:
+			t.apiFails = 0
+		}
+	case event.BoostOn:
+		t.boost, t.apiFails = &e, 0
+		// The carry-on Irie types next is no prompt of the user's, as
+		// the trod bot's messages are not.
+		t.trodTyped = e.Time()
+	case event.BoostOff:
+		t.boost, t.apiFails = nil, 0
 	case event.SubagentStarted:
 		// A helper that starts once the turn is over, as an in-process
 		// teammate's does for each message, leaves it over.
@@ -216,6 +263,8 @@ func (t *track) apply(e event.Event) {
 		t.pinned = false
 	case event.UISpaced:
 		t.space = e.Str("space")
+	case event.UIGrouped:
+		t.group = e.Str("group")
 	}
 }
 
@@ -446,6 +495,9 @@ func (t *track) describe(s *ipc.Session, dead bool, deadStatus int) {
 	}
 	if s.State == ipc.StateFrozen && t.frozen.Str("by") == trodBy {
 		s.Detail = joinDetail("Frozen by the trod bot: "+t.frozen.Str("reason"), s.Detail)
+	}
+	if t.boost != nil && s.State != ipc.StateExited && s.State != ipc.StateFailed {
+		s.Detail = joinDetail(boostedLine, s.Detail)
 	}
 	if s.State != ipc.StateExited && s.State != ipc.StateFailed {
 		s.Subagents = t.subagents()

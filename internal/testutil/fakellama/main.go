@@ -5,7 +5,8 @@
 //
 // Environment:
 //
-//	IRIE_FAKE_LLAMA_LOG    a file it writes its arguments to, as JSON
+//	IRIE_FAKE_LLAMA_LOG    a file it writes its arguments to, as JSON, and
+//	                       FILE.env its LLAMA_ARG_* environment
 //	IRIE_FAKE_LLAMA_BUILD  the build number --version gives (default 12000)
 package main
 
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -32,6 +34,15 @@ func main() {
 	if f := os.Getenv("IRIE_FAKE_LLAMA_LOG"); f != "" {
 		b, _ := json.Marshal(args)
 		os.WriteFile(f, b, 0o600)
+		// The settings llama-server reads from its environment, beside it.
+		env := map[string]string{}
+		for _, kv := range os.Environ() {
+			if k, v, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "LLAMA_ARG_") {
+				env[k] = v
+			}
+		}
+		b, _ = json.Marshal(env)
+		os.WriteFile(f+".env", b, 0o600)
 	}
 	flag := func(names ...string) string {
 		for i := 0; i+1 < len(args); i++ {
@@ -44,7 +55,14 @@ func main() {
 		return ""
 	}
 	model, alias, port := flag("-m", "--model"), flag("--alias", "-a"), flag("--port")
+	// Like llama-server, it splits its context evenly between its slots.
 	ctx, _ := strconv.Atoi(flag("-c", "--ctx-size"))
+	slots, _ := strconv.Atoi(flag("-np", "--parallel"))
+	if slots > 0 {
+		ctx /= slots
+	} else {
+		slots = 1
+	}
 	if _, err := os.Stat(model); err != nil {
 		fmt.Fprintln(os.Stderr, "fakellama: failed to load model:", err)
 		os.Exit(1)
@@ -62,7 +80,7 @@ func main() {
 		reply(w, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /props", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, map[string]any{"default_generation_settings": map[string]any{"n_ctx": ctx}, "total_slots": 1, "model_path": model, "build_info": "b" + build + "-fake"})
+		reply(w, map[string]any{"default_generation_settings": map[string]any{"n_ctx": ctx}, "total_slots": slots, "model_path": model, "build_info": "b" + build + "-fake"})
 	})
 	mux.HandleFunc("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]any{"id": "msg_fake", "type": "message", "role": "assistant", "model": alias,

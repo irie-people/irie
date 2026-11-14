@@ -291,6 +291,16 @@ func (m Mac) SleepNow() error {
 	return nil
 }
 
+// DisplaySleepNow puts the displays to sleep, as `pmset displaysleepnow`
+// does; it needs no root. With the Mac's sleep off, closing the lid no
+// longer turns the built-in display off by itself, so the core does it.
+func (m Mac) DisplaySleepNow() error {
+	if out, err := m.run(tool("pmset", Pmset), "displaysleepnow"); err != nil {
+		return fmt.Errorf("pmset displaysleepnow: %v: %s", err, strings.TrimSpace(out))
+	}
+	return nil
+}
+
 // SleepIfClosed sleeps the Mac if its lid is closed with no other display,
 // as closing the lid would have; it reports whether it did.
 func (m Mac) SleepIfClosed() (bool, error) {

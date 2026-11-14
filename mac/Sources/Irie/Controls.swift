@@ -2,11 +2,11 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-// Pause, Promote, Park and drag to reorder (DESIGN §4.1, §4.3). Pause
+// Pause, Boost, Park and drag to reorder (DESIGN §4.1, §4.3). Pause
 // freezes a session's whole process tree at once, its helpers and everything
-// they started, and Resume continues it. Promote puts a session at the top of
-// the list and gives its process tree the machine first: the other sessions
-// run in macOS's background state. Park puts a session last in the Parked
+// they started, and Resume continues it. Boost gives a session's process
+// tree the machine first, the other sessions in macOS's background state,
+// and moves no card: the order is the user's. Park puts a session last in the Parked
 // group at the end of the list, folded until opened, so it goes out of sight
 // and out of the To verify count; Unpark puts it last among the rest, just
 // above Parked. Either moves the card at once, and a notice offers Undo,
@@ -86,31 +86,26 @@ extension Store {
         }
     }
 
-    /// Promotes a session to the top, which unparks it, or puts it back
-    /// among the rest, where it stays. It shows at once.
+    /// Boosts a session, or puts it back among the rest. Neither moves its
+    /// card, in a group of yours or not. It shows at once.
     func setPromoted(_ s: Session, _ on: Bool) {
         preview { rows in
             guard let i = rows.firstIndex(where: { $0.id == s.id }) else { return }
             rows[i].priority = on ? 1 : 0
-            if on {
-                rows[i].order = (rows.compactMap(\.order).min() ?? 0) - 1
-                rows[i].parked = false
-            }
         }
         Task {
             do {
                 _ = try await client.call("priority", PriorityArgs(session: s.id, level: on ? 1 : 0), as: Empty.self)
                 if on {
-                    say("Promoted \(s.name): it has the CPU and disk first.", error: false)
+                    say("Boosted \(s.name): it has the CPU and disk first.", error: false)
                 }
             } catch {
                 preview { rows in
                     if let i = rows.firstIndex(where: { $0.id == s.id }) {
                         rows[i].priority = s.priority
-                        rows[i].parked = s.parked
                     }
                 }
-                say("Couldn’t promote \(s.name): \(error.localizedDescription)", error: true)
+                say("Couldn’t boost \(s.name): \(error.localizedDescription)", error: true)
             }
         }
     }
@@ -214,7 +209,8 @@ extension Store {
     /// Puts session id in target's place, at once, and tells the core.
     /// Across the Parked group's edge it is parked or unparked there, as one
     /// park that says where it went, so the core moves it once and one undo
-    /// takes it back.
+    /// takes it back; among the cards of another group of yours, or of
+    /// none, it joins that group or leaves its own there (Groups.swift).
     func reorder(_ id: String, onto target: Session) {
         guard let from = sessions.firstIndex(where: { $0.id == id }),
               let to = sessions.firstIndex(where: { $0.id == target.id }), from != to else { return }
@@ -223,6 +219,7 @@ extension Store {
         // across Parked's, a park or unpark, which unpins.
         let pins = canPin && s.isPinned != target.isPinned && (target.isPinned || s.isParked == target.isParked)
         let crosses = !pins && canPark && s.isParked != target.isParked
+        let regroups = !pins && !crosses && dropRegroups(s, onto: target)
         var ids = sessions.map(\.id)
         let moving = ids.remove(at: from)
         guard let t = ids.firstIndex(of: target.id) else { return }
@@ -241,6 +238,10 @@ extension Store {
                     if target.isPinned { rows[i].parked = false }
                 }
             }
+        }
+        if regroups {
+            regroup(s, onto: target, fromAbove: from < to, was: was)
+            return
         }
         Task {
             if pins {
@@ -291,8 +292,8 @@ struct PauseButton: View {
     }
 }
 
-/// Promote, or put back, as an icon: on a hovered card and in the details
-/// panel.
+/// Boost, or put back, as an icon: on a hovered card, and on a boosted
+/// card all the time, filled, as its one mark of it (SidebarView.swift).
 @MainActor
 struct PromoteButton: View {
     @Environment(Store.self) private var store
@@ -307,8 +308,8 @@ struct PromoteButton: View {
             Image(systemName: on ? "arrow.up.circle.fill" : "arrow.up.circle").frame(width: 16, height: 18)
         }
         .foregroundStyle(ink ? Theme.ink : on ? Theme.accentInk : Theme.muted)
-        .help(on ? "Promoted: click to put it back among the rest" : "Promote: put it first, with the CPU and disk first")
-        .accessibilityLabel(on ? "Stop promoting" : "Promote")
+        .help(on ? "Boosted: it has the CPU and disk first; click to put it back among the rest" : "Boost: give it the CPU and disk first, where it is")
+        .accessibilityLabel(on ? "Stop boosting" : "Boost")
     }
 }
 
@@ -331,7 +332,8 @@ struct ParkButton: View {
     }
 }
 
-/// The right-click menu's items for these.
+/// The right-click menu's items for these, in the hover buttons' order,
+/// one word each, then Move: in its group, or to another space.
 @MainActor
 struct ControlItems: View {
     @Environment(Store.self) private var store
@@ -347,28 +349,23 @@ struct ControlItems: View {
         } else {
             Button("Pause") { store.setFrozen(session, true) }.disabled(!session.canFreeze)
         }
-        Button(session.isPromoted ? "Stop Promoting" : "Promote to the Top") { store.setPromoted(session, !session.isPromoted) }
+        Button(session.isPromoted ? "Stop Boosting" : "Boost") { store.setPromoted(session, !session.isPromoted) }
         if store.canPark {
             Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) }
         }
         if store.canPin, session.peerName == nil {
-            Button(session.isPinned ? "Unpin" : "Pin to the Top") { store.setPinned(session, !session.isPinned) }
+            Button(session.isPinned ? "Unpin" : "Pin") { store.setPinned(session, !session.isPinned) }
         }
-        Button("Move Up") { store.move(session, by: -1) }.disabled(!canUp)
-        Button("Move Down") { store.move(session, by: 1) }.disabled(!canDown)
-        Button("Move to the Top of Its Group") { store.moveToEdge(session, top: true) }.disabled(!canUp)
-        Button("Move to the Bottom of Its Group") { store.moveToEdge(session, top: false) }.disabled(!canDown)
-    }
-}
-
-/// A promoted card's badge, after its name.
-struct PromotedBadge: View {
-    var body: some View {
-        Image(systemName: "arrow.up.circle.fill")
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(Theme.accentInk)
-            .help("Promoted: it has the CPU and disk first")
-            .accessibilityHidden(true)
+        Menu("Move") {
+            Button("Up") { store.move(session, by: -1) }.disabled(!canUp)
+            Button("Down") { store.move(session, by: 1) }.disabled(!canDown)
+            Button("To Top of Group") { store.moveToEdge(session, top: true) }.disabled(!canUp)
+            Button("To Bottom of Group") { store.moveToEdge(session, top: false) }.disabled(!canDown)
+            if SpaceItems.shown(store, [session]) {
+                Divider()
+                SpaceItems(list: [session])
+            }
+        }
     }
 }
 
@@ -416,7 +413,7 @@ struct TrodPrint: View {
     }
 }
 
-/// What the details panel says about a frozen, promoted or parked session,
+/// What the details panel says about a frozen, boosted or parked session,
 /// in short lines with the whole story on hover: plainly what Irie does, and
 /// that memory is not something it can set aside.
 struct ControlLines: View {
@@ -437,8 +434,8 @@ struct ControlLines: View {
             }
         }
         if session.isPromoted {
-            let more = "Promoted: it gets the CPU and disk first, and the other sessions run in the background. macOS gives no way to set memory aside for one process; the background ones are the first it slows."
-            lineText("Promoted: CPU and disk first", more: more)
+            let more = "Boosted: it gets the CPU and disk first, and the other sessions’ tools run in the background, their agents still at full speed. macOS gives no way to set memory aside for one process; the background ones are the first it slows."
+            lineText("Boosted: CPU and disk first", more: more)
             lineText("macOS can’t set memory aside", more: more, color: Theme.muted)
         }
     }
@@ -465,6 +462,7 @@ struct Reorderable: ViewModifier {
         content
             .onDrag {
                 store.dragging = session.id
+                store.draggingGroup = nil
                 return NSItemProvider(object: session.id as NSString)
             }
             .onDrop(of: [.text], delegate: CardDrop(store: store, target: session))
@@ -483,12 +481,16 @@ private struct CardDrop: DropDelegate {
     let store: Store
     let target: Session
 
-    func validateDrop(info: DropInfo) -> Bool { store.canDrop(onto: target) }
+    /// A group held by its header lands in the card's place, in its
+    /// group (Groups.swift); a card as before.
+    private var holdsGroup: Bool { store.draggingGroup != nil }
 
-    func dropEntered(info: DropInfo) { store.dropMark = store.mark(onto: target) }
+    func validateDrop(info: DropInfo) -> Bool { holdsGroup ? store.canDropGroup(onto: target) : store.canDrop(onto: target) }
+
+    func dropEntered(info: DropInfo) { store.dropMark = holdsGroup ? store.markGroup(onto: target) : store.mark(onto: target) }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: store.canDrop(onto: target) ? .move : .forbidden)
+        DropProposal(operation: validateDrop(info: info) ? .move : .forbidden)
     }
 
     func dropExited(info: DropInfo) {
@@ -496,6 +498,7 @@ private struct CardDrop: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        if holdsGroup { return store.dropGroup(onto: target) }
         defer {
             store.dragging = nil
             store.dropMark = nil

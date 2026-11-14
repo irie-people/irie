@@ -81,12 +81,12 @@ Pick by the kind of thing you test, and try the likeliest first. Each fault says
 
 ## User interfaces
 
-- **Headless only:** a browser with no window, never brought to the front.
+- **Headless:** a browser with no window. A window you must open goes through `"$IRIE_BIN" away -- COMMAND`, onto a desktop the person isn't looking at.
 - **A seeded monkey:** with Playwright, click, type into and scroll random visible elements a few hundred times, chosen by the seed, logging each step so it replays; collect `pageerror` and console errors, failed requests and 5xx answers.
 - **Flows:** back, forward and reload in the middle; two tabs on one account; a double click on every button that sends something.
 - **Shapes:** phone width (390 by 844), 200% zoom, dark mode, reduced motion, keyboard only, a right-to-left language, long German words.
 - **Too much:** paste 100,000 characters; drop a file of the wrong type or size.
-- **A Mac app:** drive it without taking the person's focus, and draw its windows to files when it can.
+- **A Mac app:** draw its windows to files when it can; open it, when you must, through `"$IRIE_BIN" away`.
 
 ## Agents and model features
 

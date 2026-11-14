@@ -101,7 +101,7 @@ func (c *Core) skillCheck(who string, profile config.Profile, skill string) erro
 }
 
 // onSkill is the task a session of profile starts with, when the profile
-// starts on one of Irie's skills (profiles.<name>.skill, DESIGN §4.18): the
+// starts on one of Irie's skills (profiles.<name>.skill, DESIGN §4.19): the
 // skill's command, then the task, which Claude Code hands the skill. A task
 // that already runs the skill, as one carried on from such a session does,
 // is kept as it is.

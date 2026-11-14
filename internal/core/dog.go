@@ -10,9 +10,12 @@ package core
 // something, or the dog has sent it back dog.nudges times since the user's
 // last prompt. A jot whose turn ends with work left says so in its row, and
 // the dog looks again every dogEvery seconds, so the row clears once the
-// work lands, however it lands. A jot you close is done: the dog never sends
-// it back, lists it or brings it back, whatever it left. The dog only reads:
-// it never commits, merges or removes anything.
+// work lands, however it lands. It also holds the agent to its word on its
+// tests: a last message that says the tests pass, while the latest test run
+// of the jot's agents failed as the hooks read it, sends the agent back
+// likewise, and stands on its row if the turn ends with it. A jot you close
+// is done: the dog never sends it back, lists it or brings it back, whatever
+// it left. The dog only reads: it never commits, merges or removes anything.
 
 import (
 	"fmt"
@@ -22,6 +25,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
@@ -29,6 +33,7 @@ import (
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/repo"
+	"github.com/irie-people/irie/internal/testrun"
 	"github.com/irie-people/irie/internal/worktree"
 )
 
@@ -63,6 +68,20 @@ type dogState struct {
 	checked  time.Time // when it last looked; zero when it has not
 	places   []jotTree // the jot's own worktrees, as last found
 	placesAt time.Time
+}
+
+// testRun is the latest test run of a session's agents, as the hooks read
+// it (testrun.Read): its outcome, the line of its output that shows a
+// failure, and its command.
+type testRun struct {
+	outcome, line, cmd string
+}
+
+// dogStop is the dog's word at the end of a jot's turn.
+type dogStop struct {
+	note     string    // what to tell its agent, which goes on; "" lets the turn end
+	loose    []looseIn // what the jot left that has not landed
+	unproven string    // what its last message says that its record contradicts (ipc.UnprovenTests), or ""
 }
 
 // jotTree is a worktree that holds a jot's own work, and its repo.
@@ -228,21 +247,22 @@ func (c *Core) noteLoose(id string, l jotLook, places []jotTree, loose []looseIn
 }
 
 // dogAtStop is the jot dog at the end of a turn (DESIGN §4.8). It reads what
-// the jot left and keeps it for the jot's row. When the agent should go on to
-// finish, it returns what to tell it, and what was left. The agent waits for
+// the jot left and keeps it for the jot's row, and holds its last message to
+// the latest test run of its agents. When the agent should go on, to finish
+// or to put its report right, it says what to tell it. The agent waits for
 // the answer, so git runs without c.mu and within dogGit a command.
-func (c *Core) dogAtStop(id string, evs []event.Event) (string, []looseIn) {
+func (c *Core) dogAtStop(id string, evs []event.Event) dogStop {
 	end := slices.IndexFunc(evs, func(e event.Event) bool { return e.Kind == event.TurnEnded && e.Agent == event.Main })
 	if end < 0 {
-		return "", nil
+		return dogStop{}
 	}
 	c.mu.Lock()
 	x := c.sessions[id]
 	if x == nil || !c.isJot(x) {
 		c.mu.Unlock()
-		return "", nil
+		return dogStop{}
 	}
-	l, repos, nudged, teach := c.lookAt(x, true), c.knownRepos(), x.track.nudged, x.tutor == config.TutorTeach
+	l, repos, nudged, teach, run := c.lookAt(x, true), c.knownRepos(), x.track.nudged, x.tutor == config.TutorTeach, x.track.test
 	c.mu.Unlock()
 
 	start := time.Now()
@@ -252,32 +272,40 @@ func (c *Core) dogAtStop(id string, evs []event.Event) (string, []looseIn) {
 	c.mu.Unlock()
 
 	e := evs[end]
+	st := dogStop{loose: loose}
+	if run.outcome == testrun.Failed && testrun.SaysPassed(e.Str("message")) {
+		st.unproven = ipc.UnprovenTests
+	}
 	waiting, _ := e.Int("waiting")
 	switch {
-	case len(loose) == 0, nudged >= c.cfg().Dog.Nudges, time.Since(start) > dogStopBudget:
-		return "", nil
+	case len(loose) == 0 && st.unproven == "", nudged >= c.cfg().Dog.Nudges, time.Since(start) > dogStopBudget:
+		return st
 	case e.Data["stop_hook_active"] == true, waiting > 0, asksUser(e.Str("message")):
 		// A stop hook sent it on already, so it has had its say; work of
 		// its own in the background will wake it; or it waits for you.
-		return "", nil
+		return st
 	case teach && turnAsked(e.Str("message")):
 		// In teach mode it left a part for you to write, which is the
 		// TODO(human) the dog would count (docs/proposals/learning.md §4.4).
-		return "", nil
+		return st
 	}
-	return unfinished(loose), loose
+	st.note = unfinished(loose, st.unproven, run)
+	return st
 }
 
-// nudgeEvent stands in for a turn's end when the dog sends the agent back to
-// finish: what was left, and what the agent had said.
-func nudgeEvent(end event.Event, loose []looseIn) event.Event {
-	l := wireLoose(loose, 0)
+// nudgeEvent stands in for a turn's end when the dog sends the agent back:
+// what was left, what its record contradicts, and what the agent had said.
+func nudgeEvent(end event.Event, st dogStop) event.Event {
+	l := wireLoose(st.loose, 0, "")
 	if l == nil {
 		l = &ipc.Loose{}
 	}
 	data := map[string]any{"dirty": l.Dirty, "ahead": l.Ahead}
 	if l.Land != "" {
 		data["land"] = l.Land
+	}
+	if st.unproven != "" {
+		data["unproven"] = st.unproven
 	}
 	if msg := end.Str("message"); msg != "" {
 		data["message"] = msg
@@ -291,17 +319,52 @@ func asksUser(msg string) bool {
 	return strings.HasSuffix(strings.TrimRight(msg, " \t\r\n*_`)\"'"), "?")
 }
 
-// unfinished is what the dog tells an agent whose jot is not through.
-func unfinished(loose []looseIn) string {
+// unfinished is what the dog tells an agent whose jot is not through, or
+// whose last message says what its record contradicts.
+func unfinished(loose []looseIn, unproven string, run testRun) string {
 	var b strings.Builder
-	b.WriteString("[" + brand.Name + "] The jot dog: this task is not through yet.")
+	if len(loose) > 0 {
+		b.WriteString("[" + brand.Name + "] The jot dog: this task is not through yet.")
+	} else {
+		b.WriteString("[" + brand.Name + "] The jot dog: your report says more than your work shows.")
+	}
 	for _, l := range looseLines(loose) {
 		b.WriteString("\n- " + l)
 	}
-	b.WriteString("\nFinish it now: commit your work, then land it the way this repo's AGENTS.md or CLAUDE.md says. " +
-		"If an install or another session holds you up, wait for it and try again. " +
-		"If you stopped on purpose, because your task says not to land it or only the user can decide what comes next, say so in one line.")
+	if unproven == ipc.UnprovenTests {
+		b.WriteString("\n- " + failedRun(run))
+	}
+	if len(loose) > 0 {
+		b.WriteString("\nFinish it now: commit your work, then land it the way this repo's AGENTS.md or CLAUDE.md says. " +
+			"If an install or another session holds you up, wait for it and try again. " +
+			"If you stopped on purpose, because your task says not to land it or only the user can decide what comes next, say so in one line.")
+	}
+	if unproven == ipc.UnprovenTests {
+		b.WriteString("\nRun the tests again before you say they pass, and report what they show: if some still fail, say which and why.")
+	}
 	return b.String()
+}
+
+// cmdMax is how much of a test run's command the dog quotes, in bytes.
+const cmdMax = 100
+
+// failedRun says that the latest test run failed, against the agent's word.
+func failedRun(run testRun) string {
+	s := "You said the tests pass, but the last test run failed"
+	if cmd := strings.TrimSpace(run.cmd); cmd != "" {
+		if len(cmd) > cmdMax {
+			n := cmdMax
+			for n > 0 && !utf8.RuneStart(cmd[n]) {
+				n--
+			}
+			cmd = cmd[:n] + "…"
+		}
+		s = "You said the tests pass, but the last test run, `" + cmd + "`, failed"
+	}
+	if run.line != "" {
+		s += ": " + run.line
+	}
+	return s + "."
 }
 
 // looseLines says what a jot left, a sentence for each worktree's files
@@ -330,12 +393,13 @@ func andMore(all, named int) string {
 	return ""
 }
 
-// wireLoose is what a jot's row says is left; nil when nothing is.
-func wireLoose(loose []looseIn, nudged int) *ipc.Loose {
-	if len(loose) == 0 {
+// wireLoose is what a jot's row says is left, and what its record
+// contradicts; nil when neither is.
+func wireLoose(loose []looseIn, nudged int, unproven string) *ipc.Loose {
+	if len(loose) == 0 && unproven == "" {
 		return nil
 	}
-	l := &ipc.Loose{Where: []ipc.LoosePlace{}, Nudged: nudged}
+	l := &ipc.Loose{Where: []ipc.LoosePlace{}, Nudged: nudged, Unproven: unproven}
 	for _, in := range loose {
 		l.Dirty += in.Dirty
 		l.Ahead += in.Ahead
@@ -428,7 +492,7 @@ func (c *Core) dogList() (ipc.DogResult, error) {
 	for _, cl := range closed {
 		if _, loose := c.readJot(cl.jotLook, repos, dogSweepGit); len(loose) > 0 {
 			at := cl.r.Closed
-			out.Jots = append(out.Jots, ipc.Jot{ID: cl.r.ID, Name: cl.r.Name, State: "closed", Closed: &at, Loose: *wireLoose(loose, 0)})
+			out.Jots = append(out.Jots, ipc.Jot{ID: cl.r.ID, Name: cl.r.Name, State: "closed", Closed: &at, Loose: *wireLoose(loose, 0, "")})
 		}
 	}
 	return out, nil

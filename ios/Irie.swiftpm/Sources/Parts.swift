@@ -119,11 +119,11 @@ struct SecondaryButton: ButtonStyle {
         if !ended && conn.can("priority") {
             if s.isPromoted {
                 Button { Task { await app.op(conn, "priority", ["session": s.id, "level": 0], done: "Put “\(s.name)” back") } } label: {
-                    Label("Put back", systemImage: "arrow.down.to.line")
+                    Label("Stop Boosting", systemImage: "arrow.up.circle.fill")
                 }
             } else {
-                Button { Task { await app.op(conn, "priority", ["session": s.id, "level": 1], done: "Promoted “\(s.name)”") } } label: {
-                    Label("Promote", systemImage: "arrow.up.to.line")
+                Button { Task { await app.op(conn, "priority", ["session": s.id, "level": 1], done: "Boosted “\(s.name)”") } } label: {
+                    Label("Boost", systemImage: "arrow.up.circle")
                 }
             }
         }

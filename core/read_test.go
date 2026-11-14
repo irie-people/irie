@@ -15,7 +15,7 @@ func view() View {
 		Home: "/home/alice",
 		Sessions: []Session{
 			{ID: "s1", Name: "fix login", State: StateWorking, Branch: "irie/fix-login"},
-			{ID: "s2", Name: "parser", State: StateFrozen},
+			{ID: "s2", Name: "parser", State: StateFrozen, Group: "g1"},
 			{ID: "s3", Name: "docs", State: StateIdle, Parked: true, Priority: 1},
 			{ID: "s4", Name: "old", State: StateExited},
 		},
@@ -34,6 +34,34 @@ func code(err error) string {
 	return ""
 }
 
+// :nest and :ungroup act on a selected group's header, which a client
+// names as Group, or :nest on the group of the selected session.
+func TestGroupWordsTakeASelectedGroup(t *testing.T) {
+	for _, c := range []struct {
+		text, session, group string
+		args                 GroupArgs
+	}{
+		{":nest Work/Irie", "", "g1", GroupArgs{Do: GroupMove, Groups: []string{"g1"}, Into: "Work/Irie"}},
+		{":nest", "", "g1", GroupArgs{Do: GroupMove, Groups: []string{"g1"}}},
+		{":ungroup", "", "g1", GroupArgs{Do: GroupUngroup, Group: "g1"}},
+	} {
+		st, err := Read(InputArgs{Text: c.text, Session: c.session, Group: c.group}, view())
+		if err != nil || st.Op != OpGroup || !reflect.DeepEqual(st.Args, c.args) {
+			t.Errorf("%q on %q: %+v, %v; want %+v", c.text, c.group, st, err, c.args)
+		}
+	}
+	// With no group selected, :nest takes the selected session's group.
+	v := view()
+	v.Sessions[0].Group = "g2"
+	st, err := Read(InputArgs{Text: ":nest Home", Session: v.Sessions[0].ID}, v)
+	if err != nil || !reflect.DeepEqual(st.Args, GroupArgs{Do: GroupMove, Groups: []string{"g2"}, Into: "Home"}) {
+		t.Errorf(":nest Home on a session of g2: %+v, %v", st, err)
+	}
+	if _, err := Read(InputArgs{Text: ":nest Home"}, view()); code(err) != CodeBadArgs {
+		t.Errorf(":nest with nothing selected: %v", err)
+	}
+}
+
 // Each command comes to the op it names, on the session that was selected.
 func TestReadTurnsWordsIntoOps(t *testing.T) {
 	for _, c := range []struct {
@@ -49,6 +77,9 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":close below", "s2", "", OpClose, CloseArgs{Sessions: []string{"s4"}}},
 		{":close finished", "", "", OpClose, CloseArgs{Finished: true}},
 		{":pin", "s1", "", OpPin, ParkArgs{Session: "s1"}},
+		{":group", "s1", "", OpGroup, GroupArgs{Do: GroupNew, Sessions: []string{"s1"}}},
+		{":group Steak cards", "s1", "", OpGroup, GroupArgs{Do: GroupAdd, Name: "Steak cards", Sessions: []string{"s1"}}},
+		{":ungroup", "s2", "", OpGroup, GroupArgs{Do: GroupRemove, Sessions: []string{"s2"}}},
 		{":reopen", "", "", OpReopen, ReopenArgs{}},
 		{":undo", "", "", OpUndo, UndoArgs{}},
 		{"  :redo  ", "", "", OpRedo, UndoArgs{}},
@@ -61,6 +92,8 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":plugins", "", "", OpPlugins, PluginsArgs{}},
 		{":write", "", "", OpTool, ToolArgs{Name: ToolWrite}},
 		{":write notes on Chapter 3\nkeep it short", "s1", "", OpTool, ToolArgs{Name: ToolWrite, Task: "notes on Chapter 3\nkeep it short"}},
+		{":markets", "s1", "", OpMarkets, MarketsArgs{}},
+		{":markets   ", "", "", OpMarkets, MarketsArgs{}},
 		{":vpn", "", "", OpVPN, VPNArgs{}},
 		{":vpn on", "s1", "", OpVPN, VPNArgs{Do: VPNOn}},
 		{":vpn OFF", "", "", OpVPN, VPNArgs{Do: VPNOff}},
@@ -68,8 +101,14 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":vpn lockdown on", "", "", OpVPN, VPNArgs{Do: VPNLockdown, Args: []string{"on"}}},
 		{":vpn se got", "", "", OpVPN, VPNArgs{Do: VPNPlace, Args: []string{"se", "got"}}},
 		{":vpn se-got-wg-001", "", "", OpVPN, VPNArgs{Do: VPNPlace, Args: []string{"se-got-wg-001"}}},
+		{":vpn use Tailscale", "", "", OpVPN, VPNArgs{Do: VPNUse, Args: []string{"tailscale"}}},
+		{":setup vpn", "", "", OpTool, ToolArgs{Name: ToolVPN}},
 		{":models", "", "", OpTool, ToolArgs{Name: ToolModels}},
 		{":route fix the typo", "", "", OpRoute, RouteArgs{Task: "fix the typo"}},
+		{":bench fix the typo", "", "", OpBench, BenchArgs{Task: "fix the typo"}},
+		// A bench reads its own ^HOST, besides its @ and + words, and runs
+		// on over more lines.
+		{":bench ^asahi +dory @web fix the typo\nin the README", "", "", OpBench, BenchArgs{Task: "fix the typo\nin the README", Profile: "dory", Repo: "web", Host: "asahi"}},
 		{":freeze", "s1", "", OpFreeze, FreezeArgs{Session: "s1"}},
 		{":freeze all", "", "", OpFreeze, FreezeArgs{All: true}},
 		{":thaw", "s2", "", OpThaw, FreezeArgs{Session: "s2"}},
@@ -115,6 +154,8 @@ func TestReadRefusesInWords(t *testing.T) {
 		{":freeze", "s4", "", CodeBadArgs, "old has ended, so there is nothing to freeze"},
 		{":park", "s3", "", CodeBadArgs, "must be not parked"},
 		{":unpark", "s1", "", CodeBadArgs, "must be parked"},
+		{":group", "", "", CodeBadArgs, ":group takes the selected session"},
+		{":ungroup", "s1", "", CodeBadArgs, "must be in a group"},
 		{":prio", "", "", CodeBadArgs, ":prio acts on the selected session"},
 		{":move", "s1", "", CodeBadArgs, "the selected session under Outside Irie, or one you name"},
 		{":move nothing-here", "", "", CodeNotFound, "No session outside Irie is called “nothing-here”"},
@@ -124,6 +165,11 @@ func TestReadRefusesInWords(t *testing.T) {
 		{"hows the weather", "", "", CodeNotFound, "No agent matches “weather”."},
 		{"+a +b fix it", "", "", CodeBadArgs, "Only one +profile per task."},
 		{"@web", "", "", CodeBadArgs, "Empty task: type what you want done after the @ or + words."},
+		{":bench +dory", "", "", CodeBadArgs, "Empty task"},
+		{":bench @web! fix it", "", "", CodeBadArgs, "each need a worktree of their own"},
+		{":bench +anon fix it", "", "", CodeBadArgs, "no anonymous research"},
+		{":markets @web add the cloud market", "", "", CodeBadArgs, "takes no @repo"},
+		{":markets +a +b add it", "", "", CodeBadArgs, "Only one +profile per task."},
 	} {
 		_, err := Read(InputArgs{Text: c.text, Session: c.session, Outside: c.outside}, view())
 		if code(err) != c.code || err == nil || !strings.Contains(err.Error(), c.says) {
@@ -163,6 +209,25 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 	st, err := Read(InputArgs{Text: "also check the docs", Apart: "s1"}, view())
 	if want := (SpawnArgs{Task: "also check the docs", Jot: true, Apart: "s1"}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) || st.Session == nil || st.Session.ID != "s1" {
 		t.Errorf("apart: %+v, %v", st, err)
+	}
+	// :markets TASK takes the menus' agent, model and tutor mode as a task
+	// does, and its own + words before them, but never their repo: its
+	// task runs in the map's folder, which the core knows. It isn't a jot,
+	// so it never goes to the agent of the task before.
+	for _, c := range []struct {
+		text string
+		want SpawnArgs
+	}{
+		{":markets add the cloud market\nwith shares", SpawnArgs{Task: "add the cloud market\nwith shares", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":markets +sonnet refresh the shares", SpawnArgs{Task: "refresh the shares", Profile: "sonnet", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+	} {
+		in := menus
+		in.Text, in.Session, in.Space = c.text, "s1", "work"
+		st, err := Read(in, view())
+		a, ok := st.Args.(MarketsArgs)
+		if err != nil || st.Op != OpMarkets || !ok || a.Task == nil || !reflect.DeepEqual(*a.Task, c.want) {
+			t.Errorf("%q: %s %+v, %v; want markets %+v", c.text, st.Op, st.Args, err, c.want)
+		}
 	}
 	// A question about an agent answers, and starts nothing.
 	st, err = Read(InputArgs{Text: "how's the login going?"}, view())
@@ -226,8 +291,21 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 			InputResult{Did: InputRan, Op: OpPriority, Session: parser, Text: "parser is back among the rest."}},
 		{"park", Step{Op: OpPark, Session: login}, nil, nil,
 			InputResult{Did: InputRan, Op: OpPark, Session: login, Text: "Parked fix login."}},
+		{"new group", Step{Op: OpGroup, Args: GroupArgs{Do: GroupNew}, Session: login}, GroupResult{Groups: []Group{{ID: "g1", Name: "Group 1"}}, Group: "g1", Sessions: []string{"s1"}}, nil,
+			InputResult{Did: InputRan, Op: OpGroup, Session: login, Text: "Made the group Group 1 of fix login. :group NAME puts another session in it."}},
+		{"into a group", Step{Op: OpGroup, Args: GroupArgs{Do: GroupAdd, Name: "steak"}, Session: login}, GroupResult{Groups: []Group{{ID: "g1", Name: "Steak"}}, Group: "g1", Sessions: []string{"s1"}}, nil,
+			InputResult{Did: InputRan, Op: OpGroup, Session: login, Text: "Put fix login in the group Steak."}},
+		{"in it already", Step{Op: OpGroup, Args: GroupArgs{Do: GroupAdd, Name: "steak"}, Session: login}, GroupResult{Groups: []Group{{ID: "g1", Name: "Steak"}}, Group: "g1"}, nil,
+			InputResult{Did: InputAnswered, Op: OpGroup, Session: login, Text: "fix login is in Steak already."}},
+		{"ungroup", Step{Op: OpGroup, Args: GroupArgs{Do: GroupRemove}, Session: parser}, GroupResult{Sessions: []string{"s2"}}, nil,
+			InputResult{Did: InputRan, Op: OpGroup, Session: parser, Text: "Took parser out of its group. :undo puts it back."}},
 		{"move", Step{Op: OpMove, Outside: &v.Outside[0]}, MoveResult{Session: Session{ID: "s7", Name: "api"}}, nil,
 			InputResult{Did: InputRan, Op: OpMove, Session: &Session{ID: "s7", Name: "api"}, Text: "Moved api into Irie."}},
+		{"markets", Step{Op: OpMarkets, Args: MarketsArgs{}}, MarketsResult{State: PartReady, Page: "/home/alice/maps/index.html", Text: "Your market map is ~/maps/index.html."}, nil,
+			InputResult{Did: InputAnswered, Op: OpMarkets, Text: "Your market map is ~/maps/index.html."}},
+		{"markets task", Step{Op: OpMarkets, Args: MarketsArgs{Task: &SpawnArgs{Task: "add it"}}}, MarketsResult{State: PartReady, Session: &started, Text: "Started flaky test in your market map's folder."}, nil,
+			InputResult{Did: InputSpawned, Op: OpMarkets, Session: &started,
+				Text: "Started flaky test on irie/flaky-test. Memory is low: 2.1 GB free of 16 GB. Copied .env."}},
 		{"hows", Step{Answer: "fix login: working", Session: login}, nil, nil,
 			InputResult{Did: InputAnswered, Session: login, Text: "fix login: working"}},
 	} {

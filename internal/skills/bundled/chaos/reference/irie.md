@@ -7,4 +7,4 @@ The Irie the person is using holds their work: every agent in it is a task in fl
 - **Start from DESIGN §2.9,** which lists the threats Irie already handles, with the test for each. Look for what it lacks: a call that can hang with no deadline, a file a crash can leave half-written, a lock two sessions can both take, a restart that loses a row.
 - **One package at a time,** such as `tools/check.sh ./internal/core`, while the machine is busy. Gabriel slows sessions the person isn't looking at while it is, which slows your timings too: say so beside any time you report.
 - **A finding as a test:** a red test must not reach the branch Irie installs from, since `tools/live.sh` runs every test. Write it with `t.Skip("chaos finding N: …")` until the fix lands, or leave it out and give the steps in your report.
-- **The Mac app:** `mac/snapshot.sh DIR` draws its windows into DIR without opening one. Never take the person's focus.
+- **The Mac app:** `mac/snapshot.sh DIR` draws its windows into DIR without showing one. A window you must open goes through `"$IRIE_BIN" away`, never onto the desktop the person is on.

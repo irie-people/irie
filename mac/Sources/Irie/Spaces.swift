@@ -124,11 +124,15 @@ extension Store {
     }
 
     /// A card dropped on a space's chip: it, or every card picked with it,
-    /// goes there.
+    /// goes there. A group of yours dropped there goes whole, with every
+    /// card in it and in its groups (Groups.swift).
     func dropOnSpace(_ key: String) -> Bool {
-        defer {
-            dragging = nil
-            dropMark = nil
+        defer { endDrag() }
+        if let g = draggingGroup {
+            let cards = sessions.filter { $0.peerName == nil && $0.spaceKey == space && isWithin($0.groupKey, g) }
+            guard !cards.isEmpty else { return false }
+            sendToSpace(cards, key)
+            return true
         }
         guard let id = dragging, let s = sessions.first(where: { $0.id == id }) else { return false }
         sendToSpace(targets(for: s), key)
@@ -278,23 +282,27 @@ private struct SpaceChip: View {
     }
 }
 
-/// A card's Move to Space menu, for it or every card picked with it.
+/// The spaces a card can go to, as items of its Move menu, for it or every
+/// card picked with it: To Irie, To Steak, To New Space.
 @MainActor
-struct SpaceMenu: View {
+struct SpaceItems: View {
     @Environment(Store.self) private var store
     let list: [Session]
 
+    /// Whether these cards can go to another space: another machine's
+    /// can't.
+    static func shown(_ store: Store, _ list: [Session]) -> Bool {
+        store.canSpaces && list.allSatisfy { $0.peerName == nil }
+    }
+
     var body: some View {
-        if store.canSpaces, list.allSatisfy({ $0.peerName == nil }) {
-            Menu("Move to Space") {
-                ForEach(Array(store.spaces.enumerated()), id: \.element.id) { i, s in
-                    let key = store.spaceKey(at: i)
-                    Button(s.name) { store.sendToSpace(list, key) }
-                        .disabled(list.allSatisfy { $0.spaceKey == key })
-                }
-                Divider()
-                Button("New Space") { store.newSpace(moving: list) }
+        if Self.shown(store, list) {
+            ForEach(Array(store.spaces.enumerated()), id: \.element.id) { i, s in
+                let key = store.spaceKey(at: i)
+                Button("To " + s.name) { store.sendToSpace(list, key) }
+                    .disabled(list.allSatisfy { $0.spaceKey == key })
             }
+            Button("To New Space") { store.newSpace(moving: list) }
         }
     }
 }
