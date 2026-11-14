@@ -15,9 +15,10 @@ import SwiftUI
 // helper starting only puts a count on a tab.
 
 /// A tab of the right sidebar, in the order the proposal gives them, then
-/// Notices, which also gives each its key: ⌥⌘1 to ⌥⌘6.
+/// Notices, then Mail, the mail plugin's (Mail.swift), which also gives
+/// each its key: ⌥⌘1 to ⌥⌘7.
 enum SideTab: String, CaseIterable, Identifiable {
-    case dock, changes, helpers, plan, review, notices
+    case dock, changes, helpers, plan, review, notices, mail
 
     var id: String { rawValue }
 
@@ -29,6 +30,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "Plan"
         case .review: return "Review"
         case .notices: return "Notices"
+        case .mail: return "Mail"
         }
     }
 
@@ -41,12 +43,13 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "list.bullet"
         case .review: return "checkmark.circle"
         case .notices: return "bell"
+        case .mail: return "envelope"
         }
     }
 
     /// The tabs this build has, in their order. The others come with the
     /// core features they need.
-    static let built: [SideTab] = [.dock, .helpers, .review, .notices]
+    static let built: [SideTab] = [.dock, .helpers, .review, .notices, .mail]
 
     /// Its key with ⌥⌘, by its place among all the tabs, so a key keeps its
     /// tab as more tabs arrive.
@@ -256,7 +259,7 @@ struct RightSidebar: View {
 
     private func tabs(tight: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(SideTab.built) { t in tabButton(t, tight: tight) }
+            ForEach(SideTab.built.filter { $0 != .mail || store.mailShown }) { t in tabButton(t, tight: tight) }
         }
     }
 
@@ -322,6 +325,9 @@ struct RightSidebar: View {
         case .notices:
             let n = store.unseenErrors
             return (n, n > 0)
+        case .mail:
+            // Unread mail is news, not something that needs you: never red.
+            return (store.mailShown ? store.mail.unread : 0, false)
         default:
             return (0, false)
         }
@@ -332,6 +338,12 @@ struct RightSidebar: View {
         case .dock: DockTab()
         case .review: ReviewTab()
         case .notices: NoticesTab()
+        case .mail:
+            if store.mailShown {
+                MailTab()
+            } else {
+                SideNote(title: "Mail is off", text: "The mail plugin is off, or this \(Brand.name) was built without it: Plugins › Mail turns it on.")
+            }
         default: HelpersTab()
         }
     }

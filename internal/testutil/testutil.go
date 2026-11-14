@@ -232,6 +232,9 @@ func NewEnv(t *testing.T) *Env {
 	// Nor does it stop the Iries of other test runs and agents (DESIGN §2.9):
 	// the tests that run beside it are using theirs.
 	t.Setenv("IRIE_LEFTOVERS", "off")
+	// Nor does it keep mail passwords in the user's Keychain: they go to
+	// files in its own state folder (docs/proposals/mail.md).
+	t.Setenv("IRIE_KEYCHAIN", "off")
 	// Nor does it read the machine's memory: a local model's spawn would
 	// pass or fail with what the user's other programs take. It sees a
 	// machine with room for the fake models (IRIE_FAKE_MEMORY, in GiB).

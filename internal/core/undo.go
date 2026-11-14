@@ -854,15 +854,17 @@ func checkReopen(c *Core, a action) []problem {
 		return cannot("no-profile", fmt.Sprintf("its profile +%s is gone", spec.Profile))
 	}
 	var ps []problem
+	// What its next turn costs once it is back, when its cache has run out.
+	price := c.reopenNote(r, time.Now())
 	if when, err := time.Parse(time.RFC3339Nano, a.str("closed")); err == nil && !when.Equal(r.Closed) {
 		ps = append(ps, problem{code: "changed", question: fmt.Sprintf("%q was reopened and closed again since.", r.Name),
-			options:   []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: "Reopen it anyway", Detail: "Brings back the session as it was closed last."}},
+			options:   []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: "Reopen it anyway", Detail: "Brings back the session as it was closed last." + price}},
 			recommend: ipc.ChoiceApply})
 	}
 	if c.names(nil)[r.Name] {
 		n := unique(r.Name, c.names(nil))
 		ps = append(ps, problem{code: "name-taken", question: fmt.Sprintf("Another session is called %q now.", r.Name),
-			options:   []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: fmt.Sprintf("Reopen it as %q", n), Detail: fmt.Sprintf("Brings it back in its own row under the name %q.", n)}},
+			options:   []ipc.ChoiceOption{{Key: ipc.ChoiceApply, Label: fmt.Sprintf("Reopen it as %q", n), Detail: fmt.Sprintf("Brings it back in its own row under the name %q.", n) + price}},
 			recommend: ipc.ChoiceApply})
 	}
 	h, herr := harnessFor(profile.Harness)

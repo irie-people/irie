@@ -98,6 +98,11 @@ const (
 	// an API error records, or the end of the boost's time.
 	BoostOn  = "boost.on"
 	BoostOff = "boost.off"
+	// CacheRebuilt records a request that wrote most of its conversation's
+	// context into the prompt cache again instead of reading it, from the
+	// session's transcript (DESIGN §6.3): what it wrote again, what that
+	// cost and, when Irie knows, what woke the session.
+	CacheRebuilt = "cache.rebuilt"
 )
 
 var kinds = map[string]bool{}
@@ -108,7 +113,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent, BoostOn, BoostOff,
+		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent, BoostOn, BoostOff, CacheRebuilt,
 	} {
 		kinds[k] = true
 	}
