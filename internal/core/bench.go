@@ -274,16 +274,20 @@ func (c *Core) benchSweep() {
 		return
 	}
 	defer c.benches.busy.Store(false)
+	// Each step works on a copy, which takes the bench's place once it
+	// changed, so a listing never reads a bench half changed.
 	c.benches.mu.Lock()
-	var open []*benchFile
+	var live []*benchFile
 	for _, b := range c.benches.all {
 		if b.State == ipc.BenchRunning || b.State == ipc.BenchJudging {
-			open = append(open, b)
+			cp := *b
+			cp.Runs = slices.Clone(b.Runs)
+			live = append(live, &cp)
 		}
 	}
 	c.benches.mu.Unlock()
-	sort.Slice(open, func(i, j int) bool { return open[i].ID < open[j].ID })
-	for _, b := range open {
+	sort.Slice(live, func(i, j int) bool { return live[i].ID < live[j].ID })
+	for _, b := range live {
 		if c.stepBench(b, time.Now()) {
 			c.keepBench(b)
 		}
