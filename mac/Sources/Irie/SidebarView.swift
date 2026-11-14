@@ -391,6 +391,17 @@ private struct SessionCard: View, Equatable {
                     .foregroundStyle(statusInk)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                // How often it woke cold today and what that cost, once it
+                // matters: the core sends the words only then (DESIGN §6.3).
+                // Two lines, so a narrow card keeps the price.
+                if let words = session.rebuilds?.words {
+                    Text(words)
+                        .font(Theme.font(11))
+                        .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             ZStack(alignment: .topTrailing) {
@@ -467,7 +478,7 @@ private struct SessionCard: View, Equatable {
             }
             Button("Open in Ghostty") {
                 store.show(session.id)
-                store.openInGhostty()
+                store.popOut()
             }
             if let branch = session.branch, !branch.isEmpty {
                 Button("Copy the branch name") { store.copy(branch, what: "branch name") }
@@ -1224,6 +1235,10 @@ struct DetailsPanel: View {
             line(s.tutor.map { $0 == "teach" ? "Teach mode: it leaves parts for you to write" : "Explain mode: it says why it does what it does" }, color: meta)
             line(s.cwd.map(Age.tilde), mono: true, color: meta)
             line(s.tokens?.breakdown, color: meta)
+            // Its prompt-cache rebuilds, and what waking it costs once its
+            // cache has run out (DESIGN §6.3).
+            line(s.rebuilds?.summary, color: meta)
+            line(s.cold.map { "Its cache has run out: \($0.words)" }, color: meta)
             ForEach((s.subagents ?? []).prefix(3)) { h in
                 line("↳ " + [h.type ?? "Helper", h.detail].compactMap { $0 }.joined(separator: " · "),
                      color: h.needsYou == true ? Theme.needs : meta)
@@ -1322,7 +1337,7 @@ private struct Actions: View {
         Button("Rename…") { store.beginRename(session.id) }
         Button("Open in Ghostty") {
             store.show(session.id)
-            store.openInGhostty()
+            store.popOut()
         }
         Divider()
         ControlItems(session: session, canUp: !first, canDown: !last)

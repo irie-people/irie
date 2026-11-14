@@ -55,6 +55,9 @@ final class MenuState {
         var sideTab: SideTab?
         /// The right sidebar's tabs, each with its key (Store.sideTabs).
         var sideTabs = SideTab.built(variorum: false)
+        /// The terminal is popped out, or could be (PopOut.swift).
+        var poppedOut = false
+        var canPopOut = false
         var canPlugins = false
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
@@ -109,6 +112,8 @@ extension Store {
         f.helperShown = helperShown
         f.showTerminal = showTerminal
         f.sideTab = side.open ? side.tab : nil
+        f.poppedOut = poppedOut != nil
+        f.canPopOut = attach != nil
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.canVPN = canVPN
@@ -219,6 +224,11 @@ struct IrieCommands: Commands {
             // The conversation, or the live terminal in its place.
             Button(f.showTerminal ? "Show Conversation" : "Show Terminal", action: run { store.showTerminal.toggle() })
                 .keyboardShortcut("t", modifiers: [.command, .option])
+            // The terminal in a Ghostty window of its own, or back in this
+            // one, as the toolbar's window button (PopOut.swift).
+            Button(f.poppedOut ? "Pop Terminal Back In" : "Pop Out Terminal", action: run { store.togglePopOut() })
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                .disabled(!f.canPopOut)
             // The right sidebar (RightSidebar.swift), with the key cmux and
             // VS Code give a right side bar, and its tabs, the one on show
             // ticked. Helpers opens on the selected session's helper, as

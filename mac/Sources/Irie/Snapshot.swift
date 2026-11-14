@@ -151,6 +151,18 @@ enum Snapshot {
             store.side = SideState()
             store.notice = nil
 
+            // The terminal popped out into Ghostty (PopOut.swift): the note
+            // in its frame, in both modes. Set directly, so nothing is saved.
+            store.poppedOut = PoppedOut(pid: 0, launched: .distantPast)
+            for (base, dark) in [("popped-out", false), ("popped-out-dark", true)] {
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1100, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.poppedOut = nil
+
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
             for dark in [false, true] {
@@ -341,7 +353,11 @@ enum Fixture {
                     group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
                     repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "glooks000000",
-                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6,
+                    // It woke cold three times today, which the card says
+                    // (DESIGN §6.3).
+                    rebuilds: Rebuilds(today: 3, todayUSD: 4.10, week: 5, weekUSD: 7.30, cause: "you", words: "$4.10 today: woke cold 3 times"),
+                    cold: Cold(tokens: 310_000, usd: 2.48, words: "~$2.48 to wake")),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",
