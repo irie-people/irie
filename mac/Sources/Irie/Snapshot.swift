@@ -228,7 +228,7 @@ enum Fixture {
         {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through \#(Brand.name)'s SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
         {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
-        {"name": "switch", "title": "Dead man's switch", "on": true, "state": "ready", "setup": ":setup switch", "detail": "The guide is ready: :setup switch, or File › Set Up a Dead Man's Switch… in the Mac app.", "summary": "A guided session sets up what your family needs if you stop checking in."}
+        {"name": "switch", "title": "Dead man's switch", "on": true, "state": "ready", "setup": ":setup switch", "detail": "The guide is ready: :setup switch, or Plugins › Dead man's switch › Set Up… in the Mac app.", "summary": "A guided session sets up what your family needs if you stop checking in."}
       ]}]}
     """#
 

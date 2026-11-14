@@ -352,10 +352,11 @@ struct PickedActions: View {
     @Environment(Store.self) private var store
     let list: [Session]
 
+    /// In one card's order (ControlItems): Park, Pin and Move, then Close.
     var body: some View {
         let n = list.count
-        Button("Close \(n) Sessions") { store.closeMany(list) }
-        SpaceMenu(list: list)
+        let pins = store.canPin && list.allSatisfy { $0.peerName == nil }
+        let moves = SpaceItems.shown(store, list)
         if store.canPark {
             if list.contains(where: { !$0.isParked }) {
                 Button("Park \(n) Sessions") { store.setParked(list, true) }
@@ -363,14 +364,18 @@ struct PickedActions: View {
                 Button("Unpark \(n) Sessions") { store.setParked(list, false) }
             }
         }
-        if store.canPin, list.allSatisfy({ $0.peerName == nil }) {
+        if pins {
             if list.contains(where: { !$0.isPinned }) {
                 Button("Pin \(n) Sessions") { store.setPinned(list, true) }
             } else {
                 Button("Unpin \(n) Sessions") { store.setPinned(list, false) }
             }
         }
-        Divider()
+        if moves {
+            Menu("Move") { SpaceItems(list: list) }
+        }
+        if store.canPark || pins || moves { Divider() }
+        Button("Close \(n) Sessions") { store.closeMany(list) }
         Button("Deselect") { store.pickNone() }
     }
 }
@@ -398,11 +403,11 @@ struct GroupActions: View {
     let group: SessionGroup
 
     var body: some View {
-        Button(store.isOpen(group) ? "Fold" : "Open") { store.fold(group) }
+        Button(store.isOpen(group) ? "Fold" : "Unfold") { store.fold(group) }
         let list = store.closable(in: group)
         if !list.isEmpty {
             Divider()
-            Button(list.count == 1 ? "Close Its Session" : "Close Its \(list.count) Sessions") { store.closeMany(list) }
+            Button(list.count == 1 ? "Close " + MenuText.quoted(list[0].name) : "Close \(list.count) Sessions") { store.closeMany(list) }
         }
     }
 }
