@@ -246,7 +246,7 @@ struct HelperPane: View {
                     .buttonStyle(FootButton(terminal: terminal))
                     .help("Take it off the strip")
             } else {
-                Text("A helper can’t take messages from Irie yet. In the terminal, Claude Code’s own panel can type to it.")
+                Text("A helper can’t take messages from \(Brand.name) yet. In the terminal, Claude Code’s own panel can type to it.")
                     .font(terminal ? mono(size: -2) : Theme.font(12))
                     .foregroundStyle(terminal ? Term.faint : Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

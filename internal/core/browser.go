@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/repo"
@@ -26,7 +27,7 @@ func (c *Core) browserServer(id string) (*harness.MCPServer, string) {
 	}
 	if _, err := browser.Find(path); err != nil {
 		if errors.Is(err, browser.ErrNotFound) {
-			return nil, "browser off: Mullvad Browser is not installed (irie setup browser)"
+			return nil, "browser off: Mullvad Browser is not installed (" + brand.Slug + " setup browser)"
 		}
 		return nil, "browser off: browser.path: " + err.Error()
 	}

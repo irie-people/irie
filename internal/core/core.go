@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -965,7 +966,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if a.Fix != "" || a.Mine != "" {
-			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over Irie's socket.")
+			return nil, ipc.Errorf(ipc.CodeBadArgs, "Raffi takes a fix or a mark only from you, over "+brand.Name+"'s socket.")
 		}
 		return c.raphaelOp(0, a)
 	case ipc.OpGabriel:

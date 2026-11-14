@@ -15,6 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 )
 
@@ -144,7 +145,7 @@ func (s Store) SaveKey(key string) error {
 func (s Store) Key() (string, error) {
 	b, err := os.ReadFile(s.KeyPath())
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", errors.New("no Healthchecks API key yet: copy the project's API key, then run `irie dms key --paste`")
+		return "", errors.New("no Healthchecks API key yet: copy the project's API key, then run `" + brand.Slug + " dms key --paste`")
 	}
 	return strings.TrimSpace(string(b)), err
 }
@@ -239,7 +240,7 @@ func Report(st State, checks []Check, channels []Channel, now time.Time) []strin
 		i := slices.IndexFunc(checks, func(c Check) bool { return c.UUID == x.ref.UUID })
 		if i < 0 {
 			out = append(out, fmt.Sprintf("The %s, “%s”, is gone from Healthchecks.", x.what, x.ref.Name))
-			todo = append(todo, "Make the checks again: `irie dms checks`.")
+			todo = append(todo, "Make the checks again: `"+brand.Slug+" dms checks`.")
 			continue
 		}
 		c := checks[i]

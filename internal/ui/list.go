@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -244,7 +245,7 @@ func (m Model) items() []item {
 		}
 	}
 	if len(m.outside) > 0 {
-		g := &group{key: groupKey, title: "Outside Irie", count: len(m.outside), folded: m.folded[groupKey], outside: true}
+		g := &group{key: groupKey, title: "Outside " + brand.Name, count: len(m.outside), folded: m.folded[groupKey], outside: true}
 		for _, o := range m.outside {
 			if o.Status == ipc.StatusWaiting {
 				g.needs++

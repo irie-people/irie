@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/repo"
 )
@@ -95,7 +96,7 @@ func (c *Core) fetchRow(p *peerState, s ipc.Session) fetched {
 	ref := "refs/remotes/" + p.name + "/" + s.Branch
 	switch {
 	case ssh == "":
-		return fetched{problem: fmt.Sprintf("not fetched: pair with irie peer add %s --ssh HOST, or set peers.%s.ssh", p.name, p.name)}
+		return fetched{problem: fmt.Sprintf("not fetched: pair with "+brand.Slug+" peer add %s --ssh HOST, or set peers.%s.ssh", p.name, p.name)}
 	case strings.HasPrefix(s.Branch, "-") || strings.Contains(s.Branch, ".."):
 		return fetched{problem: "not fetched: its branch has an odd name"}
 	}

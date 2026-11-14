@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/tmux"
@@ -370,7 +371,7 @@ func checkPark(on bool) func(c *Core, a action) []problem {
 		if x.track.parked == on {
 			return []problem{{code: "already", question: fmt.Sprintf("%q %s.", x.name, already),
 				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
-					Detail: fmt.Sprintf("Nothing needs %sing, so the history moves on as if Irie had %sed it.", verb, verb)}},
+					Detail: fmt.Sprintf("Nothing needs %sing, so the history moves on as if "+brand.Name+" had %sed it.", verb, verb)}},
 				recommend: ipc.ChoiceSettle}}
 		}
 		return nil

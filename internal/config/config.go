@@ -26,6 +26,7 @@ import (
 
 	"github.com/irie-people/irie/internal/anon"
 	"github.com/irie-people/irie/internal/arch"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/route"
 )
@@ -342,10 +343,18 @@ type UI struct {
 	// first (just under Pinned), or next, just after the session that
 	// started it, as a browser opens a tab beside the one it came from.
 	NewTabs string `toml:"new_tabs"`
+	// Bar is what the strip under the terminal shows (DESIGN §2.10): cheer,
+	// phrases of encouragement, or tips, tips for those new to it, one at a
+	// time. Its default is the brand's (internal/brand), which a company's
+	// copy may set to tips.
+	Bar string `toml:"bar"`
 }
 
 // NewTabs are the places ui.new_tabs puts a new session.
 var NewTabs = []string{"last", "first", "next"}
+
+// Bars are what ui.bar may show.
+var Bars = []string{"cheer", "tips"}
 
 // MinFreezeDog is the shortest ui.freeze_dog: a window busy for a moment,
 // as when the machine pages, is not frozen.
@@ -675,7 +684,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last"},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -743,11 +752,11 @@ func Default() Config {
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
 			Base:         "",
-			BranchPrefix: "irie/",
+			BranchPrefix: brand.Slug + "/",
 			Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
 			Submodules:   true,
 		},
-		Tmux:    Tmux{Socket: "irie"},
+		Tmux:    Tmux{Socket: brand.Slug},
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
 		Context: Context{KeepDays: 30},
 		Hold:    Hold{Max: 24 * time.Hour},
@@ -1047,6 +1056,9 @@ func (c Config) Validate() error {
 	if !slices.Contains(TeammateModes, c.Spawn.Teammates) {
 		bad("spawn.teammates = %q: must be panes or off", c.Spawn.Teammates)
 	}
+	if !slices.Contains(Bars, c.UI.Bar) {
+		bad("ui.bar = %q: must be cheer or tips", c.UI.Bar)
+	}
 	if !slices.Contains(NewTabs, c.UI.NewTabs) {
 		bad("ui.new_tabs = %q: must be last, first or next", c.UI.NewTabs)
 	}
@@ -1063,7 +1075,7 @@ func (c Config) Validate() error {
 		bad("spawn.default_profile = %q: no such profile, and not auto", c.Spawn.DefaultProfile)
 	}
 	if _, ok := c.Profiles[Auto]; ok {
-		bad("profiles.%s: auto is Irie's router; give the profile another name", Auto)
+		bad("profiles.%s: auto is "+brand.Name+"'s router; give the profile another name", Auto)
 	}
 	if !slices.Contains(TutorModes, c.Learn.Tutor) {
 		bad("learn.tutor = %q: must be off, explain or teach", c.Learn.Tutor)
@@ -1170,7 +1182,7 @@ func (c Config) Validate() error {
 			case l.MinContext < 1:
 				bad("profiles.%s.local.min_context = %d: must be positive", name, l.MinContext)
 			case (c.Local.URL == "" || l.Runtime == "llama-server") && l.MinContext > c.Local.Context:
-				bad("profiles.%s.local.min_context = %d is above local.context = %d, so Irie's own server could never run it", name, l.MinContext, c.Local.Context)
+				bad("profiles.%s.local.min_context = %d is above local.context = %d, so "+brand.Name+"'s own server could never run it", name, l.MinContext, c.Local.Context)
 			}
 		}
 		if p.Harness != "generic" {
@@ -1208,7 +1220,7 @@ func (c Config) Validate() error {
 	for _, a := range c.Local.LlamaArgs {
 		for _, own := range []string{"-m", "--model", "--host", "--port", "-c", "--ctx-size", "-np", "--parallel", "--alias", "-a"} {
 			if a == own || strings.HasPrefix(a, own+"=") {
-				bad("local.llama_args: %s is Irie's to set; use local.models, local.llama_port or local.context", own)
+				bad("local.llama_args: %s is "+brand.Name+"'s to set; use local.models, local.llama_port or local.context", own)
 			}
 		}
 	}
@@ -1222,7 +1234,7 @@ func (c Config) Validate() error {
 		bad("local.memory_gib = %d: must not be negative", c.Local.MemoryGiB)
 	}
 	if _, ok := c.Local.Env["OLLAMA_HOST"]; ok {
-		bad("local.env: OLLAMA_HOST is Irie's to set; use local.port, or local.url for a server you run")
+		bad("local.env: OLLAMA_HOST is " + brand.Name + "'s to set; use local.port, or local.url for a server you run")
 	}
 	for _, r := range c.Repos.Roots {
 		if !pathLike(r) {
@@ -1244,7 +1256,7 @@ func (c Config) Validate() error {
 		bad("worktree.base = %q: must name a commit, such as HEAD", c.Worktree.Base)
 	}
 	if !branchPrefix(c.Worktree.BranchPrefix) {
-		bad("worktree.branch_prefix = %q: must be able to start a git branch name, such as irie/", c.Worktree.BranchPrefix)
+		bad("worktree.branch_prefix = %q: must be able to start a git branch name, such as "+brand.Slug+"/", c.Worktree.BranchPrefix)
 	}
 	for _, f := range c.Worktree.Copy {
 		if !inRepo(f) {
@@ -1284,7 +1296,7 @@ func (c Config) Validate() error {
 		branch := c.Dog.Land[repo]
 		switch {
 		case strings.TrimSpace(repo) == "":
-			bad("dog.land: a repo needs a name, such as irie")
+			bad("dog.land: a repo needs a name, such as " + brand.Slug)
 		case !branchChars.MatchString(branch) || strings.HasPrefix(branch, "-") || strings.Contains(branch, ".."):
 			bad("dog.land.%s = %q: must name a branch, such as live", repo, branch)
 		}

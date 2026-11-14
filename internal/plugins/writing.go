@@ -3,6 +3,7 @@ package plugins
 import (
 	"os"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 )
 
@@ -35,7 +36,7 @@ func writing() Plugin {
 				Title:   "Writing in Variorum",
 				Summary: "`:write` starts a session that works in Variorum through its door for AI: editor's notes as comments, rewrites and translations as takes beside your paragraphs, books kept tidy.",
 				Setup:   ":write",
-				Brings:  []string{":write", "File › Write with Variorum…", "/irie:variorum"},
+				Brings:  []string{":write", "File › Write with Variorum…", "/" + brand.Slug + ":variorum"},
 				Refused: "Writing in Variorum is left out: skills.disabled names variorum.",
 				Skills:  []string{variorumSkill},
 				own: func(c config.Config) bool {

@@ -86,13 +86,13 @@ struct Diagram: View {
         }
         return """
         <!doctype html><html><head><meta charset="utf-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src irie-diagram: 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src \(Brand.slug)-diagram: 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:">
         <style>html,body{margin:0;padding:0;background:\(css(s.panel));}#d{padding:12px 14px;}#d svg{display:block;margin:0 auto;max-width:100%;height:auto;}</style>
-        <script src="irie-diagram://local/mermaid.min.js"></script></head><body><div id="d"></div><script>
+        <script src="\(Brand.slug)-diagram://local/mermaid.min.js"></script></head><body><div id="d"></div><script>
         const post = (m) => window.webkit.messageHandlers.diagram.postMessage(m);
         try {
           mermaid.initialize({startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: \(json(vars))});
-          mermaid.render('irie-diagram', \(json(source))).then((r) => {
+          mermaid.render('\(Brand.slug)-diagram', \(json(source))).then((r) => {
             const d = document.getElementById('d');
             d.innerHTML = r.svg;
             post({height: Math.ceil(d.getBoundingClientRect().height)});
@@ -165,7 +165,7 @@ private struct DiagramWeb: NSViewRepresentable {
 
 /// Serves Mermaid's script, and nothing else, to a diagram's page.
 private final class DiagramScheme: NSObject, WKURLSchemeHandler {
-    static let name = "irie-diagram"
+    static let name = "\(Brand.slug)-diagram"
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard let url = task.request.url, url.lastPathComponent == "mermaid.min.js", let data = Diagram.script else {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/plugins"
@@ -47,9 +48,9 @@ func (c *Core) guide(g guideSpec, want string) (ipc.Session, error) {
 	}
 	switch {
 	case choice == nil:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "This Irie has no skill called %s.", g.skill)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "This "+brand.Name+" has no skill called %s.", g.skill)
 	case !choice.On:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "The %s guide is Irie's skill %s, which is off here: %s.", g.name, g.skill, choice.Why)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "The %s guide is "+brand.Name+"'s skill %s, which is off here: %s.", g.name, g.skill, choice.Why)
 	}
 	// The CLI must load Irie's plugin, which its probe checks once per
 	// binary; the probe's warning says why not.
@@ -66,7 +67,7 @@ func (c *Core) guide(g guideSpec, want string) (ipc.Session, error) {
 					why = w
 				}
 			}
-			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "The %s guide needs Claude Code to load Irie's skills, and it doesn't here: %s. `claude update` may help.", g.name, why)
+			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "The %s guide needs Claude Code to load "+brand.Name+"'s skills, and it doesn't here: %s. `claude update` may help.", g.name, why)
 		}
 	}
 	// A folder of its own, the same every time, so Claude Code asks once

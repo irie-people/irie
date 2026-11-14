@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Edit is one change to the config file: Key takes Value, or with a nil
@@ -60,7 +62,7 @@ func Apply(data []byte, edits []Edit) ([]byte, error) {
 	}
 	got := map[string]any{}
 	if _, err := toml.Decode(string(out), &got); err != nil || !reflect.DeepEqual(got, want) {
-		return nil, errors.New("the file is laid out in a way Irie does not edit in place; make the change by hand")
+		return nil, errors.New("the file is laid out in a way " + brand.Name + " does not edit in place; make the change by hand")
 	}
 	return out, nil
 }
@@ -251,7 +253,7 @@ func plain(v any) (any, error) {
 		}
 		return out, nil
 	}
-	return nil, fmt.Errorf("a %T is not a value Irie writes", v)
+	return nil, fmt.Errorf("a %T is not a value "+brand.Name+" writes", v)
 }
 
 // literal writes a plain value as TOML.
@@ -293,7 +295,7 @@ func literal(v any) (string, error) {
 		}
 		return "{ " + strings.Join(parts, ", ") + " }", nil
 	}
-	return "", fmt.Errorf("a %T is not a value Irie writes", v)
+	return "", fmt.Errorf("a %T is not a value "+brand.Name+" writes", v)
 }
 
 // quote writes s as a TOML basic string.
@@ -589,7 +591,7 @@ func parseKey(data []byte, i int) ([]string, int, error) {
 			}
 			k, err := strconv.Unquote(string(data[i:end]))
 			if err != nil {
-				return nil, i, errAt(data, i, "a quoted key Irie cannot read")
+				return nil, i, errAt(data, i, "a quoted key "+brand.Name+" cannot read")
 			}
 			key, i = append(key, k), end
 		case '\'':

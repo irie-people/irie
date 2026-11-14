@@ -173,7 +173,7 @@ struct ThemeMaker: View {
                 Text(draft.editing == nil ? "Make a theme" : "Change “\(looks.theme(draft.editing ?? "")?.name ?? draft.name)”")
                     .font(Theme.font(19, .bold))
                     .foregroundStyle(Color.primary)
-                Text("Pick three colours and Irie works out the rest, light and dark, keeping every word easy to read. Irie’s window wears the theme while you make it.")
+                Text("Pick three colours and \(Brand.name) works out the rest, light and dark, keeping every word easy to read. \(Brand.name)’s window wears the theme while you make it.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -202,7 +202,7 @@ struct ThemeMaker: View {
             section("Your colours") {
                 pickRow("Accent", "The selected card’s edge, focus rings, the start button and the waves.", \.accent)
                 pickRow("Tint", "The hue of the grounds, the cards and the text. A grey keeps them grey.", \.tint)
-                pickRow("Sun", "The sun of Irie’s mark.", \.sun)
+                pickRow("Sun", "The sun of \(Brand.name)’s mark.", \.sun)
                 if draft.light.accent != draft.picks.accent, !draft.byHand.contains("light.accent") {
                     Text("In light mode the accent is a little deeper than picked, so it stands out at 3:1 on every ground.")
                         .font(.system(size: 11))
@@ -530,7 +530,7 @@ struct ThemeMaker: View {
                 Text("Layouts")
                     .font(Theme.font(19, .bold))
                     .foregroundStyle(Color.primary)
-                Text("A layout keeps how Irie’s window is arranged: what the right side shows, the sidebar, the details panel, the right sidebar and the text size. Arrange the window, here or by hand, and save it; View › Layout puts it back, and ⌃⌘1 to ⌃⌘9 your first nine.")
+                Text("A layout keeps how \(Brand.name)’s window is arranged: what the right side shows, the sidebar, the details panel, the right sidebar and the text size. Arrange the window, here or by hand, and save it; View › Layout puts it back, and ⌃⌘1 to ⌃⌘9 your first nine.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -557,7 +557,7 @@ struct ThemeMaker: View {
             listHeader("Built in")
             ForEach(PaneLayout.builtIns) { l in layoutRow(l, key: nil) }
             if !looks.problems.isEmpty {
-                listHeader("Files Irie couldn’t read")
+                listHeader("Files \(Brand.name) couldn’t read")
                 ForEach(looks.problems, id: \.self) { p in
                     Text(p).font(.system(size: 11)).foregroundStyle(Color(nsColor: .systemRed)).textSelection(.enabled)
                 }
@@ -1036,7 +1036,7 @@ struct ThemeSketch: View {
         .overlay(shape.strokeBorder(c(s.edge), lineWidth: 1))
         .environment(\.colorScheme, dark ? .dark : .light)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Irie’s window in this theme, \(dark ? "dark" : "light")")
+        .accessibilityLabel("\(Brand.name)’s window in this theme, \(dark ? "dark" : "light")")
     }
 
     private var sidebar: some View {
@@ -1044,8 +1044,7 @@ struct ThemeSketch: View {
             HStack(spacing: 5) {
                 SunMark(sun: c(s.sun), waves: c(s.waves))
                     .frame(width: 15, height: 15)
-                Text("Irie")
-                    .font(Theme.font(12, .bold))
+                BrandName(font: Theme.font(12, .bold), maxWidth: 110)
                     .foregroundStyle(c(s.ink))
                 Spacer(minLength: 2)
                 Text("◐ 2  ● 1  ✓ 1  ‖ 1")
@@ -1129,7 +1128,7 @@ struct ThemeSketch: View {
                 Text("Docs guide")
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(c(s.ink))
-                Text("Working · claude · irie/docs-guide")
+                Text("Working · claude · \(Brand.slug)/docs-guide")
                     .font(.system(size: 9))
                     .foregroundStyle(c(ink(0)))
             }

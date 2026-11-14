@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/tmux"
@@ -208,8 +209,8 @@ func checkTmux(o Options) Item {
 		if isExec(o.Tmux) {
 			path = o.Tmux
 		} else {
-			it.Status, it.Problem = Missing, "tmux.path in Irie's config, "+o.Tmux+", is not a program"
-			it.Fix = &Fix{Say: "Fix tmux.path in Irie's config, or remove it", Show: "irie config path"}
+			it.Status, it.Problem = Missing, "tmux.path in "+brand.Name+"'s config, "+o.Tmux+", is not a program"
+			it.Fix = &Fix{Say: "Fix tmux.path in " + brand.Name + "'s config, or remove it", Show: brand.Slug + " config path"}
 			return it
 		}
 	} else {
@@ -228,7 +229,7 @@ func checkTmux(o Options) Item {
 		it.Status = OK // "tmux master", a build from source: new enough
 	case !versionAtLeast(it.Version, MinTmux):
 		it.Status = Missing
-		it.Problem = "tmux " + it.Version + " is too old: Irie needs " + MinTmux + " or later"
+		it.Problem = "tmux " + it.Version + " is too old: " + brand.Name + " needs " + MinTmux + " or later"
 		it.Fix = upgradeFix(o, "tmux", "https://github.com/tmux/tmux/wiki/Installing")
 	default:
 		it.Status = OK
@@ -243,7 +244,7 @@ func claudeDirs(home string) []string {
 }
 
 func checkClaude(o Options) Item {
-	it := Item{ID: ClaudeID, Name: "Claude Code", For: "the coding agent Irie starts for you", Blocks: true}
+	it := Item{ID: ClaudeID, Name: "Claude Code", For: "the coding agent " + brand.Name + " starts for you", Blocks: true}
 	path, err := host.LookPath(o.Claude, o.Env)
 	if err != nil {
 		bare := !strings.Contains(o.Claude, "/")
@@ -271,7 +272,7 @@ func checkClaude(o Options) Item {
 	it.Status = OK
 	if it.Version != "" && !claude.AtLeast(it.Version, claude.MinVersion) {
 		it.Status = Warn
-		it.Problem = "Claude Code " + it.Version + " is older than " + claude.MinVersion + ", so Irie can't pause it"
+		it.Problem = "Claude Code " + it.Version + " is older than " + claude.MinVersion + ", so " + brand.Name + " can't pause it"
 		it.Fix = &Fix{Say: "Update Claude Code", Argv: []string{path, "update"}, Show: "claude update"}
 	}
 	return it
@@ -337,30 +338,30 @@ func checkGit(o Options) Item {
 }
 
 func checkPath(o Options) Item {
-	it := Item{ID: PathID, Name: "irie on your PATH", For: "lets you type irie in any terminal"}
+	it := Item{ID: PathID, Name: brand.Slug + " on your PATH", For: "lets you type " + brand.Slug + " in any terminal"}
 	self, err := os.Stat(o.Self)
 	if err != nil {
 		it.Status = Unknown
 		return it
 	}
-	found, err := host.LookPath("irie", o.shellEnv)
+	found, err := host.LookPath(brand.Slug, o.shellEnv)
 	if err == nil {
 		if fi, err := os.Stat(found); err == nil && os.SameFile(fi, self) {
 			it.Status, it.Path = OK, found
 			return it
 		}
 		it.Status, it.Path = Warn, found
-		it.Problem = "`irie` in a terminal runs " + tilde(found, o.Home) + ", another build"
+		it.Problem = "`" + brand.Slug + "` in a terminal runs " + tilde(found, o.Home) + ", another build"
 		return it
 	}
 	// The installer's link in ~/.local/bin is the folder to add, when it
 	// is there.
 	dir := filepath.Dir(o.Self)
-	if fi, err := os.Stat(filepath.Join(o.Home, LocalBin, "irie")); err == nil && os.SameFile(fi, self) {
+	if fi, err := os.Stat(filepath.Join(o.Home, LocalBin, brand.Slug)); err == nil && os.SameFile(fi, self) {
 		dir = filepath.Join(o.Home, LocalBin)
 	}
 	it.Status = Warn
-	it.Problem = "a terminal doesn't find irie in " + tilde(dir, o.Home)
+	it.Problem = "a terminal doesn't find " + brand.Slug + " in " + tilde(dir, o.Home)
 	it.Fix = pathFix(o, dir)
 	return it
 }
@@ -421,7 +422,7 @@ func AddLine(file, line string) error {
 	if err != nil {
 		return err
 	}
-	text := "\n# Added by irie setup: programs installed for you\n" + line + "\n"
+	text := "\n# Added by " + brand.Slug + " setup: programs installed for you\n" + line + "\n"
 	if len(old) > 0 && !strings.HasSuffix(string(old), "\n") {
 		text = "\n" + text
 	}

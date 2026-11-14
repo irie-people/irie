@@ -34,7 +34,7 @@ enum FreezeDog {
         // next build in its place.
         let bundle = Bundle.main.bundlePath.hasSuffix(".app") && !Preview.isOn ? Bundle.main.bundlePath : nil
         let thread = Thread { answer(socketPath: socketPath, bundle: bundle) }
-        thread.name = "Irie freeze dog"
+        thread.name = "\(Brand.name) freeze dog"
         thread.qualityOfService = .userInteractive
         thread.start()
     }

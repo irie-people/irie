@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
@@ -127,7 +128,7 @@ func Status(e Env) []ipc.Plugin {
 
 func (x Part) status(e Env, pluginOn bool) ipc.PluginPart {
 	if x.Held != "" {
-		return ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, State: ipc.PartHeld, Detail: "Not in Irie yet. " + x.Held}
+		return ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, State: ipc.PartHeld, Detail: "Not in " + brand.Name + " yet. " + x.Held}
 	}
 	own := x.own(e.Config)
 	w := ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, Switch: x.Switch, On: own, Setup: x.Setup, Brings: x.Brings}
@@ -155,9 +156,9 @@ func Why(cfg config.Config, part string) string {
 		}
 		switch {
 		case x.Held != "":
-			return x.Title + " isn't in Irie yet. " + x.Held
+			return x.Title + " isn't in " + brand.Name + " yet. " + x.Held
 		case !p.on(cfg):
-			return fmt.Sprintf("%s is off, as the %s plugin is: `irie plugins on %s` turns the plugin on.", x.Title, p.Name, p.Name)
+			return fmt.Sprintf("%s is off, as the %s plugin is: `"+brand.Slug+" plugins on %s` turns the plugin on.", x.Title, p.Name, p.Name)
 		case !x.own(cfg):
 			return x.Refused
 		}
@@ -195,7 +196,7 @@ func SkillSettings(cfg config.Config, profile bool) skills.Settings {
 func Edits(plugin, part string, on bool) ([]config.Edit, error) {
 	p, ok := Find(plugin)
 	if !ok {
-		return nil, fmt.Errorf("no plugin %q: Irie's plugins are %s", plugin, strings.Join(Names(), ", "))
+		return nil, fmt.Errorf("no plugin %q: "+brand.Name+"'s plugins are %s", plugin, strings.Join(Names(), ", "))
 	}
 	if part == "" {
 		return []config.Edit{{Key: p.key, Value: on}}, nil
@@ -205,7 +206,7 @@ func Edits(plugin, part string, on bool) ([]config.Edit, error) {
 		return nil, fmt.Errorf("the %s plugin has no part %q: its parts are %s", p.Name, part, strings.Join(partNames(p), ", "))
 	}
 	if x.Held != "" {
-		return nil, fmt.Errorf("%s isn't in Irie yet. %s", x.Title, x.Held)
+		return nil, fmt.Errorf("%s isn't in "+brand.Name+" yet. %s", x.Title, x.Held)
 	}
 	if x.Switch == "" {
 		return nil, fmt.Errorf("%s has no switch of its own: it is on while the %s plugin is", x.Title, p.Name)

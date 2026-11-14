@@ -28,6 +28,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -36,14 +37,14 @@ func Main(args []string) int {
 	fs := flag.NewFlagSet("sdk", flag.ContinueOnError)
 	first := fs.String("first", "", "a file whose text is the first message")
 	if fs.Parse(args) != nil || fs.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: irie sdk [--first FILE] -- CLAUDE [ARGS...]")
+		fmt.Fprintln(os.Stderr, "usage: "+brand.Slug+" sdk [--first FILE] -- CLAUDE [ARGS...]")
 		return 2
 	}
 	var text string
 	if *first != "" {
 		b, err := os.ReadFile(*first)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "irie sdk:", err)
+			fmt.Fprintln(os.Stderr, brand.Slug+" sdk:", err)
 			return 1
 		}
 		text = string(b)
@@ -79,23 +80,23 @@ func Run(o Options) int {
 
 	inR, inW, err := os.Pipe()
 	if err != nil {
-		fmt.Fprintln(o.Out, "irie sdk:", err)
+		fmt.Fprintln(o.Out, brand.Slug+" sdk:", err)
 		return 1
 	}
 	outR, outW, err := os.Pipe()
 	if err != nil {
-		fmt.Fprintln(o.Out, "irie sdk:", err)
+		fmt.Fprintln(o.Out, brand.Slug+" sdk:", err)
 		return 1
 	}
 	errR, errW, err := os.Pipe()
 	if err != nil {
-		fmt.Fprintln(o.Out, "irie sdk:", err)
+		fmt.Fprintln(o.Out, brand.Slug+" sdk:", err)
 		return 1
 	}
 	cmd := exec.Command(o.Argv[0], append(slices.Clone(o.Argv[1:]), Flags...)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = inR, outW, errW
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(o.Out, "irie sdk: %v\r\n", err)
+		fmt.Fprintf(o.Out, brand.Slug+" sdk: %v\r\n", err)
 		return 127
 	}
 	inR.Close()
@@ -132,7 +133,7 @@ func Run(o Options) int {
 	defer signal.Stop(sigs)
 
 	u := &ui{out: o.Out, v: newView(width), writes: writes, getenv: o.Getenv}
-	u.render([]string{bold + "Irie" + reset + dim + " · Agent SDK session" + reset})
+	u.render([]string{bold + brand.Name + reset + dim + " · Agent SDK session" + reset})
 	if o.First != "" {
 		u.submit(o.First)
 	}
@@ -405,7 +406,7 @@ func (u *ui) control(m message) {
 	}
 	switch {
 	case r.Subtype != "can_use_tool":
-		u.send(refuseLine(m.RequestID, "irie sdk does not take "+r.Subtype))
+		u.send(refuseLine(m.RequestID, brand.Slug+" sdk does not take "+r.Subtype))
 	case r.ToolName == "AskUserQuestion":
 		u.send(denyLine(m.RequestID, noteForm, false))
 		u.render([]string{u.v.faint("  · asked the agent to put its question in its reply")})
@@ -585,7 +586,7 @@ func (u *ui) area() ([]string, int) {
 // context is, as the status line of a Claude Code session would (DESIGN
 // §6.3). Without Irie it does nothing.
 func (u *ui) report() {
-	session, socket := u.getenv("IRIE_SESSION"), u.getenv("IRIE_SOCKET")
+	session, socket := u.getenv(brand.Env("SESSION")), u.getenv(brand.Env("SOCKET"))
 	if session == "" || socket == "" {
 		return
 	}

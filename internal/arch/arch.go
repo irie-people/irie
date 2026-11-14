@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 //go:embed agents/*.md
@@ -214,7 +216,7 @@ func loadAgent(fsys fs.FS, name string) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	fields, _, body, err := frontmatter(string(data))
+	fields, _, body, err := frontmatter(brand.Text(string(data)))
 	if err != nil {
 		return Agent{}, err
 	}
@@ -238,12 +240,12 @@ func loadAgent(fsys fs.FS, name string) (Agent, error) {
 		}
 	}
 	if data, err := fs.ReadFile(fsys, "agents/"+name+".word.md"); err == nil {
-		if a.word, err = template.New(name + ".word.md").Option("missingkey=error").Parse(string(data)); err != nil {
+		if a.word, err = template.New(name + ".word.md").Option("missingkey=error").Parse(brand.Text(string(data))); err != nil {
 			return Agent{}, err
 		}
 	}
 	if data, err := fs.ReadFile(fsys, "agents/"+name+".door.md"); err == nil {
-		fields, lists, body, err := frontmatter(string(data))
+		fields, lists, body, err := frontmatter(brand.Text(string(data)))
 		if err != nil {
 			return Agent{}, fmt.Errorf("%s.door.md: %w", name, err)
 		}

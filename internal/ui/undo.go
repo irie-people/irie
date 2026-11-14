@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -74,7 +75,7 @@ func (m *Model) undone(msg undoneMsg) {
 	switch r.Did {
 	case ipc.DidAsk:
 		if r.Choice == nil || len(r.Choice.Options) == 0 {
-			m.setStatus("Irie asked about "+r.Label+" but offered nothing to pick", true)
+			m.setStatus(brand.Name+" asked about "+r.Label+" but offered nothing to pick", true)
 			return
 		}
 		m.menu = &choiceMenu{dir: msg.dir, choice: *r.Choice}

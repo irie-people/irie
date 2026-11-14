@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -213,7 +214,7 @@ func (c *Core) localReady(name string, p config.Profile, probe bool) (need, budg
 	o, own, err := c.ollama(probe)
 	if err != nil {
 		if err == errLocalDown {
-			return 0, 0, "Irie's Ollama server is not running", false
+			return 0, 0, brand.Name + "'s Ollama server is not running", false
 		}
 		return 0, 0, err.Error(), false
 	}
@@ -229,7 +230,7 @@ func (c *Core) localReady(name string, p config.Profile, probe bool) (need, budg
 	}
 	i := slices.IndexFunc(ms, func(m ipc.LocalModel) bool { return m.Name == model })
 	if i < 0 {
-		return 0, 0, "no model " + model + "; irie setup local", false
+		return 0, 0, "no model " + model + "; " + brand.Slug + " setup local", false
 	}
 	m := ms[i]
 	machine := c.readMachine()
@@ -370,7 +371,7 @@ func (c *Core) escalate(hash, class, profile string, now time.Time) {
 
 // delegateNote is what a Claude Code session is told about delegating, with
 // the profiles it can hand work to.
-const delegateNote = `[Irie] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run ` + "`" + `"$IRIE_BIN" ctl delegate "<subtask>"` + "`" + ` with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (%s), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.`
+const delegateNote = `[` + brand.Name + `] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run ` + "`" + `"$` + brand.EnvPrefix + `_BIN" ctl delegate "<subtask>"` + "`" + ` with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (%s), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.`
 
 // delegateHint is the note for a session that may delegate: a Claude Code
 // session on a cloud profile with cheaper ones to hand work to, which was
@@ -394,7 +395,7 @@ func (c *Core) delegateHint(x *session) string {
 
 // failoverNote opens the task a failover carries on.
 func failoverNote(profile string) string {
-	return fmt.Sprintf("[Irie] This task ran on +%s, which stopped at its usage limit. What it did so far is in this directory: check it, then finish the task.\n\n", profile)
+	return fmt.Sprintf("["+brand.Name+"] This task ran on +%s, which stopped at its usage limit. What it did so far is in this directory: check it, then finish the task.\n\n", profile)
 }
 
 // failover carries a task on after its session stopped at a usage limit
@@ -532,7 +533,7 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 	case ipc.ToolModels:
 		args, name, title = []string{"ctl", "local"}, "models", "local models and their memory"
 	case ipc.ToolReady:
-		args, name, title = []string{"setup"}, "setup", "get Irie ready"
+		args, name, title = []string{"setup"}, "setup", "get "+brand.Name+" ready"
 	case ipc.ToolSwitch:
 		return c.guide(guideSwitch, "")
 	// The privacy plugin's setups (DESIGN §4.17): each asks before it

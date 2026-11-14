@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/paths"
@@ -28,7 +29,7 @@ import (
 func browserCmd(args []string) int {
 	o, check, err := browser.ParseArgs(args, os.Stderr)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "irie browser:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+" browser:", err)
 		return 2
 	}
 	o.Version = version.String()
@@ -40,14 +41,14 @@ func browserCmd(args []string) int {
 	if check != "" {
 		text, err := browser.Check(ctx, o, check)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "irie browser:", err)
+			fmt.Fprintln(os.Stderr, brand.Slug+" browser:", err)
 			return 1
 		}
 		fmt.Println(text)
 		return 0
 	}
 	if err := browser.Serve(ctx, os.Stdin, os.Stdout, o); err != nil {
-		fmt.Fprintln(os.Stderr, "irie browser:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+" browser:", err)
 		return 1
 	}
 	return 0
@@ -82,7 +83,7 @@ func setupBrowser(args []string, stdin io.Reader, stdout io.Writer) error {
 		inst := browser.HowToInstall(runtime.GOOS, exec.LookPath)
 		fmt.Fprintf(stdout, "Mullvad Browser is not installed. Its route here: %s\n", inst.Hint)
 		if inst.Argv == nil {
-			return errors.New("install Mullvad Browser, then run `irie setup browser` again")
+			return errors.New("install Mullvad Browser, then run `" + brand.Slug + " setup browser` again")
 		}
 		ok := *yes
 		if !ok && isTerminal(stdin) {
@@ -92,7 +93,7 @@ func setupBrowser(args []string, stdin io.Reader, stdout io.Writer) error {
 			ok = a == "y" || a == "yes"
 		}
 		if !ok {
-			return errors.New("Mullvad Browser is not installed; run `irie setup browser --yes` to install it")
+			return errors.New("Mullvad Browser is not installed; run `" + brand.Slug + " setup browser --yes` to install it")
 		}
 		cmd := exec.Command(inst.Argv[0], inst.Argv[1:]...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, stdout, os.Stderr
@@ -125,7 +126,7 @@ func setupBrowser(args []string, stdin io.Reader, stdout io.Writer) error {
 	if err := connectorOn(p); err != nil {
 		return fmt.Errorf("the browser works, but browser.connector could not be turned on: %w", err)
 	}
-	fmt.Fprintln(stdout, "Ready: Claude Code sessions started from now on get Irie's browser as irie-browser. `irie config print` shows its settings under [browser].")
+	fmt.Fprintln(stdout, "Ready: Claude Code sessions started from now on get "+brand.Name+"'s browser as "+brand.Slug+"-browser. `"+brand.Slug+" config print` shows its settings under [browser].")
 	return nil
 }
 

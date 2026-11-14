@@ -15,6 +15,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -74,7 +75,7 @@ func (m *Model) renumber() {
 }
 
 // noControls is what the keys say when the backend lacks Controls.
-const noControls = "this Irie cannot freeze, promote, park or reorder; update it"
+const noControls = "this " + brand.Name + " cannot freeze, promote, park or reorder; update it"
 
 func (m Model) controls() (Controls, bool) {
 	c, ok := m.backend.(Controls)
@@ -104,7 +105,7 @@ func (m Model) freezeKey(all bool) (tea.Model, tea.Cmd) {
 	}
 	sel, ok := m.selSession()
 	if !ok {
-		m.setStatus("f freezes one of Irie's sessions; select one", true)
+		m.setStatus("f freezes one of "+brand.Name+"'s sessions; select one", true)
 		return m, nil
 	}
 	s := &m.sessions[m.index(sel.ID)]
@@ -134,7 +135,7 @@ func (m Model) promoteKey(reason string) (tea.Model, tea.Cmd) {
 	}
 	s, ok := m.selSession()
 	if !ok {
-		m.setStatus("! promotes one of Irie's sessions; select one", true)
+		m.setStatus("! promotes one of "+brand.Name+"'s sessions; select one", true)
 		return m, nil
 	}
 	i := m.index(s.ID)
@@ -161,7 +162,7 @@ func (m Model) parkKey() (tea.Model, tea.Cmd) {
 	}
 	s, ok := m.selSession()
 	if !ok {
-		m.setStatus("z parks one of Irie's sessions; select one", true)
+		m.setStatus("z parks one of "+brand.Name+"'s sessions; select one", true)
 		return m, nil
 	}
 	return m.park(c, s, !s.Parked)
@@ -370,7 +371,7 @@ func frozenLine(s ipc.Session) string {
 	var out string
 	switch {
 	case s.State == ipc.StateFrozen && s.Freezing:
-		out = "frozen; its agent stops at its next tool call (it started before Irie could freeze it whole); f thaws"
+		out = "frozen; its agent stops at its next tool call (it started before " + brand.Name + " could freeze it whole); f thaws"
 	case s.State == ipc.StateFrozen:
 		out = "frozen; f thaws it"
 	}

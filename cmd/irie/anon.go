@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/anon"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
@@ -23,15 +24,15 @@ import (
 	"github.com/irie-people/irie/internal/vpn"
 )
 
-const anonUsage = `usage: irie anon [--show]          how anonymous research stands, and its compartments
-       irie anon up                start Irie's Tor and SearXNG as the compartments need them
-       irie anon check [NAME]      check where each compartment, or NAME, leaves from
-       irie anon run [--tor] NAME -- COMMAND [ARGS...]
+const anonUsage = `usage: ` + brand.Slug + ` anon [--show]          how anonymous research stands, and its compartments
+       ` + brand.Slug + ` anon up                start ` + brand.Name + `'s Tor and SearXNG as the compartments need them
+       ` + brand.Slug + ` anon check [NAME]      check where each compartment, or NAME, leaves from
+       ` + brand.Slug + ` anon run [--tor] NAME -- COMMAND [ARGS...]
                                    run a program of yours through compartment NAME's exit,
                                    made if need be: its proxy variables set, checked first
-       irie anon proxy NAME        print compartment NAME's proxy address, for your own tools
-       irie anon forget NAME       drop compartment NAME, which lets its exit go
-       irie setup anon [--yes]     install Tor and SearXNG and turn anonymous research on
+       ` + brand.Slug + ` anon proxy NAME        print compartment NAME's proxy address, for your own tools
+       ` + brand.Slug + ` anon forget NAME       drop compartment NAME, which lets its exit go
+       ` + brand.Slug + ` setup anon [--yes]     install Tor and SearXNG and turn anonymous research on
 
 A task typed with +anon runs in a compartment of its own, +anon:NAME in the
 named one, which tasks share; +tor and +tor:NAME leave through Tor (DESIGN §4.16).
@@ -101,7 +102,7 @@ func compartment(d anon.Dirs, name string) (anon.Compartment, error) {
 	}
 	c, ok := all[name]
 	if !ok {
-		return anon.Compartment{}, fmt.Errorf("no compartment %q: `irie anon` lists them", name)
+		return anon.Compartment{}, fmt.Errorf("no compartment %q: `"+brand.Slug+" anon` lists them", name)
 	}
 	return c, nil
 }
@@ -110,7 +111,7 @@ func compartment(d anon.Dirs, name string) (anon.Compartment, error) {
 func anonServe(args []string) int {
 	o, err := anon.ParseArgs(args, os.Stderr)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "irie anon mcp:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+" anon mcp:", err)
 		return 2
 	}
 	o.Version = version.String()
@@ -118,14 +119,14 @@ func anonServe(args []string) int {
 	defer stop()
 	signal.Ignore(syscall.SIGPIPE)
 	if err := anon.Serve(ctx, os.Stdin, os.Stdout, o); err != nil {
-		fmt.Fprintln(os.Stderr, "irie anon mcp:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+" anon mcp:", err)
 		return 1
 	}
 	return 0
 }
 
 func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show bool) error {
-	on := "off: `irie setup anon` sets it up"
+	on := "off: `" + brand.Slug + " setup anon` sets it up"
 	if cfg.AnonOn() {
 		on = "on: +anon and +tor tasks run in compartments"
 	}
@@ -133,7 +134,7 @@ func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show
 	fmt.Fprintf(w, "Mullvad VPN: %s\n", vpnWords(cfg))
 	var r ipc.AnonResult
 	coreErr := ipc.Call(p.Socket(), 10*time.Second, ipc.OpAnon, ipc.AnonArgs{}, &r)
-	tor := "not installed (irie setup anon installs it)"
+	tor := "not installed (" + brand.Slug + " setup anon installs it)"
 	if _, err := anon.FindTor(expand(cfg.Anon.Tor)); err == nil {
 		tor = "installed; it starts with the first +tor task"
 	}
@@ -141,18 +142,18 @@ func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show
 		tor = "running"
 	}
 	fmt.Fprintf(w, "Tor: %s\n", tor)
-	search := "not installed (irie setup anon installs it)"
+	search := "not installed (" + brand.Slug + " setup anon installs it)"
 	switch {
 	case r.Search != "":
 		search = "running at " + r.Search + ", asking the engines from its own exit"
 	case anon.SearxInstalled(d) && !cfg.Anon.Search:
 		search = "installed, and off (anon.search)"
 	case anon.SearxInstalled(d):
-		search = "installed; it starts with the first anonymous task, or `irie anon up`"
+		search = "installed; it starts with the first anonymous task, or `" + brand.Slug + " anon up`"
 	}
 	fmt.Fprintf(w, "SearXNG: %s\n", search)
 	if coreErr != nil && cfg.AnonOn() {
-		fmt.Fprintf(w, "(Irie's core did not answer: %v)\n", coreErr)
+		fmt.Fprintf(w, "("+brand.Name+"'s core did not answer: %v)\n", coreErr)
 	}
 	all, err := anon.Store{Path: d.Compartments()}.Load()
 	if err != nil {
@@ -275,12 +276,12 @@ func anonRun(cfg config.Config, p paths.Paths, d anon.Dirs, args []string) error
 		return err
 	}
 	if t.Made {
-		fmt.Fprintf(os.Stderr, "irie anon: new compartment %s, leaving from %s\n", t.Name, t.Where())
+		fmt.Fprintf(os.Stderr, brand.Slug+" anon: new compartment %s, leaving from %s\n", t.Name, t.Where())
 	}
 	if t.Route == anon.Tor {
 		var r ipc.AnonResult
 		if err := ipc.Call(p.Socket(), 3*time.Minute, ipc.OpAnon, ipc.AnonArgs{Up: true}, &r); err != nil {
-			return fmt.Errorf("starting Irie's Tor: %w", err)
+			return fmt.Errorf("starting "+brand.Name+"'s Tor: %w", err)
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -289,7 +290,7 @@ func anonRun(cfg config.Config, p paths.Paths, d anon.Dirs, args []string) error
 	if err != nil {
 		return fmt.Errorf("compartment %s: %w; not running %s", t.Name, err, argv[0])
 	}
-	fmt.Fprintf(os.Stderr, "irie anon: %s %s\n", t.Name, words)
+	fmt.Fprintf(os.Stderr, brand.Slug+" anon: %s %s\n", t.Name, words)
 	bin, err := exec.LookPath(argv[0])
 	if err != nil {
 		return err
@@ -369,7 +370,7 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 		brew, berr := exec.LookPath("brew")
 		switch {
 		case berr != nil:
-			fmt.Fprintln(stdout, "Tor is not installed, and there is no Homebrew here: install tor with your system's packages, then run `irie setup anon` again. +anon tasks work without it; +tor tasks need it.")
+			fmt.Fprintln(stdout, "Tor is not installed, and there is no Homebrew here: install tor with your system's packages, then run `"+brand.Slug+" setup anon` again. +anon tasks work without it; +tor tasks need it.")
 		case ask("Tor is not installed. Install it with `brew install tor`?"):
 			if err := run([]string{brew, "install", "tor"}); err != nil {
 				return fmt.Errorf("installing Tor: %w", err)
@@ -392,12 +393,12 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("installing SearXNG needs uv or python3 (3.10 or later)")
 		}
 		steps := anon.SearxSteps(d, git, uv, py)
-		fmt.Fprintf(stdout, "SearXNG is not installed. Irie installs it into %s from %s at commit %.12s:\n", d.Searx(), anon.SearxRepo, anon.SearxCommit)
+		fmt.Fprintf(stdout, "SearXNG is not installed. "+brand.Name+" installs it into %s from %s at commit %.12s:\n", d.Searx(), anon.SearxRepo, anon.SearxCommit)
 		for _, s := range steps {
 			fmt.Fprintf(stdout, "  %s\n", strings.Join(s, " "))
 		}
 		if !ask("Install SearXNG?") {
-			fmt.Fprintln(stdout, "Leaving SearXNG out: +anon tasks fetch and browse without it, and have no search tool. `irie setup anon` again installs it.")
+			fmt.Fprintln(stdout, "Leaving SearXNG out: +anon tasks fetch and browse without it, and have no search tool. `"+brand.Slug+" setup anon` again installs it.")
 			return nil
 		}
 		os.RemoveAll(d.SearxSrc())
@@ -413,13 +414,13 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 	fmt.Fprintln(stdout, "Starting SearXNG through an exit of its own…")
 	var r ipc.AnonResult
 	if err := ipc.Call(p.Socket(), 3*time.Minute, ipc.OpAnon, ipc.AnonArgs{Up: true}, &r); err != nil {
-		return fmt.Errorf("Irie's core: %w (is Irie running? `irie up` starts it)", err)
+		return fmt.Errorf(brand.Name+"'s core: %w (is "+brand.Name+" running? `"+brand.Slug+" up` starts it)", err)
 	}
 	for _, pr := range r.Problems {
 		fmt.Fprintln(stdout, "  "+pr)
 	}
 	if r.Search == "" {
-		return errors.New("SearXNG did not start: `irie anon` says why, and its window irie-searxng in irie-agents shows its output")
+		return errors.New("SearXNG did not start: `" + brand.Slug + " anon` says why, and its window " + brand.Slug + "-searxng in " + brand.Slug + "-agents shows its output")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -429,7 +430,7 @@ func setupAnon(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	lines := strings.Split(res.Words("open source metasearch engine"), "\n")
 	fmt.Fprintln(stdout, "\n"+strings.Join(lines[:min(len(lines), 8)], "\n")+"\n")
-	fmt.Fprintf(stdout, "Ready. Type +anon before a task to research anonymously, +anon:NAME to share a compartment, +tor for Tor. Your own tools can search at %s, and `irie anon run NAME -- COMMAND` sends one through a compartment's exit.\n", r.Search)
+	fmt.Fprintf(stdout, "Ready. Type +anon before a task to research anonymously, +anon:NAME to share a compartment, +tor for Tor. Your own tools can search at %s, and `"+brand.Slug+" anon run NAME -- COMMAND` sends one through a compartment's exit.\n", r.Search)
 	return nil
 }
 

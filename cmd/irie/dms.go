@@ -13,36 +13,37 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/dms"
 )
 
-const dmsUsage = `usage: irie dms <command>
+const dmsUsage = `usage: ` + brand.Slug + ` dms <command>
 
 The dead man's switch guide's helpers (:setup switch starts the guide). They
-keep the Healthchecks API key and the checks' ping URLs in Irie's state
+keep the Healthchecks API key and the checks' ping URLs in ` + brand.Name + `'s state
 folder, where only you can read them, and never print either.
 
-  irie dms key --paste    keep the Healthchecks project's API key you just
+  ` + brand.Slug + ` dms key --paste    keep the Healthchecks project's API key you just
                           copied, then empty the clipboard; without --paste,
                           type or pipe it in
-  irie dms checks --alarm-name NAME [--alarm-desc-file FILE]
+  ` + brand.Slug + ` dms checks --alarm-name NAME [--alarm-desc-file FILE]
                   [--every DAYS] [--remind DAYS] [--alarm DAYS]
                   [--reminder-name NAME] [--reminder-desc-file FILE] [--api URL]
                           make the reminder and the alarm checks, or bring them
                           up to date; 14, 2 and 16 days unless you say
-  irie dms status         each check's state, who it emails, and what is left
-  irie dms ping           check in from this computer, as the phone's tap does
-  irie dms pause          pause both checks, so nobody is emailed; the next
+  ` + brand.Slug + ` dms status         each check's state, who it emails, and what is left
+  ` + brand.Slug + ` dms ping           check in from this computer, as the phone's tap does
+  ` + brand.Slug + ` dms pause          pause both checks, so nobody is emailed; the next
                           check-in starts them again
-  irie dms resume         start them again now
-  irie dms calendar --out FILE [--first YYYY-MM-DD] [--at HH:MM]
+  ` + brand.Slug + ` dms resume         start them again now
+  ` + brand.Slug + ` dms calendar --out FILE [--first YYYY-MM-DD] [--at HH:MM]
                   [--review YYYY-MM-DD]
                           a calendar file: a reminder to check in, first on
                           the next Sunday at 10:00, and a review once a year
-  irie dms shortcut --out FILE [--unsigned]
+  ` + brand.Slug + ` dms shortcut --out FILE [--unsigned]
                           the iPhone's one-tap check-in, "I'm OK", signed for
                           your own phone with macOS's shortcuts tool
-  irie dms contact --out FILE [--domain DOMAIN]
+  ` + brand.Slug + ` dms contact --out FILE [--domain DOMAIN]
                           the check-in for any phone: an "I'm OK" contact card
                           with a link that emails both checks
 `
@@ -136,7 +137,7 @@ func dmsState(store dms.Store) (dms.State, dms.Client, error) {
 		return dms.State{}, dms.Client{}, err
 	}
 	if !ok {
-		return dms.State{}, dms.Client{}, errors.New("no checks yet: `irie dms checks` makes them")
+		return dms.State{}, dms.Client{}, errors.New("no checks yet: `" + brand.Slug + " dms checks` makes them")
 	}
 	key, err := store.Key()
 	if err != nil {
@@ -264,8 +265,8 @@ func dmsChecks(store dms.Store, args []string) error {
 		return err
 	}
 	fmt.Println(r.Words())
-	fmt.Println("Their ping URLs are kept in Irie's state folder, for the phone's tap and the calendar; they are not shown here.")
-	fmt.Println("Next, in Healthchecks: open Integrations, add an email integration for yourself and tick it for the reminder only; add one for each person you chose and tick those for the alarm only. Then `irie dms status`.")
+	fmt.Println("Their ping URLs are kept in " + brand.Name + "'s state folder, for the phone's tap and the calendar; they are not shown here.")
+	fmt.Println("Next, in Healthchecks: open Integrations, add an email integration for yourself and tick it for the reminder only; add one for each person you chose and tick those for the alarm only. Then `" + brand.Slug + " dms status`.")
 	return nil
 }
 
@@ -371,7 +372,7 @@ func readClipboard() (string, error) {
 		}
 		return string(out), nil
 	}
-	return "", errors.New("no clipboard tool here (pbpaste, wl-paste, xclip or xsel); run `irie dms key` in a terminal and paste the key there")
+	return "", errors.New("no clipboard tool here (pbpaste, wl-paste, xclip or xsel); run `" + brand.Slug + " dms key` in a terminal and paste the key there")
 }
 
 // clearClipboard empties the clipboard, so the key doesn't linger in it.
@@ -421,7 +422,7 @@ func readSecret(prompt string) (string, error) {
 	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil && !(errors.Is(err, io.EOF) && line != "") {
 		if errors.Is(err, io.EOF) {
-			return "", errors.New("no key given: copy it and run `irie dms key --paste`, or type it into a terminal")
+			return "", errors.New("no key given: copy it and run `" + brand.Slug + " dms key --paste`, or type it into a terminal")
 		}
 		return "", err
 	}
@@ -445,7 +446,7 @@ func dmsShortcut(store dms.Store, args []string) error {
 		return err
 	}
 	if !ok || st.Reminder.PingURL == "" || st.Alarm.PingURL == "" {
-		return errors.New("no checks yet: `irie dms checks` makes them")
+		return errors.New("no checks yet: `" + brand.Slug + " dms checks` makes them")
 	}
 	b, err := dms.Shortcut([]string{st.Reminder.PingURL, st.Alarm.PingURL})
 	if err != nil {
@@ -465,7 +466,7 @@ func dmsShortcut(store dms.Store, args []string) error {
 	}
 	// shortcuts sign reads a file by its extension, so the unsigned one is
 	// a .shortcut too, in a folder of its own.
-	tmp, err := os.MkdirTemp(filepath.Dir(path), ".irie-shortcut-")
+	tmp, err := os.MkdirTemp(filepath.Dir(path), "."+brand.Slug+"-shortcut-")
 	if err != nil {
 		return err
 	}
@@ -500,7 +501,7 @@ func dmsContact(store dms.Store, args []string) error {
 		return err
 	}
 	if !ok {
-		return errors.New("no checks yet: `irie dms checks` makes them")
+		return errors.New("no checks yet: `" + brand.Slug + " dms checks` makes them")
 	}
 	var addrs []string
 	for _, r := range []dms.Ref{st.Reminder, st.Alarm} {
@@ -522,14 +523,14 @@ func dmsContact(store dms.Store, args []string) error {
 		return err
 	}
 	fmt.Printf("Wrote %s: a contact called “I'm OK”, with both checks' email addresses and a link that writes to both.\n", path)
-	fmt.Println("Open it on the phone and add the contact. To check in, open the contact's link and send the email. Then `irie dms status` should show both checks up; if only one is, write to both addresses instead.")
+	fmt.Println("Open it on the phone and add the contact. To check in, open the contact's link and send the email. Then `" + brand.Slug + " dms status` should show both checks up; if only one is, write to both addresses instead.")
 	return nil
 }
 
 // writePrivate writes a file of the user's own, readable by them alone,
 // through a temporary file renamed into place, with no lock file beside it.
 func writePrivate(path string, b []byte) error {
-	f, err := os.CreateTemp(filepath.Dir(path), ".irie-*")
+	f, err := os.CreateTemp(filepath.Dir(path), "."+brand.Slug+"-*")
 	if err != nil {
 		return err
 	}

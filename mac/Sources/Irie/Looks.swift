@@ -282,9 +282,9 @@ enum LookFiles {
     static var config: URL {
         let env = ProcessInfo.processInfo.environment
         if let x = env["XDG_CONFIG_HOME"], x.hasPrefix("/") {
-            return URL(fileURLWithPath: x).appendingPathComponent("irie")
+            return URL(fileURLWithPath: x).appendingPathComponent("\(Brand.slug)")
         }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/irie")
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/\(Brand.slug)")
     }
 
     static var themes: URL { config.appendingPathComponent("themes") }
@@ -323,7 +323,7 @@ enum LookFiles {
         for url in files(LookFiles.themes) {
             let id = url.deletingPathExtension().lastPathComponent
             guard !Palette.all.contains(where: { $0.id == id }) else {
-                problems.append("\(url.lastPathComponent): \(id) is the name of one of Irie's palettes")
+                problems.append("\(url.lastPathComponent): \(id) is the name of one of \(Brand.name)'s palettes")
                 continue
             }
             guard let data = try? Data(contentsOf: url), let f = try? JSONDecoder().decode(ThemeFile.self, from: data) else {
@@ -480,7 +480,7 @@ final class LookBook {
         dark.accent = 0x96C3DB; dark.accentInk = 0xAFD2E5; dark.accentFill = 0x96C3DB; dark.selection = 0x283A46; dark.waves = 0x96C3DB
         themes = [CustomTheme(palette: Palette(id: "harbour", name: "Harbour", light: light, dark: dark,
                                                terminal: TerminalColors(ground: 0x0F161C, ink: 0xE6EDF2)), basedOn: start.id,
-                              file: URL(fileURLWithPath: "/home/alice/.config/irie/themes/harbour.json"))]
+                              file: URL(fileURLWithPath: "/home/alice/.config/\(Brand.slug)/themes/harbour.json"))]
         layouts = [
             PaneLayout(id: "pairing", name: "Pairing", view: "terminal", sidebar: .init(shown: true, width: 300),
                        details: .init(minimized: false, height: 120), drawer: .init(open: true, tab: "helpers", width: 380), textSize: 14),

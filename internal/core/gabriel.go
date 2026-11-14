@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -48,7 +49,7 @@ const gabrielCalm = 30 * time.Second
 const gabrielMostOutside = 8
 
 // irieBundleID is Irie.app's (mac/Info.plist).
-const irieBundleID = "io.github.irie-hq.irie"
+const irieBundleID = brand.BundleID
 
 // terminalApps are terminals Irie's own window may be in: with one in
 // front, the session on show may be what the user looks at.
@@ -87,7 +88,7 @@ type outProc struct {
 // gabrielOff reports whether Gabriel may not run in this core: a test core
 // (IRIE_GABRIEL=off, internal/testutil) would take the user's own agents
 // for apps outside it.
-func gabrielOff() bool { return os.Getenv("IRIE_GABRIEL") == "off" }
+func gabrielOff() bool { return os.Getenv(brand.Env("GABRIEL")) == "off" }
 
 // busyNext says whether the machine is busy now, given whether it was:
 // busy as soon as the work waiting to run leaves less than a CPU free or
@@ -344,7 +345,7 @@ func (c *Core) heavyOutside(ps []focus.Proc, t proc.Table, awake map[int]bool, s
 		case p.UID != mine || p.PID == os.Getpid() || !alive:
 		case !wasHeld && p.CPU < g.Heavy:
 		case inTree[p.PID] || front[p.PID] || awake[p.PID]:
-		case p.Path == c.bin || tmuxBin != "" && p.Path == tmuxBin || strings.Contains(p.Path, "/Irie.app/"):
+		case p.Path == c.bin || tmuxBin != "" && p.Path == tmuxBin || strings.Contains(p.Path, "/"+brand.Name+".app/"):
 		case st.frontOK && st.front.BundlePath != "" && strings.HasPrefix(p.Path, st.front.BundlePath+"/"):
 		case systemPath(p.Path) || spared(p.Path, g.Spare):
 		default:
@@ -554,7 +555,7 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 
 // focusNote is what an agent is told when Gabriel turns away a call that
 // would take the user's focus.
-const focusNote = "[Irie] Gabriel turned this call away: it would bring an app, a window or a page to the front while your user works on something else, and take their focus. Do it without the front: open -g (and --background for Irie.app), a browser headless (--headless=new keeps the profile and its logins) or new pages in the background with no bringToFront, a Mac view checked with Irie.app's --snapshot. If your user must see it, say so in a line and let them open it."
+const focusNote = "[" + brand.Name + "] Gabriel turned this call away: it would bring an app, a window or a page to the front while your user works on something else, and take their focus. Do it without the front: open -g (and --background for " + brand.Name + ".app), a browser headless (--headless=new keeps the profile and its logins) or new pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. If your user must see it, say so in a line and let them open it."
 
 var (
 	// shellSplit cuts a shell command at the places a new one starts.

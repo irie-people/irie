@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
 )
@@ -131,7 +132,7 @@ func (c *Core) watchWindow(a ipc.SubscribeArgs) (<-chan ipc.Frame, func(), error
 		return nil, nil, ipc.Errorf(ipc.CodeNotFound, "no process %d", a.PID)
 	}
 	kind := "app"
-	if p.Name == "irie" {
+	if p.Name == brand.Slug {
 		kind = "sidebar"
 	}
 	w := &watch{pid: a.PID, start: p.Start, bundle: a.Bundle, kind: kind, out: make(chan ipc.Frame, 1), front: true}

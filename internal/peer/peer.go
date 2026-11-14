@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -38,8 +39,8 @@ type Link struct {
 // ParseLink reads a pairing link, irie://pair?u=…&c=…&f=…&n=….
 func ParseLink(s string) (Link, error) {
 	u, err := url.Parse(strings.TrimSpace(s))
-	if err != nil || u.Scheme != "irie" || u.Host != "pair" {
-		return Link{}, fmt.Errorf("%q is not a pairing link: `irie remote pair` on the other machine prints one, irie://pair?…", s)
+	if err != nil || u.Scheme != brand.Slug || u.Host != "pair" {
+		return Link{}, fmt.Errorf("%q is not a pairing link: `"+brand.Slug+" remote pair` on the other machine prints one, "+brand.Slug+"://pair?…", s)
 	}
 	q := u.Query()
 	l := Link{URL: q.Get("u"), Code: q.Get("c"), Fingerprint: strings.ToUpper(q.Get("f")), Name: q.Get("n")}
@@ -141,7 +142,7 @@ func verifyPinned(raw [][]byte, want []byte, host string) error {
 		found = true
 	}
 	if !found {
-		return errors.New("the peer's certificate is not from the Irie authority it was paired with")
+		return errors.New("the peer's certificate is not from the " + brand.Name + " authority it was paired with")
 	}
 	_, err = leaf.Verify(x509.VerifyOptions{DNSName: host, Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}})
 	return err

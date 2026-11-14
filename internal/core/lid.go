@@ -15,6 +15,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/lid"
 )
@@ -50,7 +51,7 @@ type lidHold struct {
 // lidOff reports whether this core leaves the Mac's sleep alone: a test
 // core (IRIE_LID=off, internal/testutil) would turn the user's own Mac's
 // sleep off and on.
-func lidOff() bool { return os.Getenv("IRIE_LID") == "off" }
+func lidOff() bool { return os.Getenv(brand.Env("LID")) == "off" }
 
 // lidAdopt takes on the hold a core that stopped without letting go left
 // behind, as one that crashed does, so that this core turns sleep back on
@@ -168,7 +169,7 @@ func (c *Core) lidHoldLocked(m lid.Mac, now time.Time, why string) {
 	off, err := m.IsOff()
 	if err == nil && off {
 		h.retry = now.Add(lidRetry)
-		c.lidWarnLocked("sleep is already off, and not by Irie: Irie leaves it so")
+		c.lidWarnLocked("sleep is already off, and not by " + brand.Name + ": " + brand.Name + " leaves it so")
 		return
 	}
 	if err == nil {

@@ -1,6 +1,10 @@
 package core
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
+)
 
 // preferencesNote is what a session is told about how the user likes agents
 // to work (spawn.preferences): a line each, or nothing for none.
@@ -9,7 +13,7 @@ func preferencesNote(prefs []string) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("[Irie] The user’s preferences, which always apply:")
+	b.WriteString("[" + brand.Name + "] The user’s preferences, which always apply:")
 	for _, p := range prefs {
 		b.WriteString("\n- ")
 		b.WriteString(strings.TrimSpace(p))

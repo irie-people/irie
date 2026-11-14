@@ -25,11 +25,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Plugin is the plugin's name, which Claude Code puts before each skill's:
 // /irie:present.
-const Plugin = "irie"
+const Plugin = brand.Slug
 
 // Skill is one skill Irie can hand an agent.
 type Skill struct {
@@ -54,7 +56,7 @@ func Bundled() []Skill {
 		if !e.IsDir() {
 			continue
 		}
-		s := Skill{Name: e.Name(), Source: "bundled with Irie", Files: map[string][]byte{}}
+		s := Skill{Name: e.Name(), Source: "bundled with " + brand.Name, Files: map[string][]byte{}}
 		root := "bundled/" + e.Name()
 		err := fs.WalkDir(bundled, root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
@@ -63,6 +65,9 @@ func Bundled() []Skill {
 			b, err := bundled.ReadFile(p)
 			if err != nil {
 				return err
+			}
+			if strings.HasSuffix(p, ".md") {
+				b = []byte(brand.Text(string(b)))
 			}
 			s.Files[strings.TrimPrefix(p, root+"/")] = b
 			return nil
@@ -172,14 +177,14 @@ func Layout(set []Skill, version string) map[string][]byte {
 		License     string `json:"license"`
 	}{
 		Name:        Plugin,
-		Description: "Skills that come with Irie, handed to this session only",
+		Description: "Skills that come with " + brand.Name + ", handed to this session only",
 		Version:     version,
-		Author:      author{Name: "Irie", URL: "https://github.com/irie-people/irie"},
+		Author:      author{Name: brand.Name, URL: brand.Repo},
 		License:     "Apache-2.0",
 	}, "", "  ")
 	files[".claude-plugin/plugin.json"] = append(manifest, '\n')
 	var src strings.Builder
-	src.WriteString("# Sources\n\nIrie made this folder for its sessions, and never changes it while one uses it. Each skill and where it comes from:\n\n| Skill | Source |\n|---|---|\n")
+	src.WriteString("# Sources\n\n" + brand.Name + " made this folder for its sessions, and never changes it while one uses it. Each skill and where it comes from:\n\n| Skill | Source |\n|---|---|\n")
 	for _, s := range set {
 		fmt.Fprintf(&src, "| %s | %s %s |\n", s.Name, s.Source, version)
 		for p, b := range s.Files {

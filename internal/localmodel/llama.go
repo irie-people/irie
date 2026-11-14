@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Llama is a client of a llama-server, the server of llama.cpp, running
@@ -181,7 +183,7 @@ func (b Build) Runs(g GGUF) (problem, warning string) {
 	case types:
 		return "it is packed in a type only PrismML's llama.cpp has; set local.llama_server to PrismML's llama-server (https://github.com/PrismML-Eng/llama.cpp)", ""
 	case rotation && b.Number == 0:
-		return "", fmt.Sprintf("it needs llama.cpp build %d or later, or PrismML's, and Irie cannot tell this llama-server's build; older builds write nonsense on it", MinRotationBuild)
+		return "", fmt.Sprintf("it needs llama.cpp build %d or later, or PrismML's, and "+brand.Name+" cannot tell this llama-server's build; older builds write nonsense on it", MinRotationBuild)
 	case rotation && b.Number < MinRotationBuild:
 		return fmt.Sprintf("llama.cpp %s loads it without an error but writes nonsense: it needs build %d or later (brew upgrade llama.cpp), or PrismML's llama.cpp in local.llama_server", b, MinRotationBuild), ""
 	}

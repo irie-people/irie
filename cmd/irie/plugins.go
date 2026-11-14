@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
@@ -23,18 +24,18 @@ import (
 
 // irie plugins is Irie's plugins (DESIGN §4.17): sets of features that go on
 // and off together, such as privacy.
-const pluginsUsage = `usage: irie plugins [on|off PLUGIN [PART]]
+const pluginsUsage = `usage: ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
 
-Irie's plugins: sets of features that go on and off together. Each part
+` + brand.Name + `'s plugins: sets of features that go on and off together. Each part
 also has a switch of its own, and the plugin's switch turns them all off.
 
-  irie plugins                  each plugin, and how far each part is set up here
-  irie plugins on PLUGIN        turn a plugin on, such as privacy
-  irie plugins off PLUGIN       turn it off: all its parts go off with it
-  irie plugins on PLUGIN PART   turn one part on, such as irie plugins on privacy vpn
-  irie plugins off PLUGIN PART  turn one part off
+  ` + brand.Slug + ` plugins                  each plugin, and how far each part is set up here
+  ` + brand.Slug + ` plugins on PLUGIN        turn a plugin on, such as privacy
+  ` + brand.Slug + ` plugins off PLUGIN       turn it off: all its parts go off with it
+  ` + brand.Slug + ` plugins on PLUGIN PART   turn one part on, such as ` + brand.Slug + ` plugins on privacy vpn
+  ` + brand.Slug + ` plugins off PLUGIN PART  turn one part off
 
-  irie setup privacy [--yes]    set up each part of the privacy plugin in turn
+  ` + brand.Slug + ` setup privacy [--yes]    set up each part of the privacy plugin in turn
 `
 
 func pluginsCmd(args []string, stdout io.Writer) error {
@@ -74,7 +75,7 @@ func pluginsCmd(args []string, stdout io.Writer) error {
 		if part == "" {
 			fmt.Fprint(stdout, plugins.Text([]ipc.Plugin{pl}))
 			if pl.On && pl.Setup != "" {
-				fmt.Fprintf(stdout, "`irie setup %s`, or %s in a task bar, sets up each part in turn.\n", pl.Name, pl.Setup)
+				fmt.Fprintf(stdout, "`"+brand.Slug+" setup %s`, or %s in a task bar, sets up each part in turn.\n", pl.Name, pl.Setup)
 			}
 			return nil
 		}
@@ -247,7 +248,7 @@ func yesArgs(yes bool) []string {
 // signs in with their account.
 func setupVPN(cfg config.Config, p paths.Paths, stdout io.Writer) error {
 	if _, err := vpn.Find(expand(cfg.VPN.Mullvad)); err != nil {
-		fmt.Fprintln(stdout, "Install the Mullvad VPN app from https://mullvad.net/download and sign in to it, then run `irie setup privacy` again.")
+		fmt.Fprintln(stdout, "Install the Mullvad VPN app from https://mullvad.net/download and sign in to it, then run `"+brand.Slug+" setup privacy` again.")
 		return nil
 	}
 	if err := setConfig(p, []config.Edit{{Key: "vpn.on", Value: true}}); err != nil {
@@ -262,8 +263,8 @@ func setupVPN(cfg config.Config, p paths.Paths, stdout io.Writer) error {
 func startSwitchGuide(p paths.Paths, stdout io.Writer) error {
 	var r ipc.Session
 	if err := ipc.Call(p.Socket(), 30*time.Second, ipc.OpTool, ipc.ToolArgs{Name: ipc.ToolSwitch}, &r); err != nil {
-		return fmt.Errorf("Irie's core: %w (is Irie running? `irie up` starts it)", err)
+		return fmt.Errorf(brand.Name+"'s core: %w (is "+brand.Name+" running? `"+brand.Slug+" up` starts it)", err)
 	}
-	fmt.Fprintf(stdout, "Started %s, a session that takes you through it a step at a time. The first time, Claude Code asks whether to trust its folder, which is Irie's own: choose Yes, I trust this folder.\n", r.Name)
+	fmt.Fprintf(stdout, "Started %s, a session that takes you through it a step at a time. The first time, Claude Code asks whether to trust its folder, which is "+brand.Name+"'s own: choose Yes, I trust this folder.\n", r.Name)
 	return nil
 }

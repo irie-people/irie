@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/anon"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ctxgit"
 	"github.com/irie-people/irie/internal/event"
@@ -756,7 +757,7 @@ func claudeProjects(p config.Profile, cwd string) string {
 // from, and where it works now.
 func forkNote(src *session, at ctxgit.Turn, pl place) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "[Irie] This conversation is a fork of %q, from its turn %d.", src.name, at.Turn)
+	fmt.Fprintf(&b, "["+brand.Name+"] This conversation is a fork of %q, from its turn %d.", src.name, at.Turn)
 	if pl.worktree != "" && pl.worktree != src.worktree {
 		fmt.Fprintf(&b, " You now work in %s, a worktree of your own on branch %s", pl.cwd, pl.branch)
 		if at.Code != "" {

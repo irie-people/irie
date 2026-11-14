@@ -49,7 +49,7 @@ struct IrieApp: App {
     static let showsTitle = false
 
     var body: some Scene {
-        Window("Irie", id: "main") {
+        Window("\(Brand.name)", id: "main") {
             ContentView()
                 .environment(store)
                 .frame(minWidth: 820, minHeight: 500)

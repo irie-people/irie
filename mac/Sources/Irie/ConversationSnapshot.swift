@@ -15,7 +15,7 @@ enum ConversationSnapshot {
     static func run(into dir: String) -> Never {
         rendering = true
         NSApplication.shared.setActivationPolicy(.accessory)
-        let store = Store(socketPath: "/nonexistent/irie-snapshot.sock")
+        let store = Store(socketPath: "/nonexistent/\(Brand.slug)-snapshot.sock")
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -129,7 +129,7 @@ enum ConversationFixture {
                              tools: tools, options: options, reason: reason, queued: queued, pending: pending,
                              agent: agent, from: from)
         }
-        let site = "/home/alice/code/irie-docs-guide/docs"
+        let site = "/home/alice/code/\(Brand.slug)-docs-guide/docs"
         // The helpers' own conversations, as the core reads them from their
         // transcripts (HelperPane.swift).
         switch (id, agent) {

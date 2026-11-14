@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/anon"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
@@ -462,7 +463,7 @@ func (c *Core) launch(j job) (*session, error) {
 	if env == nil {
 		env = map[string]string{}
 	}
-	env["IRIE_SESSION"], env["IRIE_SOCKET"], env["IRIE_BIN"] = id, c.paths.Socket(), c.bin
+	env[brand.Env("SESSION")], env[brand.Env("SOCKET")], env[brand.Env("BIN")] = id, c.paths.Socket(), c.bin
 	var unset []string
 	if c.cfg().Spawn.HideTmux {
 		unset = []string{"TMUX", "TMUX_PANE"}

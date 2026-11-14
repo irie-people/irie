@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/core"
 	"github.com/irie-people/irie/internal/harness/claude"
@@ -25,75 +26,75 @@ import (
 	"github.com/irie-people/irie/internal/version"
 )
 
-const usage = `usage: irie [command]
+const usage = `usage: ` + brand.Slug + ` [command]
 
-  irie                    start Irie if needed and attach to it (same as attach);
-                          when no Irie is running, it first checks that this
-                          computer has what Irie needs
-  irie setup [--check] [--json] [--yes]
-                          check that this computer has what Irie needs (tmux,
+  ` + brand.Slug + `                    start ` + brand.Name + ` if needed and attach to it (same as attach);
+                          when no ` + brand.Name + ` is running, it first checks that this
+                          computer has what ` + brand.Name + ` needs
+  ` + brand.Slug + ` setup [--check] [--json] [--yes]
+                          check that this computer has what ` + brand.Name + ` needs (tmux,
                           Claude Code, signed in, git, PATH) and offer to fix
                           each part it lacks
-  irie up [--login-env]   start the server, core and sidebar if needed;
+  ` + brand.Slug + ` up [--login-env]   start the server, core and sidebar if needed;
                           --login-env starts a new server with the login
                           shell's environment, as the Mac app does
-  irie attach [--nested]  attach this terminal to Irie
-  irie ctl <command>      script Irie: list, spawn, show, watch, move, local,
-                          preflight (irie ctl for help)
-  irie setup local [--model MODEL] [--yes]
+  ` + brand.Slug + ` attach [--nested]  attach this terminal to ` + brand.Name + `
+  ` + brand.Slug + ` ctl <command>      script ` + brand.Name + `: list, spawn, show, watch, move, local,
+                          preflight (` + brand.Slug + ` ctl for help)
+  ` + brand.Slug + ` setup local [--model MODEL] [--yes]
                           get +local ready: install Ollama if needed, pick a
                           model that fits this machine's memory, pull and check it
-  irie setup lid [--remove]
-                          let Irie keep this Mac awake with its lid closed
+  ` + brand.Slug + ` setup lid [--remove]
+                          let ` + brand.Name + ` keep this Mac awake with its lid closed
                           while sessions work; asks for your password once
-  irie lid                whether Irie keeps this Mac awake with its lid
+  ` + brand.Slug + ` lid                whether ` + brand.Name + ` keeps this Mac awake with its lid
                           closed now, and why
-  irie remote <command>   the phone app: pair a phone, list or forget phones,
-                          share the certificate authority (irie remote for help)
-  irie dms <command>      the dead man's switch guide's helpers: its checks,
-                          check-in and calendar (irie dms for help)
-  irie setup anon [--yes] get anonymous research ready: install Tor and
+  ` + brand.Slug + ` remote <command>   the phone app: pair a phone, list or forget phones,
+                          share the certificate authority (` + brand.Slug + ` remote for help)
+  ` + brand.Slug + ` dms <command>      the dead man's switch guide's helpers: its checks,
+                          check-in and calendar (` + brand.Slug + ` dms for help)
+  ` + brand.Slug + ` setup anon [--yes] get anonymous research ready: install Tor and
                           SearXNG, and turn +anon and +tor tasks on
-  irie anon [<command>]   anonymous research's compartments and exits: check,
-                          run a program through one, forget (irie anon help)
-  irie plugins [on|off PLUGIN [PART]]
-                          Irie's plugins, such as privacy, and how far each
+  ` + brand.Slug + ` anon [<command>]   anonymous research's compartments and exits: check,
+                          run a program through one, forget (` + brand.Slug + ` anon help)
+  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
+                          ` + brand.Name + `'s plugins, such as privacy, and how far each
                           part is set up; turn a plugin or a part on or off
-  irie setup privacy [--yes]
+  ` + brand.Slug + ` setup privacy [--yes]
                           set up each part of the privacy plugin in turn:
                           Mullvad VPN, anonymous research, Mullvad Browser
                           and the dead man's switch
-  irie peer <command>     your other machines' Irie, shown in this list and
-                          started on with ^NAME (irie peer for help)
-  irie version            print the version
-  irie config path|print  show the config file's path, or the config in effect
-  irie skills             list the skills that come with Irie, and whether
+  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
+                          started on with ^NAME (` + brand.Slug + ` peer for help)
+  ` + brand.Slug + ` version            print the version
+  ` + brand.Slug + ` config path|print  show the config file's path, or the config in effect
+  ` + brand.Slug + ` skills             list the skills that come with ` + brand.Name + `, and whether
                           sessions get each
 
-Used by Irie itself:
-  irie core [--supervise]   the core
-  irie ui [--supervise]     the sidebar
-  irie host --spec <file>   the first process of an agent pane
-  irie hook                 the shim an agent runs for each hook event
-  irie sdk [--first FILE] -- CLAUDE [ARGS...]
+Used by ` + brand.Name + ` itself:
+  ` + brand.Slug + ` core [--supervise]   the core
+  ` + brand.Slug + ` ui [--supervise]     the sidebar
+  ` + brand.Slug + ` host --spec <file>   the first process of an agent pane
+  ` + brand.Slug + ` hook                 the shim an agent runs for each hook event
+  ` + brand.Slug + ` sdk [--first FILE] -- CLAUDE [ARGS...]
                             the pane of a session on the Agent SDK, which runs
                             claude -p and shows its conversation
-  irie statusline [--then COMMAND]
+  ` + brand.Slug + ` statusline [--then COMMAND]
                             the status line of Claude Code sessions, which runs
                             the user's own
-  irie browser [--path EXE] [--profile DIR] [--template DIR] [--headless=BOOL]
+  ` + brand.Slug + ` browser [--path EXE] [--profile DIR] [--template DIR] [--headless=BOOL]
                [--idle DUR] [--proxy socks5://HOST:PORT] [--search URL] [--check URL]
                             the browser connector: an MCP server that drives
                             Mullvad Browser for an agent; --check opens a page
-  irie anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR]
+  ` + brand.Slug + ` anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR]
                             an anonymous research session's tools: search,
                             fetch and the exit's check through its compartment
-  irie runtime -- COMMAND   Irie's own Ollama server, whose model runners stop
-                            with it, and Irie's own Tor and SearXNG
-  irie placeholder          what the slot shows when no session is shown
-  irie team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS
+  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
+                            with it, and ` + brand.Name + `'s own Tor and SearXNG
+  ` + brand.Slug + ` placeholder          what the slot shows when no session is shown
+  ` + brand.Slug + ` team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS
                             the tmux an agent with teams runs, which takes
-                            Claude Code's teammates to Irie's team server
+                            Claude Code's teammates to ` + brand.Name + `'s team server
 `
 
 func main() { os.Exit(run(os.Args[1:])) }
@@ -113,13 +114,13 @@ func run(args []string) int {
 		return supervised("core", args, func(o core.Options) error { return core.Run(o) })
 	case "ui":
 		return supervised("ui", args, func(o core.Options) error {
-			return ui.Run(o.Paths.Socket(), ui.Options{RedOnDone: o.Config.UI.RedOnDone, Theme: o.Config.UI.Theme})
+			return ui.Run(o.Paths.Socket(), ui.Options{RedOnDone: o.Config.UI.RedOnDone, Theme: o.Config.UI.Theme, Tips: o.Config.UI.Bar == "tips"})
 		})
 	case "host":
 		fs := flag.NewFlagSet("host", flag.ContinueOnError)
 		spec := fs.String("spec", "", "spec file")
 		if fs.Parse(args) != nil || *spec == "" {
-			fmt.Fprintln(os.Stderr, "usage: irie host --spec <file>")
+			fmt.Fprintln(os.Stderr, "usage: "+brand.Slug+" host --spec <file>")
 			return 2
 		}
 		return host.Run(*spec)
@@ -162,7 +163,7 @@ func run(args []string) int {
 	case "setup":
 		err = setup(args)
 	case "version":
-		fmt.Println("irie", version.String())
+		fmt.Println(brand.Slug, version.String())
 	case "config":
 		err = configCmd(args)
 	case "skills":
@@ -170,11 +171,11 @@ func run(args []string) int {
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
-		fmt.Fprintf(os.Stderr, "irie: unknown command %q\n\n%s", name, usage)
+		fmt.Fprintf(os.Stderr, brand.Slug+": unknown command %q\n\n%s", name, usage)
 		return 2
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "irie:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+":", err)
 		var ec exitCode
 		if errors.As(err, &ec) {
 			return ec.code
@@ -210,7 +211,7 @@ func load() (config.Config, paths.Paths, error) {
 
 // self is the irie binary that Irie's panes run. IRIE_BIN overrides it.
 func self() (string, error) {
-	if b := os.Getenv("IRIE_BIN"); b != "" {
+	if b := os.Getenv(brand.Env("BIN")); b != "" {
 		return b, nil
 	}
 	return os.Executable()
@@ -223,7 +224,7 @@ func up(args []string) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return errors.New("usage: irie up [--login-env]")
+		return errors.New("usage: " + brand.Slug + " up [--login-env]")
 	}
 	cfg, p, err := load()
 	if err != nil {
@@ -268,7 +269,7 @@ func supervised(name string, args []string, body func(core.Options) error) int {
 	}
 	cfg, p, err := load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "irie:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+":", err)
 		return 1
 	}
 	logPath := p.CoreLog()
@@ -296,7 +297,7 @@ func supervised(name string, args []string, body func(core.Options) error) int {
 		ClaudeDir: claude.ConfigDir(home, os.Environ())})
 	if err != nil {
 		log.Error("exit", "err", err)
-		fmt.Fprintln(os.Stderr, "irie:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+":", err)
 		return 1
 	}
 	return 0
@@ -314,7 +315,7 @@ func openLog(p paths.Paths, path string) *slog.Logger {
 
 func configCmd(args []string) error {
 	if len(args) != 1 {
-		return errors.New("usage: irie config path|print")
+		return errors.New("usage: " + brand.Slug + " config path|print")
 	}
 	switch args[0] {
 	case "path":
@@ -331,7 +332,7 @@ func configCmd(args []string) error {
 		}
 		return cfg.Write(os.Stdout)
 	}
-	return errors.New("usage: irie config path|print")
+	return errors.New("usage: " + brand.Slug + " config path|print")
 }
 
 // teamTmux is `irie team-tmux`, the tmux shim of a session with teams
@@ -341,10 +342,10 @@ func teamTmux(args []string) int {
 	var s team.Shim
 	fs.StringVar(&s.Tmux, "tmux", "", "the real tmux")
 	fs.StringVar(&s.Socket, "socket", "", "the team server's socket path")
-	fs.StringVar(&s.Session, "session", "", "the Irie session")
+	fs.StringVar(&s.Session, "session", "", "the "+brand.Name+" session")
 	fs.StringVar(&s.EnvFile, "env-file", "", "the environment of its teammates")
 	if fs.Parse(args) != nil || s.Tmux == "" || s.Socket == "" || s.Session == "" {
-		fmt.Fprintln(os.Stderr, "usage: irie team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS")
+		fmt.Fprintln(os.Stderr, "usage: "+brand.Slug+" team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS")
 		return 2
 	}
 	return s.Run(fs.Args())

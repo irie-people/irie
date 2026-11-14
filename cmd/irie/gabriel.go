@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-const gabrielUsage = "usage: irie ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]"
+const gabrielUsage = "usage: " + brand.Slug + " ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]"
 
 // ctlGabriel is Gabriel's report (DESIGN §4.11): whether you are at the
 // computer and it is busy, what is in your focus, and what he holds back
@@ -77,7 +78,7 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 	}
 	switch {
 	case !r.On:
-		fmt.Fprintf(w, "Gabriel: off. `irie ctl gabriel on` turns him on.\n")
+		fmt.Fprintf(w, "Gabriel: off. `"+brand.Slug+" ctl gabriel on` turns him on.\n")
 		return nil
 	case !r.Present:
 		fmt.Fprintf(w, "Gabriel: you are away (no keyboard or mouse for %s), so nothing is held back.\n", r.Idle)
@@ -93,7 +94,7 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 		fmt.Fprintf(w, "Gabriel: you are at the computer%s and it is busy (%s), so what is out of your focus steps back.\n", front, machine)
 	}
 	if r.BoostUntil != nil {
-		fmt.Fprintf(w, "Boost: on until %s; your focus gets the machine first whether it is busy or not, and the rest runs on the efficiency cores. `irie ctl gabriel boost off` ends it.\n", r.BoostUntil.Local().Format("15:04"))
+		fmt.Fprintf(w, "Boost: on until %s; your focus gets the machine first whether it is busy or not, and the rest runs on the efficiency cores. `"+brand.Slug+" ctl gabriel boost off` ends it.\n", r.BoostUntil.Local().Format("15:04"))
 	}
 	if len(r.Freed) > 0 {
 		fmt.Fprintf(w, "Freed the memory of idle local models: %s\n", strings.Join(r.Freed, ", "))
@@ -112,9 +113,9 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 		for _, a := range r.Apps {
 			apps = append(apps, fmt.Sprintf("%s (pid %d, %.0f%% of a CPU)", a.Name, a.PID, a.CPU))
 		}
-		fmt.Fprintf(w, "Apps outside Irie slowed: %s\n", strings.Join(apps, ", "))
+		fmt.Fprintf(w, "Apps outside "+brand.Name+" slowed: %s\n", strings.Join(apps, ", "))
 	} else if r.Holding && !r.Outside {
-		fmt.Fprintf(w, "Apps outside Irie: left alone (arch.gabriel.outside = false)\n")
+		fmt.Fprintf(w, "Apps outside "+brand.Name+": left alone (arch.gabriel.outside = false)\n")
 	}
 	return nil
 }

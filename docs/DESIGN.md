@@ -372,6 +372,32 @@ Principle 7. What the user does goes first: the views answer a click or a key at
 
 **Not done, and why.** Raising Irie's own priority: a process without an app role cannot raise a thread above the default priority, whatever quality of service it asks for (checked on macOS 14.1: a command-line process stays at 31). `task_policy_set` with `TASK_FOREGROUND_APPLICATION` lifts only the main thread to 47, and the Go runtime runs its work on any thread, so it would buy little. Keeping memory for Irie: macOS has no way to set memory aside for a process, and wiring the core's pages would take them from everything else. Restarting Irie.app when it quits or dies: the user owns the app, and quits it on purpose too. A window that is stopped or hung stops answering, which is the freeze dog's (§2.4).
 
+### 2.10 Another name: copies under their own brand
+
+A company may run its own copy of Irie under its own name. `internal/brand` keeps the product's names in one place, and everything else takes them from there, so a copy changes that one file. Its constants:
+
+| Constant | Irie's | What takes it |
+|---|---|---|
+| `Name` | `Irie` | Everything a person reads: messages, the help, the sidebars, the Mac app's windows, menus and Info.plist, the phone app, the skills and the arch agents' words, the tmux window title |
+| `Slug` | `irie` | Everything a computer looks up: the command, the folder in each XDG directory, the runtime folder and its socket, the tmux server and its sessions and windows, the default branch prefix, a repo's `.irie/dock.json`, the skills' namespace (`/irie:…`), the MCP servers' names, the pairing link's scheme |
+| `EnvPrefix` | `IRIE` | The environment variables agents and scripts see: `IRIE_SESSION`, `IRIE_SOCKET`, `IRIE_BIN` and the rest (`brand.Env`). Tests' hooks, such as `IRIE_FAKE_MEMORY`, keep their names |
+| `BundleID` | `io.github.irie-hq.irie` | The Mac app's identifier, the core's look for it, and the lid's launchd job |
+| `Site`, `Repo` | the guide and the source | The Help menu, the install command the app shows, the skills' author, the push service's contact |
+| `Tagline` | `Everything irie.` | The line under the name on the Mac app's welcome |
+| `Bar` | `cheer` | `ui.bar`'s default: what the strip under the terminal shows, phrases of encouragement (`cheer`) or tips for those new to it (`tips`), one at a time; a company's copy may want tips |
+
+Made from them: `App` (`Irie.app`) and `Exe`, the Mac app's executable and so its process's name, `Name`'s ASCII letters and digits, 15 at most, as macOS keeps only a process name's first bytes and `pgrep -x` matches only those.
+
+**Renaming a copy.** Change the constants, run `tools/brand.sh --swift >mac/Sources/Irie/Brand.swift` and build. Go code uses the constants; the scripts that build and install (`mac/build.sh`, `tools/live.sh`, `tools/hot.sh`, `tools/release.sh`, `mac/snapshot.sh`) read them through `tools/brand.sh`; the Mac app has them in `Brand.swift`, which `mac/build.sh` also brings up to date. Texts that ship in the binary, the skills, the arch agents' words, the tips and the phone app's pages, keep Irie's names in the source and are rewritten as they load (`brand.Text`). Since the names are constants, a message made from them is a constant too, and `go vet` still checks its format. Two copies under different names run side by side on one computer: no folder, socket, server or variable of one is the other's.
+
+**What stays Irie's.** Data whose form must not change between copies: the context store's git trailers (`Irie-Turn`, §4.13; a trailer's key can't hold a space), journal values (an event's source, a closed session's harness), tmux's own `@irie_*` options inside the private server, the Go module's path and the Mac app's source folder. None of them is shown as the name.
+
+**A long name.** `Name` may have up to 30 letters, digits, spaces, hyphens and full stops (`brand.MaxName`), which every place that shows it fits: the Mac app's title bar shrinks it a little and then trails it off with the whole name on hover, the theme maker's preview likewise, a tight button leaves it out (Move In for Move into Irie), the terminal sidebar's title bar gives it half the width at most so the counts keep theirs, the slot's placeholder cuts it to the pane, the phone app's title shrinks it and trails it off, and tmux.conf quotes it. Only those characters, since the name goes as it is into shell scripts, tmux.conf, XML and HTML.
+
+**What a copy changes by hand.** The icon (`tools/mkicon` draws Irie's), `site/` and `docs/`, `site/install.sh`, the iOS app (`ios/`), the arch agents' charges and the default preferences (`spawn.preferences`), and which plugins it builds with (§4.17).
+
+**Tests.** `internal/brand`: the names' form, `tools/brand.sh` agrees with the package, `Brand.swift` is current, `Exe` for long and non-Latin names, and two guards that fail on any string outside the package, in Go or in the Mac app, that names the product itself rather than through it. `internal/config`: `ui.bar`.
+
 ## 3. Harness support
 
 ### 3.1 Support levels
@@ -1282,6 +1308,7 @@ max_sub_rows = 6
 red_on_done = false
 helper_style = "browser"      # browser | terminal: how a view draws a helper beside its session (§4.4)
 new_tabs = "last"             # last | first | next: where a new session goes in the list; next is just after the session that started it (§4.1)
+bar = "cheer"                 # cheer | tips: what the strip under the terminal shows, one at a time; the default is the brand's (§2.10)
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
 theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
 freeze_dog = "10s"            # how long Irie's window or a sidebar may stop answering before Raphael force quits it and starts it again (§2.4, §4.11); "0s" = never, else at least 3s

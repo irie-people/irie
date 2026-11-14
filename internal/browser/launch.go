@@ -23,6 +23,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // ErrNotFound means no browser was found to drive.
@@ -107,8 +109,8 @@ var runFiles = map[string]bool{
 }
 
 const (
-	pidFile      = "irie-browser.pid"
-	templateMark = "irie-template.json"
+	pidFile      = brand.Slug + "-browser.pid"
+	templateMark = brand.Slug + "-template.json"
 )
 
 // running is one browser and its BiDi session.
@@ -204,7 +206,7 @@ func start(ctx context.Context, o Options, exe, dir string) (*running, error) {
 	}
 	if err := conn.call(sctx, "session.new", map[string]any{"capabilities": map[string]any{}}, &s); err != nil {
 		if ctx.Err() == nil && sctx.Err() != nil {
-			err = fmt.Errorf("the browser did not start a session within %s. On a busy machine a session that Irie holds back gets little of it, and a browser's first start needs a lot: try again later, or use WebFetch meanwhile", startTimeout)
+			err = fmt.Errorf("the browser did not start a session within %s. On a busy machine a session that "+brand.Name+" holds back gets little of it, and a browser's first start needs a lot: try again later, or use WebFetch meanwhile", startTimeout)
 		}
 		return fail(err)
 	}
@@ -360,7 +362,7 @@ func boolInt(b bool) int {
 
 func logf(o Options, format string, args ...any) {
 	if o.Log != nil {
-		fmt.Fprintf(o.Log, "irie browser: "+format+"\n", args...)
+		fmt.Fprintf(o.Log, brand.Slug+" browser: "+format+"\n", args...)
 	}
 }
 

@@ -90,7 +90,7 @@ struct ConversationFeed: View {
         default:
             if model.transcript == nil {
                 ConversationNote(title: "This one lives in its terminal",
-                                 text: "It started before Irie could follow conversations, so there’s nothing to show here. Its terminal has all of it.",
+                                 text: "It started before \(Brand.name) could follow conversations, so there’s nothing to show here. Its terminal has all of it.",
                                  terminal: true)
             } else {
                 ConversationNote(title: "Nothing here yet", text: "Messages show here as they come.")

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/focus"
 )
 
@@ -46,7 +47,7 @@ func (c *Core) swapApp() {
 		return
 	}
 	s := appSwap{
-		app:   filepath.Join(home, "Applications", "Irie.app"),
+		app:   filepath.Join(home, "Applications", brand.Name+".app"),
 		stamp: filepath.Join(c.paths.Data, "bin", "app.commit"),
 		front: func() (string, bool) {
 			a, ok, err := focus.Front()
@@ -102,7 +103,7 @@ func (s appSwap) run() error {
 // stopIrieApp stops every Irie.app, as tools/live.sh does: the app keeps no
 // state of its own (docs/MAC.md).
 func stopIrieApp() bool {
-	out, _ := exec.Command("/usr/bin/pgrep", "-x", "Irie").Output()
+	out, _ := exec.Command("/usr/bin/pgrep", "-x", brand.Exe).Output()
 	var pids []int
 	for _, f := range strings.Fields(string(out)) {
 		if pid, err := strconv.Atoi(f); err == nil {
@@ -113,12 +114,12 @@ func stopIrieApp() bool {
 		syscall.Kill(pid, syscall.SIGTERM)
 	}
 	for i := 0; i < 30 && len(pids) > 0; i++ {
-		if exec.Command("/usr/bin/pgrep", "-x", "Irie").Run() != nil {
+		if exec.Command("/usr/bin/pgrep", "-x", brand.Exe).Run() != nil {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	exec.Command("/usr/bin/pkill", "-9", "-x", "Irie").Run()
+	exec.Command("/usr/bin/pkill", "-9", "-x", brand.Exe).Run()
 	return len(pids) > 0
 }
 

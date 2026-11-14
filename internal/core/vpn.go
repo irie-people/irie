@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/proc"
@@ -204,7 +205,7 @@ func (c *Core) vpnOp(peer int, a ipc.VPNArgs) (ipc.VPNResult, error) {
 	now := time.Now()
 	if a.Do == "" || a.Do == ipc.VPNTime {
 		if a.Do == ipc.VPNTime && v.expires.IsZero() {
-			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeNotFound, "Irie doesn't know the account's time yet: is this Mac logged in to a Mullvad account?")
+			return ipc.VPNResult{}, ipc.Errorf(ipc.CodeNotFound, brand.Name+" doesn't know the account's time yet: is this Mac logged in to a Mullvad account?")
 		}
 		c.mu.Lock()
 		h := c.vpnHeader(now)

@@ -19,6 +19,9 @@ version=${1:?usage: tools/release.sh VERSION DIR}
 out=${2:?usage: tools/release.sh VERSION DIR}
 version=${version#v}
 root=$(cd "$(dirname "$0")/.." && pwd)
+# The product's names, from internal/brand (DESIGN §2.10): irie-*.tar.gz,
+# Irie-macos.zip and Irie.app unless a copy renamed it.
+eval "$("$root/tools/brand.sh")"
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 work=$(mktemp -d)
@@ -36,31 +39,31 @@ cd "$root"
 for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
 	os=${target%/*}
 	arch=${target#*/}
-	dir=$work/irie-$os-$arch
+	dir=$work/$BRAND_SLUG-$os-$arch
 	mkdir -p "$dir"
-	say "irie for $os/$arch"
-	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$dir/irie" ./cmd/irie
+	say "$BRAND_SLUG for $os/$arch"
+	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$dir/$BRAND_SLUG" ./cmd/irie
 	cp LICENSE "$dir/"
 	# COPYFILE_DISABLE keeps macOS's tar from adding ._ files.
-	COPYFILE_DISABLE=1 tar -czf "$out/irie-$os-$arch.tar.gz" -C "$dir" irie LICENSE
+	COPYFILE_DISABLE=1 tar -czf "$out/$BRAND_SLUG-$os-$arch.tar.gz" -C "$dir" "$BRAND_SLUG" LICENSE
 done
 
 if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
-	say "Irie.app, for Apple silicon and Intel"
+	say "$BRAND_NAME.app, for Apple silicon and Intel"
 	IRIE_MAC_UNIVERSAL=1 mac/build.sh
-	app=$work/Irie.app
-	ditto mac/build/Irie.app "$app"
+	app="$work/$BRAND_NAME.app"
+	ditto "mac/build/$BRAND_NAME.app" "$app"
 	# irie inside the app, so the app alone can start Irie (docs/MAC.md).
 	# Contents/Helpers, not MacOS: on a disk that ignores case, irie and
 	# the app's own Irie would be one file.
 	mkdir -p "$app/Contents/Helpers"
-	lipo -create "$work/irie-darwin-arm64/irie" "$work/irie-darwin-amd64/irie" -output "$app/Contents/Helpers/irie"
+	lipo -create "$work/$BRAND_SLUG-darwin-arm64/$BRAND_SLUG" "$work/$BRAND_SLUG-darwin-amd64/$BRAND_SLUG" -output "$app/Contents/Helpers/$BRAND_SLUG"
 	plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 	# Signed again from the inside out, so the app's signature covers its
 	# helper, with the identity mac/build.sh signs with: ad hoc unless
 	# IRIE_SIGN_IDENTITY or `git config irie.sign` names one (docs/MAC.md).
 	identity=${IRIE_SIGN_IDENTITY:-$(git config --get irie.sign 2>/dev/null || echo -)}
-	for f in "$app/Contents/Helpers/irie" "$app"; do
+	for f in "$app/Contents/Helpers/$BRAND_SLUG" "$app"; do
 		case "$identity" in
 		-) codesign --force --sign - "$f" ;;
 		"Developer ID"*) codesign --force --options runtime --timestamp --sign "$identity" "$f" ;;
@@ -68,13 +71,13 @@ if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
 		esac
 	done
 	codesign --verify --strict "$app"
-	ditto -c -k --keepParent "$app" "$out/Irie-macos.zip"
+	ditto -c -k --keepParent "$app" "$out/$BRAND_EXE-macos.zip"
 else
-	say "not a Mac with Apple silicon: no Irie.app"
+	say "not a Mac with Apple silicon: no $BRAND_NAME.app"
 fi
 
 cd "$out"
-sums=$(for f in irie-*.tar.gz Irie-*.zip; do [ -e "$f" ] && printf '%s\n' "$f"; done)
+sums=$(for f in "$BRAND_SLUG"-*.tar.gz "$BRAND_EXE"-*.zip; do [ -e "$f" ] && printf '%s\n' "$f"; done)
 if command -v sha256sum >/dev/null 2>&1; then
 	echo "$sums" | xargs sha256sum >SHA256SUMS
 else

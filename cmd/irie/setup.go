@@ -14,13 +14,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/ready"
 )
 
-const setupUsage = "usage: irie setup [--check] [--json] [--yes] | irie setup local [--model MODEL] [--yes] | irie setup browser [--yes] [--page URL] | irie setup anon [--yes] | irie setup privacy [--yes]"
+const setupUsage = "usage: " + brand.Slug + " setup [--check] [--json] [--yes] | " + brand.Slug + " setup local [--model MODEL] [--yes] | " + brand.Slug + " setup browser [--yes] [--page URL] | " + brand.Slug + " setup anon [--yes] | " + brand.Slug + " setup privacy [--yes]"
 
 func setup(args []string) error {
 	if len(args) > 0 && args[0] == "local" {
@@ -72,7 +73,7 @@ func setupIrie(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 		return nil
 	}
-	fmt.Fprintf(stdout, "Checking what Irie needs on this computer…\n\n")
+	fmt.Fprintf(stdout, "Checking what "+brand.Name+" needs on this computer…\n\n")
 	r := ready.Check(o)
 	printReport(stdout, r)
 	if !*check {
@@ -84,14 +85,14 @@ func setupIrie(args []string, stdin io.Reader, stdout io.Writer) error {
 		if len(r.Blocking()) > 1 {
 			it = "them"
 		}
-		next := "Run `irie setup` again once you have " + it + "."
+		next := "Run `" + brand.Slug + " setup` again once you have " + it + "."
 		if *check {
-			next = "`irie setup` offers to fix " + it + "."
+			next = "`" + brand.Slug + " setup` offers to fix " + it + "."
 		}
-		return exitCode{1, fmt.Errorf("Irie can't start agents yet: %s. %s", missing(r.Blocking()), next)}
+		return exitCode{1, fmt.Errorf(brand.Name+" can't start agents yet: %s. %s", missing(r.Blocking()), next)}
 	}
-	fmt.Fprintln(stdout, "Everything irie. "+howToOpen())
-	fmt.Fprintln(stdout, "Free local models for the small jobs: irie setup local")
+	fmt.Fprintln(stdout, "Everything "+brand.Slug+". "+howToOpen())
+	fmt.Fprintln(stdout, "Free local models for the small jobs: "+brand.Slug+" setup local")
 	return nil
 }
 
@@ -104,7 +105,7 @@ func firstRun(cfg config.Config, stdin io.Reader, stdout io.Writer) error {
 	if r.Ready() {
 		return nil
 	}
-	fmt.Fprintln(stdout, "Irie needs a few things before it can start agents:")
+	fmt.Fprintln(stdout, brand.Name+" needs a few things before it can start agents:")
 	fmt.Fprintln(stdout)
 	printReport(stdout, r)
 	tty := isTerminal(stdin)
@@ -112,13 +113,13 @@ func firstRun(cfg config.Config, stdin io.Reader, stdout io.Writer) error {
 		// Only what blocks: `irie setup` offers the rest.
 		r = fixAll(o, r, stdin, stdout, false, func(it ready.Item) bool { return it.Blocks })
 	} else {
-		fmt.Fprintln(stdout, "\n`irie setup`, in a terminal, offers to fix each one.")
+		fmt.Fprintln(stdout, "\n`"+brand.Slug+" setup`, in a terminal, offers to fix each one.")
 	}
 	if it, _ := r.Item(ready.TmuxID); it.Status == ready.Missing {
-		return exitCode{1, errors.New("Irie can't start without tmux. Run `irie setup` once you have it")}
+		return exitCode{1, errors.New(brand.Name + " can't start without tmux. Run `" + brand.Slug + " setup` once you have it")}
 	}
 	if !r.Ready() {
-		fmt.Fprintln(stdout, "\nStarting Irie anyway. An agent that needs what is missing won't start; `irie setup` checks again.")
+		fmt.Fprintln(stdout, "\nStarting "+brand.Name+" anyway. An agent that needs what is missing won't start; `"+brand.Slug+" setup` checks again.")
 		if tty {
 			time.Sleep(2 * time.Second)
 		}
@@ -321,10 +322,10 @@ func sentence(s string) string {
 func howToOpen() string {
 	if runtime.GOOS == "darwin" {
 		for _, d := range []string{filepath.Join(os.Getenv("HOME"), "Applications"), "/Applications"} {
-			if fi, err := os.Stat(filepath.Join(d, "Irie.app")); err == nil && fi.IsDir() {
-				return "Open Irie from Spotlight, or type irie in a terminal."
+			if fi, err := os.Stat(filepath.Join(d, brand.Name+".app")); err == nil && fi.IsDir() {
+				return "Open " + brand.Name + " from Spotlight, or type " + brand.Slug + " in a terminal."
 			}
 		}
 	}
-	return "Type irie to start."
+	return "Type " + brand.Slug + " to start."
 }

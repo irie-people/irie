@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
@@ -96,7 +97,7 @@ func (r *raphState) run() raphael.Runner {
 
 // raphaelOff reports whether Raphael may not look here: a test core
 // (IRIE_RAPHAEL=off, internal/testutil) would sample the whole machine.
-func raphaelOff() bool { return os.Getenv("IRIE_RAPHAEL") == "off" }
+func raphaelOff() bool { return os.Getenv(brand.Env("RAPHAEL")) == "off" }
 
 // raphaelFile keeps his last look, for the core after this one.
 func (c *Core) raphaelFile() string { return filepath.Join(c.paths.State, "raphael.json") }
@@ -277,7 +278,7 @@ func (c *Core) raphaelOp(peer int, a ipc.RaphaelArgs) (ipc.RaphaelResult, error)
 		f, ok := c.raphaelFinding(a.Fix)
 		switch {
 		case c.fromAgent(peer):
-			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't say OK to Raffi's fixes: they are your user's to say OK to, in Settings > Arch Agents or with `irie ctl raphael fix` in their own terminal.")
+			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeBadArgs, "An agent can't say OK to Raffi's fixes: they are your user's to say OK to, in Settings > Arch Agents or with `"+brand.Slug+" ctl raphael fix` in their own terminal.")
 		case !ok || f.Fix == nil:
 			return ipc.RaphaelResult{}, ipc.Errorf(ipc.CodeNotFound, "Raffi has nothing to fix by %q now: ask him to look again.", a.Fix)
 		case !a.OK:
@@ -474,14 +475,14 @@ func (c *Core) raphaelNow() archNow {
 	}
 	switch {
 	case !rep.On:
-		n.status = "Off: nothing restarts a part of Irie that stops answering, and he looks over your Mac only when you ask."
+		n.status = "Off: nothing restarts a part of " + brand.Name + " that stops answering, and he looks over your Mac only when you ask."
 	case rep.Checking:
 		n.status = "Looking over your Mac…"
 		if found != "" {
 			n.status += " So far " + found + "."
 		}
 	case rep.Checked == nil:
-		n.status = "Watching Irie's windows, sidebar and core."
+		n.status = "Watching " + brand.Name + "'s windows, sidebar and core."
 		if found != "" {
 			n.status += " So far " + found + "."
 		}

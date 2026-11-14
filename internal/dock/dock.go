@@ -16,6 +16,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Control types.
@@ -195,7 +197,7 @@ func Find(dir, top string) (path, source string) {
 		}
 	}
 	for d := dir; ; d = filepath.Dir(d) {
-		for _, c := range []struct{ rel, source string }{{".irie/dock.json", SourceRepo}, {".cmux/dock.json", SourceCmux}} {
+		for _, c := range []struct{ rel, source string }{{"." + brand.Slug + "/dock.json", SourceRepo}, {".cmux/dock.json", SourceCmux}} {
 			p := filepath.Join(d, c.rel)
 			if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
 				return p, c.source

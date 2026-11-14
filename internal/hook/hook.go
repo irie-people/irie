@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/harness/claude"
@@ -53,12 +54,12 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 		recover()
 		code = 0
 	}()
-	session := getenv("IRIE_SESSION")
+	session := getenv(brand.Env("SESSION"))
 	if session == "" {
 		// An agent team's teammate (DESIGN §2.3) speaks for no session,
 		// but waits at its tool calls while the session it works for is
 		// frozen.
-		if lead := getenv("IRIE_TEAM_OF"); teamOf.MatchString(lead) {
+		if lead := getenv(brand.Env("TEAM_OF")); teamOf.MatchString(lead) {
 			if raw, err := io.ReadAll(io.LimitReader(stdin, maxPayload)); err == nil {
 				var p struct {
 					Event string `json:"hook_event_name"`
@@ -70,7 +71,7 @@ func Run(stdin io.Reader, stdout io.Writer, getenv func(string) string) (code in
 		}
 		return 0
 	}
-	socket := getenv("IRIE_SOCKET")
+	socket := getenv(brand.Env("SOCKET"))
 	if socket == "" {
 		p, err := paths.FromEnv()
 		if err != nil {

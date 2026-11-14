@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 func writeFile(t *testing.T, body string) string {
@@ -21,7 +23,7 @@ func writeFile(t *testing.T, body string) string {
 
 func TestDefaultsMatchDesign(t *testing.T) {
 	c := Default()
-	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last"}); c.UI != want {
+	if want := (UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "auto", DefaultCwd: "", ReadyTimeout: 30 * time.Second, HideTmux: true, CloseWhenDone: false, CloseDelay: 30 * time.Second, Teammates: "off", FollowUpWindow: 2 * time.Minute, FollowUpDelay: 8 * time.Second, Preferences: Preferences()}); !reflect.DeepEqual(c.Spawn, want) {
@@ -169,6 +171,7 @@ helper_style = "terminal"
 theme = "lilac"
 freeze_dog = "20s"
 new_tabs = "next"
+bar = "tips"
 
 [spawn]
 default_profile = "fast"
@@ -271,7 +274,7 @@ links = { "Team handbook" = "https://example.com/handbook" }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second, NewTabs: "next"}); c.UI != want {
+	if want := (UI{SidebarWidth: 40, FocusKey: "C-o", FlipKey: "M-t", View: "terminal", MaxSubRows: 3, RedOnDone: true, Ghostty: "off", HelperStyle: "terminal", Theme: "lilac", FreezeDog: 20 * time.Second, NewTabs: "next", Bar: "tips"}); c.UI != want {
 		t.Errorf("ui = %+v, want %+v", c.UI, want)
 	}
 	if want := (Spawn{DefaultProfile: "fast", DefaultCwd: "/home/alice/scratch", ReadyTimeout: 45 * time.Second, HideTmux: false, CloseWhenDone: true, CloseDelay: 5 * time.Second, Teammates: "panes", FollowUpWindow: 0, FollowUpDelay: time.Second, Preferences: []string{"Text me in one line."}}); !reflect.DeepEqual(c.Spawn, want) {
