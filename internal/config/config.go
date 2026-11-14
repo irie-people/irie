@@ -513,6 +513,7 @@ type Profile struct {
 	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
+	Skill          string            `toml:"skill"`  // the skill of Irie's its sessions start on, such as chaos: the task goes to /irie:<skill> (DESIGN §4.19); "" = none
 	// FallbackModel is the model a session of the profile switches to, in
 	// place, when its own model's usage limit stops a turn, such as a Fable
 	// limit, as /model would; while that limit holds, new sessions start on
@@ -867,6 +868,18 @@ func Default() Config {
 				Args:           []string{},
 				Env:            map[string]string{},
 				Arch:           "mikael",
+			},
+			// The chaos monkey: it tries to break what the task names, in a
+			// copy of its own, and reports what broke (DESIGN §4.19).
+			"chaos": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-opus-5-5",
+				Effort:         "high",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+				Skill:          "chaos",
 			},
 		},
 		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
@@ -1343,6 +1356,17 @@ func (c Config) Validate() error {
 			}) {
 				bad("profiles.%s.args: a profile that runs as an arch agent passes no --agent or --agents of its own", name)
 			}
+		}
+		// Whether the skill is one of Irie's, and on, the spawn checks, and
+		// says why when it isn't (internal/core/guide.go).
+		switch s := p.Skill; {
+		case s == "":
+		case !skillName.MatchString(s) || len(s) > 64:
+			bad("profiles.%s.skill = %q: not a skill's name: lowercase letters, digits and single hyphens, at most 64", name, s)
+		case p.Harness != "claude-code":
+			bad("profiles.%s.skill: only the claude-code harness starts on a skill of %s's yet", name, brand.Name)
+		case !p.TakesSkills():
+			bad("profiles.%s.skill: a profile that starts on a skill takes %s's skills; drop skills = false", name, brand.Name)
 		}
 		if l := p.Local; l != nil {
 			switch {

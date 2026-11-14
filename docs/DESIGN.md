@@ -48,6 +48,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 | Anonymous research: Mullvad's relays as exits, private search with SearXNG, Tor | `+anon` and `+tor` tasks run in compartments, each with an exit of its own that nothing else of the user's uses; Irie's own SearXNG and Tor; search, fetch and evidence through the exit, with WebFetch, WebSearch and other MCP servers shut off; off until `irie setup anon` | §4.16 |
 | A browser connector for deep research, in Mullvad Browser | `irie browser`, Irie's own MCP server, drives Mullvad Browser over WebDriver BiDi for pages WebFetch cannot read, search where WebSearch is not, and clicks and forms; headless, a fresh profile per start, closed when idle; off until `irie setup browser` | §4.15 |
 | Other VPNs than Mullvad, chosen in the config, and in a company's copy the VPN the company approves | The VPN plugin follows the VPN `vpn.provider` names: Mullvad VPN, Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs, or any other through commands of the person's own; a copy's brand names the VPNs it offers and what they connect to, and keeps the VPN plugin without the privacy plugin; `irie setup vpn`, `:vpn use` | §4.18 |
+| A chaos monkey agent for stress testing products and features, whatever we point it at | `+chaos @repo TASK` starts a session on `/irie:chaos`, Irie's chaos monkey skill: it learns what the target must keep doing, then breaks its inputs, timing, processes, disk, network and load on purpose, in a copy it owns, never anything live, shared or another's, and reports each failure with a seed that replays it; any agent can run the skill on what it built; `profiles.<name>.skill` starts any profile's sessions on a skill of Irie's | §4.19 |
 
 ### 1.2 Not in v1
 
@@ -1268,6 +1269,21 @@ The state is one of connected, connecting, disconnected, disconnecting and error
 
 **Tests:** `internal/vpn`: the kinds are the config's, in order, and a copy names only kinds; the words for any VPN; opening one, with what each lacks; a missing command that names where its app comes from; the command kind against scripts, its patterns, an exit code that doesn't decide the state, and an error with only its last lines; scutil's states and list, with its addresses left out; nmcli's escapes, states and list; Tailscale's JSON, a warning before it, the exit node, the tailnet's name left out, every backend state, and its commands, including a signed-out connect; NetBird's states, as JSON and as text, an older NetBird's link, its addresses left out of the state and of an error, and a signed-out connect; an error's lines without JSON, prompts or long lines; WARP's states, old and new, a locked switch, terms it wants accepted and never `--accept-tos`; NordVPN 6's and 5's status, a pause, its address left out, and its places; Cisco's state lines, Unknown before the real state, the person sent to its app when its command line can't connect, and never `stats`; GlobalProtect's states, `disabled` and its portal; FortiClient's states, its user and address left out, and both its commands. `internal/config`: `vpn.provider` and its keys, the VPNs a copy offers, and the VPN kept off for a file that turned the privacy plugin off. `internal/plugins`: the VPN plugin on with its part off, its title from the provider, what each VPN lacks, the plugin's switch apart from privacy's, turning it on whole, and its settings with `~`. `internal/core`: Mullvad as before, a VPN asked every few seconds, its words, the words it lacks refused, `:vpn use` written to config.toml, the last VPN's server left behind, followed at once, and refused from an agent, and an older read never replacing a newer. The VPN's tests pass in a copy whose brand names its VPNs, and under the race detector. `core`: `:vpn use` and `:setup vpn`.
 
+### 4.19 The chaos monkey
+
+The owner asked on 2026-11-14 for a chaos monkey agent, to stress test products and features, whatever they are pointed at. It is one of Irie's skills, `chaos`, run as `/irie:chaos` (internal/skills/bundled/chaos), and `+chaos`, a built-in profile whose sessions start on it, in any repository: `+chaos @shop break the refund flow`.
+
+- **What it does.** The skill makes the agent a chaos monkey for the task: it learns what the target must keep doing, its steady state, measured from outside, then breaks its inputs, timing, processes, disk, network and load on purpose, one fault at a time, the likeliest and most harmful first, and reports each failure with its severity, the shortest steps that replay it and their seed, and the likely cause. It fixes nothing unless the task asks. Its catalogue of faults (`reference/faults.md`) says how to cause each on macOS and Linux, such as a full disk from a small disk image that needs no administrator, or a process stopped at moments the seed picks.
+- **Safely.** It attacks only a copy it owns for the run, such as a dev server it starts or a scratch folder, and never production, the person's live data or the copy they use, anything shared, other people's systems or any third party's service; a site on a shared host is tested as a local build. No real money, messages or personal data: test modes, fakes and example.com. It asks first, with the exact commands, when a test can only reach something live, shared, paid or beyond the machine, and skips it when nobody answers. Every fault has an end and an undo, every run is put back, no window it opens lands where the person works (§4.11, *Out of sight*), and Mikael's door, auto mode and Gabriel's word hold as for any session. Against Irie itself it never touches the running Irie, and writes its experiments as Go tests on a test Irie, as `TestIrieKeepsItsOwnProcessesRunning` does (§2.9, `reference/irie.md`).
+- **On call.** Every Claude Code session has the skill, as it has Irie's others (§3.3), so any agent can run it on what it just built, itself or in a subagent, when asked to stress test, chaos test, fuzz, load test or try to break something.
+- **A profile that starts on a skill.** `+chaos` is Opus 5.5 at high effort in auto mode with `skill = "chaos"`. Any Claude Code profile may name a skill of Irie's (`profiles.<name>.skill`): its sessions start with `/irie:<skill>` and then the task, which Claude Code hands the skill, and the task's own words name the session. A spawn on such a profile checks first that the skill is there and on and that the profile's Claude Code loads Irie's plugin, and says why not (`skills.enabled`, `skills.disabled`, a profile with `skills = false`, an old Claude Code), as a guide does; the + list says what the profile runs. A task that already runs the skill, as one carried on from such a session, is kept as it is.
+
+**Why a skill and not an agent of its own.** Claude Code's `--agent` replaces its own system prompt with the agent's, and a chaos monkey runs commands, servers and browsers all day, for which that prompt is written; a skill keeps it, comes to every session, and any agent can use it.
+
+*Not yet:* tools of Irie's own for faults that the agent now makes itself, such as a proxy that delays, drops or cuts connections from a seed; a night shift of chaos runs on what landed that day.
+
+**Tests:** the skill is bundled, on call rather than a guide, and points to its references; `+chaos` is a built-in profile; `profiles.<name>.skill` must name a skill, on a Claude Code profile that takes Irie's skills; the task goes to the skill once, however often it is carried on; a spawn says why the skill can't run before anything is made; with the fake agent, `+chaos` typed as a task starts a session on `/irie:chaos`, named by the task, with the skill and its references in Irie's plugin folder; the + list says what it runs.
+
 ---
 
 ## 5. Data and config
@@ -1469,6 +1485,14 @@ model = "claude-opus-5-5"
 effort = "high"
 permission_mode = "auto"
 arch = "mikael"               # the arch agent the session runs as; any profile may name one
+
+[profiles.chaos]              # built in: the chaos monkey (§4.19), which tries to break what the task names and reports what broke
+harness = "claude-code"
+command = "claude"
+model = "claude-opus-5-5"
+effort = "high"
+permission_mode = "auto"
+skill = "chaos"               # the skill of Irie's its sessions start on, the task after /irie:chaos; any Claude Code profile may name one
 
 # [profiles.aider]            # example: generic harness
 # harness = "generic"
