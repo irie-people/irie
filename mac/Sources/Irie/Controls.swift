@@ -87,13 +87,14 @@ extension Store {
     }
 
     /// Promotes a session to the top, which unparks it, or puts it back
-    /// among the rest, where it stays. It shows at once.
+    /// among the rest, where it stays. It shows at once. A card of a group
+    /// of yours goes first in its group, which the core's frames show.
     func setPromoted(_ s: Session, _ on: Bool) {
         preview { rows in
             guard let i = rows.firstIndex(where: { $0.id == s.id }) else { return }
             rows[i].priority = on ? 1 : 0
             if on {
-                rows[i].order = (rows.compactMap(\.order).min() ?? 0) - 1
+                if s.groupKey == nil { rows[i].order = (rows.compactMap(\.order).min() ?? 0) - 1 }
                 rows[i].parked = false
             }
         }
@@ -214,7 +215,8 @@ extension Store {
     /// Puts session id in target's place, at once, and tells the core.
     /// Across the Parked group's edge it is parked or unparked there, as one
     /// park that says where it went, so the core moves it once and one undo
-    /// takes it back.
+    /// takes it back; among the cards of another group of yours, or of
+    /// none, it joins that group or leaves its own there (Groups.swift).
     func reorder(_ id: String, onto target: Session) {
         guard let from = sessions.firstIndex(where: { $0.id == id }),
               let to = sessions.firstIndex(where: { $0.id == target.id }), from != to else { return }
@@ -223,6 +225,7 @@ extension Store {
         // across Parked's, a park or unpark, which unpins.
         let pins = canPin && s.isPinned != target.isPinned && (target.isPinned || s.isParked == target.isParked)
         let crosses = !pins && canPark && s.isParked != target.isParked
+        let regroups = !pins && !crosses && dropRegroups(s, onto: target)
         var ids = sessions.map(\.id)
         let moving = ids.remove(at: from)
         guard let t = ids.firstIndex(of: target.id) else { return }
@@ -241,6 +244,10 @@ extension Store {
                     if target.isPinned { rows[i].parked = false }
                 }
             }
+        }
+        if regroups {
+            regroup(s, onto: target, fromAbove: from < to, was: was)
+            return
         }
         Task {
             if pins {
@@ -472,6 +479,7 @@ struct Reorderable: ViewModifier {
         content
             .onDrag {
                 store.dragging = session.id
+                store.draggingGroup = nil
                 return NSItemProvider(object: session.id as NSString)
             }
             .onDrop(of: [.text], delegate: CardDrop(store: store, target: session))
@@ -490,12 +498,16 @@ private struct CardDrop: DropDelegate {
     let store: Store
     let target: Session
 
-    func validateDrop(info: DropInfo) -> Bool { store.canDrop(onto: target) }
+    /// A group held by its header lands in the card's place, in its
+    /// group (Groups.swift); a card as before.
+    private var holdsGroup: Bool { store.draggingGroup != nil }
 
-    func dropEntered(info: DropInfo) { store.dropMark = store.mark(onto: target) }
+    func validateDrop(info: DropInfo) -> Bool { holdsGroup ? store.canDropGroup(onto: target) : store.canDrop(onto: target) }
+
+    func dropEntered(info: DropInfo) { store.dropMark = holdsGroup ? store.markGroup(onto: target) : store.mark(onto: target) }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: store.canDrop(onto: target) ? .move : .forbidden)
+        DropProposal(operation: validateDrop(info: info) ? .move : .forbidden)
     }
 
     func dropExited(info: DropInfo) {
@@ -503,6 +515,7 @@ private struct CardDrop: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        if holdsGroup { return store.dropGroup(onto: target) }
         defer {
             store.dragging = nil
             store.dropMark = nil

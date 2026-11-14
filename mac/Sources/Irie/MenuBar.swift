@@ -21,6 +21,8 @@ final class MenuState {
         /// Pin, and the cards picked with ⌘ or ⇧ (Tabs.swift).
         var pinned = false
         var canPin = false
+        /// Your groups (Groups.swift).
+        var canGroup = false
         var picked = 0
         var frozen = false
         var canFreeze = false
@@ -83,6 +85,7 @@ extension Store {
             }
         }
         f.picked = picked.count
+        f.canGroup = canGroup && (picked.count > 1 || closable?.peerName == nil && closable != nil)
         f.rows = drawnOrder.prefix(9).map(\.name)
         f.reopen = closed.first?.name
         f.trodHand = trod?.hand == true
@@ -312,6 +315,10 @@ private struct SessionItems: View {
             .disabled(!f.canPark)
         Button(f.pinned ? "Unpin" : "Pin", action: run { store.setPinned($0, !$0.isPinned) })
             .disabled(!f.canPin)
+        // A group of the selected card, or of every card picked with it,
+        // inside the group that holds them all (Groups.swift).
+        Button(f.picked > 1 ? "New Group of \(f.picked) Sessions" : "New Group") { MainActor.assumeIsolated { store.newGroupKey() } }
+            .disabled(!f.canGroup)
         // The keys move the selected card in its group; with ⇧, to its
         // top or bottom, without promoting it.
         Menu("Move") {

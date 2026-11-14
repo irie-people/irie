@@ -56,6 +56,10 @@ final class Store {
     var space = UserDefaults.standard.string(forKey: "space") ?? ""
     /// The space whose name is open to edit.
     var renamingSpace: String?
+    /// Your groups, as the core's header lists them, and the one whose name
+    /// is open to edit (Groups.swift).
+    var groups: [GroupInfo] = []
+    var renamingGroup: String?
     /// The card shown last in each space, which showing it again shows.
     @ObservationIgnored var lastShown: [String: String] = [:]
     /// The repos the @ words know and the agents the + words name, with what
@@ -84,6 +88,8 @@ final class Store {
     private(set) var canPark = false
     /// Whether the core pins sessions (Tabs.swift).
     private(set) var canPin = false
+    /// Whether the core keeps your groups (Groups.swift).
+    private(set) var canGroup = false
     /// Whether the core has the trod bot (DESIGN §4.10).
     private(set) var canTrod = false
     /// The core gives a boost of Gabriel's (DESIGN §4.11).
@@ -160,6 +166,10 @@ final class Store {
     /// The card a drag holds, and where it would land (Controls.swift).
     var dragging: String?
     var dropMark: DropMark?
+    /// The group of yours a drag holds by its header, and where on a
+    /// header a held card or group would land (Groups.swift).
+    var draggingGroup: String?
+    var headerMark: HeaderMark?
     /// Bumped when the terminal should take keyboard focus.
     var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
@@ -318,6 +328,7 @@ final class Store {
                 canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
                 canPin = hello.features.contains("pin")
+                canGroup = hello.features.contains("group")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
                 canBoostAlways = hello.features.contains("boost-always")
@@ -504,6 +515,10 @@ final class Store {
             // A space removed leaves its cards in the first.
             if !space.isEmpty, !s.dropFirst().contains(where: { $0.id == space }) { setSpace("") }
         }
+        // Every header lists every group, so one with none has none.
+        if (h.groups ?? []) != groups {
+            groups = h.groups ?? []
+        }
     }
 
     /// The picked session while it shows beside its teammates: the terminal
@@ -594,6 +609,8 @@ final class Store {
         canLearn = true
         canConfigure = true
         canPark = true
+        canGroup = true
+        groups = Fixture.groups
         canTrod = true
         canBoost = true
         canBoostAlways = true
@@ -651,8 +668,9 @@ final class Store {
     // MARK: Keyboard
 
     /// The sidebar's groups, without the rows the filter hides. In the List
-    /// view, one list; in the Repo view, a group per repo in the order its
-    /// first session started, then the sessions in no repo. Then the Parked
+    /// view, one list, with your groups in it; in the Repo view, a group per
+    /// repo in the order its first session started, then the sessions in no
+    /// repo. Then the Parked
     /// group, then a group for each paired machine's sessions, in the order
     /// the core lists them, so they stand apart from this Mac's (DESIGN
     /// §2.8); parked, one goes into Parked with the rest. Within a group the
@@ -679,9 +697,9 @@ final class Store {
             if !pinned.isEmpty {
                 out.append(SessionGroup(id: SessionGroup.pinned, title: "Pinned", path: nil, sessions: pinned))
             }
-            if !here.isEmpty {
-                out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: here))
-            }
+            // Your groups, each where the first of its cards is, and the
+            // cards of none between them (Groups.swift).
+            out += listGroups(here)
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
             for s in here {
@@ -724,9 +742,9 @@ final class Store {
     }
 
     /// The cards in the order the sidebar draws them, without those in folded
-    /// groups or hidden by the filter. The keys that walk the sidebar follow
-    /// it.
-    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap(\.sessions) }
+    /// groups, a folded group inside one of yours too, or hidden by the
+    /// filter. The keys that walk the sidebar follow it.
+    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap { g in g.node.map(shown) ?? g.sessions } }
 
     /// A group is open unless folded, and Parked only once opened. Every
     /// group is open while the filter has text, so what it finds shows.
@@ -1309,7 +1327,7 @@ enum SidebarMode: String, CaseIterable {
 }
 
 /// One group of the sidebar: the list, a repo, the sessions in no repo, the
-/// parked ones, or a paired machine's.
+/// parked ones, a paired machine's, or one of your groups.
 struct SessionGroup: Identifiable, Equatable {
     let id: String
     let title: String
@@ -1318,6 +1336,16 @@ struct SessionGroup: Identifiable, Equatable {
     let sessions: [Session]
     /// The paired machine whose sessions it holds, for a machine's group.
     var host: String? = nil
+    /// Your group's id, for one of your groups (Groups.swift).
+    var userGroup: String? = nil
+    /// For one of your groups, what it holds as the List view draws it: its
+    /// cards and the groups inside it, in the list's one order. Its sessions
+    /// are every card within it, its groups' too.
+    var node: GroupNode? = nil
+
+    /// Whether it is drawn without a header: the List view's cards of no
+    /// group of yours, list, or list:1 and on after your groups.
+    var bare: Bool { id == Self.list || id.hasPrefix(Self.list + ":") }
 
     /// The List view's one group, which has no header, the Parked group,
     /// and the Pinned group at the top.

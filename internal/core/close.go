@@ -70,6 +70,9 @@ type closedRecord struct {
 	// brings it back pinned, parked or frozen, as it was.
 	Lost                   bool
 	Pinned, Parked, Frozen bool
+	// Space and Group are the space and the group it was closed in, which
+	// reopen brings it back to (comeHome).
+	Space, Group string
 }
 
 // ending is a closing pane's agent on its way out.
@@ -100,6 +103,7 @@ func closedFrom(e event.Event) closedRecord {
 	r.Created, _ = time.Parse(time.RFC3339Nano, e.Str("created"))
 	r.Resume, _ = e.Data["resume"].(bool)
 	r.Lost, r.Pinned, r.Parked, r.Frozen = e.Data["lost"] == true, e.Data["pinned"] == true, e.Data["parked"] == true, e.Data["frozen"] == true
+	r.Space, r.Group = e.Str("space"), e.Str("group")
 	named, ok := e.Data["named"].(bool)
 	r.Named, r.Old = named, !ok
 	return r
@@ -252,14 +256,21 @@ func (c *Core) closeLocked(id string, auto bool) error {
 	}
 	r := c.reopenable(x)
 	r.Closed, r.Auto = time.Now().UTC().Truncate(time.Millisecond), auto
+	r.Space, r.Group = c.spaceOf(x), c.groupOf(x)
 	// Who closed it is the event's source: you, or Irie on its own.
 	source := event.SourceUser
 	if auto {
 		source = event.SourceIrie
 	}
-	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: map[string]any{
+	data := map[string]any{
 		"name": x.name, "named": r.Named, "created": x.created.Format(time.RFC3339Nano), "vendor_id": r.VendorID, "resume": r.Resume,
-	}})
+	}
+	for k, v := range map[string]string{"space": r.Space, "group": r.Group} {
+		if v != "" {
+			data[k] = v
+		}
+	}
+	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: data})
 	c.addClosed(r)
 	delete(c.sessions, id)
 	// A frozen agent's held tool calls go through, so it ends gently.
@@ -541,6 +552,7 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	if err == nil {
 		c.dropClosed(r.ID)
 		c.record(x, event.Event{Source: event.SourceUser, Kind: event.UIReopened, Data: map[string]any{"name": x.name, "resume": j.resume != ""}})
+		c.comeHome(x, r)
 		if r.Lost {
 			c.comeBack(x, r)
 		}
