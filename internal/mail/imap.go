@@ -146,12 +146,20 @@ var roleNames = map[string][]string{
 // the person's own.
 var roleParents = []string{"", "[gmail]", "[google mail]", "inbox"}
 
-// folders reads the account's mailboxes and finds each role's.
+// folders reads the account's mailboxes and finds each role's. The
+// special-use marks come with RETURN (SPECIAL-USE), a part of extended
+// LIST: it asks for them only where the server offers both, and lists
+// plainly where the server turns the option down even so.
 func (s *session) findFolders() error {
-	opts := &imap.ListOptions{ReturnSpecialUse: s.caps.Has(imap.CapSpecialUse)}
-	list, err := s.c.List("", "*", opts).Collect()
-	if err != nil {
-		return err
+	var list []*imap.ListData
+	var err error
+	if s.caps.Has(imap.CapSpecialUse) && s.caps.Has(imap.CapListExtended) {
+		list, err = s.c.List("", "*", &imap.ListOptions{ReturnSpecialUse: true}).Collect()
+	}
+	if list == nil {
+		if list, err = s.c.List("", "*", nil).Collect(); err != nil {
+			return err
+		}
 	}
 	s.folders = roles(list)
 	return nil
@@ -296,7 +304,9 @@ func (s *session) unread() (int, error) {
 	return int(*d.NumUnseen), nil
 }
 
-// summary is a fetched message as a list shows it.
+// summary is a fetched message as a list shows it, at the time it came
+// to the server: the sender's own Date says only what the sender wants,
+// and a date in the future would hold a message at the top of the list.
 func summary(a Account, role, mbox string, validity uint32, b *imapclient.FetchMessageBuffer) ipc.MailMessage {
 	m := ipc.MailMessage{
 		ID:      MessageID{Account: a.Name, Validity: validity, UID: uint32(b.UID), Mailbox: mbox}.String(),
@@ -310,7 +320,7 @@ func summary(a Account, role, mbox string, validity uint32, b *imapclient.FetchM
 	m.Answered = slices.Contains(b.Flags, imap.FlagAnswered)
 	if e := b.Envelope; e != nil {
 		m.Subject = clean(e.Subject)
-		if !e.Date.IsZero() {
+		if m.Date.IsZero() {
 			m.Date = e.Date
 		}
 		if len(e.From) > 0 {
