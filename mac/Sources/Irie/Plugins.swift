@@ -9,6 +9,7 @@ import SwiftUI
 struct PluginCommands: Commands {
     let store: Store
     let menu: MenuState
+    @Environment(\.openWindow) private var openWindow
 
     /// An action on the main actor, where SwiftUI runs a menu's actions.
     private func run(_ work: @escaping @MainActor () -> Void) -> () -> Void {
@@ -42,7 +43,13 @@ struct PluginCommands: Commands {
                             }
                         }
                     }
-                    if p.on, let words = p.setup {
+                    if p.name == "mail" && p.on {
+                        // Mail beside the sessions, or in a window of its
+                        // own (Mail.swift).
+                        Button("Show Mail in the Sidebar", action: run { store.openSide(.mail) })
+                        Button("Open Mail Window") { openWindow(id: MailWindow.id) }
+                            .keyboardShortcut("m", modifiers: [.command, .shift])
+                    } else if p.on, let words = p.setup {
                         Button("Set Up Each Part…", action: run { store.runWords(words) })
                     }
                 }

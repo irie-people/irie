@@ -240,7 +240,9 @@ struct IrieCommands: Commands {
             // the key cmux and VS Code give a right side bar.
             Button(f.sideOpen ? "Hide Right Sidebar" : "Show Right Sidebar", action: run { store.toggleSide() })
                 .keyboardShortcut("b", modifiers: [.command, .option])
-            ForEach(SideTab.built) { t in
+            // Mail's tab shows while the core's build has the mail plugin
+            // and it is on (Mail.swift).
+            ForEach(SideTab.built.filter { $0 != .mail || (f.has("mail") && f.plugins.first(where: { $0.name == "mail" })?.on != false) }) { t in
                 Button(t.title, action: run { store.toggleSideTab(t) })
                     .keyboardShortcut(t.key, modifiers: [.command, .option])
             }

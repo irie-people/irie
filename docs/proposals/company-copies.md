@@ -63,6 +63,6 @@ Date: 2026-11-14. Status: requirements, with what is built and what is next. An 
 ## 5. Checks
 
 - `internal/brand`: the names' form and length, `tools/brand.sh` agrees with the package, `Brand.swift` is current, `Exe` for long and non-Latin names, the build tags are Irie's own, and no Go or Swift string names the product itself.
-- `internal/plugins`: every package builds with `-tags noprivacy,nowriting`, and that `irie` links none of `internal/vpn`, `anon`, `browser`, `dms`, `htmltext` and `mcp`. `tools/check.sh` vets every package with the tags too.
+- `internal/plugins`: every package builds with `-tags noprivacy,nowriting,nomail`, and that `irie` links none of `internal/vpn`, `anon`, `browser`, `dms`, `htmltext`, `mcp` and `mail`, nor the mail plugin's IMAP and MIME libraries. `tools/check.sh` vets every package with the tags too. A copy that wants Mail keeps it by leaving `nomail` out of `Tags`.
 - `internal/config`: `ui.bar`.
 - By hand, before a release of a copy: build a renamed copy with its tags, run `help`, `config print`, `plugins`, `skills`, `ctl` and `setup --check` in an empty home, and look for Irie's name and the plugins' words; draw the Mac app with `mac/snapshot.sh` and look at the title bar and the welcome.

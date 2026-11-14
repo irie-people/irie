@@ -173,9 +173,13 @@ func (c *Core) mailAdd(ctx context.Context, sv *mail.Service, all []mail.Account
 		return ipc.MailResult{}, ipc.Errorf(ipc.CodeBadArgs, "%q isn't an email address.", n.Address)
 	}
 	password := n.Password
-	if n.Kind == config.MailGmail {
+	switch n.Kind {
+	case config.MailGmail:
 		// Google shows an app password in four groups of four.
 		password = strings.ReplaceAll(strings.TrimSpace(password), " ", "")
+	case config.MailProton:
+		// Bridge's passwords have no spaces; a paste may bring some along.
+		password = strings.TrimSpace(password)
 	}
 	if err := mail.CheckPassword(password); err != nil {
 		return ipc.MailResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s", said(err))

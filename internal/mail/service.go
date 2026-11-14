@@ -28,6 +28,11 @@ type Service struct {
 	closed   bool
 }
 
+// accountWait is the most one account's part of a list may take: an
+// account slower than that says so in its row, and the list comes without
+// it.
+const accountWait = 20 * time.Second
+
 // idleWait is how long an unused connection stays open by default:
 // opening one again takes a second or so.
 const idleWait = 5 * time.Minute
@@ -273,6 +278,8 @@ func (sv *Service) List(ctx context.Context, all []Account, a ListArgs) ipc.Mail
 		wg.Add(1)
 		go func(i int, x *acct) {
 			defer wg.Done()
+			ctx, cancel := context.WithTimeout(ctx, accountWait)
+			defer cancel()
 			results[i] = sv.listOne(ctx, x, a)
 		}(i, x)
 	}

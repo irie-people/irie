@@ -75,6 +75,14 @@ struct IrieApp: App {
                 .environment(store)
         }
         .defaultSize(ThemeMaker.size)
+        // Plugins > Mail > Open Mail Window (⇧⌘M): the mail plugin's
+        // accounts, list and message side by side (MailViews.swift).
+        Window("Mail", id: MailWindow.id) {
+            MailWindow()
+                .environment(store)
+                .frame(minWidth: 760, minHeight: 420)
+        }
+        .defaultSize(width: 1080, height: 700)
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
