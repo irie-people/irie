@@ -119,7 +119,9 @@ func TestSendReachesASessionWhoseTurnFailed(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"autoContinueAtUsageLimit": false}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := setupWith(t, agentConfig{env: map[string]string{"CLAUDE_CONFIG_DIR": dir}})
+	// The usage limit below would carry its task on, on a cheaper profile:
+	// one of the built-in ones, which run the machine's own claude.
+	c := setupWith(t, agentConfig{env: map[string]string{"CLAUDE_CONFIG_DIR": dir}, extra: "[route]\nfailover = false\n"})
 	failed := c.spawn("prompt,stopfail:overloaded")
 	limited := c.spawn("prompt,stopfail:rate_limit")
 	c.waitState(failed.ID, ipc.StateNeedsYou)
