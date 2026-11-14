@@ -19,9 +19,9 @@ package core
 // what it holds is, a session or group that joins a group goes last in it
 // or where a drag dropped it, and one taken out goes just after the group
 // it left. A pinned or parked session of a group waits in Pinned or Parked,
-// and comes back last in its group when unpinned or unparked, or first when
-// promoted, so the group stays where it is; one that joins a group comes
-// out of Pinned or Parked.
+// and comes back last in its group when unpinned or unparked, so the group
+// stays where it is; one that joins a group comes out of Pinned or Parked.
+// A boost moves none (priority.go).
 //
 // The groups live in the @irie_groups option of the agents' session, as
 // JSON; a session's group is in the journal (ui.grouped), as its space is,
@@ -488,8 +488,8 @@ func (c *Core) lastIn(id string, skip map[string]bool) string {
 
 // edgeIn is the first session (or the last) in the rest of the list
 // within the innermost group around x that holds one besides x: where x
-// goes first or last in its group without moving the group, as promote,
-// unpin, unpark and a new tab put it. A group of x's alone has no place of
+// goes first or last in its group without moving the group, as unpin,
+// unpark and a new tab put it. A group of x's alone has no place of
 // its own, so the one around it gives it. "" when no group around x holds
 // another. The caller holds c.mu.
 func (c *Core) edgeIn(x *session, last bool) string {

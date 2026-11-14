@@ -8,7 +8,7 @@ import (
 	"github.com/irie-people/irie/internal/tmux"
 )
 
-// Rename, freeze, thaw, promote, putting back and reorder are steps of the
+// Rename, freeze, thaw, boost, putting back and reorder are steps of the
 // history (DESIGN §4.5), and each round-trips: undo leaves the session as
 // it was before the action, and redo as the action left it.
 
@@ -159,9 +159,10 @@ func TestUndoAndRedoOfAFreezeAndAThaw(t *testing.T) {
 	}
 }
 
-// Undoing a promotion puts the session back where it was, parked if it
-// was, and undoing a putting back promotes it again where it is.
-func TestUndoOfAPromotionPutsTheSessionBack(t *testing.T) {
+// A boost moves no card, so undoing it gives back the level and nothing
+// else: a parked session stays parked where it is throughout, and undoing
+// a putting back boosts it again where it is.
+func TestUndoOfABoostGivesBackOnlyTheLevel(t *testing.T) {
 	c := setup(t)
 	id := map[string]string{}
 	for _, n := range []string{"alpha", "beta", "gamma"} {
@@ -175,40 +176,35 @@ func TestUndoOfAPromotionPutsTheSessionBack(t *testing.T) {
 		}
 	}
 	promote("beta", 1)
-	// Promoting it again changes no level, so it is no step.
+	// Boosting it again changes no level, so it is no step.
 	promote("beta", 1)
-	if h := c.history(); !slices.Equal(labels(h.Undo)[3:], []string{`park "beta"`, `promote "beta"`}) {
+	if h := c.history(); !slices.Equal(labels(h.Undo)[3:], []string{`park "beta"`, `boost "beta"`}) {
 		t.Fatalf("history %v", labels(h.Undo))
 	}
-	rows := c.list()
-	if got := names(rows); !slices.Equal(got, []string{"beta", "alpha", "gamma"}) || len(parked(rows)) != 0 {
-		t.Fatalf("promoted: %v, parked %v", got, parked(rows))
+	// Last, as parking put it, and parked: where it was, and stays.
+	where := func(when string, level int) {
+		t.Helper()
+		rows := c.list()
+		if got := names(rows); !slices.Equal(got, []string{"alpha", "gamma", "beta"}) || !slices.Equal(parked(rows), []string{"beta"}) {
+			t.Errorf("%s: %v, parked %v", when, got, parked(rows))
+		}
+		if s, _ := c.row(id["beta"]); s.Priority != level {
+			t.Errorf("%s, priority %d", when, s.Priority)
+		}
 	}
-
-	// Back where it was promoted from: last, as parking put it, and parked.
+	where("boosted", 1)
 	c.step(dirUndo)
-	rows = c.list()
-	if got := names(rows); !slices.Equal(got, []string{"alpha", "gamma", "beta"}) || !slices.Equal(parked(rows), []string{"beta"}) {
-		t.Errorf("after undo: %v, parked %v", got, parked(rows))
-	}
-	if s, _ := c.row(id["beta"]); s.Priority != 0 {
-		t.Errorf("after undo, priority %d", s.Priority)
-	}
+	where("after undo", 0)
 	c.step(dirRedo)
-	rows = c.list()
-	if got := names(rows); !slices.Equal(got, []string{"beta", "alpha", "gamma"}) || len(parked(rows)) != 0 {
-		t.Errorf("after redo: %v, parked %v", got, parked(rows))
-	}
-	if s, _ := c.row(id["beta"]); s.Priority != 1 {
-		t.Errorf("after redo, priority %d", s.Priority)
-	}
+	where("after redo", 1)
 
 	// Putting it back moves nothing, and nor does undoing that.
+	c.park(id["beta"], false)
 	if err := c.call(ipc.OpReorder, ipc.ReorderArgs{Session: id["beta"], Before: id["gamma"]}, nil); err != nil {
 		t.Fatal(err)
 	}
 	promote("beta", 0)
-	if h := c.history(); !slices.Equal(labels(h.Undo)[5:], []string{`reorder "beta"`, `stop promoting "beta"`}) {
+	if h := c.history(); !slices.Equal(labels(h.Undo)[5:], []string{`unpark "beta"`, `reorder "beta"`, `stop boosting "beta"`}) {
 		t.Fatalf("history %v", labels(h.Undo))
 	}
 	c.step(dirUndo)

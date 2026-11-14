@@ -548,24 +548,22 @@ func TestUndoOfAParkOrAnUnparkPutsTheSessionBackInItsPlace(t *testing.T) {
 	look("an old park undone", []string{"delta", "gamma", "alpha", "beta"}, []string{"delta", "alpha"})
 }
 
-// Promote unparks a session with no step of its own, so undoing a park
-// after it finds nothing to do: it asks, and settling moves on. A closed
+// A park whose session was unparked since, by a step the history does not
+// keep, finds nothing to undo: it asks, and settling moves on. A closed
 // session has nothing to unpark.
 func TestUndoOfAParkAsksWhenItIsUnparkedOrClosed(t *testing.T) {
 	c := setup(t)
 	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "alpha"})
 	c.park(a.ID, true)
-	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: a.ID, Level: 1}, nil); err != nil {
-		t.Fatal(err)
-	}
+	c.park(a.ID, false)
 	if got := parked(c.list()); len(got) != 0 {
-		t.Fatalf("after promoting it, parked = %v", got)
+		t.Fatalf("after unparking it, parked = %v", got)
 	}
-	// Leave the promotion out of the history, so the park is next while
-	// the session is unparked.
+	// Leave the unpark out of the history, so the park is next while the
+	// session is unparked.
 	c.dropLast(nil)
 	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `park "alpha"`}) {
-		t.Errorf("history after promoting it %v", labels(h.Undo))
+		t.Errorf("history after unparking it %v", labels(h.Undo))
 	}
 	ch := c.ask(dirUndo)
 	if ch.Question != `"alpha" is not parked any more.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceSettle, ipc.ChoiceSkip, ipc.ChoiceCancel}) || !ch.Options[0].Recommended {
@@ -577,12 +575,6 @@ func TestUndoOfAParkAsksWhenItIsUnparkedOrClosed(t *testing.T) {
 	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`}) || !slices.Equal(labels(h.Redo), []string{`park "alpha"`}) {
 		t.Errorf("history after settle %v / %v", labels(h.Undo), labels(h.Redo))
 	}
-	redo := c.history().Redo
-	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: a.ID, Level: 0}, nil); err != nil {
-		t.Fatal(err)
-	}
-	c.dropLast(redo)
-
 	// Redo parks it again. Leave its close out of the history, so the park
 	// is next while it is closed.
 	c.step(dirRedo)

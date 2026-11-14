@@ -225,10 +225,14 @@ enum Fixture {
     /// The plugins op's answer, as `irie plugins` prints it on a Mac with
     /// Mullvad VPN and Mullvad Browser installed.
     static let plugins = #"""
-    {"plugins": [{"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
-      "summary": "Mullvad VPN, anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+    {"plugins": [{"name": "vpn", "title": "VPN", "on": true,
+      "summary": "Your VPN in every client, connected, disconnected or moved from any task bar or the menu: Mullvad VPN, Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and any other through commands of your own.",
       "parts": [
-        {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "detail": "Connected in Malmö, Sweden.", "summary": "See the VPN in every client, and connect, disconnect or change its place from a task bar or the menu."},
+        {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "setup": ":setup vpn", "detail": "VPN on: Malmö, Sweden (se-mma-wg-002), lockdown on, 41 days left.", "summary": "See the VPN in every client, and connect or disconnect it from a task bar or the menu, or move it where the VPN has places."}
+      ]},
+     {"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
+      "summary": "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+      "parts": [
         {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through \#(Brand.name)'s SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
         {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
