@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/irie-people/irie/compare/v1.0.0...v1.1.0) (2026-11-14)
+
+
+### Features
+
+* **core:** bring back the sessions a restart lost ([24cf8ab](https://github.com/irie-people/irie/commit/24cf8ab0f29fc0a837c60b43f4eebdf1cef7752a))
+
+
+### Bug Fixes
+
+* **anon:** close three leaks found testing anonymous research ([60adf55](https://github.com/irie-people/irie/commit/60adf55b6c1654241ccfeff8a14bff4cf8d58bb1))
+* **anon:** keep a quoted +anon task in its compartment ([726c120](https://github.com/irie-people/irie/commit/726c1201d593184e5fc0a929be41c089590280eb))
+* **anon:** shut an anonymous session's shell in a sandbox ([c26dbed](https://github.com/irie-people/irie/commit/c26dbed438f4a8ca0bec305d9741d0ccbb70eeea))
+
 ## [1.0.0](https://github.com/irie-people/irie/compare/v0.2.0...v1.0.0) (2026-11-09)
 
 
