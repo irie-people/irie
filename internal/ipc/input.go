@@ -32,6 +32,9 @@ type InputArgs struct {
 	// Outside is the selected session outside Irie, by its key (its vendor
 	// id, else id:<short id>), which :move with no name brings in.
 	Outside string `json:"outside,omitempty"`
+	// Group is the selected header of one of your groups, by its id, which
+	// :nest and :ungroup act on (DESIGN §4.1).
+	Group string `json:"group,omitempty"`
 	// Repo, InPlace, Profile, Model and Tutor say where, on what and how a
 	// task runs when its words do not: the client's own menus. The words
 	// win. Tutor is off, explain or teach (docs/proposals/learning.md).

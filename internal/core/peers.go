@@ -382,7 +382,7 @@ func (c *Core) isPeerRow(id string) bool {
 // when it is one of the peers'. Reorder does not: a peer's rows keep its
 // own order.
 var peerOps = map[string]bool{
-	ipc.OpShow: true, ipc.OpSend: true, ipc.OpClose: true, ipc.OpRename: true, ipc.OpPark: true,
+	ipc.OpShow: true, ipc.OpSend: true, ipc.OpContinue: true, ipc.OpClose: true, ipc.OpRename: true, ipc.OpPark: true,
 	ipc.OpUnpark: true, ipc.OpPriority: true, ipc.OpFreeze: true, ipc.OpThaw: true, ipc.OpRate: true,
 	ipc.OpResult: true, ipc.OpScreen: true, ipc.OpKeys: true, ipc.OpConversation: true, ipc.OpReorder: true,
 }

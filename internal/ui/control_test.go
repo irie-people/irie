@@ -403,6 +403,61 @@ func TestDraggingAcrossParkedsEdge(t *testing.T) {
 	}
 }
 
+// In the List view a card moves among the cards of its own group, those on
+// both sides of a group inside it as one, and waits over the cards of a
+// group inside its group, where a drop sends it back. Unparked into a
+// group inside a folded one, a session's selection goes to the folded
+// group's header.
+func TestDraggingACardStaysInItsInnermostGroup(t *testing.T) {
+	rows, head := treeRows()
+	for i := range rows {
+		rows[i].Order = i
+	}
+	m, b := ctlAt(t, rows, 34, 80)
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("v"))
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	y := func(name string) int { return lineOf(t, m, name) }
+	// fork-docs, after Acme, to the top of Clients.
+	m = dragAlong(m, y("fork-docs"), y("scratch-notes"))
+	if want := []string{`reorder s4 before "s2"`}; !slices.Equal(b.calls, want) {
+		t.Errorf("calls = %v, want %v", b.calls, want)
+	}
+	want := []string{"web-fix", "▾ Clients", "fork-docs", "scratch-notes", "▾ Acme", "irie-theme", "▾ Home", "▾ Garden", "web-copy", "irie-tests"}
+	if got := outline(m); !slices.Equal(got, want) {
+		t.Errorf("outline %q, want %q", got, want)
+	}
+	// Over Acme's card scratch-notes waits in Clients, and dropped there
+	// goes back.
+	b.calls = nil
+	m = send(m, tea.MouseClickMsg{X: 5, Y: y("scratch-notes"), Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: y("fork-docs"), Button: tea.MouseLeft})
+	if got := order(m); !slices.Equal(got, []string{"s1", "s2", "s4", "s3", "s5", "s6"}) {
+		t.Fatalf("while dragging: %v", got)
+	}
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: y("irie-theme"), Button: tea.MouseLeft})
+	if got := order(m); !slices.Equal(got, []string{"s1", "s2", "s4", "s3", "s5", "s6"}) {
+		t.Errorf("over Acme the card moved: %v", got)
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 5, Y: y("irie-theme"), Button: tea.MouseLeft})
+	if got := outline(m); !slices.Equal(got, want) || len(b.calls) != 0 {
+		t.Errorf("a drop on Acme: outline %q, calls %v", got, b.calls)
+	}
+	if !strings.Contains(m.status, "only among the others of its group") || selectedName(m) != "scratch-notes" {
+		t.Errorf("status %q, selection %s", m.status, selectedName(m))
+	}
+	// irie-theme unparked while Clients is folded.
+	rows[2].Parked = true
+	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameSnapshot, Sessions: rows, Header: head}})
+	m = send(m, keyMsg("Z"))
+	m.fold(userKey("g1"))
+	m = selectNamed(t, m, "irie-theme")
+	m = send(m, keyMsg("z"))
+	if last := b.calls[len(b.calls)-1]; last != "park s3 false" || selectedName(m) != "Clients" {
+		t.Errorf("unparked: call %q, selection %s", last, selectedName(m))
+	}
+}
+
 func TestWithoutControlsTheKeysSaySo(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 2)
 	m = send(m, keyMsg("f"))

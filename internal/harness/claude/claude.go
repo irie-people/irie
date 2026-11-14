@@ -357,10 +357,14 @@ type permissions struct {
 
 // LocalAllowed are the commands a local model's session runs without
 // asking (localPermissions): building, testing, vetting and formatting, in
-// Go, Python, JavaScript and Rust. Claude Code runs its read-only commands,
-// such as ls, cat and git diff, without asking in every mode.
+// Go, Python, JavaScript and Rust, setting up a Go module, and committing
+// its work where it runs, so that a bench's run (DESIGN §6.6) gets through
+// on its own. A test runs any code it likes, so go run adds no new risk;
+// nothing here pushes. Claude Code runs its read-only commands, such as ls,
+// cat and git diff, without asking in every mode.
 var LocalAllowed = []string{
 	"Bash(go build *)", "Bash(go test *)", "Bash(go vet *)", "Bash(go fmt *)", "Bash(gofmt *)",
+	"Bash(go mod *)", "Bash(go run *)", "Bash(git add *)", "Bash(git commit *)",
 	"Bash(pytest *)", "Bash(python -m pytest *)", "Bash(python3 -m pytest *)",
 	"Bash(npm test *)", "Bash(npm run test *)", "Bash(npm run build *)", "Bash(npm run lint *)",
 	"Bash(cargo build *)", "Bash(cargo check *)", "Bash(cargo test *)", "Bash(cargo fmt *)",
