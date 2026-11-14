@@ -304,9 +304,10 @@ private struct SessionCard: View, Equatable {
                 .opacity(hovering ? 0 : 1)
                 // Only the card under the pointer has them: 30 hidden sets
                 // of AppKit buttons and menus cost every drawing. A promoted
-                // card has them too, for its promote button, which stays.
+                // card has its promote button alone, which stays.
                 if actionsShown || session.isPromoted {
-                    QuickActions(session: session, ink: deep != nil, first: first, last: last, hovering: hovering)
+                    QuickActions(session: session, ink: deep != nil, first: first, last: last,
+                                 all: actionsShown, hovering: hovering)
                 }
             }
             .frame(width: Self.slot, alignment: .trailing)
@@ -727,8 +728,8 @@ private struct ModeSwitch: View {
 /// VoiceOver gets them, and more, as the card's actions. A promoted card
 /// keeps its promote button, filled, where it is once the pointer leaves:
 /// the one mark that it is promoted, beside its age, and a click on it puts
-/// the card back among the rest. The others are there unseen, so it never
-/// moves.
+/// the card back among the rest. The others leave their room empty then, so
+/// it never moves, and their buttons and menu cost nothing.
 @MainActor
 private struct QuickActions: View {
     @Environment(Store.self) private var store
@@ -738,6 +739,9 @@ private struct QuickActions: View {
     /// First or last in its group (SessionCard).
     let first: Bool
     let last: Bool
+    /// Whether the card has made all of them (SessionCard's actionsShown),
+    /// or only a promoted card's promote button.
+    let all: Bool
     /// Whether the pointer is on the card: the rest show only then.
     let hovering: Bool
 
@@ -745,19 +749,20 @@ private struct QuickActions: View {
         let promote = hovering || session.isPromoted
         HStack(spacing: 0) {
             // A click on the card types to it; the folder is in the menu.
-            PauseButton(session: session).modifier(Shown(on: hovering))
+            other(16) { PauseButton(session: session) }
             PromoteButton(session: session, ink: ink).modifier(Shown(on: promote))
-            if store.canPark { ParkButton(session: session, onCard: true).modifier(Shown(on: hovering)) }
-            Menu {
-                Actions(session: session, first: first, last: last)
-            } label: {
-                Image(systemName: "ellipsis")
+            if store.canPark { other(16) { ParkButton(session: session, onCard: true) } }
+            other(18) {
+                Menu {
+                    Actions(session: session, first: first, last: last)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .frame(width: 18)
+                .help("More")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 18)
-            .help("More")
-            .modifier(Shown(on: hovering))
         }
         .buttonStyle(.borderless)
         .font(.system(size: 11, weight: .semibold))
@@ -765,8 +770,17 @@ private struct QuickActions: View {
         .accessibilityHidden(true)
     }
 
-    /// One of them, seen and clickable only while on; unseen, it still keeps
-    /// its room.
+    /// One of the others, `width` points wide, seen only under the pointer;
+    /// before the card has made them, its empty room.
+    @ViewBuilder private func other<V: View>(_ width: CGFloat, @ViewBuilder _ button: () -> V) -> some View {
+        if all {
+            button().modifier(Shown(on: hovering))
+        } else {
+            Color.clear.frame(width: width, height: 18)
+        }
+    }
+
+    /// Seen and clickable only while on; unseen, it keeps its room.
     private struct Shown: ViewModifier {
         let on: Bool
 
