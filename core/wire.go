@@ -7,6 +7,10 @@ import "github.com/irie-people/irie/internal/ipc"
 // The wire's types: the requests and replies, every op's args and result,
 // the frames of a subscription and the rows they carry (DESIGN §2.4).
 type (
+	BenchArgs        = ipc.BenchArgs
+	BenchResult      = ipc.BenchResult
+	Bench            = ipc.Bench
+	BenchRun         = ipc.BenchRun
 	ContextArgs      = ipc.ContextArgs
 	ContextResult    = ipc.ContextResult
 	ContextTurn      = ipc.ContextTurn
@@ -155,6 +159,11 @@ type (
 // The wire's constants: the API version, the op and frame names, the
 // states, the error codes and the other values its fields take.
 const (
+	OpBench            = ipc.OpBench
+	BenchRunning       = ipc.BenchRunning
+	BenchJudging       = ipc.BenchJudging
+	BenchDone          = ipc.BenchDone
+	BenchFailed        = ipc.BenchFailed
 	OpContext          = ipc.OpContext
 	OpFork             = ipc.OpFork
 	ContextLog         = ipc.ContextLog

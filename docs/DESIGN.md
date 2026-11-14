@@ -239,6 +239,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `local` | `start?` | the local server, the machine's memory, and each model weighed against it | M10 (§6.3) |
 | `route` | `task`, `parent?` | where `+auto` would run it: class, choice, reason, every profile weighed | M10 (§6.4) |
 | `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |
+| `bench` | `task?`, `profile?`, `repo?`, `host?`, `runs?`, `judge?`; with no task it lists | `bench`, the bench started; or `benches`, every one, the newest first | §6.6 |
 | `result` | `session` | `text`: what its agent said at the end of its last turn | M10 (§6.4) |
 | `tool` | `name`: `setup` or `models` | `session`, running `irie setup local` or `irie ctl local` | M10 (§6.4) |
 | `rename` | `session`, `name` | `session`, with the name it got: whitespace and control characters made single spaces, cut at 200 bytes, numbered (`-2`) when another row has it. The name is then the user's, which Claude Code's titles leave be (§4.2). Refuses an empty name with `bad_args`. Records `ui.renamed` when the name changed | M4 |
@@ -1422,6 +1423,13 @@ claude = 1.0
 # medium = ["implement", "fix", "test", …]
 # hard = ["design", "refactor", "debug", "review", "orchestrat", …]
 
+[bench]                       # several runs of one task, then a judge (§6.6)
+runs = 3                      # how many sessions do the task
+judge = "claude"              # the profile that scores them, makes the result and rewrites the playbook
+pass = 70                     # a run scored this or more, of 100, is rated good
+timeout = "1h"                # a run still at work after this is stopped and judged as it stands
+rules = 30                    # the most rules a playbook keeps
+
 [repos]
 roots = []                    # e.g. ["~/code"]; scanned two levels deep for git repos
 aliases = {}                  # e.g. { web = "~/code/website" }
@@ -1738,6 +1746,19 @@ So Irie runs whichever llama.cpp build the user names, beside its Ollama server,
 - **FreeToken** (FlashML, a Berkeley-led team, Apache-2.0, August 2026; research of 2026-11-07). It runs mixture-of-experts models larger than the GPU: the experts stay in RAM, and the ones used lately are kept on an NVIDIA GPU. It also saves a hybrid model's running state at message, thinking and tool-call boundaries, so after an agent edits its history only the part from the edit on is read again. It runs only on Linux and Windows PCs with an NVIDIA RTX 30-series or later GPU; a macOS engine is on its roadmap but has not shipped. On Apple silicon the CPU and GPU share one memory, so the expert offload has nothing to move, and FreeToken's own guide keeps experts resident by default on unified-memory GPUs. llama-server already saves a checkpoint at each user message (since 2026-06). A FreeToken server on another machine speaks Anthropic's API, so a user with such a PC adds it as a profile with `ANTHROPIC_BASE_URL`, as for a free cloud tier (§6.3).
 
 ---
+
+
+### 6.6 The bench: three runs, one judge, a playbook
+
+A local model costs no tokens, so the more work it does the better, but its accuracy on a kind of work is a guess until it has done some. A bench measures it on real work and gets that work done well all the same, the way a team lead would: give one task to several people of the same level, each on their own, then have a senior read what each did, grade it, put together the best of it, and tell the team what to do differently next time.
+
+- **Start.** `irie ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK`, or `:bench …` in a task bar (docs/CORE.md). It starts `bench.runs` sessions (3) of one profile on the task, each on its own: a worktree each in `@REPO`, else a scratch folder each. The profile is the one named, else the first local one in `route.profiles`; `+auto` is refused, since a bench measures one profile. Each is named `bench 1/3 · <title>`, and with `^HOST` they start on that peer (§2.8), which reads its own profiles and repos. Their llama-server's slots (§6.5) let them share one copy of a local model.
+- **Through.** Once every run's turn has ended, with no helper at work, the judge starts on the same machine on `bench.judge` (`+claude`), named `bench judge · <title>`. A run still at work after `bench.timeout` (an hour) gets an Escape, which ends its turn, and is judged as it stands. The judge's brief gives the task, where each run worked and its last message, and four things to do: score each run from 0 to 100 against the task, as a reviewer grades a pull request; make the final result from the best run, bringing in what the others got right and filling what all of them missed, in its own worktree or folder; rewrite the profile's playbook; and end with its verdict as a fenced JSON block (`runs`: `run`, `score`, `missed`; `final`; `playbook`). A verdict that does not parse is asked for again, twice at most.
+- **Ratings.** Each run is rated good at `bench.pass` (70) or more, else bad, as a rating of the user's would (§6.4), so the router learns the profile's accuracy for the task's class from it. A peer's run is rated on its own core, and its outcome is kept with the bench here too, so this core's router learns from it for as long as the journal keeps its own (`journal.keep_days`).
+- **Playbook.** A profile's playbook is the rules its agents read before every task: `playbooks/<profile>.md` in the state folder, whose lines that start with `- ` are its rules, at most `bench.rules` (30) of one line each. The judge keeps the rules that still help, drops those that did not and adds one for each mistake a rule would have prevented, about how to work rather than about the one task, and the one it replaces goes to `playbooks/history/`. Every session on the profile is told its rules as it starts (§3.3's SessionStart note), so a subtask delegated to a local model (§6.4) gets them too; a run on a peer gets them at the top of its task. The user can read and edit the file: an edit counts from the next session.
+- **Kept.** Each bench is `benches/<id>.json` in the state folder, and the core moves the open ones on every five seconds, so a restarted core carries on with them. `irie ctl bench` with no task lists them, a line each with each run's score; `--wait` waits for the judge and prints its verdict.
+
+The judge costs tokens, but only to read and finish work that free runs did, and the playbook and the ratings outlast the bench: once a local model's record on a class of work passes `route.local_min_accuracy`, auto and delegation send it that work alone.
 
 ## 7. Ghostty and Irie.app
 

@@ -36,6 +36,7 @@ type Config struct {
 	Profiles map[string]Profile `toml:"profiles"`
 	Local    Local              `toml:"local"`
 	Route    Route              `toml:"route"`
+	Bench    Bench              `toml:"bench"`
 	Repos    Repos              `toml:"repos"`
 	Worktree Worktree           `toml:"worktree"`
 	Tmux     Tmux               `toml:"tmux"`
@@ -324,6 +325,21 @@ func (r Route) Priors() map[string]route.Prior {
 	}
 	return out
 }
+
+// Bench is how a bench runs (DESIGN §6.6): several sessions of one
+// profile do the same task, each on its own, then a judge scores each,
+// makes the one result from the best of them, and rewrites the profile's
+// playbook, the rules its agents read at the start of every task.
+type Bench struct {
+	Runs    int           `toml:"runs"`    // how many sessions do the task
+	Judge   string        `toml:"judge"`   // the profile that judges them and makes the result
+	Pass    int           `toml:"pass"`    // a run scored this or more, of 100, is rated good
+	Timeout time.Duration `toml:"timeout"` // a run still at work after this is stopped and judged as it stands
+	Rules   int           `toml:"rules"`   // the most rules a playbook keeps
+}
+
+// MaxBenchRuns is the most sessions one bench runs.
+const MaxBenchRuns = 8
 
 // Permission modes Claude Code takes (--permission-mode).
 var PermissionModes = []string{"acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"}
@@ -758,6 +774,7 @@ func Default() Config {
 		},
 		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
+		Bench: Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30},
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
 			Base:         "",
@@ -882,6 +899,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Profiles map[string]toml.Primitive `toml:"profiles"`
 		Local    *Local                    `toml:"local"`
 		Route    *Route                    `toml:"route"`
+		Bench    *Bench                    `toml:"bench"`
 		Repos    *Repos                    `toml:"repos"`
 		Worktree *Worktree                 `toml:"worktree"`
 		Tmux     *Tmux                     `toml:"tmux"`
@@ -903,7 +921,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1120,6 +1138,22 @@ func (c Config) Validate() error {
 	}
 	if r.LocalMinAccuracy <= 0 || r.LocalMinAccuracy > 1 {
 		bad("route.local_min_accuracy = %v: must be above 0 and at most 1", r.LocalMinAccuracy)
+	}
+	b := c.Bench
+	if b.Runs < 1 || b.Runs > MaxBenchRuns {
+		bad("bench.runs = %d: must be from 1 to %d", b.Runs, MaxBenchRuns)
+	}
+	if _, ok := c.Profiles[b.Judge]; !ok {
+		bad("bench.judge = %q: must be a profile", b.Judge)
+	}
+	if b.Pass < 1 || b.Pass > 100 {
+		bad("bench.pass = %d: must be from 1 to 100", b.Pass)
+	}
+	if b.Timeout < time.Minute {
+		bad("bench.timeout = %v: must be at least a minute", b.Timeout)
+	}
+	if b.Rules < 1 || b.Rules > 200 {
+		bad("bench.rules = %d: must be from 1 to 200", b.Rules)
 	}
 	if r.PriorWeight < 0 {
 		bad("route.prior_weight = %d: must not be negative", r.PriorWeight)

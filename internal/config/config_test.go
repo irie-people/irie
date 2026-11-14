@@ -95,6 +95,9 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if len(r.Words.Small) == 0 || len(r.Words.Hard) == 0 {
 		t.Errorf("route words = %+v", r.Words)
 	}
+	if want := (Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30}); c.Bench != want {
+		t.Errorf("bench = %+v, want %+v", c.Bench, want)
+	}
 	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
 		t.Errorf("local = %+v, want %+v", c.Local, want)
 	}
@@ -556,6 +559,12 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[route]\nmin_accuracy = 1.5\n", "route.min_accuracy"},
 		{"[route]\nlocal_min_accuracy = 0\n", "route.local_min_accuracy"},
 		{"[route]\nlocal_min_accuracy = 1.2\n", "route.local_min_accuracy"},
+		{"[bench]\nruns = 0\n", "bench.runs"},
+		{"[bench]\nruns = 9\n", "bench.runs"},
+		{"[bench]\njudge = \"nope\"\n", "bench.judge"},
+		{"[bench]\npass = 0\n", "bench.pass"},
+		{"[bench]\ntimeout = \"10s\"\n", "bench.timeout"},
+		{"[bench]\nrules = 0\n", "bench.rules"},
 		{"[route]\nprior_weight = -1\n", "route.prior_weight"},
 		{"[route]\npressure = 120\n", "route.pressure"},
 		{"[route]\ndelegate_mode = \"yolo\"\n", "route.delegate_mode"},

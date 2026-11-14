@@ -17,7 +17,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy], :plugins, :models, :vpn [on|off|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :close others|below|finished, :fork [@TURN] [TASK], :write [TASK]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -164,6 +164,16 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpVPN, vpnArgs(arg), nil)
 	case name == "route" && arg != "":
 		return step(OpRoute, RouteArgs{Task: arg}, nil)
+	case name == "bench" && arg != "":
+		// :bench [^HOST] [+PROFILE] [@REPO] TASK runs the task on several
+		// sessions of one profile, then judges them (DESIGN §6.6). The
+		// task may run on over more lines.
+		a, err := BenchTask(arg, in.Text, v.Home)
+		if err != nil {
+			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
+		}
+		a.Task = Unpaste(a.Task, in.Pastes)
+		return step(OpBench, a, nil)
 	case (name == OpFreeze || name == OpThaw) && arg == "all":
 		return step(name, FreezeArgs{All: true}, nil)
 	case (name == OpFreeze || name == OpThaw) && arg == "":
@@ -391,6 +401,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text += "."
 	case OpRoute:
 		r.Did, r.Text = InputAnswered, as[RouteChoice](result).Reason
+	case OpBench:
+		r.Text = BenchStarted(as[BenchResult](result).Bench)
 	case OpVPN:
 		r.Text = as[VPNResult](result).Text
 		if d := as[VPNArgs](st.Args).Do; d == "" || d == VPNTime {

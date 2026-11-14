@@ -137,6 +137,7 @@ type Core struct {
 	steps      stateFile             // state.json: the undo and redo stacks (undo.go)
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
 	peers      map[string]*peerState // the other machines' cores this one is paired with, by name (peers.go)
+	benches    benchState            // the benches this core started, and the playbooks (bench.go); a lock of its own, but its playbooks are under mu
 	raw        bool                  // the slot shows the picked session's raw terminal, not its conversation
 	split      string                // the session the Mac app shows beside its teammates, in the view session (view.go)
 	team       *tmux.Runner          // the team server, where sessions' teammates run (team.go)
@@ -342,6 +343,7 @@ func Run(o Options) error {
 	c.loadRecent()
 	c.loadLocal()
 	c.loadOutcomes()
+	c.loadBenches()
 	c.loadOrder()
 	c.loadSpaces()
 	c.loadHues()
@@ -416,6 +418,9 @@ func Run(o Options) error {
 			}
 			if n%trodEvery == 0 {
 				go c.trodSweep()
+			}
+			if n%benchEvery == 0 {
+				go c.benchSweep()
 			}
 			if n%lidEvery == 0 {
 				go c.lidSweep()
@@ -760,10 +765,16 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.OpBench,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
+	case ipc.OpBench:
+		var a ipc.BenchArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.benchOp(a)
 	case ipc.OpList:
 		// Whoever lists is looking, so the sessions outside Irie are
 		// refreshed when they are old; a problem is in the result.
