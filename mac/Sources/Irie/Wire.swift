@@ -36,7 +36,7 @@ struct Session: Codable, Identifiable, Equatable {
     var tokens: Tokens?
     /// Its place in the list, which the user sets; whether it is parked;
     /// when it was frozen, and whether its agent still runs on to its next
-    /// tool call; 1 while it is promoted (Controls.swift).
+    /// tool call; 1 while it is boosted (Controls.swift).
     var order: Int?
     var parked: Bool?
     /// Whether it is pinned, in the Pinned group at the top (Tabs.swift).

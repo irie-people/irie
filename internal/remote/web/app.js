@@ -323,8 +323,8 @@ function sessionActions(conn, s, { inSession = false } = {}) {
   }
   if (!ended && conn.can('priority')) {
     items.push(s.priority
-      ? { label: 'Put back', note: 'Among the rest again', run: () => op(conn, 'priority', { session: s.id, level: 0 }, { done: `Put “${s.name}” back` }) }
-      : { label: 'Promote', note: 'To the top, and the machine first', run: () => op(conn, 'priority', { session: s.id, level: 1 }, { done: `Promoted “${s.name}”` }) });
+      ? { label: 'Stop boosting', note: 'Among the rest again', run: () => op(conn, 'priority', { session: s.id, level: 0 }, { done: `Put “${s.name}” back` }) }
+      : { label: 'Boost', note: 'The machine first, where it is', run: () => op(conn, 'priority', { session: s.id, level: 1 }, { done: `Boosted “${s.name}”` }) });
   }
   if (conn.can('rate')) {
     items.push({ row: [
@@ -787,14 +787,14 @@ function fillCard(row, c, s, now) {
   card.innerHTML =
     `<span class="${L.markClass(s, c.redOnDone)}">${L.glyph(lk)}</span>` +
     '<div class="c-main">' +
-    `<div class="c-top"><span class="c-name">${esc(s.name)}</span>${s.priority ? '<span class="c-prio" title="Promoted">▲</span>' : ''}<span class="c-age">${esc(age)}</span></div>` +
+    `<div class="c-top"><span class="c-name">${esc(s.name)}</span>${s.priority ? '<span class="c-prio" title="Boosted">▲</span>' : ''}<span class="c-age">${esc(age)}</span></div>` +
     `<div class="c-detail">${esc(detail)}</div>` +
     (meta ? `<div class="c-meta">${esc(meta)}</div>` : '') +
     (helpers.length ? '<div class="c-helpers">' + helpers.map((a) =>
       `<div class="c-helper${a.needs_you ? ' loud' : ''}"><span class="arrow">↳</span><b>${esc(a.type || 'Helper')}</b> ${esc(a.detail || '')}</div>`).join('') +
       (more > 0 ? `<div class="c-helper">and ${more} more helper${more === 1 ? '' : 's'}</div>` : '') + '</div>' : '') +
     '</div>';
-  card.setAttribute('aria-label', [s.name, L.label(s), detail !== L.label(s) ? detail : '', s.priority ? 'promoted' : '', 'started ' + L.ageSpoken(s.created, now)].filter(Boolean).join(', '));
+  card.setAttribute('aria-label', [s.name, L.label(s), detail !== L.label(s) ? detail : '', s.priority ? 'boosted' : '', 'started ' + L.ageSpoken(s.created, now)].filter(Boolean).join(', '));
   // The actions under it, for a swipe to the left.
   row._acts.replaceChildren(
     h('button', { class: 'sa park', tabindex: '-1', text: s.parked ? 'Unpark' : 'Park', onclick: () => {
