@@ -532,6 +532,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-10 | https://code.claude.com/docs/en/permissions.md | Read rules take `//` before an absolute path and `~/` for home: an anonymous session's Read rules for the compartments' file and the user's sign-ins |
 | 2026-11-10 | RFC 1928, SOCKS Protocol Version 5, https://www.rfc-editor.org/rfc/rfc1928 | the forwarder's SOCKS5 server and its client to the exit: greeting, no-authentication method, CONNECT with an IPv4, IPv6 or domain address, reply codes (`internal/anon/forward.go`) |
 | 2026-11-10 | RFC 9110, HTTP Semantics, §7.6.1 and §9.3.6, https://www.rfc-editor.org/rfc/rfc9110 | the forwarder's HTTP proxy: CONNECT's 2xx and tunnel, and the hop-by-hop headers it drops from a plain request and its response |
+| 2026-11-14 | https://github.com/krishhgg/Insomnia/blob/main/docs/lid-close.md (MIT; read only, no code taken: with sleep disabled, closing the lid no longer turns the panel or the keyboard light off) ; pmset(8) (macOS 14, read locally: displaysleepnow puts the display to sleep at once) ; ioreg -r -k AppleClamshellState -d 1, timed locally at about 50 ms a run | The lid: the display put to sleep when the lid closes while the core keeps sleep off, once a close and not with another display (DESIGN §4.12) |
 
 ## Third-party code
 

@@ -17,8 +17,9 @@ import (
 
 // lidMac stands in for the Mac's tools on PATH: sudo, which runs pmset
 // -a disablesleep by the rule and logs what it ran; pmset, which says
-// whether sleep is off, reads the battery and logs sleepnow; notifyutil,
-// for the heat; ioreg, for the lid; and system_profiler, for the displays.
+// whether sleep is off, reads the battery and logs sleepnow, and
+// displaysleepnow apart; notifyutil, for the heat; ioreg, for the lid; and
+// system_profiler, for the displays.
 type lidMac struct {
 	dir string
 }
@@ -35,6 +36,7 @@ func newLidMac(t *testing.T) *lidMac {
 	m.set("batt", "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1)\t80%; charging; present: true\n")
 	m.set("heat", "0")
 	m.set("lid", "No")
+	m.set("displays", lidBuiltIn)
 	m.set("systemstate", "Current System Capabilities are: CPU Graphics Audio Network \nCurrent Power State: 4\n")
 	fakeTool(t, bin, "sudo", `echo "$*" >> `+m.path("sudo.log")+`
 [ "$2 $3 $4" = "/usr/bin/pmset -a disablesleep" ] || exit 1
@@ -44,20 +46,34 @@ echo "$5" > `+m.path("off")+"\n")
 "-g batt") cat `+m.path("batt")+` ;;
 "-g systemstate") cat `+m.path("systemstate")+` ;;
 sleepnow) echo sleepnow >> `+m.path("pmset.log")+` ;;
+displaysleepnow) echo displaysleepnow >> `+m.path("display.log")+` ;;
 *) exit 1 ;;
 esac
 `)
 	fakeTool(t, bin, "notifyutil", `echo "com.apple.system.thermalpressurelevel $(cat `+m.path("heat")+`)"`+"\n")
 	fakeTool(t, bin, "ioreg", `echo "    \"AppleClamshellState\" = $(cat `+m.path("lid")+`)"`+"\n")
-	fakeTool(t, bin, "system_profiler", `echo '{"SPDisplaysDataType" : [{"spdisplays_ndrvs" : [{"spdisplays_connection_type" : "spdisplays_internal"}]}]}'`+"\n")
+	fakeTool(t, bin, "system_profiler", `cat `+m.path("displays")+"\n")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("IRIE_LID", "")
 	rule := m.path("irie-lid")
 	m.set("irie-lid", "the rule")
-	old := lidRule
-	lidRule = rule
-	t.Cleanup(func() { lidRule = old })
+	old, oldLook := lidRule, lidLook
+	lidRule, lidLook = rule, 0
+	t.Cleanup(func() { lidRule, lidLook = old, oldLook })
 	return m
+}
+
+// What system_profiler prints with the built-in display alone, and with
+// another display beside it.
+const (
+	lidBuiltIn  = `{"SPDisplaysDataType" : [{"spdisplays_ndrvs" : [{"spdisplays_connection_type" : "spdisplays_internal"}]}]}`
+	lidExternal = `{"SPDisplaysDataType" : [{"spdisplays_ndrvs" : [{"spdisplays_connection_type" : "spdisplays_internal"}, {"_name" : "Studio Display"}]}]}`
+)
+
+// darkened is how many times pmset put the display to sleep.
+func (m *lidMac) darkened() int {
+	b, _ := os.ReadFile(m.path("display.log"))
+	return strings.Count(string(b), "displaysleepnow")
 }
 
 func (m *lidMac) path(name string) string { return filepath.Join(m.dir, name) }
@@ -154,6 +170,55 @@ func TestTheLidSleepsTheMacOnceTheWorkIsThroughWithItClosed(t *testing.T) {
 	}
 	if !m.slept() {
 		t.Error("the work is through and the lid is closed, but the Mac was not slept")
+	}
+}
+
+func TestTheLidPutsTheDisplayToSleepWhenItClosesDuringAHold(t *testing.T) {
+	m := newLidMac(t)
+	c, _ := lidCore(t, "[lid]\ngrace = \"0s\"\n")
+	c.lidSweep() // the hold
+	c.lidSweep() // open: the display stays on
+	if n := m.darkened(); n != 0 {
+		t.Fatalf("the display slept %d times with the lid open", n)
+	}
+	m.set("lid", "Yes")
+	c.lidSweep()
+	if n := m.darkened(); n != 1 {
+		t.Fatalf("the display slept %d times as the lid closed, want once", n)
+	}
+	c.lidSweep() // still closed: a display woken under the lid is left awake
+	if n := m.darkened(); n != 1 {
+		t.Errorf("the display slept %d times with the lid left closed, want once", n)
+	}
+	m.set("lid", "No")
+	c.lidSweep()
+	m.set("lid", "Yes")
+	c.lidSweep()
+	if n := m.darkened(); n != 2 {
+		t.Errorf("the display slept %d times after the lid opened and closed again, want twice", n)
+	}
+	if m.slept() {
+		t.Error("the Mac was slept while sessions work")
+	}
+	// With another display beside it the Mac is in use at a desk.
+	m.set("displays", lidExternal)
+	m.set("lid", "No")
+	c.lidSweep()
+	m.set("lid", "Yes")
+	c.lidSweep()
+	if n := m.darkened(); n != 2 {
+		t.Errorf("the display slept %d times with another display there, want still twice", n)
+	}
+}
+
+func TestTheLidDarkensALidAlreadyClosedAsTheHoldStarts(t *testing.T) {
+	m := newLidMac(t)
+	m.set("lid", "Yes")
+	c, _ := lidCore(t, "[lid]\ngrace = \"0s\"\n")
+	c.lidSweep() // the hold
+	c.lidSweep()
+	if n := m.darkened(); n != 1 {
+		t.Errorf("the display slept %d times under a lid closed before the hold, want once", n)
 	}
 }
 
