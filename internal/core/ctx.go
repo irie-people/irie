@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/irie-people/irie/internal/anon"
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ctxgit"
@@ -547,7 +546,7 @@ func (c *Core) fork(a ipc.ForkArgs) (ipc.ForkResult, error) {
 	probe.Warnings = append(warnings, probe.Warnings...)
 	// A fork of an anonymous session stays in its compartment (DESIGN
 	// §4.16).
-	var comp *anon.Compartment
+	var comp *compartment
 	if src.anon != "" {
 		got, notes, err := c.prepareAnon(src.anon, "")
 		if err != nil {

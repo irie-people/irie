@@ -1,3 +1,5 @@
+//go:build !noprivacy
+
 package plugins
 
 import (
@@ -27,6 +29,8 @@ const switchSkill = "dead-mans-switch"
 // mullvadApp is where the Mullvad VPN app, which brings the mullvad
 // command, comes from.
 const mullvadApp = "https://mullvad.net/download"
+
+func init() { built["privacy"] = privacy }
 
 // privacy is the privacy plugin: what keeps you and your agents private
 // online, and your family looked after if something happens to you.

@@ -5,6 +5,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -24,10 +25,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/irie-people/irie/internal/anon"
 	"github.com/irie-people/irie/internal/arch"
 	"github.com/irie-people/irie/internal/brand"
-	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/route"
 )
 
@@ -74,16 +73,18 @@ type Plugins struct {
 }
 
 // VPNOn says whether Mullvad VPN control runs: vpn.on, with the privacy
-// plugin on.
-func (c Config) VPNOn() bool { return c.Plugins.Privacy && c.VPN.On }
+// plugin built in and on.
+func (c Config) VPNOn() bool { return PrivacyBuilt && c.Plugins.Privacy && c.VPN.On }
 
 // AnonOn says whether +anon and +tor tasks run: anon.on, with the privacy
-// plugin on.
-func (c Config) AnonOn() bool { return c.Plugins.Privacy && c.Anon.On }
+// plugin built in and on.
+func (c Config) AnonOn() bool { return PrivacyBuilt && c.Plugins.Privacy && c.Anon.On }
 
 // BrowserOn says whether Claude Code sessions get Irie's browser:
-// browser.connector, with the privacy plugin on.
-func (c Config) BrowserOn() bool { return c.Plugins.Privacy && c.Browser.Connector == "on" }
+// browser.connector, with the privacy plugin built in and on.
+func (c Config) BrowserOn() bool {
+	return PrivacyBuilt && c.Plugins.Privacy && c.Browser.Connector == "on"
+}
 
 // Lid is a MacBook's lid (DESIGN §4.12). macOS sleeps a MacBook the
 // moment its lid closes, whatever else keeps it awake, so the core turns
@@ -778,8 +779,8 @@ func Default() Config {
 		Remote:  Remote{Port: DefaultRemotePort},
 		Place:   Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
 		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
-		Browser: Browser{Connector: "off", Headless: true, Idle: browser.DefaultIdle, Search: browser.DefaultSearch},
-		Anon:    Anon{Route: anon.Mullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: anon.Mullvad, Browser: true, TorPort: 9150},
+		Browser: Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
+		Anon:    Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Plugins: Plugins{Privacy: true, Writing: true},
 	}
 }
@@ -1403,7 +1404,7 @@ func (c Config) Validate() error {
 		bad("browser.idle = %s: must be 0 or more", br.Idle)
 	}
 	if br.Proxy != "" {
-		if _, _, err := browser.ParseProxy(br.Proxy); err != nil {
+		if _, _, err := ParseProxy(br.Proxy); err != nil {
 			bad("browser.proxy = %q: %v", br.Proxy, err)
 		}
 	}
@@ -1412,7 +1413,7 @@ func (c Config) Validate() error {
 	}
 	an := c.Anon
 	for k, v := range map[string]string{"anon.route": an.Route, "anon.search_route": an.SearchRoute} {
-		if !slices.Contains(anon.Routes, v) {
+		if !slices.Contains(AnonRoutes, v) {
 			bad("%s = %q: must be mullvad or tor", k, v)
 		}
 	}
@@ -1437,5 +1438,31 @@ func (c Config) Validate() error {
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
-	return toml.NewEncoder(w).Encode(c)
+	if PrivacyBuilt && WritingBuilt {
+		return toml.NewEncoder(w).Encode(c)
+	}
+	// A build without a plugin (DESIGN §4.17) prints none of its keys:
+	// they still load from a file, and do nothing.
+	var b bytes.Buffer
+	if err := toml.NewEncoder(&b).Encode(c); err != nil {
+		return err
+	}
+	var m map[string]any
+	if _, err := toml.Decode(b.String(), &m); err != nil {
+		return err
+	}
+	plugins, _ := m["plugins"].(map[string]any)
+	if !PrivacyBuilt {
+		delete(m, "vpn")
+		delete(m, "anon")
+		delete(m, "browser")
+		delete(plugins, "privacy")
+	}
+	if !WritingBuilt {
+		delete(plugins, "writing")
+	}
+	if len(plugins) == 0 {
+		delete(m, "plugins")
+	}
+	return toml.NewEncoder(w).Encode(m)
 }

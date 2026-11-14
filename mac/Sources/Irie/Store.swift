@@ -89,6 +89,9 @@ final class Store {
     private(set) var canArch = false
     /// The core serves the plugins op (DESIGN §4.17).
     private(set) var canPlugins = false
+    /// The core serves the vpn op: its build has the privacy plugin
+    /// (DESIGN §4.17), whose File › VPN menu shows only then.
+    private(set) var canVPN = false
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
     var plugins: [PluginInfo] = []
@@ -300,6 +303,7 @@ final class Store {
                 canPin = hello.features.contains("pin")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
+                canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")

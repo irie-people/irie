@@ -1,3 +1,5 @@
+//go:build !noprivacy
+
 package core
 
 import (
@@ -41,4 +43,18 @@ func (c *Core) browserServer(id string) (*harness.MCPServer, string) {
 		Search:   b.Search,
 	}
 	return &harness.MCPServer{Command: c.bin, Args: browser.Args(o)}, ""
+}
+
+// privacyBuilt says whether this build has the privacy plugin (DESIGN
+// §4.17); privacy_off.go says not, for go build -tags noprivacy.
+const privacyBuilt = true
+
+// browserMCP is the session's MCP servers for Irie's browser, by name, or
+// nil and why not.
+func (c *Core) browserMCP(id string) (map[string]harness.MCPServer, string) {
+	srv, warn := c.browserServer(id)
+	if warn != "" || srv == nil {
+		return nil, warn
+	}
+	return map[string]harness.MCPServer{browser.ServerName: *srv}, ""
 }

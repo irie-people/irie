@@ -28,6 +28,7 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/journal"
 	"github.com/irie-people/irie/internal/localmodel"
+	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/route"
 	"github.com/irie-people/irie/internal/statusline"
 )
@@ -527,6 +528,16 @@ func (toolHarness) Respond(event.Event, harness.HookReply) []byte { return nil }
 func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 	var args []string
 	var name, title string
+	// A plugin's tools are in the build only with their plugin (DESIGN
+	// §4.17).
+	for plugin, tools := range map[string][]string{
+		"privacy": {ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy},
+		"writing": {ipc.ToolWrite},
+	} {
+		if _, ok := plugins.Find(plugin); !ok && slices.Contains(tools, a.Name) {
+			return ipc.Session{}, notBuilt("The " + plugin + " plugin")
+		}
+	}
 	switch a.Name {
 	case ipc.ToolSetup:
 		args, name, title = []string{"setup", "local"}, "setup-local", "set up local models"

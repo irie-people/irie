@@ -34,6 +34,12 @@ final class MenuState {
         var sideOpen = false
         var canPlugins = false
         var plugins: [PluginInfo] = []
+        var canVPN = false
+
+        /// Whether the core's build has the plugin called name (DESIGN
+        /// §4.17), so its menu items show; a core from before plugins has
+        /// every one it has.
+        func has(_ name: String) -> Bool { !canPlugins || plugins.contains { $0.name == name } }
     }
 
     private(set) var facts = Facts()
@@ -55,7 +61,7 @@ extension Store {
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
-            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins)
+            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins, canVPN: canVPN)
     }
 
     /// Keeps the menu's facts up to date: whenever what they are read from
@@ -103,11 +109,16 @@ struct IrieCommands: Commands {
             Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                 .keyboardShortcut("n", modifiers: [.command, .option])
             // A guided session of Irie's own, as :setup switch starts
-            // from any task bar (docs/proposals/extensions.md §2.2).
-            Button("Set Up a Dead Man's Switch…", action: run { Task { _ = await store.input(":setup switch") } })
+            // from any task bar (docs/proposals/extensions.md §2.2), with
+            // the privacy plugin in the core's build.
+            if f.has("privacy") {
+                Button("Set Up a Dead Man's Switch…", action: run { Task { _ = await store.input(":setup switch") } })
+            }
             // A writing session in Variorum, as :write starts
-            // (docs/proposals/writers.md).
-            Button("Write with Variorum…", action: run { Task { _ = await store.input(":write") } })
+            // (docs/proposals/writers.md), with the writing plugin.
+            if f.has("writing") {
+                Button("Write with Variorum…", action: run { Task { _ = await store.input(":write") } })
+            }
             Button("Rename Session…", action: run { if let id = store.selection { store.beginRename(id) } })
                 .disabled(!f.selected)
         }
@@ -156,17 +167,20 @@ struct IrieCommands: Commands {
             Button(f.boosting ? "Stop the Boost" : "Boost Your Focus", action: run { store.setBoost(!store.boosting) })
                 .disabled(!f.canBoost)
             // Mullvad VPN, while vpn.on: the same words as :vpn in a
-            // task bar (docs/proposals/extensions.md §4.1).
-            Menu("VPN") {
-                Button("Connect", action: run { Task { _ = await store.input(":vpn on") } })
-                Button("Disconnect", action: run { Task { _ = await store.input(":vpn off") } })
-                Divider()
-                Button(f.lockdown ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On", action: run {
-                    Task { _ = await store.input(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on") }
-                })
-                Button("Account Time Left", action: run { Task { _ = await store.input(":vpn time") } })
+            // task bar (docs/proposals/extensions.md §4.1). A core built
+            // without the privacy plugin has no VPN, and no menu for it.
+            if f.canVPN {
+                Menu("VPN") {
+                    Button("Connect", action: run { Task { _ = await store.input(":vpn on") } })
+                    Button("Disconnect", action: run { Task { _ = await store.input(":vpn off") } })
+                    Divider()
+                    Button(f.lockdown ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On", action: run {
+                        Task { _ = await store.input(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on") }
+                    })
+                    Button("Account Time Left", action: run { Task { _ = await store.input(":vpn time") } })
+                }
+                .disabled(!f.vpn)
             }
-            .disabled(!f.vpn)
         }
         // Undo and Redo step through the core's history, a park or a
         // close, and name the step; a text field with typing to take

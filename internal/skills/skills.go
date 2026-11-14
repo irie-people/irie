@@ -41,12 +41,30 @@ type Skill struct {
 	Files       map[string][]byte // its files, by slash path inside its folder
 }
 
-//go:embed bundled
+// bundled are the skills that come with every build. A plugin's skills
+// come with its plugin (DESIGN §4.17): bundled_privacy.go and
+// bundled_writing.go add theirs to plugged, so a build tag that leaves a
+// plugin out leaves its skills out too.
+//
+//go:embed bundled/present
 var bundled embed.FS
+
+// plugged are the bundled skills of the plugins this build has.
+var plugged []embed.FS
 
 // Bundled returns the skills built into this binary, by name. Each is a
 // folder of bundled/ with a SKILL.md whose frontmatter names it.
 func Bundled() []Skill {
+	var out []Skill
+	for _, f := range append([]embed.FS{bundled}, plugged...) {
+		out = append(out, bundledIn(f)...)
+	}
+	slices.SortFunc(out, func(a, b Skill) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+// bundledIn reads the skills of one embedded bundled/ folder.
+func bundledIn(bundled embed.FS) []Skill {
 	entries, err := fs.ReadDir(bundled, "bundled")
 	if err != nil {
 		panic(err) // the embed holds the folder
@@ -78,7 +96,6 @@ func Bundled() []Skill {
 		s.Description = Frontmatter(s.Files["SKILL.md"])["description"]
 		out = append(out, s)
 	}
-	slices.SortFunc(out, func(a, b Skill) int { return strings.Compare(a.Name, b.Name) })
 	return out
 }
 

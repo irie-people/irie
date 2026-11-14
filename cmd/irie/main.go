@@ -51,20 +51,10 @@ const usage = `usage: ` + brand.Slug + ` [command]
                           closed now, and why
   ` + brand.Slug + ` remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (` + brand.Slug + ` remote for help)
-  ` + brand.Slug + ` dms <command>      the dead man's switch guide's helpers: its checks,
-                          check-in and calendar (` + brand.Slug + ` dms for help)
-  ` + brand.Slug + ` setup anon [--yes] get anonymous research ready: install Tor and
-                          SearXNG, and turn +anon and +tor tasks on
-  ` + brand.Slug + ` anon [<command>]   anonymous research's compartments and exits: check,
-                          run a program through one, forget (` + brand.Slug + ` anon help)
-  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
-                          ` + brand.Name + `'s plugins, such as privacy, and how far each
-                          part is set up; turn a plugin or a part on or off
-  ` + brand.Slug + ` setup privacy [--yes]
-                          set up each part of the privacy plugin in turn:
-                          Mullvad VPN, anonymous research, Mullvad Browser
-                          and the dead man's switch
-  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
+` + privacyUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
+                          ` + brand.Name + `'s plugins in this build, and how far
+                          each part is set up; turn a plugin or a part on or off
+` + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
                           started on with ^NAME (` + brand.Slug + ` peer for help)
   ` + brand.Slug + ` version            print the version
   ` + brand.Slug + ` config path|print  show the config file's path, or the config in effect
@@ -82,15 +72,8 @@ Used by ` + brand.Name + ` itself:
   ` + brand.Slug + ` statusline [--then COMMAND]
                             the status line of Claude Code sessions, which runs
                             the user's own
-  ` + brand.Slug + ` browser [--path EXE] [--profile DIR] [--template DIR] [--headless=BOOL]
-               [--idle DUR] [--proxy socks5://HOST:PORT] [--search URL] [--check URL]
-                            the browser connector: an MCP server that drives
-                            Mullvad Browser for an agent; --check opens a page
-  ` + brand.Slug + ` anon mcp --dir DIR --compartment NAME [--search URL] [--evidence DIR]
-                            an anonymous research session's tools: search,
-                            fetch and the exit's check through its compartment
-  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
-                            with it, and ` + brand.Name + `'s own Tor and SearXNG
+` + privacyServerUsage + `  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
+                            with it` + privacyRuntimeUsage + `
   ` + brand.Slug + ` placeholder          what the slot shows when no session is shown
   ` + brand.Slug + ` team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS
                             the tmux an agent with teams runs, which takes
@@ -136,8 +119,6 @@ func run(args []string) int {
 		return teamTmux(args)
 	case "statusline":
 		return statusline.Run(args, os.Stdin, os.Stdout, os.Stderr, os.Getenv)
-	case "browser":
-		return browserCmd(args)
 	case "runtime":
 		if len(args) > 0 && args[0] == "--" {
 			args = args[1:]
@@ -147,13 +128,6 @@ func run(args []string) int {
 		err = ctl(args)
 	case "remote":
 		err = remoteCmd(args)
-	case "dms":
-		err = dmsCmd(args)
-	case "anon":
-		if len(args) > 0 && args[0] == "mcp" {
-			return anonServe(args[1:])
-		}
-		err = anonCmd(args)
 	case "plugins", "plugin":
 		err = pluginsCmd(args, os.Stdout)
 	case "peer":
@@ -171,8 +145,17 @@ func run(args []string) int {
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
-		fmt.Fprintf(os.Stderr, brand.Slug+": unknown command %q\n\n%s", name, usage)
-		return 2
+		pc, ok := pluginCmds[name]
+		if !ok {
+			fmt.Fprintf(os.Stderr, brand.Slug+": unknown command %q\n\n%s", name, usage)
+			return 2
+		}
+		if pc.code != nil {
+			if code, done := pc.code(args); done {
+				return code
+			}
+		}
+		err = pc.run(args)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, brand.Slug+":", err)

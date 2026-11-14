@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/fs"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 )
 
 // ErrNotFound means no browser was found to drive.
@@ -552,30 +552,8 @@ func copyFile(from, to string, perm fs.FileMode) error {
 }
 
 // ParseProxy checks a SOCKS5 proxy URL, socks5://host:port (socks5h://
-// too), and returns its host and port.
-func ParseProxy(s string) (string, int, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return "", 0, err
-	}
-	if u.Scheme != "socks5" && u.Scheme != "socks5h" {
-		return "", 0, errors.New("must be socks5://host:port")
-	}
-	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
-		return "", 0, errors.New("must be socks5://host:port, with nothing more")
-	}
-	host := u.Hostname()
-	port, err := strconv.Atoi(u.Port())
-	if host == "" || err != nil || port < 1 || port > 65535 {
-		return "", 0, errors.New("must be socks5://host:port")
-	}
-	if !hostRE.MatchString(host) {
-		return "", 0, fmt.Errorf("%q is not a host name or address", host)
-	}
-	return host, port, nil
-}
-
-var hostRE = regexp.MustCompile(`^[A-Za-z0-9.:-]+$`)
+// too), and returns its host and port. The config checks with it too.
+func ParseProxy(s string) (string, int, error) { return config.ParseProxy(s) }
 
 // userPrefs is the profile's user.js. It turns off the testing prefs that
 // Firefox's Remote Agent would otherwise apply at start (about 120 of them,

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/mcp"
 )
 
@@ -41,7 +42,7 @@ type Options struct {
 
 // DefaultSearch is DuckDuckGo's page for browsers without JavaScript,
 // which answers with plain links.
-const DefaultSearch = "https://html.duckduckgo.com/html/?q=%s"
+const DefaultSearch = config.BrowserSearch
 
 // Limits on what one call returns, under the 50,000 characters past which
 // Claude Code saves a tool's result to a file instead.

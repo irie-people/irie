@@ -1,3 +1,5 @@
+//go:build !nowriting
+
 package plugins
 
 import (
@@ -20,6 +22,8 @@ const variorumSite = "https://stargazing.tech/variorum"
 // variorumApps are where the check looks for Variorum: the Applications
 // folders a Mac app is dragged into. Tests point them elsewhere.
 var variorumApps = []string{"/Applications/Variorum.app", "~/Applications/Variorum.app"}
+
+func init() { built["writing"] = writing }
 
 // writing is the writing plugin: agents that help a writer in Variorum
 // through its door for AI, beside the writer's words and never over them.

@@ -27,14 +27,11 @@ func setup(args []string) error {
 	if len(args) > 0 && args[0] == "local" {
 		return setupLocal(args[1:], os.Stdin, os.Stdout)
 	}
-	if len(args) > 0 && args[0] == "browser" {
-		return setupBrowser(args[1:], os.Stdin, os.Stdout)
-	}
-	if len(args) > 0 && args[0] == "anon" {
-		return setupAnon(args[1:], os.Stdin, os.Stdout)
-	}
-	if len(args) > 0 && args[0] == "privacy" {
-		return setupPrivacy(args[1:], os.Stdin, os.Stdout)
+	// A plugin's setup words: irie setup anon, browser, privacy.
+	if len(args) > 0 {
+		if f, ok := pluginSetups[args[0]]; ok {
+			return f(args[1:], os.Stdin, os.Stdout)
+		}
 	}
 	if len(args) > 0 && args[0] == "lid" {
 		return setupLid(args[1:], os.Stdin, os.Stdout)

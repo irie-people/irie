@@ -25,17 +25,18 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/filetx"
 )
 
-// The routes a compartment leaves by.
+// The routes a compartment leaves by, as the config names them.
 const (
-	Mullvad = "mullvad" // a Mullvad relay's SOCKS5 proxy, inside the Mac's own Mullvad tunnel
-	Tor     = "tor"     // Irie's own Tor, on a SocksPort of the compartment's own
+	Mullvad = config.AnonMullvad
+	Tor     = config.AnonTor
 )
 
 // Routes are the routes, in the order the config names them.
-var Routes = []string{Mullvad, Tor}
+var Routes = config.AnonRoutes
 
 // SearchName is the compartment of Irie's SearXNG: the engines see its exit,
 // never a research compartment's or the Mac's own.

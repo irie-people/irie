@@ -1,3 +1,5 @@
+//go:build !noprivacy
+
 package core
 
 import (
@@ -25,6 +27,10 @@ import (
 	"github.com/irie-people/irie/internal/tmux"
 	"github.com/irie-people/irie/internal/vpn"
 )
+
+// compartment is an anonymous research compartment; a build without the
+// privacy plugin has a stand-in (privacy_off.go).
+type compartment = anon.Compartment
 
 // Anonymous research (DESIGN §4.16): a task typed with +anon or +tor runs in
 // a compartment with an exit of its own. The core picks the exit, starts

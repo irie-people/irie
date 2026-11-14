@@ -75,8 +75,26 @@ type Live struct {
 	VPN *ipc.VPN // the VPN's mark, while vpn.on
 }
 
-// All are Irie's plugins, in the order they show.
-func All() []Plugin { return []Plugin{privacy(), writing()} }
+// order is the order plugins show in; a plugin this build leaves out is
+// skipped.
+var order = []string{"privacy", "writing"}
+
+// built are the plugins in this build, by name. Each plugin's file adds
+// itself, and a build tag leaves a plugin's file out with its parts' code:
+// go build -tags noprivacy,nowriting builds Irie without either (DESIGN
+// §4.17).
+var built = map[string]func() Plugin{}
+
+// All are Irie's plugins in this build, in the order they show.
+func All() []Plugin {
+	var out []Plugin
+	for _, name := range order {
+		if f, ok := built[name]; ok {
+			out = append(out, f())
+		}
+	}
+	return out
+}
 
 // Find is the plugin named name.
 func Find(name string) (Plugin, bool) {
@@ -164,7 +182,8 @@ func Why(cfg config.Config, part string) string {
 		}
 		return ""
 	}
-	return ""
+	// A part of a plugin this build leaves out.
+	return part + " isn't in this build of " + brand.Name + "."
 }
 
 // SkillsLeft are the skills of Irie's that sessions go without because

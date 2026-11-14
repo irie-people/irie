@@ -1,3 +1,5 @@
+//go:build !noprivacy
+
 package core
 
 import (
@@ -9,8 +11,6 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/plugins"
-	"github.com/irie-people/irie/internal/proc"
-	"github.com/irie-people/irie/internal/tmux"
 	"github.com/irie-people/irie/internal/vpn"
 )
 
@@ -267,39 +267,4 @@ func (c *Core) vpnOp(peer int, a ipc.VPNArgs) (ipc.VPNResult, error) {
 	h := c.vpnHeader(time.Now())
 	c.mu.Unlock()
 	return ipc.VPNResult{Text: did + ". " + h.Text + ".", VPN: h}, nil
-}
-
-// fromAgent reports whether the process pid runs inside one of Irie's
-// agents: whether an agent pane's first process, its host, is among its
-// parents. It stops an agent that goes through Irie, not one that runs
-// mullvad itself, which lockdown mode holds against. An unknown pid is not
-// an agent's.
-func (c *Core) fromAgent(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	c.mu.Lock()
-	hosts := map[int]bool{}
-	for _, p := range c.snap.ByRole(tmux.RoleAgent) {
-		if p.PID > 0 {
-			hosts[p.PID] = true
-		}
-	}
-	c.mu.Unlock()
-	t, err := proc.Read()
-	if err != nil {
-		c.log.Warn("vpn", "err", err)
-		return false
-	}
-	for range 64 {
-		if hosts[pid] {
-			return true
-		}
-		p, ok := t.Get(pid)
-		if !ok || p.PPID <= 1 || p.PPID == pid {
-			return false
-		}
-		pid = p.PPID
-	}
-	return false
 }
