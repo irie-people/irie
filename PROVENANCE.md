@@ -532,6 +532,9 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-10 | https://code.claude.com/docs/en/permissions.md | Read rules take `//` before an absolute path and `~/` for home: an anonymous session's Read rules for the compartments' file and the user's sign-ins |
 | 2026-11-10 | RFC 1928, SOCKS Protocol Version 5, https://www.rfc-editor.org/rfc/rfc1928 | the forwarder's SOCKS5 server and its client to the exit: greeting, no-authentication method, CONNECT with an IPv4, IPv6 or domain address, reply codes (`internal/anon/forward.go`) |
 | 2026-11-10 | RFC 9110, HTTP Semantics, §7.6.1 and §9.3.6, https://www.rfc-editor.org/rfc/rfc9110 | the forwarder's HTTP proxy: CONNECT's 2xx and tunnel, and the hop-by-hop headers it drops from a plain request and its response |
+| 2026-11-14 | https://support.apple.com/guide/notes/keyboard-shortcuts-and-gestures-apd46c25187e/mac | Notes' own checklist keys, ⇧⌘U to tick an item off or on again, ⇧Return for a line break inside one, ⌃⌘↑ and ⌃⌘↓ to move one: the notepad's keys in the Mac app (DESIGN §4.18) |
+| 2026-11-14 | https://specifications.freedesktop.org/basedir/latest/ | Data files are the user's own and state is what may be lost, so the notepad and its daily copies live under $XDG_DATA_HOME, not $XDG_STATE_HOME (DESIGN §4.18, §5.4) |
+| 2026-11-14 | The owner's request in the session that made this change: a collapsible notes section between the jot input and the agent status block, like Notes on the Mac, a checklist ticked by hand, a button that sends a note to the jot as if typed and sent, with notes that last through restarts and detaches | The notepad (DESIGN §4.18): the core's notepad op and frame, input's note, and the Mac app's Notes panel |
 
 ## Third-party code
 

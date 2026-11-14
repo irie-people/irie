@@ -46,6 +46,10 @@ type InputArgs struct {
 	// Space is the space the client shows, where a task starts ("" for
 	// the first).
 	Space string `json:"space,omitempty"`
+	// Note is the note of the notepad the text came from, sent as if typed
+	// in the task bar: once the input goes through, the note is ticked
+	// off and says when it went, and to which session (DESIGN §4.18).
+	Note string `json:"note,omitempty"`
 }
 
 // Paste is a long paste that a client shows as Label in what was typed.
