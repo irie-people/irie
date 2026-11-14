@@ -299,7 +299,8 @@ private struct TopDrop: DropDelegate {
     func dropExited(info: DropInfo) { targeted = false }
     func performDrop(info: DropInfo) -> Bool {
         targeted = false
-        return store.dropAtTop()
+        guard store.canDropAtTop else { return false }
+        return store.carrying(info.itemProviders(for: [.text])) { _ = store.dropAtTop() }
     }
 }
 
@@ -809,7 +810,12 @@ private struct HeaderDrop: DropDelegate {
         if store.headerMark?.group == group.userGroup { store.headerMark = nil }
     }
 
-    func performDrop(info: DropInfo) -> Bool { store.dropOnHeader(group, before: before(info)) }
+    func performDrop(info: DropInfo) -> Bool {
+        let b = before(info)
+        store.headerMark = nil
+        guard store.canDropOnHeader(group, before: b) else { return false }
+        return store.carrying(info.itemProviders(for: [.text])) { _ = store.dropOnHeader(group, before: b) }
+    }
 
     private func show(_ info: DropInfo) {
         guard let id = group.userGroup else { return }

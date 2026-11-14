@@ -307,9 +307,11 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	}
 	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor, anon: comp})
 	if err == nil {
-		c.placeNew(x.id, a)
+		// Its space and group first: where it goes in the list follows
+		// them (groups.go).
 		c.placeInSpace(x.id, a)
 		c.placeInGroup(x.id, a)
+		c.placeNew(x.id, a)
 	}
 	if err == nil && pl.repo != "" {
 		c.addRecent(pl.repo)

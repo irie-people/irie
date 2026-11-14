@@ -313,13 +313,14 @@ func (c *Core) claudeConfig(profile string) string {
 }
 
 // comeHome puts a session that reopen brought back in the space and the
-// group it was closed in, while they are still there: a reopened session
-// starts over (track.apply). The caller holds c.mu.
+// group it was closed in, while they are still there and the group is in
+// that space: a reopened session starts over (track.apply). The caller
+// holds c.mu.
 func (c *Core) comeHome(x *session, r closedRecord) {
 	if s := c.spaceKey(r.Space); s != "" {
 		c.record(x, event.Event{Source: event.SourceIrie, Kind: event.UISpaced, Data: map[string]any{"space": s}})
 	}
-	if c.groupIndex(r.Group) >= 0 {
+	if c.groupIndex(r.Group) >= 0 && c.groupIn(r.Group, c.spaceOf(x), map[string]bool{x.id: true}) {
 		c.record(x, event.Event{Source: event.SourceIrie, Kind: event.UIGrouped, Data: map[string]any{"group": r.Group}})
 		c.tidyOrder()
 	}

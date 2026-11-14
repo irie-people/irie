@@ -87,13 +87,14 @@ extension Store {
     }
 
     /// Promotes a session to the top, which unparks it, or puts it back
-    /// among the rest, where it stays. It shows at once.
+    /// among the rest, where it stays. It shows at once. A card of a group
+    /// of yours goes first in its group, which the core's frames show.
     func setPromoted(_ s: Session, _ on: Bool) {
         preview { rows in
             guard let i = rows.firstIndex(where: { $0.id == s.id }) else { return }
             rows[i].priority = on ? 1 : 0
             if on {
-                rows[i].order = (rows.compactMap(\.order).min() ?? 0) - 1
+                if s.groupKey == nil { rows[i].order = (rows.compactMap(\.order).min() ?? 0) - 1 }
                 rows[i].parked = false
             }
         }

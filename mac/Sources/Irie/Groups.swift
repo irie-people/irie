@@ -383,9 +383,10 @@ extension Store {
     }
 
     func renameGroup(_ id: String, _ name: String) {
-        renamingGroup = nil
+        if renamingGroup == id { renamingGroup = nil }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, name != groupName(id) else { return }
+        // A group gone meanwhile, as by ⌘Z, has nothing to rename.
+        guard groups.contains(where: { $0.id == id }), !name.isEmpty, name != groupName(id) else { return }
         groupCall(GroupArgs(action: "rename", group: id, name: name), failed: "rename the group") { _ in }
     }
 
@@ -417,7 +418,6 @@ extension Store {
     /// picked with it, or a group, goes just before the group, beside it
     /// (before), or last inside it.
     func dropOnHeader(_ g: SessionGroup, before: Bool) -> Bool {
-        defer { endDrag() }
         guard canDropOnHeader(g, before: before), let id = g.userGroup else { return false }
         let first = g.sessions.first?.id
         if let held = draggingGroup {
@@ -476,7 +476,6 @@ extension Store {
     /// What a drag holds dropped on the strip under the List view's cards:
     /// it goes last at the top of the list, out of any group.
     func dropAtTop() -> Bool {
-        defer { endDrag() }
         guard canDropAtTop else { return false }
         if let held = draggingGroup {
             moveGroup(held, into: nil)
@@ -484,6 +483,28 @@ extension Store {
         }
         guard let held = dragging, let s = sessions.first(where: { $0.id == held }) else { return false }
         moveCards(targets(for: s), into: nil)
+        return true
+    }
+
+    /// What a drop carries for what the drag holds: a card's id, or
+    /// "group:" and a group's id; nil when it holds nothing.
+    var heldText: String? { draggingGroup.map { "group:" + $0 } ?? dragging }
+
+    /// Runs drop once the dropped item proves to be what the drag holds, so
+    /// text from elsewhere, after a drag that ended without a drop, moves
+    /// nothing. It reports whether the drop can be taken.
+    func carrying(_ providers: [NSItemProvider], _ drop: @escaping @MainActor () -> Void) -> Bool {
+        guard let held = heldText, let p = providers.first, p.canLoadObject(ofClass: NSString.self) else {
+            endDrag()
+            return false
+        }
+        _ = p.loadObject(ofClass: NSString.self) { text, _ in
+            let ok = (text as? NSString).map { $0 as String } == held
+            Task { @MainActor in
+                if ok { drop() }
+                self.endDrag()
+            }
+        }
         return true
     }
 
@@ -647,7 +668,9 @@ struct GroupNameField: View {
             .textFieldStyle(.plain)
             .font(Theme.font(12, .heavy))
             .focused($editing)
-            .onAppear {
+            // After the header has drawn it, so the field can take the
+            // keyboard, as a card's name does.
+            .task {
                 text = name
                 editing = true
             }
@@ -655,6 +678,11 @@ struct GroupNameField: View {
             .onExitCommand { store.renamingGroup = nil }
             .onChange(of: editing) {
                 if !editing && store.renamingGroup == id { store.renameGroup(id, text) }
+            }
+            // A header that goes, as when its group does or the view
+            // changes, gives the keys back.
+            .onDisappear {
+                if store.renamingGroup == id { store.renameGroup(id, text) }
             }
             .accessibilityLabel("New name for \(name)")
     }
