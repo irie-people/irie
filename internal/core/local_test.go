@@ -93,6 +93,9 @@ func TestALocalSpawnRunsOnIriesOwnServer(t *testing.T) {
 	for k, want := range map[string]string{
 		"OLLAMA_HOST": fmt.Sprintf("127.0.0.1:%d", port), "OLLAMA_CONTEXT_LENGTH": "65536", "OLLAMA_KV_CACHE_TYPE": "q8_0",
 		"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_NUM_PARALLEL": "1", "OLLAMA_MAX_LOADED_MODELS": "1",
+		// Its runners, llama-servers, keep at most 512 MiB of earlier
+		// prompts and 8 checkpoints a slot.
+		"LLAMA_ARG_CACHE_RAM": "512", "LLAMA_ARG_CTX_CHECKPOINTS": "8",
 	} {
 		if env[k] != want {
 			t.Errorf("server %s = %q, want %q", k, env[k], want)
