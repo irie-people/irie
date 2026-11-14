@@ -59,7 +59,7 @@ So "click it again to undo" did the wrong thing every time, and a card's own but
 | R5 | A parked session is not *to verify*: it leaves the count, and a finished one says Parked under a quiet name | done | both sidebars |
 | R6 | Park survives restarts of the app, the sidebar and the core, and installs | done | journal replay of `ui.parked`, `ui.unparked` |
 | R7 | Promoting a parked session unparks it. A closed session comes back unparked when it is reopened | done | core |
-| R8 | Every way in: Mac app, a card's Ⓟ on hover, its menu, the details panel's Ⓟ, File > Park Session, `z` and `⇧Z` while the list has the keyboard, a drag across Parked's edge, VoiceOver's actions; terminal sidebar, `z`, `Z`, `:park`, `:unpark` and the drag | done | |
+| R8 | Every way in: Mac app, a card's Ⓟ on hover, its menu, the details panel's Ⓟ, Session > Park, `z` and `⇧Z` while the list has the keyboard, a drag across Parked's edge, VoiceOver's actions; terminal sidebar, `z`, `Z`, `:park`, `:unpark` and the drag | done | |
 | R9 | A park or unpark done on a card under the pointer leaves the card where it is, in its new state, until the pointer leaves it; a second click on the same spot takes it back. *Withdrawn 2026-11-09:* the card moves at once, and Undo takes it back | new | Mac app |
 | R10 | Park and unpark are steps of the core's one history: undo and redo take them back, from either sidebar | new | core (DESIGN §4.5) |
 | R11 | The notice after a park or unpark offers Undo, in the place that never moves | new | Mac app |

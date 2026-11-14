@@ -313,11 +313,14 @@ private struct OutsideActions: View {
         }
         .disabled(outside.movable != true || store.moving != nil)
         Divider()
-        if let v = outside.vendorId {
-            Button("Copy Session ID") { store.copy(v, what: "session ID") }
+        // As a card's menu has them (SidebarView.swift).
+        Menu("Copy") {
+            Button("Folder Path") { store.copy(outside.cwd, what: "folder path") }
+            if let v = outside.vendorId {
+                Button("Session ID") { store.copy(v, what: "session ID") }
+            }
         }
-        Button("Show Folder in Finder") { store.reveal(outside.cwd) }
-        Button("Copy Folder Path") { store.copy(outside.cwd, what: "folder path") }
+        Button("Show in Finder") { store.reveal(outside.cwd) }
     }
 }
 

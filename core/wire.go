@@ -82,6 +82,7 @@ type (
 	Subs             = ipc.Subs
 	Teammate         = ipc.Teammate
 	Header           = ipc.Header
+	Boost            = ipc.Boost
 	Load             = ipc.Load
 	Window           = ipc.Window
 	Plan             = ipc.Plan
@@ -120,6 +121,8 @@ type (
 	PluginsResult    = ipc.PluginsResult
 	Plugin           = ipc.Plugin
 	PluginPart       = ipc.PluginPart
+	MarketsArgs      = ipc.MarketsArgs
+	MarketsResult    = ipc.MarketsResult
 	AnonArgs         = ipc.AnonArgs
 	AnonResult       = ipc.AnonResult
 	VPNArgs          = ipc.VPNArgs
@@ -256,9 +259,11 @@ const (
 	OpVPN              = ipc.OpVPN
 	OpAnon             = ipc.OpAnon
 	OpPlugins          = ipc.OpPlugins
+	OpMarkets          = ipc.OpMarkets
 	OpLearn            = ipc.OpLearn
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
+	FeatureBoostAlways = ipc.FeatureBoostAlways
 	FeatureWatch       = ipc.FeatureWatch
 	ViewApp            = ipc.ViewApp
 	ViewWatch          = ipc.ViewWatch
