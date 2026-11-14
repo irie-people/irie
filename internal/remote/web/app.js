@@ -1169,7 +1169,7 @@ function machineCard(c) {
     kids.push(h('div', { class: 'meters', 'aria-label': 'Claude plan use' },
       plan.five_hour ? meter('5 hours', plan.five_hour) : null, plan.seven_day ? meter('Week', plan.seven_day) : null));
   }
-  // Mullvad VPN on that machine, while its vpn.on (docs/proposals/extensions.md §4.1).
+  // The VPN on that machine, whichever its vpn.provider names, while its vpn.on (DESIGN §4.18).
   const vpn = c.header && c.header.vpn;
   if (vpn) {
     const on = vpn.state === 'connected' || vpn.state === 'connecting';

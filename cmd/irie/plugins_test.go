@@ -20,7 +20,7 @@ func TestPluginsTurnsAPartAndThePluginOnAndOff(t *testing.T) {
 	if err := pluginsCmd(nil, &out); err != nil {
 		t.Fatal(err)
 	}
-	if s := out.String(); !strings.HasPrefix(s, "Privacy plugin: on.") || !strings.Contains(s, "○ Bitwarden for agents: Not in Irie yet.") {
+	if s := out.String(); !strings.HasPrefix(s, "VPN plugin: on.") || !strings.Contains(s, "\nPrivacy plugin: on.") || !strings.Contains(s, "○ Bitwarden for agents: Not in Irie yet.") {
 		t.Errorf("irie plugins:\n%s", s)
 	}
 	out.Reset()
@@ -37,11 +37,15 @@ func TestPluginsTurnsAPartAndThePluginOnAndOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The VPN plugin comes on whole: its one part with it (DESIGN §4.17).
+	if err := pluginsCmd([]string{"on", "vpn"}, &out); err != nil {
+		t.Fatal(err)
+	}
 	b, err := os.ReadFile(p.ConfigFile())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"[browser]\nconnector = \"on\"", "[plugins]\nprivacy = false"} {
+	for _, want := range []string{"[browser]\nconnector = \"on\"", "privacy = false", "vpn = true", "[vpn]\non = true"} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("config.toml lacks %q:\n%s", want, b)
 		}

@@ -47,12 +47,24 @@ const (
 	// tips for those new to it.
 	Bar = "cheer"
 	// Tags are the go build tags the scripts build it with (tools/live.sh,
-	// tools/release.sh), comma-separated: noprivacy, nowriting and
+	// tools/release.sh), comma-separated: novpn, noprivacy, nowriting and
 	// nomarkets leave those plugins' code out (DESIGN §4.17), as a
 	// company's copy may want.
 	// A build by hand passes them itself: go build -tags "$(tools/brand.sh
 	// --tags)" ./cmd/irie.
 	Tags = ""
+	// VPNs are the VPNs it drives (DESIGN §4.18), comma-separated, the
+	// first the default for vpn.provider: mullvad, tailscale, netbird,
+	// warp, nordvpn, cisco, globalprotect, forticlient, system and
+	// command. "" offers them
+	// all, Mullvad first. A company's copy names the VPN it approves, such
+	// as "cisco", so its people see and drive that VPN and no other; a
+	// copy that names any shows its VPN from the start (vpn.on).
+	VPNs = ""
+	// VPNServer is vpn.server's default: the host, portal or VPN by name
+	// that a company's VPN connects to, so its people set nothing. "" =
+	// none.
+	VPNServer = ""
 )
 
 // MaxName is the most characters Name may have.
