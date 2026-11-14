@@ -124,11 +124,15 @@ extension Store {
     }
 
     /// A card dropped on a space's chip: it, or every card picked with it,
-    /// goes there.
+    /// goes there. A group of yours dropped there goes whole, with every
+    /// card in it and in its groups (Groups.swift).
     func dropOnSpace(_ key: String) -> Bool {
-        defer {
-            dragging = nil
-            dropMark = nil
+        defer { endDrag() }
+        if let g = draggingGroup {
+            let cards = sessions.filter { $0.peerName == nil && $0.spaceKey == space && isWithin($0.groupKey, g) }
+            guard !cards.isEmpty else { return false }
+            sendToSpace(cards, key)
+            return true
         }
         guard let id = dragging, let s = sessions.first(where: { $0.id == id }) else { return false }
         sendToSpace(targets(for: s), key)
