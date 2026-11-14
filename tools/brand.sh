@@ -4,8 +4,9 @@
 #
 #   eval "$(tools/brand.sh)"   sets BRAND_NAME, BRAND_SLUG, BRAND_ENV,
 #                              BRAND_BUNDLE_ID, BRAND_SITE, BRAND_REPO,
-#                              BRAND_TAGLINE, BRAND_BAR and BRAND_EXE (the
-#                              Mac app's executable)
+#                              BRAND_TAGLINE, BRAND_BAR, BRAND_EXE (the
+#                              Mac app's executable) and BRAND_TAGS
+#   tools/brand.sh --tags      prints the go build tags it builds with
 #   tools/brand.sh --swift     prints mac/Sources/Irie/Brand.swift
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -28,6 +29,8 @@ repo=$(get Repo)
 env=$(get EnvPrefix)
 tagline=$(get Tagline)
 bar=$(get Bar)
+# Tags may be empty, so it is read without get's check.
+tags=$(sed -n 's/^[[:space:]]*Tags[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$src" | head -n 1)
 # The Mac app's executable, as brand.Exe makes it: Name's ASCII letters and
 # digits, 15 at most, or Slug's.
 exe=$(printf '%s' "$name" | LC_ALL=C tr -cd 'A-Za-z0-9' | cut -c1-15)
@@ -46,6 +49,10 @@ case ${1:-} in
 	echo "BRAND_TAGLINE=$(q "$tagline")"
 	echo "BRAND_BAR=$(q "$bar")"
 	echo "BRAND_EXE=$(q "$exe")"
+	echo "BRAND_TAGS=$(q "$tags")"
+	;;
+--tags)
+	printf '%s\n' "$tags"
 	;;
 --swift)
 	# Swift string literals: \ and " escaped.
@@ -78,7 +85,7 @@ enum Brand {
 EOF
 	;;
 *)
-	echo "usage: tools/brand.sh [--swift]" >&2
+	echo "usage: tools/brand.sh [--swift | --tags]" >&2
 	exit 2
 	;;
 esac

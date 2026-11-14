@@ -386,6 +386,7 @@ A company may run its own copy of Irie under its own name. `internal/brand` keep
 | `Site`, `Repo` | the guide and the source | The Help menu, the install command the app shows, the skills' author, the push service's contact |
 | `Tagline` | `Everything irie.` | The line under the name on the Mac app's welcome |
 | `Bar` | `cheer` | `ui.bar`'s default: what the strip under the terminal shows, phrases of encouragement (`cheer`) or tips for those new to it (`tips`), one at a time; a company's copy may want tips |
+| `Tags` | none | The go build tags `tools/live.sh` and `tools/release.sh` build with: `noprivacy,nowriting` leaves those plugins' code out (§4.17); by hand, `go build -tags "$(tools/brand.sh --tags)" ./cmd/irie` |
 
 Made from them: `App` (`Irie.app`) and `Exe`, the Mac app's executable and so its process's name, `Name`'s ASCII letters and digits, 15 at most, as macOS keeps only a process name's first bytes and `pgrep -x` matches only those.
 
@@ -395,7 +396,7 @@ Made from them: `App` (`Irie.app`) and `Exe`, the Mac app's executable and so it
 
 **A long name.** `Name` may have up to 30 letters, digits, spaces, hyphens and full stops (`brand.MaxName`), which every place that shows it fits: the Mac app's title bar shrinks it a little and then trails it off with the whole name on hover, the theme maker's preview likewise, a tight button leaves it out (Move In for Move into Irie), the terminal sidebar's title bar gives it half the width at most so the counts keep theirs, the slot's placeholder cuts it to the pane, the phone app's title shrinks it and trails it off, and tmux.conf quotes it. Only those characters, since the name goes as it is into shell scripts, tmux.conf, XML and HTML.
 
-**What a copy changes by hand.** The icon (`tools/mkicon` draws Irie's), `site/` and `docs/`, `site/install.sh`, the iOS app (`ios/`), the arch agents' charges and the default preferences (`spawn.preferences`), and which plugins it builds with (§4.17).
+**What a copy changes by hand.** The icon (`tools/mkicon` draws Irie's), `site/` and `docs/`, `site/install.sh`, the iOS app (`ios/`), the arch agents' charges and the default preferences (`spawn.preferences`), and the tags of a build it runs by hand rather than through the scripts.
 
 **Tests.** `internal/brand`: the names' form, `tools/brand.sh` agrees with the package, `Brand.swift` is current, `Exe` for long and non-Latin names, and two guards that fail on any string outside the package, in Go or in the Mac app, that names the product itself rather than through it. `internal/config`: `ui.bar`.
 

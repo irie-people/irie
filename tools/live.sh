@@ -294,7 +294,7 @@ fi
 # time, and only the swap below holds the lock.
 if [ -n "$gonew" ]; then
 	tmpbin=$bin.new.$$
-	go build -o "$tmpbin" ./cmd/irie
+	go build -tags "$BRAND_TAGS" -o "$tmpbin" ./cmd/irie
 fi
 if [ -n "$macpid" ]; then
 	if ! wait "$macpid"; then

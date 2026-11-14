@@ -42,7 +42,7 @@ for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
 	dir=$work/$BRAND_SLUG-$os-$arch
 	mkdir -p "$dir"
 	say "$BRAND_SLUG for $os/$arch"
-	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$dir/$BRAND_SLUG" ./cmd/irie
+	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -tags "$BRAND_TAGS" -ldflags "-s -w" -o "$dir/$BRAND_SLUG" ./cmd/irie
 	cp LICENSE "$dir/"
 	# COPYFILE_DISABLE keeps macOS's tar from adding ._ files.
 	COPYFILE_DISABLE=1 tar -czf "$out/$BRAND_SLUG-$os-$arch.tar.gz" -C "$dir" "$BRAND_SLUG" LICENSE

@@ -28,6 +28,11 @@ func TestNamesAreWellFormed(t *testing.T) {
 	if Bar != "cheer" && Bar != "tips" {
 		t.Errorf("Bar = %q: want cheer or tips", Bar)
 	}
+	for _, tag := range strings.Split(Tags, ",") {
+		if tag != "" && tag != "noprivacy" && tag != "nowriting" {
+			t.Errorf("Tags = %q: %q is no tag of Irie's; they are noprivacy and nowriting", Tags, tag)
+		}
+	}
 	if want := strings.ToUpper(strings.ReplaceAll(Slug, "-", "_")); EnvPrefix != want {
 		t.Errorf("EnvPrefix = %q: want %q, Slug in capitals with underscores for hyphens", EnvPrefix, want)
 	}
@@ -52,7 +57,7 @@ func TestScriptAgrees(t *testing.T) {
 	want := map[string]string{
 		"BRAND_NAME": Name, "BRAND_SLUG": Slug, "BRAND_ENV": EnvPrefix,
 		"BRAND_BUNDLE_ID": BundleID, "BRAND_SITE": Site, "BRAND_REPO": Repo, "BRAND_TAGLINE": Tagline,
-		"BRAND_BAR": Bar, "BRAND_EXE": Exe,
+		"BRAND_BAR": Bar, "BRAND_EXE": Exe, "BRAND_TAGS": Tags,
 	}
 	got := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
