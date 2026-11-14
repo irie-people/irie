@@ -35,3 +35,36 @@ func TestGabrielSaysWhenHeBoostsAlways(t *testing.T) {
 		t.Errorf("always, with a boost on too:\n%s", got)
 	}
 }
+
+func TestGabrielNamesTheTabOnTop(t *testing.T) {
+	report := func(r ipc.GabrielResult) string {
+		var b strings.Builder
+		if err := printGabriel(&b, r); err != nil {
+			t.Fatal(err)
+		}
+		return b.String()
+	}
+	tab := ipc.GabrielSession{ID: "s1", Name: "the tab"}
+	told := ipc.GabrielSession{ID: "s2", Name: "told"}
+	r := ipc.GabrielResult{On: true, Present: true, Busy: true, Holding: true, CPUs: 12, RunQueue: 20,
+		Top: []ipc.GabrielSession{tab}, Focus: []ipc.GabrielSession{tab, told}}
+	got := report(r)
+	for _, want := range []string{"On top: the tab, the tab you are on; it never steps back", "In your focus: told\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("light: no %q in\n%s", want, got)
+		}
+	}
+	// Holding nothing back, the tab is on top for a promotion.
+	calm := r
+	calm.Busy, calm.Holding = false, false
+	if got := report(calm); !strings.Contains(got, "it never steps back, not even for a promotion") {
+		t.Errorf("a promotion: no top line in\n%s", got)
+	}
+	r.TopBusy, r.TopCPU, r.Back = true, 230, []ipc.GabrielSession{told}
+	got = report(r)
+	for _, want := range []string{"it is at work (230% of a CPU now), so every other session but an install steps back for it", "Stepping back for the tab you are on: told"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("at work: no %q in\n%s", want, got)
+		}
+	}
+}

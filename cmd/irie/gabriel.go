@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,8 +18,8 @@ import (
 const gabrielUsage = "usage: " + brand.Slug + " ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]"
 
 // ctlGabriel is Gabriel's report (DESIGN §4.11): whether you are at the
-// computer and it is busy, what is in your focus, and what he holds back
-// for it. on and off turn him on or off first, in the config file
+// computer and it is busy, the tab you are on, what else is in your focus,
+// and what he holds back for it. on and off turn him on or off first, in the config file
 // (arch.gabriel.on); boost gives your focus the machine first for a while
 // whether it is busy or not, boost always does so whenever you are at the
 // computer (arch.gabriel.always, in the config file too), and boost off
@@ -124,8 +125,29 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 	if r.LowPower {
 		fmt.Fprintf(w, "Low Power Mode is on, which slows the whole Mac: turn it off in System Settings > Battery for full speed.\n")
 	}
-	if len(r.Focus) > 0 {
-		fmt.Fprintf(w, "In your focus: %s\n", sessionNames(r.Focus))
+	if len(r.Top) > 0 {
+		what := "the tab you are on"
+		if len(r.Top) > 1 {
+			what += ", with the subtasks it delegated"
+		}
+		switch {
+		case r.TopBusy && r.Pressure >= 4:
+			what += "; memory is critically short, so every other session but an install steps back for it, the rest of your focus too"
+		case r.TopBusy:
+			what += fmt.Sprintf("; it is at work (%.0f%% of a CPU now), so every other session but an install steps back for it, the rest of your focus too", r.TopCPU)
+		case r.Holding:
+			what += "; it never steps back, and while it runs light the rest of your focus keeps its full speed"
+		default:
+			// Gabriel holds nothing back: the top is there for a promotion.
+			what += "; it never steps back, not even for a promotion"
+		}
+		fmt.Fprintf(w, "On top: %s, %s.\n", sessionNames(r.Top), what)
+	}
+	if rest := withoutSessions(r.Focus, r.Top); len(rest) > 0 {
+		fmt.Fprintf(w, "In your focus: %s\n", sessionNames(rest))
+	}
+	if len(r.Back) > 0 {
+		fmt.Fprintf(w, "Stepping back for the tab you are on: %s\n", sessionNames(r.Back))
 	}
 	if len(r.Held) > 0 {
 		fmt.Fprintf(w, "Sessions held back: %s\n", sessionNames(r.Held))
@@ -140,6 +162,17 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 		fmt.Fprintf(w, "Apps outside "+brand.Name+": left alone (arch.gabriel.outside = false)\n")
 	}
 	return nil
+}
+
+// withoutSessions is ss without those in drop.
+func withoutSessions(ss, drop []ipc.GabrielSession) []ipc.GabrielSession {
+	var out []ipc.GabrielSession
+	for _, s := range ss {
+		if !slices.ContainsFunc(drop, func(d ipc.GabrielSession) bool { return d.ID == s.ID }) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func sessionNames(ss []ipc.GabrielSession) string {

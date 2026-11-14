@@ -1,4 +1,4 @@
-//go:build !noprivacy && !nowriting
+//go:build !noprivacy && !nowriting && !nomarkets
 
 package plugins
 
@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// TestABuildWithoutPlugins: go build -tags noprivacy,nowriting builds every
-// package, and its irie links none of the plugins' code (DESIGN §4.17), as
-// a company's copy that leaves them out needs.
+// TestABuildWithoutPlugins: go build -tags noprivacy,nowriting,nomarkets
+// builds every package, and its irie links none of the plugins' code
+// (DESIGN §4.17), as a company's copy that leaves them out needs.
 func TestABuildWithoutPlugins(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds Irie without its plugins")
@@ -23,7 +23,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if err != nil {
 		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
 	}
-	tags := "-tags=noprivacy,nowriting"
+	tags := "-tags=noprivacy,nowriting,nomarkets"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
