@@ -9,19 +9,19 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-// TestThePluginsOp: the op lists the privacy, writing, markets and mail
+// TestThePluginsOp: the op lists the VPN, privacy, writing, markets and mail
 // plugins and their parts, and :plugins answers with them in words (DESIGN
 // §4.17).
 func TestThePluginsOp(t *testing.T) {
 	c := bareCore(t, config.Default())
 	r, err := c.pluginsOp(ipc.PluginsArgs{})
-	if err != nil || len(r.Plugins) != 4 || r.Plugins[0].Name != "privacy" || !r.Plugins[0].On || len(r.Plugins[0].Parts) != 5 || r.Plugins[1].Name != "writing" || !r.Plugins[1].On || len(r.Plugins[1].Parts) != 1 ||
-		r.Plugins[2].Name != "markets" || r.Plugins[2].On || len(r.Plugins[2].Parts) != 1 ||
-		r.Plugins[3].Name != "mail" || !r.Plugins[3].On || len(r.Plugins[3].Parts) != 2 {
+	if err != nil || len(r.Plugins) != 5 || r.Plugins[0].Name != "vpn" || !r.Plugins[0].On || len(r.Plugins[0].Parts) != 1 || r.Plugins[1].Name != "privacy" || !r.Plugins[1].On || len(r.Plugins[1].Parts) != 4 ||
+		r.Plugins[2].Name != "writing" || !r.Plugins[2].On || len(r.Plugins[2].Parts) != 1 || r.Plugins[3].Name != "markets" || r.Plugins[3].On || len(r.Plugins[3].Parts) != 1 ||
+		r.Plugins[4].Name != "mail" || !r.Plugins[4].On || len(r.Plugins[4].Parts) != 2 {
 		t.Fatalf("plugins = %+v", r.Plugins)
 	}
 	in, err := c.input(ipc.InputArgs{Text: ":plugins"}, 0)
-	if err != nil || in.Did != ipc.InputAnswered || !strings.HasPrefix(in.Text, "Privacy plugin: on.") || !strings.Contains(in.Text, "Dead man's switch") || !strings.Contains(in.Text, "Writing plugin: on.") || !strings.Contains(in.Text, "Markets plugin: off.") || !strings.Contains(in.Text, "Mail plugin: on.") {
+	if err != nil || in.Did != ipc.InputAnswered || !strings.HasPrefix(in.Text, "VPN plugin: on.") || !strings.Contains(in.Text, "Privacy plugin: on.") || !strings.Contains(in.Text, "Dead man's switch") || !strings.Contains(in.Text, "Writing plugin: on.") || !strings.Contains(in.Text, "Mail plugin: on.") || !strings.Contains(in.Text, "Markets plugin: off.") {
 		t.Errorf(":plugins = %+v, %v", in, err)
 	}
 	// A part turned on through the op: the core writes its key.
@@ -38,7 +38,7 @@ func TestThePluginsOp(t *testing.T) {
 	if err != nil || c.cfg().BrowserOn() || c.cfg().Browser.Connector != "on" {
 		t.Fatalf("privacy off: %v, browser on %v", err, c.cfg().BrowserOn())
 	}
-	for _, x := range r.Plugins[0].Parts {
+	for _, x := range r.Plugins[1].Parts {
 		if x.State != ipc.PartPluginOff && x.State != ipc.PartHeld {
 			t.Errorf("%s = %q with the plugin off", x.Name, x.State)
 		}

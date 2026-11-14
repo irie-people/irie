@@ -28,5 +28,10 @@ go vet "$@"
 # A build that leaves the plugins out (DESIGN §4.17), as a company's copy
 # may, must still compile, its tests too: the stand-ins and tags can't
 # drift from the code they stand in for.
-if [ "$*" = ./... ]; then go vet -tags noprivacy,nowriting,nomarkets,nomail ./...; fi
+if [ "$*" = ./... ]; then
+	# A company's copy keeps the VPN and leaves the rest out; a build may
+	# leave out every plugin (DESIGN §4.17, §4.18).
+	go vet -tags noprivacy,nowriting,nomarkets,nomail ./...
+	go vet -tags novpn,noprivacy,nowriting,nomarkets,nomail ./...
+fi
 go test "$@"

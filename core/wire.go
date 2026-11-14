@@ -355,6 +355,7 @@ const (
 	ToolAnon           = ipc.ToolAnon
 	ToolBrowser        = ipc.ToolBrowser
 	ToolPrivacy        = ipc.ToolPrivacy
+	ToolVPN            = ipc.ToolVPN
 	ToolWrite          = ipc.ToolWrite
 	PartReady          = ipc.PartReady
 	PartOff            = ipc.PartOff
@@ -363,6 +364,7 @@ const (
 	PartHeld           = ipc.PartHeld
 	VPNOn              = ipc.VPNOn
 	VPNOff             = ipc.VPNOff
+	VPNUse             = ipc.VPNUse
 	VPNLockdown        = ipc.VPNLockdown
 	VPNPlace           = ipc.VPNPlace
 	VPNTime            = ipc.VPNTime

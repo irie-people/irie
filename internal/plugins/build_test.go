@@ -1,4 +1,4 @@
-//go:build !noprivacy && !nowriting && !nomarkets && !nomail
+//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail
 
 package plugins
 
@@ -10,9 +10,11 @@ import (
 	"testing"
 )
 
-// TestABuildWithoutPlugins: go build -tags noprivacy,nowriting,nomarkets,nomail
-// builds every package, and its irie links none of the plugins' code
-// (DESIGN §4.17), as a company's copy that leaves them out needs.
+// TestABuildWithoutPlugins: go build -tags novpn,noprivacy,nowriting,
+// nomarkets,nomail builds every package, and its irie links none of the
+// plugins' code (DESIGN §4.17); and a company's copy, which keeps the VPN
+// plugin to drive the VPN it approves (§4.18) and leaves the rest out,
+// builds and links the VPN's code and none of the others'.
 func TestABuildWithoutPlugins(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds Irie without its plugins")
@@ -23,7 +25,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if err != nil {
 		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
 	}
-	tags := "-tags=noprivacy,nowriting,nomarkets,nomail"
+	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
@@ -48,6 +50,32 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	for _, d := range deps {
 		if strings.HasPrefix(d, "github.com/emersion/") {
 			t.Errorf("a build without plugins links %s", d)
+		}
+	}
+	// A company's copy keeps only the VPN plugin: Mail reads a person's own
+	// accounts, so it goes with the other personal plugins.
+	company := "-tags=noprivacy,nowriting,nomarkets,nomail"
+	build = exec.Command(goBin, "build", "-o", filepath.Join(t.TempDir(), "irie"), company, "./cmd/irie")
+	build.Dir = list.Dir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build %s ./cmd/irie: %v\n%s", company, err, out)
+	}
+	list = exec.Command(goBin, "list", "-deps", company, "./cmd/irie")
+	list.Dir = build.Dir
+	out, err = list.Output()
+	if err != nil {
+		t.Fatalf("go list -deps %s: %v", company, err)
+	}
+	links := map[string]bool{}
+	for _, d := range strings.Fields(string(out)) {
+		links[strings.TrimPrefix(d, "github.com/irie-people/irie/internal/")] = true
+	}
+	if !links["vpn"] {
+		t.Error("a company's copy lacks internal/vpn, so it can't drive its VPN")
+	}
+	for _, pkg := range []string{"anon", "browser", "dms", "htmltext", "mcp", "mail"} {
+		if links[pkg] {
+			t.Errorf("a company's copy links internal/%s", pkg)
 		}
 	}
 	// The list must hold what every build has, or the look above means nothing.

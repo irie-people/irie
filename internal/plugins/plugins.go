@@ -60,6 +60,17 @@ type Part struct {
 
 	own   func(config.Config) bool       // its own switch, as the file has it
 	check func(Env, bool) (bool, string) // whether it has what it needs, and its state in a sentence, given whether it is on
+	// titled is its title as the config makes it, such as the VPN that
+	// vpn.provider names; nil = Title.
+	titled func(config.Config) string
+}
+
+// title is the part's title in cfg.
+func (x Part) title(cfg config.Config) string {
+	if x.titled != nil {
+		return x.titled(cfg)
+	}
+	return x.Title
 }
 
 // Env is what a part's check reads: the config, Irie's folders and what only
@@ -78,11 +89,11 @@ type Live struct {
 
 // order is the order plugins show in; a plugin this build leaves out is
 // skipped.
-var order = []string{"privacy", "writing", "markets", "mail"}
+var order = []string{"vpn", "privacy", "writing", "markets", "mail"}
 
 // built are the plugins in this build, by name. Each plugin's file adds
 // itself, and a build tag leaves a plugin's file out with its parts' code:
-// go build -tags noprivacy,nowriting,nomarkets,nomail builds Irie without
+// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail builds Irie without
 // any of them (DESIGN §4.17).
 var built = map[string]func() Plugin{}
 
@@ -150,7 +161,7 @@ func (x Part) status(e Env, pluginOn bool) ipc.PluginPart {
 		return ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, State: ipc.PartHeld, Detail: "Not in " + brand.Name + " yet. " + x.Held}
 	}
 	own := x.own(e.Config)
-	w := ipc.PluginPart{Name: x.Name, Title: x.Title, Summary: x.Summary, Switch: x.Switch, On: own, Setup: x.Setup, Brings: x.Brings}
+	w := ipc.PluginPart{Name: x.Name, Title: x.title(e.Config), Summary: x.Summary, Switch: x.Switch, On: own, Setup: x.Setup, Brings: x.Brings}
 	ok, detail := x.check(e, own && pluginOn)
 	switch {
 	case !pluginOn:
@@ -177,7 +188,7 @@ func Why(cfg config.Config, part string) string {
 		case x.Held != "":
 			return x.Title + " isn't in " + brand.Name + " yet. " + x.Held
 		case !p.on(cfg):
-			return fmt.Sprintf("%s is off, as the %s plugin is: `"+brand.Slug+" plugins on %s` turns the plugin on.", x.Title, p.Name, p.Name)
+			return fmt.Sprintf("%s is off, as the %s plugin is: `"+brand.Slug+" plugins on %s` turns the plugin on.", x.title(cfg), p.Name, p.Name)
 		case !x.own(cfg):
 			return x.Refused
 		}
@@ -219,7 +230,13 @@ func Edits(plugin, part string, on bool) ([]config.Edit, error) {
 		return nil, fmt.Errorf("no plugin %q: "+brand.Name+"'s plugins are %s", plugin, strings.Join(Names(), ", "))
 	}
 	if part == "" {
-		return []config.Edit{{Key: p.key, Value: on}}, nil
+		edits := []config.Edit{{Key: p.key, Value: on}}
+		// A plugin of one part with a switch, such as the VPN, comes on
+		// whole: there is nothing else to want of it.
+		if on && len(p.Parts) == 1 && p.Parts[0].Switch != "" && p.Parts[0].Held == "" {
+			edits = append(edits, config.Edit{Key: p.Parts[0].Switch, Value: p.Parts[0].On})
+		}
+		return edits, nil
 	}
 	x, ok := p.Part(part)
 	if !ok {

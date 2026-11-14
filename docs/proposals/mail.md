@@ -8,7 +8,7 @@ Every account's mail in one list inside Irie, beside the sessions: the newest fi
 
 ## What it is
 
-Irie's fourth plugin, **Mail** (DESIGN §4.17), on by default: `[plugins] mail`, and `irie plugins off mail` turns it off. It shows nothing until an account is added. Its two parts are kinds of account:
+Irie's fifth plugin, **Mail** (DESIGN §4.17), on by default: `[plugins] mail`, and `irie plugins off mail` turns it off. It shows nothing until an account is added. Its two parts are kinds of account:
 
 | Part | How Irie reads it | Its check |
 |---|---|---|
