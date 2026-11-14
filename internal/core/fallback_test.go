@@ -12,6 +12,8 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness/claude"
+	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
 )
@@ -235,5 +237,49 @@ func TestARestartKeepsTheLimits(t *testing.T) {
 	c.loadOutcomes()
 	if at, ok := c.limits["fable"]; !ok || time.Since(at) > time.Minute {
 		t.Errorf("limits after a restart %v", c.limits)
+	}
+}
+
+// A session that started without the hooks a switch needs, as one from
+// before Irie had them, or one with its slash commands off, waits for the
+// reset, and its route.fallback says why: nothing is typed to it.
+func TestASessionThatCannotSwitchWaits(t *testing.T) {
+	c := historyCore(t)
+	for _, tc := range []struct {
+		argv  []string
+		hooks bool
+		want  string
+	}{
+		{[]string{"claude", "--model", "claude-fable-5-1"}, false, "without the hooks a model switch needs"},
+		{[]string{"claude", "--disable-slash-commands", "--model", "claude-fable-5-1"}, true, "--disable-slash-commands"},
+	} {
+		id := newID(time.Now())
+		dir := c.paths.Session(id)
+		os.MkdirAll(dir, 0o700)
+		if err := host.WriteSpec(c.paths.SpecFile(id), host.Spec{Session: id, Profile: "fable", Harness: "claude-code", Argv: tc.argv, Cwd: dir}); err != nil {
+			t.Fatal(err)
+		}
+		settings, _ := claude.Settings("/home/alice/.local/bin/irie", 0, tc.hooks, claude.Extra{})
+		os.WriteFile(filepath.Join(dir, claude.SettingsFile), settings, 0o600)
+		sw := &modelSwitch{from: "claude-fable-5-1", to: "claude-opus-5-5", limit: "You've reached your Fable limit.", done: make(chan struct{})}
+		c.mu.Lock()
+		x := &session{id: id, name: id, harness: "claude-code", profile: "fable", switching: sw}
+		c.sessions[id] = x
+		c.mu.Unlock()
+		c.fallBack(id, sw)
+		var reason string
+		for _, e := range c.journalOf(t, id) {
+			if e.Kind == event.RouteFallback {
+				reason = e.Str("reason")
+			}
+		}
+		if !strings.Contains(reason, tc.want) || !strings.HasPrefix(reason, "it waits for the limit to reset") {
+			t.Errorf("%q: reason %q, want %q", tc.argv, reason, tc.want)
+		}
+		c.mu.Lock()
+		if x.switching != nil {
+			t.Errorf("%q: the switch is still under way", tc.argv)
+		}
+		c.mu.Unlock()
 	}
 }

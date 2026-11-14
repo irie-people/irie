@@ -143,3 +143,30 @@ func TestRestoreModelKeepsALink(t *testing.T) {
 		t.Errorf("left beside the link: %v", entries)
 	}
 }
+
+func TestSeesSwitches(t *testing.T) {
+	now, err := Settings("/home/alice/.local/bin/irie", 0, true, Extra{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := Settings("/home/alice/.local/bin/irie", 0, false, Extra{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for name, c := range map[string]struct {
+		body []byte
+		want bool
+	}{
+		"now": {now, true}, "older": {old, false}, "broken": {[]byte("{"), false},
+	} {
+		path := filepath.Join(dir, name+".json")
+		os.WriteFile(path, c.body, 0o600)
+		if got := SeesSwitches(path); got != c.want {
+			t.Errorf("%s: %v, want %v", name, got, c.want)
+		}
+	}
+	if SeesSwitches(filepath.Join(dir, "none.json")) {
+		t.Error("a session with no settings sees switches")
+	}
+}

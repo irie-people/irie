@@ -15,6 +15,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -176,6 +177,10 @@ func (c *Core) switchModel(id string, sw *modelSwitch) error {
 		return err
 	case slices.Contains(spec.Argv, "--disable-slash-commands"):
 		return fmt.Errorf("it started with --disable-slash-commands, which turns /model off: close and reopen it to start it without")
+	case !claude.SeesSwitches(filepath.Join(c.paths.Session(id), claude.SettingsFile)):
+		// Without its hooks, /model would stop at Claude Code's
+		// confirmation, and the new model would go unheard.
+		return fmt.Errorf("it started without the hooks a model switch needs: close and reopen it to give it them")
 	}
 	// One switch at a time, so each puts back the user's own default and
 	// none the one another switch saved.

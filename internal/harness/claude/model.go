@@ -102,6 +102,22 @@ type member struct {
 	from, at, value, end int
 }
 
+// SeesSwitches reports whether a session's settings file, written at its
+// launch, has the hooks a model switch needs: PreModelSwitch, which lets
+// Irie's own switch skip Claude Code's confirmation, and PostModelSwitch,
+// which reports the new model. A session launched before Irie had them, or
+// on a Claude Code older than MinVersion, has neither.
+func SeesSwitches(settings string) bool {
+	b, err := os.ReadFile(settings)
+	if err != nil {
+		return false
+	}
+	var f struct {
+		Hooks map[string]json.RawMessage `json:"hooks"`
+	}
+	return json.Unmarshal(b, &f) == nil && f.Hooks["PreModelSwitch"] != nil && f.Hooks["PostModelSwitch"] != nil
+}
+
 // topMembers finds the top-level members of the JSON object b, in order.
 func topMembers(b []byte) ([]member, error) {
 	dec := json.NewDecoder(bytes.NewReader(b))
