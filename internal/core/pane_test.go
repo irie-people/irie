@@ -17,8 +17,14 @@ import (
 // when asked, in the session's worktree on the dock server, keeps its last
 // screen when it exits, restarts, ends, and ends with its session.
 func TestAPanesShellRunsInTheSessionsFolderAndEndsWithIt(t *testing.T) {
-	// A plain shell, not the user's, which may ask questions on a first run.
-	t.Setenv("SHELL", "/bin/sh")
+	// A plain shell, not the user's, which may ask questions on a first run,
+	// and not a login shell, which would read the user's own profile: the
+	// core starts "$SHELL -l", and this one drops the -l.
+	plain := filepath.Join(t.TempDir(), "plain-sh")
+	if err := os.WriteFile(plain, []byte("#!/bin/sh\nexec /bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SHELL", plain)
 	testutil.IsolateGit(t)
 	repo := website(t, filepath.Join(t.TempDir(), "website"))
 	c := setupWith(t, agentConfig{})

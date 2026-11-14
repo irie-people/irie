@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
+	"sync"
 
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/tmux"
@@ -21,6 +23,11 @@ import (
 
 // paneID is the shape of a pane's id, which names its tmux session.
 var paneID = regexp.MustCompile(`^[a-z0-9]{1,24}$`)
+
+// paneMu makes each pane op's look and act one step: a client asks to start
+// a card's shell again as the card comes to the front, and an end may race
+// a start, which would otherwise leave a shell with no card.
+var paneMu sync.Mutex
 
 // paneSession names the tmux session of a session's pane on the dock server.
 func paneSession(session, pane string) string {
@@ -62,6 +69,8 @@ func (c *Core) paneOp(a ipc.PaneArgs) (ipc.PaneResult, error) {
 	}
 
 	name := paneSession(a.Session, a.Pane)
+	paneMu.Lock()
+	defer paneMu.Unlock()
 	_, exists := c.dockCopies()[name]
 	end := func() error {
 		if _, err := c.dock.Run("kill-session", "-t", "="+name); err != nil && !errors.Is(err, tmux.ErrNoServer) {
@@ -116,9 +125,17 @@ func (c *Core) paneStart(name, session, pane, dir string) error {
 	}
 	if _, err := c.dock.StartWith(conf, "new-session", "-d", "-s", name, "-x", "100", "-y", "30", "-c", dir,
 		"--", loginShell(), "-l"); err != nil {
+		// Another core's start won: the shell is there.
+		if strings.Contains(err.Error(), "duplicate session") {
+			return nil
+		}
 		return fmt.Errorf("start the pane's shell: %w", err)
 	}
 	c.log.Info("pane started", "session", session, "pane", pane, "cwd", dir)
-	_, err = c.dock.Run("set-option", "-t", "="+name+":", "@irie_dock_session", session)
-	return err
+	if _, err := c.dock.Run("set-option", "-t", "="+name+":", "@irie_dock_session", session); err != nil {
+		// A shell the sweep can't tie to its session would outlive it.
+		_, _ = c.dock.Run("kill-session", "-t", "="+name)
+		return fmt.Errorf("mark the pane's shell as its session's: %w", err)
+	}
+	return nil
 }
