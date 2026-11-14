@@ -1,6 +1,6 @@
 # Reversible Irie: what the Toffoli gate teaches
 
-Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3); steps 2 to 6 are proposals. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3), and step 2, the rebuild meter, on 2026-11-14 (DESIGN §6.3); steps 3 to 6 are proposals. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 **In short.** The Toffoli gate, or controlled-controlled-NOT, flips its target bit only when both control bits are 1. It keeps its inputs, so no information is lost, and run twice it undoes itself. Any computation can be built from such gates (Toffoli, 1980). Bennett (1973) showed such a computation need not pile up garbage either: compute, copy the answer, then run the steps backwards to clean the scratch.
 
@@ -25,10 +25,10 @@ Neither reversible chips nor quantum computers will make Irie faster before 2030
 1. **Built.** Rename, reorder, the freeze and thaw of one session, and promote and stop promoting are steps of the history, with labels that name their sessions (`rename "a" to "b"`). Undoing a promotion puts the session back in its place and parks it again if it was parked. `core.Title` and the Mac app's Edit menu put curly quotes on each quoted name.
 
    A test in `internal/peer` checks that the phone's and the peers' links agree their keys with the hybrid post-quantum X25519MLKEM768. It also checks that a client with X25519 alone still gets in ([PHONE.md](../PHONE.md)).
-2. **A rebuild meter.**
-   - Each turn's usage says how much it wrote to the cache. A turn whose write is most of its context rebuilt the cache, after an expiry, a reopen or a compaction.
-   - Count those rebuilds per session.
-   - Before Irie wakes a session idle past its cache's life, say what the rebuild costs, the way the spawn list says what a session costs (§6.3). Irie wakes sessions with a send, the jot dog's sending back (§4.8), a thaw, or a reopen.
+2. **A rebuild meter. Built** (DESIGN §6.3).
+   - Each turn's usage says how much it wrote to the cache. A turn whose write is most of its context rebuilt the cache, after an expiry or a reopen. A compaction starts a new context, so the meter does not count it.
+   - Count those rebuilds per session: the journal's `cache.rebuilt`, with what each cost and what woke the session, each row's count and cost today and this week, and `irie ctl rebuilds`.
+   - Before Irie wakes a session idle past its cache's life, say what the rebuild costs, the way the spawn list says what a session costs (§6.3). Irie wakes sessions with a send, the jot dog's sending back (§4.8), a thaw, or a reopen. The trod bot leaves a cold session be when waking it costs more than `usage.wake_most`; the jot dog's nudge comes while the cache is warm.
    - Irie causes rebuilds of its own: a freeze of more than an hour (§4.10), close and reopen, and a mass thaw.
 3. **The rest of undo.** Pause, notes, and freezing or thawing them all as one step that names its sessions.
 4. **Inside and outside.** Mark each op by whether its effect leaves Irie. Inside ops never ask, since undo is there. Outside ops are the ones to confirm or have Mikael weigh. A mass thaw is an inside action with outside effects: each agent signs in again.
@@ -46,7 +46,7 @@ On the maintainer's Mac on 2026-11-07, the 27 open sessions had:
 - produced 3.8 million of output
 - sent 8,600 uncached
 
-At Opus 5.5's list prices with a one-hour cache, that is 44% of spend re-reading context, 36% writing it and 20% output. Part of the writing is each turn's new tool output, which has to be written once; the rest is rebuilds, which the meter in step 2 would tell apart.
+At Opus 5.5's list prices with a one-hour cache, that is 44% of spend re-reading context, 36% writing it and 20% output. Part of the writing is each turn's new tool output, which has to be written once; the rest is rebuilds, which the meter of step 2 now tells apart (`irie ctl rebuilds`).
 
 The newest estimates for breaking 256-bit elliptic curves:
 

@@ -105,6 +105,10 @@ const (
 	// OpLearn gives what the Help menu shows: the learning resources, the
 	// user's own links and the glossary (docs/proposals/learning.md).
 	OpLearn = "learn"
+	// OpRebuilds is the prompt-cache meter's report (DESIGN §6.3): the
+	// sessions and the causes that rebuilt their caches most today and in
+	// the last seven days, and what that cost. It answers a RebuildsResult.
+	OpRebuilds = "rebuilds"
 )
 
 // FeatureTutor is in hello's features when spawn takes SpawnArgs.Tutor.
@@ -244,6 +248,88 @@ type Session struct {
 	// Trod is what the trod bot did for it in this night's shift or
 	// the last (DESIGN §4.10); nil when it did nothing.
 	Trod *TrodRow `json:"trod,omitempty"`
+
+	// Rebuilds is how often its prompt cache was written again in the
+	// last seven days, and what that cost (DESIGN §6.3); nil when it was
+	// not.
+	Rebuilds *Rebuilds `json:"rebuilds,omitempty"`
+	// Cold is what waking it costs now that its prompt cache has run out:
+	// its next turn writes its whole context into the cache again; nil
+	// while the cache is warm, while it works, or when Irie cannot tell.
+	Cold *Cold `json:"cold,omitempty"`
+}
+
+// Rebuilds is the prompt-cache meter's count for one session (DESIGN §6.3):
+// the requests that wrote most of its context into the cache again instead
+// of reading it, today since midnight and in the last seven days, today's
+// among them, with what they cost at list price.
+type Rebuilds struct {
+	Today    int       `json:"today"`
+	TodayUSD float64   `json:"today_usd"`
+	Week     int       `json:"week"`
+	WeekUSD  float64   `json:"week_usd"`
+	Last     time.Time `json:"last"`            // when the latest was
+	Cause    string    `json:"cause,omitempty"` // what woke it for the latest, RebuildYou and the rest; "" when Irie cannot tell
+	// Words say it for its card, in plain words, once today's rebuilds cost
+	// usage.rebuild_card: "$4.10 today: woke cold 3 times". "" until then.
+	Words string `json:"words,omitempty"`
+}
+
+// What woke a session for a rebuild of its prompt cache (DESIGN §6.3), as
+// a rebuild's cause.
+const (
+	RebuildYou        = "you"        // your message, or your answer at a prompt, after a long idle
+	RebuildTrod       = "trod"       // a message the trod bot typed
+	RebuildDog        = "dog"        // the jot dog sent its turn on
+	RebuildThaw       = "thaw"       // a thaw, in the middle of its work
+	RebuildReopen     = "reopen"     // a reopen
+	RebuildBackground = "background" // work of its own in the background, or a wakeup
+	RebuildLimit      = "limit"      // Claude Code carried it on at a usage limit's reset
+	RebuildTool       = "tool"       // one of its tool calls ran longer than the cache lives
+	RebuildChanged    = "changed"    // not cold: the start of its prompt changed, as for another model or other tools
+)
+
+// Cold is what waking a session costs once its prompt cache has run out
+// (DESIGN §6.3): its next turn writes the whole context into the cache
+// again.
+type Cold struct {
+	Since  time.Time `json:"since"`  // when its cache ran out
+	Tokens int64     `json:"tokens"` // its context, which the next turn writes again
+	USD    float64   `json:"usd"`    // what that costs at list price
+	Words  string    `json:"words"`  // the price in a few words, for where you wake it: "~$2.40 to wake"
+}
+
+// RebuildsResult is the prompt-cache meter's report (irie ctl rebuilds):
+// today since midnight and the last seven days, today included.
+type RebuildsResult struct {
+	On    bool         `json:"on"` // usage.rebuilds
+	Today RebuildsSpan `json:"today"`
+	Week  RebuildsSpan `json:"week"`
+}
+
+// RebuildsSpan is the rebuilds of one span of time, with the sessions and
+// the causes ranked by what their rebuilds cost, the most first.
+type RebuildsSpan struct {
+	From     time.Time      `json:"from"`
+	Count    int            `json:"count"`
+	Tokens   int64          `json:"tokens"`
+	USD      float64        `json:"usd"`
+	Sessions []RebuildsPart `json:"sessions"`
+	Causes   []RebuildsPart `json:"causes"`
+}
+
+// RebuildsPart is one session's or one cause's share of a span's rebuilds.
+// A cause's Name is one of RebuildYou and the rest, "trod-thaw" for the
+// trod bot's thaws, or "" when Irie could not tell; Words say it in plain
+// words.
+type RebuildsPart struct {
+	ID     string  `json:"id,omitempty"` // the session's id, for a session
+	Name   string  `json:"name"`
+	Words  string  `json:"words,omitempty"`
+	Open   bool    `json:"open,omitempty"` // the session is open
+	Count  int     `json:"count"`
+	Tokens int64   `json:"tokens"`
+	USD    float64 `json:"usd"`
 }
 
 // TrodRow is what the trod bot did for a session in one shift.
@@ -750,6 +836,10 @@ type ClosedSession struct {
 	Closed time.Time `json:"closed"`
 	Auto   bool      `json:"auto,omitempty"`
 	Lost   bool      `json:"lost,omitempty"`
+	// Cold is what its next turn would cost once reopened, now that its
+	// prompt cache has run out (DESIGN §6.3); nil while the cache is warm
+	// or when Irie cannot tell.
+	Cold *Cold `json:"cold,omitempty"`
 }
 
 // CloseArgs name the session to close, or several: Sessions close together,

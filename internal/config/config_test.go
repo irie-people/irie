@@ -101,7 +101,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
 		t.Errorf("local = %+v, want %+v", c.Local, want)
 	}
-	if want := (Usage{StatusLine: true}); c.Usage != want {
+	if want := (Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4}); c.Usage != want {
 		t.Errorf("usage = %+v, want %+v", c.Usage, want)
 	}
 	if want := (Repos{Roots: []string{}, Aliases: map[string]string{}}); !reflect.DeepEqual(c.Repos, want) {

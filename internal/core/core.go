@@ -150,6 +150,7 @@ type Core struct {
 	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
 	trodThawed time.Time             // when the trod bot last thawed a session it froze (trod.go)
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
+	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 }
@@ -202,6 +203,7 @@ type session struct {
 	screen    *screenFeed            // its terminal, read while clients watch it live (screenfeed.go)
 	helpers   map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog       dogState               // what the jot dog found its jot left (dog.go)
+	trodCold  string                 // why the trod bot's last sweep left it be for the price of waking it (trod.go); "" when it did not
 	team      []team.Teammate        // its teammates on the team server, last listed (team.go)
 	stopped   map[string]bool        // its helpers you stopped, whose tool calls are turned away until they end (sub.go)
 	hue       int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
@@ -284,10 +286,12 @@ func (x *session) waitsOnSubs() bool {
 // countTokens catches each session's tally up with its transcripts. The
 // caller holds c.mu.
 func (c *Core) countTokens() {
+	now := time.Now()
 	for _, x := range c.sessions {
 		if t, ok := x.tally.update(x.track.transcripts); ok {
 			x.tokens = &t
 		}
+		c.noteRebuilds(x, now)
 	}
 }
 
@@ -352,6 +356,7 @@ func Run(o Options) error {
 	c.loadGroups()
 	c.loadHues()
 	c.loadClosed()
+	c.loadMeter(time.Now())
 	c.loadState()
 	c.loadTrodHand()
 	c.loadRaphael()
@@ -488,6 +493,7 @@ func (c *Core) tick() {
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
+	c.closedGoesCold(time.Now())
 }
 
 // refresh takes a snapshot, repairs the layout until it is sound and
@@ -676,6 +682,9 @@ func (c *Core) row(x *session, from time.Time) ipc.Session {
 	if !from.IsZero() {
 		s.Trod = trodRow(&x.track, from)
 	}
+	now := time.Now()
+	s.Rebuilds = c.rebuildsRow(x.id, now)
+	s.Cold = c.coldRow(x, s.State, now)
 	return s
 }
 
@@ -777,7 +786,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins, ipc.OpMarkets,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -846,6 +855,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return ipc.CloseResult{Sessions: ids}, err
 	case ipc.OpDog:
 		return c.dogList()
+	case ipc.OpRebuilds:
+		return c.rebuildsOp(), nil
 	case ipc.OpReady:
 		return c.ready(), nil
 	case ipc.OpTrod:

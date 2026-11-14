@@ -353,6 +353,9 @@ extension View {
                 if !meta.isEmpty {
                     Text(meta).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(1).padding(.top, 1)
                 }
+                if let words = s.rebuilds?.words {
+                    Text(words).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(1)
+                }
                 if !helpers.isEmpty {
                     VStack(alignment: .leading, spacing: 1) {
                         ForEach(helpers) { a in

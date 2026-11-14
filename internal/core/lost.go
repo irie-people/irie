@@ -27,6 +27,7 @@ import (
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/journal"
+	"github.com/irie-people/irie/internal/rebuild"
 )
 
 // lostOne is a session folder findLost found lost.
@@ -107,6 +108,11 @@ func (c *Core) findLost(now time.Time) {
 			if v != "" {
 				data[k] = v
 			}
+		}
+		if !l.spec.Local {
+			wakeData(data, r.Wake)
+		} else {
+			r.Wake = rebuild.Wake{}
 		}
 		e := event.Event{TS: event.Stamp(r.Closed), Session: r.ID, Source: event.SourceIrie, Harness: l.harness, Kind: event.UIClosed, Data: data}
 		if _, err := c.journal.Append(e); err != nil {
@@ -231,6 +237,13 @@ func (c *Core) lostRecord(l lostOne, evs []event.Event, now time.Time) closedRec
 	h, err := harnessFor(l.harness)
 	_, resumes := h.(harness.Resumer)
 	_, taskErr := os.Stat(c.paths.TaskFile(l.id))
+	// What its next turn costs in its cache once reopened, by its newest
+	// transcript's end.
+	for _, p := range transcripts {
+		if w, ok := rebuild.LastWake(p); ok && w.Last.After(r.Wake.Last) {
+			r.Wake = w
+		}
+	}
 	// The journal may lack the run's events, as when it could not be
 	// written, so a transcript on disk counts as a conversation too.
 	r.Resume = err == nil && resumes && r.VendorID != "" && (taskErr != nil || t.conversed() || len(transcripts) > 0)

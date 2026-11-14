@@ -5,11 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/rebuild"
 )
 
 // controlUsage is the part of ctlUsage for what the user does to a session
@@ -65,12 +67,24 @@ func ctlFreeze(args []string, on bool) error {
 	if err != nil {
 		return err
 	}
+	// What waking each costs, for those whose prompt cache has run out.
+	var before ipc.ListResult
+	if !on {
+		ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &before)
+	}
 	var r ipc.FreezeResult
 	if err := ipc.Call(sock, 10*time.Second, op, ipc.FreezeArgs{Session: fs.Arg(0), All: *all}, &r); err != nil {
 		return err
 	}
 	if *all {
 		fmt.Println(strings.Join(r.Sessions, "\n"))
+	}
+	for _, s := range before.Sessions {
+		thawed := slices.Contains(r.Sessions, s.ID) || len(r.Sessions) == 0 && (s.ID == fs.Arg(0) || strings.EqualFold(s.Name, fs.Arg(0)))
+		if c := s.Cold; c != nil && s.Frozen != nil && thawed {
+			fmt.Fprintf(os.Stderr, "%s: its prompt cache has run out, so its next turn writes %s tokens into it again, ~%s\n",
+				s.Name, rebuild.Tokens(c.Tokens), rebuild.Dollars(c.USD))
+		}
 	}
 	return nil
 }

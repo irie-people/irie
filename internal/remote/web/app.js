@@ -318,7 +318,8 @@ function sessionActions(conn, s, { inSession = false } = {}) {
   }
   if (!ended && conn.can('freeze')) {
     items.push(frozen
-      ? { label: 'Thaw', note: 'It carries on where it stopped', run: () => op(conn, 'thaw', { session: s.id }, { done: `Thawed “${s.name}”` }) }
+      // Once its prompt cache has run out, the price of waking it (DESIGN §6.3).
+      ? { label: 'Thaw', note: s.cold ? `It carries on where it stopped · ${s.cold.words}` : 'It carries on where it stopped', run: () => op(conn, 'thaw', { session: s.id }, { done: `Thawed “${s.name}”` }) }
       : { label: 'Freeze', note: 'Stops it at once, every process', run: () => op(conn, 'freeze', { session: s.id }, { done: `Froze “${s.name}”` }) });
   }
   if (!ended && conn.can('priority')) {
@@ -712,14 +713,14 @@ function renderSection(sec, c, multi, now) {
   const closed = S.filter || c.status === 'unpaired' ? [] : c.closed;
   const cOpen = !!S.closedOpen[c.m.id];
   sec._closedHead.hidden = !closed.length;
-  const ck = closed.map((x) => x.id).join() + cOpen + Math.floor(now / 60000);
+  const ck = closed.map((x) => x.id + (x.cold ? x.cold.words : '')).join() + cOpen + Math.floor(now / 60000);
   if (sec._ck !== ck) {
     sec._ck = ck;
     sec._closedHead.setAttribute('aria-expanded', String(cOpen));
     sec._closedHead.replaceChildren(h('span', { class: 'chev', html: ICON.chevron }), h('span', { class: 'dv-title', text: 'Closed' }), h('span', { class: 'cnt', text: String(closed.length) }));
     sec._closed.replaceChildren(...(cOpen ? closed.map((x) => h('div', { class: 'closed-item' },
       h('div', { class: 'ci-body' }, h('div', { class: 'ci-name', text: x.name }),
-        h('div', { class: 'ci-when', text: (x.auto ? 'Closed itself ' : 'Closed ') + L.ageSpoken(x.closed, now) })),
+        h('div', { class: 'ci-when', text: (x.auto ? 'Closed itself ' : 'Closed ') + L.ageSpoken(x.closed, now) + (x.cold ? ' · ' + x.cold.words : '') })),
       h('button', { class: 'btn small', text: 'Reopen', onclick: () => reopen(c, x.id) }))) : []));
   }
   sec.hidden = S.filter && !liveShown.length && !parkedShown.length;
@@ -779,7 +780,9 @@ function fillCard(row, c, s, now) {
   const helpers = (s.subagents || []).slice(0, 2);
   const more = (s.subagents || []).length - helpers.length;
   const age = L.age(s.created, now);
-  const sig = JSON.stringify([s.name, lk, detail, meta, age, s.parked, s.priority, !!s.loose, helpers, more, c.redOnDone]);
+  // How often it woke cold today, once that matters (DESIGN §6.3).
+  const rebuilt = s.rebuilds && s.rebuilds.words ? s.rebuilds.words : '';
+  const sig = JSON.stringify([s.name, lk, detail, meta, age, s.parked, s.priority, !!s.loose, helpers, more, c.redOnDone, rebuilt]);
   if (row._sig === sig) return;
   row._sig = sig;
   const card = row._card;
@@ -790,6 +793,7 @@ function fillCard(row, c, s, now) {
     `<div class="c-top"><span class="c-name">${esc(s.name)}</span>${s.priority ? '<span class="c-prio" title="Promoted">▲</span>' : ''}<span class="c-age">${esc(age)}</span></div>` +
     `<div class="c-detail">${esc(detail)}</div>` +
     (meta ? `<div class="c-meta">${esc(meta)}</div>` : '') +
+    (rebuilt ? `<div class="c-meta">${esc(rebuilt)}</div>` : '') +
     (helpers.length ? '<div class="c-helpers">' + helpers.map((a) =>
       `<div class="c-helper${a.needs_you ? ' loud' : ''}"><span class="arrow">↳</span><b>${esc(a.type || 'Helper')}</b> ${esc(a.detail || '')}</div>`).join('') +
       (more > 0 ? `<div class="c-helper">and ${more} more helper${more === 1 ? '' : 's'}</div>` : '') + '</div>' : '') +

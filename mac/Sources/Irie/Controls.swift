@@ -292,7 +292,9 @@ struct PauseButton: View {
         Button { store.setFrozen(session, !frozen) } label: {
             Image(systemName: frozen ? "play.fill" : "pause.fill").frame(width: 16, height: 18)
         }
-        .help(frozen ? "Resume: it and everything it started carry on" : "Pause: stop it, its helpers and everything they started, at once")
+        // Once its prompt cache has run out, Resume says what waking it
+        // costs (DESIGN §6.3).
+        .help(frozen ? "Resume: it and everything it started carry on" + (session.cold.map { " · \($0.words)" } ?? "") : "Pause: stop it, its helpers and everything they started, at once")
         .disabled(!frozen && !session.canFreeze)
         .accessibilityLabel(frozen ? "Resume" : "Pause")
     }
@@ -351,7 +353,7 @@ struct ControlItems: View {
 
     var body: some View {
         if session.isFrozen {
-            Button("Resume") { store.setFrozen(session, false) }
+            Button(session.cold.map { "Resume · \($0.words)" } ?? "Resume") { store.setFrozen(session, false) }
         } else {
             Button("Pause") { store.setFrozen(session, true) }.disabled(!session.canFreeze)
         }

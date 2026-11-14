@@ -2,10 +2,10 @@ package core
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/rebuild"
 )
 
 // tokenTally counts a session's model usage from its Claude Code
@@ -22,6 +22,10 @@ type transcriptCount struct {
 	byID  map[string]ipc.Tokens // usage per message id
 	sum   ipc.Tokens
 	title string // the newest title read and not yet taken
+	// The prompt-cache meter's reading of it (rebuilds.go), and the
+	// rebuilds read since the meter last took them.
+	meter rebuild.Transcript
+	found []rebuild.Rebuild
 }
 
 // maxRead caps one read, so a long transcript is caught up over a few ticks.
@@ -96,6 +100,35 @@ func (t *tokenTally) update(paths []string) (ipc.Tokens, bool) {
 	return total, seen
 }
 
+// rebuilds takes the rebuilds of the prompt cache read from the
+// transcripts since the last call, the transcripts' in the order of paths.
+func (t *tokenTally) rebuilds(paths []string) []rebuild.Rebuild {
+	var out []rebuild.Rebuild
+	for _, p := range paths {
+		if f := t.files[p]; f != nil && len(f.found) > 0 {
+			out = append(out, f.found...)
+			f.found = nil
+		}
+	}
+	return out
+}
+
+// wake is what the next request of the session's own conversation would
+// cost in its cache, by the transcript at paths whose conversation made a
+// request last; false when none has said.
+func (t *tokenTally) wake(paths []string) (rebuild.Wake, bool) {
+	var best rebuild.Wake
+	ok := false
+	for _, p := range paths {
+		if f := t.files[p]; f != nil {
+			if w, has := f.meter.Wake(); has && (!ok || w.Last.After(best.Last)) {
+				best, ok = w, true
+			}
+		}
+	}
+	return best, ok
+}
+
 // title returns the newest title that the transcripts at paths gained since
 // the last call, if any.
 func (t *tokenTally) title(paths []string) (string, bool) {
@@ -110,7 +143,10 @@ func (t *tokenTally) title(paths []string) (string, bool) {
 
 func (f *transcriptCount) read(path string) {
 	// Replaced or cut short: count it again from the start.
-	f.follower.read(path, func() { f.byID, f.sum, f.title = map[string]ipc.Tokens{}, ipc.Tokens{}, "" }, f.line)
+	f.follower.read(path, func() {
+		f.byID, f.sum, f.title = map[string]ipc.Tokens{}, ipc.Tokens{}, ""
+		f.meter, f.found = rebuild.Transcript{}, nil
+	}, f.line)
 }
 
 func (f *transcriptCount) line(b []byte) {
@@ -118,30 +154,24 @@ func (f *transcriptCount) line(b []byte) {
 		f.title = t
 		return
 	}
-	if !bytes.Contains(b, []byte(`"usage"`)) {
+	l, ok := rebuild.ParseLine(b)
+	if !ok {
 		return
 	}
-	var rec struct {
-		Message struct {
-			ID    string `json:"id"`
-			Usage *struct {
-				Input      int64 `json:"input_tokens"`
-				Output     int64 `json:"output_tokens"`
-				CacheWrite int64 `json:"cache_creation_input_tokens"`
-				CacheRead  int64 `json:"cache_read_input_tokens"`
-			} `json:"usage"`
-		} `json:"message"`
-	}
-	if json.Unmarshal(b, &rec) != nil || rec.Message.ID == "" || rec.Message.Usage == nil {
+	if !l.Usage {
+		f.meter.Read(l, false) // a compaction
 		return
 	}
-	u := rec.Message.Usage
-	now := ipc.Tokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
-	if old, ok := f.byID[rec.Message.ID]; ok {
+	now := ipc.Tokens{Input: l.Input, Output: l.Output, CacheRead: l.Read, CacheWrite: l.Write}
+	old, seen := f.byID[l.ID]
+	if seen {
 		f.sum = addTokens(f.sum, old, -1)
 	}
-	f.byID[rec.Message.ID] = now
+	f.byID[l.ID] = now
 	f.sum = addTokens(f.sum, now, 1)
+	if b, ok := f.meter.Read(l, !seen); ok {
+		f.found = append(f.found, b)
+	}
 }
 
 // addTokens returns a plus sign times b.
