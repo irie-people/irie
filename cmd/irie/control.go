@@ -38,7 +38,7 @@ const controlUsage = `  ` + brand.Slug + ` ctl freeze SESSION|--all          sto
                                          made when none has it, which the
                                          sidebars draw together: by id or name,
                                          or with none the one this runs in. A
-                                         path, Work/Irie, makes groups inside
+                                         path, Work/Sidebar, makes groups inside
                                          groups; --list lists them by path
   ` + brand.Slug + ` ctl ungroup [SESSION...]          take sessions out of their groups, each
                                          into the group around its group

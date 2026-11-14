@@ -33,7 +33,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short;
                                          --group puts it in the group of that name
-                                         or path, Work/Irie, made when none has it
+                                         or path, Work/Sidebar, made when none has it
                                          (else it goes in the group of the session
                                          this runs in)
   ` + brand.Slug + ` ctl input [--json] [--session SESSION] TEXT...

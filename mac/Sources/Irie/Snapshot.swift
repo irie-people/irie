@@ -262,10 +262,10 @@ enum Fixture {
     }}
     """#
 
-    /// Your groups, one inside another: Irie holds Mac app and
+    /// Your groups, one inside another: Work holds Mac app and
     /// patent-research, Mac app holds conversation-view and Looks, and Looks
     /// holds warm-look.
-    static let groups = [GroupInfo(id: "girie0000000", name: "Irie"),
+    static let groups = [GroupInfo(id: "girie0000000", name: "Work"),
                          GroupInfo(id: "gmacapp00000", name: "Mac app", parent: "girie0000000"),
                          GroupInfo(id: "glooks000000", name: "Looks", parent: "gmacapp00000")]
 
