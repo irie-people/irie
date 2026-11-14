@@ -697,12 +697,16 @@ type ListResult struct {
 
 // ClosedSession is a closed session that reopen can carry on. Auto says
 // that it closed on its own, by spawn.close_when_done; one closed by you,
-// or by an agent at your word, is done (DESIGN §4.5).
+// or by an agent at your word, is done (DESIGN §4.5). Lost says that its
+// agent ended with Irie's tmux server, as when the Mac restarted, so it
+// closed on its own as the core started again, and reopen brings it back
+// as it was.
 type ClosedSession struct {
 	ID     string    `json:"id"`
 	Name   string    `json:"name"`
 	Closed time.Time `json:"closed"`
 	Auto   bool      `json:"auto,omitempty"`
+	Lost   bool      `json:"lost,omitempty"`
 }
 
 // CloseArgs name the session to close, or several: Sessions close together,

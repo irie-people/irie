@@ -246,3 +246,24 @@ func TestReadKindReadsOnlyThatKind(t *testing.T) {
 		t.Errorf("ReadKind of no journal = %+v, %v", evs, err)
 	}
 }
+
+func TestReadSessionsReadsOnlyTheirEvents(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "journal")
+	c := &clock{t: time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)}
+	j := open(t, dir, c, 30)
+	for _, id := range []string{"s0k3j9x2m4a7q", "s1a2b3c4d5e6f", "s0k3j9x2m4a7q"} {
+		e := ev(event.SpawnRequested)
+		e.Session = id
+		if _, err := j.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	evs, err := ReadSessions(dir, time.Time{}, "s1a2b3c4d5e6f", "s9z9z9z9z9z9z")
+	if err != nil || len(evs) != 1 || evs[0].Session != "s1a2b3c4d5e6f" || evs[0].Seq != 2 {
+		t.Errorf("ReadSessions = %+v, %v, want the one event of s1a2b3c4d5e6f", evs, err)
+	}
+	// A value is matched whole, to its closing quote.
+	if evs, err := ReadSessions(dir, time.Time{}, "s0k3j9x2m4a7"); err != nil || len(evs) != 0 {
+		t.Errorf("ReadSessions of a cut id = %+v, %v", evs, err)
+	}
+}

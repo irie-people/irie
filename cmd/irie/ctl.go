@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -88,9 +89,12 @@ const ctlUsage = `usage: irie ctl <command>
                                          work. It is done: the jot dog lets it
                                          be. history lists it and reopen
                                          brings it back
-  irie ctl reopen [SESSION]              bring a closed session back, by id or name
+  irie ctl reopen [--lost | SESSION]     bring a closed session back, by id or name
                                          (the one closed last with none), carrying
-                                         on its conversation; prints its new id
+                                         on its conversation; prints its new id.
+                                         --lost brings back every session the last
+                                         restart lost, one at a time, pinned,
+                                         parked or frozen as it was
   irie ctl show [--focus] SESSION        show a session in the slot
   irie ctl rename SESSION NAME...        rename a session, by its id or name,
                                          and print the name it got: numbered
@@ -756,20 +760,35 @@ func ctlHistory(args []string) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "SESSION\tCLOSED\tNAME")
 	for _, c := range got {
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", c.ID, c.Closed.Local().Format("Jan 2 15:04"), c.Name)
+		closed := c.Closed.Local().Format("Jan 2 15:04")
+		if c.Lost {
+			// Its agent ended with Irie's tmux server, as in a restart.
+			closed += " lost"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", c.ID, closed, c.Name)
 	}
 	return tw.Flush()
 }
 
 // ctlReopen brings a closed session back, found by id or name; with none
-// named, the one closed last.
+// named, the one closed last. --lost brings back what the last restart
+// lost.
 func ctlReopen(args []string) error {
-	if len(args) > 1 {
-		return errors.New("usage: irie ctl reopen [SESSION]")
+	fs := flag.NewFlagSet("ctl reopen", flag.ContinueOnError)
+	lost := fs.Bool("lost", false, "bring back every session the last restart lost, one at a time")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	args = fs.Args()
+	if len(args) > 1 || *lost && len(args) > 0 {
+		return errors.New("usage: irie ctl reopen [--lost | SESSION]")
 	}
 	sock, err := socket()
 	if err != nil {
 		return err
+	}
+	if *lost {
+		return reopenLost(sock)
 	}
 	id := ""
 	if len(args) == 1 {
@@ -791,6 +810,80 @@ func ctlReopen(args []string) error {
 	}
 	fmt.Println(r.Session.ID)
 	return nil
+}
+
+// lostGap is how long reopenLost waits after one agent has started before
+// it brings back the next.
+const lostGap = 5 * time.Second
+
+// reopenLost brings back the sessions the last restart lost, the one that
+// started first first, one at a time: each agent starts before the next
+// comes back, so that if their sign-in to Claude Code needs renewing, the
+// first renews it and the rest find it renewed (DESIGN §4.5, §4.10).
+func reopenLost(sock string) error {
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+		return err
+	}
+	batch := lastLost(l.Closed)
+	if len(batch) == 0 {
+		fmt.Println("no lost sessions to bring back")
+		return nil
+	}
+	failed := 0
+	for i, c := range batch {
+		var r ipc.ReopenResult
+		if err := ipc.Call(sock, 10*time.Minute, ipc.OpReopen, ipc.ReopenArgs{Session: c.ID}, &r); err != nil {
+			fmt.Fprintf(os.Stderr, "irie: %s did not come back: %v\n", c.Name, err)
+			failed++
+			continue
+		}
+		fmt.Printf("%s\t%s\n", r.Session.ID, r.Session.Name)
+		if i < len(batch)-1 {
+			waitStarted(sock, r.Session.ID, time.Minute)
+			time.Sleep(lostGap)
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d lost sessions did not come back", failed, len(batch))
+	}
+	return nil
+}
+
+// lastLost are the closed sessions the last restart lost, the one that
+// started first first: those lost within a minute of the one lost last.
+// The closed list is newest first, and the core records the sessions a
+// restart lost the newest last, so they come back the other way round.
+func lastLost(closed []ipc.ClosedSession) []ipc.ClosedSession {
+	var last time.Time
+	for _, c := range closed {
+		if c.Lost && c.Closed.After(last) {
+			last = c.Closed
+		}
+	}
+	var out []ipc.ClosedSession
+	for _, c := range closed {
+		if c.Lost && last.Sub(c.Closed) < time.Minute {
+			out = append(out, c)
+		}
+	}
+	slices.Reverse(out)
+	return out
+}
+
+// waitStarted waits until session id has started, or is gone, for at most
+// d.
+func waitStarted(sock, id string, d time.Duration) {
+	for end := time.Now().Add(d); time.Now().Before(end); time.Sleep(time.Second) {
+		var l ipc.ListResult
+		if ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l) != nil {
+			continue
+		}
+		i := slices.IndexFunc(l.Sessions, func(s ipc.Session) bool { return s.ID == id })
+		if i < 0 || l.Sessions[i].State != ipc.StateStarting {
+			return
+		}
+	}
 }
 
 // ctlClose closes a session, found by id or name; with none named, the one

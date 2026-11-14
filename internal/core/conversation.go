@@ -694,15 +694,7 @@ func (c *Core) transcriptsOf(x *session) []string {
 		}
 	}
 	if len(out) == 0 && x.vendorID != "" && x.cwd != "" {
-		config := c.cfg().Profiles[x.profile].Env["CLAUDE_CONFIG_DIR"]
-		if config == "" {
-			config = os.Getenv("CLAUDE_CONFIG_DIR")
-		}
-		if config == "" {
-			home, _ := os.UserHomeDir()
-			config = filepath.Join(home, ".claude")
-		}
-		if p := claudeTranscript(config, x.cwd, x.vendorID); p != "" {
+		if p := claudeTranscript(c.claudeConfig(x.profile), x.cwd, x.vendorID); p != "" {
 			out = append(out, p)
 		}
 	}

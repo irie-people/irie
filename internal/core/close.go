@@ -10,7 +10,9 @@ package core
 // session back in the same row: it carries the conversation on, or starts
 // the task again when the agent never got that far. Which sessions are
 // closed, and which closed on their own, is derived from the journal's
-// ui.closed and ui.reopened events, so it survives a restart.
+// ui.closed and ui.reopened events, so it survives a restart. A session
+// lost with Irie's tmux server is recorded as closed on its own when the
+// core next starts (lost.go).
 
 import (
 	"errors"
@@ -44,6 +46,7 @@ const maxClosed = 100
 // closes is what the core knows of closed sessions. c.mu guards it.
 type closes struct {
 	list   []closedRecord     // newest first
+	done   map[string]bool    // every session closed now, past maxClosed too, by id
 	ending map[string]*ending // closing panes whose agents are still ending, by pane id
 }
 
@@ -62,6 +65,11 @@ type closedRecord struct {
 	// from irie says. Else you closed it, or an agent did at your word, and
 	// it is done.
 	Auto bool
+	// Lost: its agent ended with Irie's tmux server, as when the Mac
+	// restarts, and the core found it gone as it started (lost.go). Reopen
+	// brings it back pinned, parked or frozen, as it was.
+	Lost                   bool
+	Pinned, Parked, Frozen bool
 }
 
 // ending is a closing pane's agent on its way out.
@@ -91,6 +99,7 @@ func closedFrom(e event.Event) closedRecord {
 	r := closedRecord{ID: e.Session, Name: e.Str("name"), Closed: e.Time(), VendorID: e.Str("vendor_id"), Auto: e.Source == event.SourceIrie}
 	r.Created, _ = time.Parse(time.RFC3339Nano, e.Str("created"))
 	r.Resume, _ = e.Data["resume"].(bool)
+	r.Lost, r.Pinned, r.Parked, r.Frozen = e.Data["lost"] == true, e.Data["pinned"] == true, e.Data["parked"] == true, e.Data["frozen"] == true
 	named, ok := e.Data["named"].(bool)
 	r.Named, r.Old = named, !ok
 	return r
@@ -99,6 +108,10 @@ func closedFrom(e event.Event) closedRecord {
 // addClosed puts r first among the closed sessions. The caller holds c.mu.
 func (c *Core) addClosed(r closedRecord) {
 	c.dropClosed(r.ID)
+	if c.closes.done == nil {
+		c.closes.done = map[string]bool{}
+	}
+	c.closes.done[r.ID] = true
 	c.closes.list = slices.Insert(c.closes.list, 0, r)
 	if len(c.closes.list) > maxClosed {
 		c.closes.list = c.closes.list[:maxClosed]
@@ -107,6 +120,7 @@ func (c *Core) addClosed(r closedRecord) {
 
 // dropClosed forgets that a session is closed. The caller holds c.mu.
 func (c *Core) dropClosed(id string) {
+	delete(c.closes.done, id)
 	c.closes.list = slices.DeleteFunc(c.closes.list, func(r closedRecord) bool { return r.ID == id })
 }
 
@@ -116,7 +130,7 @@ func (c *Core) closedList() []ipc.ClosedSession {
 	out := []ipc.ClosedSession{}
 	for _, r := range c.closes.list {
 		if c.sessions[r.ID] == nil {
-			out = append(out, ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed, Auto: r.Auto})
+			out = append(out, ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed, Auto: r.Auto, Lost: r.Lost})
 		}
 	}
 	return out
@@ -527,6 +541,9 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	if err == nil {
 		c.dropClosed(r.ID)
 		c.record(x, event.Event{Source: event.SourceUser, Kind: event.UIReopened, Data: map[string]any{"name": x.name, "resume": j.resume != ""}})
+		if r.Lost {
+			c.comeBack(x, r)
+		}
 	}
 	frames := c.changes()
 	c.mu.Unlock()

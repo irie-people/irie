@@ -184,18 +184,30 @@ func ReadKind(dir string, since time.Time, kind string) ([]event.Event, error) {
 
 // ReadKinds is ReadKind for the events of any of several kinds.
 func ReadKinds(dir string, since time.Time, kinds ...string) ([]event.Event, error) {
-	needles := make([][]byte, len(kinds))
-	for i, k := range kinds {
-		needles[i] = []byte(`"kind":"` + k + `"`)
+	return read(dir, since, anyOf(`"kind":"`, kinds))
+}
+
+// ReadSessions is Read for the events of the sessions ids names, which it
+// picks out the same way.
+func ReadSessions(dir string, since time.Time, ids ...string) ([]event.Event, error) {
+	return read(dir, since, anyOf(`"session":"`, ids))
+}
+
+// anyOf keeps the lines that hold key followed by one of values and its
+// closing quote.
+func anyOf(key string, values []string) func([]byte) bool {
+	needles := make([][]byte, len(values))
+	for i, v := range values {
+		needles[i] = []byte(key + v + `"`)
 	}
-	return read(dir, since, func(line []byte) bool {
+	return func(line []byte) bool {
 		for _, n := range needles {
 			if bytes.Contains(line, n) {
 				return true
 			}
 		}
 		return false
-	})
+	}
 }
 
 // read reads the day files from since's day on, decoding the lines that

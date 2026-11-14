@@ -190,6 +190,7 @@ type session struct {
 	out       *outcome               // its route and how it went, shared with Core.outcomes
 	conv      *conversation          // its conversation, read while clients follow it (conversation.go)
 	note      string                 // what its agent is told at its next tool call, once (freeze.go)
+	refreeze  bool                   // a lost session that was frozen, to freeze again once its agent starts (lost.go)
 	demoted   bool                   // its process tree runs in the background, for a promoted session or Gabriel (priority.go)
 	userWord  time.Time              // when the user last messaged or started it, which keeps it in their focus (gabriel.go)
 	convSubs  int                    // the subscriptions that follow its conversation
@@ -365,6 +366,9 @@ func Run(o Options) error {
 	c.mu.Unlock()
 	c.releaseOutside()
 	c.tick()
+	// Once every pane is adopted, what the server lost with it is closed
+	// on its own, for history and reopen.
+	c.findLost(time.Now())
 	c.pruneSkills()
 	go c.sample()
 	go c.dogSweep()
@@ -457,6 +461,7 @@ func (c *Core) tick() {
 	c.observe(time.Now())
 	c.sendFollowUps(time.Now())
 	c.keepFrozen()
+	c.refreezeLost()
 	c.background()
 	c.countTokens()
 	c.followTitles()
