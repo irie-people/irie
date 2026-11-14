@@ -55,7 +55,7 @@ var archTable = map[string]archEntry{
 			{Key: "arch.gabriel.guard", Kind: ipc.ArchBool, Label: "Keep agents from taking your focus", Help: "An agent's call that would put a window where you work, in front of you or on the desktop you are on, is turned away, and it is told how to keep the window out of sight."},
 			{Key: "arch.gabriel.boost", Kind: ipc.ArchDuration, Label: "A boost lasts", Help: "Your focus first at once, busy or not; it changes only what runs first, never a clock or a fan."},
 			{Key: "arch.gabriel.always", Kind: ipc.ArchBool, Label: "Always boost while you’re at the computer", Help: "A boost that never ends. The rest runs on the efficiency cores even when there is room to spare, so it finishes later; nothing is held back while you’re away."},
-			{Key: "arch.gabriel.heavy", Kind: ipc.ArchNumber, Label: "An app outside " + brand.Name + " is heavy from (percent of a CPU)"},
+			{Key: "arch.gabriel.heavy", Kind: ipc.ArchNumber, Label: "Heavy from (percent of a CPU)", Help: "An app outside " + brand.Name + " this busy is slowed. The tab you’re on this busy has every other session but an install step back for it, the rest of your focus too."},
 			{Key: "arch.gabriel.spare", Kind: ipc.ArchLines, Label: "Apps Gabriel never slows", Help: "Calls, music, video and recording; an app that plays sound or holds a call is spared too."},
 		},
 		now: (*Core).gabrielNow,
@@ -162,6 +162,9 @@ func (c *Core) gabrielNow() archNow {
 			n.status = "Giving " + focus + " the machine first; nothing needs holding back."
 		} else {
 			n.status = "Holding back " + strings.Join(what, " and ") + " for " + focus + "."
+		}
+		if st.topBusy {
+			n.status += " The tab you’re on is at work, so the rest of your focus steps back for it too."
 		}
 	case g.Always:
 		// Just switched on: the next sweep, seconds away, holds back.
