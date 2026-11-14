@@ -90,6 +90,14 @@ type outProc struct {
 // for apps outside it.
 func gabrielOff() bool { return os.Getenv(brand.Env("GABRIEL")) == "off" }
 
+// holds says whether Gabriel holds back: while he is on and the user is at
+// the computer, when the machine is busy or a boost is on, and at all times
+// then with arch.gabriel.always. While the user is away nothing is held
+// back, so work left running goes at full speed.
+func holds(on, present, busy, boosting, always bool) bool {
+	return on && present && (busy || boosting || always)
+}
+
 // busyNext says whether the machine is busy now, given whether it was:
 // busy as soon as the work waiting to run leaves less than a CPU free or
 // memory is under pressure; calm again only after gabrielCalm with two
@@ -196,10 +204,10 @@ func (c *Core) gabrielSweep() {
 	} else {
 		st.present, st.busy, st.calmSince = false, false, time.Time{}
 	}
-	// A boost holds back as a busy machine does, until its time is up;
-	// while the user is away it waits like the rest.
-	boosting := now.Before(st.boostUntil)
-	st.holding = on && st.present && (st.busy || boosting)
+	// A boost holds back as a busy machine does, until its time is up, and
+	// arch.gabriel.always for good; while the user is away they wait like
+	// the rest.
+	st.holding = holds(on, st.present, st.busy, now.Before(st.boostUntil), g.Always)
 	st.frontOK, st.irieFront = false, false
 	if st.holding {
 		if a, ok, err := focus.Front(); err == nil && ok {
@@ -474,7 +482,30 @@ func (c *Core) gabrielOp(a ipc.GabrielArgs) (ipc.GabrielResult, error) {
 	}
 	r := c.gabrielReport()
 	r.Freed = freed
+	if a.Boost || a.Stop {
+		// Every client hears at once (the header's boost).
+		c.publishHeader()
+	}
 	return r, nil
+}
+
+// boostHeader is Gabriel's boost for the header while one is on: when a
+// boost started by hand ends, and arch.gabriel.always; nil while none is,
+// or while he is off. The caller holds c.mu.
+func (c *Core) boostHeader(now time.Time) *ipc.Boost {
+	g := c.cfg().Arch.Gabriel
+	if !g.On || !proc.CanBackground || gabrielOff() {
+		return nil
+	}
+	b := ipc.Boost{Always: g.Always}
+	if now.Before(c.gab.boostUntil) {
+		until := c.gab.boostUntil
+		b.Until = &until
+	}
+	if b.Until == nil && !b.Always {
+		return nil
+	}
+	return &b
 }
 
 // freeModels lets the models of Irie's own Ollama go that no live session
@@ -526,7 +557,7 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 	st := c.gab
 	r := ipc.GabrielResult{
 		On: g.On && proc.CanBackground && !gabrielOff(), Outside: g.Outside, Present: st.present, Idle: st.idle.Round(time.Second).String(),
-		Busy: st.busy, Holding: st.holding, CPUs: c.load.CPUs, RunQueue: c.load.RunQueue, Pressure: c.load.Pressure,
+		Busy: st.busy, Holding: st.holding, Always: g.Always, CPUs: c.load.CPUs, RunQueue: c.load.RunQueue, Pressure: c.load.Pressure,
 	}
 	if st.frontOK {
 		r.Front = st.front.Name

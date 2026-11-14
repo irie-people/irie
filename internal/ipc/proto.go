@@ -98,6 +98,10 @@ const (
 	// OpPlugins lists Irie's plugins, each with its parts and how far each
 	// is set up on this computer (DESIGN §4.17).
 	OpPlugins = "plugins"
+	// OpMarkets is the markets plugin's map (DESIGN §4.17): where the page
+	// in markets.folder is, for :markets and the Mac app's Markets window,
+	// or with a task, a session that works on the map in its folder.
+	OpMarkets = "markets"
 	// OpLearn gives what the Help menu shows: the learning resources, the
 	// user's own links and the glossary (docs/proposals/learning.md).
 	OpLearn = "learn"
@@ -108,6 +112,11 @@ const FeatureTutor = "spawn-tutor"
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
+
+// FeatureBoostAlways is in hello's features when the core boosts the
+// user's focus always with arch.gabriel.always, and its header says how
+// Gabriel boosts (Header.Boost).
+const FeatureBoostAlways = "boost-always"
 
 // FeatureWatch is in hello's features when subscribe takes ViewWatch: the
 // freeze dog watches the window that asks (DESIGN §2.4).
@@ -436,6 +445,7 @@ type GabrielResult struct {
 	// BoostUntil is when the boost ends, while one is on: the user's focus
 	// gets the machine first then whether it is busy or not.
 	BoostUntil *time.Time       `json:"boost_until,omitempty"`
+	Always     bool             `json:"always,omitempty"`    // arch.gabriel.always: a boost that never ends, while the user is at the computer
 	LowPower   bool             `json:"low_power,omitempty"` // macOS's Low Power Mode is on, which slows the whole machine
 	Freed      []string         `json:"freed,omitempty"`     // the idle local models the boost unloaded
 	CPUs       int              `json:"cpus"`
@@ -629,12 +639,22 @@ type Header struct {
 	Trod *TrodShift `json:"trod,omitempty"`
 	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
 	VPN *VPN `json:"vpn,omitempty"`
+	// Boost is Gabriel's boost while one is on (DESIGN §4.11), however it
+	// was started, so every client can say so.
+	Boost *Boost `json:"boost,omitempty"`
 	// Spaces are the spaces, in their order, the first first (spaces.go).
 	Spaces []Space `json:"spaces,omitempty"`
 	// Theme is the palette the Mac app draws in, once it has said (the
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
 	Theme *Theme `json:"theme,omitempty"`
+}
+
+// Boost is Gabriel's boost as the header gives it: the user's focus gets
+// the machine first, busy or not.
+type Boost struct {
+	Until  *time.Time `json:"until,omitempty"`  // when a boost started by hand ends
+	Always bool       `json:"always,omitempty"` // arch.gabriel.always: whenever the user is at the computer
 }
 
 // Load is how busy the machine is, which a core also advertises to the
@@ -1095,6 +1115,26 @@ const (
 	PartPluginOff = "plugin_off" // its plugin is off, so it is too
 	PartHeld      = "held"       // not in this build: the detail says why
 )
+
+// MarketsArgs ask the markets op where the market map is (DESIGN §4.17).
+// With Task, it starts that task in the map's folder instead: the core sets
+// its Repo to markets.folder and InPlace, so each rebuild of the page shows
+// in the Markets window.
+type MarketsArgs struct {
+	Task *SpawnArgs `json:"task,omitempty"`
+}
+
+// MarketsResult is the markets op's answer.
+type MarketsResult struct {
+	// State is the map's: ready, needs (Text says what it lacks) or
+	// plugin_off.
+	State   string    `json:"state"`
+	Folder  string    `json:"folder,omitempty"`  // markets.folder, ~ expanded
+	Page    string    `json:"page,omitempty"`    // the map: index.html in Folder
+	Changed time.Time `json:"changed,omitzero"`  // when the page last changed, while it is there
+	Text    string    `json:"text"`              // the answer in words, as :markets says it
+	Session *Session  `json:"session,omitempty"` // the session a task started
+}
 
 // AnonArgs ask the anon op for the state of anonymous research (DESIGN
 // §4.16); with Up, it first starts Irie's own Tor and SearXNG as the

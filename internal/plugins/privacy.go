@@ -48,7 +48,7 @@ func privacy() Plugin {
 				Title:   "Mullvad VPN",
 				Summary: "See the VPN in every client, and connect, disconnect or change its place from a task bar or the menu.",
 				Switch:  "vpn.on", On: true, Off: false,
-				Brings:  []string{":vpn", "File › VPN", "the header's mark"},
+				Brings:  []string{":vpn", "Plugins › Mullvad VPN", "the header's mark"},
 				Refused: "Mullvad VPN control is off: `" + brand.Slug + " plugins on privacy vpn`, or Settings › Plugins in the Mac app, turns it on.",
 				own:     func(c config.Config) bool { return c.VPN.On },
 				check:   checkVPN,
@@ -170,5 +170,5 @@ func checkSwitch(e Env, on bool) (bool, string) {
 	case made:
 		return true, "Set up. `" + brand.Slug + " dms status` says how its checks stand."
 	}
-	return true, "The guide is ready: :setup switch, or File › Set Up a Dead Man's Switch… in the Mac app."
+	return true, "The guide is ready: :setup switch, or Plugins › Dead man's switch › Set Up… in the Mac app."
 }

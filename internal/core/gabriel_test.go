@@ -18,6 +18,25 @@ import (
 	"github.com/irie-people/irie/internal/sysload"
 )
 
+func TestAlwaysHoldsBackOnlyWhileTheUserIsThere(t *testing.T) {
+	for _, tc := range []struct {
+		name                                string
+		on, present, busy, boosting, always bool
+		holds                               bool
+	}{
+		{"room to spare", true, true, false, false, false, false},
+		{"busy", true, true, true, false, false, true},
+		{"a boost", true, true, false, true, false, true},
+		{"always, with room to spare", true, true, false, false, true, true},
+		{"always, while away", true, false, true, true, true, false},
+		{"always, with Gabriel off", false, true, true, true, true, false},
+	} {
+		if got := holds(tc.on, tc.present, tc.busy, tc.boosting, tc.always); got != tc.holds {
+			t.Errorf("%s: holds = %v, want %v", tc.name, got, tc.holds)
+		}
+	}
+}
+
 func TestBusyNextHasRoomToCalmDown(t *testing.T) {
 	now := time.Date(2026, 11, 1, 15, 0, 0, 0, time.UTC)
 	l := func(rq float64, pressure int) sysload.Load {
@@ -212,8 +231,49 @@ func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
 	if r.BoostUntil == nil || time.Until(*r.BoostUntil) < 59*time.Minute {
 		t.Errorf("a boost of the configured hour ends at %v", r.BoostUntil)
 	}
-	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil {
-		t.Errorf("stopped, still until %v", r.BoostUntil)
+	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil || r.Always {
+		t.Errorf("stopped, still until %v or always", r.BoostUntil)
+	}
+	// Boosting always is the config's, and the report says so.
+	cfg.Arch.Gabriel.Always = true
+	c.useConfig(cfg)
+	if r, _ = c.gabrielOp(ipc.GabrielArgs{}); !r.Always || r.BoostUntil != nil {
+		t.Errorf("always: %+v", r)
+	}
+}
+
+func TestTheHeaderSaysHowGabrielBoosts(t *testing.T) {
+	t.Setenv("IRIE_GABRIEL", "")
+	cfg := config.Default()
+	c := &Core{sessions: map[string]*session{}}
+	c.useConfig(cfg)
+	now := time.Now()
+	if !proc.CanBackground {
+		if b := c.boostHeader(now); b != nil {
+			t.Errorf("no background state here, yet a boost: %+v", b)
+		}
+		return
+	}
+	if b := c.boostHeader(now); b != nil {
+		t.Errorf("no boost: %+v", b)
+	}
+	c.gab.boostUntil = now.Add(time.Hour)
+	if b := c.boostHeader(now); b == nil || b.Until == nil || !b.Until.Equal(c.gab.boostUntil) || b.Always {
+		t.Errorf("a boost of an hour: %+v", b)
+	}
+	if b := c.boostHeader(now.Add(2 * time.Hour)); b != nil {
+		t.Errorf("a boost whose time is up: %+v", b)
+	}
+	c.gab.boostUntil = time.Time{}
+	cfg.Arch.Gabriel.Always = true
+	c.useConfig(cfg)
+	if b := c.boostHeader(now); b == nil || !b.Always || b.Until != nil {
+		t.Errorf("always: %+v", b)
+	}
+	// With Gabriel off nothing boosts, always or not.
+	t.Setenv("IRIE_GABRIEL", "off")
+	if b := c.boostHeader(now); b != nil {
+		t.Errorf("Gabriel off: %+v", b)
 	}
 }
 

@@ -87,15 +87,14 @@ struct TerminalArea: View {
             ToolbarItem(placement: .primaryAction) {
                 // The session's helpers, in the right sidebar's Helpers tab
                 // (RightSidebar.swift), with that tab's icon: the helpers
-                // no longer split the terminal. As View > Show Helpers, it
-                // works on a session of Irie's, not one outside it.
+                // no longer split the terminal.
                 Button {
                     store.toggleHelpers()
                 } label: {
                     Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: SideTab.helpers.symbol)
                 }
                 .help(store.helperShown ? "Close the helpers (⇧⌘H)" : "Show the session’s helpers in the right sidebar (⇧⌘H)")
-                .disabled(selected == nil || store.outsideSelection != nil)
+                .disabled(selected == nil)
             }
             ToolbarItem(placement: .primaryAction) {
                 // The terminal out in a Ghostty window of its own, and back

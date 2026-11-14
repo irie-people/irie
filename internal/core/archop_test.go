@@ -38,11 +38,12 @@ func TestArchListShowsEveryArchAgent(t *testing.T) {
 		values[s.Key] = string(s.Value)
 	}
 	for key, want := range map[string]string{
-		"arch.mikael.on":     "true",
-		"arch.mikael.good":   `["Give credit where it is due."]`,
-		"arch.gabriel.away":  `"5m"`,
-		"arch.gabriel.boost": `"1h"`,
-		"arch.gabriel.heavy": "50",
+		"arch.mikael.on":      "true",
+		"arch.mikael.good":    `["Give credit where it is due."]`,
+		"arch.gabriel.away":   `"5m"`,
+		"arch.gabriel.boost":  `"1h"`,
+		"arch.gabriel.always": "false",
+		"arch.gabriel.heavy":  "50",
 	} {
 		if values[key] != want {
 			t.Errorf("%s = %s, want %s", key, values[key], want)
@@ -64,6 +65,16 @@ func TestArchListShowsEveryArchAgent(t *testing.T) {
 		if g := c.archList().Agents[1]; len(g.Actions) != 1 || g.Actions[0].Label != "Stop the boost" || !strings.Contains(g.Status, "Boosting until") {
 			t.Errorf("boosting: %+v", g)
 		}
+		// Boosting always offers no boost of an hour, which would add
+		// nothing, and never says there is room to spare.
+		c.gab.boostUntil = time.Time{}
+		cfg.Arch.Gabriel.Always = true
+		c.useConfig(cfg)
+		if g := c.archList().Agents[1]; len(g.Actions) != 0 || !strings.Contains(g.Status, "Always boosting") || strings.Contains(g.Status, "Room to spare") {
+			t.Errorf("boosting always: %+v", g)
+		}
+		cfg.Arch.Gabriel.Always = false
+		c.useConfig(cfg)
 	}
 	// Gabriel off is said so, with nothing to do.
 	t.Setenv("IRIE_GABRIEL", "off")
