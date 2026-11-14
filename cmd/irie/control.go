@@ -17,10 +17,12 @@ import (
 const controlUsage = `  ` + brand.Slug + ` ctl freeze SESSION|--all          stop a session's whole process tree at
                                          once, or every session's
   ` + brand.Slug + ` ctl thaw SESSION|--all            continue it
-  ` + brand.Slug + ` ctl promote SESSION [REASON...]   put a session at the top of the list
-                                         and give its process tree the machine
-                                         first; the others run in the background
-  ` + brand.Slug + ` ctl unpromote SESSION             put it back among the rest
+  ` + brand.Slug + ` ctl boost SESSION [REASON...]     give a session's process tree the
+                                         machine first, the others' in the
+                                         background; its card stays where it
+                                         is (ctl promote does the same)
+  ` + brand.Slug + ` ctl unboost SESSION               put it back among the rest
+                                         (or ctl unpromote)
   ` + brand.Slug + ` ctl reorder [--before OTHER] SESSION
                                          put a session just before another in
                                          the list, or last
@@ -75,13 +77,16 @@ func ctlFreeze(args []string, on bool) error {
 	return nil
 }
 
-// ctlPromote is `irie ctl promote` (level 1) and `irie ctl unpromote`.
-func ctlPromote(args []string, level int) error {
+// ctlPromote is `irie ctl boost` and `irie ctl promote`, which give level
+// 1, and `irie ctl unboost` and `irie ctl unpromote`, which give level 0,
+// as name says.
+func ctlPromote(name string, args []string) error {
+	level := map[string]int{"boost": 1, "promote": 1}[name]
 	if len(args) == 0 || level == 0 && len(args) != 1 {
 		if level == 0 {
-			return errors.New("usage: " + brand.Slug + " ctl unpromote SESSION")
+			return errors.New("usage: " + brand.Slug + " ctl " + name + " SESSION")
 		}
-		return errors.New("usage: " + brand.Slug + " ctl promote SESSION [REASON...]")
+		return errors.New("usage: " + brand.Slug + " ctl " + name + " SESSION [REASON...]")
 	}
 	sock, err := socket()
 	if err != nil {

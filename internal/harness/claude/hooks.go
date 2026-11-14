@@ -180,7 +180,11 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 		}
 		return []event.Event{ev(event.TurnEnded, data)}, nil
 	case "StopFailure":
-		return []event.Event{ev(event.TurnFailed, with(map[string]any{}, "error", p.str("error")))}, nil
+		// The error's type, what the API said of it, and the error as the
+		// conversation shows it, such as "API Error: The response stopped
+		// arriving", for whoever reads the journal later.
+		return []event.Event{ev(event.TurnFailed, with(map[string]any{}, "error", p.str("error"),
+			"details", p.str("error_details"), "message", p.str("last_assistant_message")))}, nil
 	case "SubagentStart":
 		return []event.Event{ev(event.SubagentStarted, with(map[string]any{}, "agent_type", p.str("agent_type")))}, nil
 	case "SubagentStop":

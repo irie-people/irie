@@ -209,6 +209,9 @@ type session struct {
 	// and whether that is under way (follow.go).
 	followUps []followUp
 	sending   bool
+	// keptOut says its agent and Irie's helpers came out of the background
+	// once since this core found the session (keepup.go).
+	keptOut bool
 }
 
 func (x *session) wire() ipc.Session {
@@ -414,6 +417,8 @@ func Run(o Options) error {
 		select {
 		case <-t.C:
 			c.tick()
+			// What the agents' hooks kept while no core listened.
+			c.takeMissed(time.Now())
 			c.beat()
 			if n%raphaelEvery == 0 {
 				go c.raphaelSweep()
@@ -443,6 +448,10 @@ func Run(o Options) error {
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
+			// A hook from here on finds no core, so its shim keeps its event
+			// for the next one (missed.go), rather than this one taking it
+			// and stopping before it is recorded.
+			l.Close()
 			// Nothing stays slowed after the core is gone: its agents run on.
 			c.letGo()
 			// Nor does the Mac stay awake with its lid closed for a core that
@@ -478,6 +487,7 @@ func (c *Core) tick() {
 	c.sendFollowUps(time.Now())
 	c.keepFrozen()
 	c.refreezeLost()
+	c.endBoosts(time.Now())
 	c.background()
 	c.countTokens()
 	c.followTitles()

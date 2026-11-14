@@ -174,7 +174,7 @@ func (c *Core) sendFollowUps(now time.Time) {
 			c.saveFollowUps(x)
 			continue
 		}
-		if f := x.followUps[0]; now.Before(f.After) || sendable(x, f.Text) != nil {
+		if f := x.followUps[0]; now.Before(f.After) || c.sendable(x, f.Text) != nil {
 			continue
 		}
 		x.sending = true
@@ -195,7 +195,7 @@ func (c *Core) typeFollowUps(id string) {
 	for {
 		c.mu.Lock()
 		x := c.sessions[id]
-		if x == nil || len(x.followUps) == 0 || time.Now().Before(x.followUps[0].After) || sendable(x, x.followUps[0].Text) != nil {
+		if x == nil || len(x.followUps) == 0 || time.Now().Before(x.followUps[0].After) || c.sendable(x, x.followUps[0].Text) != nil {
 			c.mu.Unlock()
 			return
 		}

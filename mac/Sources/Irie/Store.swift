@@ -653,8 +653,8 @@ final class Store {
     }
 
     /// The list's order, which the core keeps and the user sets: a new
-    /// session goes last, Promote puts one first, and a drag puts one where
-    /// it is dropped. A core without it sends no order: the order they
+    /// session goes last, and a drag puts one where it is dropped; a boost
+    /// moves none. A core without it sends no order: the order they
     /// started.
     static func before(_ a: Session, _ b: Session) -> Bool {
         if let x = a.order, let y = b.order, x != y { return x < y }

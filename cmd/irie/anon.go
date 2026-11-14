@@ -185,11 +185,11 @@ func anonStatus(w io.Writer, cfg config.Config, p paths.Paths, d anon.Dirs, show
 }
 
 func vpnWords(cfg config.Config) string {
-	bin, err := vpn.Find(cfg.VPN.Mullvad)
+	bin, err := vpn.FindMullvad(cfg.VPN.Mullvad)
 	if err != nil {
 		return "not installed: anonymous research needs it"
 	}
-	st, err := vpn.CLI{Bin: bin}.Status()
+	st, err := vpn.Mullvad{Bin: bin}.Status()
 	switch {
 	case err != nil:
 		return "can't tell: " + err.Error()
@@ -302,11 +302,11 @@ func anonRun(cfg config.Config, p paths.Paths, d anon.Dirs, args []string) error
 
 // macExit is the relay of the Mac's own Mullvad tunnel, which must be up.
 func macExit(cfg config.Config) (string, error) {
-	bin, err := vpn.Find(cfg.VPN.Mullvad)
+	bin, err := vpn.FindMullvad(cfg.VPN.Mullvad)
 	if err != nil {
 		return "", errors.New("anonymous research needs Mullvad VPN, which is not installed")
 	}
-	st, err := vpn.CLI{Bin: bin}.Status()
+	st, err := vpn.Mullvad{Bin: bin}.Status()
 	if err != nil {
 		return "", fmt.Errorf("can't read Mullvad VPN's state: %v", err)
 	}
