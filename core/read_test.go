@@ -101,6 +101,8 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":vpn lockdown on", "", "", OpVPN, VPNArgs{Do: VPNLockdown, Args: []string{"on"}}},
 		{":vpn se got", "", "", OpVPN, VPNArgs{Do: VPNPlace, Args: []string{"se", "got"}}},
 		{":vpn se-got-wg-001", "", "", OpVPN, VPNArgs{Do: VPNPlace, Args: []string{"se-got-wg-001"}}},
+		{":vpn use Tailscale", "", "", OpVPN, VPNArgs{Do: VPNUse, Args: []string{"tailscale"}}},
+		{":setup vpn", "", "", OpTool, ToolArgs{Name: ToolVPN}},
 		{":models", "", "", OpTool, ToolArgs{Name: ToolModels}},
 		{":route fix the typo", "", "", OpRoute, RouteArgs{Task: "fix the typo"}},
 		{":bench fix the typo", "", "", OpBench, BenchArgs{Task: "fix the typo"}},

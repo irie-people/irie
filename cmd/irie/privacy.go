@@ -14,7 +14,6 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/plugins"
-	"github.com/irie-people/irie/internal/vpn"
 )
 
 // The privacy plugin's commands (DESIGN §4.17): irie dms, irie anon, irie
@@ -31,8 +30,8 @@ const (
 `
 	privacySetupUsage = `  ` + brand.Slug + ` setup privacy [--yes]
                           set up each part of the privacy plugin in turn:
-                          Mullvad VPN, anonymous research, Mullvad Browser
-                          and the dead man's switch
+                          anonymous research, Mullvad Browser and the dead
+                          man's switch
 `
 	privacyServerUsage = `  ` + brand.Slug + ` browser [--path EXE] [--profile DIR] [--template DIR] [--headless=BOOL]
                [--idle DUR] [--proxy socks5://HOST:PORT] [--search URL] [--check URL]
@@ -108,8 +107,6 @@ func setupPrivacy(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 		var err error
 		switch x.Name {
-		case plugins.VPN:
-			err = setupVPN(cfg, p, stdout)
 		case plugins.Anon:
 			err = setupAnon(yesArgs(*yes), stdin, stdout)
 		case plugins.Browser:
@@ -137,21 +134,6 @@ func yesArgs(yes bool) []string {
 	if yes {
 		return []string{"--yes"}
 	}
-	return nil
-}
-
-// setupVPN turns Mullvad VPN control on once the app is installed. The app
-// itself is the person's to install: it runs a VPN service of its own, and
-// signs in with their account.
-func setupVPN(cfg config.Config, p paths.Paths, stdout io.Writer) error {
-	if _, err := vpn.Find(expand(cfg.VPN.Mullvad)); err != nil {
-		fmt.Fprintln(stdout, "Install the Mullvad VPN app from https://mullvad.net/download and sign in to it, then run `"+brand.Slug+" setup privacy` again.")
-		return nil
-	}
-	if err := setConfig(p, []config.Edit{{Key: "vpn.on", Value: true}}); err != nil {
-		return err
-	}
-	fmt.Fprintln(stdout, "Mullvad VPN control is on: every client shows the VPN, and :vpn on, :vpn off or :vpn PLACE in a task bar changes it.")
 	return nil
 }
 
