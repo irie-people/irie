@@ -88,7 +88,7 @@ func (m Model) padded(edge, fill color.Color, ps ...piece) string {
 
 // marks are what a session's line starts with: its state's glyph, then the
 // flags of DESIGN §5.3 next to it (◆ when it is frozen under a state that
-// comes first), then for a promoted session an ↑ in the accent, else a
+// comes first), then for a boosted session an ↑ in the accent, else a
 // space before the name.
 func (m Model) marks(s ipc.Session) []piece {
 	p, l := m.pal, m.look(s)
@@ -482,7 +482,7 @@ func (m Model) detailRows() (string, [][]piece) {
 	marks := m.marks(s)
 	state := append(marks[:len(marks)-1], piece{" " + stateLabel(s), l.name, false})
 	if s.Priority > 0 {
-		state = append(state, piece{" · ↑ promoted", p.ink, false})
+		state = append(state, piece{" · ↑ boosted", p.ink, false})
 	}
 	if c := strings.TrimSpace(cost(s) + " " + routed(s)); c != "" {
 		state = append(state, piece{" · " + c, p.muted, false})
@@ -491,7 +491,7 @@ func (m Model) detailRows() (string, [][]piece) {
 	if detail == "" && len(s.Warnings) > 0 {
 		detail = s.Warnings[0]
 	}
-	// What freezing or promoting it means comes first, as in the strip.
+	// What freezing or boosting it means comes first, as in the strip.
 	if fl := frozenLine(s); fl != "" {
 		detail = strings.TrimSuffix(fl+" · "+detail, " · ")
 	}

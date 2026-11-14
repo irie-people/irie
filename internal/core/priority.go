@@ -1,7 +1,9 @@
 package core
 
-// Promote (DESIGN §4.3, M7) puts a session at the top of the list with a
-// badge, and gives its whole process tree the machine first, at once.
+// A boost (DESIGN §4.3, M7), which the op and `ctl promote` still call
+// promoting, gives a session's whole process tree the machine first, at
+// once, with a badge on its card. It moves no card: the list's order is the
+// user's alone (order.go), and undoing a boost gives back only the level.
 // Without root no process can be raised above normal priority, so the
 // others step back instead: while any session is promoted, every other
 // session's tree runs in macOS's background state (proc.SetBackground), with
@@ -30,12 +32,10 @@ type bgProc struct {
 	session string // whose tree it was in
 }
 
-// setPriority promotes a session (level 1), which also puts it at the top
-// of the list and unparks it, or puts it back (level 0). It takes effect
-// before it returns. The unpark goes with the promotion, so it is no step
-// of the history of its own: when the level changed, step is what undoing
-// it needs (§4.5), which for a promotion is where the session was and
-// whether it was parked, since undoing it puts both back.
+// setPriority boosts a session (level 1) or puts it back (level 0), and
+// moves no card. It takes effect before it returns. When the level
+// changed, step is not nil, for the history (§4.5): undoing it gives back
+// the level, and only the level.
 func (c *Core) setPriority(a ipc.PriorityArgs) (step map[string]any, err error) {
 	if a.Level < 0 || a.Level > 1 {
 		return nil, ipc.Errorf(ipc.CodeBadArgs, "priority level %d: it is 0 or 1", a.Level)
@@ -48,16 +48,6 @@ func (c *Core) setPriority(a ipc.PriorityArgs) (step map[string]any, err error) 
 	}
 	if x.track.priority != a.Level {
 		step = map[string]any{}
-		if a.Level > 0 {
-			step["next"] = c.nextOf(x.id)
-			if x.track.parked {
-				step["parked"] = true
-			}
-		}
-	}
-	if a.Level > 0 {
-		c.toTop(x.id)
-		c.setParked(x.id, false)
 	}
 	c.setLevel(x, a.Level, a.Reason)
 	frames := c.changes()
@@ -81,20 +71,20 @@ func (c *Core) setLevel(x *session, level int, reason string) {
 	c.background()
 }
 
-// Action kinds of priority (undo.go): promoting a session, and putting it
-// back. Undoing a promotion puts the session back where it was in the list,
-// parked again if it was; undoing a putting back promotes it where it is,
-// since putting it back moved nothing.
+// Action kinds of priority (undo.go): boosting a session, and putting it
+// back. Each undoes the other's level, and only the level, as a boost moves
+// no card. A step from before kept where a promotion moved the session from
+// and whether it was parked, which undo now leaves be.
 const (
 	actPromote   = "promote"
 	actUnpromote = "unpromote"
 )
 
 func init() {
-	registerAction(actPromote, actionKind{verb: "promote",
-		undo: effect{check: checkLevel(0), do: unpromote},
-		redo: effect{check: checkLevel(1), do: promote}})
-	registerAction(actUnpromote, actionKind{verb: "stop promoting",
+	registerAction(actPromote, actionKind{verb: "boost",
+		undo: effect{check: checkLevel(0), do: doLevel(0)},
+		redo: effect{check: checkLevel(1), do: doLevel(1)}})
+	registerAction(actUnpromote, actionKind{verb: "stop boosting",
 		undo: effect{check: checkLevel(1), do: doLevel(1)},
 		redo: effect{check: checkLevel(0), do: doLevel(0)}})
 }
@@ -102,9 +92,9 @@ func init() {
 // checkLevel is what makes giving a's session the priority level uncertain:
 // that it is closed or gone, or has that level already.
 func checkLevel(level int) func(c *Core, a action) []problem {
-	verb, already := "stop promoting", "is not promoted any more"
+	verb, already := "stop boosting", "is not boosted any more"
 	if level > 0 {
-		verb, already = "promote", "is promoted already"
+		verb, already = "boost", "is boosted already"
 	}
 	return func(c *Core, a action) []problem {
 		x := c.sessions[a.Session]
@@ -116,43 +106,6 @@ func checkLevel(level int) func(c *Core, a action) []problem {
 		}
 		return nil
 	}
-}
-
-// promote promotes a's session again the way the op does, and keeps where
-// it was just now and whether it was parked, for the next undo.
-func promote(c *Core, a action) (action, error) {
-	step, err := c.setPriority(ipc.PriorityArgs{Session: a.Session, Level: 1})
-	if err != nil {
-		return a, err
-	}
-	if step != nil {
-		a = a.with("next", step["next"]).with("parked", step["parked"])
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	a.Name = c.nameOf(a.Session)
-	return a, nil
-}
-
-// unpromote takes a's promotion back: it puts the session back, where it
-// was in the list, and parks it again if it was parked.
-func unpromote(c *Core, a action) (action, error) {
-	c.mu.Lock()
-	x := c.sessions[a.Session]
-	if x == nil {
-		c.mu.Unlock()
-		return a, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
-	}
-	c.setLevel(x, 0, "")
-	c.putBack(x.id, a.strs("next"))
-	if a.flag("parked") {
-		c.setParked(x.id, true)
-	}
-	a.Name = x.name
-	frames := c.changes()
-	c.mu.Unlock()
-	c.publish(frames)
-	return a, nil
 }
 
 // doLevel gives a's session the priority level where it is, and changes
@@ -210,6 +163,7 @@ func (c *Core) background() {
 		c.bg = map[int]bgProc{}
 	}
 	inTree := map[int]bool{}
+	own := c.ownName()
 	for _, x := range c.sessions {
 		p := c.snap.Pane(x.pane)
 		if p == nil || p.Dead || p.PID <= 1 {
@@ -225,19 +179,25 @@ func (c *Core) background() {
 			inTree[q.PID] = true
 			b, ok := c.bg[q.PID]
 			ok = ok && b.start == q.Start
+			// The agent keeps its network, and its own helpers theirs:
+			// only the rest of the tree steps back (keepup.go). They come
+			// out once, as this core finds the tree, from where a core
+			// before it may have left them, and never go in.
+			kept := keepsUp(t, p.PID, own, q)
+			back := want && !kept
 			switch {
-			case want && !ok:
+			case back && !ok:
 				if err := proc.SetBackground(q.PID, true); err == nil {
 					c.bg[q.PID] = bgProc{start: q.Start, session: x.id}
 				}
-			case !want && (ok || x.demoted):
+			case !back && (ok || x.demoted && (!kept || !x.keptOut)):
 				// What it started while in the background inherited that,
 				// so every process of a tree that was there comes out.
 				proc.SetBackground(q.PID, false)
 				delete(c.bg, q.PID)
 			}
 		}
-		x.demoted = want
+		x.demoted, x.keptOut = want, true
 	}
 	for pid, b := range c.bg {
 		switch {
@@ -266,6 +226,10 @@ func (c *Core) stepsBack(id string, raised map[string]bool) bool {
 		// The tab on top decides while it works, a promotion's claim
 		// included: everything but an install steps back for it.
 		return !g.installs[id]
+	case c.boosted(id):
+		// Boosted after its API errors (boost.go): with the rest of the
+		// focus, whatever is promoted or held back, and pushing back none.
+		return false
 	case len(raised) > 0:
 		return !raised[id]
 	}

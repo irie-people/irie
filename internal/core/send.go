@@ -23,14 +23,15 @@ const enterDelay = 150 * time.Millisecond
 // boundary, since Claude Code queues what is typed while it works. While
 // the agent waits on you in its terminal, Enter would answer that prompt,
 // so send refuses, and the views offer the terminal instead (DESIGN §4.7).
-// The message shows in the conversation as pending until the transcript
-// has it.
+// A turn that failed is no such prompt: the agent is back at its own, and
+// the message goes as a new turn. The message shows in the conversation as
+// pending until the transcript has it.
 func (c *Core) send(a ipc.SendArgs) error {
 	text := strings.TrimRight(strings.TrimLeft(a.Text, "\r\n"), " \t\r\n")
 	if strings.TrimSpace(text) == "" {
 		return ipc.Errorf(ipc.CodeBadArgs, "there is nothing to send")
 	}
-	return c.typeTo(a.Session, text, sendable, nil)
+	return c.typeTo(a.Session, text, c.sendable, nil)
 }
 
 // typeTo types text to session id's agent as send does, once may, called
@@ -118,20 +119,19 @@ const (
 // with nothing typed in it, so the word never joins a message you are
 // writing in its terminal. A prompt that shows is where Claude Code waits
 // for a message; a permission's, a question's or a plan's menu stands in
-// for it. So a turn that failed, on an API error, takes the word too,
-// though send refuses while a session needs you. Enter waits until the
-// prompt shows the word.
+// for it. So a turn that failed, on an API error, takes the word too, as
+// it takes a message (sendable). Enter waits until the prompt shows the
+// word.
 func (c *Core) continueAgent(a ipc.ContinueArgs) error {
 	return c.typeTo(a.Session, continueWord, c.continuable, c.promptHolds)
 }
 
 // continuable says why session x's agent cannot take the continue word
-// now, if it cannot: as sendable says, except that a turn that failed
-// waits at the agent's prompt, and the prompt must show with nothing typed
-// in it. The caller holds c.mu.
+// now, if it cannot: as sendable says, for a turn that failed too, and the
+// prompt must show with nothing typed in it. The caller holds c.mu.
 func (c *Core) continuable(x *session, text string) error {
 	if !failedTurn(x) {
-		if err := sendable(x, text); err != nil {
+		if err := c.sendable(x, text); err != nil {
 			return err
 		}
 	}
@@ -202,15 +202,19 @@ func (c *Core) promptIn(pane string) (typed string, shows bool, err error) {
 
 // sendable says why session x cannot take a message now, if it cannot.
 // The caller holds c.mu.
-func sendable(x *session, text string) error {
+func (c *Core) sendable(x *session, text string) error {
 	switch w := x.wire(); w.State {
 	case ipc.StateNeedsYou:
-		// Your turn in teach mode waits at the agent's prompt, for your
-		// word that the part is written.
-		if w.Reason == event.ReasonTurn {
-			break
+		switch {
+		case w.Reason == event.ReasonTurn:
+			// Your turn in teach mode waits at the agent's prompt, for your
+			// word that the part is written.
+		case failedTurn(x) && !c.limitMenu(x):
+			// So does a turn that failed, on an API error, a usage limit
+			// or a login: a message is a new turn.
+		default:
+			return ipc.Errorf(ipc.CodeBusy, "%s is waiting for you in its terminal: answer it there", x.name)
 		}
-		return ipc.Errorf(ipc.CodeBusy, "%s is waiting for you in its terminal: answer it there", x.name)
 	case ipc.StateStarting, ipc.StateStalled:
 		return ipc.Errorf(ipc.CodeBusy, "%s hasn’t started yet", x.name)
 	case ipc.StateExited, ipc.StateFailed:
@@ -227,6 +231,14 @@ func sendable(x *session, text string) error {
 		return ipc.Errorf(ipc.CodeBusy, "%s can’t take a message of several lines right now: send one line, or type it in its terminal", x.name)
 	}
 	return nil
+}
+
+// limitMenu reports whether session x's turn failed at a usage limit with
+// Claude Code's own continue at the reset turned off: it then asks the user
+// what to do in its terminal, which a typed message would answer
+// (trod.go). The caller holds c.mu.
+func (c *Core) limitMenu(x *session) bool {
+	return x.track.needs[event.Main].Str("error") == "rate_limit" && c.autoContinueOff(x)
 }
 
 // sent adds a message sent to the agent, pending until the transcript has
