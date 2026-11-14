@@ -239,6 +239,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `local` | `start?` | the local server, the machine's memory, and each model weighed against it | M10 (§6.3) |
 | `route` | `task`, `parent?` | where `+auto` would run it: class, choice, reason, every profile weighed | M10 (§6.4) |
 | `rate` | `session`, `verdict`: `good` or `bad` | none | M10 (§6.4) |
+| `bench` | `task?`, `profile?`, `repo?`, `host?`, `runs?`, `judge?`; with no task it lists | `bench`, the bench started; or `benches`, every one, the newest first | §6.6 |
 | `result` | `session` | `text`: what its agent said at the end of its last turn | M10 (§6.4) |
 | `tool` | `name`: `setup` or `models` | `session`, running `irie setup local` or `irie ctl local` | M10 (§6.4) |
 | `rename` | `session`, `name` | `session`, with the name it got: whitespace and control characters made single spaces, cut at 200 bytes, numbered (`-2`) when another row has it. The name is then the user's, which Claude Code's titles leave be (§4.2). Refuses an empty name with `bad_args`. Records `ui.renamed` when the name changed | M4 |
@@ -1384,6 +1385,7 @@ harness = "claude-code"
 command = "claude"
 model = ""                    # "" = the best model it can run here; a GGUF file's name, or an Ollama model's
 local = { runtime = "llama-server", min_context = 65536, enforce = true }
+# local's peer = "Asahi" runs the model on that peer's llama-server, through an ssh tunnel (§6.5)
 
 [profiles.mikael]             # built in: a session that runs as Mikael (§4.11), to talk with him
 harness = "claude-code"
@@ -1411,11 +1413,13 @@ env = {}                      # more settings for its server, such as OLLAMA_MOD
 llama_server = ""             # Irie's own llama-server (§6.5): any llama.cpp build, such as PrismML's; "" = PATH, then Homebrew's
 llama_port = 11436            # it listens on 127.0.0.1; it takes context and kv_cache above too
 llama_args = []               # more arguments for it, such as a build's own
+llama_slots = 1               # how many sessions it serves at once, each with a context of its own
 models = ""                   # GGUF files it may run besides Ollama's models; "" = $XDG_DATA_HOME/irie/models
 
 [route]                       # how auto picks a profile (§6.4)
 profiles = ["local", "haiku", "sonnet", "claude"]
 min_accuracy = 0.85           # a profile below this for a task's class is never chosen
+local_min_accuracy = 0.6      # the same for a local model, which costs no tokens
 prior_weight = 10             # how many outcomes the starting guesses below count as
 pressure = 80                 # from this much of the plan's five hours, in percent, its tokens cost more
 failover = true               # carry a task on, on a cheaper profile, when a usage limit stops it
@@ -1438,6 +1442,13 @@ claude = 1.0
 # small = ["typo", "rename", "docstring", …]
 # medium = ["implement", "fix", "test", …]
 # hard = ["design", "refactor", "debug", "review", "orchestrat", …]
+
+[bench]                       # several runs of one task, then a judge (§6.6)
+runs = 3                      # how many sessions do the task
+judge = "claude"              # the profile that scores them, makes the result and rewrites the playbook
+pass = 70                     # a run scored this or more, of 100, is rated good
+timeout = "1h"                # a run still at work after this is stopped and judged as it stands
+rules = 30                    # the most rules a playbook keeps
 
 [repos]
 roots = []                    # e.g. ["~/code"]; scanned two levels deep for git repos
@@ -1599,7 +1610,7 @@ Claude Code reaches a local model through any server that speaks the Anthropic M
 
 - **Environment.** As Ollama's own launcher (`ollama launch claude`) does, Irie sets `ANTHROPIC_BASE_URL` to the server, a placeholder `ANTHROPIC_AUTH_TOKEN`, an empty `ANTHROPIC_API_KEY` (one in the user's environment would win over the token), every alias (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL`) and `CLAUDE_CODE_SUBAGENT_MODEL` to the model, `CLAUDE_CODE_AUTO_MODE_SERVER=0` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. It sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the context the preflight measured: for a model ID it does not recognise, Claude Code otherwise assumes 200K and compacts far too late. From 100k it also sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, whose minimum that is. The profile's own `env` wins over all of these.
 - **Context.** Irie runs its own Ollama server with the context it needs (§6.3), so nothing of the user's Ollama setup has to change. A server the user runs at `local.url` is checked as it is.
-- **Permissions.** Claude Code asks auto mode's check of the session's own model before each command it runs, and a local model cannot answer it, so in auto mode every command was refused. A local model's session therefore runs in `acceptEdits` when its profile names no mode, or `auto`, and is allowed the build and test commands of `LocalAllowed` (internal/harness/claude): `go test`, `go vet`, `pytest`, `npm test`, `cargo test` and the like. Claude Code runs its own read-only commands, such as `ls`, `cat` and `git diff`, without asking in every mode; anything else waits for the user's OK. Any other mode the profile names stays, without the list.
+- **Permissions.** Claude Code asks auto mode's check of the session's own model before each command it runs, and a local model cannot answer it, so in auto mode every command was refused. A local model's session therefore runs in `acceptEdits` when its profile names no mode, or `auto`, and is allowed the build and test commands of `LocalAllowed` (internal/harness/claude): `go test`, `go vet`, `pytest`, `npm test`, `cargo test` and the like, with `go mod`, `go run`, `git add` and `git commit`, so a bench's run (§6.6) gets through on its own; a test runs whatever code it likes, so `go run` adds no new risk, and nothing in the list pushes. Claude Code runs its own read-only commands, such as `ls`, `cat` and `git diff`, without asking in every mode; anything else waits for the user's OK. Any other mode the profile names stays, without the list.
 
 Before spawning on a local profile, v1 runs a preflight (M10):
 
@@ -1702,9 +1713,9 @@ A cheap model that gets a task wrong costs a retry and the user's attention, so 
 3. **Cost.** Cost per attempt is relative to the strongest profile: the starting guess (`route.cost`), replaced by what its sessions of that class cost, from their status lines, once three or more say.
    - A local model costs no tokens, only a hundredth of an Opus task in memory weight when its model takes the whole budget. It can be chosen only when Irie's Ollama server has a model for it and the machine can hold that model now (§6.3).
    - Profiles on the user's Claude plan cost up to five times more as its five hours pass `route.pressure` percent, and none can run at a window's limit.
-4. **Choice.** The cheapest cost per success (cost ÷ accuracy) among usable profiles at or above `route.min_accuracy` wins, the more accurate on a tie. If none reaches the floor, the most accurate usable profile runs it.
+4. **Choice.** The cheapest cost per success (cost ÷ accuracy) among usable profiles at or above their floor wins, the more accurate on a tie. The floor is `route.min_accuracy`, and `route.local_min_accuracy` for a local model's profile: a local model costs no tokens, so a miss costs only a retry, and the lower floor hands it more of the work. If none reaches its floor, the most accurate usable profile runs it.
 
-With the starting guesses and a floor of 85%, small work goes to `+local` when it is ready (else `+haiku`), medium work to `+sonnet`, and hard work to `+claude`. To keep medium work on Opus too, raise `route.min_accuracy` to 0.9 or more.
+With the starting guesses and floors of 85% and 60%, small work goes to `+local` when it is ready (else `+haiku`), medium work to `+sonnet`, and hard work to `+claude`; medium work goes local too once a local model's record there passes 60%, which a bench (§6.6) measures. To keep medium work on Opus, raise `route.min_accuracy` to 0.9 or more.
 
 **Learning.** Outcomes are folded from the journal, like every row's state, over its 30 days:
 
@@ -1715,14 +1726,14 @@ With the starting guesses and a floor of 85%, small work goes to `+local` when i
 | A turn ended, 30 minutes have passed, and neither of the above happened | good |
 | A turn stopped at a usage limit, or no turn ended | nothing |
 
-With a weight of 10, a profile's own record outweighs the guess after about ten outcomes. `irie ctl route "<task>"` and `:route <task>` show the class, each profile's accuracy with its number of outcomes, cost and cost per success, and the choice.
+With a weight of 10, a profile's own record outweighs the guess after about ten outcomes. `irie ctl route "<task>"` and `:route <task>` show the class, each profile's accuracy with its number of outcomes, its floor, cost and cost per success, and the choice.
 
 **Delegation.** A Claude Code session on a profile with cheaper ones in `route.profiles`, which was not itself delegated, is told at session start (SessionStart `additionalContext`) that it can delegate.
 - **The call.** `"$IRIE_BIN" ctl delegate "<subtask>"` routes the subtask among the profiles cheaper than the caller's. A profile with no starting cost counts as the dearest.
 - **Where it runs.** In the caller's directory, with `route.delegate_mode` (`acceptEdits`), so it can edit without asking; a command still needs the user.
 - **The result.** The call waits until the session's turn ends and prints the agent's last message: Stop's `last_assistant_message`, which the shim passes whole and the core keeps in `result.md`.
 - **Exit codes.** 3 when no cheaper profile is accurate enough ("do it yourself"); 4 when the session is still at work at `--timeout` (10 minutes), where it goes on as a row marked `↳ delegated`.
-- **Choosing what to hand on.** The note asks for self-contained, mechanical subtasks on files the caller is not editing, and keeps planning, design and review with the caller.
+- **Choosing what to hand on.** The note asks for self-contained, mechanical subtasks on files the caller is not editing, and keeps planning, design and review with the caller. It names the local profiles among those it may hand work to, which cost no tokens, and asks it to prefer them for every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and to check what comes back.
 
 **Failover.** With `route.failover`, a turn that stops with `rate_limit` makes the core route the task again among profiles cheaper than the session's, keeping its class.
 - **Carrying on.** A profile accurate enough carries it on in the same directory. Its task opens with a note that the earlier session stopped at its limit and that its work so far is there to check.
@@ -1742,8 +1753,10 @@ A coding agent wants the largest model it can get, and a laptop's memory is the 
 So Irie runs whichever llama.cpp build the user names, beside its Ollama server, with the same checks: PrismML's for the smallest packings, a streaming fork for models larger than memory, or Homebrew's.
 
 **Irie's own llama-server.** Profiles with `local = { runtime = "llama-server" }`, such as the built-in `+big`, run on it.
-- **Start.** The first spawn on such a profile starts `irie runtime -- <llama_server> -m <model> --alias <name> --host 127.0.0.1 --port <llama_port> -c <context> -ctk <kv_cache> -ctv <kv_cache> -fa on -np 1`, then `local.llama_args`, in window `irie-llama` of `irie-agents`, and waits until `GET /health` answers 200 (up to three minutes, as a model loads from disk). Its pane keeps the model's name, so a restarted core finds it.
+- **Start.** The first spawn on such a profile starts `irie runtime -- <llama_server> -m <model> --alias <name> --host 127.0.0.1 --port <llama_port> -c <context × llama_slots> -ctk <kv_cache> -ctv <kv_cache> -fa on -np <llama_slots>`, then `local.llama_args`, in window `irie-llama` of `irie-agents`, and waits until `GET /health` answers 200 (up to three minutes, as a model loads from disk). Its pane keeps the model's name, so a restarted core finds it.
 - **One model at a time.** Another model takes the server's place: llama-server answers every request with its one model, so a session on the old model would get the new one's answers. A switch while a live session runs on the old model is refused without `--force`.
+- **On a peer.** A profile with `local = { runtime = "llama-server", peer = "Asahi" }` runs its agent here, in this machine's folders with its hooks, and its model on that peer's llama-server (§2.8), so this machine holds none of it: a laptop short of memory hands the model to a machine with room. The core keeps an ssh tunnel to the peer in a window of its own, `irie-tunnel` (`ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -L 127.0.0.1:<llama_port + 1>:127.0.0.1:<llama_port> <ssh name>`, under `irie runtime`), while the peer answers, starting it again at most every 15 seconds; like the gateway's window it outlives the core, so a restart leaves the agents on it alone. Both machines take the same `local.llama_port`, and the ssh name is `peers.<name>.ssh` or the one the peer was paired over. A spawn waits for the tunnel; when the server there runs another model, or none, the core has the peer load the profile's, as `irie ctl preflight +<profile>` run there over ssh, and the agent gets the context a slot there has. For the router such a profile is usable while the peer answers and its tunnel runs, and costs no memory here.
+- **Slots.** `local.llama_slots` sessions run on the one model at once, each in a slot of its own with `local.context` tokens: llama-server splits its context evenly between its slots, and the memory check counts a cache for each. A session beyond them waits at the server for a slot. Three slots let a bench's three agents (§6.6) share one copy of the weights.
 - **Models.** The GGUF files in `local.models` (`$XDG_DATA_HOME/irie/models`), by their names without `.gguf`, then Ollama's models, read from Ollama's store (`manifests/…`, `blobs/sha256-…`) as they are: no copy, and without a vision projector, which an agent does not need. Vision projectors and the later parts of split files are no models.
 - **Weighing.** Irie reads each file's GGUF header, never its weights: the architecture, the context it was trained for, the K/V heads of each layer, the chat template (a model whose template takes no tools cannot call tools), and each tensor's size, from where its data starts to where the next one's does. The estimate is §6.3's, from the weights alone.
 - **Builds.** `llama-server --version` gives the build. A model whose tensors use a type only PrismML's build has (`PTQ1_0`, `PQ2_0`) needs PrismML's build; one with Bonsai's Hadamard rotation (`prism.hadamard.*`) needs PrismML's or upstream build 11556 or later, since older builds load it without an error and write nonsense. Irie knows PrismML's build by "prism" in its version or its path.
@@ -1759,6 +1772,19 @@ So Irie runs whichever llama.cpp build the user names, beside its Ollama server,
 - **FreeToken** (FlashML, a Berkeley-led team, Apache-2.0, August 2026; research of 2026-11-07). It runs mixture-of-experts models larger than the GPU: the experts stay in RAM, and the ones used lately are kept on an NVIDIA GPU. It also saves a hybrid model's running state at message, thinking and tool-call boundaries, so after an agent edits its history only the part from the edit on is read again. It runs only on Linux and Windows PCs with an NVIDIA RTX 30-series or later GPU; a macOS engine is on its roadmap but has not shipped. On Apple silicon the CPU and GPU share one memory, so the expert offload has nothing to move, and FreeToken's own guide keeps experts resident by default on unified-memory GPUs. llama-server already saves a checkpoint at each user message (since 2026-06). A FreeToken server on another machine speaks Anthropic's API, so a user with such a PC adds it as a profile with `ANTHROPIC_BASE_URL`, as for a free cloud tier (§6.3).
 
 ---
+
+
+### 6.6 The bench: three runs, one judge, a playbook
+
+A local model costs no tokens, so the more work it does the better, but its accuracy on a kind of work is a guess until it has done some. A bench measures it on real work and gets that work done well all the same, the way a team lead would: give one task to several people of the same level, each on their own, then have a senior read what each did, grade it, put together the best of it, and tell the team what to do differently next time.
+
+- **Start.** `irie ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK`, or `:bench …` in a task bar (docs/CORE.md). It starts `bench.runs` sessions (3) of one profile on the task, each on its own: a worktree each in `@REPO`, else a scratch folder each. The profile is the one named, else the first local one in `route.profiles`; `+auto` is refused, since a bench measures one profile. Each is named `bench 1/3 · <title>`, and with `^HOST` they start on that peer (§2.8), which reads its own profiles and repos. Their llama-server's slots (§6.5) let them share one copy of a local model.
+- **Through.** Once every run's turn has ended, with no helper at work, the judge starts on the same machine on `bench.judge` (`+claude`), named `bench judge · <title>`. A run still at work after `bench.timeout` (an hour) gets an Escape, which ends its turn, and is judged as it stands. The judge's brief gives the task, where each run worked and its last message, and four things to do: score each run from 0 to 100 against the task, as a reviewer grades a pull request; make the final result from the best run, bringing in what the others got right and filling what all of them missed, in its own worktree or folder; rewrite the profile's playbook; and end with its verdict as a fenced JSON block (`runs`: `run`, `score`, `missed`; `final`; `playbook`). A verdict that does not parse is asked for again, twice at most.
+- **Ratings.** Each run is rated good at `bench.pass` (70) or more, else bad, as a rating of the user's would (§6.4), so the router learns the profile's accuracy for the task's class from it. A peer's run is rated on its own core, and its outcome is kept with the bench here too, so this core's router learns from it for as long as the journal keeps its own (`journal.keep_days`).
+- **Playbook.** A profile's playbook is the rules its agents read before every task: `playbooks/<profile>.md` in the state folder, whose lines that start with `- ` are its rules, at most `bench.rules` (30) of one line each. The judge keeps the rules that still help, drops those that did not and adds one for each mistake a rule would have prevented, about how to work rather than about the one task, and the one it replaces goes to `playbooks/history/`. Every session on the profile is told its rules as it starts (§3.3's SessionStart note), so a subtask delegated to a local model (§6.4) gets them too; a run on a peer gets them at the top of its task. The user can read and edit the file: an edit counts from the next session.
+- **Kept.** Each bench is `benches/<id>.json` in the state folder, and the core moves the open ones on every five seconds, so a restarted core carries on with them. `irie ctl bench` with no task lists them, a line each with each run's score; `--wait` waits for the judge and prints its verdict.
+
+The judge costs tokens, but only to read and finish work that free runs did, and the playbook and the ratings outlast the bench: once a local model's record on a class of work passes `route.local_min_accuracy`, auto and delegation send it that work alone.
 
 ## 7. Ghostty and Irie.app
 
