@@ -90,6 +90,7 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":setup browser", "", "", OpTool, ToolArgs{Name: ToolBrowser}},
 		{":setup privacy", "", "", OpTool, ToolArgs{Name: ToolPrivacy}},
 		{":plugins", "", "", OpPlugins, PluginsArgs{}},
+		{":mail", "", "", OpMail, MailArgs{}},
 		{":write", "", "", OpTool, ToolArgs{Name: ToolWrite}},
 		{":write notes on Chapter 3\nkeep it short", "s1", "", OpTool, ToolArgs{Name: ToolWrite, Task: "notes on Chapter 3\nkeep it short"}},
 		{":markets", "s1", "", OpMarkets, MarketsArgs{}},

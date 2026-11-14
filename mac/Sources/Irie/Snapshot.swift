@@ -105,6 +105,38 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // Mail (MailViews.swift): its tab with the list and with a
+            // message open, its window, and its two sheets.
+            for (base, opening, dark) in [("side-mail", false, false), ("side-mail-dark", false, true), ("side-mail-reading", true, false)] {
+                store.mail.loadFixture(opening: opening)
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .mail)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            for dark in [false, true] {
+                store.mail.loadFixture(opening: true)
+                let (rep, _) = window(MailWindow().environment(store), dark: dark, width: 1080, height: 700)
+                let name = "mail-window-\(dark ? "dark" : "light").png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            do {
+                let (add, _) = window(AddMailAccount().environment(store), dark: false, width: 480, height: 330)
+                try add.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("mail-add-account.png"))
+                print("mail-add-account.png")
+                store.mail.loadFixture(opening: true)
+                store.mail.reply()
+                if let c = store.mail.composing {
+                    let (rep, _) = window(MailComposer(draft: c).environment(store), dark: false, width: 560, height: 520)
+                    try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("mail-compose.png"))
+                    print("mail-compose.png")
+                }
+                store.mail.composing = nil
+                store.mail.loadFixture()
+            }
             store.side = SideState()
             store.notice = nil
 
