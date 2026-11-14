@@ -299,7 +299,7 @@ The status strip and the Mac app show a small mark: green with the city when con
 | Item | Rule |
 |---|---|
 | Finding it | `vpn.mullvad`, else `mullvad` on the PATH, else `/usr/local/bin/mullvad` (macOS) and `/usr/bin/mullvad` (Linux) |
-| State | `mullvad status listen --json`, kept running by the core while `[vpn] on`, prints the state, then a JSON line for each event of the daemon: each change of the tunnel's state, and also new settings, a new relay list (a long line), device and version events, which Irie skips, as it does the warning line printed when the device is logged out. The core restarts it with backoff if it ends |
+| State | `mullvad status --json listen` (`--json` before `listen`: mullvad-cli 2026.3 refuses it after), kept running by the core while `[vpn] on`, prints the state, then a JSON line for each event of the daemon: each change of the tunnel's state, and also new settings, a new relay list (a long line), device and version events, which Irie skips, as it does the warning line printed when the device is logged out. The core restarts it with backoff if it ends |
 | Account time | `mullvad account get`, once an hour. Only its `Expires at:` line is read |
 | Lockdown | `mullvad lockdown-mode get`, at start and after each change |
 | Changes | Each word runs its command with a 30-second limit, and the reply is the command's own message when it fails |

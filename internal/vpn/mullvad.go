@@ -59,7 +59,7 @@ type errState struct {
 }
 
 // ParseMullvad reads one line of `mullvad status --json` or of `status
-// listen --json`. It reports false for a line that is not a tunnel's
+// --json listen`. It reports false for a line that is not a tunnel's
 // state: the listener also prints settings, the relay list and device
 // events, and a warning line when the device is logged out.
 func ParseMullvad(line []byte) (State, bool) {
@@ -305,7 +305,7 @@ func CheckLocation(where []string) error {
 }
 
 // LockdownSetting reads lockdown mode from a line of the daemon's settings, which
-// `status listen --json` prints when they change: {"lockdown_mode": …}.
+// `status --json listen` prints when they change: {"lockdown_mode": …}.
 func LockdownSetting(line []byte) (bool, bool) {
 	line = bytes.TrimSpace(line)
 	if len(line) == 0 || line[0] != '{' {
@@ -320,12 +320,14 @@ func LockdownSetting(line []byte) (bool, bool) {
 	return *s.Lockdown, true
 }
 
-// Listen runs `mullvad status listen --json` until ctx ends or it exits, and
+// Listen runs `mullvad status --json listen` until ctx ends or it exits, and
 // calls each with every state it prints, and lockdown, when it is not nil,
 // with lockdown mode whenever the settings change. Lines can be long: the
 // relay list is one.
 func (c Mullvad) Listen(ctx context.Context, each func(State), lockdown func(bool)) error {
-	cmd := exec.CommandContext(ctx, c.Bin, "status", "listen", "--json")
+	// --json is status's option, before its listen command: mullvad-cli
+	// 2026.3 refuses `status listen --json` (exit status 2).
+	cmd := exec.CommandContext(ctx, c.Bin, "status", "--json", "listen")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
