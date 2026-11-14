@@ -3,7 +3,8 @@ import Foundation
 
 // Sessions close like tabs (DESIGN §4.5). ⌘W closes the selected session at
 // once, without asking, because ⇧⌘T, reopen, is its undo; the next session
-// in the list takes its place. ⇧⌘W still closes the window.
+// in the list takes its place. ⇧⌘W still closes the window: File's Close
+// Window, which takes the place of the window's own Close (MenuBar.swift).
 
 /// A closed session that reopen can bring back. `auto` says it closed on
 /// its own, by close_when_done; one you closed is done.
@@ -77,33 +78,6 @@ extension Store {
                 show(r.session.id, focus: true)
             } catch {
                 say("Couldn’t reopen \(last.name): \(error.localizedDescription)", error: true)
-            }
-        }
-    }
-}
-
-/// The window's own Close item, which SwiftUI adds with ⌘W, says Close
-/// Window and ⇧⌘W, since ⌘W closes a session. KeyRouter acts on both keys
-/// first, so this only keeps the menu honest; it runs again whenever a menu
-/// opens, in case SwiftUI rebuilt the item.
-@MainActor
-enum WindowCloseItem {
-    private static var observer: Any?
-
-    static func install() {
-        rebind()
-        guard observer == nil else { return }
-        observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { rebind() }
-        }
-    }
-
-    private static func rebind() {
-        for top in NSApp.mainMenu?.items ?? [] {
-            for item in top.submenu?.items ?? [] where item.action == #selector(NSWindow.performClose(_:)) {
-                item.title = "Close Window"
-                item.keyEquivalent = "w"
-                item.keyEquivalentModifierMask = [.command, .shift]
             }
         }
     }

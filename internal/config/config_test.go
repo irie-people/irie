@@ -829,11 +829,11 @@ func TestArchValidation(t *testing.T) {
 }
 
 func TestArchGabrielFromTheFile(t *testing.T) {
-	c, err := Load(writeFile(t, "[arch.gabriel]\noutside = false\naway = \"2m\"\nspare = [\"Xcode\"]\n"))
+	c, err := Load(writeFile(t, "[arch.gabriel]\noutside = false\naway = \"2m\"\nspare = [\"Xcode\"]\nalways = true\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Gabriel{On: true, Outside: false, Away: 2 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: []string{"Xcode"}, Boost: time.Hour, Guard: true}); !reflect.DeepEqual(c.Arch.Gabriel, want) {
+	if want := (Gabriel{On: true, Outside: false, Away: 2 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: []string{"Xcode"}, Boost: time.Hour, Always: true, Guard: true}); !reflect.DeepEqual(c.Arch.Gabriel, want) {
 		t.Errorf("arch.gabriel = %+v, want %+v", c.Arch.Gabriel, want)
 	}
 	for body, want := range map[string]string{

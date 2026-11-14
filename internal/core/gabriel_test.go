@@ -18,6 +18,25 @@ import (
 	"github.com/irie-people/irie/internal/sysload"
 )
 
+func TestAlwaysHoldsBackOnlyWhileTheUserIsThere(t *testing.T) {
+	for _, tc := range []struct {
+		name                                string
+		on, present, busy, boosting, always bool
+		holds                               bool
+	}{
+		{"room to spare", true, true, false, false, false, false},
+		{"busy", true, true, true, false, false, true},
+		{"a boost", true, true, false, true, false, true},
+		{"always, with room to spare", true, true, false, false, true, true},
+		{"always, while away", true, false, true, true, true, false},
+		{"always, with Gabriel off", false, true, true, true, true, false},
+	} {
+		if got := holds(tc.on, tc.present, tc.busy, tc.boosting, tc.always); got != tc.holds {
+			t.Errorf("%s: holds = %v, want %v", tc.name, got, tc.holds)
+		}
+	}
+}
+
 func TestBusyNextHasRoomToCalmDown(t *testing.T) {
 	now := time.Date(2026, 11, 1, 15, 0, 0, 0, time.UTC)
 	l := func(rq float64, pressure int) sysload.Load {
@@ -212,8 +231,14 @@ func TestBoostLastsItsTimeAndSaysSo(t *testing.T) {
 	if r.BoostUntil == nil || time.Until(*r.BoostUntil) < 59*time.Minute {
 		t.Errorf("a boost of the configured hour ends at %v", r.BoostUntil)
 	}
-	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil {
-		t.Errorf("stopped, still until %v", r.BoostUntil)
+	if r, _ = c.gabrielOp(ipc.GabrielArgs{Stop: true}); r.BoostUntil != nil || r.Always {
+		t.Errorf("stopped, still until %v or always", r.BoostUntil)
+	}
+	// Boosting always is the config's, and the report says so.
+	cfg.Arch.Gabriel.Always = true
+	c.useConfig(cfg)
+	if r, _ = c.gabrielOp(ipc.GabrielArgs{}); !r.Always || r.BoostUntil != nil {
+		t.Errorf("always: %+v", r)
 	}
 }
 

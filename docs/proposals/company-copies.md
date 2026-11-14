@@ -7,7 +7,7 @@ Date: 2026-11-14. Status: requirements, with what is built and what is next. An 
 | | Before | Now |
 |---|---|---|
 | Rename Irie | About 2,000 places, by hand | One file, `internal/brand/brand.go`, and `tools/brand.sh --swift` |
-| The privacy and writing plugins in a copy | Compiled in, with their commands, menus and settings | `Tags = "noprivacy,nowriting"` leaves every line of them out |
+| The privacy, writing and markets plugins in a copy | Compiled in, with their commands, menus and settings | `Tags = "noprivacy,nowriting,nomarkets"` leaves every line of them out |
 | A long name | Pushed the title bar's counts out, wrapped buttons | Up to 30 characters fit: it shrinks, trails off or is left out of a tight button |
 | The strip under the terminal | Irie's phrases of encouragement | `Bar = "tips"`: tips for those new to it |
 | Two copies on one Mac | Shared folders, socket, tmux server and variables | Each has its own |
@@ -63,6 +63,6 @@ Date: 2026-11-14. Status: requirements, with what is built and what is next. An 
 ## 5. Checks
 
 - `internal/brand`: the names' form and length, `tools/brand.sh` agrees with the package, `Brand.swift` is current, `Exe` for long and non-Latin names, the build tags are Irie's own, and no Go or Swift string names the product itself.
-- `internal/plugins`: every package builds with `-tags noprivacy,nowriting`, and that `irie` links none of `internal/vpn`, `anon`, `browser`, `dms`, `htmltext` and `mcp`. `tools/check.sh` vets every package with the tags too.
+- `internal/plugins`: every package builds with `-tags noprivacy,nowriting,nomarkets`, and that `irie` links none of `internal/vpn`, `anon`, `browser`, `dms`, `htmltext` and `mcp`. `tools/check.sh` vets every package with the tags too.
 - `internal/config`: `ui.bar`.
 - By hand, before a release of a copy: build a renamed copy with its tags, run `help`, `config print`, `plugins`, `skills`, `ctl` and `setup --check` in an empty home, and look for Irie's name and the plugins' words; draw the Mac app with `mac/snapshot.sh` and look at the title bar and the welcome.

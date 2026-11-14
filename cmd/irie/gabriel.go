@@ -14,13 +14,15 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-const gabrielUsage = "usage: " + brand.Slug + " ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]"
+const gabrielUsage = "usage: " + brand.Slug + " ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]"
 
 // ctlGabriel is Gabriel's report (DESIGN §4.11): whether you are at the
 // computer and it is busy, what is in your focus, and what he holds back
 // for it. on and off turn him on or off first, in the config file
 // (arch.gabriel.on); boost gives your focus the machine first for a while
-// whether it is busy or not, and boost off ends that.
+// whether it is busy or not, boost always does so whenever you are at the
+// computer (arch.gabriel.always, in the config file too), and boost off
+// ends either.
 func ctlGabriel(args []string) error {
 	fs := flag.NewFlagSet("ctl gabriel", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the report as JSON")
@@ -37,7 +39,7 @@ func ctlGabriel(args []string) error {
 	}
 	verb := strings.Join(words, " ")
 	switch {
-	case verb != "" && verb != "on" && verb != "off" && verb != "boost" && verb != "boost off",
+	case verb != "" && verb != "on" && verb != "off" && verb != "boost" && verb != "boost always" && verb != "boost off",
 		*boostFor != "" && verb != "boost":
 		return errors.New(gabrielUsage)
 	}
@@ -45,21 +47,39 @@ func ctlGabriel(args []string) error {
 	if err != nil {
 		return err
 	}
+	// set writes a key of Gabriel's in the config file, which the core runs
+	// on at once; a nil value puts it back to its default.
+	set := func(key string, v json.RawMessage) error {
+		a := ipc.ConfigArgs{Set: []ipc.ConfigSet{{Key: key, Value: v}}}
+		return ipc.Call(sock, 10*time.Second, ipc.OpConfig, a, nil)
+	}
 	var a ipc.GabrielArgs
 	switch verb {
 	case "on", "off":
-		set := ipc.ConfigArgs{Set: []ipc.ConfigSet{{Key: "arch.gabriel.on", Value: json.RawMessage(fmt.Sprint(verb == "on"))}}}
-		if err := ipc.Call(sock, 10*time.Second, ipc.OpConfig, set, nil); err != nil {
+		if err := set("arch.gabriel.on", json.RawMessage(fmt.Sprint(verb == "on"))); err != nil {
 			return err
 		}
 	case "boost":
 		a = ipc.GabrielArgs{Boost: true, For: *boostFor}
+	case "boost always":
+		if err := set("arch.gabriel.always", json.RawMessage("true")); err != nil {
+			return err
+		}
 	case "boost off":
 		a = ipc.GabrielArgs{Stop: true}
 	}
 	var r ipc.GabrielResult
 	if err := ipc.Call(sock, 20*time.Second, ipc.OpGabriel, a, &r); err != nil {
 		return err
+	}
+	if verb == "boost off" && r.Always {
+		// Boosting always ends too, back to the default.
+		if err := set("arch.gabriel.always", nil); err != nil {
+			return err
+		}
+		if err := ipc.Call(sock, 20*time.Second, ipc.OpGabriel, ipc.GabrielArgs{}, &r); err != nil {
+			return err
+		}
 	}
 	if *asJSON {
 		return json.NewEncoder(os.Stdout).Encode(r)
@@ -82,7 +102,7 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 		return nil
 	case !r.Present:
 		fmt.Fprintf(w, "Gabriel: you are away (no keyboard or mouse for %s), so nothing is held back.\n", r.Idle)
-	case !r.Busy && r.BoostUntil != nil:
+	case !r.Busy && (r.BoostUntil != nil || r.Always):
 		fmt.Fprintf(w, "Gabriel: you are at the computer and boosting, so what is out of your focus steps back (%s).\n", machine)
 	case !r.Busy:
 		fmt.Fprintf(w, "Gabriel: you are at the computer and it has room to spare (%s), so nothing is held back.\n", machine)
@@ -93,7 +113,9 @@ func printGabriel(w io.Writer, r ipc.GabrielResult) error {
 		}
 		fmt.Fprintf(w, "Gabriel: you are at the computer%s and it is busy (%s), so what is out of your focus steps back.\n", front, machine)
 	}
-	if r.BoostUntil != nil {
+	if r.Always {
+		fmt.Fprintf(w, "Boost: always, while you are at the computer (arch.gabriel.always); your focus gets the machine first whether it is busy or not, and the rest runs on the efficiency cores, slower even when the machine has room to spare. `"+brand.Slug+" ctl gabriel boost off` ends it.\n")
+	} else if r.BoostUntil != nil {
 		fmt.Fprintf(w, "Boost: on until %s; your focus gets the machine first whether it is busy or not, and the rest runs on the efficiency cores. `"+brand.Slug+" ctl gabriel boost off` ends it.\n", r.BoostUntil.Local().Format("15:04"))
 	}
 	if len(r.Freed) > 0 {
