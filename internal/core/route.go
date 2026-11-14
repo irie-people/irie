@@ -275,8 +275,13 @@ func (c *Core) choose(class, why string, only []string, probe bool) route.Choice
 			continue
 		}
 		counts := stats.Counts(name, class)
+		// A local model costs no tokens, so it has a floor of its own.
+		floor := r.MinAccuracy
+		if p.Local != nil {
+			floor = r.LocalMinAccuracy
+		}
 		cand := route.Candidate{
-			Profile: name, Accuracy: route.Accuracy(prior.Accuracy[class], r.PriorWeight, counts),
+			Profile: name, Accuracy: route.Accuracy(prior.Accuracy[class], r.PriorWeight, counts), Floor: floor,
 			Outcomes: counts.Good + counts.Bad, Cost: prior.Cost, Usable: true,
 		}
 		if mean, ok := stats.MeanCost(name, class); ok {
@@ -285,7 +290,7 @@ func (c *Core) choose(class, why string, only []string, probe bool) route.Choice
 			}
 		}
 		switch {
-		case p.Local != nil && cand.Accuracy < r.MinAccuracy:
+		case p.Local != nil && cand.Accuracy < floor:
 			// Below the floor it cannot win, so it is not probed.
 			cand.Usable, cand.Note = false, "not accurate enough for "+class+" work"
 		case p.Local != nil:

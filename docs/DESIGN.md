@@ -1392,11 +1392,13 @@ env = {}                      # more settings for its server, such as OLLAMA_MOD
 llama_server = ""             # Irie's own llama-server (§6.5): any llama.cpp build, such as PrismML's; "" = PATH, then Homebrew's
 llama_port = 11436            # it listens on 127.0.0.1; it takes context and kv_cache above too
 llama_args = []               # more arguments for it, such as a build's own
+llama_slots = 1               # how many sessions it serves at once, each with a context of its own
 models = ""                   # GGUF files it may run besides Ollama's models; "" = $XDG_DATA_HOME/irie/models
 
 [route]                       # how auto picks a profile (§6.4)
 profiles = ["local", "haiku", "sonnet", "claude"]
 min_accuracy = 0.85           # a profile below this for a task's class is never chosen
+local_min_accuracy = 0.6      # the same for a local model, which costs no tokens
 prior_weight = 10             # how many outcomes the starting guesses below count as
 pressure = 80                 # from this much of the plan's five hours, in percent, its tokens cost more
 failover = true               # carry a task on, on a cheaper profile, when a usage limit stops it
@@ -1678,9 +1680,9 @@ A cheap model that gets a task wrong costs a retry and the user's attention, so 
 3. **Cost.** Cost per attempt is relative to the strongest profile: the starting guess (`route.cost`), replaced by what its sessions of that class cost, from their status lines, once three or more say.
    - A local model costs no tokens, only a hundredth of an Opus task in memory weight when its model takes the whole budget. It can be chosen only when Irie's Ollama server has a model for it and the machine can hold that model now (§6.3).
    - Profiles on the user's Claude plan cost up to five times more as its five hours pass `route.pressure` percent, and none can run at a window's limit.
-4. **Choice.** The cheapest cost per success (cost ÷ accuracy) among usable profiles at or above `route.min_accuracy` wins, the more accurate on a tie. If none reaches the floor, the most accurate usable profile runs it.
+4. **Choice.** The cheapest cost per success (cost ÷ accuracy) among usable profiles at or above their floor wins, the more accurate on a tie. The floor is `route.min_accuracy`, and `route.local_min_accuracy` for a local model's profile: a local model costs no tokens, so a miss costs only a retry, and the lower floor hands it more of the work. If none reaches its floor, the most accurate usable profile runs it.
 
-With the starting guesses and a floor of 85%, small work goes to `+local` when it is ready (else `+haiku`), medium work to `+sonnet`, and hard work to `+claude`. To keep medium work on Opus too, raise `route.min_accuracy` to 0.9 or more.
+With the starting guesses and floors of 85% and 60%, small work goes to `+local` when it is ready (else `+haiku`), medium work to `+sonnet`, and hard work to `+claude`; medium work goes local too once a local model's record there passes 60%, which a bench (§6.6) measures. To keep medium work on Opus, raise `route.min_accuracy` to 0.9 or more.
 
 **Learning.** Outcomes are folded from the journal, like every row's state, over its 30 days:
 
@@ -1691,7 +1693,7 @@ With the starting guesses and a floor of 85%, small work goes to `+local` when i
 | A turn ended, 30 minutes have passed, and neither of the above happened | good |
 | A turn stopped at a usage limit, or no turn ended | nothing |
 
-With a weight of 10, a profile's own record outweighs the guess after about ten outcomes. `irie ctl route "<task>"` and `:route <task>` show the class, each profile's accuracy with its number of outcomes, cost and cost per success, and the choice.
+With a weight of 10, a profile's own record outweighs the guess after about ten outcomes. `irie ctl route "<task>"` and `:route <task>` show the class, each profile's accuracy with its number of outcomes, its floor, cost and cost per success, and the choice.
 
 **Delegation.** A Claude Code session on a profile with cheaper ones in `route.profiles`, which was not itself delegated, is told at session start (SessionStart `additionalContext`) that it can delegate.
 - **The call.** `"$IRIE_BIN" ctl delegate "<subtask>"` routes the subtask among the profiles cheaper than the caller's. A profile with no starting cost counts as the dearest.
@@ -1718,8 +1720,9 @@ A coding agent wants the largest model it can get, and a laptop's memory is the 
 So Irie runs whichever llama.cpp build the user names, beside its Ollama server, with the same checks: PrismML's for the smallest packings, a streaming fork for models larger than memory, or Homebrew's.
 
 **Irie's own llama-server.** Profiles with `local = { runtime = "llama-server" }`, such as the built-in `+big`, run on it.
-- **Start.** The first spawn on such a profile starts `irie runtime -- <llama_server> -m <model> --alias <name> --host 127.0.0.1 --port <llama_port> -c <context> -ctk <kv_cache> -ctv <kv_cache> -fa on -np 1`, then `local.llama_args`, in window `irie-llama` of `irie-agents`, and waits until `GET /health` answers 200 (up to three minutes, as a model loads from disk). Its pane keeps the model's name, so a restarted core finds it.
+- **Start.** The first spawn on such a profile starts `irie runtime -- <llama_server> -m <model> --alias <name> --host 127.0.0.1 --port <llama_port> -c <context × llama_slots> -ctk <kv_cache> -ctv <kv_cache> -fa on -np <llama_slots>`, then `local.llama_args`, in window `irie-llama` of `irie-agents`, and waits until `GET /health` answers 200 (up to three minutes, as a model loads from disk). Its pane keeps the model's name, so a restarted core finds it.
 - **One model at a time.** Another model takes the server's place: llama-server answers every request with its one model, so a session on the old model would get the new one's answers. A switch while a live session runs on the old model is refused without `--force`.
+- **Slots.** `local.llama_slots` sessions run on the one model at once, each in a slot of its own with `local.context` tokens: llama-server splits its context evenly between its slots, and the memory check counts a cache for each. A session beyond them waits at the server for a slot. Three slots let a bench's three agents (§6.6) share one copy of the weights.
 - **Models.** The GGUF files in `local.models` (`$XDG_DATA_HOME/irie/models`), by their names without `.gguf`, then Ollama's models, read from Ollama's store (`manifests/…`, `blobs/sha256-…`) as they are: no copy, and without a vision projector, which an agent does not need. Vision projectors and the later parts of split files are no models.
 - **Weighing.** Irie reads each file's GGUF header, never its weights: the architecture, the context it was trained for, the K/V heads of each layer, the chat template (a model whose template takes no tools cannot call tools), and each tensor's size, from where its data starts to where the next one's does. The estimate is §6.3's, from the weights alone.
 - **Builds.** `llama-server --version` gives the build. A model whose tensors use a type only PrismML's build has (`PTQ1_0`, `PQ2_0`) needs PrismML's build; one with Bonsai's Hadamard rotation (`prism.hadamard.*`) needs PrismML's or upstream build 11556 or later, since older builds load it without an error and write nonsense. Irie knows PrismML's build by "prism" in its version or its path.

@@ -532,6 +532,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-10 | https://code.claude.com/docs/en/permissions.md | Read rules take `//` before an absolute path and `~/` for home: an anonymous session's Read rules for the compartments' file and the user's sign-ins |
 | 2026-11-10 | RFC 1928, SOCKS Protocol Version 5, https://www.rfc-editor.org/rfc/rfc1928 | the forwarder's SOCKS5 server and its client to the exit: greeting, no-authentication method, CONNECT with an IPv4, IPv6 or domain address, reply codes (`internal/anon/forward.go`) |
 | 2026-11-10 | RFC 9110, HTTP Semantics, §7.6.1 and §9.3.6, https://www.rfc-editor.org/rfc/rfc9110 | the forwarder's HTTP proxy: CONNECT's 2xx and tunnel, and the hop-by-hop headers it drops from a plain request and its response |
+| 2026-11-14 | https://github.com/brianchmielNV/llama.cpp at 98a74c9 (NVIDIA's Dory fork of llama.cpp, MIT; tools/server/server.cpp, tools/server/server-context.cpp, src/llama-context.cpp read locally) | That an explicit -np N without --kv-unified gives each slot n_ctx / N tokens, and that GET /props reports one slot's context: local.llama_slots passes -c context × slots and -np slots (DESIGN §6.5) |
 
 ## Third-party code
 

@@ -136,6 +136,35 @@ func TestChooseNormalisesCostByAccuracy(t *testing.T) {
 	}
 }
 
+func TestChooseTakesACandidatesOwnFloor(t *testing.T) {
+	// Medium work: a local model at 65% clears its own floor of 60%,
+	// though not the 85% the others need, and costs nothing.
+	medium := []Candidate{
+		{Profile: "claude", Accuracy: 0.94, Cost: 1, Usable: true},
+		{Profile: "haiku", Accuracy: 0.7, Cost: 0.02, Usable: true},
+		{Profile: "dory", Accuracy: 0.65, Floor: 0.6, Cost: 0, Usable: true},
+	}
+	ch := Choose(Medium, "fix", medium, 0.85)
+	if ch.Profile != "dory" || !ch.Met || !strings.Contains(ch.Reason, "where its floor is 60%") {
+		t.Errorf("local at its own floor = %+v", ch)
+	}
+	// Below its own floor it is passed over for the cheapest at 85%, and
+	// haiku, at 70%, is not one of those.
+	medium[2].Accuracy = 0.55
+	if ch = Choose(Medium, "fix", medium, 0.85); ch.Profile != "claude" || !strings.Contains(ch.Reason, "of those at 85% or more") {
+		t.Errorf("local below its own floor = %+v", ch)
+	}
+	// None accurate enough: the most accurate, and the reason says each
+	// was held to its own floor.
+	low := []Candidate{
+		{Profile: "haiku", Accuracy: 0.7, Cost: 0.02, Usable: true},
+		{Profile: "dory", Accuracy: 0.5, Floor: 0.6, Cost: 0, Usable: true},
+	}
+	if ch = Choose(Hard, "", low, 0.85); ch.Profile != "haiku" || ch.Met || !strings.Contains(ch.Reason, "none reaches its floor") {
+		t.Errorf("none at its floor = %+v", ch)
+	}
+}
+
 func TestCheaper(t *testing.T) {
 	priors := map[string]Prior{"local": {Cost: 0}, "haiku": {Cost: 0.02}, "sonnet": {Cost: 0.25}, "claude": {Cost: 1}}
 	order := []string{"local", "haiku", "sonnet", "claude"}

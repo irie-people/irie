@@ -285,16 +285,20 @@ const Auto = "auto"
 
 // Route is how auto picks a profile, and what goes with it (DESIGN §6.4).
 type Route struct {
-	Profiles     []string                      `toml:"profiles"`      // what auto chooses between
-	MinAccuracy  float64                       `toml:"min_accuracy"`  // a profile below this for a task's class is never chosen
-	PriorWeight  int                           `toml:"prior_weight"`  // how many outcomes the starting accuracies count as
-	Pressure     float64                       `toml:"pressure"`      // from this much of the plan's five hours used, in percent, cloud tokens cost more
-	Failover     bool                          `toml:"failover"`      // carry on a task on a cheaper profile when its session hits a usage limit
-	Delegate     bool                          `toml:"delegate"`      // tell Claude Code sessions they can hand subtasks to cheaper profiles
-	DelegateMode string                        `toml:"delegate_mode"` // the permission mode of a delegated session
-	Accuracy     map[string]map[string]float64 `toml:"accuracy"`      // starting guesses: first-time success, by profile and class
-	Cost         map[string]float64            `toml:"cost"`          // starting guesses: a task's cost relative to one on +claude
-	Words        route.Words                   `toml:"words"`         // what makes a task small, medium or hard
+	Profiles    []string `toml:"profiles"`     // what auto chooses between
+	MinAccuracy float64  `toml:"min_accuracy"` // a profile below this for a task's class is never chosen
+	// LocalMinAccuracy is min_accuracy for a local model's profile: a local
+	// model costs no tokens, so a miss costs only a retry, and its floor can
+	// sit lower to hand it more of the work.
+	LocalMinAccuracy float64                       `toml:"local_min_accuracy"`
+	PriorWeight      int                           `toml:"prior_weight"`  // how many outcomes the starting accuracies count as
+	Pressure         float64                       `toml:"pressure"`      // from this much of the plan's five hours used, in percent, cloud tokens cost more
+	Failover         bool                          `toml:"failover"`      // carry on a task on a cheaper profile when its session hits a usage limit
+	Delegate         bool                          `toml:"delegate"`      // tell Claude Code sessions they can hand subtasks to cheaper profiles
+	DelegateMode     string                        `toml:"delegate_mode"` // the permission mode of a delegated session
+	Accuracy         map[string]map[string]float64 `toml:"accuracy"`      // starting guesses: first-time success, by profile and class
+	Cost             map[string]float64            `toml:"cost"`          // starting guesses: a task's cost relative to one on +claude
+	Words            route.Words                   `toml:"words"`         // what makes a task small, medium or hard
 }
 
 // Prior returns where a profile starts, for the router.
@@ -460,8 +464,12 @@ type Local struct {
 	LlamaServer string   `toml:"llama_server"` // the llama-server binary, any llama.cpp build; "" = PATH, then Homebrew's
 	LlamaPort   int      `toml:"llama_port"`   // it listens on 127.0.0.1 at this port
 	LlamaArgs   []string `toml:"llama_args"`   // more arguments for it, such as a build's own
+	LlamaSlots  int      `toml:"llama_slots"`  // how many sessions it serves at once, each with local.context of its own
 	Models      string   `toml:"models"`       // a folder of GGUF files it may run besides Ollama's models; "" = $XDG_DATA_HOME/irie/models
 }
+
+// MaxLlamaSlots is the most sessions Irie's llama-server serves at once.
+const MaxLlamaSlots = 16
 
 // KV cache types Ollama offers (DESIGN §6.3).
 var KVCaches = []string{"f16", "q8_0", "q4_0"}
@@ -748,7 +756,7 @@ func Default() Config {
 				Arch:           "mikael",
 			},
 		},
-		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}},
+		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
@@ -787,19 +795,21 @@ func Default() Config {
 
 // DefaultRoute is where routing starts (DESIGN §6.4). The accuracies are
 // guesses, which the user's own outcomes replace; with the floor at 85%
-// they keep hard work on claude. The costs follow Anthropic's list prices:
-// Sonnet 5.5 costs half as much as Opus 5.5 per token and spends fewer
-// thinking tokens at medium effort than at max, and Haiku 5.5 costs a
-// fortieth. A local model costs no tokens.
+// they keep hard work on claude, and a local model, at 60%, takes small
+// work. The costs follow Anthropic's list prices: Sonnet 5.5 costs half as
+// much as Opus 5.5 per token and spends fewer thinking tokens at medium
+// effort than at max, and Haiku 5.5 costs a fortieth. A local model costs
+// no tokens.
 func DefaultRoute() Route {
 	return Route{
-		Profiles:     []string{"local", "haiku", "sonnet", "claude"},
-		MinAccuracy:  0.85,
-		PriorWeight:  10,
-		Pressure:     80,
-		Failover:     true,
-		Delegate:     true,
-		DelegateMode: "acceptEdits",
+		Profiles:         []string{"local", "haiku", "sonnet", "claude"},
+		MinAccuracy:      0.85,
+		LocalMinAccuracy: 0.6,
+		PriorWeight:      10,
+		Pressure:         80,
+		Failover:         true,
+		Delegate:         true,
+		DelegateMode:     "acceptEdits",
 		Accuracy: map[string]map[string]float64{
 			"local":  {route.Small: 0.85, route.Medium: 0.40, route.Hard: 0.05},
 			"haiku":  {route.Small: 0.92, route.Medium: 0.70, route.Hard: 0.30},
@@ -1108,6 +1118,9 @@ func (c Config) Validate() error {
 	if r.MinAccuracy <= 0 || r.MinAccuracy > 1 {
 		bad("route.min_accuracy = %v: must be above 0 and at most 1", r.MinAccuracy)
 	}
+	if r.LocalMinAccuracy <= 0 || r.LocalMinAccuracy > 1 {
+		bad("route.local_min_accuracy = %v: must be above 0 and at most 1", r.LocalMinAccuracy)
+	}
 	if r.PriorWeight < 0 {
 		bad("route.prior_weight = %d: must not be negative", r.PriorWeight)
 	}
@@ -1221,12 +1234,15 @@ func (c Config) Validate() error {
 	for _, a := range c.Local.LlamaArgs {
 		for _, own := range []string{"-m", "--model", "--host", "--port", "-c", "--ctx-size", "-np", "--parallel", "--alias", "-a"} {
 			if a == own || strings.HasPrefix(a, own+"=") {
-				bad("local.llama_args: %s is "+brand.Name+"'s to set; use local.models, local.llama_port or local.context", own)
+				bad("local.llama_args: %s is "+brand.Name+"'s to set; use local.models, local.llama_port, local.context or local.llama_slots", own)
 			}
 		}
 	}
 	if c.Local.Context < 2048 {
 		bad("local.context = %d: must be at least 2048 tokens", c.Local.Context)
+	}
+	if c.Local.LlamaSlots < 1 || c.Local.LlamaSlots > MaxLlamaSlots {
+		bad("local.llama_slots = %d: must be from 1 to %d", c.Local.LlamaSlots, MaxLlamaSlots)
 	}
 	if !slices.Contains(KVCaches, c.Local.KVCache) {
 		bad("local.kv_cache = %q: must be one of %s", c.Local.KVCache, strings.Join(KVCaches, ", "))

@@ -86,6 +86,12 @@ func TestAutoRoutesByCostPerSuccess(t *testing.T) {
 	if ch := c.routeDry(hardTask); ch.Profile != "fake" || ch.Candidates[0].Profile != "cheap" || ch.Candidates[0].Accuracy >= 0.85 {
 		t.Errorf("hard choice = %+v", ch)
 	}
+	// Neither runs a local model, so each needs route.min_accuracy.
+	for _, cand := range ch.Candidates {
+		if cand.Floor != 0.85 {
+			t.Errorf("%s's floor = %v, want route.min_accuracy", cand.Profile, cand.Floor)
+		}
+	}
 
 	// The + list says where auto sends each class.
 	var r ipc.CompleteResult

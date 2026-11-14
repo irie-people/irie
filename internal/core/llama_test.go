@@ -266,3 +266,57 @@ func mapsEqual(a, b map[string]string) bool {
 	}
 	return true
 }
+
+func TestLlamaSlotsServeSessionsAtOnce(t *testing.T) {
+	dir := t.TempDir()
+	models := filepath.Join(dir, "models")
+	if err := os.MkdirAll(models, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testutil.WriteGGUF(t, filepath.Join(models, "coder.gguf"), qwenGGUF(true, nil), layerTensors(8, 2<<20, 12))
+	log := filepath.Join(dir, "llama-args.json")
+	t.Setenv("IRIE_FAKE_LLAMA_LOG", log)
+	port := testutil.FreePort(t)
+	fake := testutil.BuildFakeAgent(t)
+	c := setupWith(t, agentConfig{
+		extra: fmt.Sprintf("[profiles.coder]\ncommand = %q\nmodel = \"coder\"\nlocal = { runtime = \"llama-server\" }\n", fake),
+		local: fmt.Sprintf("ollama = \"/nonexistent/ollama\"\nllama_server = %q\nllama_port = %d\nllama_slots = 3\nmodels = %q\n",
+			testutil.BuildFakeLlama(t), port, models),
+	})
+
+	// Three slots of local.context each: the server's context is three
+	// times it, split evenly, and two sessions share the one model.
+	var ids []string
+	for range 2 {
+		var r ipc.SpawnResult
+		if err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "coder"}, &r); err != nil {
+			t.Fatal(err)
+		}
+		c.waitState(r.Session.ID, ipc.StateWorking)
+		ids = append(ids, r.Session.ID)
+	}
+	args := readArgs(t, log)
+	for _, want := range [][]string{{"-c", "196608"}, {"-np", "3"}} {
+		if i := slices.Index(args, want[0]); i < 0 || i+1 >= len(args) || args[i+1] != want[1] {
+			t.Errorf("llama-server %s = ?, want %s, in %q", want[0], want[1], args)
+		}
+	}
+	for _, id := range ids {
+		spec, err := host.ReadSpec(c.paths.SpecFile(id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := spec.Env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"]; got != "65536" {
+			t.Errorf("%s's context = %q, want one slot's, 65536", id, got)
+		}
+	}
+	servers := 0
+	for _, p := range c.panes() {
+		if p["@irie_role"] == "llama" {
+			servers++
+		}
+	}
+	if servers != 1 {
+		t.Errorf("%d llama-servers, want 1", servers)
+	}
+}

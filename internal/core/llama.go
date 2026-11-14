@@ -178,12 +178,13 @@ func splitPart(name string) bool {
 }
 
 // llamaNeed is what a model takes in Irie's llama-server: its weights, its
-// context cache at local.context and local.kv_cache in one slot, and
-// working room. The cache is the one the server loads with local.llama_args,
-// whose --override-kv can change it, as a looped model's loop count does.
+// context cache at local.context and local.kv_cache in each of its
+// local.llama_slots, and working room. The cache is the one the server
+// loads with local.llama_args, whose --override-kv can change it, as a
+// looped model's loop count does.
 func (c *Core) llamaNeed(m llamaModel) localmodel.Need {
 	l := c.cfg().Local
-	return localmodel.Estimate(m.g.Weights(), m.g.InfoWith(l.LlamaArgs), l.Context, l.KVCache, 1)
+	return localmodel.Estimate(m.g.Weights(), m.g.InfoWith(l.LlamaArgs), l.Context, l.KVCache, l.LlamaSlots)
 }
 
 // llamaWhy is why a coding agent cannot run on a model on build b, in a
@@ -281,8 +282,10 @@ func llamaPick(name string, p config.Profile, list []ipc.LocalModel) (string, er
 // startLlama starts Irie's own llama-server on model m, in place of the
 // one it runs, and waits until the model is loaded: llama-server under
 // `irie runtime`, which stops it with its window, in its own window, with
-// Irie's context and cache type in one slot, then local.llama_args. A
-// server that exits first is an error with the last lines it printed.
+// Irie's cache type and local.llama_slots slots of local.context each,
+// then local.llama_args. llama-server splits its context evenly between
+// its slots. A server that exits first is an error with the last lines it
+// printed.
 func (c *Core) startLlama(bin string, m llamaModel) error {
 	l := c.cfg().Local
 	o := localmodel.Llama{URL: c.llamaURL(), HTTP: c.http}
@@ -317,7 +320,7 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 	}
 	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", llamaWindow, "-P", "-F", "#{pane_id}", "--",
 		c.bin, "runtime", "--", bin, "-m", m.path, "--alias", m.name, "--host", "127.0.0.1", "--port", strconv.Itoa(l.LlamaPort),
-		"-c", strconv.Itoa(l.Context), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", "1"}
+		"-c", strconv.Itoa(l.Context * l.LlamaSlots), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", strconv.Itoa(l.LlamaSlots)}
 	args = append(args, l.LlamaArgs...)
 	out, err := c.tmux.Run(args...)
 	if err != nil {

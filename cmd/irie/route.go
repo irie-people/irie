@@ -67,7 +67,7 @@ func printChoice(w io.Writer, ch route.Choice) {
 	fmt.Fprintf(w, "class    %s (%s)\n", ch.Class, ch.Why)
 	fmt.Fprintf(w, "choice   %s\n\n", ch.Reason)
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "PROFILE\tACCURACY\tOUTCOMES\tCOST\tPER SUCCESS\tNOTE")
+	fmt.Fprintln(tw, "PROFILE\tACCURACY\tFLOOR\tOUTCOMES\tCOST\tPER SUCCESS\tNOTE")
 	for _, c := range ch.Candidates {
 		note := c.Note
 		if !c.Usable && note == "" {
@@ -77,7 +77,11 @@ func printChoice(w io.Writer, ch route.Choice) {
 		if c.Profile == ch.Profile {
 			mark = "→"
 		}
-		fmt.Fprintf(tw, "%s %s\t%s\t%d\t%s\t%s\t%s\n", mark, c.Profile, route.Percent(c.Accuracy), c.Outcomes, route.Relative(c.Cost), route.Relative(c.PerSuccess), note)
+		floor := "-"
+		if c.Floor > 0 {
+			floor = route.Percent(c.Floor)
+		}
+		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%d\t%s\t%s\t%s\n", mark, c.Profile, route.Percent(c.Accuracy), floor, c.Outcomes, route.Relative(c.Cost), route.Relative(c.PerSuccess), note)
 	}
 	tw.Flush()
 }
