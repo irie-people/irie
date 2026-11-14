@@ -11,6 +11,7 @@ package core
 // irie-agents, under `irie runtime`, on 127.0.0.1.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -178,12 +179,13 @@ func splitPart(name string) bool {
 }
 
 // llamaNeed is what a model takes in Irie's llama-server: its weights, its
-// context cache at local.context and local.kv_cache in one slot, and
-// working room. The cache is the one the server loads with local.llama_args,
-// whose --override-kv can change it, as a looped model's loop count does.
+// context cache at local.context and local.kv_cache in each of its
+// local.llama_slots, and working room. The cache is the one the server
+// loads with local.llama_args, whose --override-kv can change it, as a
+// looped model's loop count does.
 func (c *Core) llamaNeed(m llamaModel) localmodel.Need {
 	l := c.cfg().Local
-	return localmodel.Estimate(m.g.Weights(), m.g.InfoWith(l.LlamaArgs), l.Context, l.KVCache, 1)
+	return localmodel.Estimate(m.g.Weights(), m.g.InfoWith(l.LlamaArgs), l.Context, l.KVCache, l.LlamaSlots)
 }
 
 // llamaWhy is why a coding agent cannot run on a model on build b, in a
@@ -281,8 +283,10 @@ func llamaPick(name string, p config.Profile, list []ipc.LocalModel) (string, er
 // startLlama starts Irie's own llama-server on model m, in place of the
 // one it runs, and waits until the model is loaded: llama-server under
 // `irie runtime`, which stops it with its window, in its own window, with
-// Irie's context and cache type in one slot, then local.llama_args. A
-// server that exits first is an error with the last lines it printed.
+// Irie's cache type and local.llama_slots slots of local.context each,
+// then local.llama_args. llama-server splits its context evenly between
+// its slots. A server that exits first is an error with the last lines it
+// printed.
 func (c *Core) startLlama(bin string, m llamaModel) error {
 	l := c.cfg().Local
 	o := localmodel.Llama{URL: c.llamaURL(), HTTP: c.http}
@@ -315,9 +319,13 @@ func (c *Core) startLlama(bin string, m llamaModel) error {
 		c.mu.Unlock()
 		return fmt.Errorf("%s already runs a server "+brand.Name+" did not start; stop it, or set local.llama_port", o.URL)
 	}
-	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", llamaWindow, "-P", "-F", "#{pane_id}", "--",
+	args := []string{"new-window", "-d", "-t", tmux.AgentsSession + ":", "-n", llamaWindow, "-P", "-F", "#{pane_id}"}
+	for _, k := range slices.Sorted(maps.Keys(runnerCaps)) {
+		args = append(args, "-e", k+"="+runnerCaps[k])
+	}
+	args = append(args, "--",
 		c.bin, "runtime", "--", bin, "-m", m.path, "--alias", m.name, "--host", "127.0.0.1", "--port", strconv.Itoa(l.LlamaPort),
-		"-c", strconv.Itoa(l.Context), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", "1"}
+		"-c", strconv.Itoa(l.Context*l.LlamaSlots), "-ctk", l.KVCache, "-ctv", l.KVCache, "-fa", "on", "-np", strconv.Itoa(l.LlamaSlots))
 	args = append(args, l.LlamaArgs...)
 	out, err := c.tmux.Run(args...)
 	if err != nil {
@@ -473,6 +481,9 @@ func (c *Core) llamaTarget(name string, p config.Profile) (string, localmodel.Bu
 // does an Ollama one: the model is picked, checked and loaded, and p gets
 // it and the environment that points Claude Code at the server.
 func (c *Core) prepareLlama(name string, p *config.Profile, force bool) ([]string, error) {
+	if p.Local.Peer != "" {
+		return c.preparePeerLlama(name, p, force)
+	}
 	bin, b, m, err := c.llamaTarget(name, *p)
 	if err != nil {
 		return nil, err
@@ -527,6 +538,10 @@ func (c *Core) llamaStatus() *ipc.LlamaStatus {
 // localReady does for Ollama's: llama-server is there, the profile has a
 // model this build runs, and the machine can hold it.
 func (c *Core) llamaReady(name string, p config.Profile) (need, budget int64, note string, ok bool) {
+	if p.Local.Peer != "" {
+		note, ok := c.peerLlamaReady(name, p)
+		return 0, 0, note, ok
+	}
 	_, b, err := c.llamaBuild()
 	if err != nil {
 		return 0, 0, err.Error(), false
@@ -561,6 +576,10 @@ func (c *Core) llamaNote(name string, p config.Profile) string {
 	cost := "local, $0"
 	if p.Cost != "" {
 		cost = p.Cost
+	}
+	if p.Local.Peer != "" {
+		note, _ := c.peerLlamaReady(name, p)
+		return strings.Join([]string{cmp.Or(p.Model, "its model"), cost, note}, " · ")
 	}
 	_, b, err := c.llamaBuild()
 	if err != nil {

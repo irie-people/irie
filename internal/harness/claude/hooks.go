@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
+	"github.com/irie-people/irie/internal/testrun"
 )
 
 // object is a JSON object such as a hook's input, read leniently: a field of
@@ -130,6 +132,15 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 		if ms, ok := p.number("duration_ms"); ok {
 			data["ms"] = ms
 		}
+		// What a shell command's tests showed, for the jot dog (DESIGN §4.8).
+		if tool == "Bash" {
+			if outcome, line := testRun(hook, p); outcome != "" {
+				data["tests"] = outcome
+				if line != "" {
+					data["test_line"] = line
+				}
+			}
+		}
 		return []event.Event{ev(kind, data)}, nil
 	case "PermissionRequest":
 		return []event.Event{ev(event.InputNeeded, with(map[string]any{"reason": event.ReasonPermission},
@@ -179,6 +190,46 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 		return []event.Event{ev(event.SessionEnded, with(map[string]any{}, "reason", p.str("reason")))}, nil
 	}
 	return nil, nil
+}
+
+// testRun is what a finished Bash call's tests showed (testrun.Read): ""
+// when its command runs none. Claude Code's hooks reference gives a call
+// that succeeded a tool_response of stdout, stderr and interrupted, and one
+// that failed an error whose first line is "Exit code N", then the output.
+// A run sent to the background, or cut short, is Ran: its outcome comes
+// later, if at all.
+func testRun(hook string, p object) (string, string) {
+	var in struct {
+		Command    string `json:"command"`
+		Background bool   `json:"run_in_background"`
+	}
+	json.Unmarshal(p["tool_input"], &in)
+	if !testrun.Runs(in.Command) {
+		return "", ""
+	}
+	if in.Background {
+		return testrun.Ran, ""
+	}
+	if hook == "PostToolUseFailure" {
+		first, rest, _ := strings.Cut(p.str("error"), "\n")
+		code, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(first, "Exit code ")))
+		if p.flag("is_interrupt") || !strings.HasPrefix(first, "Exit code ") || err != nil {
+			return testrun.Ran, ""
+		}
+		return testrun.Read(in.Command, rest, code)
+	}
+	var out struct {
+		Stdout      string `json:"stdout"`
+		Stderr      string `json:"stderr"`
+		Interrupted bool   `json:"interrupted"`
+	}
+	if json.Unmarshal(p["tool_response"], &out) != nil {
+		out.Stdout = p.str("tool_response")
+	}
+	if out.Interrupted {
+		return testrun.Ran, ""
+	}
+	return testrun.Read(in.Command, out.Stdout+"\n"+out.Stderr, 0)
 }
 
 // summary is a one-line description of a tool call's input, for the detail

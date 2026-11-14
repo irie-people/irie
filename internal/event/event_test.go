@@ -114,6 +114,20 @@ func TestCapKeepsWholeRunes(t *testing.T) {
 	}
 }
 
+func TestCapEndsKeepsTheHeadAndTheTail(t *testing.T) {
+	s := "Exit code 1\n" + strings.Repeat("é", MaxString) + "FAIL\texample.com/x\nFAIL"
+	got := CapEnds(s)
+	if len(got) > MaxString || len(got) < MaxString-8 || !utf8.ValidString(got) {
+		t.Errorf("CapEnds gave %d bytes, valid %v", len(got), utf8.ValidString(got))
+	}
+	if !strings.HasPrefix(got, "Exit code 1\n") || !strings.HasSuffix(got, "FAIL\texample.com/x\nFAIL") || !strings.Contains(got, capGap) {
+		t.Errorf("CapEnds lost an end: %.30q … %q", got, got[len(got)-30:])
+	}
+	if CapEnds("short") != "short" {
+		t.Error("a short string changed")
+	}
+}
+
 func TestCapAllWalksMapsAndSlices(t *testing.T) {
 	long := strings.Repeat("x", 3*MaxString)
 	v := map[string]any{"a": long, "b": []any{long, 3.0, map[string]any{"c": long}}, "n": 7.0}
