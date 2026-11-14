@@ -115,3 +115,37 @@ func TestPlainTurnsRemoteValuesIntoJSON(t *testing.T) {
 		t.Fatalf("plain = %s\nwant    %s", compact.String(), want)
 	}
 }
+
+func TestATableComesBackAsTOON(t *testing.T) {
+	var v remoteValue
+	raw := `{"type":"array","value":[
+		{"type":"object","value":[["plan",{"type":"string","value":"Basic, monthly"}],["price",{"type":"number","value":9}],["note",{"type":"null"}]]},
+		{"type":"object","value":[["plan",{"type":"string","value":"Pro"}],["price",{"type":"number","value":19.5}],["note",{"type":"string","value":"#1 pick"}]]}]}`
+	if err := json.Unmarshal([]byte(raw), &v); err != nil {
+		t.Fatal(err)
+	}
+	got, err := asText(plain(v))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[2]{note,plan,price}:\n  null,\"Basic, monthly\",9\n  \"#1 pick\",Pro,19.5"
+	if got != want {
+		t.Fatalf("asText = %q\nwant      %q", got, want)
+	}
+	// Lists that are not tables stay JSON: other keys, a nested value, one
+	// row, no objects.
+	for _, v := range []any{
+		[]any{map[string]any{"a": 1.0}, map[string]any{"b": 2.0}},
+		[]any{map[string]any{"a": 1.0}, map[string]any{"a": 1.0, "b": 2.0}},
+		[]any{map[string]any{"a": []any{1.0}}, map[string]any{"a": []any{2.0}}},
+		[]any{map[string]any{"a": 1.0}},
+		[]any{"x", "y"},
+	} {
+		if table(v) {
+			t.Errorf("table(%v) = true", v)
+		}
+		if s, _ := asText(v); !json.Valid([]byte(s)) {
+			t.Errorf("asText(%v) = %q, want JSON", v, s)
+		}
+	}
+}
