@@ -138,6 +138,7 @@ type Core struct {
 	selected   string                // the session you picked, whose conversation or terminal the slot shows (view.go)
 	peers      map[string]*peerState // the other machines' cores this one is paired with, by name (peers.go)
 	benches    benchState            // the benches this core started, and the playbooks (bench.go); a lock of its own, but its playbooks are under mu
+	tunnelAt   map[string]time.Time  // when each peer's tunnel last started (tunnel.go)
 	raw        bool                  // the slot shows the picked session's raw terminal, not its conversation
 	split      string                // the session the Mac app shows beside its teammates, in the view session (view.go)
 	team       *tmux.Runner          // the team server, where sessions' teammates run (team.go)
@@ -473,6 +474,7 @@ func (c *Core) tick() {
 	c.followTitles()
 	c.followConversations()
 	c.keepRemote()
+	c.keepTunnels()
 	c.keepVPN()
 	frames := c.changes()
 	c.mu.Unlock()

@@ -536,6 +536,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-14 | The owner's request (2026-11-14): offload token use to local models, a 60% accuracy floor for them, and a first bench of three runs of one agent on the Asahi on the same task, rated, then combined with their gaps filled, each run's process improved from all three | route.local_min_accuracy, local.llama_slots and the bench: runs, judge, ratings and playbook (DESIGN §6.4, §6.5, §6.6) |
 | 2026-11-14 | https://arxiv.org/abs/2510.04618 (Zhang, Hu et al., Agentic Context Engineering: Evolving Contexts for Self-Improving Language Models; abstract read) | Ideas only: a context kept as a playbook of strategies that grows and is curated from execution feedback, not summarised away: the bench's playbook, rewritten by its judge, with its rules kept whole (DESIGN §6.6) |
 | 2026-11-14 | https://arxiv.org/abs/2306.05685 (Zheng, Chiang et al., Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena; abstract read) | That a strong model's grades agree with people's about as well as people agree, with position, length and self-preference biases: the bench's judge on a stronger profile, grading each run on its own against the task (DESIGN §6.6) |
+| 2026-11-14 | ssh(1) and ssh_config(5), the manual pages of OpenSSH on macOS, read locally | -N, -L [bind_address:]port:host:hostport, BatchMode, ExitOnForwardFailure, ServerAliveInterval and ServerAliveCountMax: the ssh tunnel to a peer's llama-server (DESIGN §6.5) |
 
 ## Third-party code
 

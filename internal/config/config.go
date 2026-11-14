@@ -455,6 +455,10 @@ type LocalModel struct {
 	Runtime    string `toml:"runtime"`     // ollama | llama-server
 	MinContext int    `toml:"min_context"` // a spawn is refused below this context, in tokens
 	Enforce    bool   `toml:"enforce"`     // false: spawn anyway, with a warning, when the context or memory is short
+	// Peer is a peer whose llama-server runs the model (DESIGN §6.5): the
+	// agent runs here and reaches it through an ssh tunnel, so this
+	// machine holds none of the model. "" = this machine's own server.
+	Peer string `toml:"peer"`
 }
 
 // DefaultMinContext is Ollama's guidance for coding agents: 64k tokens.
@@ -1229,7 +1233,11 @@ func (c Config) Validate() error {
 				bad("profiles.%s.local: only the claude-code harness runs on a local model yet", name)
 			case l.MinContext < 1:
 				bad("profiles.%s.local.min_context = %d: must be positive", name, l.MinContext)
-			case (c.Local.URL == "" || l.Runtime == "llama-server") && l.MinContext > c.Local.Context:
+			case l.Peer != "" && l.Runtime != "llama-server":
+				bad("profiles.%s.local.peer: only a llama-server profile runs on a peer's server", name)
+			case l.Peer != "" && strings.ContainsAny(l.Peer, " /\t"):
+				bad("profiles.%s.local.peer = %q: must be a peer's name, as irie peer list shows it", name, l.Peer)
+			case l.Peer == "" && (c.Local.URL == "" || l.Runtime == "llama-server") && l.MinContext > c.Local.Context:
 				bad("profiles.%s.local.min_context = %d is above local.context = %d, so "+brand.Name+"'s own server could never run it", name, l.MinContext, c.Local.Context)
 			}
 		}

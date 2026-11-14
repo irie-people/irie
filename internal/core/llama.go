@@ -11,6 +11,7 @@ package core
 // irie-agents, under `irie runtime`, on 127.0.0.1.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -476,6 +477,9 @@ func (c *Core) llamaTarget(name string, p config.Profile) (string, localmodel.Bu
 // does an Ollama one: the model is picked, checked and loaded, and p gets
 // it and the environment that points Claude Code at the server.
 func (c *Core) prepareLlama(name string, p *config.Profile, force bool) ([]string, error) {
+	if p.Local.Peer != "" {
+		return c.preparePeerLlama(name, p, force)
+	}
 	bin, b, m, err := c.llamaTarget(name, *p)
 	if err != nil {
 		return nil, err
@@ -530,6 +534,10 @@ func (c *Core) llamaStatus() *ipc.LlamaStatus {
 // localReady does for Ollama's: llama-server is there, the profile has a
 // model this build runs, and the machine can hold it.
 func (c *Core) llamaReady(name string, p config.Profile) (need, budget int64, note string, ok bool) {
+	if p.Local.Peer != "" {
+		note, ok := c.peerLlamaReady(name, p)
+		return 0, 0, note, ok
+	}
 	_, b, err := c.llamaBuild()
 	if err != nil {
 		return 0, 0, err.Error(), false
@@ -564,6 +572,10 @@ func (c *Core) llamaNote(name string, p config.Profile) string {
 	cost := "local, $0"
 	if p.Cost != "" {
 		cost = p.Cost
+	}
+	if p.Local.Peer != "" {
+		note, _ := c.peerLlamaReady(name, p)
+		return strings.Join([]string{cmp.Or(p.Model, "its model"), cost, note}, " · ")
 	}
 	_, b, err := c.llamaBuild()
 	if err != nil {
