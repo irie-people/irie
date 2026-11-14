@@ -127,7 +127,7 @@ struct CoreConfig: Decodable, Equatable {
     var dog: Dog
     /// The trod bot; nil from a core from before it.
     var trod: Trod?
-    /// Mullvad VPN control; nil from a core from before it.
+    /// VPN control (DESIGN §4.18); nil from a core from before it.
     var vpn: VPN?
     /// The context store (DESIGN §4.13); nil from a core from before it.
     var context: Context?
@@ -228,6 +228,8 @@ struct CoreConfig: Decodable, Equatable {
     struct Route: Decodable, Equatable {
         var profiles: [String]
         var minAccuracy: Double
+        /// A local model's floor; nil from a core that has none.
+        var localMinAccuracy: Double?
         var failover: Bool
         var delegate: Bool
         var accuracy: [String: [String: Double]]
@@ -235,6 +237,7 @@ struct CoreConfig: Decodable, Equatable {
         enum CodingKeys: String, CodingKey {
             case profiles, failover, delegate, accuracy, cost
             case minAccuracy = "min_accuracy"
+            case localMinAccuracy = "local_min_accuracy"
         }
     }
 
@@ -1066,6 +1069,8 @@ private struct RouteSection: View {
     let config: CoreConfig
     /// The floor while its slider is dragged; sent when it is let go.
     @State private var floor: Double?
+    /// The same for local models.
+    @State private var localFloor: Double?
 
     var body: some View {
         let c = config
@@ -1085,10 +1090,25 @@ private struct RouteSection: View {
                         .frame(width: 40, alignment: .trailing)
                 }
             }
+            if let local = c.route.localMinAccuracy {
+                LabeledContent("Floor for local models") {
+                    HStack {
+                        Slider(value: Binding(get: { localFloor ?? local }, set: { localFloor = $0 }), in: 0.3...1) { editing in
+                            guard !editing, let f = localFloor else { return }
+                            model.binding(local, "route.local_min_accuracy") { $0.route.localMinAccuracy = $1 }.wrappedValue = (f * 100).rounded() / 100
+                            localFloor = nil
+                        }
+                        .frame(width: 200)
+                        Text("\(Int(((localFloor ?? local) * 100).rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+            }
         } header: {
             Text("Auto")
         } footer: {
-            footnote("Auto runs each task on the agent with the lowest cost per success among those at least this accurate for the task’s size. At 90% medium work stays on the strongest.")
+            footnote("Auto runs each task on the agent with the lowest cost per success among those at least this accurate for the task’s size. At 90% medium work stays on the strongest. A local model costs no tokens, so it can have a lower floor and take more of the work.")
         }
         Section {
             ForEach(routable, id: \.self) { name in

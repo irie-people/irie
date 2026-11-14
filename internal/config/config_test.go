@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local, big and mikael", c.Profiles)
 	}
 	r := c.Route
-	if !reflect.DeepEqual(r.Profiles, []string{"local", "haiku", "sonnet", "claude"}) || r.MinAccuracy != 0.85 || r.PriorWeight != 10 ||
+	if !reflect.DeepEqual(r.Profiles, []string{"local", "haiku", "sonnet", "claude"}) || r.MinAccuracy != 0.85 || r.LocalMinAccuracy != 0.6 || r.PriorWeight != 10 ||
 		r.Pressure != 80 || !r.Failover || !r.Delegate || r.DelegateMode != "acceptEdits" {
 		t.Errorf("route = %+v", r)
 	}
@@ -95,7 +96,10 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if len(r.Words.Small) == 0 || len(r.Words.Hard) == 0 {
 		t.Errorf("route words = %+v", r.Words)
 	}
-	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}}); !reflect.DeepEqual(c.Local, want) {
+	if want := (Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30}); c.Bench != want {
+		t.Errorf("bench = %+v, want %+v", c.Bench, want)
+	}
+	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
 		t.Errorf("local = %+v, want %+v", c.Local, want)
 	}
 	if want := (Usage{StatusLine: true}); c.Usage != want {
@@ -317,7 +321,7 @@ links = { "Team handbook" = "https://example.com/handbook" }
 		t.Errorf("profiles.small = %+v, want %+v", got, wantSmall)
 	}
 	wantLocal := Local{Ollama: "/home/alice/bin/ollama", Port: 11500, Context: 131072, KVCache: "q4_0", MemoryGiB: 24, Env: map[string]string{"OLLAMA_MODELS": "/home/alice/models"},
-		LlamaServer: "/home/alice/llama/llama-server", LlamaPort: 11600, LlamaArgs: []string{"--cpu-moe"}, Models: "~/gguf"}
+		LlamaServer: "/home/alice/llama/llama-server", LlamaPort: 11600, LlamaArgs: []string{"--cpu-moe"}, LlamaSlots: 1, Models: "~/gguf"}
 	if !reflect.DeepEqual(c.Local, wantLocal) {
 		t.Errorf("local = %+v, want %+v", c.Local, wantLocal)
 	}
@@ -540,6 +544,9 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[local]\nmemory_gib = -1\n", "local.memory_gib"},
 		{"[local.env]\nOLLAMA_HOST = \"0.0.0.0:1\"\n", "OLLAMA_HOST"},
 		{"[local]\nllama_port = 11435\n", "local.llama_port"},
+		{"[local]\nllama_slots = 0\n", "local.llama_slots"},
+		{"[local]\nllama_slots = 17\n", "local.llama_slots"},
+		{"[local]\nllama_args = [\"-np\", \"4\"]\n", "local.llama_slots"},
 		{"[local]\nllama_port = 0\n", "local.llama_port"},
 		{"[local]\nllama_server = \"llama-server\"\n", "local.llama_server"},
 		{"[local]\nmodels = \"gguf\"\n", "local.models"},
@@ -551,6 +558,16 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[profiles.mine]\nmodel = \"x\"\n\n[route]\nprofiles = [\"mine\"]\n", "needs route.accuracy.mine"},
 		{"[route]\nmin_accuracy = 0\n", "route.min_accuracy"},
 		{"[route]\nmin_accuracy = 1.5\n", "route.min_accuracy"},
+		{"[route]\nlocal_min_accuracy = 0\n", "route.local_min_accuracy"},
+		{"[route]\nlocal_min_accuracy = 1.2\n", "route.local_min_accuracy"},
+		{"[profiles.x]\nlocal = { runtime = \"ollama\", peer = \"Asahi\" }\n", "only a llama-server profile runs on a peer's server"},
+		{"[profiles.x]\nlocal = { runtime = \"llama-server\", peer = \"a b\" }\n", "must be a peer's name"},
+		{"[bench]\nruns = 0\n", "bench.runs"},
+		{"[bench]\nruns = 9\n", "bench.runs"},
+		{"[bench]\njudge = \"nope\"\n", "bench.judge"},
+		{"[bench]\npass = 0\n", "bench.pass"},
+		{"[bench]\ntimeout = \"10s\"\n", "bench.timeout"},
+		{"[bench]\nrules = 0\n", "bench.rules"},
 		{"[route]\nprior_weight = -1\n", "route.prior_weight"},
 		{"[route]\npressure = 120\n", "route.pressure"},
 		{"[route]\ndelegate_mode = \"yolo\"\n", "route.delegate_mode"},
@@ -743,8 +760,9 @@ command = "claude"
 }
 
 func TestVPNSection(t *testing.T) {
-	if v := Default().VPN; v.On || v.Mullvad != "" {
-		t.Errorf("default vpn = %+v, want off", v)
+	// Off in Irie; on in a copy whose brand names its VPNs.
+	if v := Default().VPN; v.On != (brand.VPNs != "") || v.Mullvad != "" {
+		t.Errorf("default vpn = %+v", v)
 	}
 	c, err := Load(writeFile(t, "[vpn]\non = true\nmullvad = \"/usr/local/bin/mullvad\"\n"))
 	if err != nil || !c.VPN.On || c.VPN.Mullvad != "/usr/local/bin/mullvad" {
@@ -752,6 +770,56 @@ func TestVPNSection(t *testing.T) {
 	}
 	if _, err := Load(writeFile(t, "[vpn]\nmullvad = \"mullvad\"\n")); err == nil || !strings.Contains(err.Error(), "vpn.mullvad") {
 		t.Errorf("a bare name: %v", err)
+	}
+	// Any VPN, chosen by vpn.provider (DESIGN §4.18).
+	if v := Default().VPN; v.Provider != VPNOffered()[0] || v.Server != brand.VPNServer {
+		t.Errorf("default vpn = %+v, want the first VPN offered and the brand's server", v)
+	}
+	custom := "[vpn]\non = true\nprovider = \"command\"\nserver = \"vpn.example.com\"\nstatus = [\"/usr/local/bin/myvpn\", \"status\"]\nconnect = [\"myvpn\", \"up\"]\nconnected = \"(?m)^State: Connected$\"\n"
+	c, err = Load(writeFile(t, custom))
+	switch {
+	case !slices.Contains(VPNOffered(), "command"):
+		if err == nil || !strings.Contains(err.Error(), "this copy of") {
+			t.Errorf("a VPN this copy doesn't offer: %v", err)
+		}
+	case err != nil || c.VPN.Provider != "command" || c.VPN.Status[1] != "status" || c.VPN.Connect[0] != "myvpn" || c.VPN.Connected != "(?m)^State: Connected$" || c.VPN.Server != "vpn.example.com":
+		t.Errorf("command vpn = %+v, %v", c.VPN, err)
+	}
+	// A file that turned the privacy plugin off kept its VPN off; it still
+	// does, unless it says the VPN plugin's own.
+	for file, want := range map[string]bool{
+		"[vpn]\non = true\n\n[plugins]\nprivacy = false\n":             false,
+		"[vpn]\non = true\n\n[plugins]\nprivacy = false\nvpn = true\n": true,
+		"[vpn]\non = true\n\n[plugins]\nprivacy = true\n":              true,
+	} {
+		if c, err := Load(writeFile(t, file)); err != nil || c.Plugins.VPN != want {
+			t.Errorf("%q: plugins.vpn = %v, %v; want %v", file, c.Plugins.VPN, err, want)
+		}
+	}
+	for file, want := range map[string]string{
+		"[vpn]\nprovider = \"openvpn9\"\n": "vpn.provider",
+		"[vpn]\ncli = \"warp-cli\"\n":      "vpn.cli",
+		"[vpn]\nconnected = \"(\"\n":       "vpn.connected",
+		"[vpn]\nstatus = [\"--json\"]\n":   "vpn.status",
+		"[vpn]\nserver = \"a\\nb\"\n":      "vpn.server",
+	} {
+		if _, err := Load(writeFile(t, file)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", file, err, want)
+		}
+	}
+}
+
+// TestTheVPNsACopyOffers: a copy's brand names its VPNs, the first the
+// default, each once; none names them all.
+func TestTheVPNsACopyOffers(t *testing.T) {
+	for list, want := range map[string][]string{
+		"":                       VPNKinds,
+		"cisco":                  {"cisco"},
+		" cisco, command ,cisco": {"cisco", "command"},
+	} {
+		if got := offeredVPNs(list); !slices.Equal(got, want) {
+			t.Errorf("offeredVPNs(%q) = %v, want %v", list, got, want)
+		}
 	}
 }
 

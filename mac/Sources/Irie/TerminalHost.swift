@@ -91,7 +91,7 @@ struct TerminalHost: NSViewRepresentable {
 /// Draws with Metal once it is in a window. SwiftTerm compiles its shaders
 /// from Shaders.metal in the app's resources at run time, so no Xcode is
 /// needed; without Metal it keeps drawing with Core Graphics.
-final class IrieTerminalView: LocalProcessTerminalView {
+final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
     private var triedMetal = false
     /// Whether it takes the keyboard once it is in a window; not while the
     /// conversation shows over it.
@@ -300,6 +300,14 @@ final class IrieTerminalView: LocalProcessTerminalView {
     override func copy(_ sender: Any) {
         copySelection(asked: true)
     }
+
+    /// The lines the terminal shows, a row each (TerminalScreen).
+    func screenLines() -> [String]? {
+        guard let t = terminal, t.rows > 0 else { return nil }
+        return (0..<t.rows).map { t.getLine(row: $0)?.translateToString(trimRight: true) ?? "" }
+    }
+
+    var composing: Bool { hasMarkedText() }
 
     /// Copies SwiftTerm's selection, and says so: when asked, or when a drag
     /// or a click made it and Settings keeps copying on. With no selection,

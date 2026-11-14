@@ -96,6 +96,8 @@ func (p Paths) FreezeFile(id string) string   { return filepath.Join(p.Session(i
 func (p Paths) FollowUpFile(id string) string { return filepath.Join(p.Session(id), "followups.json") }
 func (p Paths) StatusFile(id string) string   { return filepath.Join(p.Session(id), "status.json") }
 func (p Paths) LocalFile() string             { return filepath.Join(p.State, "local.json") }
+func (p Paths) Benches() string               { return filepath.Join(p.State, "benches") }
+func (p Paths) Playbooks() string             { return filepath.Join(p.State, "playbooks") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 

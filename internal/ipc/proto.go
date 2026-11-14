@@ -88,9 +88,9 @@ const (
 	// see it: tmux, Claude Code, signed in, git (DESIGN §2.7). It answers
 	// a ready.Report, for the Mac app's welcome.
 	OpReady = "ready"
-	// OpVPN reads or changes Mullvad VPN through its CLI, while vpn.on
-	// (docs/proposals/extensions.md §4). A change from inside an agent is
-	// refused.
+	// OpVPN reads or changes the VPN that vpn.provider names through its
+	// own command line, while vpn.on (DESIGN §4.18). A change from inside
+	// an agent is refused.
 	OpVPN = "vpn"
 	// OpAnon says how anonymous research stands, and starts Irie's own
 	// Tor and SearXNG (DESIGN §4.16).
@@ -219,6 +219,7 @@ type Session struct {
 	Parked   bool       `json:"parked,omitempty"`   // in the Parked group at the end of the list
 	Pinned   bool       `json:"pinned,omitempty"`   // in the Pinned group at the top of the list
 	Space    string     `json:"space,omitempty"`    // the space it is in (spaces.go); "" for the first
+	Group    string     `json:"group,omitempty"`    // the group it is in (groups.go); "" for none
 	Priority int        `json:"priority,omitempty"` // 1 while it is promoted
 	Frozen   *time.Time `json:"frozen,omitempty"`   // when it was frozen, while it is
 	Freezing bool       `json:"freezing,omitempty"` // frozen, but its agent runs until its next tool call
@@ -452,9 +453,17 @@ type GabrielResult struct {
 	RunQueue   float64          `json:"run_queue"`
 	Pressure   int              `json:"pressure"`        // the kernel's memory pressure: 1 normal, 2 warn, 4 critical
 	Front      string           `json:"front,omitempty"` // the app in front, when he read it
-	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus
-	Held       []GabrielSession `json:"held,omitempty"`  // the sessions he holds back
-	Apps       []GabrielApp     `json:"apps,omitempty"`  // the apps outside Irie he slowed
+	Focus      []GabrielSession `json:"focus,omitempty"` // the sessions in the user's focus, the top among them
+	// Top is the tab the user is on, first, with the subtasks it delegated:
+	// it never steps back, and while it works the machine (TopBusy) every
+	// other session but an install steps back for it, the rest of the focus
+	// too (Back).
+	Top     []GabrielSession `json:"top,omitempty"`
+	TopBusy bool             `json:"top_busy,omitempty"`
+	TopCPU  float64          `json:"top_cpu,omitempty"` // the top's share of the CPUs, in percent of one
+	Back    []GabrielSession `json:"back,omitempty"`    // the sessions of the focus that step back for the top now
+	Held    []GabrielSession `json:"held,omitempty"`    // the sessions he holds back, out of the focus
+	Apps    []GabrielApp     `json:"apps,omitempty"`    // the apps outside Irie he slowed
 }
 
 // GabrielSession is a session in Gabriel's report.
@@ -516,7 +525,15 @@ type Loose struct {
 	Land   string       `json:"land,omitempty"`   // that branch, when its repo has one (dog.land)
 	Where  []LoosePlace `json:"where"`            // the worktrees that hold them
 	Nudged int          `json:"nudged,omitempty"` // how often the dog sent it back to finish since your last prompt
+	// Unproven is what its last message says that its own record
+	// contradicts: UnprovenTests, that the tests pass while its latest
+	// test run failed.
+	Unproven string `json:"unproven,omitempty"`
 }
+
+// UnprovenTests is a jot whose last message says the tests pass while its
+// latest test run failed (Loose.Unproven).
+const UnprovenTests = "tests"
 
 // Words says what is left in plain words, such as "3 files not committed ·
 // 2 commits not in live".
@@ -527,6 +544,9 @@ func (l Loose) Words() string {
 	}
 	if l.Ahead > 0 {
 		parts = append(parts, counted(l.Ahead, "commit")+" not in "+l.Land)
+	}
+	if l.Unproven == UnprovenTests {
+		parts = append(parts, "says the tests pass, but the last run failed")
 	}
 	return strings.Join(parts, " · ")
 }
@@ -637,13 +657,16 @@ type Header struct {
 	Peers []PeerInfo `json:"peers,omitempty"`
 	// Trod is the trod bot while it is in its hours (DESIGN §4.10).
 	Trod *TrodShift `json:"trod,omitempty"`
-	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
+	// VPN is the VPN, while vpn.on (DESIGN §4.18).
 	VPN *VPN `json:"vpn,omitempty"`
 	// Boost is Gabriel's boost while one is on (DESIGN §4.11), however it
 	// was started, so every client can say so.
 	Boost *Boost `json:"boost,omitempty"`
 	// Spaces are the spaces, in their order, the first first (spaces.go).
 	Spaces []Space `json:"spaces,omitempty"`
+	// Groups are your groups (groups.go), in the order they were made: a
+	// sidebar draws each where the first of its sessions is.
+	Groups []Group `json:"groups,omitempty"`
 	// Theme is the palette the Mac app draws in, once it has said (the
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
@@ -893,6 +916,12 @@ type SpawnArgs struct {
 	// the session that started it (After, Parent or Continues), else the
 	// first.
 	Space string `json:"space,omitempty"`
+	// Group is the group the new session goes in: a group's id, or a name,
+	// which makes a group of that name when none has it. "" puts it in the
+	// group of the session whose agent started it (After, Parent or
+	// Continues), or, for a jot with ui.new_tabs = "next", the group of the
+	// session it goes beside; else in none.
+	Group string `json:"group,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that
@@ -1056,8 +1085,8 @@ type ToolArgs struct {
 }
 
 // Tools. Anon, browser and privacy run `irie setup NAME`, which sets up
-// that part of the privacy plugin, or each part of it in turn (DESIGN
-// §4.17).
+// that part of the privacy plugin, or each part of it in turn, and vpn
+// `irie setup vpn`, which sets up the VPN plugin (DESIGN §4.17).
 const (
 	ToolSetup   = "setup"
 	ToolModels  = "models"
@@ -1066,6 +1095,7 @@ const (
 	ToolAnon    = "anon"
 	ToolBrowser = "browser"
 	ToolPrivacy = "privacy"
+	ToolVPN     = "vpn"
 	ToolWrite   = "write"
 )
 
@@ -1152,14 +1182,15 @@ type AnonResult struct {
 
 // VPNArgs ask the vpn op for the VPN's state, or for a change.
 type VPNArgs struct {
-	Do   string   `json:"do,omitempty"`   // "" for the state; on, off, lockdown, place or time
-	Args []string `json:"args,omitempty"` // lockdown's on or off; place's country, city or server
+	Do   string   `json:"do,omitempty"`   // "" for the state; on, off, use, lockdown, place or time
+	Args []string `json:"args,omitempty"` // use's VPN; lockdown's on or off; place's country, city, server or exit node
 }
 
 // What the vpn op does.
 const (
 	VPNOn       = "on"
 	VPNOff      = "off"
+	VPNUse      = "use"
 	VPNLockdown = "lockdown"
 	VPNPlace    = "place"
 	VPNTime     = "time"
@@ -1172,18 +1203,21 @@ type VPNResult struct {
 	VPN  *VPN   `json:"vpn,omitempty"`
 }
 
-// VPN is Mullvad VPN as the header carries it, while vpn.on: never an
-// address, a place on the map or the account's number.
+// VPN is the VPN as the header carries it, while vpn.on: never an
+// address, a place on the map or an account's number.
 type VPN struct {
+	Kind     string     `json:"kind,omitempty"`     // which VPN, as vpn.provider names it, such as mullvad
+	Title    string     `json:"title,omitempty"`    // its name, such as Mullvad VPN
+	Can      []string   `json:"can,omitempty"`      // what its words do beyond on and off: place, lockdown, time
 	State    string     `json:"state"`              // connected, connecting, disconnected, disconnecting or error; "" while unread
 	City     string     `json:"city,omitempty"`     // the relay's, while connected or connecting
 	Country  string     `json:"country,omitempty"`  // the relay's
-	Host     string     `json:"host,omitempty"`     // the relay, such as se-got-wg-001
+	Host     string     `json:"host,omitempty"`     // where it goes: a relay such as se-got-wg-001, a gateway, a portal or a network
 	Lockdown bool       `json:"lockdown,omitempty"` // lockdown mode is on: the network is blocked while the VPN is off
 	Blocked  bool       `json:"blocked,omitempty"`  // off, and lockdown blocks the network now
 	Expires  *time.Time `json:"expires,omitempty"`  // when the account's time runs out
 	Text     string     `json:"text"`               // the state in one line
-	Problem  string     `json:"problem,omitempty"`  // why Irie can't read the VPN, such as no mullvad
+	Problem  string     `json:"problem,omitempty"`  // why Irie can't read the VPN, such as its command missing
 }
 
 // StatusArgs carry one status line update of a Claude Code session: its

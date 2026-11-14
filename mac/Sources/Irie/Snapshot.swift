@@ -165,7 +165,10 @@ enum Snapshot {
     }
 
     /// The window as the app draws it, at 2x, and its title bar's height in
-    /// points. It is ordered in far off any screen, so it never shows.
+    /// points. It has to be ordered in for SwiftUI to lay it out, and macOS
+    /// brings any titled window ordered in onto a screen, however far off
+    /// it was placed, so it is see-through, takes no clicks and goes to a
+    /// desktop the user cannot see first (Desktops.swift): it never shows.
     private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat) -> (NSBitmapImageRep, CGFloat) {
         let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: height),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -173,6 +176,7 @@ enum Snapshot {
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         w.toolbarStyle = IrieApp.toolbarStyle
         w.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
+        Desktops.drawUnseen(w)
         let host = NSHostingView(rootView: root)
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
@@ -233,10 +237,14 @@ enum Fixture {
     /// The plugins op's answer, as `irie plugins` prints it on a Mac with
     /// Mullvad VPN and Mullvad Browser installed.
     static let plugins = #"""
-    {"plugins": [{"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
-      "summary": "Mullvad VPN, anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+    {"plugins": [{"name": "vpn", "title": "VPN", "on": true,
+      "summary": "Your VPN in every client, connected, disconnected or moved from any task bar or the menu: Mullvad VPN, Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and any other through commands of your own.",
       "parts": [
-        {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "detail": "Connected in Malmö, Sweden.", "summary": "See the VPN in every client, and connect, disconnect or change its place from a task bar or the menu."},
+        {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "setup": ":setup vpn", "detail": "VPN on: Malmö, Sweden (se-mma-wg-002), lockdown on, 41 days left.", "summary": "See the VPN in every client, and connect or disconnect it from a task bar or the menu, or move it where the VPN has places."}
+      ]},
+     {"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
+      "summary": "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+      "parts": [
         {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through \#(Brand.name)'s SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
         {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
@@ -264,7 +272,7 @@ enum Fixture {
             "sonnet": {"command": "claude", "effort": "medium", "harness": "claude-code", "model": "claude-sonnet-5-5", "permission_mode": "auto"}
         },
         "repos": {"aliases": {"\#(Brand.slug)": "~/code/\#(Brand.slug)", "notes": "~/notes"}, "roots": ["~/code"]},
-        "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
+        "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "local_min_accuracy": 0.6, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
         "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "follow_up_delay": "8s", "follow_up_window": "2m", "hide_tmux": true, "ready_timeout": "30s", "teammates": "panes",
             "preferences": ["Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.", "Ask before you push."]},
         "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "new_tabs": "last", "freeze_dog": "10s", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
@@ -273,6 +281,13 @@ enum Fixture {
         "worktree": {"base": "", "branch_prefix": "\#(Brand.slug)/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
     }}
     """#
+
+    /// Your groups, one inside another: Work holds Mac app and
+    /// patent-research, Mac app holds conversation-view and Looks, and Looks
+    /// holds warm-look.
+    static let groups = [GroupInfo(id: "girie0000000", name: "Work"),
+                         GroupInfo(id: "gmacapp00000", name: "Mac app", parent: "girie0000000"),
+                         GroupInfo(id: "glooks000000", name: "Looks", parent: "gmacapp00000")]
 
     static var sessions: [Session] {
         let now = Date()
@@ -292,9 +307,10 @@ enum Fixture {
                     tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800), hue: 5),
             Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "\(Brand.slug)/conversation-view", profile: "claude",
-                    trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
+                    group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
-                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "glooks000000",
+                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",
@@ -304,7 +320,7 @@ enum Fixture {
                     team: [Teammate(session: "s10patents00-1", name: "seed-finder", color: "blue", type: "general-purpose", title: "Reading the claims", working: true),
                            Teammate(session: "s10patents00-2", name: "expand-a", color: "green", type: "general-purpose", title: "Paging the citations", working: true)],
                     subs: Subs(helpers: 1, teammates: 2),
-                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), hue: 4),
+                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), group: "girie0000000", hue: 4),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "\(Brand.slug)/bigup-m0", profile: "claude", hue: 3),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),

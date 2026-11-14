@@ -275,8 +275,13 @@ func (c *Core) choose(class, why string, only []string, probe bool) route.Choice
 			continue
 		}
 		counts := stats.Counts(name, class)
+		// A local model costs no tokens, so it has a floor of its own.
+		floor := r.MinAccuracy
+		if p.Local != nil {
+			floor = r.LocalMinAccuracy
+		}
 		cand := route.Candidate{
-			Profile: name, Accuracy: route.Accuracy(prior.Accuracy[class], r.PriorWeight, counts),
+			Profile: name, Accuracy: route.Accuracy(prior.Accuracy[class], r.PriorWeight, counts), Floor: floor,
 			Outcomes: counts.Good + counts.Bad, Cost: prior.Cost, Usable: true,
 		}
 		if mean, ok := stats.MeanCost(name, class); ok {
@@ -285,7 +290,7 @@ func (c *Core) choose(class, why string, only []string, probe bool) route.Choice
 			}
 		}
 		switch {
-		case p.Local != nil && cand.Accuracy < r.MinAccuracy:
+		case p.Local != nil && cand.Accuracy < floor:
 			// Below the floor it cannot win, so it is not probed.
 			cand.Usable, cand.Note = false, "not accurate enough for "+class+" work"
 		case p.Local != nil:
@@ -374,6 +379,13 @@ func (c *Core) escalate(hash, class, profile string, now time.Time) {
 // the profiles it can hand work to.
 const delegateNote = `[` + brand.Name + `] To save tokens, you can hand a small, self-contained subtask to a cheaper model: run ` + "`" + `"$` + brand.EnvPrefix + `_BIN" ctl delegate "<subtask>"` + "`" + ` with Bash. It runs the subtask in this directory on the cheapest profile accurate enough for it (%s), waits until it is done, and prints the result; it refuses a subtask that needs your accuracy. Delegate mechanical work, such as renames, docstrings, simple tests and summaries, on files you are not editing yourself, and keep planning, design and review. Run a long subtask in the background.`
 
+// localOne and localMany follow delegateNote when local models are among
+// the profiles a session can hand work to: they cost no tokens at all.
+const (
+	localOne  = ` %s runs on a local model, which costs no tokens: prefer handing it every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and check what comes back.`
+	localMany = ` %s run on local models, which cost no tokens: prefer handing them every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and check what comes back.`
+)
+
 // delegateHint is the note for a session that may delegate: a Claude Code
 // session on a cloud profile with cheaper ones to hand work to, which was
 // not delegated itself. The caller holds c.mu.
@@ -388,10 +400,22 @@ func (c *Core) delegateHint(x *session) string {
 		return ""
 	}
 	names := make([]string, len(cheaper))
+	var local []string
 	for i, p := range cheaper {
 		names[i] = "+" + p
+		if q, ok := c.cfg().Profiles[p]; ok && q.Local != nil {
+			local = append(local, "+"+p)
+		}
 	}
-	return fmt.Sprintf(delegateNote, strings.Join(names, ", "))
+	note := fmt.Sprintf(delegateNote, strings.Join(names, ", "))
+	switch len(local) {
+	case 0:
+	case 1:
+		note += fmt.Sprintf(localOne, local[0])
+	default:
+		note += fmt.Sprintf(localMany, strings.Join(local[:len(local)-1], ", ")+" and "+local[len(local)-1])
+	}
+	return note
 }
 
 // failoverNote opens the task a failover carries on.
@@ -531,6 +555,7 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 	// A plugin's tools are in the build only with their plugin (DESIGN
 	// §4.17).
 	for plugin, tools := range map[string][]string{
+		"vpn":     {ipc.ToolVPN},
 		"privacy": {ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy},
 		"writing": {ipc.ToolWrite},
 	} {
@@ -555,10 +580,14 @@ func (c *Core) tool(a ipc.ToolArgs) (ipc.Session, error) {
 		args, name, title = []string{"setup", "browser"}, "setup-browser", "set up Mullvad Browser for agents"
 	case ipc.ToolPrivacy:
 		args, name, title = []string{"setup", "privacy"}, "setup-privacy", "set up the privacy plugin"
+	// The VPN plugin's setup (DESIGN §4.18), which asks before it changes
+	// anything.
+	case ipc.ToolVPN:
+		args, name, title = []string{"setup", "vpn"}, "setup-vpn", "set up the VPN"
 	case ipc.ToolWrite:
 		return c.guide(guideWrite, a.Task)
 	default:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s", a.Name, strings.Join([]string{ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy, ipc.ToolWrite}, ", "))
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "no tool %q; the tools are %s", a.Name, strings.Join([]string{ipc.ToolSetup, ipc.ToolModels, ipc.ToolReady, ipc.ToolSwitch, ipc.ToolAnon, ipc.ToolBrowser, ipc.ToolPrivacy, ipc.ToolVPN, ipc.ToolWrite}, ", "))
 	}
 	p := config.Profile{Harness: "tool", Command: c.bin, Args: args, Env: map[string]string{}}
 	return c.spawnProfile(ipc.SpawnArgs{Task: title, Name: name}, false, "tool:"+a.Name, p, nil, map[string]any{})

@@ -382,7 +382,7 @@ func (c *Core) isPeerRow(id string) bool {
 // when it is one of the peers'. Reorder does not: a peer's rows keep its
 // own order.
 var peerOps = map[string]bool{
-	ipc.OpShow: true, ipc.OpSend: true, ipc.OpClose: true, ipc.OpRename: true, ipc.OpPark: true,
+	ipc.OpShow: true, ipc.OpSend: true, ipc.OpContinue: true, ipc.OpClose: true, ipc.OpRename: true, ipc.OpPark: true,
 	ipc.OpUnpark: true, ipc.OpPriority: true, ipc.OpFreeze: true, ipc.OpThaw: true, ipc.OpRate: true,
 	ipc.OpResult: true, ipc.OpScreen: true, ipc.OpKeys: true, ipc.OpConversation: true, ipc.OpReorder: true,
 }
@@ -489,6 +489,9 @@ func hostIDs(name string, raw json.RawMessage) json.RawMessage {
 func (c *Core) showPeerRow(id string) error {
 	c.mu.Lock()
 	c.selected, c.split = id, ""
+	// The tab on top was this core's session on show, no longer on show
+	// (gabriel.go).
+	c.refocus()
 	var cmds [][]string
 	if slot := c.snap.SlotPane(); slot != nil && slot.Role != tmux.RolePlaceholder {
 		out, err := tmux.SwapOut(c.snap, slot.ID)

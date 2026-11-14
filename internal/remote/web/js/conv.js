@@ -848,6 +848,7 @@ export function looseWords(l) {
   const parts = [];
   if (l.dirty > 0) parts.push(n(l.dirty, 'file') + ' not committed');
   if (l.ahead > 0) parts.push(n(l.ahead, 'commit') + ' not in ' + (l.land || 'its branch'));
+  if (l.unproven === 'tests') parts.push('says the tests pass, but the last run failed');
   return parts.join(' · ');
 }
 

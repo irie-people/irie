@@ -43,6 +43,10 @@ final class MenuState {
         var canBoostAlways = false
         var vpn = false
         var lockdown = false
+        /// The VPN has a lockdown mode, and an account's time to tell:
+        /// Mullvad's do.
+        var vpnLockdown = false
+        var vpnTime = false
         var undo: String?
         var redo: String?
         var helperShown = false
@@ -56,8 +60,8 @@ final class MenuState {
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
         var plugins: [PluginInfo] = []
-        /// The core serves the vpn op: its build has the privacy plugin,
-        /// whose VPN items show only then.
+        /// The core serves the vpn op: its build has the VPN plugin, whose
+        /// items show only then.
         var canVPN = false
     }
 
@@ -99,6 +103,8 @@ extension Store {
         f.canBoostAlways = canBoostAlways
         f.vpn = vpn != nil
         f.lockdown = vpn?.lockdown == true
+        f.vpnLockdown = vpn?.can("lockdown") ?? false
+        f.vpnTime = vpn?.can("time") ?? false
         f.undo = undoLabel
         f.redo = redoLabel
         f.helperShown = helperShown
