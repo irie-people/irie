@@ -314,7 +314,7 @@ private struct SessionItems: View {
             .disabled(f.name == nil)
         Button(f.frozen ? "Resume" : "Pause", action: run { store.setFrozen($0, !$0.isFrozen) })
             .disabled(f.name == nil || !f.frozen && !f.canFreeze)
-        Button(f.promoted ? "Stop Promoting" : "Promote", action: run { store.setPromoted($0, !$0.isPromoted) })
+        Button(f.promoted ? "Stop Boosting" : "Boost", action: run { store.setPromoted($0, !$0.isPromoted) })
             .disabled(f.name == nil)
         // The sidebar's z key does it while the list has the keyboard.
         Button(f.parked ? "Unpark" : "Park", action: run { store.setParked($0, !$0.isParked) })
@@ -326,7 +326,7 @@ private struct SessionItems: View {
         Button(f.picked > 1 ? "New Group of \(f.picked) Sessions" : "New Group") { MainActor.assumeIsolated { store.newGroupKey() } }
             .disabled(!f.canGroup)
         // The keys move the selected card in its group; with ⇧, to its
-        // top or bottom, without promoting it.
+        // top or bottom.
         Menu("Move") {
             Button("Up", action: run { store.move($0, by: -1) })
                 .keyboardShortcut(.upArrow, modifiers: [.command, .option])
