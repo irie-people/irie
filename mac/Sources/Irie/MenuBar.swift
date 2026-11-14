@@ -32,6 +32,9 @@ final class MenuState {
         var helperShown = false
         var showTerminal = false
         var sideOpen = false
+        /// The terminal is popped out, or could be (PopOut.swift).
+        var poppedOut = false
+        var canPopOut = false
         var canPlugins = false
         var plugins: [PluginInfo] = []
     }
@@ -55,7 +58,8 @@ extension Store {
             canReopen: !closed.isEmpty, trodHand: trod?.hand == true, canTrod: canTrod,
             boosting: boosting, canBoost: canBoost, vpn: vpn != nil, lockdown: vpn?.lockdown == true,
             undo: undoLabel, redo: redoLabel, helperShown: helperShown, showTerminal: showTerminal,
-            sideOpen: side.open, canPlugins: canPlugins, plugins: plugins)
+            sideOpen: side.open, poppedOut: poppedOut != nil, canPopOut: attach != nil,
+            canPlugins: canPlugins, plugins: plugins)
     }
 
     /// Keeps the menu's facts up to date: whenever what they are read from
@@ -217,6 +221,11 @@ struct IrieCommands: Commands {
             // The conversation, or the live terminal on the right.
             Toggle("Terminal", isOn: Binding(get: { f.showTerminal }, set: { on in MainActor.assumeIsolated { store.showTerminal = on } }))
                 .keyboardShortcut("t", modifiers: [.command, .option])
+            // The terminal in a Ghostty window of its own, or back in this
+            // one, as the toolbar's window button (PopOut.swift).
+            Button(f.poppedOut ? "Pop Terminal Back In" : "Pop Out Terminal", action: run { store.togglePopOut() })
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                .disabled(!f.canPopOut)
             // The session's helpers, in the right sidebar (HelperPane.swift).
             Button(f.helperShown ? "Hide Helpers" : "Show Helpers", action: run { store.toggleHelpers() })
                 .keyboardShortcut("h", modifiers: [.command, .shift])

@@ -85,22 +85,28 @@ struct TerminalArea: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             ToolbarItem(placement: .primaryAction) {
-                // The session's helpers, in the right sidebar (RightSidebar.swift).
+                // The session's helpers, in the right sidebar's Helpers tab
+                // (RightSidebar.swift), with that tab's icon: the helpers
+                // no longer split the terminal. As View > Show Helpers, it
+                // works on a session of Irie's, not one outside it.
                 Button {
                     store.toggleHelpers()
                 } label: {
-                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: "rectangle.split.2x1")
+                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: SideTab.helpers.symbol)
                 }
                 .help(store.helperShown ? "Close the helpers (⇧⌘H)" : "Show the session’s helpers in the right sidebar (⇧⌘H)")
-                .disabled(selected == nil)
+                .disabled(selected == nil || store.outsideSelection != nil)
             }
             ToolbarItem(placement: .primaryAction) {
+                // The terminal out in a Ghostty window of its own, and back
+                // (PopOut.swift).
+                let out = store.poppedOut != nil
                 Button {
-                    store.openInGhostty()
+                    store.togglePopOut()
                 } label: {
-                    Label("Open in Ghostty", systemImage: "macwindow.on.rectangle")
+                    Label(out ? "Pop Back In" : "Pop Out", systemImage: out ? "pip.exit" : "macwindow.on.rectangle")
                 }
-                .help("Open the terminal in a Ghostty window too")
+                .help(out ? "Bring the terminal back into this window (⌥⌘O)" : "Pop the terminal out into a Ghostty window of its own (⌥⌘O)")
                 .disabled(store.attach == nil)
             }
             // At the toolbar's trailing end, where the HIG puts a button that
@@ -111,7 +117,7 @@ struct TerminalArea: View {
                 } label: {
                     Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: "sidebar.right")
                 }
-                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)" : "Show the right sidebar: helpers, what is ready to review, and notices (⌥⌘B)")
+                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)" : "Show the right sidebar: the dock, helpers, what is ready to review, and notices (⌥⌘B)")
             }
         }
     }
@@ -123,20 +129,28 @@ struct TerminalArea: View {
     private var main: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
-            // restart, so a flap gets a banner, not a reattach.
+            // restart, so a flap gets a banner, not a reattach. Only a pop
+            // out ends it: the Ghostty window is then the one client that
+            // sizes the slot, and a note stands in the frame (PopOut.swift).
             if let a = store.attach {
-                // The terminal stays attached under the conversation, so
-                // ⌥⌘T flips between them at once, and under the split.
-                let shows = store.showTerminal && split == nil
-                terminal(a, active: shows)
-                    .opacity(shows ? 1 : 0)
-                    .allowsHitTesting(shows)
-                    .accessibilityHidden(!shows)
-                if let s = split { framed(TeamSplit(session: s, team: s.team ?? []), padded: false) }
+                if store.poppedOut != nil {
+                    if store.showTerminal { framed(PoppedOutNote()) }
+                } else {
+                    // The terminal stays attached under the conversation, so
+                    // ⌥⌘T flips between them at once, and under the split.
+                    let shows = store.showTerminal && split == nil
+                    terminal(a, active: shows)
+                        .opacity(shows ? 1 : 0)
+                        .allowsHitTesting(shows)
+                        .accessibilityHidden(!shows)
+                    if let s = split { framed(TeamSplit(session: s, team: s.team ?? []), padded: false) }
+                }
             } else if store.isFixture, store.showTerminal {
                 // `--snapshot` attaches no terminal: the frame round an empty
-                // one, or the split's panes.
-                if let s = split {
+                // one, the split's panes, or the note of a pop out.
+                if store.poppedOut != nil {
+                    framed(PoppedOutNote())
+                } else if let s = split {
                     framed(TeamSplit(session: s, team: s.team ?? []), padded: false)
                 } else {
                     framed(Color.clear)
@@ -228,7 +242,7 @@ struct TerminalArea: View {
         Placeholder(
             title: "The terminal opens in Ghostty for now",
             text: "This build has no terminal of its own yet. Pick a session on the left and the Ghostty window follows it.",
-            action: ("Open the terminal", store.openInGhostty)
+            action: ("Open the terminal", store.popOut)
         )
         #endif
     }

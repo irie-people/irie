@@ -368,7 +368,7 @@ private struct SessionCard: View, Equatable {
             }
             Button("Open in Ghostty") {
                 store.show(session.id)
-                store.openInGhostty()
+                store.popOut()
             }
             if let branch = session.branch, !branch.isEmpty {
                 Button("Copy the branch name") { store.copy(branch, what: "branch name") }
@@ -1056,7 +1056,7 @@ private struct Actions: View {
         Button("Show and Type to It") { store.show(session.id, focus: true) }
         Button("Open in Ghostty") {
             store.show(session.id)
-            store.openInGhostty()
+            store.popOut()
         }
         Button("Rename…") { store.beginRename(session.id) }
         Divider()

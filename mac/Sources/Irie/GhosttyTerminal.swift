@@ -990,4 +990,16 @@ struct GhosttyTerminal: NSViewRepresentable {
     }
 }
 
+extension GhosttyTerminalView {
+    /// Types text into the terminal, as a dropped file's path goes in
+    /// (FileDrop.swift), through the surface's own text input; false with no
+    /// surface yet.
+    func pasteText(_ text: String) -> Bool {
+        guard let surface else { return false }
+        let n = text.utf8.count
+        if n > 0 { text.withCString { ghostty_surface_text(surface, $0, UInt(n)) } }
+        return true
+    }
+}
+
 #endif
