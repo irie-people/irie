@@ -54,6 +54,7 @@ var archTable = map[string]archEntry{
 			{Key: "arch.gabriel.word", Kind: ipc.ArchDuration, Label: "A session you message stays in your focus for"},
 			{Key: "arch.gabriel.guard", Kind: ipc.ArchBool, Label: "Keep agents from taking your focus", Help: "An agent's call that would bring an app or a page to the front while you look elsewhere is turned away, and it is told how to do it in the background."},
 			{Key: "arch.gabriel.boost", Kind: ipc.ArchDuration, Label: "A boost lasts", Help: "Your focus first at once, busy or not; it changes only what runs first, never a clock or a fan."},
+			{Key: "arch.gabriel.always", Kind: ipc.ArchBool, Label: "Always boost while you’re at the computer", Help: "A boost that never ends. The rest runs on the efficiency cores even when there is room to spare, so it finishes later; nothing is held back while you’re away."},
 			{Key: "arch.gabriel.heavy", Kind: ipc.ArchNumber, Label: "An app outside " + brand.Name + " is heavy from (percent of a CPU)"},
 			{Key: "arch.gabriel.spare", Kind: ipc.ArchLines, Label: "Apps Gabriel never slows", Help: "Calls, music, video and recording; an app that plays sound or holds a call is spared too."},
 		},
@@ -162,10 +163,18 @@ func (c *Core) gabrielNow() archNow {
 		} else {
 			n.status = "Holding back " + strings.Join(what, " and ") + " for " + focus + "."
 		}
+	case g.Always:
+		// Just switched on: the next sweep, seconds away, holds back.
+		n.status = "Giving your focus the machine first."
 	default:
 		n.status = "Room to spare, so nothing is held back."
 	}
-	if boosting {
+	switch {
+	case on && g.Always:
+		// A boost of an hour would add nothing: the switch is the way back.
+		n.status += " Always boosting while you’re at the computer."
+		return n
+	case boosting:
 		n.status += " Boosting until " + st.boostUntil.Local().Format("15:04") + "."
 	}
 	if on {

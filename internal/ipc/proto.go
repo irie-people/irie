@@ -437,6 +437,7 @@ type GabrielResult struct {
 	// BoostUntil is when the boost ends, while one is on: the user's focus
 	// gets the machine first then whether it is busy or not.
 	BoostUntil *time.Time       `json:"boost_until,omitempty"`
+	Always     bool             `json:"always,omitempty"`    // arch.gabriel.always: a boost that never ends, while the user is at the computer
 	LowPower   bool             `json:"low_power,omitempty"` // macOS's Low Power Mode is on, which slows the whole machine
 	Freed      []string         `json:"freed,omitempty"`     // the idle local models the boost unloaded
 	CPUs       int              `json:"cpus"`
