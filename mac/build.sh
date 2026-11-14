@@ -41,12 +41,14 @@ cd "$(dirname "$0")"
 
 # The product's names, from internal/brand, the one place they are kept.
 eval "$(../tools/brand.sh)"
+# A file of its own per build: hot.sh and live.sh may build at once.
 mkdir -p build
-../tools/brand.sh --swift >build/Brand.swift.tmp
-if cmp -s build/Brand.swift.tmp Sources/Irie/Brand.swift; then
-	rm -f build/Brand.swift.tmp
+brandtmp=$(mktemp build/Brand.swift.XXXXXX)
+../tools/brand.sh --swift >"$brandtmp"
+if cmp -s "$brandtmp" Sources/Irie/Brand.swift; then
+	rm -f "$brandtmp"
 else
-	mv build/Brand.swift.tmp Sources/Irie/Brand.swift
+	mv "$brandtmp" Sources/Irie/Brand.swift
 fi
 
 target="$(uname -m)-apple-macos14.0"
