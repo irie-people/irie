@@ -5,7 +5,7 @@ import SwiftUI
 /// to its exact command or path, runs of reads or edits gather into one
 /// line, and subagents are chips. A message box at the foot types to the
 /// agent through the core; while the agent waits on you in its terminal, a
-/// banner opens the terminal instead. View > Terminal (⌥⌘T) flips to the
+/// banner opens the terminal instead. View › Show Terminal (⌥⌘T) flips to the
 /// live terminal and back. Colours, type and shapes come from Theme and the
 /// system's text styles only, so the view follows the palette.
 @MainActor
@@ -37,7 +37,7 @@ struct ConversationView: View {
     }
 
     /// The newest helper the shown session's conversation names, which
-    /// View > Show Helpers opens when none runs.
+    /// View › Helpers opens when none runs.
     private var newestHelper: String? {
         guard let s = selected else { return nil }
         return HelperRef.list(model.items, s).last?.agent
@@ -761,7 +761,7 @@ struct Composer: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.muted)
-            .help("Show the live terminal (View > Terminal)")
+            .help("Show the live terminal (View › Show Terminal, ⌥⌘T)")
         }
         .padding(.horizontal, 24)
         .padding(.top, 10)

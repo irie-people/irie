@@ -123,6 +123,19 @@ final class KeyRouter {
                 }
                 return nil
             }
+            // ⌘1–9 shows that card. Go › Sessions lists only the cards
+            // there are, so this takes the key past the last one too,
+            // which the terminal would otherwise get.
+            if irie, mods == .command, let c = event.charactersIgnoringModifiers, let n = Int(c), (1...9).contains(n) {
+                MainActor.assumeIsolated { store.showRow(n) }
+                return nil
+            }
+            // ⇧⌘H shows the selected session's helpers, as View › Helpers
+            // (⌥⌘3) does.
+            if irie, mods == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "h" {
+                MainActor.assumeIsolated { store.toggleHelpers() }
+                return nil
+            }
             if mods == .control, event.charactersIgnoringModifiers == "]" {
                 MainActor.assumeIsolated { store.toggleFocus() }
                 return nil
@@ -130,7 +143,7 @@ final class KeyRouter {
             // In Irie's window ⌘W closes the selected session and ⇧⌘W the
             // window, even while the terminal has the keyboard. In any other
             // window, such as Settings or About, either closes that window:
-            // the menu's ⌘W is Close Session.
+            // the menu's ⌘W closes a session (MenuBar.swift).
             if event.charactersIgnoringModifiers?.lowercased() == "w", mods == .command || mods == [.command, .shift],
                let window = event.window {
                 MainActor.assumeIsolated {
@@ -219,7 +232,6 @@ struct ContentView: View {
         })
         .onAppear {
             keys.install(store)
-            WindowCloseItem.install()
             LookBook.shared.start(store)
         }
         .onChange(of: theme) { store.sendTheme(theme) }

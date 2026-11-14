@@ -1052,28 +1052,32 @@ private struct Actions: View {
         }
     }
 
+    /// The menu bar's Session menu has the middle part in the same words
+    /// and order (MenuBar.swift). A click on the card shows it and types to
+    /// it, so the menu leaves that out.
     @ViewBuilder private var one: some View {
-        Button("Show and Type to It") { store.show(session.id, focus: true) }
+        Button("Rename…") { store.beginRename(session.id) }
         Button("Open in Ghostty") {
             store.show(session.id)
             store.openInGhostty()
         }
-        Button("Rename…") { store.beginRename(session.id) }
         Divider()
         ControlItems(session: session, canUp: !first, canDown: !last)
         Divider()
+        Menu("Copy") {
+            if let cwd = session.cwd {
+                Button("Folder Path") { store.copy(cwd, what: "folder path") }
+            }
+            if let branch = session.branch, !branch.isEmpty {
+                Button("Branch Name") { store.copy(branch, what: "branch name") }
+            }
+            Button("Session ID") { store.copy(session.id, what: "session ID") }
+        }
         if let cwd = session.cwd {
-            Button("Show Folder in Finder") { store.reveal(cwd) }
-            Button("Copy Folder Path") { store.copy(cwd, what: "folder path") }
+            Button("Show in Finder") { store.reveal(cwd) }
         }
-        if let branch = session.branch, !branch.isEmpty {
-            Button("Copy Branch Name") { store.copy(branch, what: "branch name") }
-        }
-        Button("Copy Session ID") { store.copy(session.id, what: "session ID") }
         Divider()
-        SpaceMenu(list: [session])
-        Divider()
-        Button("Close Session") { store.close(session) }
+        Button("Close") { store.close(session) }
         CloseManyItems(session: session)
     }
 }
@@ -1169,7 +1173,7 @@ private struct Counts: View {
     /// Mullvad VPN (docs/proposals/extensions.md §4.1): a shield, green while
     /// connected, yellow while it comes or goes, red in error or while
     /// lockdown blocks the network, and muted when off. A click says the
-    /// state in a notice; File > VPN changes it.
+    /// state in a notice; Plugins › Mullvad VPN changes it.
     private func vpnMark(_ v: VPNMark) -> some View {
         let color: Color
         switch v.state {

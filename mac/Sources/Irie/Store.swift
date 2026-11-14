@@ -162,7 +162,7 @@ final class Store {
     /// round an empty terminal, as no core attaches one.
     private(set) var isFixture = false
     /// The right side shows the live terminal instead of the conversation
-    /// (View > Terminal, ⌥⌘T); remembered across launches.
+    /// (View › Show Terminal, ⌥⌘T); remembered across launches.
     var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
         didSet {
             UserDefaults.standard.set(showTerminal, forKey: "showTerminal")
@@ -795,7 +795,7 @@ final class Store {
     }
 
     /// The helper each session showed last, and the newest its conversation
-    /// names, which View > Show Helpers opens when none runs.
+    /// names, which View › Helpers opens when none runs.
     @ObservationIgnored private var lastHelpers: [String: String] = [:]
     @ObservationIgnored private var newestHelpers: [String: String] = [:]
 
@@ -810,11 +810,15 @@ final class Store {
         return side.open && side.tab == .helpers
     }
 
-    /// View > Show Helpers (⇧⌘H): opens the right sidebar's Helpers tab on
+    /// View › Helpers (⌥⌘3, ⇧⌘H): opens the right sidebar's Helpers tab on
     /// the selected session's helper (the one shown last, else the newest
-    /// running, else the newest), or closes it.
+    /// running, else the newest), or closes it. With no session of Irie's
+    /// selected, the tab opens or closes as the other tabs do.
     func toggleHelpers() {
-        guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else { return }
+        guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else {
+            toggleSideTab(.helpers)
+            return
+        }
         if helperShown {
             closeSide()
             return
