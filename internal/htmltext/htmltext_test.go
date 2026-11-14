@@ -2,11 +2,17 @@ package htmltext
 
 import (
 	"net/url"
+	"os"
+	"os/exec"
 	"reflect"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/sysload"
 )
 
 func mustURL(t testing.TB, s string) *url.URL {
@@ -267,14 +273,36 @@ func TestHostileInputIsFast(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			start := time.Now()
 			got := Read([]byte(in), mustURL(t, "https://example.com/"))
-			if d := time.Since(start); d > 2*time.Second {
-				t.Errorf("took %v", d)
+			if d, most := time.Since(start), bound(t, 2*time.Second); d > most {
+				t.Errorf("took %v, more than %v", d, most)
 			}
 			if !utf8.ValidString(got.Text) {
 				t.Error("text is not valid UTF-8")
 			}
 		})
 	}
+}
+
+// bound is how long a read may take: d, or twelve times d while the
+// scheduler rather than the reader sets the time, when the test runs in
+// macOS's background state or the machine has more work waiting than CPUs
+// to run it, as during a busy install (tools/live.sh). It is internal/host's
+// bound. Either way it tells a linear read of 2 MiB from a quadratic one,
+// which takes minutes.
+func bound(t *testing.T, d time.Duration) time.Duration {
+	t.Helper()
+	if runtime.GOOS == "darwin" {
+		out, _ := exec.Command("ps", "-o", "pri=", "-p", strconv.Itoa(os.Getpid())).Output()
+		if strings.TrimSpace(string(out)) == "4" {
+			t.Logf("allowing %s: the test runs in macOS's background state", 12*d)
+			return 12 * d
+		}
+	}
+	if l, err := sysload.Read(); err == nil && l.RunQueue > float64(l.CPUs) {
+		t.Logf("allowing %s: %.1f CPUs' worth of work waiting on %d CPUs", 12*d, l.RunQueue, l.CPUs)
+		return 12 * d
+	}
+	return d
 }
 
 func FuzzRead(f *testing.F) {
