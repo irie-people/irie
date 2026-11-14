@@ -56,11 +56,14 @@ struct TerminalHost: NSViewRepresentable {
         var info: AttachInfo
         var focusToken = 0
         var active = true
+        /// The terminal went, as when the terminal pops out: it attaches no more.
+        var gone = false
         weak var view: IrieTerminalView?
 
         init(info: AttachInfo) { self.info = info }
 
         func attach() {
+            guard !gone else { return }
             var env = Terminal.getEnvironmentVariables(termName: "xterm-256color")
             env.removeAll { $0.hasPrefix("TMUX=") || $0.hasPrefix("TMUX_PANE=") }
             view?.startProcess(executable: info.tmux, args: ["-S", info.socket, "attach-session"] + Preview.clientFlags + ["-t", info.target],
@@ -75,6 +78,13 @@ struct TerminalHost: NSViewRepresentable {
         func processTerminated(source: TerminalView, exitCode: Int32?) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.attach() }
         }
+    }
+
+    /// The terminal goes, as when it pops out (PopOut.swift): its tmux
+    /// client ends with it, or it would go on sizing the slot unseen.
+    static func dismantleNSView(_ view: IrieTerminalView, coordinator: Coordinator) {
+        coordinator.gone = true
+        view.terminate()
     }
 }
 

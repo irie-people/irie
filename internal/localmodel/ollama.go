@@ -172,7 +172,15 @@ type Info struct {
 	// their K/V heads, one entry per such layer, and the window in tokens.
 	SWAHeads []int
 	Window   int
+	// Runner is the engine Ollama runs it on (details.runner): "llamacpp"
+	// for a GGUF model, "mlx" for one in Apple's MLX format, such as the
+	// nvfp4 builds Ollama pulls for some tags on Apple silicon; "" when
+	// Ollama does not say.
+	Runner string
 }
+
+// RunnerMLX is Ollama's name for its MLX engine.
+const RunnerMLX = "mlx"
 
 // Tools reports whether the model can call tools, which a coding agent
 // needs.
@@ -183,12 +191,16 @@ func (o Ollama) Show(ctx context.Context, model string) (Info, error) {
 	var v struct {
 		Capabilities []string       `json:"capabilities"`
 		ModelInfo    map[string]any `json:"model_info"`
+		Details      struct {
+			Runner string `json:"runner"`
+		} `json:"details"`
 	}
 	if err := o.call(ctx, http.MethodPost, "/api/show", map[string]any{"model": model}, &v); err != nil {
 		return Info{}, err
 	}
 	info := parseModelInfo(v.ModelInfo)
 	info.Capabilities = v.Capabilities
+	info.Runner = v.Details.Runner
 	return info, nil
 }
 

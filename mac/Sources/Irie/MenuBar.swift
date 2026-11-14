@@ -53,6 +53,9 @@ final class MenuState {
         var showTerminal = false
         /// The right sidebar's tab on show; nil while it is closed.
         var sideTab: SideTab?
+        /// The terminal is popped out, or could be (PopOut.swift).
+        var poppedOut = false
+        var canPopOut = false
         /// The panes beside the terminal show (Rolodex.swift).
         var panesOpen = false
         var canPlugins = false
@@ -109,6 +112,8 @@ extension Store {
         f.helperShown = helperShown
         f.showTerminal = showTerminal
         f.sideTab = side.open ? side.tab : nil
+        f.poppedOut = poppedOut != nil
+        f.canPopOut = attach != nil
         f.panesOpen = rolodex.open
         f.canPlugins = canPlugins
         f.plugins = plugins
@@ -219,6 +224,11 @@ struct IrieCommands: Commands {
             // The conversation, or the live terminal in its place.
             Button(f.showTerminal ? "Show Conversation" : "Show Terminal", action: run { store.showTerminal.toggle() })
                 .keyboardShortcut("t", modifiers: [.command, .option])
+            // The terminal in a Ghostty window of its own, or back in this
+            // one, as the toolbar's window button (PopOut.swift).
+            Button(f.poppedOut ? "Pop Terminal Back In" : "Pop Out Terminal", action: run { store.togglePopOut() })
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                .disabled(!f.canPopOut)
             // The right sidebar (RightSidebar.swift), with the key cmux and
             // VS Code give a right side bar, and its tabs, the one on show
             // ticked. Helpers opens on the selected session's helper, as
@@ -226,7 +236,8 @@ struct IrieCommands: Commands {
             Section("Right Sidebar") {
                 Button(f.sideTab == nil ? "Show Right Sidebar" : "Hide Right Sidebar", action: run { store.toggleSide() })
                     .keyboardShortcut("b", modifiers: [.command, .option])
-                ForEach(SideTab.built) { t in
+                // Mail's tab, while the mail plugin is on (Mail.swift).
+                ForEach(SideTab.built.filter { $0 != .mail || f.plugins.contains { $0.name == "mail" && $0.on } }) { t in
                     Toggle(t.title, isOn: Binding(get: { f.sideTab == t }, set: { _ in
                         MainActor.assumeIsolated { t == .helpers ? store.toggleHelpers() : store.toggleSideTab(t) }
                     }))

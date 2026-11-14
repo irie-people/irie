@@ -33,6 +33,9 @@ func (c *Core) pluginsOp(a ipc.PluginsArgs) (ipc.PluginsResult, error) {
 	c.mu.Lock()
 	live := plugins.Live{VPN: c.vpnHeader(time.Now())}
 	c.mu.Unlock()
+	if c.cfg().MailOn() {
+		live.Mail = c.mailLive()
+	}
 	all := plugins.Status(plugins.Env{Config: *c.cfg(), Paths: c.paths, Live: live})
 	return ipc.PluginsResult{Plugins: all, Text: plugins.Text(all)}, nil
 }

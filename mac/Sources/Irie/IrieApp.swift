@@ -67,6 +67,7 @@ struct IrieApp: App {
             IrieCommands(store: store, menu: store.menu)
             PluginCommands(store: store, menu: store.menu)
             MarketsCommands(menu: store.menu)
+            MailCommands(menu: store.menu)
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
@@ -89,6 +90,16 @@ struct IrieApp: App {
                 .environment(store)
         }
         .defaultSize(width: 1280, height: 820)
+        .commandsRemoved()
+        // Window › Mail (⇧⌘E): the mail plugin's accounts, list and message
+        // side by side (MailViews.swift). As with Markets, its item shows
+        // only while the plugin is on.
+        Window("Mail", id: MailWindow.id) {
+            MailWindow()
+                .environment(store)
+                .frame(minWidth: 760, minHeight: 420)
+        }
+        .defaultSize(width: 1080, height: 700)
         .commandsRemoved()
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {

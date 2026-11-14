@@ -212,6 +212,19 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 		}
 		profile.Model = a.Model
 	}
+	// A profile that starts on one of Irie's skills, such as +chaos, hands
+	// the task to the skill (DESIGN §4.19), or says why it can't; the
+	// person's words name the session, as a guide's do. It probes the CLI,
+	// as the spawn does below, before taking the lock.
+	if profile.Skill != "" {
+		if err := c.skillCheck("+"+profileName, profile, profile.Skill); err != nil {
+			return ipc.Session{}, err
+		}
+		if a.Name == "" {
+			a.Name, named = title(a.Task), false
+		}
+		a.Task = onSkill(profile, a.Task)
+	}
 	// A local profile's model is checked, and may be loaded, before
 	// anything else; like probing, it happens before taking the lock.
 	var warnings []string

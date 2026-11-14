@@ -58,6 +58,7 @@ type Config struct {
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
 	Markets  Markets            `toml:"markets"`
+	Mail     Mail               `toml:"mail"`
 	Plugins  Plugins            `toml:"plugins"`
 }
 
@@ -78,6 +79,10 @@ type Plugins struct {
 	// Markets is a map of your own market research: the page in
 	// markets.folder in the Mac app's Markets window, and :markets.
 	Markets bool `toml:"markets"`
+	// Mail is Irie's own mail client: Gmail, Proton Mail and other IMAP
+	// accounts in one list, each in a colour of its own
+	// (docs/proposals/mail.md).
+	Mail bool `toml:"mail"`
 }
 
 // Markets is the markets plugin's map (DESIGN §4.17).
@@ -91,6 +96,10 @@ type Markets struct {
 // MarketsOn says whether the markets plugin runs: plugins.markets, with
 // the plugin built in.
 func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
+
+// MailOn says whether the mail plugin runs: plugins.mail, with the plugin
+// built in.
+func (c Config) MailOn() bool { return MailBuilt && c.Plugins.Mail }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -504,6 +513,7 @@ type Profile struct {
 	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
+	Skill          string            `toml:"skill"`  // the skill of Irie's its sessions start on, such as chaos: the task goes to /irie:<skill> (DESIGN §4.19); "" = none
 	// SDK runs the session on the Agent SDK: Irie's own pane program drives
 	// `claude -p`, instead of Claude Code's terminal app (DESIGN §3.5). It is
 	// for an API key whose credits cover the Agent SDK but not Claude Code,
@@ -565,6 +575,20 @@ type Usage struct {
 	// their cost, context and plan use. Irie runs the user's own status
 	// line and shows what it prints.
 	StatusLine bool `toml:"status_line"`
+	// Rebuilds is the prompt-cache meter (DESIGN §6.3): it counts each
+	// session's requests that wrote its context into the cache again
+	// instead of reading it, with what they cost at list price and what
+	// woke the session, and says what waking a cold session costs.
+	Rebuilds bool `toml:"rebuilds"`
+	// RebuildCard is how many dollars a session's rebuilds must cost in a
+	// day for its card to say how often it woke cold that day; 0 = from
+	// the first.
+	RebuildCard float64 `toml:"rebuild_card"`
+	// WakeMost is what a nudge is worth, in dollars at list price: the
+	// trod bot and the jot dog leave a session whose cache has run out be
+	// when waking it would cost more, and the trod bot leaves what it froze
+	// frozen; 0 = no limit.
+	WakeMost float64 `toml:"wake_most"`
 }
 
 // Dog is the jot dog (DESIGN §4.8): it sees each task you jot down through
@@ -840,6 +864,18 @@ func Default() Config {
 				Env:            map[string]string{},
 				Arch:           "mikael",
 			},
+			// The chaos monkey: it tries to break what the task names, in a
+			// copy of its own, and reports what broke (DESIGN §4.19).
+			"chaos": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-opus-5-5",
+				Effort:         "high",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+				Skill:          "chaos",
+			},
 		},
 		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
@@ -855,7 +891,7 @@ func Default() Config {
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
 		Context: Context{KeepDays: 30},
 		Hold:    Hold{Max: 24 * time.Hour},
-		Usage:   Usage{StatusLine: true},
+		Usage:   Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4},
 		Skills:  Skills{Enabled: true, Disabled: []string{}},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
 		Env:     Env{Capture: "login-shell"},
@@ -875,8 +911,9 @@ func Default() Config {
 		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 		Browser: Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
 		Anon:    Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
+		Mail:    defaultMail(),
 		VPN:     VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins: Plugins{VPN: true, Privacy: true, Writing: true},
+		Plugins: Plugins{VPN: true, Privacy: true, Writing: true, Mail: true},
 	}
 }
 
@@ -991,8 +1028,9 @@ func Parse(data []byte, path string) (Config, error) {
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
 		Markets  *Markets                  `toml:"markets"`
+		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1071,6 +1109,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Spawn.Preferences == nil {
 		c.Spawn.Preferences = []string{}
+	}
+	if c.Mail.Accounts == nil {
+		c.Mail.Accounts = map[string]MailAccount{}
 	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
@@ -1298,6 +1339,17 @@ func (c Config) Validate() error {
 				bad("profiles.%s.args: a profile that runs as an arch agent passes no --agent or --agents of its own", name)
 			}
 		}
+		// Whether the skill is one of Irie's, and on, the spawn checks, and
+		// says why when it isn't (internal/core/guide.go).
+		switch s := p.Skill; {
+		case s == "":
+		case !skillName.MatchString(s) || len(s) > 64:
+			bad("profiles.%s.skill = %q: not a skill's name: lowercase letters, digits and single hyphens, at most 64", name, s)
+		case p.Harness != "claude-code":
+			bad("profiles.%s.skill: only the claude-code harness starts on a skill of %s's yet", name, brand.Name)
+		case !p.TakesSkills():
+			bad("profiles.%s.skill: a profile that starts on a skill takes %s's skills; drop skills = false", name, brand.Name)
+		}
 		if l := p.Local; l != nil {
 			switch {
 			case !slices.Contains(Runtimes, l.Runtime):
@@ -1415,6 +1467,12 @@ func (c Config) Validate() error {
 	}
 	if c.Hold.Max <= 0 {
 		bad("hold.max = %v: must be positive", c.Hold.Max)
+	}
+	if c.Usage.RebuildCard < 0 {
+		bad("usage.rebuild_card = %v: must not be negative", c.Usage.RebuildCard)
+	}
+	if c.Usage.WakeMost < 0 {
+		bad("usage.wake_most = %v: must be 0, for no limit, or more", c.Usage.WakeMost)
 	}
 	for _, n := range c.Skills.Disabled {
 		if !skillName.MatchString(n) || len(n) > 64 {
@@ -1591,13 +1649,14 @@ func (c Config) Validate() error {
 	if an.Tor != "" && !pathLike(an.Tor) {
 		bad("anon.tor = %q: must be an absolute or ~ path, or empty for the usual places", an.Tor)
 	}
+	checkMail(c.Mail, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1635,6 +1694,10 @@ func (c Config) Write(w io.Writer) error {
 	if !MarketsBuilt {
 		delete(m, "markets")
 		delete(plugins, "markets")
+	}
+	if !MailBuilt {
+		delete(m, "mail")
+		delete(plugins, "mail")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

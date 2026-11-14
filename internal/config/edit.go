@@ -61,10 +61,27 @@ func Apply(data []byte, edits []Edit) ([]byte, error) {
 		}
 	}
 	got := map[string]any{}
-	if _, err := toml.Decode(string(out), &got); err != nil || !reflect.DeepEqual(got, want) {
+	// Tables left empty don't count: a table removed whole, such as the
+	// last mail account, leaves none of the tables it was under.
+	if _, err := toml.Decode(string(out), &got); err != nil || !reflect.DeepEqual(pruned(got), pruned(want)) {
 		return nil, errors.New("the file is laid out in a way " + brand.Name + " does not edit in place; make the change by hand")
 	}
 	return out, nil
+}
+
+// pruned is m without its empty tables, at any depth.
+func pruned(m map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range m {
+		if t, ok := v.(map[string]any); ok {
+			if t = pruned(t); len(t) == 0 {
+				continue
+			}
+			v = t
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // ParseValue reads a value for key from JSON, as the type the key takes; a
@@ -455,6 +472,21 @@ func unset(data []byte, key []string) ([]byte, error) {
 			deleteIn(t, key[len(e.key):])
 			return nil
 		})
+	}
+	// A table goes whole: its header, its pairs and the tables under it,
+	// such as a mail account's [mail.accounts.NAME].
+	for i, e := range entries {
+		if !e.header || e.array || !slices.Equal(e.key, key) {
+			continue
+		}
+		end := e.end
+		for _, f := range entries[i+1:] {
+			if f.header && (len(f.key) <= len(key) || !slices.Equal(f.key[:len(key)], key)) {
+				break
+			}
+			end = f.end
+		}
+		return splice(data, e.start, end, ""), nil
 	}
 	return data, nil
 }
