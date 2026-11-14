@@ -28,5 +28,5 @@ go vet "$@"
 # A build that leaves the plugins out (DESIGN §4.17), as a company's copy
 # may, must still compile, its tests too: the stand-ins and tags can't
 # drift from the code they stand in for.
-if [ "$*" = ./... ]; then go vet -tags noprivacy,nowriting,nomail ./...; fi
+if [ "$*" = ./... ]; then go vet -tags noprivacy,nowriting,nomarkets,nomail ./...; fi
 go test "$@"

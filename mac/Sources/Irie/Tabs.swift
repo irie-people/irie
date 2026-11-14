@@ -23,7 +23,8 @@ extension Store {
         guard canPin, s.peerName == nil, s.isPinned != on else { return }
         let was = sessions
         withAnimation(.easeOut(duration: 0.18)) {
-            preview { rows in Self.putPinned(&rows, s.id, on) }
+            let around = groupPath(s.groupKey).reversed().map(\.id)
+            preview { rows in Self.putPinned(&rows, s.id, on, around: around, within: { self.isWithin($0, $1) }) }
         }
         Task { await pin(s, on, was: was) }
     }
@@ -51,14 +52,24 @@ extension Store {
 
     /// Pins (on) or unpins session id in rows, in the list's order, as the
     /// core does: a pin goes last, and unparks; an unpin goes first among
-    /// this Mac's sessions that are neither pinned nor parked.
-    static func putPinned(_ rows: inout [Session], _ id: String, _ on: Bool) {
+    /// this Mac's sessions that are neither pinned nor parked, or, for a
+    /// card of a group of yours, last in the innermost group around it that
+    /// holds another card, after the groups inside it too: around are its
+    /// group and those around it, the innermost first, and within says
+    /// whether a group is inside another (Groups.swift).
+    static func putPinned(_ rows: inout [Session], _ id: String, _ on: Bool, around: [String] = [],
+                          within: (String?, String) -> Bool = { a, b in a == b }) {
         guard let i = rows.firstIndex(where: { $0.id == id }) else { return }
         var s = rows.remove(at: i)
         s.pinned = on
         if on { s.parked = false }
+        var last: Int?
+        for g in around where last == nil {
+            last = rows.lastIndex(where: { within($0.groupKey, g) && !$0.isPinned && !$0.isParked })
+        }
         let at = on ? rows.count
-            : rows.firstIndex(where: { !$0.isPinned && !$0.isParked && $0.peerName == nil }) ?? rows.count
+            : last.map { $0 + 1 }
+            ?? rows.firstIndex(where: { !$0.isPinned && !$0.isParked && $0.peerName == nil }) ?? rows.count
         rows.insert(s, at: at)
         for j in rows.indices { rows[j].order = j }
     }
@@ -73,13 +84,17 @@ extension Store {
             .filter { $0.id != s.id && !$0.isPinned && !$0.isParked && $0.peerName == nil }
     }
 
-    /// The cards below s in its group, which Close Below closes; none for a
-    /// pinned card, or another machine's.
+    /// The cards below s, which Close Below closes: in the List view every
+    /// card under it between Pinned and Parked, your groups' too; else
+    /// those under it in its group. None for a pinned card, or another
+    /// machine's.
     func below(_ s: Session) -> [Session] {
         guard !s.isPinned, s.peerName == nil,
-              let g = drawnGroups.first(where: { g in g.sessions.contains { $0.id == s.id } }),
-              let i = g.sessions.firstIndex(where: { $0.id == s.id }) else { return [] }
-        return Array(g.sessions[(i + 1)...]).filter { !$0.isPinned && $0.peerName == nil }
+              let g = drawnGroups.first(where: { g in g.sessions.contains { $0.id == s.id } }) else { return [] }
+        let section = g.bare || g.userGroup != nil
+            ? drawnGroups.filter { $0.bare || $0.userGroup != nil }.flatMap(\.sessions) : g.sessions
+        guard let i = section.firstIndex(where: { $0.id == s.id }) else { return [] }
+        return Array(section[(i + 1)...]).filter { !$0.isPinned && $0.peerName == nil }
     }
 
     /// The cards a group header's Close Group closes: none for Pinned's or
@@ -352,10 +367,11 @@ struct PickedActions: View {
     @Environment(Store.self) private var store
     let list: [Session]
 
+    /// In one card's order (ControlItems): Park, Pin and Move, then Close.
     var body: some View {
         let n = list.count
-        Button("Close \(n) Sessions") { store.closeMany(list) }
-        SpaceMenu(list: list)
+        let pins = store.canPin && list.allSatisfy { $0.peerName == nil }
+        let moves = SpaceItems.shown(store, list)
         if store.canPark {
             if list.contains(where: { !$0.isParked }) {
                 Button("Park \(n) Sessions") { store.setParked(list, true) }
@@ -363,14 +379,20 @@ struct PickedActions: View {
                 Button("Unpark \(n) Sessions") { store.setParked(list, false) }
             }
         }
-        if store.canPin, list.allSatisfy({ $0.peerName == nil }) {
+        if pins {
             if list.contains(where: { !$0.isPinned }) {
                 Button("Pin \(n) Sessions") { store.setPinned(list, true) }
             } else {
                 Button("Unpin \(n) Sessions") { store.setPinned(list, false) }
             }
         }
-        Divider()
+        if moves {
+            Menu("Move") { SpaceItems(list: list) }
+        }
+        // New Group, Move to Group and Move Out, for all of them.
+        GroupMenu(list: list)
+        if store.canPark || pins || moves || store.canGroup { Divider() }
+        Button("Close \(n) Sessions") { store.closeMany(list) }
         Button("Deselect") { store.pickNone() }
     }
 }
@@ -391,18 +413,28 @@ struct CloseManyItems: View {
     }
 }
 
-/// A group header's menu: fold it, and close its cards.
+/// A group header's menu: fold it, and close its cards; for your group,
+/// rename it, put it in a new group, move it into another or out of the one
+/// around it, and ungroup it too (Groups.swift).
 @MainActor
 struct GroupActions: View {
     @Environment(Store.self) private var store
     let group: SessionGroup
 
     var body: some View {
-        Button(store.isOpen(group) ? "Fold" : "Open") { store.fold(group) }
+        if let id = group.userGroup {
+            Button("Rename Group…") { store.renamingGroup = id }
+        }
+        Button(store.isOpen(group) ? "Fold" : "Unfold") { store.fold(group) }
+        if let id = group.userGroup {
+            Divider()
+            GroupPlaceMenu(id: id)
+            Button("Ungroup") { store.ungroup(id) }
+        }
         let list = store.closable(in: group)
         if !list.isEmpty {
             Divider()
-            Button(list.count == 1 ? "Close Its Session" : "Close Its \(list.count) Sessions") { store.closeMany(list) }
+            Button(list.count == 1 ? "Close " + MenuText.quoted(list[0].name) : "Close \(list.count) Sessions") { store.closeMany(list) }
         }
     }
 }

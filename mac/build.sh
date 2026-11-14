@@ -19,6 +19,9 @@
 # IRIE_SIGN_IDENTITY signs it with your own identity (below).
 # IRIE_MAC_UNIVERSAL=1 on Apple silicon adds an Intel slice, drawn with
 # SwiftTerm, as a release's app has (tools/release.sh).
+# IRIE_MAC_INSTALL=1 marks a build to install, as tools/live.sh and
+# tools/release.sh make: it takes a build number, the time it was built,
+# where any other build takes 0 (below, at the version).
 #
 # `build.sh --hot OBJ APP` builds a preview for tools/hot.sh instead (docs/
 # MAC.md, "Hot loading"): APP, named Irie Preview, with IRIE_MAC_HOT_ID as
@@ -196,7 +199,19 @@ if [ -n "$hot" ]; then
 	cp "$out" "$app/Contents/MacOS/$exe"
 	id=${IRIE_MAC_HOT_ID:-$BRAND_BUNDLE_ID.preview} shown="$BRAND_NAME Preview"
 fi
-for kv in "CFBundleExecutable $exe" "CFBundleIdentifier $id" "CFBundleName $shown" "CFBundleDisplayName $shown"; do
+# The version is the release the app comes from (internal/version). The
+# build number picks the copy that opens when macOS opens the app by its
+# identifier rather than its path, as System Settings does to reopen it
+# after one of its privacy settings changes, or `open -b`: Launch Services
+# takes the copy with the highest CFBundleVersion, and among equal ones
+# any. So a build to install takes the time it was built, UTC, as
+# 20261114.153012, and the newest install wins; every other build, such as
+# one left in a worktree, takes 0 and never wins over it.
+version=$(sed -n 's/^const Base = "\([^"]*\)".*/\1/p' ../internal/version/version.go)
+build=0
+if [ "${IRIE_MAC_INSTALL:-}" = 1 ] && [ -z "$hot" ]; then build=$(date -u +%Y%m%d.%H%M%S); fi
+for kv in "CFBundleExecutable $exe" "CFBundleIdentifier $id" "CFBundleName $shown" "CFBundleDisplayName $shown" \
+	"CFBundleShortVersionString ${version:?internal/version has no Base}" "CFBundleVersion $build"; do
 	plutil -replace "${kv%% *}" -string "${kv#* }" "$app/Contents/Info.plist"
 done
 if [ -f "$mermaid/mermaid.min.js" ]; then

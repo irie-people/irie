@@ -47,9 +47,9 @@ const (
 	// tips for those new to it.
 	Bar = "cheer"
 	// Tags are the go build tags the scripts build it with (tools/live.sh,
-	// tools/release.sh), comma-separated: noprivacy, nowriting and nomail
-	// leave those plugins' code out (DESIGN §4.17), as a company's copy may
-	// want.
+	// tools/release.sh), comma-separated: noprivacy, nowriting, nomarkets
+	// and nomail leave those plugins' code out (DESIGN §4.17), as a
+	// company's copy may want.
 	// A build by hand passes them itself: go build -tags "$(tools/brand.sh
 	// --tags)" ./cmd/irie.
 	Tags = ""

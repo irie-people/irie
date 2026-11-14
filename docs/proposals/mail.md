@@ -8,7 +8,7 @@ Every account's mail in one list inside Irie, beside the sessions: the newest fi
 
 ## What it is
 
-Irie's third plugin, **Mail** (DESIGN §4.17), on by default: `[plugins] mail`, and `irie plugins off mail` turns it off. It shows nothing until an account is added. Its two parts are kinds of account:
+Irie's fourth plugin, **Mail** (DESIGN §4.17), on by default: `[plugins] mail`, and `irie plugins off mail` turns it off. It shows nothing until an account is added. Its two parts are kinds of account:
 
 | Part | How Irie reads it | Its check |
 |---|---|---|
@@ -47,7 +47,7 @@ Each account wears one of the agents' six colours (Theme.agent), which the core 
 ### Where it shows
 
 - **The right sidebar's Mail tab** (⌥⌘7, or `:mail`): the list beside the sessions, with the folder (Inbox, Starred, Sent, Drafts, Archive, Junk, Trash, the same for every account), search across every account, and the strip of accounts. A message opens in place of the list. The tab's count is the unread mail, never red: unread mail is news, not something that needs you.
-- **The Mail window** (Plugins › Mail › Open Mail Window, ⇧⌘M): folders and accounts, the list and the message side by side.
+- **The Mail window** (Window › Mail, ⇧⌘E, while the plugin is on): folders and accounts, the list and the message side by side.
 - **Reading**: the message's text, or its HTML read as text when that is all it has; or, with **As Sent**, the HTML as the sender laid it out, in a web view that runs no script, keeps no data and loads nothing from elsewhere (a content security policy allows only the page's own styles and inline pictures), so no tracking picture reports that it was read. A link opens in the browser. Its files are listed by name and size.
 - **Acting**: Reply, Reply All and Forward open the composer, From set to the account the message came to; Send sends at once, threaded under the message answered, which is then marked answered. Gmail and Proton keep the copy in Sent themselves. Star, Mark as Unread, Archive (Gmail's All Mail), Move to Inbox, Junk and Move to Trash.
 - **Plugins**: Settings › Plugins, the Plugins menu, `irie plugins` and `:plugins` show each part's state and what it lacks.

@@ -61,6 +61,8 @@ struct IrieApp: App {
             LearnCommands(store: store)
             IrieCommands(store: store, menu: store.menu)
             PluginCommands(store: store, menu: store.menu)
+            MarketsCommands(menu: store.menu)
+            MailCommands(menu: store.menu)
         }
         // Help > Learning Resources and Glossary (Learn.swift).
         Window("Learn", id: LearnWindow.id) {
@@ -75,14 +77,25 @@ struct IrieApp: App {
                 .environment(store)
         }
         .defaultSize(ThemeMaker.size)
-        // Plugins > Mail > Open Mail Window (⇧⌘M): the mail plugin's
-        // accounts, list and message side by side (MailViews.swift).
+        // Window › Markets (⇧⌘M) and :markets: the markets plugin's map
+        // (Markets.swift). Its item shows only while the plugin is on, so
+        // the one SwiftUI would add for the window goes.
+        Window("Markets", id: MarketsWindow.id) {
+            MarketsWindow()
+                .environment(store)
+        }
+        .defaultSize(width: 1280, height: 820)
+        .commandsRemoved()
+        // Window › Mail (⇧⌘E): the mail plugin's accounts, list and message
+        // side by side (MailViews.swift). As with Markets, its item shows
+        // only while the plugin is on.
         Window("Mail", id: MailWindow.id) {
             MailWindow()
                 .environment(store)
                 .frame(minWidth: 760, minHeight: 420)
         }
         .defaultSize(width: 1080, height: 700)
+        .commandsRemoved()
         // Irie > Settings… (⌘,): every preference in one place (Settings.swift).
         Settings {
             SettingsView(model: store.settings)
@@ -131,6 +144,19 @@ final class KeyRouter {
                 }
                 return nil
             }
+            // ⌘1–9 shows that card. Go › Sessions lists only the cards
+            // there are, so this takes the key past the last one too,
+            // which the terminal would otherwise get.
+            if irie, mods == .command, let c = event.charactersIgnoringModifiers, let n = Int(c), (1...9).contains(n) {
+                MainActor.assumeIsolated { store.showRow(n) }
+                return nil
+            }
+            // ⇧⌘H shows the selected session's helpers, as View › Helpers
+            // (⌥⌘3) does.
+            if irie, mods == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "h" {
+                MainActor.assumeIsolated { store.toggleHelpers() }
+                return nil
+            }
             if mods == .control, event.charactersIgnoringModifiers == "]" {
                 MainActor.assumeIsolated { store.toggleFocus() }
                 return nil
@@ -138,7 +164,7 @@ final class KeyRouter {
             // In Irie's window ⌘W closes the selected session and ⇧⌘W the
             // window, even while the terminal has the keyboard. In any other
             // window, such as Settings or About, either closes that window:
-            // the menu's ⌘W is Close Session.
+            // the menu's ⌘W closes a session (MenuBar.swift).
             if event.charactersIgnoringModifiers?.lowercased() == "w", mods == .command || mods == [.command, .shift],
                let window = event.window {
                 MainActor.assumeIsolated {
@@ -181,6 +207,7 @@ extension Notification.Name {
 @MainActor
 struct ContentView: View {
     @Environment(Store.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @State private var keys = KeyRouter()
     @AppStorage(Palette.defaultsKey) private var theme = Palette.standard.id
 
@@ -227,10 +254,11 @@ struct ContentView: View {
         })
         .onAppear {
             keys.install(store)
-            WindowCloseItem.install()
             LookBook.shared.start(store)
         }
         .onChange(of: theme) { store.sendTheme(theme) }
+        // :markets in a task bar opens the Markets window (Markets.swift).
+        .onReceive(NotificationCenter.default.publisher(for: .irieMarkets)) { _ in openWindow(id: MarketsWindow.id) }
     }
 }
 

@@ -22,7 +22,7 @@ import (
 const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
 
   ` + brand.Slug + ` ctl list [--json]                 the sessions and their states
-  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...
+  ` + brand.Slug + ` ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...
                                          start a task and print its session id,
                                          starting ` + brand.Name + ` if needed. @REPO runs it in
                                          a new worktree of that repo, @REPO! in the
@@ -31,7 +31,11 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          reads the task from stdin. --wait waits
                                          until the agent is ready, and fails if it
                                          is not; --force spawns a local profile even
-                                         when its context or memory falls short
+                                         when its context or memory falls short;
+                                         --group puts it in the group of that name
+                                         or path, Work/Sidebar, made when none has it
+                                         (else it goes in the group of the session
+                                         this runs in)
   ` + brand.Slug + ` ctl input [--json] [--session SESSION] TEXT...
                                          type to ` + brand.Name + ` as into a task bar, and
                                          print what it says: a task with its @
@@ -53,7 +57,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
   ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
-  ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost off] [--json]
+  ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
                                          Gabriel: whether you are at the computer
                                          and it is busy, what is in your focus,
                                          and the sessions and apps he holds back
@@ -61,7 +65,10 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          (arch.gabriel.on); boost gives your focus
                                          the machine first for a while (an hour,
                                          arch.gabriel.boost) busy or not, and frees
-                                         idle local models; boost off ends it
+                                         idle local models; boost always puts it
+                                         first whenever you are at the computer
+                                         (arch.gabriel.always); boost off ends
+                                         either
   ` + brand.Slug + ` ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]
                                          Raphael (Raffi): what his last look over
                                          your Mac found, with his advice: what runs
@@ -202,6 +209,12 @@ func ctl(args []string) error {
 		return ctlPark(args[1:], args[0] == "park")
 	case "pin", "unpin":
 		return ctlPin(args[1:], args[0] == "pin")
+	case "group":
+		return ctlGroup(args[1:])
+	case "ungroup":
+		return ctlUngroup(args[1:])
+	case "nest":
+		return ctlNest(args[1:])
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":
@@ -479,6 +492,7 @@ func ctlSpawn(args []string) error {
 	name := fs.String("name", "", "name the session")
 	wait := fs.Bool("wait", false, "wait until the agent is ready, and fail if it is not")
 	force := fs.Bool("force", false, "spawn a local profile even when its context or memory falls short")
+	group := fs.String("group", "", "put the session in the group of this name, made when none has it")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -498,7 +512,7 @@ func ctlSpawn(args []string) error {
 		task = string(b)
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [@REPO[!]] [+PROFILE] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl spawn [--wait] [--force] [--cwd DIR] [--name NAME] [--group NAME] [@REPO[!]] [+PROFILE] TASK...")
 	}
 	if *cwd != "" && a.Repo != "" {
 		return errors.New("--cwd runs a task in place, so it cannot go with @REPO")
@@ -519,7 +533,7 @@ func ctlSpawn(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.Task, a.Cwd, a.Name, a.Force = task, dir, *name, *force
+	a.Task, a.Cwd, a.Name, a.Force, a.Group = task, dir, *name, *force, strings.TrimSpace(*group)
 	// An agent's spawn goes beside its own session when ui.new_tabs is
 	// next.
 	a.After = os.Getenv(brand.Env("SESSION"))

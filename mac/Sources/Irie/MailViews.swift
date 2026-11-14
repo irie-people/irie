@@ -10,6 +10,24 @@ import WebKit
 
 // MARK: The tab and the window
 
+/// Window › Mail (⇧⌘E), while the mail plugin is on. The window's own item,
+/// which SwiftUI would add whatever the plugin, is removed (IrieApp.swift).
+struct MailCommands: Commands {
+    let menu: MenuState
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        let on = MainActor.assumeIsolated { menu.facts.plugins.contains { $0.name == "mail" && $0.on } }
+        CommandGroup(before: .windowList) {
+            if on {
+                Button("Mail") { openWindow(id: MailWindow.id) }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                Divider()
+            }
+        }
+    }
+}
+
 /// The right sidebar's Mail tab (⌥⌘7): every account's newest mail in one
 /// list, a strip of the accounts above it to show one alone, and the
 /// message read in place of the list.
@@ -36,8 +54,8 @@ struct MailTab: View {
     }
 }
 
-/// The Mail window (Plugins › Mail › Open Mail Window, ⇧⌘M): the accounts
-/// and folders, the list and the message read, side by side.
+/// The Mail window (Window › Mail, ⇧⌘E): the accounts and folders, the
+/// list and the message read, side by side.
 @MainActor
 struct MailWindow: View {
     static let id = "mail"
@@ -136,7 +154,7 @@ struct MailBar: View {
             barButton("square.and.pencil", help: "Write a message") { mail.compose() }
                 .disabled(mail.accounts.isEmpty)
             if let popOut {
-                barButton("macwindow", help: "Open Mail in a window of its own (⇧⌘M)", action: popOut)
+                barButton("macwindow", help: "Open Mail in a window of its own (⇧⌘E)", action: popOut)
             }
         }
         .padding(.horizontal, 10)

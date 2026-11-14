@@ -56,6 +56,7 @@ type Config struct {
 	VPN      VPN                `toml:"vpn"`
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
+	Markets  Markets            `toml:"markets"`
 	Mail     Mail               `toml:"mail"`
 	Plugins  Plugins            `toml:"plugins"`
 }
@@ -71,11 +72,26 @@ type Plugins struct {
 	// Writing is writing in Variorum: :write and the skill its sessions run
 	// (docs/proposals/writers.md).
 	Writing bool `toml:"writing"`
+	// Markets is a map of your own market research: the page in
+	// markets.folder in the Mac app's Markets window, and :markets.
+	Markets bool `toml:"markets"`
 	// Mail is Irie's own mail client: Gmail, Proton Mail and other IMAP
 	// accounts in one list, each in a colour of its own
 	// (docs/proposals/mail.md).
 	Mail bool `toml:"mail"`
 }
+
+// Markets is the markets plugin's map (DESIGN §4.17).
+type Markets struct {
+	// Folder holds the map: its index.html is the page the Markets window
+	// shows, and :markets TASK starts a session there. "" = none chosen
+	// yet.
+	Folder string `toml:"folder"`
+}
+
+// MarketsOn says whether the markets plugin runs: plugins.markets, with
+// the plugin built in.
+func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 
 // MailOn says whether the mail plugin runs: plugins.mail, with the plugin
 // built in.
@@ -226,17 +242,19 @@ type Mikael struct {
 // first: the session you are looking at or messaged lately, and the app in
 // front. Every other session's processes, and your other heavy apps, step
 // back into macOS's background state until it is calm again or you walk
-// away. macOS lets a process slow another of its user's down and undo it,
-// but not raise one, and gives no way to set memory aside, so the others
-// step back instead.
+// away. The tab you are on comes first of all: while it works the machine,
+// the rest of your focus steps back for it too. macOS lets a process slow
+// another of its user's down and undo it, but not raise one, and gives no
+// way to set memory aside, so the others step back instead.
 type Gabriel struct {
 	On      bool          `toml:"on"`      // give your focus the machine first while it is busy
 	Outside bool          `toml:"outside"` // slow your heavy apps outside Irie too, not only Irie's sessions
 	Away    time.Duration `toml:"away"`    // with no keyboard or mouse for this long you are away, and nothing is held back; 0 = always at the computer
 	Word    time.Duration `toml:"word"`    // a session you message or start stays in your focus this long
-	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
+	Heavy   float64       `toml:"heavy"`   // heavy from this share of one CPU, in percent: an app outside Irie, which is slowed, or the tab you are on, for which the rest of your focus steps back
 	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
 	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
+	Always  bool          `toml:"always"`  // boost whenever you are at the computer, busy or not: the rest runs slower even when the machine has room to spare
 	Guard   bool          `toml:"guard"`   // turn away an agent's call that would bring an app or a page to the front while you look elsewhere
 }
 
@@ -902,9 +920,10 @@ func Parse(data []byte, path string) (Config, error) {
 		VPN      *VPN                      `toml:"vpn"`
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
+		Markets  *Markets                  `toml:"markets"`
 		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1405,6 +1424,9 @@ func (c Config) Validate() error {
 	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
 		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
 	}
+	if f := c.Markets.Folder; f != "" && !pathLike(f) {
+		bad("markets.folder = %q: must be an absolute or ~ path to the folder that holds your map, or empty for none", f)
+	}
 	br := c.Browser
 	if !slices.Contains(BrowserConnectors, br.Connector) {
 		bad("browser.connector = %q: must be on or off", br.Connector)
@@ -1453,7 +1475,7 @@ func (c Config) Validate() error {
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
-	if PrivacyBuilt && WritingBuilt && MailBuilt {
+	if PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1475,6 +1497,10 @@ func (c Config) Write(w io.Writer) error {
 	}
 	if !WritingBuilt {
 		delete(plugins, "writing")
+	}
+	if !MarketsBuilt {
+		delete(m, "markets")
+		delete(plugins, "markets")
 	}
 	if !MailBuilt {
 		delete(m, "mail")
