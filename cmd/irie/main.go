@@ -49,6 +49,9 @@ const usage = `usage: ` + brand.Slug + ` [command]
                           while sessions work; asks for your password once
   ` + brand.Slug + ` lid                whether ` + brand.Name + ` keeps this Mac awake with its lid
                           closed now, and why
+  ` + brand.Slug + ` away [--for 10s] [--app NAME]... -- COMMAND
+                          run COMMAND with each window it opens on a desktop
+                          you are not looking at, never the one you work on
   ` + brand.Slug + ` remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (` + brand.Slug + ` remote for help)
 ` + privacyUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
@@ -134,6 +137,8 @@ func run(args []string) int {
 		err = peerCmd(args)
 	case "lid":
 		err = lidCmd(args)
+	case "away":
+		err = away(args)
 	case "setup":
 		err = setup(args)
 	case "version":

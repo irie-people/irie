@@ -301,8 +301,9 @@ func (m Model) statusLine() string {
 	case itemOutside:
 		return m.outsideStatus(m.outside[it.o])
 	case itemGroup:
+		// A group of yours inside another by its path, Work / Irie.
 		g := it.group
-		text := g.title + " · " + groupLabel(g)
+		text := strings.Join(g.path(), " / ") + " · " + groupLabel(g)
 		if g.outside {
 			text = "Claude Code sessions in other terminals · m moves an idle one in"
 		}

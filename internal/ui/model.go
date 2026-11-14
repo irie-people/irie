@@ -536,6 +536,10 @@ func (m Model) barKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if o, ok := m.selOutside(); ok {
 			in.Outside = o.Key()
 		}
+		// A header of one of your groups, for :nest and :ungroup.
+		if it, ok := m.selected(); ok && it.kind == itemGroup && it.group.user != "" && !it.group.bare {
+			in.Group = it.group.user
+		}
 		m.spawning = true
 		if first, _, _ := strings.Cut(strings.TrimSpace(in.Text), "\n"); !strings.HasPrefix(first, ":") {
 			m.setStatus("starting…", false)

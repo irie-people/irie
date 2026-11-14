@@ -3,10 +3,11 @@ import SwiftUI
 
 /// `Irie --bench` measures what one change to the store costs the window:
 /// the main thread's CPU time for each kind of change, with 30 fixture
-/// sessions drawn offscreen, never a core. It is the yardstick for "only
+/// sessions drawn out of sight, never a core. It is the yardstick for "only
 /// redraw what changed" (docs/proposals/optimisation.md, iteration 6): a
-/// change that draws more than it shows costs here first. Like --snapshot,
-/// the window is ordered in far off any screen and the app takes no focus.
+/// change that draws more than it shows costs here first. Like --snapshot's,
+/// the window is see-through, on a desktop the user cannot see, and the app
+/// takes no focus.
 @MainActor
 enum Bench {
     /// The main thread's CPU time so far.
@@ -32,6 +33,8 @@ enum Bench {
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
         w.toolbarStyle = IrieApp.toolbarStyle
+        // Never in sight, as --snapshot's (Desktops.swift).
+        Desktops.drawUnseen(w)
         let host = NSHostingView(rootView: ContentView().environment(store))
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host

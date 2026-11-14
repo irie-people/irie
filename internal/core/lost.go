@@ -103,6 +103,11 @@ func (c *Core) findLost(now time.Time) {
 				data[k] = true
 			}
 		}
+		for k, v := range map[string]string{"space": r.Space, "group": r.Group} {
+			if v != "" {
+				data[k] = v
+			}
+		}
 		e := event.Event{TS: event.Stamp(r.Closed), Session: r.ID, Source: event.SourceIrie, Harness: l.harness, Kind: event.UIClosed, Data: data}
 		if _, err := c.journal.Append(e); err != nil {
 			c.log.Warn("lost: journal", "session", r.ID, "err", err)
@@ -254,6 +259,7 @@ func (c *Core) lostRecord(l lostOne, evs []event.Event, now time.Time) closedRec
 	// holds even what a journal that could not be written lacks.
 	_, noFreeze := os.Stat(c.paths.FreezeFile(l.id))
 	r.Pinned, r.Parked, r.Frozen = t.pinned, t.parked, noFreeze == nil
+	r.Space, r.Group = t.space, t.group
 	return r
 }
 
@@ -304,6 +310,20 @@ func (c *Core) claudeConfig(profile string) string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".claude")
+}
+
+// comeHome puts a session that reopen brought back in the space and the
+// group it was closed in, while they are still there and the group is in
+// that space: a reopened session starts over (track.apply). The caller
+// holds c.mu.
+func (c *Core) comeHome(x *session, r closedRecord) {
+	if s := c.spaceKey(r.Space); s != "" {
+		c.record(x, event.Event{Source: event.SourceIrie, Kind: event.UISpaced, Data: map[string]any{"space": s}})
+	}
+	if c.groupIndex(r.Group) >= 0 && c.groupIn(r.Group, c.spaceOf(x), map[string]bool{x.id: true}) {
+		c.record(x, event.Event{Source: event.SourceIrie, Kind: event.UIGrouped, Data: map[string]any{"group": r.Group}})
+		c.tidyOrder()
+	}
 }
 
 // comeBack puts a lost session that reopen brought back where it was:

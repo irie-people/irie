@@ -153,7 +153,10 @@ enum Snapshot {
     }
 
     /// The window as the app draws it, at 2x, and its title bar's height in
-    /// points. It is ordered in far off any screen, so it never shows.
+    /// points. It has to be ordered in for SwiftUI to lay it out, and macOS
+    /// brings any titled window ordered in onto a screen, however far off
+    /// it was placed, so it is see-through, takes no clicks and goes to a
+    /// desktop the user cannot see first (Desktops.swift): it never shows.
     private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat) -> (NSBitmapImageRep, CGFloat) {
         let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: height),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -161,6 +164,7 @@ enum Snapshot {
         w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         w.toolbarStyle = IrieApp.toolbarStyle
         w.titleVisibility = IrieApp.showsTitle ? .visible : .hidden
+        Desktops.drawUnseen(w)
         let host = NSHostingView(rootView: root)
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
@@ -266,6 +270,13 @@ enum Fixture {
     }}
     """#
 
+    /// Your groups, one inside another: Work holds Mac app and
+    /// patent-research, Mac app holds conversation-view and Looks, and Looks
+    /// holds warm-look.
+    static let groups = [GroupInfo(id: "girie0000000", name: "Work"),
+                         GroupInfo(id: "gmacapp00000", name: "Mac app", parent: "girie0000000"),
+                         GroupInfo(id: "glooks000000", name: "Looks", parent: "gmacapp00000")]
+
     static var sessions: [Session] {
         let now = Date()
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
@@ -284,9 +295,10 @@ enum Fixture {
                     tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800), hue: 5),
             Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "\(Brand.slug)/conversation-view", profile: "claude",
-                    trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
+                    group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
-                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "glooks000000",
+                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",
@@ -296,7 +308,7 @@ enum Fixture {
                     team: [Teammate(session: "s10patents00-1", name: "seed-finder", color: "blue", type: "general-purpose", title: "Reading the claims", working: true),
                            Teammate(session: "s10patents00-2", name: "expand-a", color: "green", type: "general-purpose", title: "Paging the citations", working: true)],
                     subs: Subs(helpers: 1, teammates: 2),
-                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), hue: 4),
+                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), group: "girie0000000", hue: 4),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "\(Brand.slug)/bigup-m0", profile: "claude", hue: 3),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),
