@@ -49,6 +49,8 @@ final class MenuState {
         var showTerminal = false
         /// The right sidebar's tab on show; nil while it is closed.
         var sideTab: SideTab?
+        /// The panes beside the terminal show (Rolodex.swift).
+        var panesOpen = false
         var canPlugins = false
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
@@ -101,6 +103,7 @@ extension Store {
         f.helperShown = helperShown
         f.showTerminal = showTerminal
         f.sideTab = side.open ? side.tab : nil
+        f.panesOpen = rolodex.open
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.canVPN = canVPN
@@ -226,10 +229,10 @@ struct IrieCommands: Commands {
             }
             // The panes beside the terminal, a rolodex of cards
             // (Rolodex.swift); Go walks them.
-            Button(MainActor.assumeIsolated { store.rolodex.open } ? "Hide Panes" : "Show Panes", action: run { store.togglePanes() })
+            Button(f.panesOpen ? "Hide Panes" : "Show Panes", action: run { store.togglePanes() })
                 .keyboardShortcut("p", modifiers: [.command, .option])
             Menu("New Pane") {
-                ForEach(MainActor.assumeIsolated { store.paneKinds }) { k in
+                ForEach(PaneKind.offered(f.plugins)) { k in
                     Button(k.title, action: run { store.newPane(k) })
                 }
             }

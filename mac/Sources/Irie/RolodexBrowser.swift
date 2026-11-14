@@ -52,6 +52,8 @@ final class WebPool {
     static let shared = WebPool()
     private var pages: [String: WebPage] = [:]
     private var used: [String] = []
+    /// The cards whose page is on a wheel now, which are never dropped.
+    private var mounted: [String: Int] = [:]
     private let keep = 10
 
     func page(for id: String, url: String?) -> WebPage {
@@ -62,10 +64,20 @@ final class WebPool {
         if let p = pages[id] { return p }
         let p = WebPage(start: url)
         pages[id] = p
-        while used.count > keep {
-            pages[used.removeFirst()] = nil
+        var spare = used.filter { mounted[$0] == nil && $0 != id }
+        while pages.count > keep, !spare.isEmpty {
+            let old = spare.removeFirst()
+            pages[old] = nil
+            used.removeAll { $0 == old }
         }
         return p
+    }
+
+    func mount(_ id: String) { mounted[id, default: 0] += 1 }
+
+    func unmount(_ id: String) {
+        mounted[id, default: 1] -= 1
+        if mounted[id] == 0 { mounted[id] = nil }
     }
 
     func drop(_ id: String) {
@@ -85,6 +97,9 @@ final class WebPage: ObservableObject {
     @Published private(set) var loading = false
     @Published private(set) var progress = 0.0
     @Published var failed: String?
+    /// The page last asked for: a first load that fails leaves the view
+    /// with no address, and Try Again and the card keep this one.
+    @Published private(set) var requested: URL?
     /// Told of each page's address and title, which its card keeps.
     var changed: ((URL?, String?) -> Void)?
     private var watches: [NSKeyValueObservation] = []
@@ -128,16 +143,23 @@ final class WebPage: ObservableObject {
                 onMain { self?.progress = v }
             },
         ]
-        if let s = start, let u = URL(string: s) { web.load(URLRequest(url: u)) }
+        if let s = start, let u = URL(string: s) {
+            requested = u
+            web.load(URLRequest(url: u))
+        }
     }
+
+    /// The page on show, or the one asked for while none loaded.
+    var address: URL? { url ?? requested }
 
     func go(_ url: URL) {
         failed = nil
+        requested = url
         web.load(URLRequest(url: url))
     }
 
     private func report() {
-        changed?(url, title)
+        changed?(address, title)
     }
 }
 
@@ -200,16 +222,17 @@ private final class WebGuide: NSObject, WKNavigationDelegate, WKUIDelegate {
 @MainActor
 struct BrowserPane: View {
     @Environment(Store.self) private var store
-    let session: Session
+    let session: String
     let pane: DeckPane
     let shows: Bool
+    let keys: Bool
     let token: Int
 
     var body: some View {
         if store.isFixture {
             BrowserSketch(pane: pane)
         } else {
-            BrowserLive(session: session, pane: pane, page: WebPool.shared.page(for: pane.id, url: pane.url), shows: shows, token: token)
+            BrowserLive(session: session, pane: pane, page: WebPool.shared.page(for: pane.id, url: pane.url), shows: shows, keys: keys, token: token)
         }
     }
 }
@@ -218,10 +241,11 @@ struct BrowserPane: View {
 @MainActor
 private struct BrowserLive: View {
     @Environment(Store.self) private var store
-    let session: Session
+    let session: String
     let pane: DeckPane
     @ObservedObject var page: WebPage
     let shows: Bool
+    let keys: Bool
     let token: Int
     @State private var text = ""
     @FocusState private var editing: Bool
@@ -230,31 +254,38 @@ private struct BrowserLive: View {
         VStack(spacing: 0) {
             bar
             ZStack {
-                WebHost(page: page, token: token, takesKeys: page.url != nil && !editing)
-                    .opacity(page.url == nil ? 0 : 1)
-                if page.url == nil { start }
+                WebHost(id: pane.id, page: page, token: token, takesKeys: page.address != nil && !editing,
+                        takesKeysOnStart: shows && keys && page.address != nil)
+                    .opacity(page.address == nil ? 0 : 1)
+                if page.address == nil { start }
                 if let f = page.failed { failure(f) }
             }
             .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9, style: .continuous))
         }
         .onAppear {
             page.changed = { [weak store] url, title in
-                store?.rolodex.update(pane.id, in: session.id, url: url?.absoluteString, title: title)
+                store?.rolodex.update(pane.id, in: session, url: url?.absoluteString, title: title)
             }
-            text = Address.shown(page.url)
-            if store.rolodex.keys == pane.id, page.url == nil { editing = true }
+            text = Address.shown(page.address)
+            if shows, keys, page.address == nil { editing = true }
         }
-        .onChange(of: page.url) { _, u in if !editing { text = Address.shown(u) } }
+        .onChange(of: page.address) { _, u in if !editing { text = Address.shown(u) } }
         // Sent the keyboard: a card with no page yet types its address.
-        .onChange(of: token) { if page.url == nil { editing = true } }
+        .onChange(of: token) { if page.address == nil { editing = true } }
     }
 
     private var bar: some View {
         HStack(spacing: 2) {
             icon("chevron.left", help: "Back", off: !page.canGoBack) { page.web.goBack() }
             icon("chevron.right", help: "Forward", off: !page.canGoForward) { page.web.goForward() }
-            icon(page.loading ? "xmark" : "arrow.clockwise", help: page.loading ? "Stop" : "Reload", off: page.url == nil) {
-                if page.loading { page.web.stopLoading() } else { page.web.reload() }
+            icon(page.loading ? "xmark" : "arrow.clockwise", help: page.loading ? "Stop" : "Reload", off: page.address == nil) {
+                if page.loading {
+                    page.web.stopLoading()
+                } else if let u = page.address, page.url == nil || page.failed != nil {
+                    page.go(u)
+                } else {
+                    page.web.reload()
+                }
             }
             TextField("Address, a port such as 3000, or words to search", text: $text)
                 .textFieldStyle(.plain)
@@ -262,7 +293,7 @@ private struct BrowserLive: View {
                 .focused($editing)
                 .onSubmit { go(text) }
                 .onExitCommand {
-                    text = Address.shown(page.url)
+                    text = Address.shown(page.address)
                     editing = false
                 }
                 .padding(.horizontal, 9)
@@ -281,8 +312,8 @@ private struct BrowserLive: View {
                     }
                 }
                 .padding(.horizontal, 4)
-            icon("arrow.up.right.square", help: "Open this page in your browser", off: page.url == nil) {
-                if let u = page.url { NSWorkspace.shared.open(u) }
+            icon("arrow.up.right.square", help: "Open this page in your browser", off: page.address == nil) {
+                if let u = page.address { NSWorkspace.shared.open(u) }
             }
         }
         .padding(.horizontal, 6)
@@ -345,7 +376,7 @@ private struct BrowserLive: View {
                 .font(Theme.font(12))
                 .foregroundStyle(Theme.muted)
                 .multilineTextAlignment(.center)
-            Button("Try Again") { if let u = page.url { page.go(u) } else { page.web.reload() } }
+            Button("Try Again") { if let u = page.address { page.go(u) } else { page.web.reload() } }
                 .controlSize(.small)
         }
         .padding(18)
@@ -366,16 +397,25 @@ private struct BrowserLive: View {
 /// Holds a card's web view, which the pool keeps when the card goes, and
 /// gives it the keyboard when the card is sent it.
 private struct WebHost: NSViewRepresentable {
+    let id: String
     let page: WebPage
     let token: Int
     let takesKeys: Bool
+    /// The keyboard was sent to the card before it showed: its page takes
+    /// it once it is in the window.
+    let takesKeysOnStart: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { Coordinator(id: id) }
 
     func makeNSView(context: Context) -> NSView {
         let box = NSView()
         place(page.web, in: box)
         context.coordinator.token = token
+        WebPool.shared.mount(id)
+        if takesKeysOnStart {
+            let web = page.web
+            DispatchQueue.main.async { [weak box] in box?.window?.makeFirstResponder(web) }
+        }
         return box
     }
 
@@ -387,11 +427,15 @@ private struct WebHost: NSViewRepresentable {
         }
     }
 
-    static func dismantleNSView(_ box: NSView, coordinator _: Coordinator) {
+    static func dismantleNSView(_ box: NSView, coordinator: Coordinator) {
         for v in box.subviews { v.removeFromSuperview() }
+        WebPool.shared.unmount(coordinator.id)
     }
 
+    /// Puts the card's view in the box, alone: a view of a page made again
+    /// takes the old one's place.
     private func place(_ web: WKWebView, in box: NSView) {
+        for v in box.subviews where v !== web { v.removeFromSuperview() }
         web.removeFromSuperview()
         web.frame = box.bounds
         web.autoresizingMask = [.width, .height]
@@ -399,7 +443,10 @@ private struct WebHost: NSViewRepresentable {
     }
 
     final class Coordinator {
+        let id: String
         var token = 0
+
+        init(id: String) { self.id = id }
     }
 }
 

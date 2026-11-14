@@ -66,6 +66,10 @@ struct MarketsWindow: View {
     /// its own: no window size, and no toolbar, which would join the main
     /// window's.
     var embedded = false
+    /// On a card: bumped to give the map the keyboard, and whether it takes
+    /// it as it first shows.
+    var focus = 0
+    var takesKeys = false
     @Environment(Store.self) private var store
     @State private var map: MarketsResult?
     @State private var loaded = false
@@ -117,7 +121,8 @@ struct MarketsWindow: View {
 
     @ViewBuilder private var content: some View {
         if let map, map.state == "ready", let page = map.page, let folder = map.folder {
-            MarketsWeb(page: URL(fileURLWithPath: page), folder: URL(fileURLWithPath: folder, isDirectory: true), reload: reloads)
+            MarketsWeb(page: URL(fileURLWithPath: page), folder: URL(fileURLWithPath: folder, isDirectory: true), reload: reloads,
+                       focus: focus, takesKeys: takesKeys)
         } else if let map {
             MarketsLacking(map: map) { await look() }
         } else if loaded {
@@ -271,6 +276,8 @@ private struct MarketsWeb: NSViewRepresentable {
     let page: URL
     let folder: URL
     let reload: Int
+    var focus = 0
+    var takesKeys = false
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -285,6 +292,8 @@ private struct MarketsWeb: NSViewRepresentable {
         web.allowsBackForwardNavigationGestures = false
         context.coordinator.page = page
         context.coordinator.reloads = reload
+        context.coordinator.focus = focus
+        if takesKeys { DispatchQueue.main.async { web.window?.makeFirstResponder(web) } }
         Self.offline { list in
             guard let list else {
                 web.loadHTMLString(Self.unblocked, baseURL: nil)
@@ -304,6 +313,10 @@ private struct MarketsWeb: NSViewRepresentable {
 
     func updateNSView(_ web: WKWebView, context: Context) {
         let c = context.coordinator
+        if c.focus != focus {
+            c.focus = focus
+            web.window?.makeFirstResponder(web)
+        }
         if c.page != page {
             c.page = page
             c.reloads = reload
@@ -329,6 +342,7 @@ private struct MarketsWeb: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var page: URL?
         var reloads = 0
+        var focus = 0
         /// Opens a link out in the browser.
         var open: (URL) -> Void = { NSWorkspace.shared.open($0) }
 

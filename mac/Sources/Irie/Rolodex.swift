@@ -68,6 +68,11 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
 
     /// The plugin it comes with, which must be on for it to be offered.
     var plugin: String? { self == .markets ? "markets" : nil }
+
+    /// The kinds on offer with these plugins: a plugin's only while it is on.
+    static func offered(_ plugins: [PluginInfo], all: Bool = false) -> [PaneKind] {
+        allCases.filter { k in k.plugin.map { p in all || plugins.contains { $0.name == p && $0.on } } ?? true }
+    }
 }
 
 /// One card of the wheel.
@@ -116,6 +121,8 @@ struct Deck: Codable, Equatable {
 /// one that comes to it.
 struct Flip: Equatable, Identifiable {
     var id: Int
+    /// The session whose wheel turns: another's never shows on this one.
+    var session: String
     /// The card that leaves the front; nil for a blank card.
     var from: DeckPane?
     var to: DeckPane?
@@ -241,7 +248,30 @@ final class RolodexModel {
     func token(_ id: String) -> Int { focus[id] ?? 0 }
 
     /// Gives a card the keyboard, once its live pane shows.
-    func bump(_ id: String) { focus[id, default: 0] += 1 }
+    func bump(_ id: String) {
+        focus[id, default: 0] += 1
+        if id != Self.blank, !fixture { settle(id) }
+    }
+
+    /// A card that took no keyboard, such as a map still loading or a shell
+    /// not yet up, keeps its place all the same: the window holds the
+    /// keyboard itself, so typing reaches no agent unseen and the next ⌥Tab
+    /// goes on from the card.
+    private func settle(_ id: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.keys == id, !self.blankHasKeys, let w = WindowPanes.window,
+                      w.firstResponder is NSView, self.place(in: w, deck: Deck()) == nil else { return }
+                w.makeFirstResponder(nil)
+            }
+        }
+    }
+
+    /// Stops a spin under way, as another turn or a key starts.
+    func stopSpin() {
+        spin?.cancel()
+        spin = nil
+    }
 
     // MARK: Showing
 
@@ -266,10 +296,11 @@ final class RolodexModel {
         quietly { share = min(max(s, 0.2), 0.75) }
     }
 
-    /// The wheel's width in a room as wide as room.
-    static func width(share: Double, in room: CGFloat) -> CGFloat {
+    /// The wheel's width in a room as wide as room, leaving the terminal at
+    /// least keep, down to its own narrowest.
+    static func width(share: Double, in room: CGFloat, keep: CGFloat) -> CGFloat {
         let want = room * CGFloat(share)
-        return max(min(want, room - 300), min(280, room * 0.5)).rounded()
+        return max(min(want, room - keep), min(260, room * 0.5)).rounded()
     }
 
     private func quietly(_ work: () -> Void) {
@@ -350,6 +381,7 @@ final class RolodexModel {
     func turn(to target: String, in session: String, prefer forward: Bool = true, keys giveKeys: Bool, layout: @escaping (Int) -> CGFloat) {
         let d = deck(session)
         guard let t = d.panes.firstIndex(where: { $0.id == target }) else { return }
+        stopSpin()
         if giveKeys { keys = target }
         guard let f = d.frontIndex, f != t else {
             if giveKeys { bump(target) }
@@ -360,8 +392,6 @@ final class RolodexModel {
         let fwd = ahead == back ? forward : ahead < back
         let steps = fwd ? ahead : back
         let each = steps == 1 ? Self.flipTime : max(0.16, Self.flipTime / Double(steps).squareRoot())
-        spin?.cancel()
-        spin = nil
         // The first notch at once, on the key; the rest of a spin after it.
         notch(in: session, forward: fwd, duration: each, keys: giveKeys && steps == 1 ? target : nil, layout: layout)
         guard steps > 1 else { return }
@@ -389,7 +419,7 @@ final class RolodexModel {
             knob += (forward ? 1 : -1) * 360 / Double(max(n, 8))
         }
         saveSoon()
-        play(Flip(id: 0, from: from, to: to, forward: forward, start: Date(), duration: duration,
+        play(Flip(id: 0, session: session, from: from, to: to, forward: forward, start: Date(), duration: duration,
                   fromTab: layout(f), toTab: layout(ti)), calm: calm, keys: target)
     }
 
@@ -401,7 +431,7 @@ final class RolodexModel {
         if calm {
             flips = []
             swapped = nil
-            if let target { bump(target) }
+            if let target, keys == target { bump(target) }
             return
         }
         var f = flip
@@ -413,7 +443,9 @@ final class RolodexModel {
             try? await Task.sleep(nanoseconds: UInt64(f.swap * f.duration * 1e9))
             guard let self else { return }
             if self.flipCount == id { self.swapped = f.to?.id }
-            if let target, self.flipCount == id { self.bump(target) }
+            // Only while the keyboard is still meant for it: a key or a
+            // click since may have sent it elsewhere.
+            if let target, self.flipCount == id, self.keys == target { self.bump(target) }
             try? await Task.sleep(nanoseconds: UInt64((1 - f.swap) * f.duration * 1e9 + 30_000_000))
             self.flips.removeAll { $0.id == id }
             if self.flips.isEmpty { self.swapped = nil }
@@ -427,6 +459,13 @@ final class RolodexModel {
     /// the last key sent it.
     func keysNow(in window: NSWindow?, deck: Deck) -> String? {
         if turning { return keys }
+        return place(in: window, deck: deck)
+    }
+
+    /// Where the window's keyboard is, whatever the wheel is doing: on the
+    /// front card, or nil for anywhere else; where the last key sent it while
+    /// the window itself holds it.
+    private func place(in window: NSWindow?, deck: Deck) -> String? {
         if blankHasKeys { return Self.blank }
         guard let window, let r = window.firstResponder as? NSView else { return keys }
         guard open, let probe = frontProbe, probe.window === window else { return nil }
@@ -450,8 +489,10 @@ final class RolodexModel {
             let window = event.window
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
+                    // A click counts even mid-turn: it sends the keyboard
+                    // where it lands, and a turn under way then keeps it.
                     guard let s = store.paneSession, window != nil, window === WindowPanes.window else { return }
-                    let k = self.keysNow(in: window, deck: self.deck(s.id))
+                    let k = self.place(in: window, deck: self.deck(s.id))
                     if k != self.keys { self.keys = k }
                 }
             }
@@ -475,6 +516,7 @@ final class RolodexModel {
         scrolled += forward ? unit : -unit
         let follow = keys != nil && keys != Self.blank
         let next = d.panes[((d.frontIndex ?? 0) + (forward ? 1 : d.panes.count - 1)) % d.panes.count].id
+        stopSpin()
         if follow { keys = next }
         notch(in: s.id, forward: forward, duration: 0.26, keys: follow ? next : nil, layout: store.tabPlace(for: s.id))
         if event.phase != [] { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
@@ -546,7 +588,7 @@ final class RolodexModel {
         var after = d
         after.front = d.panes[t].id
         decks[session] = after
-        flips = [Flip(id: 1, from: d.panes[f], to: d.panes[t], forward: forward, start: .distantPast, duration: 1,
+        flips = [Flip(id: 1, session: session, from: d.panes[f], to: d.panes[t], forward: forward, start: .distantPast, duration: 1,
                       fromTab: lay.tabX(f), toTab: lay.tabX(t))]
         let flip = flips[0]
         swapped = progress < flip.swap ? d.panes[f].id : d.panes[t].id
@@ -579,9 +621,7 @@ extension Store {
     var paneSession: Session? { outsideSelection == nil ? selectedRow : nil }
 
     /// The kinds of card on offer: the plugins' only while they are on.
-    var paneKinds: [PaneKind] {
-        PaneKind.allCases.filter { k in k.plugin.map { p in plugins.contains { $0.name == p && $0.on } || isFixture } ?? true }
-    }
+    var paneKinds: [PaneKind] { PaneKind.offered(plugins, all: isFixture) }
 
     /// Where the tabs of a session's cards stand, by place, in the wheel's
     /// width as last drawn.
@@ -610,7 +650,7 @@ extension Store {
     /// first card, then to each card in turn, left to right, and back to the
     /// terminal after the last. A closed wheel slides in first.
     func cyclePanes(_ delta: Int, in window: NSWindow?) {
-        guard let s = paneSession else { return }
+        guard let s = paneSession, window == nil || window === WindowPanes.window else { return }
         let r = rolodex
         let d = r.deck(s.id)
         let at = r.open ? r.keysNow(in: window, deck: d) : nil
@@ -655,8 +695,8 @@ extension Store {
             let x = tabPlace(for: s.id)(0)
             // The blank card falls from where it stood, already over the new
             // card's live pane.
-            r.play(Flip(id: 0, from: nil, to: p, forward: true, start: Date().addingTimeInterval(-0.06), duration: RolodexModel.flipTime,
-                        fromTab: x, toTab: x),
+            r.play(Flip(id: 0, session: s.id, from: nil, to: p, forward: true, start: Date().addingTimeInterval(-0.06),
+                        duration: RolodexModel.flipTime, fromTab: x, toTab: x),
                    calm: r.fixture || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, keys: p.id)
         } else {
             r.turn(to: p.id, in: s.id, keys: true, layout: tabPlace(for: s.id))
@@ -682,12 +722,15 @@ extension Store {
         guard wasFront else { return }
         let after = r.deck(s.id)
         let next = after.frontPane
-        if hadKeys { r.keys = next?.id ?? RolodexModel.blank }
+        if hadKeys, let n = next { r.keys = n.id }
         let calm = r.fixture || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         // The closed card falls from where it stood, already over the live pane.
-        let flip = Flip(id: 0, from: p, to: next, forward: true, start: Date().addingTimeInterval(-0.06), duration: RolodexModel.flipTime,
-                        fromTab: place(i), toTab: next.flatMap { n in after.panes.firstIndex { $0.id == n.id } }.map { RolodexLayout(size: RolodexLayout.lastSize, count: after.panes.count).tabX($0) } ?? place(0))
-        r.play(flip, calm: calm, keys: hadKeys ? (next?.id ?? RolodexModel.blank) : nil)
+        let nextTab = next.flatMap { n in after.panes.firstIndex { $0.id == n.id } }
+            .map { RolodexLayout(size: RolodexLayout.lastSize, count: after.panes.count).tabX($0) } ?? place(0)
+        let flip = Flip(id: 0, session: s.id, from: p, to: next, forward: true, start: Date().addingTimeInterval(-0.06),
+                        duration: RolodexModel.flipTime, fromTab: place(i), toTab: nextTab)
+        r.play(flip, calm: calm, keys: hadKeys ? next?.id : nil)
+        // With no card left, the keyboard goes back to the terminal.
         if hadKeys, next == nil { giveMainKeys() }
     }
 
@@ -724,7 +767,7 @@ struct RolodexLayout {
     @MainActor static var lastSize = CGSize(width: 480, height: 600)
 
     var left: CGFloat { 14 }
-    var cardsWidth: CGFloat { max(160, size.width - left - Self.knobRoom) }
+    var cardsWidth: CGFloat { max(100, size.width - left - Self.knobRoom) }
     var railY: CGFloat { size.height - Self.rail / 2 }
 
     /// The front card, its tab included.
@@ -840,11 +883,45 @@ private struct Rules: View {
 
 // MARK: The wheel
 
-/// The rolodex beside the terminal: the cards behind, the front card with
-/// its live pane, the flaps of turns on show, the rail and its knob, and the
-/// + that adds a card.
+/// What the wheel needs of the session it shows, and no more: the session's
+/// row changes at every new detail or token, which then leaves the wheel be.
+struct PaneOwner: Equatable {
+    let id: String
+    /// The other machine it runs on, if any.
+    let peer: String?
+    /// Its colour, for the knob's dot.
+    let ink: Color
+
+    init(_ s: Session) {
+        id = s.id
+        peer = s.peerName
+        ink = Look.edge(s)
+    }
+}
+
+/// The rolodex beside the terminal, for the session on show.
 @MainActor
 struct RolodexView: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        let r = store.rolodex
+        let owner = store.paneSession.map(PaneOwner.init)
+        RolodexWheel(owner: owner)
+            .onAppear { r.install(store) }
+            // A key that sends the keyboard to the terminal takes it off the cards.
+            .onChange(of: store.focusTerminal) { if r.keys != nil, !r.turning { r.keys = nil } }
+            .onChange(of: store.focusMessage) { if r.keys != nil, !r.turning { r.keys = nil } }
+            // Another session's wheel stops a spin of this one's.
+            .onChange(of: owner?.id) { r.stopSpin() }
+    }
+}
+
+/// The wheel: the cards behind, the front card with its live pane, the
+/// flaps of turns on show, the rail and its knob, and the + that adds a card.
+@MainActor
+private struct RolodexWheel: View {
+    let owner: PaneOwner?
     @Environment(Store.self) private var store
     @State private var hoveredTab: String?
     @State private var knobDrag: CGFloat?
@@ -852,18 +929,17 @@ struct RolodexView: View {
 
     var body: some View {
         let r = store.rolodex
-        let session = store.paneSession
-        let deck = session.map { r.deck($0.id) } ?? Deck()
+        let deck = owner.map { r.deck($0.id) } ?? Deck()
         GeometryReader { geo in
             let lay = RolodexLayout(size: geo.size, count: deck.panes.count)
             ZStack(alignment: .topLeading) {
-                rail(lay, session: session)
+                rail(lay)
                 // The cards behind, the furthest first, each with its tab.
                 ForEach(Array(deck.panes.enumerated()).filter { deck.depth(of: $0.offset) > 0 }, id: \.element.id) { i, p in
                     backCard(p, place: i, depth: deck.depth(of: i), lay: lay)
                 }
-                frontCard(deck, lay: lay, session: session)
-                live(deck, lay: lay, session: session)
+                frontCard(deck, lay: lay)
+                live(deck, lay: lay)
                 flaps(lay)
                 plus(lay)
                 // The bands a scroll turns the wheel over; a turn drawn still
@@ -881,10 +957,6 @@ struct RolodexView: View {
             .onAppear { RolodexLayout.lastSize = geo.size }
             .onChange(of: geo.size) { _, s in RolodexLayout.lastSize = s }
         }
-        .onAppear { r.install(store) }
-        // A key that sends the keyboard to the terminal takes it off the cards.
-        .onChange(of: store.focusTerminal) { if r.keys != nil, !r.turning { r.keys = nil } }
-        .onChange(of: store.focusMessage) { if r.keys != nil, !r.turning { r.keys = nil } }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Panes, \(deck.panes.count) " + (deck.panes.count == 1 ? "card" : "cards"))
     }
@@ -901,6 +973,7 @@ struct RolodexView: View {
                 .overlay(shape.fill(Theme.panel.opacity(0.35)))
                 .overlay(shape.stroke(Theme.edge, lineWidth: 1))
                 .shadow(color: .black.opacity(0.08), radius: 3, y: -1)
+                .allowsHitTesting(false)
             tabLabel(p, front: false, width: lay.tabWidth)
                 .offset(x: tabX)
         }
@@ -911,7 +984,7 @@ struct RolodexView: View {
     }
 
     @ViewBuilder
-    private func frontCard(_ deck: Deck, lay: RolodexLayout, session: Session?) -> some View {
+    private func frontCard(_ deck: Deck, lay: RolodexLayout) -> some View {
         let r = store.rolodex
         let p = deck.frontPane
         let i = deck.frontIndex ?? 0
@@ -922,13 +995,16 @@ struct RolodexView: View {
         ZStack(alignment: .topLeading) {
             shape.fill(Theme.panel)
                 .shadow(color: keys ? ink.opacity(0.35) : .black.opacity(0.16), radius: keys ? 12 : 8, y: 2)
+                .allowsHitTesting(false)
             // The tab, in the card's colour.
             Rectangle()
                 .fill(p.map { Theme.agentWash(slot: $0.slot) } ?? Theme.field)
                 .frame(height: RolodexLayout.tabHeight + 1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .clipShape(shape)
+                .allowsHitTesting(false)
             shape.stroke(keys ? ink : Theme.edge, lineWidth: keys ? 1.6 : 1)
+                .allowsHitTesting(false)
             if let p {
                 tabLabel(p, front: true, width: lay.tabWidth)
                     .offset(x: tabX)
@@ -942,8 +1018,9 @@ struct RolodexView: View {
                     .fill(p.kind == .terminal ? Color(nsColor: Theme.terminalBackground) : Theme.card)
                     .frame(width: lay.content.width, height: lay.content.height)
                     .offset(x: lay.content.minX - lay.front.minX, y: lay.content.minY - lay.front.minY)
+                    .allowsHitTesting(false)
             } else {
-                BlankCard(session: session, lay: lay)
+                BlankCard(hasSession: owner != nil, lay: lay)
                     .frame(width: lay.body.width, height: lay.body.height)
                     .offset(y: RolodexLayout.tabHeight)
             }
@@ -956,15 +1033,15 @@ struct RolodexView: View {
     /// The live panes, one on show, the rest kept under it, so a terminal
     /// stays attached and a page stays loaded as the wheel turns.
     @ViewBuilder
-    private func live(_ deck: Deck, lay: RolodexLayout, session: Session?) -> some View {
+    private func live(_ deck: Deck, lay: RolodexLayout) -> some View {
         let r = store.rolodex
         let shown = r.visible(in: deck)
         let c = lay.content
-        if let session {
+        if let owner {
             ZStack(alignment: .topLeading) {
                 ForEach(deck.panes) { p in
                     let on = shown == p.id
-                    PaneContent(session: session, pane: p, shows: on && r.open, token: r.token(p.id))
+                    PaneContent(owner: owner, pane: p, shows: on && r.open, keys: r.keys == p.id, token: r.token(p.id))
                         .frame(width: c.width, height: c.height)
                         .opacity(on ? 1 : 0)
                         .allowsHitTesting(on)
@@ -984,13 +1061,14 @@ struct RolodexView: View {
     @ViewBuilder
     private func flaps(_ lay: RolodexLayout) -> some View {
         let r = store.rolodex
-        if let still = r.still, let f = r.flips.last {
+        let flips = r.flips.filter { $0.session == owner?.id }
+        if let still = r.still, let f = flips.last {
             FlapView(flip: f, progress: still, lay: lay)
                 .zIndex(5)
-        } else if !r.flips.isEmpty {
+        } else if !flips.isEmpty {
             TimelineView(.animation) { ctx in
                 ZStack(alignment: .topLeading) {
-                    ForEach(r.flips.first?.forward == false ? r.flips : r.flips.reversed()) { f in
+                    ForEach(flips.first?.forward == false ? flips : flips.reversed()) { f in
                         FlapView(flip: f, progress: f.progress(at: ctx.date), lay: lay)
                     }
                 }
@@ -1042,9 +1120,9 @@ struct RolodexView: View {
     private func tabMenu(_ p: DeckPane) -> some View {
         Button("Show") { store.showPane(p.id) }
         Divider()
-        if let s = store.paneSession {
-            Button("Move Left") { store.rolodex.move(p.id, in: s.id, by: -1) }
-            Button("Move Right") { store.rolodex.move(p.id, in: s.id, by: 1) }
+        if let o = owner {
+            Button("Move Left") { store.rolodex.move(p.id, in: o.id, by: -1) }
+            Button("Move Right") { store.rolodex.move(p.id, in: o.id, by: 1) }
         }
         if p.kind == .browser, let u = p.url.flatMap(URL.init(string:)) {
             Divider()
@@ -1075,9 +1153,9 @@ struct RolodexView: View {
 
     /// The rail along the foot, which runs through the cards' notch, with a
     /// cap at its left end and the knob at its right.
-    private func rail(_ lay: RolodexLayout, session: Session?) -> some View {
+    private func rail(_ lay: RolodexLayout) -> some View {
         let y = lay.railY
-        let ink = session.map(Look.edge) ?? Theme.accent
+        let ink = owner?.ink ?? Theme.accent
         return ZStack(alignment: .topLeading) {
             // The rod: lit along its top, shaded under, as round metal is.
             Capsule()
@@ -1097,7 +1175,7 @@ struct RolodexView: View {
             Knob(angle: store.rolodex.knob, ink: ink)
                 .frame(width: 26, height: 26)
                 .contentShape(Circle())
-                .gesture(knobGesture(session: session))
+                .gesture(knobGesture())
                 .help("Turn the wheel: click, drag, or scroll over the tabs or the rail")
                 .offset(x: lay.size.width - 28, y: y - 13)
                 .accessibilityLabel("Turn to the next pane")
@@ -1108,10 +1186,10 @@ struct RolodexView: View {
 
     /// A drag of the knob turns the wheel a notch per 18 points; a click
     /// turns it one notch forward.
-    private func knobGesture(session: Session?) -> some Gesture {
+    private func knobGesture() -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { g in
-                guard let s = session else { return }
+                guard let s = owner?.id else { return }
                 let moved = g.translation.height - g.translation.width
                 let base = knobDrag ?? 0
                 if knobDrag == nil { knobDrag = 0 }
@@ -1122,20 +1200,21 @@ struct RolodexView: View {
                 }
             }
             .onEnded { _ in
-                if !knobTurned, let s = session { turnOne(s, forward: true) }
+                if !knobTurned, let s = owner?.id { turnOne(s, forward: true) }
                 knobDrag = nil
                 knobTurned = false
             }
     }
 
-    private func turnOne(_ s: Session, forward: Bool) {
+    private func turnOne(_ s: String, forward: Bool) {
         let r = store.rolodex
-        let d = r.deck(s.id)
+        let d = r.deck(s)
         guard d.panes.count > 1, let f = d.frontIndex else { return }
         let next = d.panes[(f + (forward ? 1 : d.panes.count - 1)) % d.panes.count].id
         let follow = r.keys != nil && r.keys != RolodexModel.blank
+        r.stopSpin()
         if follow { r.keys = next }
-        r.notch(in: s.id, forward: forward, duration: 0.3, keys: follow ? next : nil, layout: store.tabPlace(for: s.id))
+        r.notch(in: s, forward: forward, duration: 0.3, keys: follow ? next : nil, layout: store.tabPlace(for: s))
     }
 
     /// The + above the knob: a new card of any kind on offer.
@@ -1164,7 +1243,7 @@ struct RolodexView: View {
         .frame(width: 24, height: 24)
         .background(Circle().fill(Theme.panel).overlay(Circle().strokeBorder(Theme.edge, lineWidth: 1)))
         .help("Add a pane: a terminal, a browser or a plugin’s page")
-        .disabled(store.paneSession == nil)
+        .disabled(owner == nil)
         .offset(x: lay.size.width - 27, y: lay.front.minY + 1)
         .zIndex(6)
     }
@@ -1270,7 +1349,7 @@ private struct CardFace: View {
 @MainActor
 private struct BlankCard: View {
     @Environment(Store.self) private var store
-    let session: Session?
+    let hasSession: Bool
     let lay: RolodexLayout
     @FocusState private var focused: Bool
 
@@ -1282,11 +1361,11 @@ private struct BlankCard: View {
                 .padding(.top, 4)
                 .padding(.bottom, 18)
             VStack(alignment: .leading, spacing: 12) {
-                Text(session == nil ? "Pick a session" : "What goes on this card?")
+                Text(hasSession ? "What goes on this card?" : "Pick a session")
                     .font(Theme.font(15, .bold))
                     .foregroundStyle(Theme.ink)
                     .padding(.top, 8)
-                if session != nil {
+                if hasSession {
                     ForEach(store.paneKinds) { k in choice(k) }
                     Text("Press its letter, or ⌥Tab to go back to the terminal.")
                         .font(Theme.font(11))
@@ -1302,7 +1381,7 @@ private struct BlankCard: View {
             .padding(.horizontal, 22)
             .padding(.top, 12)
         }
-        .focusable(session != nil)
+        .focusable(hasSession)
         .focused($focused)
         .focusEffectDisabled()
         .onKeyPress { press in
@@ -1351,9 +1430,11 @@ private struct BlankCard: View {
 @MainActor
 struct RolodexEdge: View {
     @Environment(Store.self) private var store
-    /// The room beside the right sidebar, and the wheel's width in it.
+    /// The room beside the right sidebar, the wheel's width in it, and what
+    /// the terminal keeps of it.
     let room: CGFloat
     let drawn: CGFloat
+    let keep: CGFloat
     @State private var hovering = false
 
     var body: some View {
@@ -1369,7 +1450,7 @@ struct RolodexEdge: View {
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { g in
                     let share = Double((drawn - g.translation.width) / max(room, 1))
-                    r.guide = Double(RolodexModel.width(share: min(max(share, 0.2), 0.75), in: room))
+                    r.guide = Double(RolodexModel.width(share: min(max(share, 0.2), 0.75), in: room, keep: keep))
                 }
                 .onEnded { _ in
                     if let g = r.guide { r.setShare(g / Double(max(room, 1))) }
@@ -1404,16 +1485,18 @@ private struct Probe: NSViewRepresentable {
 /// One card's live pane, by its kind.
 @MainActor
 private struct PaneContent: View {
-    let session: Session
+    let owner: PaneOwner
     let pane: DeckPane
     let shows: Bool
+    /// The keyboard is meant for this card: it takes it as it first shows.
+    let keys: Bool
     let token: Int
 
     var body: some View {
         switch pane.kind {
-        case .terminal: ShellPane(session: session, pane: pane, shows: shows, token: token)
-        case .browser: BrowserPane(session: session, pane: pane, shows: shows, token: token)
-        case .markets: MarketsPane()
+        case .terminal: ShellPane(owner: owner, pane: pane, shows: shows, keys: keys, token: token)
+        case .browser: BrowserPane(session: owner.id, pane: pane, shows: shows, keys: keys, token: token)
+        case .markets: MarketsPane(shows: shows, keys: keys, token: token)
         }
     }
 }
@@ -1424,9 +1507,10 @@ private struct PaneContent: View {
 @MainActor
 private struct ShellPane: View {
     @Environment(Store.self) private var store
-    let session: Session
+    let owner: PaneOwner
     let pane: DeckPane
     let shows: Bool
+    let keys: Bool
     let token: Int
     @State private var shell: PaneShell?
     @State private var problem: String?
@@ -1437,15 +1521,15 @@ private struct ShellPane: View {
                 FixtureScreen(lines: ["~/src/website  (fix-login-test)", "❯ npm run dev", "", "  VITE ready in 312 ms", "  ➜  Local:   http://localhost:5173/",
                                       "", "❯ git log --oneline -3", "a1b2c3d Wait for the session write", "9f8e7d6 Add a helper that reads it back"])
                     .padding(8)
-            } else if session.peerName != nil {
-                note("A shell beside a session on \(session.peerName ?? "another Mac") runs there; that comes later.")
+            } else if let peer = owner.peer {
+                note("A shell beside a session on \(peer) runs there; that comes later.")
             } else if !store.rolodex.canShell {
                 note("This \(Brand.name)’s core can’t run a pane’s shell yet. The next install brings it.")
             } else if let s = shell, s.state != "stopped", let target = s.target, let tmux = s.tmux, let socket = s.socket {
                 // A card the keyboard was sent to before its shell was up
                 // takes the keyboard as its terminal starts.
                 SplitTerminalView(tmux: tmux, socket: socket, target: "=" + target, fontSize: max(9, store.fontSize - 1),
-                                  focusToken: token, followsFocus: true, takesKeysOnStart: shows && store.rolodex.keys == pane.id, shows: shows)
+                                  focusToken: token, followsFocus: true, takesKeysOnStart: shows && keys, shows: shows)
                     .padding(6)
                 if s.state == "exited" { ended(s) }
             } else if let problem {
@@ -1454,8 +1538,9 @@ private struct ShellPane: View {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        // Again as it comes to the front or leaves it: it looks while it shows.
-        .task(id: "\(session.id)/\(pane.id)/\(shows)") { await follow() }
+        // Again as it comes to the front or leaves it, since it looks while
+        // it shows, and once the core can run its shell.
+        .task(id: "\(owner.id)/\(pane.id)/\(shows)/\(store.rolodex.canShell)") { await follow() }
     }
 
     private func note(_ text: String) -> some View {
@@ -1473,7 +1558,7 @@ private struct ShellPane: View {
                 .font(Theme.font(12, .semibold))
                 .foregroundStyle(Theme.ink)
             Spacer(minLength: 4)
-            Button("New Shell") { act(PaneArgs(session: session.id, pane: pane.id, restart: true)) }
+            Button("New Shell") { act(PaneArgs(session: owner.id, pane: pane.id, restart: true)) }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.agent(slot: pane.slot))
             Button("Close Pane") { store.closePane(pane.id) }
@@ -1486,14 +1571,16 @@ private struct ShellPane: View {
     }
 
     /// Starts the shell when none runs, then, while the card shows, looks
-    /// every few seconds to catch it ending.
+    /// every few seconds to catch it ending. Each look starts it again if
+    /// it has gone, as after a start that failed; one that ended keeps its
+    /// last screen until New Shell.
     private func follow() async {
-        guard !store.isFixture, session.peerName == nil, store.rolodex.canShell else { return }
-        await load(PaneArgs(session: session.id, pane: pane.id, start: true))
+        guard !store.isFixture, owner.peer == nil, store.rolodex.canShell else { return }
+        await load(PaneArgs(session: owner.id, pane: pane.id, start: true))
         while shows, !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             if Task.isCancelled { return }
-            await load(PaneArgs(session: session.id, pane: pane.id))
+            await load(PaneArgs(session: owner.id, pane: pane.id, start: true))
         }
     }
 
@@ -1519,12 +1606,15 @@ private struct ShellPane: View {
 @MainActor
 private struct MarketsPane: View {
     @Environment(Store.self) private var store
+    let shows: Bool
+    let keys: Bool
+    let token: Int
 
     var body: some View {
         if store.isFixture {
             MapSketch()
         } else {
-            MarketsWindow(embedded: true)
+            MarketsWindow(embedded: true, focus: token, takesKeys: shows && keys)
         }
     }
 }

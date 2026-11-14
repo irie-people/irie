@@ -44,7 +44,7 @@ struct TerminalArea: View {
                 // terminal makes room once they are in.
                 let side = store.sideDocked ? width : 0
                 let room = geo.size.width - side
-                let deck = RolodexModel.width(share: store.rolodex.share, in: room)
+                let deck = RolodexModel.width(share: store.rolodex.share, in: room, keep: keepBesidePanes)
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
                         .padding(.trailing, side + (store.rolodex.docked ? deck : 0))
@@ -54,7 +54,7 @@ struct TerminalArea: View {
                             .padding(.trailing, 12)
                             .padding(.vertical, 12)
                             .frame(width: deck)
-                            .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: deck).offset(x: -4) }
+                            .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: deck, keep: keepBesidePanes).offset(x: -4) }
                             .padding(.trailing, side)
                             .transition(.move(edge: .trailing))
                     }
@@ -153,6 +153,10 @@ struct TerminalArea: View {
     /// What the terminal keeps beside the sidebar before the sidebar gives up
     /// width: about 80 columns and the frame round them.
     private var minTerminal: CGFloat { 80 * store.fontSize * 0.6 + 60 }
+
+    /// What it keeps beside the panes, which give up width first: about 60
+    /// columns, since every agent takes the slot's size.
+    private var keepBesidePanes: CGFloat { 60 * store.fontSize * 0.6 + 60 }
 
     private var main: some View {
         ZStack(alignment: .top) {
