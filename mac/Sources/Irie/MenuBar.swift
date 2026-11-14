@@ -37,6 +37,8 @@ final class MenuState {
         var canTrod = false
         var boosting = false
         var canBoost = false
+        var boostAlways = false
+        var canBoostAlways = false
         var vpn = false
         var lockdown = false
         var undo: String?
@@ -87,6 +89,8 @@ extension Store {
         f.canTrod = canTrod
         f.boosting = boosting
         f.canBoost = canBoost
+        f.boostAlways = boostAlways
+        f.canBoostAlways = canBoostAlways
         f.vpn = vpn != nil
         f.lockdown = vpn?.lockdown == true
         f.undo = undoLabel
@@ -238,9 +242,15 @@ struct IrieCommands: Commands {
             SessionItems(store: store, f: f)
             Divider()
             // Gabriel's boost: your focus gets the machine first for a
-            // while, busy or not; it ends by itself (DESIGN §4.11).
+            // while, busy or not; it ends by itself (DESIGN §4.11). While
+            // he boosts always, one for a while has nothing to add.
             Button(f.boosting ? "Stop Boost" : "Boost Your Focus", action: run { store.setBoost(!store.boosting) })
-                .disabled(!f.canBoost)
+                .disabled(!f.canBoost || f.boostAlways)
+            // And whenever you're at the computer, ticked while it is on
+            // (arch.gabriel.always).
+            if f.canBoostAlways {
+                Toggle("Always Boost Your Focus", isOn: Binding(get: { f.boostAlways }, set: { on in MainActor.assumeIsolated { store.setBoostAlways(on) } }))
+            }
             // A run you start goes on while you watch, until no session has
             // work left or the plan is as full as it may get.
             Button(f.trodHand ? "Stop Trod Bot" : "Start Trod Bot Now", action: run { store.setTrod(store.trod?.hand != true) })
