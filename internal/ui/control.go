@@ -41,8 +41,8 @@ type controlledMsg struct {
 type drag struct {
 	key    string // the entry pressed
 	id     string // its session; "" for a header or a row outside Irie
-	group  string // the group it is in now, which it moves within
-	from   string // the group it was in, where a drop elsewhere sends it back
+	group  string // the zone it is in now, which it moves within (zone)
+	from   string // the zone it was in, where a drop elsewhere sends it back
 	parked bool   // whether it was parked
 	at     int    // where it is in m.sessions while it moves
 	moved  bool   // it left its place
@@ -171,8 +171,8 @@ func (m Model) parkKey() (tea.Model, tea.Cmd) {
 // park parks session s (on), which puts it last in the Parked group at the
 // end of the list, or unparks it, last among the rest, just above Parked
 // (a paired machine's last in that machine's group), at once, as the core
-// does. The selection goes with it, or to its group's header while that is
-// folded.
+// does. The selection goes with it, or to the header of the folded group
+// it is in.
 func (m Model) park(c Controls, s ipc.Session, on bool) (tea.Model, tea.Cmd) {
 	i := m.index(s.ID)
 	x := m.sessions[i]
@@ -184,11 +184,7 @@ func (m Model) park(c Controls, s ipc.Session, on bool) (tea.Model, tea.Cmd) {
 	if !on {
 		done = "unparked " + s.Name
 	}
-	j := m.sessionIndex(s.ID)
-	if j < 0 {
-		j = keyIndex(m.items(), m.groupOf(x))
-	}
-	m.moveTo(j)
+	m.moveTo(m.shownAt(s.ID))
 	return m, func() tea.Msg { return controlledMsg{done: done, err: c.Park(s.ID, on, "")} }
 }
 
@@ -223,14 +219,15 @@ func (m *Model) press(i int) {
 	d := &drag{key: it.key}
 	if it.kind == itemSession {
 		s := m.sessions[it.s]
-		d.id, d.group, d.from, d.parked, d.at = s.ID, it.group.key, it.group.key, s.Parked, it.s
+		d.id, d.group, d.from, d.parked, d.at = s.ID, zone(it.group), zone(it.group), s.Parked, it.s
 	}
 	m.drag = d
 }
 
-// crosses reports whether session s can be carried into group g across
+// crosses reports whether session s can be carried into zone g across
 // Parked's edge: any session into Parked, which parks it, and a parked one
-// back into its own group, which unparks it.
+// back into its own group, the innermost of yours it is in, which unparks
+// it; one of no group of yours into the List view's sessions of none.
 func (m Model) crosses(s ipc.Session, g string) bool {
 	if s.Parked {
 		return g == m.homeKey(s)
@@ -238,11 +235,25 @@ func (m Model) crosses(s ipc.Session, g string) bool {
 	return g == parkedKey
 }
 
+// zone is what a dragged session in group g moves within, by its key: a
+// group of yours, its own sessions on each side of the groups inside it
+// as one; the List view's sessions of no group of yours, every run of them
+// between your groups as one, listKey; or g alone.
+func zone(g *group) string {
+	switch {
+	case g.user != "":
+		return userKey(g.user)
+	case isRun(g.key):
+		return listKey
+	}
+	return g.key
+}
+
 // dragTo carries the held session to where the pointer is, among the
 // sessions of its group, past each card it crosses, or across Parked's
-// edge. Anywhere else it waits where it is. It moves only when it would
-// land under the pointer, so cards of different heights never trade places
-// back and forth.
+// edge. Anywhere else, a group inside its group too, it waits where it
+// is. It moves only when it would land under the pointer, so cards of
+// different heights never trade places back and forth.
 func (m *Model) dragTo(y int) {
 	d := m.drag
 	if d == nil || d.id == "" {
@@ -267,8 +278,8 @@ func (m *Model) dragTo(y int) {
 	// before or just after the card, whichever lands it under the pointer.
 	rest := slices.Delete(slices.Clone(m.sessions), from, from+1)
 	tries := [][]ipc.Session{slices.Insert(slices.Clone(rest), it.s, s)}
-	if it.group.key != d.group {
-		if !m.crosses(s, it.group.key) {
+	if z := zone(it.group); z != d.group {
+		if !m.crosses(s, z) {
 			return
 		}
 		s.Parked = it.group.key == parkedKey
@@ -281,7 +292,7 @@ func (m *Model) dragTo(y int) {
 		if j, _, ok := trial.at(y); !ok || trial.items()[j].key != sessionKey(d.id) {
 			continue
 		}
-		m.sessions, d.at, d.moved, d.group = moved, slices.IndexFunc(moved, func(x ipc.Session) bool { return x.ID == d.id }), true, it.group.key
+		m.sessions, d.at, d.moved, d.group = moved, slices.IndexFunc(moved, func(x ipc.Session) bool { return x.ID == d.id }), true, zone(it.group)
 		m.sel = m.sessionIndex(d.id)
 		m.setStatus("drop "+s.Name+" where it goes, among "+it.group.title, false)
 		return
@@ -318,9 +329,9 @@ func (m Model) release(y int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if on && m.items()[i].group.key != d.group {
+	if on && zone(m.items()[i].group) != d.group {
 		m.putBack(d)
-		m.setStatus("a session moves only among the others of its group, or into Parked and out", false)
+		m.setStatus("a session moves only among the others of its group, or into Parked and out; :group NAME puts it in a group of yours", false)
 		return m, nil
 	}
 	c, ok := m.controls()

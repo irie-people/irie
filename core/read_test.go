@@ -15,7 +15,7 @@ func view() View {
 		Home: "/home/alice",
 		Sessions: []Session{
 			{ID: "s1", Name: "fix login", State: StateWorking, Branch: "irie/fix-login"},
-			{ID: "s2", Name: "parser", State: StateFrozen},
+			{ID: "s2", Name: "parser", State: StateFrozen, Group: "g1"},
 			{ID: "s3", Name: "docs", State: StateIdle, Parked: true, Priority: 1},
 			{ID: "s4", Name: "old", State: StateExited},
 		},
@@ -34,6 +34,34 @@ func code(err error) string {
 	return ""
 }
 
+// :nest and :ungroup act on a selected group's header, which a client
+// names as Group, or :nest on the group of the selected session.
+func TestGroupWordsTakeASelectedGroup(t *testing.T) {
+	for _, c := range []struct {
+		text, session, group string
+		args                 GroupArgs
+	}{
+		{":nest Work/Irie", "", "g1", GroupArgs{Do: GroupMove, Groups: []string{"g1"}, Into: "Work/Irie"}},
+		{":nest", "", "g1", GroupArgs{Do: GroupMove, Groups: []string{"g1"}}},
+		{":ungroup", "", "g1", GroupArgs{Do: GroupUngroup, Group: "g1"}},
+	} {
+		st, err := Read(InputArgs{Text: c.text, Session: c.session, Group: c.group}, view())
+		if err != nil || st.Op != OpGroup || !reflect.DeepEqual(st.Args, c.args) {
+			t.Errorf("%q on %q: %+v, %v; want %+v", c.text, c.group, st, err, c.args)
+		}
+	}
+	// With no group selected, :nest takes the selected session's group.
+	v := view()
+	v.Sessions[0].Group = "g2"
+	st, err := Read(InputArgs{Text: ":nest Home", Session: v.Sessions[0].ID}, v)
+	if err != nil || !reflect.DeepEqual(st.Args, GroupArgs{Do: GroupMove, Groups: []string{"g2"}, Into: "Home"}) {
+		t.Errorf(":nest Home on a session of g2: %+v, %v", st, err)
+	}
+	if _, err := Read(InputArgs{Text: ":nest Home"}, view()); code(err) != CodeBadArgs {
+		t.Errorf(":nest with nothing selected: %v", err)
+	}
+}
+
 // Each command comes to the op it names, on the session that was selected.
 func TestReadTurnsWordsIntoOps(t *testing.T) {
 	for _, c := range []struct {
@@ -49,6 +77,9 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":close below", "s2", "", OpClose, CloseArgs{Sessions: []string{"s4"}}},
 		{":close finished", "", "", OpClose, CloseArgs{Finished: true}},
 		{":pin", "s1", "", OpPin, ParkArgs{Session: "s1"}},
+		{":group", "s1", "", OpGroup, GroupArgs{Do: GroupNew, Sessions: []string{"s1"}}},
+		{":group Steak cards", "s1", "", OpGroup, GroupArgs{Do: GroupAdd, Name: "Steak cards", Sessions: []string{"s1"}}},
+		{":ungroup", "s2", "", OpGroup, GroupArgs{Do: GroupRemove, Sessions: []string{"s2"}}},
 		{":reopen", "", "", OpReopen, ReopenArgs{}},
 		{":undo", "", "", OpUndo, UndoArgs{}},
 		{"  :redo  ", "", "", OpRedo, UndoArgs{}},
@@ -121,6 +152,8 @@ func TestReadRefusesInWords(t *testing.T) {
 		{":freeze", "s4", "", CodeBadArgs, "old has ended, so there is nothing to freeze"},
 		{":park", "s3", "", CodeBadArgs, "must be not parked"},
 		{":unpark", "s1", "", CodeBadArgs, "must be parked"},
+		{":group", "", "", CodeBadArgs, ":group takes the selected session"},
+		{":ungroup", "s1", "", CodeBadArgs, "must be in a group"},
 		{":prio", "", "", CodeBadArgs, ":prio acts on the selected session"},
 		{":move", "s1", "", CodeBadArgs, "the selected session under Outside Irie, or one you name"},
 		{":move nothing-here", "", "", CodeNotFound, "No session outside Irie is called “nothing-here”"},
@@ -256,6 +289,14 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 			InputResult{Did: InputRan, Op: OpPriority, Session: parser, Text: "parser is back among the rest."}},
 		{"park", Step{Op: OpPark, Session: login}, nil, nil,
 			InputResult{Did: InputRan, Op: OpPark, Session: login, Text: "Parked fix login."}},
+		{"new group", Step{Op: OpGroup, Args: GroupArgs{Do: GroupNew}, Session: login}, GroupResult{Groups: []Group{{ID: "g1", Name: "Group 1"}}, Group: "g1", Sessions: []string{"s1"}}, nil,
+			InputResult{Did: InputRan, Op: OpGroup, Session: login, Text: "Made the group Group 1 of fix login. :group NAME puts another session in it."}},
+		{"into a group", Step{Op: OpGroup, Args: GroupArgs{Do: GroupAdd, Name: "steak"}, Session: login}, GroupResult{Groups: []Group{{ID: "g1", Name: "Steak"}}, Group: "g1", Sessions: []string{"s1"}}, nil,
+			InputResult{Did: InputRan, Op: OpGroup, Session: login, Text: "Put fix login in the group Steak."}},
+		{"in it already", Step{Op: OpGroup, Args: GroupArgs{Do: GroupAdd, Name: "steak"}, Session: login}, GroupResult{Groups: []Group{{ID: "g1", Name: "Steak"}}, Group: "g1"}, nil,
+			InputResult{Did: InputAnswered, Op: OpGroup, Session: login, Text: "fix login is in Steak already."}},
+		{"ungroup", Step{Op: OpGroup, Args: GroupArgs{Do: GroupRemove}, Session: parser}, GroupResult{Sessions: []string{"s2"}}, nil,
+			InputResult{Did: InputRan, Op: OpGroup, Session: parser, Text: "Took parser out of its group. :undo puts it back."}},
 		{"move", Step{Op: OpMove, Outside: &v.Outside[0]}, MoveResult{Session: Session{ID: "s7", Name: "api"}}, nil,
 			InputResult{Did: InputRan, Op: OpMove, Session: &Session{ID: "s7", Name: "api"}, Text: "Moved api into Irie."}},
 		{"markets", Step{Op: OpMarkets, Args: MarketsArgs{}}, MarketsResult{State: PartReady, Page: "/home/alice/maps/index.html", Text: "Your market map is ~/maps/index.html."}, nil,

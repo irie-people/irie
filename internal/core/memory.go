@@ -190,6 +190,7 @@ func (c *Core) headerNow() ipc.Header {
 	h.Peers = c.peersInfo()
 	h.Trod = c.trodHeader(c.awakeNow())
 	h.Spaces = slices.Clone(c.spaces)
+	h.Groups = slices.Clone(c.groups)
 	h.VPN = c.vpnHeader(time.Now())
 	h.Boost = c.boostHeader(time.Now())
 	h.Theme = c.appColors

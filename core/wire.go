@@ -32,6 +32,9 @@ type (
 	DockControl      = ipc.DockControl
 	DockFile         = ipc.DockFile
 	DockUntrusted    = ipc.DockUntrusted
+	Group            = ipc.Group
+	GroupArgs        = ipc.GroupArgs
+	GroupResult      = ipc.GroupResult
 	InputArgs        = ipc.InputArgs
 	Paste            = ipc.Paste
 	InputResult      = ipc.InputResult
@@ -205,6 +208,15 @@ const (
 	DockStateRunning   = ipc.DockStateRunning
 	DockStateExited    = ipc.DockStateExited
 	DockStateReady     = ipc.DockStateReady
+	OpGroup            = ipc.OpGroup
+	GroupList          = ipc.GroupList
+	GroupNew           = ipc.GroupNew
+	GroupAdd           = ipc.GroupAdd
+	GroupRemove        = ipc.GroupRemove
+	GroupRename        = ipc.GroupRename
+	GroupUngroup       = ipc.GroupUngroup
+	GroupMove          = ipc.GroupMove
+	MaxGroupDepth      = ipc.MaxGroupDepth
 	OpInput            = ipc.OpInput
 	InputSpawned       = ipc.InputSpawned
 	InputAdded         = ipc.InputAdded
