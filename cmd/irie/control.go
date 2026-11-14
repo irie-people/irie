@@ -37,9 +37,14 @@ const controlUsage = `  ` + brand.Slug + ` ctl freeze SESSION|--all          sto
   ` + brand.Slug + ` ctl group NAME [SESSION...]       put sessions in the group of that name,
                                          made when none has it, which the
                                          sidebars draw together: by id or name,
-                                         or with none the one this runs in;
-                                         --list lists the groups
-  ` + brand.Slug + ` ctl ungroup [SESSION...]          take sessions out of their groups
+                                         or with none the one this runs in. A
+                                         path, Work/Irie, makes groups inside
+                                         groups; --list lists them by path
+  ` + brand.Slug + ` ctl ungroup [SESSION...]          take sessions out of their groups, each
+                                         into the group around its group
+  ` + brand.Slug + ` ctl nest GROUP [INTO]             put a group, with what it holds, inside
+                                         another, by id, name or path, or with
+                                         no INTO back at the top of the list
 `
 
 // ctlFreeze is `irie ctl freeze` (on) and `irie ctl thaw`.
@@ -136,9 +141,17 @@ func ctlGroup(args []string) error {
 		if err := ipc.Call(sock, 5*time.Second, ipc.OpGroup, ipc.GroupArgs{}, &r); err != nil {
 			return err
 		}
-		for _, g := range r.Groups {
-			fmt.Printf("%s\t%s\n", g.ID, g.Name)
+		// Each by its path, a group's groups just after it.
+		var walk func(parent string)
+		walk = func(parent string) {
+			for _, g := range r.Groups {
+				if g.Parent == parent {
+					fmt.Printf("%s\t%s\n", g.ID, ipc.GroupTitle(r.Groups, g.ID, "/"))
+					walk(g.ID)
+				}
+			}
 		}
+		walk("")
 		return nil
 	}
 	if len(args) == 0 || strings.TrimSpace(args[0]) == "" {
@@ -152,10 +165,31 @@ func ctlGroup(args []string) error {
 	if err := ipc.Call(sock, 10*time.Second, ipc.OpGroup, ipc.GroupArgs{Do: ipc.GroupAdd, Name: args[0], Sessions: ids}, &r); err != nil {
 		return err
 	}
-	for _, g := range r.Groups {
-		if g.ID == r.Group {
-			fmt.Printf("in %s: %d moved\n", g.Name, len(r.Sessions))
-		}
+	fmt.Printf("in %s: %d moved\n", ipc.GroupTitle(r.Groups, r.Group, "/"), len(r.Sessions))
+	return nil
+}
+
+// ctlNest is `irie ctl nest GROUP [INTO]`: the group, with the sessions and
+// groups it holds, goes last inside group INTO, or back at the top of the
+// list, as one step of the history.
+func ctlNest(args []string) error {
+	if len(args) < 1 || len(args) > 2 || strings.TrimSpace(args[0]) == "" {
+		return errors.New("usage: " + brand.Slug + " ctl nest GROUP [INTO]")
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	a := ipc.GroupArgs{Do: ipc.GroupMove, Groups: args[:1]}
+	if len(args) == 2 {
+		a.Into = args[1]
+	}
+	var r ipc.GroupResult
+	if err := ipc.Call(sock, 10*time.Second, ipc.OpGroup, a, &r); err != nil {
+		return err
+	}
+	if i := ipc.FindGroup(r.Groups, args[0]); i >= 0 {
+		fmt.Println(ipc.GroupTitle(r.Groups, r.Groups[i].ID, "/"))
 	}
 	return nil
 }

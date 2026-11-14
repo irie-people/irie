@@ -471,6 +471,7 @@ struct Reorderable: ViewModifier {
         content
             .onDrag {
                 store.dragging = session.id
+                store.draggingGroup = nil
                 return NSItemProvider(object: session.id as NSString)
             }
             .onDrop(of: [.text], delegate: CardDrop(store: store, target: session))
@@ -489,12 +490,16 @@ private struct CardDrop: DropDelegate {
     let store: Store
     let target: Session
 
-    func validateDrop(info: DropInfo) -> Bool { store.canDrop(onto: target) }
+    /// A group held by its header lands in the card's place, in its
+    /// group (Groups.swift); a card as before.
+    private var holdsGroup: Bool { store.draggingGroup != nil }
 
-    func dropEntered(info: DropInfo) { store.dropMark = store.mark(onto: target) }
+    func validateDrop(info: DropInfo) -> Bool { holdsGroup ? store.canDropGroup(onto: target) : store.canDrop(onto: target) }
+
+    func dropEntered(info: DropInfo) { store.dropMark = holdsGroup ? store.markGroup(onto: target) : store.mark(onto: target) }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: store.canDrop(onto: target) ? .move : .forbidden)
+        DropProposal(operation: validateDrop(info: info) ? .move : .forbidden)
     }
 
     func dropExited(info: DropInfo) {
@@ -502,6 +507,7 @@ private struct CardDrop: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        if holdsGroup { return store.dropGroup(onto: target) }
         defer {
             store.dragging = nil
             store.dropMark = nil

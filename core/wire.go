@@ -203,6 +203,8 @@ const (
 	GroupRemove        = ipc.GroupRemove
 	GroupRename        = ipc.GroupRename
 	GroupUngroup       = ipc.GroupUngroup
+	GroupMove          = ipc.GroupMove
+	MaxGroupDepth      = ipc.MaxGroupDepth
 	OpInput            = ipc.OpInput
 	InputSpawned       = ipc.InputSpawned
 	InputAdded         = ipc.InputAdded

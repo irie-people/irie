@@ -213,30 +213,43 @@ func (c *Core) spaceOp(a ipc.SpaceArgs) (ipc.SpaceResult, error) {
 		}
 	}
 	// Each space has its own groups: a session leaves its group unless
-	// the whole group goes with it (groups.go), and undo puts it back.
+	// the whole group goes with it, which then comes out of a group around
+	// it that stays (groups.go), and undo puts them back.
 	going := map[string]bool{}
 	for _, id := range moved {
 		going[id] = true
 	}
-	left := map[string]ipc.Group{}
+	left := map[string][]ipc.Group{}
+	out := map[string][]ipc.Group{}
 	for _, id := range moved {
-		if g := c.leaveForSpace(c.sessions[id], to, going); g != "" {
-			left[id] = ipc.Group{ID: g, Name: c.groupNameOf(g)}
+		chain := c.chainOf(c.groupOf(c.sessions[id]))
+		g, nest := c.leaveForSpace(c.sessions[id], to, going)
+		if g != "" {
+			left[id] = chain
+		}
+		if nest.ID != "" {
+			out[id] = append(c.chainOf(nest.Parent), nest)
 		}
 	}
-	if len(left) > 0 {
+	changed := len(left) > 0 || len(out) > 0
+	if changed {
+		c.tidyOrder()
 		c.saveGroups()
 	}
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
-	if len(left) > 0 {
+	if changed {
 		c.publishHeader()
 	}
 	c.recordEach(actSpace, moved, func(id string) map[string]any {
 		d := map[string]any{"from": from[id], "to": to}
-		if g, ok := left[id]; ok {
-			d["group"], d["group_name"] = g.ID, g.Name
+		if chain, ok := left[id]; ok {
+			g := chain[len(chain)-1]
+			d["group"], d["group_name"], d["group_groups"] = g.ID, g.Name, shotOf(chain)
+		}
+		if chain, ok := out[id]; ok {
+			d["nest"], d["nest_groups"] = chain[len(chain)-1].ID, shotOf(chain)
 		}
 		return d
 	})
@@ -287,22 +300,38 @@ func doSpace(k string) func(c *Core, a action) (action, error) {
 		}
 		c.putInSpace(x, a.str(k))
 		// A session the move took out of its group goes back in it with
-		// undo, and out again with redo.
-		g := a.str("group")
+		// undo, and out again with redo; so does a group the move took out
+		// of the group around it.
+		g, nest := a.str("group"), a.str("nest")
 		if g != "" {
 			if k == "from" {
-				c.ensureGroup(g, a.str("group_name"))
+				if shot := a.shot("group_groups"); len(shot) > 0 {
+					c.restoreGroups(shot)
+				} else {
+					c.ensureGroup(g, a.str("group_name"))
+				}
 				c.setGroup(x, g, event.SourceUser)
 			} else {
 				c.setGroup(x, "", event.SourceUser)
 			}
+		}
+		if i := c.groupIndex(nest); i >= 0 {
+			if k == "from" {
+				c.restoreGroups(a.shot("nest_groups"))
+			} else if c.groups[i].Parent != "" {
+				c.groups[i].Parent = ""
+				c.groups[i].Name = c.groupName(c.groups[i].Name, nest, "")
+			}
+		}
+		if g != "" || nest != "" {
+			c.tidyOrder()
 			c.saveGroups()
 		}
 		a.Name = x.name
 		frames := c.changes()
 		c.mu.Unlock()
 		c.publish(frames)
-		if g != "" {
+		if g != "" || nest != "" {
 			c.publishHeader()
 		}
 		return a, nil

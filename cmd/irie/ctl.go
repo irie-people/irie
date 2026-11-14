@@ -32,9 +32,10 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          until the agent is ready, and fails if it
                                          is not; --force spawns a local profile even
                                          when its context or memory falls short;
-                                         --group puts it in the group of that name,
-                                         made when none has it (else it goes in the
-                                         group of the session this runs in)
+                                         --group puts it in the group of that name
+                                         or path, Work/Irie, made when none has it
+                                         (else it goes in the group of the session
+                                         this runs in)
   ` + brand.Slug + ` ctl input [--json] [--session SESSION] TEXT...
                                          type to ` + brand.Name + ` as into a task bar, and
                                          print what it says: a task with its @
@@ -209,6 +210,8 @@ func ctl(args []string) error {
 		return ctlGroup(args[1:])
 	case "ungroup":
 		return ctlUngroup(args[1:])
+	case "nest":
+		return ctlNest(args[1:])
 	case "ctx", "context":
 		return ctlContext(args[1:])
 	case "fork":

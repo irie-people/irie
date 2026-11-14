@@ -321,6 +321,7 @@ func (c *Core) comeHome(x *session, r closedRecord) {
 	}
 	if c.groupIndex(r.Group) >= 0 {
 		c.record(x, event.Event{Source: event.SourceIrie, Kind: event.UIGrouped, Data: map[string]any{"group": r.Group}})
+		c.tidyOrder()
 	}
 }
 

@@ -163,7 +163,7 @@ func TestSessionsJoinAndLeaveAGroupAndUngroupKeepsThemInPlace(t *testing.T) {
 	if got := inGroup(rows, ""); !slices.Equal(got, []string{"beta", "delta", "gamma", "alpha"}) {
 		t.Errorf("after ungroup, in no group: %v", got)
 	}
-	if u := c.step(dirUndo); u.Label != "ungroup 3 sessions" {
+	if u := c.step(dirUndo); u.Label != `ungroup "steak"` {
 		t.Errorf("undo label %q", u.Label)
 	}
 	if got := inGroup(c.list(), g); !slices.Equal(got, []string{"beta", "delta", "gamma"}) {

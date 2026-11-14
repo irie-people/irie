@@ -157,6 +157,10 @@ final class Store {
     /// The card a drag holds, and where it would land (Controls.swift).
     var dragging: String?
     var dropMark: DropMark?
+    /// The group of yours a drag holds by its header, and where on a
+    /// header a held card or group would land (Groups.swift).
+    var draggingGroup: String?
+    var headerMark: HeaderMark?
     /// Bumped when the terminal should take keyboard focus.
     var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
@@ -711,9 +715,9 @@ final class Store {
     }
 
     /// The cards in the order the sidebar draws them, without those in folded
-    /// groups or hidden by the filter. The keys that walk the sidebar follow
-    /// it.
-    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap(\.sessions) }
+    /// groups, a folded group inside one of yours too, or hidden by the
+    /// filter. The keys that walk the sidebar follow it.
+    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap { g in g.node.map(shown) ?? g.sessions } }
 
     /// A group is open unless folded, and Parked only once opened. Every
     /// group is open while the filter has text, so what it finds shows.
@@ -1252,6 +1256,10 @@ struct SessionGroup: Identifiable, Equatable {
     var host: String? = nil
     /// Your group's id, for one of your groups (Groups.swift).
     var userGroup: String? = nil
+    /// For one of your groups, what it holds as the List view draws it: its
+    /// cards and the groups inside it, in the list's one order. Its sessions
+    /// are every card within it, its groups' too.
+    var node: GroupNode? = nil
 
     /// Whether it is drawn without a header: the List view's cards of no
     /// group of yours, list, or list:1 and on after your groups.

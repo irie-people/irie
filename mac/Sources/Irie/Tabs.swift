@@ -397,7 +397,8 @@ struct CloseManyItems: View {
 }
 
 /// A group header's menu: fold it, and close its cards; for your group,
-/// rename it and ungroup it too (Groups.swift).
+/// rename it, put it in a new group, move it into another or out of the one
+/// around it, and ungroup it too (Groups.swift).
 @MainActor
 struct GroupActions: View {
     @Environment(Store.self) private var store
@@ -409,6 +410,8 @@ struct GroupActions: View {
         }
         Button(store.isOpen(group) ? "Fold" : "Open") { store.fold(group) }
         if let id = group.userGroup {
+            Divider()
+            GroupPlaceMenu(id: id)
             Button("Ungroup") { store.ungroup(id) }
         }
         let list = store.closable(in: group)

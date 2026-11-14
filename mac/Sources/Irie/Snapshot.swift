@@ -262,8 +262,12 @@ enum Fixture {
     }}
     """#
 
-    /// A group of yours, which conversation-view and warm-look are in.
-    static let groups = [GroupInfo(id: "gmacapp00000", name: "Mac app")]
+    /// Your groups, one inside another: Irie holds Mac app and
+    /// patent-research, Mac app holds conversation-view and Looks, and Looks
+    /// holds warm-look.
+    static let groups = [GroupInfo(id: "girie0000000", name: "Irie"),
+                         GroupInfo(id: "gmacapp00000", name: "Mac app", parent: "girie0000000"),
+                         GroupInfo(id: "glooks000000", name: "Looks", parent: "gmacapp00000")]
 
     static var sessions: [Session] {
         let now = Date()
@@ -285,7 +289,7 @@ enum Fixture {
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "\(Brand.slug)/conversation-view", profile: "claude",
                     group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
-                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "gmacapp00000",
+                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "glooks000000",
                     trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
@@ -296,7 +300,7 @@ enum Fixture {
                     team: [Teammate(session: "s10patents00-1", name: "seed-finder", color: "blue", type: "general-purpose", title: "Reading the claims", working: true),
                            Teammate(session: "s10patents00-2", name: "expand-a", color: "green", type: "general-purpose", title: "Paging the citations", working: true)],
                     subs: Subs(helpers: 1, teammates: 2),
-                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), hue: 4),
+                    tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), group: "girie0000000", hue: 4),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
                     created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "\(Brand.slug)/bigup-m0", profile: "claude", hue: 3),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),
