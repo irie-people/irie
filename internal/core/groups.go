@@ -11,11 +11,13 @@ package core
 // A group has no place of its own in the list's one order (order.go): a
 // sidebar draws it where the first of its sessions is, with its other
 // sessions just after it, in their order. So the core keeps a group's
-// sessions together: a new group gathers its sessions just after the first
-// of them, a session that joins a group goes last in it, and one taken out
-// goes just after it. A pinned or parked session of a group waits in
-// Pinned or Parked, and comes back to its group when unpinned or unparked;
-// one that joins a group comes out of Pinned or Parked.
+// sessions together, whatever changes the order (together): a new group
+// gathers its sessions just after the first of them, a session that joins
+// a group goes last in it, and one taken out goes just after it. A pinned
+// or parked session of a group waits in Pinned or Parked, and comes back
+// last in its group when unpinned or unparked, or first when promoted, so
+// the group stays where it is; one that joins a group comes out of Pinned
+// or Parked.
 //
 // The groups live in the @irie_groups option of the agents' session, as
 // JSON; a session's group is in the journal (ui.grouped), as its space is,
@@ -89,10 +91,26 @@ func (c *Core) groupIndex(id string) int {
 	return slices.IndexFunc(c.groups, func(g ipc.Group) bool { return g.ID == id })
 }
 
-// groupNamed is where the group of that name is, in any case, or -1.
-func (c *Core) groupNamed(name string) int {
+// groupNamed is where the group of that name is, in any case, among those
+// of space, or -1: a group of another space's sessions is not one a
+// session of this space can join. The caller holds c.mu.
+func (c *Core) groupNamed(name, space string) int {
 	name = c.groupName(name, "\x00")
-	return slices.IndexFunc(c.groups, func(g ipc.Group) bool { return strings.EqualFold(g.Name, name) })
+	return slices.IndexFunc(c.groups, func(g ipc.Group) bool {
+		return strings.EqualFold(g.Name, name) && c.groupIn(g.ID, space, nil)
+	})
+}
+
+// groupIn reports whether group id can hold a session of space: none of
+// its open sessions, but those in except, is in another space, as each
+// space has its own groups. The caller holds c.mu.
+func (c *Core) groupIn(id, space string, except map[string]bool) bool {
+	for _, y := range c.sessions {
+		if !except[y.id] && c.groupOf(y) == id && c.spaceOf(y) != space {
+			return false
+		}
+	}
+	return true
 }
 
 // groupOf is the group x is in, as its row says it: "" when it is in none,
@@ -187,8 +205,11 @@ func inRest(x *session) bool { return x != nil && !x.track.pinned && !x.track.pa
 
 // lastIn is the last session of group id in the order that the group
 // draws, one neither pinned nor parked, leaving out those in skip; "" when
-// there is none. The caller holds c.mu.
+// there is none, or no group. The caller holds c.mu.
 func (c *Core) lastIn(id string, skip map[string]bool) string {
+	if id == "" {
+		return ""
+	}
 	last := ""
 	for _, s := range c.fullOrder() {
 		if x := c.sessions[s]; x != nil && !skip[s] && inRest(x) && c.groupOf(x) == id {
@@ -196,6 +217,58 @@ func (c *Core) lastIn(id string, skip map[string]bool) string {
 		}
 	}
 	return last
+}
+
+// firstIn is the first session of group id in the order that the group
+// draws, as lastIn. The caller holds c.mu.
+func (c *Core) firstIn(id string, skip map[string]bool) string {
+	if id == "" {
+		return ""
+	}
+	for _, s := range c.fullOrder() {
+		if x := c.sessions[s]; x != nil && !skip[s] && inRest(x) && c.groupOf(x) == id {
+			return s
+		}
+	}
+	return ""
+}
+
+// together is ids with the sessions each of your groups draws, those
+// neither pinned nor parked, gathered just after the first of them, as the
+// sidebars draw them: so a move worked out on the order lands where it
+// shows, and a group never splits. The others keep their places. The
+// caller holds c.mu.
+func (c *Core) together(ids []string) []string {
+	if len(c.groups) == 0 {
+		return ids
+	}
+	in := func(id string) string {
+		if x := c.sessions[id]; x != nil && inRest(x) {
+			return c.groupOf(x)
+		}
+		return ""
+	}
+	members := map[string][]string{}
+	for _, id := range ids {
+		if g := in(id); g != "" {
+			members[g] = append(members[g], id)
+		}
+	}
+	if len(members) == 0 {
+		return ids
+	}
+	out := make([]string, 0, len(ids))
+	drawn := map[string]bool{}
+	for _, id := range ids {
+		switch g := in(id); {
+		case g == "":
+			out = append(out, id)
+		case !drawn[g]:
+			drawn[g] = true
+			out = append(out, members[g]...)
+		}
+	}
+	return out
 }
 
 // gather puts the sessions ids, which are in the list's order, together:
@@ -228,7 +301,8 @@ func (c *Core) gather(ids []string, after, before string) {
 	case at < 0:
 		at = len(rest)
 	}
-	next := slices.Concat(rest[:at], ids, rest[at:])
+	// Groups that a session joined or left come together too.
+	next := c.together(slices.Concat(rest[:at], ids, rest[at:]))
 	if !slices.Equal(next, order) {
 		c.setOrder(next)
 	}
@@ -290,11 +364,6 @@ func (c *Core) join(xs []*session, id, after, before string) []groupStep {
 		if from := c.groupOf(x); from != "" {
 			d["from_name"] = c.groupNameOf(from)
 		}
-		for k, v := range map[string]string{"before": before, "after": after} {
-			if v != "" {
-				d[k] = v
-			}
-		}
 		if x.track.pinned {
 			c.setPinned(x.id, false)
 			d["pinned"] = true
@@ -330,13 +399,7 @@ func (c *Core) leave(xs []*session, after, before string) []groupStep {
 			continue
 		}
 		skip[x.id], was[x.id], from[x.id] = true, c.nextOf(x.id), g
-		d := map[string]any{"from": g, "from_name": c.groupNameOf(g), "to": ""}
-		for k, v := range map[string]string{"before": before, "after": after} {
-			if v != "" {
-				d[k] = v
-			}
-		}
-		steps = append(steps, groupStep{id: x.id, data: d})
+		steps = append(steps, groupStep{id: x.id, data: map[string]any{"from": g, "from_name": c.groupNameOf(g), "to": ""}})
 	}
 	if len(steps) == 0 {
 		return nil
@@ -369,42 +432,32 @@ func (c *Core) leave(xs []*session, after, before string) []groupStep {
 	return steps
 }
 
-// notePlaces adds to each step, when its session moved, the place it left,
-// which undo puts it back in, and the place it went to. Redo works that
-// one out again (doGroup): of several steps taken together, the first
-// redone would find the others' places not yet there. The caller holds
-// c.mu.
+// notePlaces adds to each step, when its session moved, the place it left
+// and the place it went to, each as the sessions after it (nextOf). Undo
+// takes a batch's steps back last first, so each finds the ones after it
+// back in their places already; redo takes them again first first, so the
+// place each went to leaves out the batch's sessions after it, which are
+// not back there yet. The caller holds c.mu.
 func (c *Core) notePlaces(steps []groupStep, was map[string][]string) {
-	for _, s := range steps {
-		if now := c.nextOf(s.id); !slices.Equal(was[s.id], now) {
-			s.data["was"], s.data["now"] = was[s.id], now
+	order := c.fullOrder()
+	for i, s := range steps {
+		if slices.Equal(was[s.id], c.nextOf(s.id)) {
+			continue
 		}
-	}
-}
-
-// replace puts session x, which a step moved into group to or out of group
-// from (to ""), where the step put it: just before or after the session
-// its drag dropped it by, while that one is in that group, or in none as x
-// is; else last in its group, or just after the group it left. The caller
-// holds c.mu.
-func (c *Core) replace(x *session, to, from, before, after string) {
-	if !inRest(x) {
-		return
-	}
-	if y := c.sessions[before]; y != nil && y != x && c.groupOf(y) == to {
-		c.gather([]string{x.id}, "", before)
-		return
-	}
-	if y := c.sessions[after]; y != nil && y != x && c.groupOf(y) == to {
-		c.gather([]string{x.id}, after, "")
-		return
-	}
-	in := to
-	if in == "" {
-		in = from
-	}
-	if last := c.lastIn(in, map[string]bool{x.id: true}); last != "" {
-		c.gather([]string{x.id}, last, "")
+		later := map[string]bool{}
+		for _, t := range steps[i+1:] {
+			later[t.id] = true
+		}
+		now := []string{}
+		for _, id := range order[slices.Index(order, s.id)+1:] {
+			if len(now) == placeAnchors {
+				break
+			}
+			if !later[id] {
+				now = append(now, id)
+			}
+		}
+		s.data["was"], s.data["now"] = was[s.id], now
 	}
 }
 
@@ -429,6 +482,9 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 			if len(xs) == 0 {
 				return ipc.Errorf(ipc.CodeBadArgs, "a new group needs one of this machine's sessions")
 			}
+			if err := c.oneSpace(xs, ""); err != nil {
+				return err
+			}
 			res.Group = c.newGroup(a.Name)
 			steps = c.join(xs, res.Group, "", "")
 		case ipc.GroupAdd:
@@ -444,12 +500,17 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 				return ipc.Errorf(ipc.CodeBadArgs, "no session of this machine's to put in a group")
 			}
 			if at < 0 {
-				at = c.groupNamed(a.Name)
+				// By name, among the groups of their space.
+				at = c.groupNamed(a.Name, c.spaceOf(xs[0]))
+			}
+			if at >= 0 {
+				res.Group = c.groups[at].ID
+			}
+			if err := c.oneSpace(xs, res.Group); err != nil {
+				return err
 			}
 			if at < 0 {
 				res.Group = c.newGroup(a.Name)
-			} else {
-				res.Group = c.groups[at].ID
 			}
 			steps = c.join(xs, res.Group, a.After, a.Before)
 		case ipc.GroupRemove:
@@ -464,6 +525,7 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 				return ipc.Errorf(ipc.CodeBadArgs, "a group needs a name")
 			}
 			c.groups[at].Name = c.groupName(a.Name, a.Group)
+			c.renameInHistory(a.Group, c.groups[at].Name)
 		case ipc.GroupUngroup:
 			kind = actUngroup
 			at := c.groupIndex(a.Group)
@@ -502,6 +564,43 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 	return res, err
 }
 
+// oneSpace refuses sessions xs of more than one space, or, for a group id
+// to join, of a space other than its sessions': each space has its own
+// groups. The caller holds c.mu.
+func (c *Core) oneSpace(xs []*session, id string) error {
+	space, moving := c.spaceOf(xs[0]), map[string]bool{}
+	for _, x := range xs {
+		moving[x.id] = true
+		if c.spaceOf(x) != space {
+			return ipc.Errorf(ipc.CodeBadArgs, "%q and %q are in different spaces, and a group is in one", xs[0].name, x.name)
+		}
+	}
+	if id != "" && !c.groupIn(id, space, moving) {
+		return ipc.Errorf(ipc.CodeBadArgs, "the group %q is in another space than %q", c.groupNameOf(id), xs[0].name)
+	}
+	return nil
+}
+
+// renameInHistory gives group id's name to the steps of the history that
+// keep it, so that an undo or redo that makes the group again names it as
+// it is named now. The caller holds c.mu.
+func (c *Core) renameInHistory(id, name string) {
+	changed := false
+	for _, list := range [][]action{c.steps.hist.Undo, c.steps.hist.Redo} {
+		for _, a := range list {
+			for _, k := range []string{"from", "to", "group"} {
+				if a.Data != nil && a.str(k) == id {
+					a.Data[k+"_name"] = name
+					changed = true
+				}
+			}
+		}
+	}
+	if changed {
+		c.saveState()
+	}
+}
+
 // Action kinds of a group op (undo.go): a session that joined a group, as
 // new and add put them, and one that left its group, as remove and ungroup
 // take them out. Undo puts it back in the group it left, or in none, and
@@ -531,7 +630,11 @@ func checkGroup(k string) func(c *Core, a action) []problem {
 			}
 			return []problem{gone(a)}
 		}
-		if c.groupOf(x) == a.str(k) {
+		back := k == "from"
+		if g := a.str(k); g != "" && c.groupIndex(g) >= 0 && !c.groupIn(g, c.spaceOf(x), map[string]bool{x.id: true}) {
+			return []problem{{code: "space", question: fmt.Sprintf("The group %q is in another space than %q now.", c.groupNameOf(g), x.name), recommend: ipc.ChoiceSkip}}
+		}
+		if c.groupOf(x) == a.str(k) && (!a.flag("pinned") || x.track.pinned == back) && (!a.flag("parked") || x.track.parked == back) {
 			where := "in no group already"
 			if a.str(k) != "" {
 				where = "in that group already"
@@ -546,10 +649,9 @@ func checkGroup(k string) func(c *Core, a action) []problem {
 }
 
 // doGroup puts a's session in the group its data keeps as k, made again
-// should it have gone: as before the step (from), in the place it left, or
-// as after it (to), where the step put it. A session that joining unpinned
-// or unparked is pinned or parked again by undo, and comes out again by
-// redo.
+// should it have gone, and in its place then: before the step (from) or
+// after it (to). A session that joining unpinned or unparked is pinned or
+// parked again by undo, and comes out again by redo.
 func doGroup(k string) func(c *Core, a action) (action, error) {
 	return func(c *Core, a action) (action, error) {
 		c.mu.Lock()
@@ -568,11 +670,12 @@ func doGroup(k string) func(c *Core, a action) (action, error) {
 			c.setParked(x.id, back)
 		}
 		c.setGroup(x, g, event.SourceUser)
-		switch _, moved := a.Data["was"]; {
-		case moved && back:
-			c.putBack(x.id, a.strs("was"))
-		case moved:
-			c.replace(x, a.str("to"), a.str("from"), a.str("before"), a.str("after"))
+		place := "now"
+		if back {
+			place = "was"
+		}
+		if _, moved := a.Data[place]; moved {
+			c.putBack(x.id, a.strs(place))
 		}
 		c.saveGroups()
 		a.Name = x.name
@@ -614,14 +717,14 @@ func (c *Core) placeInGroup(id string, a ipc.SpawnArgs) {
 	if x == nil {
 		return
 	}
-	g := ""
+	g, space := "", c.spaceOf(x)
 	switch {
 	case a.Group != "":
-		if at := c.groupIndex(a.Group); at >= 0 {
+		if c.groupIndex(a.Group) >= 0 && c.groupIn(a.Group, space, nil) {
 			g = a.Group
-		} else if at := c.groupNamed(a.Group); at >= 0 {
+		} else if at := c.groupNamed(a.Group, space); at >= 0 {
 			g = c.groups[at].ID
-		} else if strings.TrimSpace(a.Group) != "" {
+		} else if strings.TrimSpace(a.Group) != "" && c.groupIndex(a.Group) < 0 {
 			g = c.newGroup(a.Group)
 		}
 	case !a.Jot || c.cfg().UI.NewTabs == "next":
@@ -634,4 +737,6 @@ func (c *Core) placeInGroup(id string, a ipc.SpawnArgs) {
 	}
 	c.record(x, event.Event{Source: event.SourceIrie, Kind: event.UIGrouped, Data: map[string]any{"group": g}})
 	c.saveGroups()
+	// Last in its group, until placeNew puts it elsewhere in it.
+	c.setOrder(c.fullOrder())
 }

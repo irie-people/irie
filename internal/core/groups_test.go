@@ -269,8 +269,123 @@ func TestANewSessionGoesInItsOpenersGroup(t *testing.T) {
 	if r := c.group(ipc.GroupArgs{}); !slices.Equal(groupNames(r), []string{"Steak", "Gigbot"}) || fresh == "" || fresh == g {
 		t.Errorf("groups %v, fresh in %q", groupNames(r), fresh)
 	}
-	if got := inGroup(c.list(), g); !slices.Equal(got, []string{"alpha", "from-alpha", "named"}) {
+	// Each joins its group's cards, last in the group.
+	rows := c.list()
+	if got := inGroup(rows, g); !slices.Equal(got, []string{"alpha", "from-alpha", "named"}) {
 		t.Errorf("in the group: %v", got)
+	}
+	if got := names(rows); !slices.Equal(got, []string{"alpha", "from-alpha", "named", "beta", "typed", "fresh"}) {
+		t.Errorf("order = %v, want the group's together", got)
+	}
+}
+
+func TestANewSessionOfAGroupGoesInItWithNewTabsFirst(t *testing.T) {
+	c := setupWith(t, agentConfig{extra: "[ui]\nnew_tabs = \"first\"\n"})
+	id := c.spawnNamed("x", "y", "alpha")
+	// new_tabs = first: alpha, y, x.
+	g := c.group(ipc.GroupArgs{Do: ipc.GroupNew, Sessions: []string{id["x"]}}).Group
+	c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "kid", After: id["x"]})
+	rows := c.list()
+	if got := names(rows); !slices.Equal(got, []string{"alpha", "y", "x", "kid"}) {
+		t.Errorf("order = %v, want kid last in x's group, where the group is", got)
+	}
+	if got := inGroup(rows, g); !slices.Equal(got, []string{"x", "kid"}) {
+		t.Errorf("in the group: %v", got)
+	}
+}
+
+func TestAGroupStaysTogetherAndInPlace(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("x", "y", "alpha", "beta", "gamma", "delta", "eps")
+	g := c.group(ipc.GroupArgs{Do: ipc.GroupNew, Name: "Steak", Sessions: []string{id["beta"], id["gamma"], id["delta"]}}).Group
+
+	// Taking two out at once, then undo and redo, puts them back in their
+	// order.
+	c.group(ipc.GroupArgs{Do: ipc.GroupRemove, Sessions: []string{id["beta"], id["gamma"]}})
+	want := []string{"x", "y", "alpha", "delta", "beta", "gamma", "eps"}
+	if got := names(c.list()); !slices.Equal(got, want) {
+		t.Errorf("after remove, order = %v", got)
+	}
+	c.step(dirUndo)
+	if got := names(c.list()); !slices.Equal(got, []string{"x", "y", "alpha", "beta", "gamma", "delta", "eps"}) {
+		t.Errorf("after undo, order = %v", got)
+	}
+	c.step(dirRedo)
+	if got := names(c.list()); !slices.Equal(got, want) {
+		t.Errorf("after redo, order = %v, want %v", got, want)
+	}
+	c.step(dirUndo)
+
+	// Unpinned, unparked or promoted, a card of a group comes back into
+	// it, and the group stays where it is.
+	c.pin(id["gamma"], true)
+	c.pin(id["gamma"], false)
+	c.park(id["beta"], true)
+	c.park(id["beta"], false)
+	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: id["delta"], Level: 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	rows := c.list()
+	if got := names(rows); !slices.Equal(got, []string{"x", "y", "alpha", "delta", "gamma", "beta", "eps"}) {
+		t.Errorf("after unpin, unpark and promote, order = %v", got)
+	}
+	if got := inGroup(rows, g); !slices.Equal(got, []string{"delta", "gamma", "beta"}) {
+		t.Errorf("in the group: %v", got)
+	}
+
+	// A new group of one card of another group takes it just after that
+	// group, which stays whole.
+	other := c.group(ipc.GroupArgs{Do: ipc.GroupNew, Sessions: []string{id["gamma"]}}).Group
+	rows = c.list()
+	if got := names(rows); !slices.Equal(got, []string{"x", "y", "alpha", "delta", "beta", "gamma", "eps"}) {
+		t.Errorf("after a new group of gamma, order = %v", got)
+	}
+	if got := inGroup(rows, other); !slices.Equal(got, []string{"gamma"}) {
+		t.Errorf("in the new group: %v", got)
+	}
+
+	// A renamed group made again by redo keeps its new name.
+	c.group(ipc.GroupArgs{Do: ipc.GroupRename, Group: other, Name: "Gigbot"})
+	c.step(dirUndo)
+	c.step(dirRedo)
+	if r := c.group(ipc.GroupArgs{}); !slices.Contains(groupNames(r), "Gigbot") {
+		t.Errorf("after undo and redo, groups = %v, want Gigbot kept", groupNames(r))
+	}
+}
+
+func TestUndoPinsAgainACardThatJoinedItsOwnGroup(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("alpha", "beta")
+	g := c.group(ipc.GroupArgs{Do: ipc.GroupNew, Name: "Steak", Sessions: []string{id["alpha"], id["beta"]}}).Group
+	c.pin(id["beta"], true)
+	// Dropped on its own group's header, it comes out of Pinned.
+	c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Group: g, Sessions: []string{id["beta"]}})
+	if r, _ := c.row(id["beta"]); r.Pinned || r.Group != g {
+		t.Errorf("after joining its group, beta = pinned %v, group %q", r.Pinned, r.Group)
+	}
+	c.step(dirUndo)
+	if r, _ := c.row(id["beta"]); !r.Pinned || r.Group != g {
+		t.Errorf("after undo, beta = pinned %v, group %q", r.Pinned, r.Group)
+	}
+}
+
+func TestAGroupByNameIsOneOfTheSessionsSpace(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("alpha", "beta")
+	docs := c.group(ipc.GroupArgs{Do: ipc.GroupNew, Name: "Docs", Sessions: []string{id["alpha"]}}).Group
+	other := c.spaces(ipc.SpacesArgs{Do: ipc.SpacesNew, Name: "Gigbot"}).Space
+	if err := c.call(ipc.OpSpace, ipc.SpaceArgs{Sessions: []string{id["beta"]}, Space: other}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Docs is the first space's: in the other, the name makes a group of
+	// its own.
+	r := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "docs", Sessions: []string{id["beta"]}})
+	if r.Group == docs || !slices.Equal(groupNames(r), []string{"Docs", "docs 2"}) {
+		t.Errorf("beta went in %q; groups %v", r.Group, groupNames(r))
+	}
+	// Nor can a session join another space's group by its id.
+	if err := c.call(ipc.OpGroup, ipc.GroupArgs{Do: ipc.GroupAdd, Group: docs, Sessions: []string{id["beta"]}}, nil); err == nil {
+		t.Error("beta joined the other space's group")
 	}
 }
 

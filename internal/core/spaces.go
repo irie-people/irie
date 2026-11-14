@@ -291,8 +291,12 @@ func doSpace(k string) func(c *Core, a action) (action, error) {
 		g := a.str("group")
 		if g != "" {
 			if k == "from" {
-				c.ensureGroup(g, a.str("group_name"))
-				c.setGroup(x, g, event.SourceUser)
+				// Back in its group, unless the group went to another
+				// space meanwhile.
+				if c.groupIndex(g) < 0 || c.groupIn(g, c.spaceOf(x), map[string]bool{x.id: true}) {
+					c.ensureGroup(g, a.str("group_name"))
+					c.setGroup(x, g, event.SourceUser)
+				}
 			} else {
 				c.setGroup(x, "", event.SourceUser)
 			}

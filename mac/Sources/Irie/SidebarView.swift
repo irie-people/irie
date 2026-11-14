@@ -602,7 +602,7 @@ private struct GroupHeader: View {
             .help(help)
             .contextMenu { GroupActions(group: group) }
             // A card dropped on your group's header joins it.
-            .onDrop(of: group.userGroup == nil ? [] : [.text], isTargeted: $targeted) { _ in store.dropOnGroup(group) }
+            .onDrop(of: group.userGroup == nil ? [] : [.text], isTargeted: $targeted) { store.dropOnGroup(group, $0) }
             .simultaneousGesture(TapGesture(count: 2).onEnded {
                 if let id = group.userGroup { store.renamingGroup = id }
             })

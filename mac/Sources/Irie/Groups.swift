@@ -148,9 +148,10 @@ extension Store {
     }
 
     func renameGroup(_ id: String, _ name: String) {
-        renamingGroup = nil
+        if renamingGroup == id { renamingGroup = nil }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, name != groupName(id) else { return }
+        // A group gone meanwhile, as by ⌘Z, has nothing to rename.
+        guard groups.contains(where: { $0.id == id }), !name.isEmpty, name != groupName(id) else { return }
         groupCall(GroupArgs(action: "rename", group: id, name: name), failed: "rename the group") { _ in }
     }
 
@@ -165,14 +166,21 @@ extension Store {
     }
 
     /// A card dropped on a group's header: it, or every card picked with
-    /// it, goes last in that group.
-    func dropOnGroup(_ g: SessionGroup) -> Bool {
-        defer {
-            dragging = nil
-            dropMark = nil
+    /// it, goes last in that group. The drop must carry the held card's
+    /// id, so text from elsewhere, after a drag that ended without a drop,
+    /// moves nothing.
+    func dropOnGroup(_ g: SessionGroup, _ providers: [NSItemProvider]) -> Bool {
+        let held = dragging
+        dragging = nil
+        dropMark = nil
+        guard let id = g.userGroup, let held, let p = providers.first, p.canLoadObject(ofClass: NSString.self) else { return false }
+        _ = p.loadObject(ofClass: NSString.self) { text, _ in
+            guard (text as? NSString).map({ $0 as String }) == held else { return }
+            Task { @MainActor in
+                guard let s = self.sessions.first(where: { $0.id == held }) else { return }
+                self.addToGroup(self.targets(for: s), id)
+            }
         }
-        guard let id = g.userGroup, let held = dragging, let s = sessions.first(where: { $0.id == held }) else { return false }
-        addToGroup(targets(for: s), id)
         return true
     }
 
@@ -281,7 +289,9 @@ struct GroupNameField: View {
             .textFieldStyle(.plain)
             .font(Theme.font(12, .heavy))
             .focused($editing)
-            .onAppear {
+            // After the header has drawn it, so the field can take the
+            // keyboard, as a card's name does.
+            .task {
                 text = name
                 editing = true
             }
@@ -289,6 +299,11 @@ struct GroupNameField: View {
             .onExitCommand { store.renamingGroup = nil }
             .onChange(of: editing) {
                 if !editing && store.renamingGroup == id { store.renameGroup(id, text) }
+            }
+            // A header that goes, as when its group does or the view
+            // changes, gives the keys back.
+            .onDisappear {
+                if store.renamingGroup == id { store.renameGroup(id, text) }
             }
             .accessibilityLabel("New name for \(name)")
     }

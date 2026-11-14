@@ -51,14 +51,17 @@ extension Store {
 
     /// Pins (on) or unpins session id in rows, in the list's order, as the
     /// core does: a pin goes last, and unparks; an unpin goes first among
-    /// this Mac's sessions that are neither pinned nor parked.
+    /// this Mac's sessions that are neither pinned nor parked, or, for a
+    /// card of a group of yours, last in its group (Groups.swift).
     static func putPinned(_ rows: inout [Session], _ id: String, _ on: Bool) {
         guard let i = rows.firstIndex(where: { $0.id == id }) else { return }
         var s = rows.remove(at: i)
         s.pinned = on
         if on { s.parked = false }
+        let inGroup = { (r: Session) in s.groupKey != nil && r.groupKey == s.groupKey && !r.isPinned && !r.isParked }
         let at = on ? rows.count
-            : rows.firstIndex(where: { !$0.isPinned && !$0.isParked && $0.peerName == nil }) ?? rows.count
+            : rows.lastIndex(where: inGroup).map { $0 + 1 }
+            ?? rows.firstIndex(where: { !$0.isPinned && !$0.isParked && $0.peerName == nil }) ?? rows.count
         rows.insert(s, at: at)
         for j in rows.indices { rows[j].order = j }
     }
