@@ -263,6 +263,7 @@ func (c *Core) dogAtStop(id string, evs []event.Event) dogStop {
 		return dogStop{}
 	}
 	l, repos, nudged, teach, run := c.lookAt(x, true), c.knownRepos(), x.track.nudged, x.tutor == config.TutorTeach, x.track.test
+	dear := c.dogDear(x, time.Now())
 	c.mu.Unlock()
 
 	start := time.Now()
@@ -288,9 +289,33 @@ func (c *Core) dogAtStop(id string, evs []event.Event) dogStop {
 		// In teach mode it left a part for you to write, which is the
 		// TODO(human) the dog would count (docs/proposals/learning.md §4.4).
 		return st
+	case dear:
+		// Its row says what is left, and you decide (usage.wake_most).
+		return st
 	}
 	st.note = unfinished(loose, st.unproven, run)
 	return st
+}
+
+// dogDear reports whether sending x's turn on at its end would cost more
+// than a nudge is worth (usage.wake_most). A turn ends just after its last
+// request, while its cache is warm, so this holds only for a turn whose
+// end comes late, as one frozen at its end and thawed hours later: its
+// cache has run out since its last request, a thaw came after that, and
+// its agent called no tool since the thaw. Claude Code writes a turn's
+// last reply only after its Stop hooks, so the last request read may be
+// the one before: without a thaw since, the turn only ran a long tool
+// call, and a tool call after the thaw means the turn went on and made
+// its last request after it, which warmed the cache again. The caller
+// holds c.mu.
+func (c *Core) dogDear(x *session, now time.Time) bool {
+	x.tally.update(x.track.transcripts)
+	w, cold := c.wakePrice(x, now)
+	if _, dear := c.tooDear(x, now); !cold || !dear {
+		return false
+	}
+	thawed := x.track.lastThaw()
+	return thawed.After(w.Last) && !x.track.lastTool.After(thawed)
 }
 
 // nudgeEvent stands in for a turn's end when the dog sends the agent back:
