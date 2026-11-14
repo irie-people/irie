@@ -215,22 +215,32 @@ final class WindowPlace {
     private var on = false
     private var placed = Set<ObjectIdentifier>()
     private weak var kept: NSWindow?
+    /// The window a view reported before the app had launched.
+    private weak var early: NSWindow?
     private var watching: [NSObjectProtocol] = []
     private var timer: Timer?
 
     /// Called as the app has launched: places each window that is there
-    /// already, before the window server first shows it.
+    /// already, before the window server first shows it, and takes on the
+    /// window a view reported before now, as the app's optimized build's
+    /// does.
     func start() {
         on = true
         for w in NSApp.windows where w.isVisible && w.styleMask.contains(.titled) && !(w is NSPanel) {
             place(w)
         }
+        if let w = early { adopt(w) }
     }
 
     /// The app's window, once a view is in it: placed, if it was not yet,
-    /// and its desktop kept from then on.
+    /// and its desktop kept from then on. Before the app has launched it
+    /// waits for start(); in --snapshot, --bench and --record, which never
+    /// launch the app, it waits for good.
     func adopt(_ window: NSWindow) {
-        guard on else { return }
+        guard on else {
+            early = window
+            return
+        }
         place(window)
         keep(window)
     }
