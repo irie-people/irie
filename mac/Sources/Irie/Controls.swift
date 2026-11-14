@@ -298,8 +298,8 @@ struct PauseButton: View {
     }
 }
 
-/// Promote, or put back, as an icon: on a hovered card and in the details
-/// panel.
+/// Promote, or put back, as an icon: on a hovered card, and on a promoted
+/// card all the time, filled, as its one mark of it (SidebarView.swift).
 @MainActor
 struct PromoteButton: View {
     @Environment(Store.self) private var store
@@ -314,7 +314,7 @@ struct PromoteButton: View {
             Image(systemName: on ? "arrow.up.circle.fill" : "arrow.up.circle").frame(width: 16, height: 18)
         }
         .foregroundStyle(ink ? Theme.ink : on ? Theme.accentInk : Theme.muted)
-        .help(on ? "Promoted: click to put it back among the rest" : "Promote: put it first, with the CPU and disk first")
+        .help(on ? "Promoted: it has the CPU and disk first; click to put it back among the rest" : "Promote: put it first, with the CPU and disk first")
         .accessibilityLabel(on ? "Stop promoting" : "Promote")
     }
 }
@@ -372,17 +372,6 @@ struct ControlItems: View {
                 SpaceItems(list: [session])
             }
         }
-    }
-}
-
-/// A promoted card's badge, after its name.
-struct PromotedBadge: View {
-    var body: some View {
-        Image(systemName: "arrow.up.circle.fill")
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(Theme.accentInk)
-            .help("Promoted: it has the CPU and disk first")
-            .accessibilityHidden(true)
     }
 }
 
