@@ -56,6 +56,8 @@ type (
 	OutsideSession   = ipc.OutsideSession
 	MoveArgs         = ipc.MoveArgs
 	MoveResult       = ipc.MoveResult
+	PaneArgs         = ipc.PaneArgs
+	PaneResult       = ipc.PaneResult
 	PeersArgs        = ipc.PeersArgs
 	PeersResult      = ipc.PeersResult
 	PeerFetch        = ipc.PeerFetch
@@ -269,6 +271,7 @@ const (
 	StatusBusy         = ipc.StatusBusy
 	StatusWaiting      = ipc.StatusWaiting
 	StatusIdle         = ipc.StatusIdle
+	OpPane             = ipc.OpPane
 	OpPeers            = ipc.OpPeers
 	CodePeerDown       = ipc.CodePeerDown
 	OpPerf             = ipc.OpPerf

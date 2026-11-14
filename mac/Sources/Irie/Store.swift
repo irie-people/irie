@@ -212,6 +212,8 @@ final class Store {
     var sideSliding = false
     /// Counts its slides, so that only the last one's end counts.
     @ObservationIgnored var sideSlides = 0
+    /// The panes beside the terminal, a rolodex of cards (Rolodex.swift).
+    let rolodex = RolodexModel()
     /// The session the core shows beside its teammates, as last asked
     /// (TeamSplit.swift); nil while the slot shows the picked session.
     private(set) var splitShown: String?
@@ -336,6 +338,7 @@ final class Store {
                 canTutor = hello.features.contains("spawn-tutor")
                 canLearn = hello.features.contains("learn")
                 canDock = hello.features.contains("dock")
+                rolodex.canShell = hello.features.contains("pane")
                 canConfigure = hello.features.contains("config")
                 canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
