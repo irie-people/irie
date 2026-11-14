@@ -50,12 +50,15 @@ func notBuilt(what string) error {
 // builtFeatures leaves out of hello's features the ops of a plugin this
 // build leaves out, so a client never offers them.
 func builtFeatures(all []string) []string {
-	if privacyBuilt {
+	if privacyBuilt && marketsBuilt {
 		return all
 	}
 	var out []string
 	for _, f := range all {
-		if f != ipc.OpVPN && f != ipc.OpAnon {
+		switch {
+		case !privacyBuilt && (f == ipc.OpVPN || f == ipc.OpAnon):
+		case !marketsBuilt && f == ipc.OpMarkets:
+		default:
 			out = append(out, f)
 		}
 	}
