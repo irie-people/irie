@@ -324,7 +324,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/statusline/` | `irie statusline`: cost, context and plan use from Claude Code's status line | M10 |
 | `internal/dms/` | The dead man's switch guide's helpers, `irie dms`: the Healthchecks checks, the phone's check-in and the calendar file ([extensions.md](proposals/extensions.md) §2) | Extensions |
 | `internal/plugins/` | Irie's plugins (§4.17): each plugin and its parts, how far each part is set up here, its switches, and the reasons a part that is off gives | Plugins |
-| `internal/vpn/` | A VPN through its own command line, as `vpn.provider` names it (§4.18): Mullvad VPN (the tunnel's state from `mullvad status --json` and `status listen --json`, lockdown, the account's expiry; [extensions.md](proposals/extensions.md) §4), Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and the person's own commands; the `:vpn` changes | Extensions, VPNs |
+| `internal/vpn/` | A VPN through its own command line, as `vpn.provider` names it (§4.18): Mullvad VPN (the tunnel's state from `mullvad status --json` and `status --json listen`, lockdown, the account's expiry; [extensions.md](proposals/extensions.md) §4), Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and the person's own commands; the `:vpn` changes | Extensions, VPNs |
 | `e2e/` | Opt-in tests against the real Claude Code | M11 |
 
 ### 2.7 Install and first run
@@ -1229,7 +1229,7 @@ The owner asked on 2026-11-14 for VPNs other than Mullvad, chosen in the config,
 
 | `vpn.provider` | The VPN | Its command | The state from | `vpn.server` | Runs on | Beyond on and off |
 |---|---|---|---|---|---|---|
-| `mullvad` | Mullvad VPN | `mullvad` (`vpn.mullvad`) | `status listen --json`, which says each change | none | macOS, Linux | place (a relay), lockdown, time |
+| `mullvad` | Mullvad VPN | `mullvad` (`vpn.mullvad`) | `status --json listen`, which says each change | none | macOS, Linux | place (a relay), lockdown, time |
 | `tailscale` | Tailscale | `tailscale`, or the Mac app's own binary | `status --json`'s `BackendState` | none | macOS, Linux | place (an exit node; `none` goes out directly) |
 | `netbird` | NetBird | `netbird` | `status --json`'s `daemonStatus` | none | macOS, Linux | none |
 | `warp` | Cloudflare WARP (Cloudflare One) | `warp-cli` | `warp-cli status` | none | macOS, Linux | none |
