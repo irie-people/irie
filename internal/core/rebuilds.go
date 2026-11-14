@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/journal"
@@ -509,7 +510,7 @@ func causeWords(cause string) string {
 	case ipc.RebuildLimit:
 		return "a usage limit's reset"
 	case ipc.RebuildBoost:
-		return "Irie's carry-on after API errors"
+		return brand.Name + "'s carry-on after API errors"
 	case ipc.RebuildTool:
 		return "a long tool call"
 	case ipc.RebuildChanged:
