@@ -20,6 +20,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -246,7 +247,7 @@ func checkSpace(k string) func(c *Core, a action) []problem {
 		if c.spaceOf(x) == c.spaceKey(a.str(k)) {
 			return []problem{{code: "already", question: fmt.Sprintf("%q is in that space already.", x.name),
 				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
-					Detail: "Nothing needs moving, so the history moves on as if Irie had moved it."}},
+					Detail: "Nothing needs moving, so the history moves on as if " + brand.Name + " had moved it."}},
 				recommend: ipc.ChoiceSettle}}
 		}
 		return nil

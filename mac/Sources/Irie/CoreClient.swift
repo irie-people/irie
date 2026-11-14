@@ -3,7 +3,7 @@ import Foundation
 
 /// Where the core listens: the same rules as internal/paths, so the app
 /// finds the core that `irie up` started. --socket PATH or IRIE_CORE_SOCKET
-/// override them.
+/// (Brand.env) override them.
 enum CorePaths {
     static let maxSocketPath = 104 // macOS caps sun_path at 104 bytes with the NUL
 
@@ -12,16 +12,16 @@ enum CorePaths {
         if let i = arguments.firstIndex(of: "--socket"), i + 1 < arguments.count {
             return arguments[i + 1]
         }
-        if let s = env["IRIE_CORE_SOCKET"], s.hasPrefix("/") {
+        if let s = env[Brand.env("CORE_SOCKET")], s.hasPrefix("/") {
             return s
         }
         let uid = getuid()
-        let short = "/tmp/irie-\(uid)"
+        let short = "/tmp/\(Brand.slug)-\(uid)"
         var runtime = short
         if let run = env["XDG_RUNTIME_DIR"], run.hasPrefix("/") {
-            runtime = (run as NSString).appendingPathComponent("irie")
+            runtime = (run as NSString).appendingPathComponent("\(Brand.slug)")
         } else if let tmp = env["TMPDIR"], tmp.hasPrefix("/") {
-            runtime = (tmp as NSString).appendingPathComponent("irie-\(uid)")
+            runtime = (tmp as NSString).appendingPathComponent("\(Brand.slug)-\(uid)")
         }
         let path = (runtime as NSString).appendingPathComponent("core.sock")
         if path.utf8.count >= maxSocketPath {

@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/perf"
 )
@@ -25,7 +26,7 @@ func ctlPerf(args []string) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return errors.New("usage: irie ctl perf [--json]")
+		return errors.New("usage: " + brand.Slug + " ctl perf [--json]")
 	}
 	sock, err := socket()
 	if err != nil {
@@ -35,7 +36,7 @@ func ctlPerf(args []string) error {
 	if err := ipc.Call(sock, 10*time.Second, ipc.OpPerf, nil, &r); err != nil {
 		var e *ipc.Error
 		if errors.As(err, &e) && e.Code == ipc.CodeUnknownOp {
-			return errors.New("this core counts nothing yet; an install of a newer irie brings `perf`")
+			return errors.New("this core counts nothing yet; an install of a newer " + brand.Slug + " brings `perf`")
 		}
 		return err
 	}

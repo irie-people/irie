@@ -5,15 +5,17 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"time"
+
+	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 )
 
 // ServerName is the connector's name in an agent's MCP config: its tools
 // are mcp__irie-browser__open and so on.
-const ServerName = "irie-browser"
+const ServerName = brand.Slug + "-browser"
 
 // DefaultIdle is how long the browser waits for a call before it closes.
-const DefaultIdle = 10 * time.Minute
+const DefaultIdle = config.BrowserIdle
 
 // Args are the arguments of `irie browser` that give a server o.
 func Args(o Options) []string {

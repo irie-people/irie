@@ -131,7 +131,7 @@ final class GhosttyRuntime {
         guard let config = ghostty_config_new() else { return nil }
         ghostty_config_load_default_files(config)
         ghostty_config_load_recursive_files(config)
-        let mine = FileManager.default.temporaryDirectory.appendingPathComponent("irie-ghostty-\(getpid()).conf")
+        let mine = FileManager.default.temporaryDirectory.appendingPathComponent("\(Brand.slug)-ghostty-\(getpid()).conf")
         let text = """
             background = \(hex(Theme.terminalBackground))
             foreground = \(hex(Theme.terminalForeground))

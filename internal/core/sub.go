@@ -10,13 +10,14 @@ package core
 import (
 	"slices"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/team"
 )
 
 // stoppedNote is what a stopped helper hears instead of its tool's result.
-const stoppedNote = "[Irie] The user stopped you from Irie. Make no more tool calls: end now, and say in a line or two what you found so far."
+const stoppedNote = "[" + brand.Name + "] The user stopped you from " + brand.Name + ". Make no more tool calls: end now, and say in a line or two what you found so far."
 
 // stopSub stops the helper or teammate a names, and records it in the
 // journal (ui.sub_stopped).

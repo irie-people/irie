@@ -89,6 +89,9 @@ final class Store {
     private(set) var canArch = false
     /// The core serves the plugins op (DESIGN §4.17).
     private(set) var canPlugins = false
+    /// The core serves the vpn op: its build has the privacy plugin
+    /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
+    private(set) var canVPN = false
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
     var plugins: [PluginInfo] = []
@@ -255,7 +258,7 @@ final class Store {
         guard !started else { return }
         started = true
         if let seconds = FreezeDog.restartedAfter {
-            say("Irie stopped answering for \(seconds) s, so ❤️‍🩹 Raffi restarted it. Every agent kept running.",
+            say("\(Brand.name) stopped answering for \(seconds) s, so ❤️‍🩹 Raffi restarted it. Every agent kept running.",
                 error: false, seconds: 10)
         }
         // Behind another app, the window takes in the core's news less
@@ -278,7 +281,7 @@ final class Store {
             do {
                 let hello = try await client.call("hello", HelloArgs(), timeout: 2, as: HelloResult.self)
                 guard hello.features.contains("attach-info") else {
-                    link = .offline("This Irie is too old for the app. Run the new build's `irie up` to update it.")
+                    link = .offline("This \(Brand.name) is too old for the app. Run the new build's `\(Brand.slug) up` to update it.")
                     try await Task.sleep(nanoseconds: 3_000_000_000)
                     continue
                 }
@@ -300,6 +303,7 @@ final class Store {
                 canPin = hello.features.contains("pin")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
+                canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
@@ -341,7 +345,7 @@ final class Store {
 
     private static func describe(_ error: Error) -> String {
         if notRunning(error) {
-            return "Irie isn’t running."
+            return "\(Brand.name) isn’t running."
         }
         return error.localizedDescription
     }
@@ -556,7 +560,7 @@ final class Store {
         sessions = rows.sorted(by: Self.before)
         self.selection = selection
         link = .online(version: "snapshot")
-        repoNames = ["bigup", "irie", "notes"]
+        repoNames = ["bigup", "\(Brand.slug)", "notes"]
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
@@ -569,7 +573,7 @@ final class Store {
         canArch = true
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
-                      about: "Mikael, the first of Irie's arch agents, stands with the user against evil and for the good they want to see in the world.",
+                      about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
                       on: true, status: "With every Claude Code session, weighing the calls that can’t be taken back.",
                       actions: [ArchAction(label: "Talk with Mikael", op: "spawn")],
                       settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "Mikael goes with every session", value: .bool(true)),
@@ -581,8 +585,8 @@ final class Store {
                       actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
                       settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
                                  ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
-            ArchAgent(name: "raphael", nickname: "Raffi", icon: "❤️‍🩹", title: "heals Irie and your Mac",
-                      about: "Raphael keeps Irie and the computer it runs on well.",
+            ArchAgent(name: "raphael", nickname: "Raffi", icon: "❤️‍🩹", title: "heals \(Brand.name) and your Mac",
+                      about: "Raphael keeps \(Brand.name) and the computer it runs on well.",
                       on: true, status: "Looked at 14:05: 2 things need care, and 1 is worth a look.",
                       actions: [ArchAction(label: "Look over my Mac now", op: "raphael")],
                       items: [ArchItem(text: "Your disk is nearly full: 9.9 GB free of 995 GB (1%).",
@@ -598,7 +602,7 @@ final class Store {
                                  ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app when it has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
-        taskRepo = "irie"
+        taskRepo = "\(Brand.slug)"
     }
 
     /// The list's order, which the core keeps and the user sets: a new
@@ -1167,7 +1171,7 @@ final class Store {
         }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = ["-na", "Ghostty", "--args", "--title=Irie", "-e", a.tmux, "-S", a.socket, "attach-session", "-t", a.target]
+        p.arguments = ["-na", "Ghostty", "--args", "--title=\(Brand.name)", "-e", a.tmux, "-S", a.socket, "attach-session", "-t", a.target]
         do {
             try p.run()
         } catch {

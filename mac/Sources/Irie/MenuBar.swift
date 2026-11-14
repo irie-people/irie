@@ -46,7 +46,12 @@ final class MenuState {
         /// The right sidebar's tab on show; nil while it is closed.
         var sideTab: SideTab?
         var canPlugins = false
+        /// The core's plugins, which the Plugins menu lists: a build
+        /// without one has none of its items (DESIGN §4.17).
         var plugins: [PluginInfo] = []
+        /// The core serves the vpn op: its build has the privacy plugin,
+        /// whose VPN items show only then.
+        var canVPN = false
     }
 
     private(set) var facts = Facts()
@@ -91,6 +96,7 @@ extension Store {
         f.sideTab = side.open ? side.tab : nil
         f.canPlugins = canPlugins
         f.plugins = plugins
+        f.canVPN = canVPN
         return f
     }
 

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
@@ -67,9 +68,9 @@ func (c *Core) move(a ipc.MoveArgs) (ipc.Session, error) {
 	c.mu.Unlock()
 	switch {
 	case !found && ids[a.VendorID]:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "session %s already runs in Irie", a.VendorID)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "session %s already runs in "+brand.Name, a.VendorID)
 	case !found:
-		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no Claude Code session %s runs outside Irie", a.VendorID)
+		return ipc.Session{}, ipc.Errorf(ipc.CodeNotFound, "no Claude Code session %s runs outside "+brand.Name, a.VendorID)
 	case !o.Movable:
 		return ipc.Session{}, ipc.Errorf(ipc.CodeBusy, "%s cannot move now: %s", outsideName(o), o.Why)
 	}
@@ -103,7 +104,7 @@ func (c *Core) move(a ipc.MoveArgs) (ipc.Session, error) {
 	c.publish(frames)
 	if err != nil {
 		c.log.Warn("move", "session", o.VendorID, "err", err)
-		return ipc.Session{}, fmt.Errorf("%s stopped where it ran, but Irie could not start it: %v; `claude --resume %s` in %s carries it on", outsideName(o), err, o.VendorID, o.Cwd)
+		return ipc.Session{}, fmt.Errorf("%s stopped where it ran, but "+brand.Name+" could not start it: %v; `claude --resume %s` in %s carries it on", outsideName(o), err, o.VendorID, o.Cwd)
 	}
 	c.publishOutside()
 	c.log.Info("moved", "session", x.id, "name", x.name, "resume", o.VendorID, "kind", o.Kind)
@@ -169,7 +170,7 @@ func endOutside(o ipc.OutsideSession, stop func() error, wait time.Duration) err
 			return ipc.Errorf(ipc.CodeInternal, "cannot stop %s (pid %d): %v; nothing was moved", name, o.PID, err)
 		}
 	default:
-		return ipc.Errorf(ipc.CodeBadArgs, "Irie cannot move a session of kind %q", o.Kind)
+		return ipc.Errorf(ipc.CodeBadArgs, brand.Name+" cannot move a session of kind %q", o.Kind)
 	}
 	for deadline := time.Now().Add(wait); alive(o.PID); time.Sleep(50 * time.Millisecond) {
 		if time.Now().After(deadline) {

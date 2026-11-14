@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Version is the envelope version.
@@ -236,7 +238,7 @@ func Validate(e Event) error {
 		bad("ts %q is not RFC 3339 UTC with milliseconds", e.TS)
 	}
 	if !sessionID.MatchString(e.Session) {
-		bad("session %q is not an Irie session id", e.Session)
+		bad("session %q is not an "+brand.Name+" session id", e.Session)
 	}
 	if e.Agent != "" && e.Agent != Main && (!strings.HasPrefix(e.Agent, "sub:") || e.Agent == "sub:") {
 		bad("agent %q is not main or sub:<id>", e.Agent)

@@ -39,7 +39,7 @@ enum Recording {
     }
 
     private static func fail(_ why: String) -> Never {
-        FileHandle.standardError.write(Data("Irie --record: \(why)\n".utf8))
+        FileHandle.standardError.write(Data("\(Brand.name) --record: \(why)\n".utf8))
         exit(2)
     }
 
@@ -142,7 +142,7 @@ enum Recording {
         // An app with no window on screen is napped, and its timers slowed;
         // this keeps the film's clock on time until it is done.
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
-                                                          reason: "Filming Irie's window")
+                                                          reason: "Filming \(Brand.name)'s window")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let scale = window.backingScaleFactor
         let film = Film(url: o.out, window: CGWindowID(window.windowNumber), fps: o.fps, backdrop: o.backdrop,
@@ -203,7 +203,7 @@ enum Recording {
     }
 
     private static func say(_ why: String) {
-        FileHandle.standardError.write(Data("Irie --record: \(why)\n".utf8))
+        FileHandle.standardError.write(Data("\(Brand.name) --record: \(why)\n".utf8))
     }
 }
 
@@ -437,8 +437,8 @@ final class Film: @unchecked Sendable {
     private let window: CGWindowID
     private let fps: Int
     private let backdrop: CGColor
-    private let queue = DispatchQueue(label: "Irie film", qos: .userInitiated)
-    private let encoder = DispatchQueue(label: "Irie film encoding", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "\(Brand.name) film", qos: .userInitiated)
+    private let encoder = DispatchQueue(label: "\(Brand.name) film encoding", qos: .userInitiated)
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?

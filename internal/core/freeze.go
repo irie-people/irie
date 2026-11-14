@@ -33,6 +33,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/host"
@@ -45,7 +46,7 @@ const freezePasses = 5
 
 // frozenNote is what an agent that was working is told at its first tool
 // call after a thaw (DESIGN §5.5, notes.frozen).
-const frozenNote = "[Irie] The user froze this session for %s (%s–%s UTC). Network calls or child processes may have failed meanwhile; re-check before you continue."
+const frozenNote = "[" + brand.Name + "] The user froze this session for %s (%s–%s UTC). Network calls or child processes may have failed meanwhile; re-check before you continue."
 
 // freezeMark is freeze.json.
 type freezeMark struct {

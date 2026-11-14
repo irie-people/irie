@@ -437,7 +437,7 @@ struct ControlLines: View {
         if session.isFrozen {
             if session.freezing == true {
                 lineText("Freezing at its next tool call",
-                         more: "Everything it started has stopped. The agent itself started before Irie could pause it whole, so it stops at its next tool call.")
+                         more: "Everything it started has stopped. The agent itself started before \(Brand.name) could pause it whole, so it stops at its next tool call.")
             } else {
                 lineText("Paused" + (session.frozen.map { " since " + $0.formatted(date: .omitted, time: .shortened) } ?? ""),
                          more: "It, its helpers and everything they started are stopped. Resume carries them on.")

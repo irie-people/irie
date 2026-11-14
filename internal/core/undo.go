@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/host"
@@ -580,7 +581,7 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 		id, d, codes, ok := parseChoiceID(a.ChoiceID)
 		if !ok || id != top.ID || d != dir {
 			unlock()
-			return res, ipc.Errorf(ipc.CodeStale, "the history changed since Irie asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
+			return res, ipc.Errorf(ipc.CodeStale, "the history changed since "+brand.Name+" asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
 		}
 		accepted, asked = codes[:len(codes)-1], codes[len(codes)-1]
 	}
@@ -591,7 +592,7 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 	}
 	var probs []problem
 	if !known {
-		probs = []problem{{code: "unknown", question: fmt.Sprintf("This version of Irie cannot %s %s.", dir, top.Label), recommend: ipc.ChoiceSkip}}
+		probs = []problem{{code: "unknown", question: fmt.Sprintf("This version of "+brand.Name+" cannot %s %s.", dir, top.Label), recommend: ipc.ChoiceSkip}}
 	} else {
 		probs = eff.check(c, top)
 	}
@@ -627,7 +628,7 @@ func (c *Core) undoStep(dir string, a ipc.UndoArgs) (ipc.UndoResult, error) {
 				return ask(p, accepted)
 			}
 			unlock()
-			return res, ipc.Errorf(ipc.CodeStale, "things changed since Irie asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
+			return res, ipc.Errorf(ipc.CodeStale, "things changed since "+brand.Name+" asked, so nothing was done; press %s again", map[string]string{dirUndo: "u", dirRedo: "U"}[dir])
 		}
 		c.steps.hist.finish(dir, top.ID, top)
 		c.saveState()
@@ -715,7 +716,7 @@ func checkClose(c *Core, a action) []problem {
 		if _, ok := c.closedRecord(a.Session); ok {
 			return []problem{{code: "closed", question: fmt.Sprintf("%q is closed already.", c.nameOf(a.Session)),
 				options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it closed and move on",
-					Detail: "Nothing needs closing, so the history moves on as if Irie had closed it."}},
+					Detail: "Nothing needs closing, so the history moves on as if " + brand.Name + " had closed it."}},
 				recommend: ipc.ChoiceSettle}}
 		}
 		return []problem{gone(a)}
@@ -765,7 +766,7 @@ func checkClose(c *Core, a action) []problem {
 }
 
 func gone(a action) problem {
-	return problem{code: "gone", question: fmt.Sprintf("%q is gone: Irie no longer has it, open or closed.", a.Name), recommend: ipc.ChoiceSkip}
+	return problem{code: "gone", question: fmt.Sprintf("%q is gone: "+brand.Name+" no longer has it, open or closed.", a.Name), recommend: ipc.ChoiceSkip}
 }
 
 // notOpen is what makes a step about an open session uncertain when its
@@ -783,7 +784,7 @@ func notOpen(c *Core, a action, verb string) []problem {
 func alreadyDone(question string) problem {
 	return problem{code: "already", question: question,
 		options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it as it is and move on",
-			Detail: "Nothing needs doing, so the history moves on as if Irie had done it."}},
+			Detail: "Nothing needs doing, so the history moves on as if " + brand.Name + " had done it."}},
 		recommend: ipc.ChoiceSettle}
 }
 
@@ -806,7 +807,7 @@ func checkReopen(c *Core, a action) []problem {
 	if x := c.sessions[a.Session]; x != nil {
 		return []problem{{code: "open", question: fmt.Sprintf("%q is open already.", x.name),
 			options: []ipc.ChoiceOption{{Key: ipc.ChoiceSettle, Label: "Leave it open and move on",
-				Detail: "Nothing needs reopening, so the history moves on as if Irie had reopened it."}},
+				Detail: "Nothing needs reopening, so the history moves on as if " + brand.Name + " had reopened it."}},
 			recommend: ipc.ChoiceSettle}}
 	}
 	r, ok := c.closedRecord(a.Session)
@@ -818,7 +819,7 @@ func checkReopen(c *Core, a action) []problem {
 	}
 	spec, err := host.ReadSpec(c.paths.SpecFile(r.ID))
 	if err != nil {
-		return cannot("no-spec", "Irie lost how it ran")
+		return cannot("no-spec", brand.Name+" lost how it ran")
 	}
 	if fi, err := os.Stat(spec.Cwd); err != nil || !fi.IsDir() {
 		return cannot("no-folder", fmt.Sprintf("its folder %s is gone", spec.Cwd))

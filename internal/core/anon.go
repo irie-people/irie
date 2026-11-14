@@ -1,3 +1,5 @@
+//go:build !noprivacy
+
 package core
 
 import (
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/anon"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/harness"
@@ -25,6 +28,10 @@ import (
 	"github.com/irie-people/irie/internal/vpn"
 )
 
+// compartment is an anonymous research compartment; a build without the
+// privacy plugin has a stand-in (privacy_off.go).
+type compartment = anon.Compartment
+
 // Anonymous research (DESIGN §4.16): a task typed with +anon or +tor runs in
 // a compartment with an exit of its own. The core picks the exit, starts
 // Irie's own Tor and SearXNG as they are needed, each under `irie runtime`
@@ -33,8 +40,8 @@ import (
 
 // The windows and pane roles of Irie's own Tor and SearXNG.
 const (
-	torWindow   = "irie-tor"
-	searxWindow = "irie-searxng"
+	torWindow   = brand.Slug + "-tor"
+	searxWindow = brand.Slug + "-searxng"
 	roleTor     = "tor"
 	roleSearx   = "searxng"
 )
@@ -66,7 +73,7 @@ func (c *Core) macExit() (string, error) {
 	}
 	st, err := vpn.CLI{Bin: bin}.Status()
 	if err != nil {
-		return "", fmt.Errorf("anonymous research needs Mullvad VPN connected, and Irie can't read its state: %v", err)
+		return "", fmt.Errorf("anonymous research needs Mullvad VPN connected, and "+brand.Name+" can't read its state: %v", err)
 	}
 	if st.State != vpn.Connected {
 		return "", errors.New("anonymous research needs Mullvad VPN connected (:vpn on), so that nothing leaves from this Mac's own address")
@@ -116,7 +123,7 @@ func (c *Core) prepareAnon(name, route string) (anon.Compartment, []string, erro
 		return anon.Compartment{}, nil, ipc.Errorf(ipc.CodeBadArgs, "%s", why)
 	}
 	if name == anon.SearchName {
-		return anon.Compartment{}, nil, ipc.Errorf(ipc.CodeBadArgs, "%s is Irie's search compartment, for SearXNG alone: name another", name)
+		return anon.Compartment{}, nil, ipc.Errorf(ipc.CodeBadArgs, "%s is "+brand.Name+"'s search compartment, for SearXNG alone: name another", name)
 	}
 	mac, err := c.macExit()
 	if err != nil {
@@ -248,9 +255,9 @@ func anonNote(x *session) string {
 	if x.anon == "" {
 		return ""
 	}
-	return "[Irie] This session is anonymous research, in compartment " + x.anon + ": its web traffic leaves from an exit of its own, which nothing else of the user's uses. " +
-		"Search with irie-anon's search, read pages and files with its fetch (save: true keeps one as evidence, with its address, UTC time and SHA-256), and use irie-browser for a page that needs JavaScript or clicks. " +
-		"WebFetch and WebSearch are off here, and your shell runs in a sandbox whose only way out is the same exit: curl, git, Python and most programs take it through the proxy variables, and a program that ignores them, looks names up itself or doesn't use TCP can't connect at all. Irie's ctl, this machine's other ports and sockets, and the user's sign-ins are out of your shell's reach. Never look up your exit's address. The rules:\n" +
+	return "[" + brand.Name + "] This session is anonymous research, in compartment " + x.anon + ": its web traffic leaves from an exit of its own, which nothing else of the user's uses. " +
+		"Search with " + brand.Slug + "-anon's search, read pages and files with its fetch (save: true keeps one as evidence, with its address, UTC time and SHA-256), and use " + brand.Slug + "-browser for a page that needs JavaScript or clicks. " +
+		"WebFetch and WebSearch are off here, and your shell runs in a sandbox whose only way out is the same exit: curl, git, Python and most programs take it through the proxy variables, and a program that ignores them, looks names up itself or doesn't use TCP can't connect at all. " + brand.Name + "'s ctl, this machine's other ports and sockets, and the user's sign-ins are out of your shell's reach. Never look up your exit's address. The rules:\n" +
 		"- Research only: read, never act. Never sign in or sign up, post, comment, message, buy, or fill in a form that reaches a person, and never run what you download.\n" +
 		"- Never put the user's name, accounts, places or anything else that could identify them into a search, a page or a request.\n" +
 		"- Never contact the people or groups you research, nor let them learn they are researched. Keep to the wrongdoing: leave alone what of people's private lives has nothing to do with it.\n" +
@@ -451,7 +458,7 @@ func (c *Core) anonOp(a ipc.AnonArgs) (ipc.AnonResult, error) {
 	case c.servicePane(roleSearx) != nil:
 		r.Search = fmt.Sprintf("http://127.0.0.1:%d", cfg.SearchPort)
 	case !anon.SearxInstalled(d):
-		r.Problems = append(r.Problems, "SearXNG is not installed: irie setup anon installs it")
+		r.Problems = append(r.Problems, "SearXNG is not installed: "+brand.Slug+" setup anon installs it")
 	case !cfg.Search:
 		r.Problems = append(r.Problems, "SearXNG is off: anon.search = false")
 	}

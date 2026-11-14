@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 )
 
@@ -79,10 +80,10 @@ func (s *Store) path(name string) string { return filepath.Join(s.Dir, name) }
 
 // Pairing errors, with the words a phone shows.
 var (
-	ErrNoCode   = &PairError{Code: "expired", Msg: "That code has expired or was used. On the machine, run `irie remote pair` for a new one."}
+	ErrNoCode   = &PairError{Code: "expired", Msg: "That code has expired or was used. On the machine, run `" + brand.Slug + " remote pair` for a new one."}
 	ErrBadCode  = &PairError{Code: "bad_code", Msg: "That code isn't right. Check it on the machine and try again."}
-	ErrTooMany  = &PairError{Code: "too_many", Msg: "Too many wrong codes, so that one no longer works. On the machine, run `irie remote pair` for a new one."}
-	ErrUnpaired = &PairError{Code: "unpaired", Msg: "This phone isn't paired with this machine any more. Pair it again with a code from `irie remote pair`."}
+	ErrTooMany  = &PairError{Code: "too_many", Msg: "Too many wrong codes, so that one no longer works. On the machine, run `" + brand.Slug + " remote pair` for a new one."}
+	ErrUnpaired = &PairError{Code: "unpaired", Msg: "This phone isn't paired with this machine any more. Pair it again with a code from `" + brand.Slug + " remote pair`."}
 )
 
 // PairError is a refused pairing or token, in words for the phone.

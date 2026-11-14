@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/sysload"
@@ -78,7 +79,7 @@ func busyWhy(r room, pl config.Place) string {
 // holds c.mu.
 func (c *Core) hooksDiffer(p *peerState) string {
 	if p.header == nil || p.header.Machine == nil {
-		return p.name + " runs an Irie too old to say which Claude Code hooks it runs; install this Irie there"
+		return p.name + " runs an " + brand.Name + " too old to say which Claude Code hooks it runs; install this " + brand.Name + " there"
 	}
 	m := p.header.Machine
 	if len(m.HooksMissing) > 0 {

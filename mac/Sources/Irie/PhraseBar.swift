@@ -2,12 +2,14 @@ import SwiftUI
 
 /// The strip under the agent's terminal, the counterpart of the title bar:
 /// lighter than the ground, rounded top corners, and one muted phrase that
-/// gives way to the next every half minute.
+/// gives way to the next every half minute. With ui.bar = tips, as a
+/// company's copy may set (DESIGN §2.10), the phrases are the core's tips
+/// for those new to it instead of words of encouragement.
 @MainActor
 struct PhraseBar: View {
     static let phrases = [
         "Be the change you want to see in the world. 🌍",
-        "Have no fear, Irie is here! 🌴",
+        "Have no fear, \(Brand.name) is here! 🌴",
         "Power to the people! ✊",
         "If you contribute, you earn stake. 🥩",
         "No worries. 😌",
@@ -34,6 +36,8 @@ struct PhraseBar: View {
 
     @Environment(Store.self) private var store
     @State private var index = Self.fixed ?? Int.random(in: 0..<Self.phrases.count)
+    /// The core's tips, while ui.bar is tips; empty for the phrases.
+    @State private var tips: [String] = []
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -58,7 +62,13 @@ struct PhraseBar: View {
             }
             .transition(.opacity)
             .animation(.easeInOut(duration: 0.8), value: index)
-            .onReceive(tick) { _ in if Self.fixed == nil { index = (index + 1) % Self.phrases.count } }
+            .onReceive(tick) { _ in
+                guard Self.fixed == nil else { return }
+                index += 1
+                // ui.bar may have changed in Settings: a look every five minutes.
+                if index % 10 == 0 { Task { await readBar() } }
+            }
+            .task(id: store.link) { await readBar() }
             .accessibilityHidden(true)
     }
 
@@ -67,10 +77,22 @@ struct PhraseBar: View {
         if Preview.isOn {
             PreviewBadge()
         } else {
-            Text(Self.phrases[index])
+            Text(tips.isEmpty ? Self.phrases[index % Self.phrases.count] : "Tip: " + tips[index % tips.count])
                 .id(index)
                 .font(Theme.font(12))
                 .foregroundStyle(Theme.muted)
+                .truncationMode(.tail)
+        }
+    }
+
+    /// Reads ui.bar and the tips from the core once it answers, and again
+    /// after it comes back, as after an install or a change of settings.
+    private func readBar() async {
+        guard !Preview.isOn, Self.fixed == nil, case .online = store.link, let r = await store.learn() else { return }
+        let next = r.bar == "tips" ? (r.tips ?? []) : []
+        if next != tips {
+            tips = next
+            index = next.isEmpty ? Int.random(in: 0..<Self.phrases.count) : Int.random(in: 0..<next.count)
         }
     }
 }

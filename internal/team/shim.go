@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/tmux"
 )
@@ -83,7 +84,7 @@ func (s Shim) Route(args, env []string, query func(args ...string) (string, erro
 			return Call{Args: append(clone(pre), out...), Env: env}, nil
 		}
 	case "kill-server":
-		return Call{}, errors.New("irie: the team server serves every session's teammates; it stops with Irie")
+		return Call{}, errors.New(brand.Slug + ": the team server serves every session's teammates; it stops with " + brand.Name)
 	}
 	return Call{Args: args, Env: env}, nil
 }
@@ -304,7 +305,7 @@ func (s Shim) Run(args []string) int {
 		return 1
 	}
 	err = syscall.Exec(s.Tmux, append([]string{"tmux"}, call.Args...), call.Env)
-	fmt.Fprintln(os.Stderr, "irie team-tmux:", err)
+	fmt.Fprintln(os.Stderr, brand.Slug+" team-tmux:", err)
 	return 1
 }
 

@@ -70,7 +70,7 @@ enum IrieLauncher {
         let env = ProcessInfo.processInfo.environment
         var data = (NSHomeDirectory() as NSString).appendingPathComponent(".local/share")
         if let x = env["XDG_DATA_HOME"], x.hasPrefix("/") { data = x }
-        return (data as NSString).appendingPathComponent("irie/bin")
+        return (data as NSString).appendingPathComponent("\(Brand.slug)/bin")
     }
 
     /// The irie to start Irie with: Irie's own, then one a terminal would
@@ -80,10 +80,10 @@ enum IrieLauncher {
     static func find() -> String? {
         let fm = FileManager.default
         let home = NSHomeDirectory()
-        let own = (ownBin as NSString).appendingPathComponent("irie")
-        let places = [own, home + "/.local/bin/irie", "/opt/homebrew/bin/irie", "/usr/local/bin/irie", home + "/go/bin/irie"]
+        let own = (ownBin as NSString).appendingPathComponent("\(Brand.slug)")
+        let places = [own, home + "/.local/bin/\(Brand.slug)", "/opt/homebrew/bin/\(Brand.slug)", "/usr/local/bin/\(Brand.slug)", home + "/go/bin/\(Brand.slug)"]
         if let found = places.first(where: { fm.isExecutableFile(atPath: $0) }) { return found }
-        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/irie").path
+        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(Brand.slug)").path
         guard fm.isExecutableFile(atPath: bundled) else { return nil }
         do {
             try fm.createDirectory(atPath: ownBin, withIntermediateDirectories: true)
@@ -113,9 +113,9 @@ enum IrieLauncher {
             p.standardOutput = FileHandle.nullDevice
             // A file, not a pipe: the tmux server outlives irie, and must
             // not hold the app's end open.
-            let errPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("irie-up-\(getpid()).txt")
+            let errPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("\(Brand.slug)-up-\(getpid()).txt")
             FileManager.default.createFile(atPath: errPath, contents: nil)
-            guard let err = FileHandle(forWritingAtPath: errPath) else { return "Couldn’t start irie." }
+            guard let err = FileHandle(forWritingAtPath: errPath) else { return "Couldn’t start \(Brand.slug)." }
             defer { try? FileManager.default.removeItem(atPath: errPath) }
             p.standardError = err
             do {
@@ -128,26 +128,26 @@ enum IrieLauncher {
             try? err.close()
             if p.terminationStatus == 0 { return nil }
             var said = ((try? String(contentsOfFile: errPath, encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if said.hasPrefix("irie: ") { said.removeFirst(6) }
-            return said.isEmpty ? "irie up stopped with status \(p.terminationStatus)." : said
+            if said.hasPrefix("\(Brand.slug): ") { said.removeFirst(Brand.slug.count + 2) }
+            return said.isEmpty ? "\(Brand.slug) up stopped with status \(p.terminationStatus)." : said
         }.value
     }
 
     /// Opens Terminal on `irie setup`, for what Irie needs before it can
     /// start at all, such as tmux: Terminal opens a .command file at once.
     static func openSetup(_ bin: String) {
-        let dir = (NSTemporaryDirectory() as NSString).appendingPathComponent("irie-setup-\(getuid())")
+        let dir = (NSTemporaryDirectory() as NSString).appendingPathComponent("\(Brand.slug)-setup-\(getuid())")
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        let path = (dir as NSString).appendingPathComponent("Irie Setup.command")
+        let path = (dir as NSString).appendingPathComponent("\(Brand.name) Setup.command")
         let quoted = "'" + bin.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        let script = "#!/bin/sh\nclear\n\(quoted) setup\necho\necho 'Irie opens by itself once it can. You can close this window.'\n"
+        let script = "#!/bin/sh\nclear\n\(quoted) setup\necho\necho '\(Brand.name) opens by itself once it can. You can close this window.'\n"
         try? script.write(toFile: path, atomically: true, encoding: .utf8)
         chmod(path, 0o755)
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     /// The installer's command, for a computer with no irie at all.
-    static let installCommand = "curl -fsSL https://irie-people.github.io/irie/install.sh | sh"
+    static let installCommand = "curl -fsSL \(Brand.site)install.sh | sh"
 }
 
 // MARK: The first task
@@ -281,7 +281,7 @@ struct WelcomeContent: View {
     var body: some View {
             VStack(spacing: 12) {
                 SunMark().frame(width: 56, height: 56)
-                Text("Everything irie.").font(Theme.font(18, .bold)).foregroundStyle(Theme.ink)
+                Text(Brand.tagline).font(Theme.font(18, .bold)).foregroundStyle(Theme.ink)
                 Text("Type a task below and an agent starts on it, in a folder of its own. Start as many as you like: each gets a card here, and turns red when it needs you.")
                     .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)
@@ -466,26 +466,26 @@ struct Offline: View {
             case (true, _):
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Starting Irie…").font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
+                    Text("Starting \(Brand.name)…").font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
                 }
                 Text("Its agents run on in the background, even when this window is closed.")
                     .font(.system(size: 12)).foregroundStyle(Theme.muted)
             case let (false, .failed(said, bin)?):
-                Text("Irie couldn’t start").font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
+                Text("\(Brand.name) couldn’t start").font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
                 Text((try? AttributedString(markdown: said)) ?? AttributedString(said)).font(.system(size: 12)).foregroundStyle(Theme.needs)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 HStack {
-                    Button("Set Up Irie…") { IrieLauncher.openSetup(bin) }
+                    Button(Brand.isLong ? "Set Up…" : "Set Up \(Brand.name)…") { IrieLauncher.openSetup(bin) }
                         .buttonStyle(SoftButton(prominent: true))
                     Button("Try Again") { Task { await store.startIrie() } }
                         .buttonStyle(SoftButton())
                 }
-                Text("Set Up opens Terminal on `irie setup`, which asks before it installs anything.")
+                Text("Set Up opens Terminal on `\(Brand.slug) setup`, which asks before it installs anything.")
                     .font(.system(size: 11)).foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             case (false, .notInstalled?):
-                Text("Irie isn’t installed").font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
+                Text("\(Brand.name) isn’t installed").font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
                 Text("Paste this in Terminal to install it:")
                     .font(.system(size: 12)).foregroundStyle(Theme.muted)
                 Text(IrieLauncher.installCommand)
@@ -497,9 +497,9 @@ struct Offline: View {
                     .buttonStyle(SoftButton(prominent: true))
             case (false, nil):
                 Text(why).font(Theme.font(13.5, .bold)).foregroundStyle(Theme.ink)
-                Button("Start Irie") { Task { await store.startIrie() } }
+                Button(Brand.isLong ? "Start" : "Start \(Brand.name)") { Task { await store.startIrie() } }
                     .buttonStyle(SoftButton(prominent: true))
-                Text("Or type `irie up` in a terminal. The app connects by itself once it’s running.")
+                Text("Or type `\(Brand.slug) up` in a terminal. The app connects by itself once it’s running.")
                     .font(.system(size: 12)).foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }

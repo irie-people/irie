@@ -24,6 +24,7 @@ Irie runs coding agents from any supplier, cloud or local, side by side in one c
 |---|---|---|
 | Sidebar with inner scrolling, header pinned at the top, command bar pinned at the bottom | Bubble Tea sidebar in which only the list scrolls (keys and mouse wheel) | §4.1, M1 |
 | Different options for closing tabs and sub tabs, and moving tabs and workspaces, your way | Pin a card to a Pinned group at the top, which no bulk close reaches; close the others, those below, all finished or a group's, or cards picked with ⌘ and ⇧, each as one step one undo takes back; a × on a hovered card and a middle click; keys to move a card; `ui.new_tabs` for where a new card goes; a helper or teammate hidden from its card, or stopped. Your groups, spaces and a workspace pane beside each agent come next ([workspaces.md](proposals/workspaces.md)) | §4.1, §4.5 |
+| A copy of Irie a company runs as its own product: rename it in one place, leave the personal plugins out, fit a long name, tips in the bottom bar, the core on its servers | `internal/brand` holds the names and everything takes them from there; `Tags = "noprivacy,nowriting"` builds without the plugins' code; names up to 30 characters fit; `ui.bar = "tips"`. Running the core as a Linux service comes next ([company-copies.md](proposals/company-copies.md)) | §2.10, §4.17 |
 | Collapsible park section | A "Parked" group at the end of the list, folded until you open it, so a parked session goes out of sight at once. Folded, it shows its size and how many of its sessions need you. A parked session is out of the way: it leaves the *to verify* count. A parked card goes there at once, last in Parked, and an unparked one goes last among the rest, just above Parked. A park is undone like any step, which puts the card back where it was ([park.md](proposals/park.md)) | §4.1, §4.5, M4 |
 | Fine-grained pause of orchestrators and their subagents | Hold one agent (the orchestrator or one subagent) or a whole tree at its next tool call; freeze a session's process tree instantly | §4.3, M5, M6, M8 |
 | "Context aware" | v1 reading: whatever Irie does to an agent (hold, freeze, priority, a note from you) reaches it as a context note at its next tool boundary or prompt, including how long it was held. Awareness of sibling agents and context-window gauges come after v1 | §4.3, M5–M7 |
@@ -291,6 +292,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `cmd/irie/` | Entry point and subcommand dispatch | M1 |
 | `core/` | irie-core's contract for Go clients: the wire types and op names, generated from `internal/ipc`, the socket's place, a client, and the language a person types (`Read`, `Said`) ([CORE.md](CORE.md)) | irie-core |
 | `internal/paths/` | XDG and runtime dirs, socket path | M1 |
+| `internal/brand/`, `tools/brand.sh` | The product's names in one place, for a copy under another name; the script gives them to the build scripts and writes the Mac app's `Brand.swift` (§2.10) | §2.10 |
 | `internal/ctxgit/` | The context store: git objects written in git's own format, transcripts read into turns, forks' transcripts (§4.13) | §4.13 |
 | `internal/config/` | TOML config, defaults, validation | M1 |
 | `internal/tmux/` | Command runner, generated tmux.conf, layout, swap-in, sizes; `control/` from M11 | M1 |
@@ -371,6 +373,33 @@ Principle 7. What the user does goes first: the views answer a click or a key at
 | The core's own loop stuck: a lock held for ever, a call that never returns | Every 5 s the freeze dog looks at when the core's loop last went round, by the monotonic clock, which stops while the computer sleeps, so a sleep never counts. Once it has stood still for `arch.raphael.core` (2 min), the core writes where every goroutine is in `<state>/freezes/` and leaves, and its supervisor starts it again; that look takes no lock. A late look starts the loop's time again, and a core restarted three times in half an hour is left be (§4.11) | `TestRaphaelRestartsACoreWhoseLoopStandsStill`, `TestTheCoresBeatSkipsTheComputersSleep` |
 
 **Not done, and why.** Raising Irie's own priority: a process without an app role cannot raise a thread above the default priority, whatever quality of service it asks for (checked on macOS 14.1: a command-line process stays at 31). `task_policy_set` with `TASK_FOREGROUND_APPLICATION` lifts only the main thread to 47, and the Go runtime runs its work on any thread, so it would buy little. Keeping memory for Irie: macOS has no way to set memory aside for a process, and wiring the core's pages would take them from everything else. Restarting Irie.app when it quits or dies: the user owns the app, and quits it on purpose too. A window that is stopped or hung stops answering, which is the freeze dog's (§2.4).
+
+### 2.10 Another name: copies under their own brand
+
+A company may run its own copy of Irie under its own name. `internal/brand` keeps the product's names in one place, and everything else takes them from there, so a copy changes that one file. Its constants:
+
+| Constant | Irie's | What takes it |
+|---|---|---|
+| `Name` | `Irie` | Everything a person reads: messages, the help, the sidebars, the Mac app's windows, menus and Info.plist, the phone app, the skills and the arch agents' words, the tmux window title |
+| `Slug` | `irie` | Everything a computer looks up: the command, the folder in each XDG directory, the runtime folder and its socket, the tmux server and its sessions and windows, the default branch prefix, a repo's `.irie/dock.json`, the skills' namespace (`/irie:…`), the MCP servers' names, the pairing link's scheme |
+| `EnvPrefix` | `IRIE` | The environment variables agents and scripts see: `IRIE_SESSION`, `IRIE_SOCKET`, `IRIE_BIN` and the rest (`brand.Env`). Tests' hooks, such as `IRIE_FAKE_MEMORY`, keep their names |
+| `BundleID` | `io.github.irie-hq.irie` | The Mac app's identifier, the core's look for it, and the lid's launchd job |
+| `Site`, `Repo` | the guide and the source | The Help menu, the install command the app shows, the skills' author, the push service's contact |
+| `Tagline` | `Everything irie.` | The line under the name on the Mac app's welcome |
+| `Bar` | `cheer` | `ui.bar`'s default: what the strip under the terminal shows, phrases of encouragement (`cheer`) or tips for those new to it (`tips`), one at a time; a company's copy may want tips |
+| `Tags` | none | The go build tags `tools/live.sh` and `tools/release.sh` build with: `noprivacy,nowriting` leaves those plugins' code out (§4.17); by hand, `go build -tags "$(tools/brand.sh --tags)" ./cmd/irie` |
+
+Made from them: `App` (`Irie.app`) and `Exe`, the Mac app's executable and so its process's name, `Name`'s ASCII letters and digits, 15 at most, as macOS keeps only a process name's first bytes and `pgrep -x` matches only those.
+
+**Renaming a copy.** Change the constants, run `tools/brand.sh --swift >mac/Sources/Irie/Brand.swift` and build. Go code uses the constants; the scripts that build and install (`mac/build.sh`, `tools/live.sh`, `tools/hot.sh`, `tools/release.sh`, `mac/snapshot.sh`) read them through `tools/brand.sh`; the Mac app has them in `Brand.swift`, which `mac/build.sh` also brings up to date. Texts that ship in the binary, the skills, the arch agents' words, the tips and the phone app's pages, keep Irie's names in the source and are rewritten as they load (`brand.Text`). Since the names are constants, a message made from them is a constant too, and `go vet` still checks its format. Two copies under different names run side by side on one computer: no folder, socket, server or variable of one is the other's.
+
+**What stays Irie's.** Data whose form must not change between copies: the context store's git trailers (`Irie-Turn`, §4.13; a trailer's key can't hold a space), journal values (an event's source, a closed session's harness), tmux's own `@irie_*` options inside the private server, the Go module's path and the Mac app's source folder. None of them is shown as the name.
+
+**A long name.** `Name` may have up to 30 letters, digits, spaces, hyphens and full stops (`brand.MaxName`), which every place that shows it fits: the Mac app's title bar shrinks it a little and then trails it off with the whole name on hover, the theme maker's preview likewise, a tight button leaves it out (Move In for Move into Irie), the terminal sidebar's title bar gives it half the width at most so the counts keep theirs, the slot's placeholder cuts it to the pane, the phone app's title shrinks it and trails it off, and tmux.conf quotes it. Only those characters, since the name goes as it is into shell scripts, tmux.conf, XML and HTML.
+
+**What a copy changes by hand.** The icon (`tools/mkicon` draws Irie's), `site/` and `docs/`, `site/install.sh`, the iOS app (`ios/`), the arch agents' charges and the default preferences (`spawn.preferences`), and the tags of a build it runs by hand rather than through the scripts.
+
+**Tests.** `internal/brand`: the names' form, `tools/brand.sh` agrees with the package, `Brand.swift` is current, `Exe` for long and non-Latin names, and two guards that fail on any string outside the package, in Go or in the Mac app, that names the product itself rather than through it. `internal/config`: `ui.bar`.
 
 ## 3. Harness support
 
@@ -1133,6 +1162,8 @@ The owner asked on 2026-11-09 to start making plugins for Irie, beginning with a
 
 **One switch.** `[plugins] privacy`, on by default: each part keeps its own switch, and those are off by default, so a new Irie shows nothing of it until asked. With the plugin off, none of its parts runs, whatever its own switch says. `config.Config`'s `VPNOn`, `AnonOn` and `BrowserOn` are where the rest of Irie asks; a word or command of a part that is off says which switch turns it on (`plugins.Why`); the guide's skill leaves every session, with the reason in `irie skills` (`skills.Settings.Left`); and the VPN's mark leaves every client. Each part's own switch keeps its value meanwhile, so the plugin on again brings back what was on.
 
+**A build without a plugin.** A plugin's code can also be left out of the binary, for a copy that must not carry it, such as a company's (§2.10): `go build -tags noprivacy` builds Irie without the privacy plugin, `-tags nowriting` without the writing plugin, and `-tags noprivacy,nowriting` without either. Each plugin's files carry its tag: its entry in `internal/plugins`, which adds itself to the plugins this build has; its uses in `internal/core` (`vpn.go`, `anon.go`, `browser.go`), for which `privacy_off.go` stands in; its commands in `cmd/irie` (`anon.go`, `browser.go`, `dms.go` and `privacy.go`, which registers them and their lines in the usage); and its skills (`internal/skills/bundled_privacy.go`, `bundled_writing.go`). The config keeps the privacy plugin's defaults itself (`internal/config/privacy.go`), so it needs none of the plugin's packages; it still reads a config.toml that sets them, its switches (`VPNOn`, `AnonOn`, `BrowserOn`) read as off, and `irie config print` leaves the keys out. Such a build has no `irie anon`, `irie browser`, `irie dms` or `irie setup anon|browser|privacy`; `plugins` lists only the plugins it has; `hello` leaves out the `vpn` and `anon` ops, so the Mac app's Plugins menu, which holds each plugin's items, lists only the plugins the build has and shows the VPN's items only with the `vpn` op; and `+anon`, `:vpn`, `:setup anon`, `:setup switch` and `:write` say the plugin isn't in this build (`plugins.Why` refuses a part no plugin of the build has). `internal/plugins`' test builds every package with both tags and checks that `irie` links none of `internal/vpn`, `anon`, `browser`, `dms`, `htmltext` and `mcp`, and `tools/check.sh` vets every package with them.
+
 **How far each part is set up.** Each part's check reads only files and the config: whether `mullvad`, `tor`, SearXNG, Mullvad Browser and its clean profile are where Irie looks, and whether the switch's checks were made. It never reads the network, an account or a vault. A part is *ready* (on, with what it needs), *off* (its own switch), *needs* (on, and it lacks something: the sentence says what and what fixes it), *off with its plugin*, or *held* (not in this build). The core adds what only it knows, the VPN's state now.
 
 **Where it shows.**
@@ -1282,6 +1313,7 @@ max_sub_rows = 6
 red_on_done = false
 helper_style = "browser"      # browser | terminal: how a view draws a helper beside its session (§4.4)
 new_tabs = "last"             # last | first | next: where a new session goes in the list; next is just after the session that started it (§4.1)
+bar = "cheer"                 # cheer | tips: what the strip under the terminal shows, one at a time; the default is the brand's (§2.10)
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
 theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
 freeze_dog = "10s"            # how long Irie's window or a sidebar may stop answering before Raphael force quits it and starts it again (§2.4, §4.11); "0s" = never, else at least 3s

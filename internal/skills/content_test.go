@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/irie-people/irie/internal/config"
 )
 
 // grants are the frontmatter fields that change what an agent may do, which
@@ -48,7 +50,15 @@ func TestBundledSkillsGrantNothing(t *testing.T) {
 // writing session in Variorum, runs only when the person starts it, so it
 // costs no context in other sessions and no agent starts it on its own.
 func TestGuidesAreTheUsers(t *testing.T) {
-	guides := map[string]bool{"dead-mans-switch": false, "variorum": false}
+	// Each guide comes with its plugin, when this build has it (DESIGN
+	// §4.17).
+	guides := map[string]bool{}
+	if config.PrivacyBuilt {
+		guides["dead-mans-switch"] = false
+	}
+	if config.WritingBuilt {
+		guides["variorum"] = false
+	}
 	for _, s := range Bundled() {
 		if _, ok := guides[s.Name]; !ok {
 			continue

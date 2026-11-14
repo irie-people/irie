@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/arch"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/learn"
@@ -121,7 +122,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		return nil, nil, nil, errors.New("claude: no session id")
 	}
 	if s.Bin == "" {
-		return nil, nil, nil, errors.New("claude: no irie binary for the hooks")
+		return nil, nil, nil, errors.New("claude: no " + brand.Slug + " binary for the hooks")
 	}
 	p, allow := localPermissions(p)
 	taken, err := TakeArch(p, s)
@@ -196,7 +197,7 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		case hasFlag(p.Args, "--mcp-config") || hasFlag(p.Args, "--strict-mcp-config"):
 			return nil, nil, nil, errors.New("claude: anonymous research can't run on a profile that passes its own --mcp-config")
 		case len(s.MCP) == 0:
-			return nil, nil, nil, errors.New("claude: anonymous research needs Irie's own MCP servers")
+			return nil, nil, nil, errors.New("claude: anonymous research needs " + brand.Name + "'s own MCP servers")
 		}
 	}
 	var mcp []byte
@@ -329,7 +330,7 @@ var Styles = map[string]string{config.TutorExplain: "Explanatory", config.TutorT
 const TipsVersion = "2.1.247"
 
 // TipsLabel is what Claude Code shows before Irie's tips.
-const TipsLabel = "Irie tip"
+const TipsLabel = brand.Name + " tip"
 
 // tipCooldown is how many sessions Claude Code waits before it shows one of
 // Irie's tips again, so they come seldom among its own.

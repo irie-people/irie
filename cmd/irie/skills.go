@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/skills"
 	"github.com/irie-people/irie/internal/version"
@@ -16,13 +17,13 @@ import (
 // sessions get each, and why not (docs/proposals/skills.md §5.2).
 func skillsCmd(args []string) error {
 	if len(args) > 0 {
-		return errors.New("usage: irie skills")
+		return errors.New("usage: " + brand.Slug + " skills")
 	}
 	cfg, _, err := load()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Skills that come with Irie. Each Claude Code session gets them as a plugin\nfor that session only, and runs them as /%s:<name>.\n\n", skills.Plugin)
+	fmt.Printf("Skills that come with "+brand.Name+". Each Claude Code session gets them as a plugin\nfor that session only, and runs them as /%s:<name>.\n\n", skills.Plugin)
 	choices := skills.Choose(skills.Bundled(), plugins.SkillSettings(cfg, true))
 	width := 0
 	for _, c := range choices {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -54,7 +55,7 @@ func (c *Core) typeTo(id, text string, may func(*session, string) error) error {
 	file := filepath.Join(c.paths.Session(x.id), "message.txt")
 	err := os.WriteFile(file, []byte(text), 0o600)
 	if err == nil {
-		buf := "irie-message-" + x.id
+		buf := brand.Slug + "-message-" + x.id
 		_, err = c.tmux.RunList([][]string{
 			{"load-buffer", "-b", buf, file},
 			{"paste-buffer", "-p", "-d", "-b", buf, "-t", pane},

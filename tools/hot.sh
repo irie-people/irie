@@ -64,6 +64,8 @@ fi
 cd "$(git rev-parse --show-toplevel)"
 root=$PWD
 dir=$root/mac/build/hot
+# The product's names, from internal/brand (DESIGN §2.10).
+eval "$(tools/brand.sh)"
 mkdir -p "$dir"
 
 # One hot.sh per checkout: they would build into the same folder.
@@ -83,14 +85,14 @@ echo $$ >"$lock/pid"
 # checkout, keeps each preview's window and choices apart from the app's and
 # from other checkouts' previews.
 name=$(git symbolic-ref -q --short HEAD || git rev-parse --short HEAD)
-name=${name#irie/}
-id=io.github.irie-hq.irie.preview.$(printf %s "$root" | shasum | cut -c1-10)
+name=${name#"$BRAND_SLUG"/}
+id=$BRAND_BUNDLE_ID.preview.$(printf %s "$root" | shasum | cut -c1-10)
 
 # A first preview takes the app's choices (palette, view, folds, sidebar
 # width, font size) but not its window's frame, so it opens beside the app
 # rather than over it. From then on it keeps its own, build after build.
 if [ -n "$show" ] && ! defaults read "$id" >/dev/null 2>&1 &&
-	defaults export io.github.irie-hq.irie "$dir/seed.plist" 2>/dev/null; then
+	defaults export "$BRAND_BUNDLE_ID" "$dir/seed.plist" 2>/dev/null; then
 	plutil -remove 'NSWindow Frame main' "$dir/seed.plist" 2>/dev/null || true
 	defaults import "$id" "$dir/seed.plist"
 	rm -f "$dir/seed.plist"
@@ -100,11 +102,11 @@ fi
 # slots, A and B, so a new build never writes over the one that runs.
 cur= slot= echoed=0
 
-app() { echo "$dir/$1/Irie Preview.app"; }
+app() { echo "$dir/$1/$BRAND_NAME Preview.app"; }
 
 # pids SLOT prints the processes that run the build in SLOT.
 pids() {
-	exe="$(app "$1")/Contents/MacOS/IriePreview"
+	exe="$(app "$1")/Contents/MacOS/${BRAND_EXE}Preview"
 	ps -axo pid=,comm= | while read -r pid comm; do
 		if [ "$comm" = "$exe" ]; then echo "$pid"; fi
 	done
@@ -128,9 +130,9 @@ output() {
 # why PID says why a preview that is gone went: a crash report or a freeze
 # dog report written since it opened. Nothing means it was closed.
 why() {
-	r=$(find "$HOME/Library/Logs/DiagnosticReports" -name 'IriePreview*' -newer "$dir/launched" 2>/dev/null | head -1)
+	r=$(find "$HOME/Library/Logs/DiagnosticReports" -name "${BRAND_EXE}Preview*" -newer "$dir/launched" 2>/dev/null | head -1)
 	if [ -z "$r" ]; then
-		r=$(find "${XDG_STATE_HOME:-$HOME/.local/state}/irie/freezes" -name "*-$1.txt" 2>/dev/null | head -1)
+		r=$(find "${XDG_STATE_HOME:-$HOME/.local/state}/$BRAND_SLUG/freezes" -name "*-$1.txt" 2>/dev/null | head -1)
 	fi
 	if [ -n "$r" ]; then echo ": it crashed or froze, see $r"; fi
 }
@@ -169,7 +171,7 @@ build() {
 # shot SLOT draws the fixture with the build in SLOT into the snapshot
 # folder, offscreen.
 shot() {
-	if "$(app "$1")/Contents/MacOS/IriePreview" --snapshot "$snap" >"$dir/snapshot.log" 2>&1; then
+	if "$(app "$1")/Contents/MacOS/${BRAND_EXE}Preview" --snapshot "$snap" >"$dir/snapshot.log" 2>&1; then
 		say "drew the fixture into $snap"
 	else
 		cat "$dir/snapshot.log" >&2

@@ -1,5 +1,8 @@
 #!/bin/sh
-# Builds mac/build/Irie.app (docs/MAC.md).
+# Builds mac/build/Irie.app (docs/MAC.md), named as internal/brand names
+# the product (DESIGN §2.10): its folder, executable, bundle name and
+# identifier come from tools/brand.sh, which also brings Brand.swift up to
+# date.
 #
 # It calls swiftc rather than `swift build`: with only the Command Line Tools
 # installed, SwiftPM 5.9 stops at "unable to lookup item 'PlatformPath'". The
@@ -36,10 +39,22 @@ if [ "${1:-}" = --hot ]; then
 fi
 cd "$(dirname "$0")"
 
+# The product's names, from internal/brand, the one place they are kept.
+eval "$(../tools/brand.sh)"
+# A file of its own per build: hot.sh and live.sh may build at once.
+mkdir -p build
+brandtmp=$(mktemp build/Brand.swift.XXXXXX)
+../tools/brand.sh --swift >"$brandtmp"
+if cmp -s "$brandtmp" Sources/Irie/Brand.swift; then
+	rm -f "$brandtmp"
+else
+	mv "$brandtmp" Sources/Irie/Brand.swift
+fi
+
 target="$(uname -m)-apple-macos14.0"
 sdk=$(xcrun --sdk macosx --show-sdk-path)
-app=build/Irie.app exe=Irie
-if [ -n "$hot" ]; then app=$hot exe=IriePreview; fi
+app="build/$BRAND_NAME.app" exe=$BRAND_EXE
+if [ -n "$hot" ]; then app=$hot exe="${BRAND_EXE}Preview"; fi
 # Where the linker writes: into the app, or for a preview beside its
 # objects. The Swift driver starts over whenever its arguments change, and
 # a preview's slot changes with every build.
@@ -156,8 +171,8 @@ if [ "$term" = 1 ]; then
 		swiftc -O -parse-as-library -target x86_64-apple-macos14.0 -sdk "$sdk" \
 			-I "$deps" -L "$deps" -lSwiftTerm \
 			-o build/Irie-x86_64 Sources/Irie/*.swift
-		lipo -create "$app/Contents/MacOS/Irie" build/Irie-x86_64 -output build/Irie-universal
-		mv build/Irie-universal "$app/Contents/MacOS/Irie"
+		lipo -create "$app/Contents/MacOS/$exe" build/Irie-x86_64 -output build/Irie-universal
+		mv build/Irie-universal "$app/Contents/MacOS/$exe"
 		rm -f build/Irie-x86_64
 		deps=$native
 	fi
@@ -173,15 +188,17 @@ else
 		-o "$out" Sources/Irie/*.swift
 fi
 cp Info.plist "$app/Contents/Info.plist"
+# The brand's name and identifier; a preview has its own of each: its own
+# Dock icon and its own saved window and choices, apart from the app's
+# (tools/hot.sh).
+id=$BRAND_BUNDLE_ID shown=$BRAND_NAME
 if [ -n "$hot" ]; then
 	cp "$out" "$app/Contents/MacOS/$exe"
-	# Its own name and identifier: its own Dock icon and its own saved
-	# window and choices, apart from the app's (tools/hot.sh).
-	for kv in "CFBundleExecutable $exe" "CFBundleIdentifier ${IRIE_MAC_HOT_ID:-io.github.irie-hq.irie.preview}" \
-		"CFBundleName Irie Preview" "CFBundleDisplayName Irie Preview"; do
-		plutil -replace "${kv%% *}" -string "${kv#* }" "$app/Contents/Info.plist"
-	done
+	id=${IRIE_MAC_HOT_ID:-$BRAND_BUNDLE_ID.preview} shown="$BRAND_NAME Preview"
 fi
+for kv in "CFBundleExecutable $exe" "CFBundleIdentifier $id" "CFBundleName $shown" "CFBundleDisplayName $shown"; do
+	plutil -replace "${kv%% *}" -string "${kv#* }" "$app/Contents/Info.plist"
+done
 if [ -f "$mermaid/mermaid.min.js" ]; then
 	cp "$mermaid/mermaid.min.js" "$app/Contents/Resources/"
 	cp "$mermaid/LICENSE" "$app/Contents/Resources/mermaid-LICENSE.txt"

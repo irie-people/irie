@@ -15,7 +15,7 @@ enum Bench {
     static func run() -> Never {
         NSApplication.shared.setActivationPolicy(.accessory)
         UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)
-        let store = Store(socketPath: "/nonexistent/irie-bench.sock")
+        let store = Store(socketPath: "/nonexistent/\(Brand.slug)-bench.sock")
         var rows: [Session] = []
         for i in 0..<30 {
             var s = Fixture.sessions[i % Fixture.sessions.count]

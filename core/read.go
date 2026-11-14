@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
@@ -97,7 +99,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 	// selected is the selected row, which must be one of Irie's.
 	selected := func() (*Session, error) {
 		if sel == nil {
-			return nil, Errorf(CodeBadArgs, ":%s acts on the selected session; select one of Irie's.", name)
+			return nil, Errorf(CodeBadArgs, ":%s acts on the selected session; select one of "+brand.Name+"'s.", name)
 		}
 		return sel, nil
 	}
@@ -234,7 +236,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		}
 		return Step{Op: OpMove, Args: MoveArgs{VendorID: o.VendorID}, Outside: o}, nil
 	}
-	return Step{}, Errorf(CodeBadArgs, "Irie has no :%s. The commands are %s.", name, Commands)
+	return Step{}, Errorf(CodeBadArgs, brand.Name+" has no :%s. The commands are %s.", name, Commands)
 }
 
 // vpnArgs reads the words after :vpn (docs/proposals/extensions.md §4.1):
@@ -265,7 +267,7 @@ func pickOutside(outside []OutsideSession, what, selected string) (*OutsideSessi
 				return &outside[i], nil
 			}
 		}
-		return nil, Errorf(CodeBadArgs, ":move brings in the selected session under Outside Irie, or one you name.")
+		return nil, Errorf(CodeBadArgs, ":move brings in the selected session under Outside "+brand.Name+", or one you name.")
 	}
 	var named []int
 	for i, o := range outside {
@@ -278,11 +280,11 @@ func pickOutside(outside []OutsideSession, what, selected string) (*OutsideSessi
 	}
 	switch len(named) {
 	case 0:
-		return nil, Errorf(CodeNotFound, "No session outside Irie is called “%s”.", what)
+		return nil, Errorf(CodeNotFound, "No session outside "+brand.Name+" is called “%s”.", what)
 	case 1:
 		return &outside[named[0]], nil
 	}
-	return nil, Errorf(CodeBadArgs, "%d sessions outside Irie are called “%s”; select one and :move it.", len(named), what)
+	return nil, Errorf(CodeBadArgs, "%d sessions outside "+brand.Name+" are called “%s”; select one and :move it.", len(named), what)
 }
 
 // outsideName is how a session outside Irie is called in words: its name,
@@ -354,7 +356,7 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		// A guide runs in a folder of Irie's, which Claude Code asks to
 		// trust the first time.
 		if n := as[ToolArgs](st.Args).Name; n == ToolSwitch || n == ToolWrite {
-			r.Text += " The first time, Claude Code asks whether to trust the guide's folder, which is Irie's own: choose Yes, I trust this folder."
+			r.Text += " The first time, Claude Code asks whether to trust the guide's folder, which is " + brand.Name + "'s own: choose Yes, I trust this folder."
 		}
 	case OpRename:
 		s := as[RenameResult](result).Session
@@ -378,7 +380,7 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Session, r.Text = &s, "Reopened "+s.Name+"."
 	case OpMove:
 		s := as[MoveResult](result).Session
-		r.Session, r.Text = &s, "Moved "+outsideName(*st.Outside)+" into Irie."
+		r.Session, r.Text = &s, "Moved "+outsideName(*st.Outside)+" into "+brand.Name+"."
 	case OpFork:
 		f := as[ForkResult](result)
 		s := f.Session
@@ -449,7 +451,7 @@ func undone(op string, u UndoResult) string {
 		if u.Choice != nil {
 			return u.Choice.Question
 		}
-		return "Irie asks about " + what + "."
+		return brand.Name + " asks about " + what + "."
 	case DidUndo:
 		return "Undid " + what + "."
 	case DidRedo:

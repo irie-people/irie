@@ -76,8 +76,8 @@ enum DockFixture {
                     scope: "session", state: "running", target: "dock-r-tests-fixture", command: "go test ./... -json | tparse -follow"),
         DockControl(key: "mine:app", id: "app", title: "App", type: "browser", url: "http://localhost:8080/", chrome: true,
                     source: "mine", scope: "session", state: "ready"),
-    ], files: [DockFileInfo(path: "/home/alice/src/website/.irie/dock.json", source: "repo", trusted: true)],
-    mine: "/home/alice/.config/irie/dock.json")
+    ], files: [DockFileInfo(path: "/home/alice/src/website/.\(Brand.slug)/dock.json", source: "repo", trusted: true)],
+    mine: "/home/alice/.config/\(Brand.slug)/dock.json")
 
     static let lines: [String: [String]] = [
         "repo:git": ["fix-login-test  ↑2 on live", " M internal/auth/login_test.go", " M internal/auth/session.go",
@@ -107,7 +107,7 @@ struct DockTab: View {
                 if store.isFixture {
                     dock(DockFixture.result, session: s)
                 } else if !store.canDock {
-                    SideNote(title: "The Dock needs a newer Irie", text: "This Irie's core has no Dock yet. It comes with the next install.")
+                    SideNote(title: "The Dock needs a newer \(Brand.name)", text: "This \(Brand.name)'s core has no Dock yet. It comes with the next install.")
                 } else if let r = result, shownFor == s.id {
                     dock(r, session: s)
                 } else if let problem {
@@ -240,7 +240,7 @@ struct DockTab: View {
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.field))
-            Text("From \((u.path as NSString).abbreviatingWithTildeInPath). Irie asks again whenever the file changes, so an agent's edit never runs before you look.")
+            Text("From \((u.path as NSString).abbreviatingWithTildeInPath). \(Brand.name) asks again whenever the file changes, so an agent's edit never runs before you look.")
                 .font(Theme.font(11))
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -272,7 +272,7 @@ struct DockTab: View {
             Button("Set Up My Dock…") { setUp(s) }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accent)
-                .help("Starts an agent that reads this repo and writes its Dock file, .irie/dock.json, asking you what to watch when unsure")
+                .help("Starts an agent that reads this repo and writes its Dock file, .\(Brand.slug)/dock.json, asking you what to watch when unsure")
             Button("Open My Dock File") { openMine(r.mine) }
                 .help("Your own controls, for every session: \((r.mine as NSString).abbreviatingWithTildeInPath)")
         }
@@ -284,7 +284,7 @@ struct DockTab: View {
 
     /// Starts an agent that writes the repo's Dock file.
     private func setUp(_ s: Session) {
-        let task = "Set up Irie's Dock for this repo. Irie's Dock is the right sidebar's control area, and its file has the same shape as cmux's Dock: read https://cmux.com/docs/dock for the fields. Look at this repo's scripts, dev servers, logs, tests and tools, then write .irie/dock.json with up to four controls that are worth watching, each a terminal command or a local web page. If it is not clear what to watch, ask me first. Never put secrets in the file. Commit it when it is done."
+        let task = "Set up \(Brand.name)'s Dock for this repo. \(Brand.name)'s Dock is the right sidebar's control area, and its file has the same shape as cmux's Dock: read https://cmux.com/docs/dock for the fields. Look at this repo's scripts, dev servers, logs, tests and tools, then write .\(Brand.slug)/dock.json with up to four controls that are worth watching, each a terminal command or a local web page. If it is not clear what to watch, ask me first. Never put secrets in the file. Commit it when it is done."
         Task {
             _ = await store.input(task, repo: s.repo ?? s.cwd, worktree: true, agent: nil, model: nil, tutor: nil)
         }
@@ -482,7 +482,7 @@ private struct DockWeb: NSViewRepresentable {
         // FNV-1a names the compiled list, stably across launches.
         var h: UInt64 = 0xcbf29ce484222325
         for b in origin.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
-        let id = "irie-dock-" + String(h, radix: 16)
+        let id = "\(Brand.slug)-dock-" + String(h, radix: 16)
         WKContentRuleListStore.default().compileContentRuleList(forIdentifier: id, encodedContentRuleList: rules) { list, _ in
             DispatchQueue.main.async { done(list) }
         }

@@ -18,11 +18,12 @@ import (
 	"time"
 
 	irie "github.com/irie-people/irie/core"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
 // raceUsage is the part of ctlUsage for races (proposals/agent-os.md).
-const raceUsage = `  irie ctl race [--from SESSION[@AT]] [--check CMD] [--timeout D] [--json] +PROFILE... [@REPO] TASK...
+const raceUsage = `  ` + brand.Slug + ` ctl race [--from SESSION[@AT]] [--check CMD] [--timeout D] [--json] +PROFILE... [@REPO] TASK...
                                          race one task on several profiles, a
                                          session and worktree each: new in @REPO,
                                          or forked from a point of a session's
@@ -106,7 +107,7 @@ func ctlRace(args []string) error {
 		task = string(b)
 	}
 	if len(profiles) == 0 || strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl race [--from SESSION[@AT]] [--check CMD] [--timeout D] [--json] +PROFILE... [@REPO] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl race [--from SESSION[@AT]] [--check CMD] [--timeout D] [--json] +PROFILE... [@REPO] TASK...")
 	}
 	if *from != "" && spawn.Repo != "" {
 		return errors.New("a race starts from a session's context or in @REPO, not both")

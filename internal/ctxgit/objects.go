@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // gitTimeout bounds every git command the store runs but gc, which
@@ -29,8 +31,8 @@ const (
 // ident is who writes the store's commits and reflogs: Irie, never the
 // user, whose git identity has no place in it.
 const (
-	identName  = "irie"
-	identEmail = "irie@irie.invalid"
+	identName  = brand.Slug
+	identEmail = brand.Slug + "@irie.invalid"
 )
 
 // repoEnv are the variables that point git at another repo than the one it

@@ -21,7 +21,7 @@ struct PluginCommands: Commands {
         let f = MainActor.assumeIsolated { menu.facts }
         CommandMenu("Plugins") {
             if f.plugins.isEmpty {
-                Text(f.canPlugins ? "Reading the plugins…" : "This Irie has no plugins yet")
+                Text(f.canPlugins ? "Reading the plugins…" : "This \(Brand.name) has no plugins yet")
             }
             // A plugin's switch heads its parts, with a line between plugins.
             // Lines are Dividers: a Section draws one before and after itself,
@@ -48,16 +48,20 @@ struct PluginCommands: Commands {
                             Button(Self.setupTitle(x, words), action: run { store.runWords(words) })
                                 .disabled(!p.on)
                         }
-                        // Mullvad VPN, while vpn.on: the same words as
-                        // :vpn in a task bar (docs/proposals/extensions.md §4.1).
-                        if x.name == "vpn", f.vpn {
+                        // Mullvad VPN: the same words as :vpn in a task bar
+                        // (docs/proposals/extensions.md §4.1), while the core
+                        // serves the vpn op, and off until vpn.on.
+                        if x.name == "vpn", f.canVPN {
                             if acts || !lines.isEmpty { Divider() }
-                            Button("Connect", action: run { store.runWords(":vpn on") })
-                            Button("Disconnect", action: run { store.runWords(":vpn off") })
-                            Button(f.lockdown ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On", action: run {
-                                store.runWords(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on")
-                            })
-                            Button("Account Time Left", action: run { store.runWords(":vpn time") })
+                            Group {
+                                Button("Connect", action: run { store.runWords(":vpn on") })
+                                Button("Disconnect", action: run { store.runWords(":vpn off") })
+                                Button(f.lockdown ? "Turn Lockdown Mode Off" : "Turn Lockdown Mode On", action: run {
+                                    store.runWords(store.vpn?.lockdown == true ? ":vpn lockdown off" : ":vpn lockdown on")
+                                })
+                                Button("Account Time Left", action: run { store.runWords(":vpn time") })
+                            }
+                            .disabled(!f.vpn)
                         }
                     }
                 }

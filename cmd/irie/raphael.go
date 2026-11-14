@@ -12,10 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-const raphaelUsage = "usage: irie ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]"
+const raphaelUsage = "usage: " + brand.Slug + " ctl raphael [look|fix N [--yes]|mine N|on|off] [--json]"
 
 // ctlRaphael is Raphael's report (DESIGN §4.11): what his last look at the
 // computer found, with his advice, and what he restarted lately. look has
@@ -130,7 +131,7 @@ func ctlRaphael(args []string) error {
 func pickFinding(r ipc.RaphaelResult, arg string) (ipc.RaphaelFinding, error) {
 	if n, err := strconv.Atoi(arg); err == nil {
 		if n < 1 || n > len(r.Findings) {
-			return ipc.RaphaelFinding{}, fmt.Errorf("Raffi's report has %d findings: give one of their numbers, as `irie ctl raphael` prints them", len(r.Findings))
+			return ipc.RaphaelFinding{}, fmt.Errorf("Raffi's report has %d findings: give one of their numbers, as `"+brand.Slug+" ctl raphael` prints them", len(r.Findings))
 		}
 		return r.Findings[n-1], nil
 	}
@@ -139,7 +140,7 @@ func pickFinding(r ipc.RaphaelResult, arg string) (ipc.RaphaelFinding, error) {
 			return f, nil
 		}
 	}
-	return ipc.RaphaelFinding{}, fmt.Errorf("Raffi has no finding %q now: `irie ctl raphael` lists them", arg)
+	return ipc.RaphaelFinding{}, fmt.Errorf("Raffi has no finding %q now: `"+brand.Slug+" ctl raphael` lists them", arg)
 }
 
 func findingNumber(r ipc.RaphaelResult, f ipc.RaphaelFinding) int {
@@ -170,11 +171,11 @@ func printRaphael(w io.Writer, r ipc.RaphaelResult) error {
 	head := "❤️‍🩹 Raffi (Raphael)"
 	switch {
 	case !r.On:
-		head += ": off, so nothing restarts a part of Irie that stops answering. `irie ctl raphael on` turns him on."
+		head += ": off, so nothing restarts a part of " + brand.Name + " that stops answering. `" + brand.Slug + " ctl raphael on` turns him on."
 	case r.Checking:
 		head += ": looking over your Mac now."
 	case r.Checked == nil:
-		head += ": he has not looked over your Mac yet. `irie ctl raphael look` has him look now."
+		head += ": he has not looked over your Mac yet. `" + brand.Slug + " ctl raphael look` has him look now."
 	default:
 		head += fmt.Sprintf(": looked over your Mac at %s, in %s.", r.Checked.Local().Format("15:04 on 2 Jan"), r.Took)
 	}
@@ -206,10 +207,10 @@ func printRaphael(w io.Writer, r ipc.RaphaelResult) error {
 				if r.Fixing == f.ID {
 					prefix = "working on it now; "
 				}
-				can = append(can, fmt.Sprintf("%s`irie ctl raphael fix %d` (%s)", prefix, i+1, strings.Join(f.Fix.Run, "; ")))
+				can = append(can, fmt.Sprintf("%s`"+brand.Slug+" ctl raphael fix %d` (%s)", prefix, i+1, strings.Join(f.Fix.Run, "; ")))
 			}
 			if f.Mine {
-				can = append(can, fmt.Sprintf("yours? `irie ctl raphael mine %d`", i+1))
+				can = append(can, fmt.Sprintf("yours? `"+brand.Slug+" ctl raphael mine %d`", i+1))
 			}
 			if len(can) > 0 {
 				fmt.Fprintf(w, "     %s\n", strings.Join(can, " · "))
