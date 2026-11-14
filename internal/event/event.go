@@ -202,6 +202,28 @@ func Cap(s string) string {
 	return s[:cut]
 }
 
+// capGap stands where CapEnds cut a string's middle out.
+const capGap = "\n…\n"
+
+// CapEnds caps s at MaxString bytes as Cap does, but by cutting out its
+// middle: it keeps a quarter for the head and the rest for the tail. A
+// command's output says how it went at its end, as a test run's FAIL lines
+// do, and a failed call's error starts with its exit code.
+func CapEnds(s string) string {
+	if len(s) <= MaxString {
+		return s
+	}
+	head := MaxString / 4
+	for head > 0 && !utf8.RuneStart(s[head]) {
+		head--
+	}
+	tail := len(s) - (MaxString - head - len(capGap))
+	for tail < len(s) && !utf8.RuneStart(s[tail]) {
+		tail++
+	}
+	return s[:head] + capGap + s[tail:]
+}
+
 // CapAll caps every string inside v, which holds decoded JSON (maps, slices
 // and scalars), in place where it can, and returns the result.
 func CapAll(v any) any {

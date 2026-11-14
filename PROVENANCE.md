@@ -532,6 +532,12 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-10 | https://code.claude.com/docs/en/permissions.md | Read rules take `//` before an absolute path and `~/` for home: an anonymous session's Read rules for the compartments' file and the user's sign-ins |
 | 2026-11-10 | RFC 1928, SOCKS Protocol Version 5, https://www.rfc-editor.org/rfc/rfc1928 | the forwarder's SOCKS5 server and its client to the exit: greeting, no-authentication method, CONNECT with an IPv4, IPv6 or domain address, reply codes (`internal/anon/forward.go`) |
 | 2026-11-10 | RFC 9110, HTTP Semantics, §7.6.1 and §9.3.6, https://www.rfc-editor.org/rfc/rfc9110 | the forwarder's HTTP proxy: CONNECT's 2xx and tunnel, and the hop-by-hop headers it drops from a plain request and its response |
+| 2026-11-14 | https://code.claude.com/docs/en/hooks | Jot dog's word on its tests (DESIGN §4.8): PostToolUse's Bash tool_response (stdout, stderr, interrupted) and PostToolUseFailure's error, whose first line is "Exit code N", and is_interrupt; read for a test run's outcome |
+| 2026-11-14 | https://dev.to/raimondasl/69-of-my-coding-agents-done-claims-werent-here-is-the-gate-i-put-in-front-of-them-lho (isitdone, MIT; idea only, no code) | The rule that a claim the tests pass needs a passing run behind it, and its measured kinds of claims without one (stale, none, under 1% on a failing run), which Irie's own record was measured against (DESIGN §4.8) |
+| 2026-11-14 | https://arxiv.org/abs/2503.11926 (Baker et al., 2025) | Why the jot dog checks a turn's claims against its own tool record with plain code and only tells the agent, never optimises against it: action monitors catch blatant cases, and optimising against a monitor teaches obfuscation (DESIGN §4.8) |
+| 2026-11-14 | https://arxiv.org/abs/2505.23575 (Arnav et al., 2025, §2.2) | Monitors held to a false-positive rate of 1% or less on benign runs: why only a check that cannot cry wolf on Irie's own record was built (DESIGN §4.8) |
+| 2026-11-14 | https://deploymentsafety.openai.com/gpt-5 (GPT-5 system card, deception, Table 9) | False claims of success concentrate where a task hit an impediment: why the dog holds a claim that the tests pass to a failed run (DESIGN §4.8) |
+| 2026-11-14 | https://transluce.org/investigating-o3-truthfulness and https://arxiv.org/abs/2412.04984 | Agents claim actions they never took and keep to it when asked: why the dog checks a claim against the hooks' record of runs rather than asking the agent (DESIGN §4.8) |
 
 ## Third-party code
 

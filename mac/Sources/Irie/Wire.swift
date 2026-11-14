@@ -90,12 +90,15 @@ struct Subs: Codable, Equatable {
 }
 
 /// What a jot left that has not landed: files not committed, and its own
-/// commits not yet in its repo's land branch (DESIGN §4.8). The core says
-/// it in words in the session's detail too.
+/// commits not yet in its repo's land branch; or a claim its own record
+/// contradicts, "tests" when it says the tests pass while its last test run
+/// failed (DESIGN §4.8). The core says it in words in the session's detail
+/// too.
 struct Loose: Codable, Equatable {
     var dirty: Int?
     var ahead: Int?
     var land: String?
+    var unproven: String?
 }
 
 /// What a session's model calls have used, each reply counted once.

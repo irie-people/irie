@@ -39,6 +39,10 @@ type track struct {
 	nudged    int
 	waiting   int
 	waitingOn string
+	// The latest test run of its agents, as the hooks read it, and what
+	// its last turn's message said that this run contradicts (dog.go).
+	test     testRun
+	unproven string
 
 	// For the trod bot (trod.go): when its last turn ended or failed,
 	// and whether its last message asked the user something; what the
@@ -113,7 +117,7 @@ func (t *track) apply(e event.Event) {
 		// the dog and the shift did since the user's last one still counts.
 		shifts := !t.trodTyped.IsZero() && e.Time().Sub(t.trodTyped) < trodTypedFor
 		t.prompted, t.activity, t.needs, t.stalled = true, working, nil, nil
-		t.waiting, t.waitingOn, t.asked, t.trodTyped = 0, "", false, time.Time{}
+		t.waiting, t.waitingOn, t.asked, t.trodTyped, t.unproven = 0, "", false, time.Time{}, ""
 		if !shifts {
 			t.nudged, t.trodAnswered = 0, false
 		}
@@ -128,6 +132,9 @@ func (t *track) apply(e event.Event) {
 		}
 		t.tools[toolUseID(e)] = e
 	case event.ToolFinished, event.ToolFailed:
+		if o := e.Str("tests"); o != "" {
+			t.test = testRun{outcome: o, line: e.Str("test_line"), cmd: t.tools[toolUseID(e)].Str("summary")}
+		}
 		t.busy(e)
 		t.held = t.held || t.frozen != nil
 		delete(t.tools, toolUseID(e))
@@ -150,6 +157,7 @@ func (t *track) apply(e event.Event) {
 			t.waiting, _ = e.Int("waiting")
 			t.waitingOn = e.Str("waiting_on")
 			t.stopped, t.asked = e.Time(), e.Data["asks"] == true
+			t.unproven = e.Str("unproven")
 			// Only a helper in the background outlives its session's
 			// turn, so when the Stop lists none, every helper still listed
 			// here has stopped: its SubagentStop never came, as while the
@@ -161,6 +169,7 @@ func (t *track) apply(e event.Event) {
 	case event.DogNudged:
 		// The turn goes on: the dog sent the agent back to finish.
 		t.nudged++
+		t.unproven = ""
 		t.busy(e)
 	case event.TrodSent:
 		t.trod = append(t.trod, trodSend{at: e.Time(), reason: e.Str("reason"), how: e.Str("how")})

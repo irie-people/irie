@@ -506,7 +506,15 @@ type Loose struct {
 	Land   string       `json:"land,omitempty"`   // that branch, when its repo has one (dog.land)
 	Where  []LoosePlace `json:"where"`            // the worktrees that hold them
 	Nudged int          `json:"nudged,omitempty"` // how often the dog sent it back to finish since your last prompt
+	// Unproven is what its last message says that its own record
+	// contradicts: UnprovenTests, that the tests pass while its latest
+	// test run failed.
+	Unproven string `json:"unproven,omitempty"`
 }
+
+// UnprovenTests is a jot whose last message says the tests pass while its
+// latest test run failed (Loose.Unproven).
+const UnprovenTests = "tests"
 
 // Words says what is left in plain words, such as "3 files not committed ·
 // 2 commits not in live".
@@ -517,6 +525,9 @@ func (l Loose) Words() string {
 	}
 	if l.Ahead > 0 {
 		parts = append(parts, counted(l.Ahead, "commit")+" not in "+l.Land)
+	}
+	if l.Unproven == UnprovenTests {
+		parts = append(parts, "says the tests pass, but the last run failed")
 	}
 	return strings.Join(parts, " · ")
 }

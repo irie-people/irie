@@ -10,8 +10,8 @@ import (
 
 // step is one step of a script.
 type step struct {
-	kind string        // prompt, tool, permission, stop, stopfail, sub, sleep, exit, status, kids, write, commit
-	arg  string        // the tool name, error, subagent id, cost, file, or how a stop goes (bg, ask)
+	kind string        // prompt, tool, test, permission, stop, stopfail, sub, sleep, exit, status, kids, write, commit
+	arg  string        // the tool name, error, subagent id, cost, file, how a test run goes (pass, fail), or how a stop goes (bg, ask, passes)
 	d    time.Duration // sleep
 	n    int           // exit code
 	sub  []step        // the steps run inside a subagent
@@ -53,7 +53,12 @@ func parseStep(item string, inSub bool) (step, error) {
 		}
 		return step{kind: name}, nil
 	case "stop":
-		if inSub || hasArg && arg != "bg" && arg != "ask" && arg != "asks" && arg != "turn" {
+		if inSub || hasArg && arg != "bg" && arg != "ask" && arg != "asks" && arg != "turn" && arg != "passes" {
+			return bad()
+		}
+		return step{kind: name, arg: arg}, nil
+	case "test":
+		if arg != "pass" && arg != "fail" {
 			return bad()
 		}
 		return step{kind: name, arg: arg}, nil

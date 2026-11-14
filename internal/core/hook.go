@@ -16,9 +16,9 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 )
 
-// toolInputKeys are the data a hook event takes from a tool's input, which
-// journal.tool_input = "none" leaves out.
-var toolInputKeys = []string{"summary", "question"}
+// toolInputKeys are the data a hook event takes from a tool's input, or
+// quotes from its output, which journal.tool_input = "none" leaves out.
+var toolInputKeys = []string{"summary", "question", "test_line"}
 
 // hook takes one hook event from the shim (DESIGN §3.3) and records it.
 // Nothing holds a call yet. A session that starts may be told it can
@@ -43,13 +43,14 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		Input json.RawMessage `json:"tool_input"`
 	}
 	json.Unmarshal(a.Payload, &call)
-	// The jot dog reads what a finished turn left before the turn is
-	// recorded, outside c.mu (dog.go).
-	unfinished, loose := c.dogAtStop(a.Session, evs)
+	// The jot dog reads what a finished turn left, and holds its last
+	// message to its tests, before the turn is recorded, outside c.mu
+	// (dog.go).
+	stop := c.dogAtStop(a.Session, evs)
 	// So may the trod bot, which may read the machine's idle time
 	// (trod.go).
 	var trod trodReply
-	if unfinished == "" {
+	if stop.note == "" {
 		trod = c.trodAtHook(a.Session, evs)
 	}
 	// And the arch agents' word to a session or subagent that starts
@@ -81,11 +82,12 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 			// end at once (sub.go).
 			reply.Deny = stoppedNote
 			continue
-		case unfinished != "" && ends:
+		case stop.note != "" && ends:
 			// The turn goes on, so it has not ended: the dog sent the
-			// agent back to finish what it left.
-			e = nudgeEvent(e, loose)
-			reply.Unfinished = unfinished
+			// agent back to finish what it left, or to put its report
+			// right.
+			e = nudgeEvent(e, stop)
+			reply.Unfinished = stop.note
 		case trod.how == trodAtStop && ends:
 			// Likewise the trod bot, to decide what it asked.
 			e = trodEvent(e, trodAtStop)
@@ -100,6 +102,11 @@ func (c *Core) hook(a ipc.HookArgs) (ipc.HookResult, error) {
 		case trod.how == trodAtAsk && e.Kind == event.InputNeeded && e.Str("reason") == event.ReasonQuestion:
 			e = trodEvent(e, trodAtAsk)
 			reply.Deny = trod.note
+		}
+		if ends && e.Kind == event.TurnEnded && stop.unproven != "" {
+			// The turn ends with its word on its tests standing against
+			// its last test run: the row says so (dog.go).
+			e.Data["unproven"] = stop.unproven
 		}
 		input := call.Input
 		if c.cfg().Journal.ToolInput == "none" {
