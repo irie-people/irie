@@ -39,9 +39,34 @@ struct TerminalArea: View {
             // its narrowest, so the terminal keeps some room.
             GeometryReader { geo in
                 let width = min(CGFloat(store.side.width), max(CGFloat(SideState.minWidth), geo.size.width - minTerminal))
+                // The panes, a rolodex of cards between the terminal and the
+                // right sidebar (Rolodex.swift), slide in the same way: the
+                // terminal makes room once they are in.
+                let side = store.sideDocked ? width : 0
+                let room = geo.size.width - side
+                let deck = RolodexModel.width(share: store.rolodex.share, in: room)
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
-                        .padding(.trailing, store.sideDocked ? width : 0)
+                        .padding(.trailing, side + (store.rolodex.docked ? deck : 0))
+                    if store.rolodex.open {
+                        RolodexView()
+                            .padding(.leading, 4)
+                            .padding(.trailing, 12)
+                            .padding(.vertical, 12)
+                            .frame(width: deck)
+                            .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: deck).offset(x: -4) }
+                            .padding(.trailing, side)
+                            .transition(.move(edge: .trailing))
+                    }
+                    if let g = store.rolodex.guide {
+                        Rectangle()
+                            .fill(Theme.accent)
+                            .frame(width: 2)
+                            .padding(.vertical, 12)
+                            .padding(.trailing, side + CGFloat(g) - 1)
+                            .allowsHitTesting(false)
+                            .zIndex(2)
+                    }
                     if store.side.open {
                         RightSidebar(guide: $sideGuide, drawn: Double(width),
                                      most: Double(max(CGFloat(SideState.minWidth), geo.size.width - minTerminal)))
@@ -102,6 +127,15 @@ struct TerminalArea: View {
                 }
                 .help("Open the terminal in a Ghostty window too")
                 .disabled(store.attach == nil)
+            }
+            // The panes beside the terminal, a rolodex of cards (Rolodex.swift).
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.togglePanes()
+                } label: {
+                    Label(store.rolodex.open ? "Hide Panes" : "Show Panes", systemImage: "rectangle.stack")
+                }
+                .help(store.rolodex.open ? "Hide the panes (⌥⌘P)" : "Show your panes beside the terminal: a shell, a browser, a plugin’s page (⌥⌘P; ⌥Tab walks them)")
             }
             // At the toolbar's trailing end, where the HIG puts a button that
             // opens an inspector.

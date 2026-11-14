@@ -124,6 +124,13 @@ final class KeyRouter {
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
             }
+            // ⌥Tab walks the keyboard from the terminal through the panes,
+            // left to right, turning the rolodex to each, and ⌥⇧Tab back
+            // (Rolodex.swift).
+            if event.keyCode == 48, mods == .option || mods == [.option, .shift], irie {
+                MainActor.assumeIsolated { store.cyclePanes(mods.contains(.shift) ? -1 : 1, in: event.window) }
+                return nil
+            }
             // ⌃1–9 shows a space, and ⌃⌥1–9 sends the selected or picked
             // cards to it (Spaces.swift).
             if irie, mods == .control || mods == [.control, .option], let c = event.charactersIgnoringModifiers,

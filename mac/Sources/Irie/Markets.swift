@@ -61,6 +61,10 @@ struct MarketsCommands: Commands {
 struct MarketsWindow: View {
     static let id = "markets"
 
+    /// On a card of the rolodex (Rolodex.swift) rather than in a window of
+    /// its own: no window size, and no toolbar, which would join the main
+    /// window's.
+    var embedded = false
     @Environment(Store.self) private var store
     @State private var map: MarketsResult?
     @State private var loaded = false
@@ -70,6 +74,16 @@ struct MarketsWindow: View {
     @State private var reloads = 0
 
     var body: some View {
+        if embedded {
+            content
+                .background(Theme.card)
+                .task { await watch() }
+        } else {
+            window
+        }
+    }
+
+    private var window: some View {
         content
             .frame(minWidth: 720, minHeight: 480)
             .background(Theme.sidebar)

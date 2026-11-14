@@ -217,6 +217,16 @@ struct IrieCommands: Commands {
                     .keyboardShortcut(t.key, modifiers: [.command, .option])
                 }
             }
+            // The panes beside the terminal, a rolodex of cards
+            // (Rolodex.swift); Go walks them.
+            Button(MainActor.assumeIsolated { store.rolodex.open } ? "Hide Panes" : "Show Panes", action: run { store.togglePanes() })
+                .keyboardShortcut("p", modifiers: [.command, .option])
+            Menu("New Pane") {
+                ForEach(MainActor.assumeIsolated { store.paneKinds }) { k in
+                    Button(k.title, action: run { store.newPane(k) })
+                }
+            }
+            .disabled(f.name == nil)
             // The palettes, yours after Irie's, Make a Theme, and the
             // window's layouts (Looks.swift). A section ends with a line of
             // its own.
@@ -268,6 +278,12 @@ struct IrieCommands: Commands {
             // or the terminal while it shows.
             Button("Switch Focus", action: run { store.toggleFocus() })
                 .keyboardShortcut("]", modifiers: .control)
+            // KeyRouter catches ⌥Tab and ⌥⇧Tab first: from the terminal
+            // through the panes, left to right (Rolodex.swift).
+            Button("Next Pane", action: run { store.cyclePanes(1, in: NSApp.keyWindow) })
+                .keyboardShortcut(.tab, modifiers: .option)
+            Button("Previous Pane", action: run { store.cyclePanes(-1, in: NSApp.keyWindow) })
+                .keyboardShortcut(.tab, modifiers: [.option, .shift])
             Divider()
             // Step through the strip of the helper pane (HelperPane.swift).
             Button("Next Helper") { NotificationCenter.default.post(name: .irieHelperStep, object: 1) }
