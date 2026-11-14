@@ -93,6 +93,10 @@ struct SideState: Equatable {
 }
 
 extension Store {
+    /// The tabs the right sidebar shows: Mail only while its plugin is on
+    /// (Mail.swift). The toolbar's button names them too.
+    var sideTabs: [SideTab] { SideTab.built.filter { $0 != .mail || mailShown } }
+
     /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button.
     func toggleSide() {
         if side.open { closeSide() } else { openSide(side.tab) }
@@ -259,7 +263,7 @@ struct RightSidebar: View {
 
     private func tabs(tight: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(SideTab.built.filter { $0 != .mail || store.mailShown }) { t in tabButton(t, tight: tight) }
+            ForEach(store.sideTabs) { t in tabButton(t, tight: tight) }
         }
     }
 
