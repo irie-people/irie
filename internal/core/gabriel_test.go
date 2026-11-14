@@ -233,16 +233,54 @@ func TestStealsFocus(t *testing.T) {
 		"open -gj -a Safari": false,
 		"open -j report.pdf": false,
 		"open":               false,
+		"open -g -a Safari":  false,
 		`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --user-data-dir=/tmp/p`: false,
 		"mac/build/Irie.app/Contents/MacOS/Irie --snapshot /tmp/shots":                                         false,
 		"mac/build/Irie.app/Contents/MacOS/Irie --record /tmp/first-look.mp4 --reel docs/demo/first-look.reel": false,
+		"mac/build/Irie.app/Contents/MacOS/Irie --away-helper -- open -g -a Safari":                            false,
 		`osascript -e 'display notification "done"'`:                                                           false,
 		"go test ./... && git commit -m 'open the door'":                                                       false,
 		"opencode run":   false,
 		"grep -r open .": false,
+		// A path that is only an argument starts nothing.
+		"cp build/Test mac/build/Test.app/Contents/MacOS/Test":                                                                 false,
+		`ls "build/Irie Preview.app/Contents/MacOS/"`:                                                                          false,
+		`"$IRIE_BIN" away -- "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir=/tmp/p`:            false,
+		`exec "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir=/tmp/p`:                           true,
+		`nohup /Applications/Simulator.app/Contents/MacOS/Simulator & sleep 1`:                                                 true,
+		`IRIE_X=1 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9334 >/dev/null 2>&1`: true,
 	} {
 		if got := stealsFocus(cmd); got != want {
 			t.Errorf("stealsFocus(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}
+
+// TestOpensInSight: a window opened behind the app in front still lands on
+// the desktop the user is on, so it goes through irie away instead; Irie.app
+// keeps its own windows out of sight with its flags.
+func TestOpensInSight(t *testing.T) {
+	for cmd, want := range map[string]bool{
+		"open -g -a Safari":                                                         true,
+		"open -g https://example.com":                                               true,
+		"cd /tmp && open -g report.pdf":                                             true,
+		"open -gn -a 'Google Chrome' --args --user-data-dir=/tmp/p":                 true,
+		"open -g -u https://example.com":                                            true,
+		"open -g -R build/out.txt":                                                  true,
+		"open -g mac/build/Irie.app --args --background":                            false,
+		"open -g -n -W --stdout /tmp/b.txt -a Irie.app --args --background --bench": false,
+		"open -n -g 'mac/build/hot/A/Irie Preview.app' --args --background --away":  false,
+		"open -g -a 'Google Chrome' --args --headless=new":                          false,
+		"open -gj -a Safari":                                                        false,
+		"open -j report.pdf":                                                        false,
+		"open -g":                                                                   false,
+		"open -a Safari":                                                            false, // in front, which stealsFocus says
+		`"$IRIE_BIN" away -- open -g -a Simulator`:                                  false,
+		"irie away --for 30s --app Simulator -- xcrun simctl boot 'iPhone 15'":      false,
+		"irie away -- open -g -n -a 'Google Chrome' --args --user-data-dir=/tmp/p http://localhost:3000": false,
+	} {
+		if got := opensInSight(cmd); got != want {
+			t.Errorf("opensInSight(%q) = %v, want %v", cmd, got, want)
 		}
 	}
 }

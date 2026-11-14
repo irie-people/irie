@@ -10,8 +10,9 @@
 #
 # A preview is a client of the running core, as Irie.app is: its sessions
 # are the real ones, and what you do in it happens to them. Its terminals
-# never size a window, so it never resizes an agent. It opens behind the app
-# in front and never takes the focus, though it keeps the focus it has.
+# never size a window, so it never resizes an agent. It opens on a desktop
+# you are not looking at, never the one you work on, and never takes the
+# focus, though it keeps the focus it has (DESIGN §4.11, "Out of sight").
 #
 #   tools/hot.sh                 open the preview, and build it again on each change
 #   tools/hot.sh --snapshot DIR  also draw the fixture into DIR after each build
@@ -179,14 +180,14 @@ shot() {
 	fi
 }
 
-# launch SLOT opens the build in SLOT as a preview, behind the app in front,
-# and waits for it to take over from the build before.
+# launch SLOT opens the build in SLOT as a preview, on a desktop out of
+# sight (--away), and waits for it to take over from the build before.
 launch() {
 	log=$dir/$1.log
 	: >"$log"
 	touch "$dir/launched"
 	/usr/bin/open -n -g -F --stdout "$log" --stderr "$log" "$(app "$1")" --args \
-		--background --preview "$name" --hot "$dir" --hot-pid $$ ${cur:+--replace "$cur"}
+		--background --away --preview "$name" --hot "$dir" --hot-pid $$ ${cur:+--replace "$cur"}
 	new= n=0
 	while [ -z "$new" ] && [ $n -lt 100 ]; do
 		new=$(pids "$1" | head -1)

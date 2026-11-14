@@ -23,6 +23,7 @@ import (
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/proc"
+	"github.com/irie-people/irie/internal/skills"
 	"github.com/irie-people/irie/internal/sysload"
 )
 
@@ -554,8 +555,8 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 }
 
 // focusNote is what an agent is told when Gabriel turns away a call that
-// would take the user's focus.
-const focusNote = "[" + brand.Name + "] Gabriel turned this call away: it would bring an app, a window or a page to the front while your user works on something else, and take their focus. Do it without the front: open -g (and --background for " + brand.Name + ".app), a browser headless (--headless=new keeps the profile and its logins) or new pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. If your user must see it, say so in a line and let them open it."
+// would put a window where the user works.
+var focusNote = "[" + brand.Name + "] Gabriel turned this call away: it would put a window where your user works, in front of what they look at, or on the desktop they are on even behind it. Work without a window where you can: a browser headless (--headless=new keeps the profile and its logins), pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. A window you must open goes through \"$" + brand.Env("BIN") + "\" away -- COMMAND, with open -g inside it, which puts each window it opens on a desktop they are not looking at; never a tab in their own browser. The " + skills.Plugin + ":out-of-sight skill says more. If your user must see it, say so in a line and let them open it."
 
 var (
 	// shellSplit cuts a shell command at the places a new one starts.
@@ -563,15 +564,41 @@ var (
 	// appActivates is AppleScript that brings an app forward or types into
 	// one.
 	appActivates = regexp.MustCompile(`(?i)\b(activate|reopen|keystroke|key code|open location)\b`)
+	// quietFlags keep an app started straight, or one open(1) passes them
+	// to, from showing a window where the user works: a browser headless,
+	// and Irie.app's own runs that draw out of sight (Desktops.swift).
+	quietFlags = []string{"--headless", "--snapshot", "--render-conversation", "--record", "--bench", "--background", "--away", "--version", "--help"}
+)
+
+// windowEffect is where a shell command would put a window, from best to
+// worst.
+type windowEffect int
+
+const (
+	outOfSight windowEffect = iota // nowhere the user works
+	inSight                        // on the desktop the user is on, behind the app in front
+	inFront                        // in front: an app, a window or a page brought forward
 )
 
 // stealsFocus reports whether a shell command would bring an app, a window
 // or a page to the front: open(1) without -g or -j, AppleScript that
 // activates an app or types into it, or an app's own executable started
-// straight, short of a headless browser, Irie.app's --snapshot, --record
-// and --background, and the like. It reads the command roughly, as a person
-// would, and errs toward letting it run.
-func stealsFocus(cmd string) bool {
+// straight, short of a headless browser, Irie.app's --snapshot, --record,
+// --background or --away, and the like.
+func stealsFocus(cmd string) bool { return windowOf(cmd) == inFront }
+
+// opensInSight reports whether a shell command would open a window on the
+// desktop the user is on, behind the app in front, where it still covers
+// what they see: open(1) with -g but not -j, short of what Irie.app keeps
+// out of sight itself. irie away is the way to open one (DESIGN §4.11, "Out
+// of sight").
+func opensInSight(cmd string) bool { return windowOf(cmd) == inSight }
+
+// windowOf is the worst any part of a shell command does with a window. It
+// reads the command roughly, as a person would, and errs toward letting it
+// run.
+func windowOf(cmd string) windowEffect {
+	worst := outOfSight
 	for _, seg := range shellSplit.Split(cmd, -1) {
 		words := strings.Fields(seg)
 		for len(words) > 0 && (strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") || slices.Contains([]string{"sudo", "env", "nohup", "exec", "command", "time", "("}, words[0])) {
@@ -581,56 +608,85 @@ func stealsFocus(cmd string) bool {
 			continue
 		}
 		prog := strings.Trim(words[0], `"'`)
+		e := outOfSight
 		switch {
 		case prog == "open" || prog == "/usr/bin/open":
-			if openInFront(words[1:]) {
-				return true
-			}
+			e = openEffect(words[1:])
 		case filepath.Base(prog) == "osascript":
 			if appActivates.MatchString(seg) {
-				return true
+				e = inFront
 			}
-		case strings.Contains(seg, ".app/Contents/MacOS/"):
-			quiet := []string{"--headless", "--snapshot", "--render-conversation", "--record", "--background", "--version", "--help"}
-			if !slices.ContainsFunc(quiet, func(q string) bool { return strings.Contains(seg, q) }) {
-				return true
-			}
+		case strings.Contains(program(words), ".app/Contents/MacOS/") && !quietRun(seg):
+			e = inFront
 		}
+		worst = max(worst, e)
 	}
-	return false
+	return worst
 }
 
-// openInFront reports whether open(1) with args opens something in front:
-// it has something to open, and neither -g (in the background) nor -j
-// (hidden).
-func openInFront(args []string) bool {
-	target := false
+// program is the program a command's words start with, whole when it is a
+// quoted path with spaces, as "/Applications/Google Chrome.app/Contents/
+// MacOS/Google Chrome" is. A path that is only an argument, as to cp or
+// ls, is not one.
+func program(words []string) string {
+	first := words[0]
+	if q := first[:1]; q == `"` || q == `'` {
+		rest := strings.Join(words, " ")[1:]
+		if i := strings.Index(rest, q); i >= 0 {
+			return rest[:i]
+		}
+		return rest
+	}
+	return first
+}
+
+// quietRun reports whether text holds a flag that keeps the window out of
+// sight.
+func quietRun(text string) bool {
+	return slices.ContainsFunc(quietFlags, func(q string) bool { return strings.Contains(text, q) })
+}
+
+// openEffect is where open(1) with args puts a window: nowhere without
+// something to open, or with -j (hidden); in front without -g; else on the
+// desktop the user is on, behind the app in front, unless it opens Irie.app
+// with a flag that keeps the window out of sight, such as --background.
+func openEffect(args []string) windowEffect {
+	target, background, hidden := false, false, false
 	for i := 0; i < len(args); i++ {
 		a := strings.Trim(args[i], `"'`)
 		switch {
 		case a == "--args":
-			return target
-		case a == "-a" || a == "-b" || a == "-s" || a == "--env" || a == "--stdin" || a == "--stdout" || a == "--stderr":
+			if target && background && !hidden && quietRun(strings.Join(args[i+1:], " ")) {
+				return outOfSight
+			}
+			i = len(args)
+		case a == "-a" || a == "-b" || a == "-s" || a == "-u" || a == "--env" || a == "--stdin" || a == "--stdout" || a == "--stderr":
 			i++ // its value
-			if a == "-a" || a == "-b" {
+			if a == "-a" || a == "-b" || a == "-u" {
 				target = true
 			}
 		case strings.HasPrefix(a, "--"):
 		case strings.HasPrefix(a, "-") && len(a) > 1:
-			if strings.ContainsAny(a[1:], "gj") {
-				return false
-			}
+			hidden = hidden || strings.Contains(a[1:], "j")
+			background = background || strings.Contains(a[1:], "g")
 		default:
 			target = true
 		}
 	}
-	return target
+	switch {
+	case !target || hidden:
+		return outOfSight
+	case !background:
+		return inFront
+	}
+	return inSight
 }
 
 // focusGuard says what to tell the agent when a Bash call it is about to
-// make would take the user's focus while they look at something else: not
-// at the session that makes it, with Irie in front. "" lets the call run.
-// It holds no lock when it is called.
+// make would put a window where the user works: on the desktop they are on,
+// always, since nobody asked for a window behind them; in front, unless
+// they watch the session that makes it, with Irie in front, and may want
+// what it opens. "" lets the call run. It holds no lock when it is called.
 func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Event) string {
 	g := c.cfg().Arch.Gabriel
 	if tool != "Bash" || !g.On || !g.Guard || gabrielOff() || !slices.ContainsFunc(evs, func(e event.Event) bool { return e.Kind == event.ToolStarted }) {
@@ -639,19 +695,24 @@ func (c *Core) focusGuard(id, tool string, input json.RawMessage, evs []event.Ev
 	var in struct {
 		Command string `json:"command"`
 	}
-	if json.Unmarshal(input, &in) != nil || !stealsFocus(in.Command) {
+	if json.Unmarshal(input, &in) != nil {
 		return ""
 	}
-	// The user watching this very session may want what it opens.
-	if a, ok, err := focus.Front(); err == nil && ok && (a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)) {
-		c.mu.Lock()
-		watching := c.selected == id
-		c.mu.Unlock()
-		if watching {
-			return ""
+	switch windowOf(in.Command) {
+	case inSight:
+		return focusNote
+	case inFront:
+		if a, ok, err := focus.Front(); err == nil && ok && (a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)) {
+			c.mu.Lock()
+			watching := c.selected == id
+			c.mu.Unlock()
+			if watching {
+				return ""
+			}
 		}
+		return focusNote
 	}
-	return focusNote
+	return ""
 }
 
 // installing is the sessions that run tools/live.sh: every session's work

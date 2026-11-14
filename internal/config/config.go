@@ -228,7 +228,7 @@ type Gabriel struct {
 	Heavy   float64       `toml:"heavy"`   // an app outside Irie is heavy from this share of one CPU, in percent
 	Spare   []string      `toml:"spare"`   // apps never slowed, by name, such as zoom.us or Music
 	Boost   time.Duration `toml:"boost"`   // how long a boost lasts: your focus gets the machine first whether it is busy or not
-	Guard   bool          `toml:"guard"`   // turn away an agent's call that would bring an app or a page to the front while you look elsewhere
+	Guard   bool          `toml:"guard"`   // turn away an agent's call that would put a window in front of you or on the desktop you are on
 }
 
 // Raphael is the arch agent who heals. He restarts a part of Irie that
