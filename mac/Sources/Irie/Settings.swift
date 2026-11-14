@@ -820,8 +820,8 @@ private struct AppearanceSettings: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Arrange Layouts…") { make(.layouts(saving: false)) }
-                    Button("Save the Window’s Layout…") { make(.layouts(saving: true)) }
+                    Button("Edit Layouts…") { make(.layouts(saving: false)) }
+                    Button("Save Layout…") { make(.layouts(saving: true)) }
                 }
             } header: {
                 Text("Layouts")
@@ -850,8 +850,8 @@ private struct AppearanceSettings: View {
                 Text("Window")
             } footer: {
                 footnote((TerminalEngine.built.count > 1
-                    ? "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
-                    : "View > Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
+                    ? "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
+                    : "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
                     + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
             }
             Section {
