@@ -224,12 +224,21 @@ func Accuracy(prior float64, weight int, c Counts) float64 {
 // Candidate is one profile weighed for a task.
 type Candidate struct {
 	Profile    string  `json:"profile"`
-	Accuracy   float64 `json:"accuracy"`    // on the task's class, 0 to 1
-	Outcomes   int     `json:"outcomes"`    // how many of the user's outcomes moved it
-	Cost       float64 `json:"cost"`        // per attempt, relative to the strongest profile
-	PerSuccess float64 `json:"per_success"` // Cost over Accuracy
-	Usable     bool    `json:"usable"`      // it can run the task now
+	Accuracy   float64 `json:"accuracy"`        // on the task's class, 0 to 1
+	Floor      float64 `json:"floor,omitempty"` // the accuracy it needs to be chosen; 0 = the choice's floor
+	Outcomes   int     `json:"outcomes"`        // how many of the user's outcomes moved it
+	Cost       float64 `json:"cost"`            // per attempt, relative to the strongest profile
+	PerSuccess float64 `json:"per_success"`     // Cost over Accuracy
+	Usable     bool    `json:"usable"`          // it can run the task now
 	Note       string  `json:"note,omitempty"`
+}
+
+// need is the accuracy c needs to be chosen: its own floor, else floor.
+func (c Candidate) need(floor float64) float64 {
+	if c.Floor > 0 {
+		return c.Floor
+	}
+	return floor
 }
 
 // Choice is the profile a task runs on, and why.
@@ -242,9 +251,11 @@ type Choice struct {
 	Candidates []Candidate `json:"candidates"` // cheapest per success first
 }
 
-// Choose picks, of the usable candidates whose accuracy reaches floor, the
-// one with the lowest cost per success, the more accurate one on a tie.
-// When none reaches the floor it takes the most accurate usable one.
+// Choose picks, of the usable candidates accurate enough, the one with the
+// lowest cost per success, the more accurate one on a tie. A candidate is
+// accurate enough at its own floor, when it has one, else at floor: a local
+// model, which costs no tokens, can have a lower one. When none is accurate
+// enough it takes the most accurate usable one.
 func Choose(class, why string, cands []Candidate, floor float64) Choice {
 	cands = slices.Clone(cands)
 	for i := range cands {
@@ -263,11 +274,17 @@ func Choose(class, why string, cands []Candidate, floor float64) Choice {
 	})
 	ch := Choice{Class: class, Why: why, Candidates: cands}
 	for _, c := range cands {
-		if c.Usable && c.Accuracy >= floor {
-			ch.Profile, ch.Met = c.Profile, true
-			ch.Reason = fmt.Sprintf("%s: %s is the cheapest per success of those at %s or more (%s, %s a success)", class, c.Profile, Percent(floor), Percent(c.Accuracy), Relative(c.PerSuccess))
-			return ch
+		need := c.need(floor)
+		if !c.Usable || c.Accuracy < need {
+			continue
 		}
+		ch.Profile, ch.Met = c.Profile, true
+		if need == floor {
+			ch.Reason = fmt.Sprintf("%s: %s is the cheapest per success of those at %s or more (%s, %s a success)", class, c.Profile, Percent(floor), Percent(c.Accuracy), Relative(c.PerSuccess))
+		} else {
+			ch.Reason = fmt.Sprintf("%s: %s is the cheapest per success of those accurate enough (%s, where its floor is %s; %s a success)", class, c.Profile, Percent(c.Accuracy), Percent(need), Relative(c.PerSuccess))
+		}
+		return ch
 	}
 	best := -1
 	for i, c := range cands {
@@ -277,7 +294,13 @@ func Choose(class, why string, cands []Candidate, floor float64) Choice {
 	}
 	if best >= 0 {
 		ch.Profile = cands[best].Profile
-		ch.Reason = fmt.Sprintf("%s: none reaches %s, so the most accurate, %s (%s)", class, Percent(floor), ch.Profile, Percent(cands[best].Accuracy))
+		floors := Percent(floor)
+		for _, c := range cands {
+			if need := c.need(floor); need != floor && c.Usable {
+				floors = "its floor"
+			}
+		}
+		ch.Reason = fmt.Sprintf("%s: none reaches %s, so the most accurate, %s (%s)", class, floors, ch.Profile, Percent(cands[best].Accuracy))
 	} else {
 		ch.Reason = class + ": no profile can run it now"
 	}

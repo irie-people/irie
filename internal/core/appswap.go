@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/focus"
+	"github.com/irie-people/irie/internal/proc"
 )
 
 // While the user uses Irie.app, tools/live.sh leaves its next build beside
@@ -103,24 +105,36 @@ func (s appSwap) run() error {
 // stopIrieApp stops every Irie.app, as tools/live.sh does: the app keeps no
 // state of its own (docs/MAC.md).
 func stopIrieApp() bool {
-	out, _ := exec.Command("/usr/bin/pgrep", "-x", brand.Exe).Output()
-	var pids []int
-	for _, f := range strings.Fields(string(out)) {
-		if pid, err := strconv.Atoi(f); err == nil {
-			pids = append(pids, pid)
-		}
-	}
+	pids := appPIDs()
 	for _, pid := range pids {
 		syscall.Kill(pid, syscall.SIGTERM)
 	}
-	for i := 0; i < 30 && len(pids) > 0; i++ {
-		if exec.Command("/usr/bin/pgrep", "-x", brand.Exe).Run() != nil {
-			break
-		}
+	for i := 0; i < 30 && len(pids) > 0 && len(appPIDs()) > 0; i++ {
 		time.Sleep(100 * time.Millisecond)
 	}
-	exec.Command("/usr/bin/pkill", "-9", "-x", brand.Exe).Run()
+	for _, pid := range appPIDs() {
+		syscall.Kill(pid, syscall.SIGKILL)
+	}
 	return len(pids) > 0
+}
+
+// appPIDs are the running Irie.app's processes. irie away runs the same
+// executable with --away-helper for an agent's command, which is no app to
+// stop: stopping it would stop the command (DESIGN §2.1, principle 6).
+func appPIDs() []int {
+	out, _ := exec.Command("/usr/bin/pgrep", "-x", brand.Exe).Output()
+	var pids []int
+	for _, f := range strings.Fields(string(out)) {
+		pid, err := strconv.Atoi(f)
+		if err != nil {
+			continue
+		}
+		if argv, _, err := proc.Args(pid); err == nil && slices.Contains(argv, "--away-helper") {
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	return pids
 }
 
 // openIrieApp opens the app: in the background with --background, which

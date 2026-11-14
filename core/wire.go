@@ -7,6 +7,10 @@ import "github.com/irie-people/irie/internal/ipc"
 // The wire's types: the requests and replies, every op's args and result,
 // the frames of a subscription and the rows they carry (DESIGN §2.4).
 type (
+	BenchArgs        = ipc.BenchArgs
+	BenchResult      = ipc.BenchResult
+	Bench            = ipc.Bench
+	BenchRun         = ipc.BenchRun
 	ContextArgs      = ipc.ContextArgs
 	ContextResult    = ipc.ContextResult
 	ContextTurn      = ipc.ContextTurn
@@ -22,12 +26,16 @@ type (
 	Conversation     = ipc.Conversation
 	Item             = ipc.Item
 	SendArgs         = ipc.SendArgs
+	ContinueArgs     = ipc.ContinueArgs
 	FlipResult       = ipc.FlipResult
 	DockArgs         = ipc.DockArgs
 	DockResult       = ipc.DockResult
 	DockControl      = ipc.DockControl
 	DockFile         = ipc.DockFile
 	DockUntrusted    = ipc.DockUntrusted
+	Group            = ipc.Group
+	GroupArgs        = ipc.GroupArgs
+	GroupResult      = ipc.GroupResult
 	InputArgs        = ipc.InputArgs
 	Paste            = ipc.Paste
 	InputResult      = ipc.InputResult
@@ -80,6 +88,7 @@ type (
 	Subs             = ipc.Subs
 	Teammate         = ipc.Teammate
 	Header           = ipc.Header
+	Boost            = ipc.Boost
 	Load             = ipc.Load
 	Window           = ipc.Window
 	Plan             = ipc.Plan
@@ -159,6 +168,11 @@ type (
 // The wire's constants: the API version, the op and frame names, the
 // states, the error codes and the other values its fields take.
 const (
+	OpBench            = ipc.OpBench
+	BenchRunning       = ipc.BenchRunning
+	BenchJudging       = ipc.BenchJudging
+	BenchDone          = ipc.BenchDone
+	BenchFailed        = ipc.BenchFailed
 	OpContext          = ipc.OpContext
 	OpFork             = ipc.OpFork
 	ContextLog         = ipc.ContextLog
@@ -190,6 +204,7 @@ const (
 	ItemError          = ipc.ItemError
 	ItemStopped        = ipc.ItemStopped
 	OpSend             = ipc.OpSend
+	OpContinue         = ipc.OpContinue
 	OpFlip             = ipc.OpFlip
 	OpDock             = ipc.OpDock
 	DockStateUntrusted = ipc.DockStateUntrusted
@@ -197,6 +212,15 @@ const (
 	DockStateRunning   = ipc.DockStateRunning
 	DockStateExited    = ipc.DockStateExited
 	DockStateReady     = ipc.DockStateReady
+	OpGroup            = ipc.OpGroup
+	GroupList          = ipc.GroupList
+	GroupNew           = ipc.GroupNew
+	GroupAdd           = ipc.GroupAdd
+	GroupRemove        = ipc.GroupRemove
+	GroupRename        = ipc.GroupRename
+	GroupUngroup       = ipc.GroupUngroup
+	GroupMove          = ipc.GroupMove
+	MaxGroupDepth      = ipc.MaxGroupDepth
 	OpInput            = ipc.OpInput
 	InputSpawned       = ipc.InputSpawned
 	InputAdded         = ipc.InputAdded
@@ -250,6 +274,7 @@ const (
 	OpLearn            = ipc.OpLearn
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
+	FeatureBoostAlways = ipc.FeatureBoostAlways
 	FeatureWatch       = ipc.FeatureWatch
 	ViewApp            = ipc.ViewApp
 	ViewWatch          = ipc.ViewWatch
@@ -279,6 +304,7 @@ const (
 	ArchDuration       = ipc.ArchDuration
 	ArchNumber         = ipc.ArchNumber
 	ArchLines          = ipc.ArchLines
+	UnprovenTests      = ipc.UnprovenTests
 	DidUndo            = ipc.DidUndo
 	DidRedo            = ipc.DidRedo
 	DidSettle          = ipc.DidSettle

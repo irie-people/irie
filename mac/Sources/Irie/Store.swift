@@ -56,6 +56,10 @@ final class Store {
     var space = UserDefaults.standard.string(forKey: "space") ?? ""
     /// The space whose name is open to edit.
     var renamingSpace: String?
+    /// Your groups, as the core's header lists them, and the one whose name
+    /// is open to edit (Groups.swift).
+    var groups: [GroupInfo] = []
+    var renamingGroup: String?
     /// The card shown last in each space, which showing it again shows.
     @ObservationIgnored var lastShown: [String: String] = [:]
     /// The repos the @ words know and the agents the + words name, with what
@@ -77,14 +81,22 @@ final class Store {
     var learnTab = LearnTab.resources
     /// Whether the core reads and edits its config for the Settings window.
     private(set) var canConfigure = false
+    /// Whether the core sends an agent on with "continue" (op continue), for
+    /// a double ↓ on its empty prompt (ContinueKey.swift).
+    private(set) var canContinue = false
     /// Whether the core parks sessions (Controls.swift).
     private(set) var canPark = false
     /// Whether the core pins sessions (Tabs.swift).
     private(set) var canPin = false
+    /// Whether the core keeps your groups (Groups.swift).
+    private(set) var canGroup = false
     /// Whether the core has the trod bot (DESIGN §4.10).
     private(set) var canTrod = false
     /// The core gives a boost of Gabriel's (DESIGN §4.11).
     private(set) var canBoost = false
+    /// The core boosts always too (arch.gabriel.always), and its header
+    /// says how Gabriel boosts.
+    private(set) var canBoostAlways = false
     /// The core lists its arch agents (op arch).
     private(set) var canArch = false
     /// The core serves the plugins op (DESIGN §4.17).
@@ -101,6 +113,9 @@ final class Store {
     private(set) var archAgents: [ArchAgent] = []
     /// While a boost is on, when it ends.
     private(set) var boostUntil: Date?
+    /// Gabriel boosts always while you're at the computer
+    /// (arch.gabriel.always), as the core's header says.
+    private(set) var boostAlways = false
     /// Whether the core keeps a history to undo, and what undo and redo
     /// would take next (Undo.swift).
     private(set) var canUndo = false
@@ -151,6 +166,10 @@ final class Store {
     /// The card a drag holds, and where it would land (Controls.swift).
     var dragging: String?
     var dropMark: DropMark?
+    /// The group of yours a drag holds by its header, and where on a
+    /// header a held card or group would land (Groups.swift).
+    var draggingGroup: String?
+    var headerMark: HeaderMark?
     /// Bumped when the terminal should take keyboard focus.
     var focusTerminal = 0
     /// Bumped to move the keyboard to the session list or the find field.
@@ -161,6 +180,9 @@ final class Store {
     private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
     @ObservationIgnored weak var terminalView: NSView?
+    /// The split's lead pane, the picked session's own terminal while it
+    /// shows beside its teammates (TeamSplit.swift).
+    @ObservationIgnored weak var leadView: NSView?
     /// Whether the rows are `--snapshot`'s, which draws the terminal's frame
     /// round an empty terminal, as no core attaches one.
     private(set) var isFixture = false
@@ -192,6 +214,10 @@ final class Store {
     var focusMessage = 0
     /// Whether the message box has the keyboard.
     @ObservationIgnored var messageHasKeys = false
+    /// The message box's own field while it has the keyboard. The window
+    /// has one field editor for all its fields, so the field it edits tells
+    /// the box from the find field and the task bar (ContinueKey.swift).
+    @ObservationIgnored weak var messageField: NSTextField?
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     var outside: [OutsideSession] = []
@@ -302,10 +328,13 @@ final class Store {
                 canDock = hello.features.contains("dock")
                 rolodex.canShell = hello.features.contains("pane")
                 canConfigure = hello.features.contains("config")
+                canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
                 canPin = hello.features.contains("pin")
+                canGroup = hello.features.contains("group")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
+                canBoostAlways = hello.features.contains("boost-always")
                 canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
@@ -476,10 +505,22 @@ final class Store {
             // The VPN's part says how the VPN is now.
             loadPluginsSoon()
         }
+        // Gabriel's boost, however it was started: from ctl, Settings or
+        // this menu. An older core's header never says, so its boost is
+        // the one this app started.
+        if canBoostAlways {
+            let until = h.boost?.until, always = h.boost?.always ?? false
+            if until != boostUntil { boostUntil = until }
+            if always != boostAlways { boostAlways = always }
+        }
         if let s = h.spaces, s != spaces {
             spaces = s
             // A space removed leaves its cards in the first.
             if !space.isEmpty, !s.dropFirst().contains(where: { $0.id == space }) { setSpace("") }
+        }
+        // Every header lists every group, so one with none has none.
+        if (h.groups ?? []) != groups {
+            groups = h.groups ?? []
         }
     }
 
@@ -571,8 +612,11 @@ final class Store {
         canLearn = true
         canConfigure = true
         canPark = true
+        canGroup = true
+        groups = Fixture.groups
         canTrod = true
         canBoost = true
+        canBoostAlways = true
         canArch = true
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
@@ -627,8 +671,9 @@ final class Store {
     // MARK: Keyboard
 
     /// The sidebar's groups, without the rows the filter hides. In the List
-    /// view, one list; in the Repo view, a group per repo in the order its
-    /// first session started, then the sessions in no repo. Then the Parked
+    /// view, one list, with your groups in it; in the Repo view, a group per
+    /// repo in the order its first session started, then the sessions in no
+    /// repo. Then the Parked
     /// group, then a group for each paired machine's sessions, in the order
     /// the core lists them, so they stand apart from this Mac's (DESIGN
     /// §2.8); parked, one goes into Parked with the rest. Within a group the
@@ -655,9 +700,9 @@ final class Store {
             if !pinned.isEmpty {
                 out.append(SessionGroup(id: SessionGroup.pinned, title: "Pinned", path: nil, sessions: pinned))
             }
-            if !here.isEmpty {
-                out.append(SessionGroup(id: SessionGroup.list, title: "Sessions", path: nil, sessions: here))
-            }
+            // Your groups, each where the first of its cards is, and the
+            // cards of none between them (Groups.swift).
+            out += listGroups(here)
         case .repo:
             var order: [String] = [], byRepo: [String: [Session]] = [:], none: [Session] = []
             for s in here {
@@ -700,9 +745,9 @@ final class Store {
     }
 
     /// The cards in the order the sidebar draws them, without those in folded
-    /// groups or hidden by the filter. The keys that walk the sidebar follow
-    /// it.
-    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap(\.sessions) }
+    /// groups, a folded group inside one of yours too, or hidden by the
+    /// filter. The keys that walk the sidebar follow it.
+    var drawnOrder: [Session] { drawnGroups.filter(isOpen).flatMap { g in g.node.map(shown) ?? g.sessions } }
 
     /// A group is open unless folded, and Parked only once opened. Every
     /// group is open while the filter has text, so what it finds shows.
@@ -755,6 +800,37 @@ final class Store {
         let order = drawnOrder
         guard n >= 1, n <= order.count else { return }
         show(order[n - 1].id)
+    }
+
+    /// The session a terminal view types to, while it is the picked
+    /// session's own: the main terminal, or the split's lead pane. A
+    /// session of another machine's has no terminal here (ContinueTarget).
+    func continueSession(for view: NSView) -> String? {
+        guard let s = selectedRow, s.host == nil, outsideSelection == nil else { return nil }
+        if view === terminalView, showTerminal, splitSession == nil { return s.id }
+        if view === leadView, splitSession?.id == s.id { return s.id }
+        return nil
+    }
+
+    /// Whether the field editor edits the message box.
+    func isMessageBox(_ editor: NSTextView) -> Bool {
+        guard messageHasKeys, let field = messageField else { return false }
+        return (editor.delegate as AnyObject?) === field
+    }
+
+    /// Sends a session's agent on: the core types "continue" and Enter
+    /// into its prompt while the prompt is empty (op continue), for a
+    /// double ↓ on it (ContinueKey.swift). When it can't, as when the
+    /// prompt has something typed in it, a notice says why.
+    func continueAgent(_ id: String) {
+        guard canContinue else { return }
+        Task {
+            do {
+                _ = try await client.call("continue", ContinueArgs(session: id), as: Empty.self)
+            } catch {
+                say(error.localizedDescription, error: true)
+            }
+        }
     }
 
     /// Moves the keyboard between the session list and the terminal.
@@ -1101,6 +1177,23 @@ final class Store {
         }
     }
 
+    /// Boosts your focus whenever you're at the computer, or no longer:
+    /// arch.gabriel.always, in the config file, shown at once; the core's
+    /// header then says so (DESIGN §4.11). Off takes the key out of the
+    /// file, as boost off does.
+    func setBoostAlways(_ on: Bool) {
+        boostAlways = on
+        Task {
+            do {
+                _ = try await client.call("config", ConfigArgs(set: [ConfigSet(key: "arch.gabriel.always", value: on ? .bool(true) : .null)]), timeout: 10, as: ConfigResult.self)
+                say(on ? "Boosting your focus whenever you’re at the computer: the rest runs on the efficiency cores, so it finishes later." : "No longer boosting always: Gabriel holds back only while the Mac is busy.", error: false, seconds: 6)
+            } catch {
+                boostAlways = !on
+                say("Couldn’t \(on ? "boost always" : "stop boosting always"): \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
     /// Shows a notice at the top of the working area (NoticeToast), never
     /// over the task bar, has VoiceOver read it, and keeps it in the right
     /// sidebar's Notices tab. It goes by itself: a confirmation after
@@ -1237,7 +1330,7 @@ enum SidebarMode: String, CaseIterable {
 }
 
 /// One group of the sidebar: the list, a repo, the sessions in no repo, the
-/// parked ones, or a paired machine's.
+/// parked ones, a paired machine's, or one of your groups.
 struct SessionGroup: Identifiable, Equatable {
     let id: String
     let title: String
@@ -1246,6 +1339,16 @@ struct SessionGroup: Identifiable, Equatable {
     let sessions: [Session]
     /// The paired machine whose sessions it holds, for a machine's group.
     var host: String? = nil
+    /// Your group's id, for one of your groups (Groups.swift).
+    var userGroup: String? = nil
+    /// For one of your groups, what it holds as the List view draws it: its
+    /// cards and the groups inside it, in the list's one order. Its sessions
+    /// are every card within it, its groups' too.
+    var node: GroupNode? = nil
+
+    /// Whether it is drawn without a header: the List view's cards of no
+    /// group of yours, list, or list:1 and on after your groups.
+    var bare: Bool { id == Self.list || id.hasPrefix(Self.list + ":") }
 
     /// The List view's one group, which has no header, the Parked group,
     /// and the Pinned group at the top.
@@ -1289,3 +1392,6 @@ extension String {
     /// last folder.
     var repoLabel: String { hasPrefix("/") || hasPrefix("~") ? (self as NSString).lastPathComponent : self }
 }
+
+/// The double ↓ on an empty prompt asks the store (ContinueKey.swift).
+extension Store: ContinueTarget {}

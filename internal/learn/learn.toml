@@ -55,6 +55,10 @@ id = "irie.hows"
 text = "Ask how a session is going: type hows and its name in Irie's task bar"
 
 [[tip]]
+id = "irie.continue"
+text = "In Irie's app, press ↓ twice on an agent's empty prompt to send it on with “continue”"
+
+[[tip]]
 id = "irie.dog"
 text = "A finished jot whose work has not landed says what is left on its card, and irie ctl dog lists them all"
 
