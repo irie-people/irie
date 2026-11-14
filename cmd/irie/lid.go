@@ -17,19 +17,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/lid"
 	"github.com/irie-people/irie/internal/paths"
 )
 
-const lidUsage = `usage: irie lid [check [--file PATH]]
+const lidUsage = `usage: ` + brand.Slug + ` lid [check [--file PATH]]
 
-  irie lid                whether Irie keeps this Mac awake with its lid
+  ` + brand.Slug + ` lid                whether ` + brand.Name + ` keeps this Mac awake with its lid
                           closed now, and why
-  irie lid check          turn the Mac's sleep back on if no core has kept it
+  ` + brand.Slug + ` lid check          turn the Mac's sleep back on if no core has kept it
                           off for a while; the launchd agent runs it
-  irie setup lid [--remove]
-                          let Irie keep the Mac awake with its lid closed
+  ` + brand.Slug + ` setup lid [--remove]
+                          let ` + brand.Name + ` keep the Mac awake with its lid closed
                           while sessions work; asks for your password once
 `
 
@@ -50,7 +51,7 @@ func lidCmd(args []string) error {
 		}
 		did, err := lid.Check(lid.Mac{}, path, time.Now())
 		if did != "" {
-			fmt.Println("irie lid check: turned the Mac's sleep back on:", did)
+			fmt.Println(brand.Slug+" lid check: turned the Mac's sleep back on:", did)
 		}
 		return err
 	}
@@ -77,21 +78,21 @@ func lidStatus(w io.Writer, n config.Lid, p paths.Paths, m lid.Mac, now time.Tim
 	case config.LidWork:
 		fmt.Fprintf(w, "lid.awake = work: with its lid closed, the Mac stays awake while sessions work, and %v after.\n", n.Grace)
 	case config.LidAlways:
-		fmt.Fprintln(w, "lid.awake = always: with its lid closed, the Mac stays awake while Irie runs.")
+		fmt.Fprintln(w, "lid.awake = always: with its lid closed, the Mac stays awake while "+brand.Name+" runs.")
 	default:
 		fmt.Fprintln(w, "lid.awake = off: the Mac sleeps when its lid closes, as macOS decides.")
 	}
 	if !lid.Supported() {
-		fmt.Fprintln(w, "This is not a Mac: Irie leaves its sleep alone.")
+		fmt.Fprintln(w, "This is not a Mac: "+brand.Name+" leaves its sleep alone.")
 		return
 	}
 	home, _ := os.UserHomeDir()
 	_, agentErr := os.Stat(lid.AgentPath(home))
 	switch ok := m.Allowed(); {
 	case !ok:
-		fmt.Fprintln(w, "Not set up: run irie setup lid, which asks for your password once.")
+		fmt.Fprintln(w, "Not set up: run "+brand.Slug+" setup lid, which asks for your password once.")
 	case agentErr != nil:
-		fmt.Fprintln(w, "Set up, but the check that turns sleep back on if no core does is missing: run irie setup lid again.")
+		fmt.Fprintln(w, "Set up, but the check that turns sleep back on if no core does is missing: run "+brand.Slug+" setup lid again.")
 	default:
 		fmt.Fprintln(w, "Set up.")
 	}
@@ -100,11 +101,11 @@ func lidStatus(w io.Writer, n config.Lid, p paths.Paths, m lid.Mac, now time.Tim
 	case err != nil:
 		fmt.Fprintln(w, "lid.json:", err)
 	case s.Off:
-		fmt.Fprintf(w, "Now: Irie keeps the Mac awake, since %s (%s); last word %s ago.\n", s.Since.Local().Format("Jan 2 15:04"), s.Why, now.Sub(at).Round(time.Second))
+		fmt.Fprintf(w, "Now: "+brand.Name+" keeps the Mac awake, since %s (%s); last word %s ago.\n", s.Since.Local().Format("Jan 2 15:04"), s.Why, now.Sub(at).Round(time.Second))
 	case !s.Since.IsZero():
 		fmt.Fprintf(w, "Now: the Mac sleeps as usual, since %s (%s).\n", s.Since.Local().Format("Jan 2 15:04"), s.Why)
 	default:
-		fmt.Fprintln(w, "Now: the Mac sleeps as usual; Irie has not kept it awake.")
+		fmt.Fprintln(w, "Now: the Mac sleeps as usual; "+brand.Name+" has not kept it awake.")
 	}
 	var facts []string
 	if closed, err := m.Closed(); err == nil {
@@ -124,7 +125,7 @@ func lidStatus(w io.Writer, n config.Lid, p paths.Paths, m lid.Mac, now time.Tim
 		facts = append(facts, "heat "+[]string{"nominal", "moderate", "heavy", "trapping", "sleeping"}[min(max(h, 0), 4)])
 	}
 	if off, err := m.IsOff(); err == nil && off && !s.Off {
-		facts = append(facts, "sleep is off, but not by Irie")
+		facts = append(facts, "sleep is off, but not by "+brand.Name)
 	}
 	if len(facts) > 0 {
 		fmt.Fprintf(w, "The Mac: %s.\n", strings.Join(facts, "; "))
@@ -141,7 +142,7 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return errors.New("usage: irie setup lid [--remove]")
+		return errors.New("usage: " + brand.Slug + " setup lid [--remove]")
 	}
 	if !lid.Supported() {
 		return errors.New("setup lid: a lid is kept open only on a Mac")
@@ -166,18 +167,18 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 			if err := m.SleepOff(false); err != nil {
 				return fmt.Errorf("setup lid: turn sleep back on: %w", err)
 			}
-			lid.Write(p.LidFile(), lid.State{Off: false, Since: time.Now(), Why: "irie setup lid --remove"})
+			lid.Write(p.LidFile(), lid.State{Off: false, Since: time.Now(), Why: brand.Slug + " setup lid --remove"})
 		}
 		exec.Command("/bin/launchctl", "bootout", "gui/"+uid+"/"+lid.Label).Run()
 		if err := os.Remove(agent); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		if _, err := os.Stat(lid.Rule); err == nil {
-			if err := asRoot(lid.RemoveScript(), "Irie wants to remove the rule that let it keep this Mac awake with its lid closed."); err != nil {
+			if err := asRoot(lid.RemoveScript(), brand.Name+" wants to remove the rule that let it keep this Mac awake with its lid closed."); err != nil {
 				return fmt.Errorf("setup lid: remove %s: %w", lid.Rule, err)
 			}
 		}
-		fmt.Fprintln(stdout, "Done: the Mac sleeps when its lid closes again, whatever Irie is doing.")
+		fmt.Fprintln(stdout, "Done: the Mac sleeps when its lid closes again, whatever "+brand.Name+" is doing.")
 		return nil
 	}
 	u, err := user.Current()
@@ -193,7 +194,7 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if err := asRoot(script, "Irie wants to keep this Mac awake with its lid closed while agents work. It adds a rule that lets you turn sleep off and on without a password."); err != nil {
+		if err := asRoot(script, brand.Name+" wants to keep this Mac awake with its lid closed while agents work. It adds a rule that lets you turn sleep off and on without a password."); err != nil {
 			return fmt.Errorf("setup lid: install %s: %w", lid.Rule, err)
 		}
 		if !m.Allowed() {
@@ -202,7 +203,7 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	// The check runs the installed irie, which outlives a build in a
 	// worktree.
-	bin := filepath.Join(p.Data, "bin", "irie")
+	bin := filepath.Join(p.Data, "bin", brand.Slug)
 	if _, err := os.Stat(bin); err != nil {
 		if bin, err = os.Executable(); err != nil {
 			return err
@@ -218,10 +219,10 @@ func setupLid(args []string, stdin io.Reader, stdout io.Writer) error {
 	if out, err := exec.Command("/bin/launchctl", "bootstrap", "gui/"+uid, agent).CombinedOutput(); err != nil {
 		return fmt.Errorf("setup lid: launchctl bootstrap %s: %v: %s", agent, err, strings.TrimSpace(string(out)))
 	}
-	fmt.Fprintf(stdout, `Done: with its lid closed, this Mac now stays awake while Irie's sessions work.
+	fmt.Fprintf(stdout, `Done: with its lid closed, this Mac now stays awake while `+brand.Name+`'s sessions work.
   The rule:  %s lets you run pmset -a disablesleep 1 or 0 without a password.
   The check: %s turns sleep back on if no core does.
-Undo it with irie setup lid --remove.
+Undo it with `+brand.Slug+` setup lid --remove.
 `, strings.TrimPrefix(lid.Rule, "/private"), agent)
 	return nil
 }
@@ -240,7 +241,7 @@ func asRoot(script, why string) error {
 	quote := func(s string) string { return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"` }
 	out, err := exec.Command("/usr/bin/osascript", "-e", "do shell script "+quote(script)+" with prompt "+quote(why)+" with administrator privileges").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("macOS's password dialog: %v: %s (or run irie setup lid in a terminal)", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("macOS's password dialog: %v: %s (or run "+brand.Slug+" setup lid in a terminal)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

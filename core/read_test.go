@@ -61,6 +61,8 @@ func TestReadTurnsWordsIntoOps(t *testing.T) {
 		{":plugins", "", "", OpPlugins, PluginsArgs{}},
 		{":write", "", "", OpTool, ToolArgs{Name: ToolWrite}},
 		{":write notes on Chapter 3\nkeep it short", "s1", "", OpTool, ToolArgs{Name: ToolWrite, Task: "notes on Chapter 3\nkeep it short"}},
+		{":markets", "s1", "", OpMarkets, MarketsArgs{}},
+		{":markets   ", "", "", OpMarkets, MarketsArgs{}},
 		{":vpn", "", "", OpVPN, VPNArgs{}},
 		{":vpn on", "s1", "", OpVPN, VPNArgs{Do: VPNOn}},
 		{":vpn OFF", "", "", OpVPN, VPNArgs{Do: VPNOff}},
@@ -124,6 +126,8 @@ func TestReadRefusesInWords(t *testing.T) {
 		{"hows the weather", "", "", CodeNotFound, "No agent matches “weather”."},
 		{"+a +b fix it", "", "", CodeBadArgs, "Only one +profile per task."},
 		{"@web", "", "", CodeBadArgs, "Empty task: type what you want done after the @ or + words."},
+		{":markets @web add the cloud market", "", "", CodeBadArgs, "takes no @repo"},
+		{":markets +a +b add it", "", "", CodeBadArgs, "Only one +profile per task."},
 	} {
 		_, err := Read(InputArgs{Text: c.text, Session: c.session, Outside: c.outside}, view())
 		if code(err) != c.code || err == nil || !strings.Contains(err.Error(), c.says) {
@@ -163,6 +167,25 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 	st, err := Read(InputArgs{Text: "also check the docs", Apart: "s1"}, view())
 	if want := (SpawnArgs{Task: "also check the docs", Jot: true, Apart: "s1"}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) || st.Session == nil || st.Session.ID != "s1" {
 		t.Errorf("apart: %+v, %v", st, err)
+	}
+	// :markets TASK takes the menus' agent, model and tutor mode as a task
+	// does, and its own + words before them, but never their repo: its
+	// task runs in the map's folder, which the core knows. It isn't a jot,
+	// so it never goes to the agent of the task before.
+	for _, c := range []struct {
+		text string
+		want SpawnArgs
+	}{
+		{":markets add the cloud market\nwith shares", SpawnArgs{Task: "add the cloud market\nwith shares", Profile: "haiku", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+		{":markets +sonnet refresh the shares", SpawnArgs{Task: "refresh the shares", Profile: "sonnet", Model: "sonnet", Tutor: "explain", Space: "work", After: "s1"}},
+	} {
+		in := menus
+		in.Text, in.Session, in.Space = c.text, "s1", "work"
+		st, err := Read(in, view())
+		a, ok := st.Args.(MarketsArgs)
+		if err != nil || st.Op != OpMarkets || !ok || a.Task == nil || !reflect.DeepEqual(*a.Task, c.want) {
+			t.Errorf("%q: %s %+v, %v; want markets %+v", c.text, st.Op, st.Args, err, c.want)
+		}
 	}
 	// A question about an agent answers, and starts nothing.
 	st, err = Read(InputArgs{Text: "how's the login going?"}, view())
@@ -228,6 +251,11 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 			InputResult{Did: InputRan, Op: OpPark, Session: login, Text: "Parked fix login."}},
 		{"move", Step{Op: OpMove, Outside: &v.Outside[0]}, MoveResult{Session: Session{ID: "s7", Name: "api"}}, nil,
 			InputResult{Did: InputRan, Op: OpMove, Session: &Session{ID: "s7", Name: "api"}, Text: "Moved api into Irie."}},
+		{"markets", Step{Op: OpMarkets, Args: MarketsArgs{}}, MarketsResult{State: PartReady, Page: "/home/alice/maps/index.html", Text: "Your market map is ~/maps/index.html."}, nil,
+			InputResult{Did: InputAnswered, Op: OpMarkets, Text: "Your market map is ~/maps/index.html."}},
+		{"markets task", Step{Op: OpMarkets, Args: MarketsArgs{Task: &SpawnArgs{Task: "add it"}}}, MarketsResult{State: PartReady, Session: &started, Text: "Started flaky test in your market map's folder."}, nil,
+			InputResult{Did: InputSpawned, Op: OpMarkets, Session: &started,
+				Text: "Started flaky test on irie/flaky-test. Memory is low: 2.1 GB free of 16 GB. Copied .env."}},
 		{"hows", Step{Answer: "fix login: working", Session: login}, nil, nil,
 			InputResult{Did: InputAnswered, Session: login, Text: "fix login: working"}},
 	} {

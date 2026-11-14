@@ -14,11 +14,13 @@ dir=${1:?usage: mac/snapshot.sh DIR}
 mkdir -p "$dir"
 dir=$(cd "$dir" && pwd)
 cd "$(dirname "$0")"
+# The product's names, from internal/brand (DESIGN §2.10).
+eval "$(../tools/brand.sh)"
 
-app="$PWD/build/snapshot/Irie Preview.app"
+app="$PWD/build/snapshot/$BRAND_NAME Preview.app"
 ./build.sh --hot build/snapshot/obj "$app" >&2
 # Each drawing exits once its pictures are written, so each runs alone.
 for mode in --snapshot --render-conversation --render-onboarding; do
-	"$app/Contents/MacOS/IriePreview" "$mode" "$dir" >&2
+	"$app/Contents/MacOS/${BRAND_EXE}Preview" "$mode" "$dir" >&2
 done
 ls "$dir"

@@ -91,7 +91,7 @@ extension Look {
 }
 
 /// What a move ends, for the confirmation.
-let moveEnds = "Its copy outside Irie ends, and anything it runs in the background stops."
+let moveEnds = "Its copy outside \(Brand.name) ends, and anything it runs in the background stops."
 
 extension Store {
     /// The outside rows the sidebar draws: the order they started, without
@@ -143,9 +143,9 @@ extension Store {
 
     /// Return on an outside row: it cannot be shown, so say why.
     func explainOutside(_ o: OutsideSession) {
-        var text = "\(o.label) runs outside Irie, \(o.whereItRuns)."
+        var text = "\(o.label) runs outside \(Brand.name), \(o.whereItRuns)."
         if o.movable == true {
-            text += " Move into Irie carries it on here."
+            text += " Move into \(Brand.name) carries it on here."
         } else if let why = o.why {
             text += " It can’t move yet: \(why)."
         }
@@ -171,7 +171,7 @@ extension Store {
             do {
                 // A move waits its turn behind a spawn, which may make a worktree.
                 let r = try await client.call("move", MoveArgs(vendorId: id), timeout: 600, as: MoveResult.self)
-                say("Moved \(r.session.name) into Irie.", error: false)
+                say("Moved \(r.session.name) into \(Brand.name).", error: false)
                 show(r.session.id, focus: true)
             } catch {
                 say(error.localizedDescription, error: true)
@@ -193,16 +193,16 @@ struct OutsideSection: View {
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text("Outside Irie").font(.system(size: 11, weight: .semibold))
+                    Text("Outside \(Brand.name)").font(.system(size: 11, weight: .semibold))
                     Text("\(rows.count)").font(.system(size: 11, weight: .bold, design: .rounded)).monospacedDigit()
                     Rectangle().fill(Theme.edge).frame(height: 1)
                 }
                 .foregroundStyle(Theme.muted)
                 .padding(.top, 10)
                 .padding(.horizontal, 4)
-                .help("Claude Code sessions that run in other terminals. Select one to move it into Irie.")
+                .help("Claude Code sessions that run in other terminals. Select one to move it into \(Brand.name).")
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Outside Irie, \(rows.count) Claude Code sessions in other terminals")
+                .accessibilityLabel("Outside \(Brand.name), \(rows.count) Claude Code sessions in other terminals")
                 .accessibilityAddTraits(.isHeader)
                 ForEach(rows) { o in
                     OutsideRow(outside: o, selected: o.id == store.outsideSelection, listFocused: listFocused, now: now)
@@ -249,7 +249,7 @@ private struct OutsideRow: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Theme.muted)
                 .disabled(!canMove)
-                .help(outside.movable == true ? "Move into Irie" : "Can’t move yet: \(outside.why ?? "it isn’t idle")")
+                .help(outside.movable == true ? "Move into \(Brand.name)" : "Can’t move yet: \(outside.why ?? "it isn’t idle")")
                 .opacity(hovering || selected ? 1 : 0)
                 .allowsHitTesting(hovering || selected)
                 .accessibilityHidden(true)
@@ -273,7 +273,7 @@ private struct OutsideRow: View {
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { store.outsideSelection = outside.id }
         .accessibilityActions {
-            Button("Move into Irie") { store.askToMove(outside) }
+            Button("Move into \(Brand.name)") { store.askToMove(outside) }
             if let v = outside.vendorId {
                 Button("Copy the session ID") { store.copy(v, what: "session ID") }
             }
@@ -296,7 +296,7 @@ private struct OutsideRow: View {
     }
 
     private var spoken: String {
-        [outside.label + ", outside Irie", outside.doing, outside.whereItRuns, outside.started.map { "started " + Age.spoken($0, now: now) }]
+        [outside.label + ", outside \(Brand.name)", outside.doing, outside.whereItRuns, outside.started.map { "started " + Age.spoken($0, now: now) }]
             .compactMap { $0 }.joined(separator: ", ")
     }
 }
@@ -308,16 +308,19 @@ private struct OutsideActions: View {
     let outside: OutsideSession
 
     var body: some View {
-        Button(outside.movable == true ? "Move into Irie…" : "Move into Irie (\(outside.doing.lowercased()))") {
+        Button(outside.movable == true ? "Move into \(Brand.name)…" : "Move into \(Brand.name) (\(outside.doing.lowercased()))") {
             store.askToMove(outside)
         }
         .disabled(outside.movable != true || store.moving != nil)
         Divider()
-        if let v = outside.vendorId {
-            Button("Copy Session ID") { store.copy(v, what: "session ID") }
+        // As a card's menu has them (SidebarView.swift).
+        Menu("Copy") {
+            Button("Folder Path") { store.copy(outside.cwd, what: "folder path") }
+            if let v = outside.vendorId {
+                Button("Session ID") { store.copy(v, what: "session ID") }
+            }
         }
-        Button("Show Folder in Finder") { store.reveal(outside.cwd) }
-        Button("Copy Folder Path") { store.copy(outside.cwd, what: "folder path") }
+        Button("Show in Finder") { store.reveal(outside.cwd) }
     }
 }
 
@@ -339,7 +342,7 @@ struct OutsideDetails: View {
                     .foregroundStyle(look.loud ? Theme.needs : Theme.ink)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                Button(store.moving == outside.id ? "Moving…" : "Move into Irie") { store.askToMove(outside) }
+                Button(store.moving == outside.id ? "Moving…" : Brand.isLong ? "Move In" : "Move into \(Brand.name)") { store.askToMove(outside) }
                     .disabled(outside.movable != true || store.moving != nil)
                 if let v = outside.vendorId {
                     Button("Copy Session ID") { store.copy(v, what: "session ID") }
@@ -348,7 +351,7 @@ struct OutsideDetails: View {
             }
             .controlSize(.small)
             line(outside.label, color: Theme.ink)
-            line("Outside Irie, " + outside.whereItRuns)
+            line("Outside \(Brand.name), " + outside.whereItRuns)
             line(Age.tilde(outside.cwd), mono: true)
             if outside.movable != true {
                 // The button is off; this says why.
@@ -375,12 +378,12 @@ struct OutsideMoveConfirmation: ViewModifier {
 
     func body(content: Content) -> some View {
         content.confirmationDialog(
-            "Move \(store.confirmingMove?.label ?? "it") into Irie?",
+            "Move \(store.confirmingMove?.label ?? "it") into \(Brand.name)?",
             isPresented: Binding(get: { store.confirmingMove != nil }, set: { if !$0 { store.confirmingMove = nil } }),
             titleVisibility: .visible,
             presenting: store.confirmingMove
         ) { o in
-            Button("Move into Irie") { store.move(o) }
+            Button("Move into \(Brand.name)") { store.move(o) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text(moveEnds)

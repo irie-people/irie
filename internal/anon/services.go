@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Irie's own Tor and SearXNG live in <data>/anon: tor/ holds Tor's config
@@ -41,7 +43,7 @@ func (d Dirs) SearxSecret() string { return filepath.Join(d.Root, "searxng", "se
 // compartments never share a Tor exit at once (tor(1), "SocksPort").
 func Torrc(d Dirs, ports []int) string {
 	var b strings.Builder
-	b.WriteString("# Irie's own Tor (DESIGN §4.16). Irie writes this file again whenever a Tor\n# compartment is made: edits are lost.\n")
+	b.WriteString("# " + brand.Name + "'s own Tor (DESIGN §4.16). " + brand.Name + " writes this file again whenever a Tor\n# compartment is made: edits are lost.\n")
 	fmt.Fprintf(&b, "DataDirectory %s\n", filepath.Join(d.Tor(), "data"))
 	fmt.Fprintf(&b, "PidFile %s\n", d.TorPid())
 	ports = slices.Clone(ports)
@@ -120,7 +122,7 @@ func WaitPorts(ctx context.Context, ports []int) error {
 var torPlaces = []string{"/opt/homebrew/bin/tor", "/usr/local/bin/tor", "/usr/bin/tor", "/usr/sbin/tor"}
 
 // ErrNoTor is FindTor's error when tor is nowhere to be found.
-var ErrNoTor = errors.New("tor is not installed (irie setup anon installs it)")
+var ErrNoTor = errors.New("tor is not installed (" + brand.Slug + " setup anon installs it)")
 
 // FindTor finds tor: configured, else on the PATH, else where Homebrew and
 // Linux packages put it.
@@ -215,9 +217,9 @@ type SearxOptions struct {
 func SearxSettings(o SearxOptions) string {
 	q := func(s string) string { return strconv.Quote(s) }
 	var b strings.Builder
-	b.WriteString("# Irie's own SearXNG (DESIGN §4.16). Irie writes this file as it starts SearXNG:\n# edits are lost.\n")
+	b.WriteString("# " + brand.Name + "'s own SearXNG (DESIGN §4.16). " + brand.Name + " writes this file as it starts SearXNG:\n# edits are lost.\n")
 	b.WriteString("use_default_settings: true\n")
-	b.WriteString("general:\n  instance_name: \"Irie\"\n  enable_metrics: false\n")
+	b.WriteString("general:\n  instance_name: \"" + brand.Name + "\"\n  enable_metrics: false\n")
 	b.WriteString("search:\n  safe_search: 0\n  autocomplete: \"\"\n  formats:\n    - html\n    - json\n")
 	fmt.Fprintf(&b, "server:\n  bind_address: \"127.0.0.1\"\n  port: %d\n  secret_key: %s\n  limiter: false\n  public_instance: false\n  image_proxy: true\n  method: \"POST\"\n", o.Port, q(o.Secret))
 	b.WriteString("outgoing:\n  request_timeout: 6.0\n  max_request_timeout: 20.0\n")

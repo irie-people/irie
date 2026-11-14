@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // installDirs are where Ollama's installers put the binary: Homebrew on
@@ -68,9 +70,9 @@ func HowToInstall(goos string, lookPath func(string) (string, error)) Install {
 				Hint: "Homebrew's ollama formula: brew install ollama (or the app from https://ollama.com/download)",
 			}
 		}
-		return Install{Hint: "download Ollama from https://ollama.com/download, open the app once, then run `irie setup local` again"}
+		return Install{Hint: "download Ollama from https://ollama.com/download, open the app once, then run `" + brand.Slug + " setup local` again"}
 	}
-	return Install{Hint: "install Ollama from https://ollama.com/download, then run `irie setup local` again"}
+	return Install{Hint: "install Ollama from https://ollama.com/download, then run `" + brand.Slug + " setup local` again"}
 }
 
 // HowToInstallHere is HowToInstall for this system.

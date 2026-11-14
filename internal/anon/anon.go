@@ -24,17 +24,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/filetx"
 )
 
-// The routes a compartment leaves by.
+// The routes a compartment leaves by, as the config names them.
 const (
-	Mullvad = "mullvad" // a Mullvad relay's SOCKS5 proxy, inside the Mac's own Mullvad tunnel
-	Tor     = "tor"     // Irie's own Tor, on a SocksPort of the compartment's own
+	Mullvad = config.AnonMullvad
+	Tor     = config.AnonTor
 )
 
 // Routes are the routes, in the order the config names them.
-var Routes = []string{Mullvad, Tor}
+var Routes = config.AnonRoutes
 
 // SearchName is the compartment of Irie's SearXNG: the engines see its exit,
 // never a research compartment's or the Mac's own.
@@ -228,7 +230,7 @@ func Take(s Store, name, route string, o Options, relays []Relay, avoid string, 
 			}
 			c.Relay, c.Country, c.City = r.Host, r.Country, r.City
 		default:
-			return fmt.Errorf("%s has route %q, which Irie does not know", name, c.Route)
+			return fmt.Errorf("%s has route %q, which "+brand.Name+" does not know", name, c.Route)
 		}
 		all[name] = c
 		out.Compartment = c
@@ -300,12 +302,12 @@ func Environ(environ []string, c Compartment) []string {
 	out := make([]string, 0, len(environ)+9)
 	for _, kv := range environ {
 		k, _, _ := strings.Cut(kv, "=")
-		if k == "IRIE_ANON" || strings.HasSuffix(strings.ToUpper(k), "_PROXY") {
+		if k == brand.Env("ANON") || strings.HasSuffix(strings.ToUpper(k), "_PROXY") {
 			continue
 		}
 		out = append(out, kv)
 	}
-	return append(append(out, ProxyEnv(c.Proxy())...), "IRIE_ANON="+c.Name)
+	return append(append(out, ProxyEnv(c.Proxy())...), brand.EnvPrefix+"_ANON="+c.Name)
 }
 
 // LocalProxyEnv are the proxy variables of an anonymous session's shell:
@@ -329,7 +331,7 @@ func LocalProxyEnv(socks, http int) []string {
 // IRIE_ANON naming the compartment.
 func Exports(name string, socks, http int) string {
 	var b []byte
-	for _, kv := range append(LocalProxyEnv(socks, http), "IRIE_ANON="+name) {
+	for _, kv := range append(LocalProxyEnv(socks, http), brand.EnvPrefix+"_ANON="+name) {
 		k, v, _ := strings.Cut(kv, "=")
 		b = fmt.Appendf(b, "export %s=%s\n", k, shellQuote(v))
 	}

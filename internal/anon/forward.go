@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // closedPorts are the ports the forwarder refuses: signing in (SSH,
@@ -98,7 +100,7 @@ func (f Forwarder) connect(ctx context.Context, host string, port int) (net.Conn
 	}
 	up, err := dial(ctx, "tcp", f.Exit)
 	if err != nil {
-		return nil, 1, errors.New("the exit didn't answer (is Mullvad VPN connected, or Irie's Tor running?)")
+		return nil, 1, errors.New("the exit didn't answer (is Mullvad VPN connected, or " + brand.Name + "'s Tor running?)")
 	}
 	req := []byte{5, 1, 0}
 	if ip := net.ParseIP(host); ip == nil {

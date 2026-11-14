@@ -11,31 +11,32 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/peer"
 	"github.com/irie-people/irie/internal/remote"
 )
 
-const peerUsage = `usage: irie peer <command>
+const peerUsage = `usage: ` + brand.Slug + ` peer <command>
 
-Your other machines' Irie, which this one shows in its list and starts
+Your other machines' ` + brand.Name + `, which this one shows in its list and starts
 tasks on with ^NAME (docs/proposals/multi-host.md). Each runs its phone
-app's gateway: irie remote on, there.
+app's gateway: ` + brand.Slug + ` remote on, there.
 
-  irie peer add [NAME] LINK
-                          pair with the machine whose irie remote pair --link
-                          printed LINK (irie://pair?…), and call it NAME here;
+  ` + brand.Slug + ` peer add [NAME] LINK
+                          pair with the machine whose ` + brand.Slug + ` remote pair --link
+                          printed LINK (` + brand.Slug + `://pair?…), and call it NAME here;
                           NAME is the machine's own name when left out
-  irie peer add [NAME] --ssh HOST [--irie PATH]
-                          the same, running irie remote pair --link on HOST
-                          over ssh (PATH: ~/.local/share/irie/bin/irie)
-  irie peer list          the machines this one is paired with, and how each is
-  irie peer fetch [SESSION]
+  ` + brand.Slug + ` peer add [NAME] --ssh HOST [--` + brand.Slug + ` PATH]
+                          the same, running ` + brand.Slug + ` remote pair --link on HOST
+                          over ssh (PATH: ~/.local/share/` + brand.Slug + `/bin/` + brand.Slug + `)
+  ` + brand.Slug + ` peer list          the machines this one is paired with, and how each is
+  ` + brand.Slug + ` peer fetch [SESSION]
                           fetch the branch of another machine's session, or
                           of each whose turn ended, into the repo of the same
-                          name here, as <machine>/<branch> (Irie does this by
+                          name here, as <machine>/<branch> (` + brand.Name + ` does this by
                           itself when a turn ends)
-  irie peer remove NAME   unpair one
+  ` + brand.Slug + ` peer remove NAME   unpair one
 `
 
 func peerCmd(args []string) error {
@@ -51,8 +52,8 @@ func peerCmd(args []string) error {
 	switch sub {
 	case "add":
 		fs := flag.NewFlagSet("peer add", flag.ContinueOnError)
-		ssh := fs.String("ssh", "", "run irie remote pair --link on this ssh host")
-		bin := fs.String("irie", "$HOME/.local/share/irie/bin/irie", "irie on the ssh host")
+		ssh := fs.String("ssh", "", "run "+brand.Slug+" remote pair --link on this ssh host")
+		bin := fs.String(brand.Slug, "$HOME/.local/share/"+brand.Slug+"/bin/"+brand.Slug, brand.Slug+" on the ssh host")
 		var pos []string
 		// NAME and LINK may come before or after the flags.
 		for len(args) > 0 {
@@ -78,7 +79,7 @@ func peerCmd(args []string) error {
 		case *ssh == "" && len(pos) == 2:
 			name, text = pos[0], pos[1]
 		default:
-			return errors.New("usage: irie peer add [NAME] LINK, or irie peer add [NAME] --ssh HOST")
+			return errors.New("usage: " + brand.Slug + " peer add [NAME] LINK, or " + brand.Slug + " peer add [NAME] --ssh HOST")
 		}
 		link, err := peer.ParseLink(text)
 		if err != nil {
@@ -88,7 +89,7 @@ func peerCmd(args []string) error {
 			name = link.Name
 		}
 		if err := peer.CheckName(name); err != nil {
-			return fmt.Errorf("%w; name it with irie peer add NAME …", err)
+			return fmt.Errorf("%w; name it with "+brand.Slug+" peer add NAME …", err)
 		}
 		me := cfg.Remote.Name
 		if me == "" {
@@ -108,16 +109,16 @@ func peerCmd(args []string) error {
 			return fmt.Errorf("%s doesn't answer at %s: %w", name, link.URL, err)
 		}
 		if info.API != ipc.API {
-			return fmt.Errorf("%s runs Irie's API %d and this machine %d: install the same Irie on both", name, info.API, ipc.API)
+			return fmt.Errorf("%s runs "+brand.Name+"'s API %d and this machine %d: install the same "+brand.Name+" on both", name, info.API, ipc.API)
 		}
-		token, err := cl.Pair(ctx, link.Code, me+" (Irie)")
+		token, err := cl.Pair(ctx, link.Code, me+" ("+brand.Name+")")
 		if err != nil {
 			return fmt.Errorf("pairing with %s: %w", name, err)
 		}
 		if err := peer.Save(p.State, name, peer.Peer{URL: link.URL, Token: token, Fingerprint: link.Fingerprint, Machine: info.ID, SSH: *ssh, Paired: time.Now().UTC()}); err != nil {
 			return err
 		}
-		fmt.Printf("Paired with %s (%s, %s, Irie %s).\n", name, link.URL, info.OS, info.Version)
+		fmt.Printf("Paired with %s (%s, %s, "+brand.Name+" %s).\n", name, link.URL, info.OS, info.Version)
 		reloadPeers(p.Socket(), name)
 		return nil
 	case "list":
@@ -129,11 +130,11 @@ func peerCmd(args []string) error {
 				return lerr
 			}
 			for _, n := range peer.Names(ps) {
-				res.Peers = append(res.Peers, ipc.PeerInfo{Name: n, URL: ps[n].URL, Problem: "Irie isn't running here"})
+				res.Peers = append(res.Peers, ipc.PeerInfo{Name: n, URL: ps[n].URL, Problem: brand.Name + " isn't running here"})
 			}
 		}
 		if len(res.Peers) == 0 {
-			fmt.Println("This machine is paired with no other. irie peer add pairs one.")
+			fmt.Println("This machine is paired with no other. " + brand.Slug + " peer add pairs one.")
 			return nil
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
@@ -164,7 +165,7 @@ func peerCmd(args []string) error {
 		case 1:
 			what = args[0]
 		default:
-			return errors.New("usage: irie peer fetch [SESSION]")
+			return errors.New("usage: " + brand.Slug + " peer fetch [SESSION]")
 		}
 		var res ipc.PeersResult
 		if err := ipc.Call(p.Socket(), 10*time.Minute, ipc.OpPeers, ipc.PeersArgs{Fetch: what}, &res); err != nil {
@@ -184,7 +185,7 @@ func peerCmd(args []string) error {
 		return nil
 	case "remove":
 		if len(args) != 1 {
-			return errors.New("usage: irie peer remove NAME")
+			return errors.New("usage: " + brand.Slug + " peer remove NAME")
 		}
 		name := args[0]
 		ps, err := peer.Load(p.State)
@@ -200,7 +201,7 @@ func peerCmd(args []string) error {
 		if cl, err := peer.New(pc.URL, pc.Token, pc.Fingerprint); err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := cl.Forget(ctx); err != nil {
-				fmt.Fprintf(os.Stderr, "irie: %s didn't hear it (%v); irie remote forget there unpairs this machine\n", name, err)
+				fmt.Fprintf(os.Stderr, brand.Slug+": %s didn't hear it (%v); "+brand.Slug+" remote forget there unpairs this machine\n", name, err)
 			}
 			cancel()
 		}
@@ -220,21 +221,21 @@ func linkOverSSH(host, bin string) (string, error) {
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("ssh %s irie remote pair --link: %w", host, err)
+		return "", fmt.Errorf("ssh %s "+brand.Slug+" remote pair --link: %w", host, err)
 	}
 	for _, line := range strings.Split(string(out), "\n") {
-		if l := strings.TrimSpace(line); strings.HasPrefix(l, "irie://") {
+		if l := strings.TrimSpace(line); strings.HasPrefix(l, brand.Slug+"://") {
 			return l, nil
 		}
 	}
-	return "", fmt.Errorf("%s printed no pairing link; is its Irie from this version?", host)
+	return "", fmt.Errorf("%s printed no pairing link; is its "+brand.Name+" from this version?", host)
 }
 
 // reloadPeers asks the core to follow the peers as they are now kept.
 func reloadPeers(socket, added string) {
 	var res ipc.PeersResult
 	if err := ipc.Call(socket, 5*time.Second, ipc.OpPeers, ipc.PeersArgs{Reload: true}, &res); err != nil {
-		fmt.Println("Irie isn't running here; it follows its peers once it starts.")
+		fmt.Println(brand.Name + " isn't running here; it follows its peers once it starts.")
 		return
 	}
 	if added != "" {

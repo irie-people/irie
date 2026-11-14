@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Want is the layout the core keeps.
@@ -134,7 +136,7 @@ func Plan(s Snapshot, w Want) [][]string {
 	// Exactly one placeholder: in the slot, or the shown pane's way home.
 	placeholders := s.ByRole(RolePlaceholder)
 	if len(placeholders) == 0 {
-		name := "irie-home-" + strings.TrimPrefix(slot.ID, "%")
+		name := brand.Slug + "-home-" + strings.TrimPrefix(slot.ID, "%")
 		return [][]string{
 			append([]string{"new-window", "-d", "-t", AgentsSession + ":", "-n", name, "--"}, w.placeholder()...),
 			setOption(AgentsSession+":="+name, OptRole, RolePlaceholder),

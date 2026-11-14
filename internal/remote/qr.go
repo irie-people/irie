@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"rsc.io/qr"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // QR encodes text as a QR code at the medium level of error correction,
@@ -47,5 +49,5 @@ func PairLink(base, code, fingerprint, name string) string {
 	q.Set("c", code)
 	q.Set("f", fingerprint)
 	q.Set("n", name)
-	return "irie://pair?" + q.Encode()
+	return brand.Slug + "://pair?" + q.Encode()
 }

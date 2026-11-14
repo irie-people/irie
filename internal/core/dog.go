@@ -27,6 +27,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
@@ -323,9 +324,9 @@ func asksUser(msg string) bool {
 func unfinished(loose []looseIn, unproven string, run testRun) string {
 	var b strings.Builder
 	if len(loose) > 0 {
-		b.WriteString("[Irie] The jot dog: this task is not through yet.")
+		b.WriteString("[" + brand.Name + "] The jot dog: this task is not through yet.")
 	} else {
-		b.WriteString("[Irie] The jot dog: your report says more than your work shows.")
+		b.WriteString("[" + brand.Name + "] The jot dog: your report says more than your work shows.")
 	}
 	for _, l := range looseLines(loose) {
 		b.WriteString("\n- " + l)

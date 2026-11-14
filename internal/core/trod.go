@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
@@ -89,7 +90,7 @@ const trodBy = "trod"
 
 // trodPrefix starts every note the trod bot gives an agent, so that a view
 // can tell its messages from yours.
-const trodPrefix = "[Irie] The trod bot:"
+const trodPrefix = "[" + brand.Name + "] The trod bot:"
 
 // trodHandKey is the key of state.json that holds the run of the trod bot
 // you started by hand, so that a restarted core goes on with it.

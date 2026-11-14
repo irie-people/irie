@@ -93,7 +93,7 @@ private struct SessionList: View {
             Offline(why: why, socket: store.socketPath)
         } else if store.sessions.isEmpty && store.outside.isEmpty {
             if store.link == .connecting {
-                Hint(text: "Connecting to Irie…")
+                Hint(text: "Connecting to \(Brand.name)…")
             } else {
                 Welcome()
             }
@@ -587,7 +587,7 @@ private struct GroupHeader: View {
             return "Out of the way, and still running. Unpark one with its P button, z, or a drag out of Parked; ⌘Z takes back the last park."
         }
         if let h = group.host {
-            return "Irie’s sessions on \(h), the machine paired with this Mac. They run there, in the order they have there."
+            return "\(Brand.name)’s sessions on \(h), the machine paired with this Mac. They run there, in the order they have there."
         }
         return group.path.map(Age.tilde) ?? group.title
     }
@@ -1052,28 +1052,32 @@ private struct Actions: View {
         }
     }
 
+    /// The menu bar's Session menu has the middle part in the same words
+    /// and order (MenuBar.swift). A click on the card shows it and types to
+    /// it, so the menu leaves that out.
     @ViewBuilder private var one: some View {
-        Button("Show and Type to It") { store.show(session.id, focus: true) }
+        Button("Rename…") { store.beginRename(session.id) }
         Button("Open in Ghostty") {
             store.show(session.id)
             store.openInGhostty()
         }
-        Button("Rename…") { store.beginRename(session.id) }
         Divider()
         ControlItems(session: session, canUp: !first, canDown: !last)
         Divider()
+        Menu("Copy") {
+            if let cwd = session.cwd {
+                Button("Folder Path") { store.copy(cwd, what: "folder path") }
+            }
+            if let branch = session.branch, !branch.isEmpty {
+                Button("Branch Name") { store.copy(branch, what: "branch name") }
+            }
+            Button("Session ID") { store.copy(session.id, what: "session ID") }
+        }
         if let cwd = session.cwd {
-            Button("Show Folder in Finder") { store.reveal(cwd) }
-            Button("Copy Folder Path") { store.copy(cwd, what: "folder path") }
+            Button("Show in Finder") { store.reveal(cwd) }
         }
-        if let branch = session.branch, !branch.isEmpty {
-            Button("Copy Branch Name") { store.copy(branch, what: "branch name") }
-        }
-        Button("Copy Session ID") { store.copy(session.id, what: "session ID") }
         Divider()
-        SpaceMenu(list: [session])
-        Divider()
-        Button("Close Session") { store.close(session) }
+        Button("Close") { store.close(session) }
         CloseManyItems(session: session)
     }
 }
@@ -1084,10 +1088,10 @@ private struct TitleName: View {
     var body: some View {
         HStack(spacing: 3) {
             SunMark().frame(width: 14, height: 14)
-            Text("Irie").font(.system(size: 13, weight: .heavy, design: .rounded))
+            BrandName(font: .system(size: 13, weight: .heavy, design: .rounded), maxWidth: 150)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Irie")
+        .accessibilityLabel("\(Brand.name)")
         .accessibilityAddTraits(.isHeader)
         // The gap to the counts, which are an item of their own.
         .padding(.trailing, 6)
@@ -1169,7 +1173,7 @@ private struct Counts: View {
     /// Mullvad VPN (docs/proposals/extensions.md §4.1): a shield, green while
     /// connected, yellow while it comes or goes, red in error or while
     /// lockdown blocks the network, and muted when off. A click says the
-    /// state in a notice; File > VPN changes it.
+    /// state in a notice; Plugins › Mullvad VPN changes it.
     private func vpnMark(_ v: VPNMark) -> some View {
         let color: Color
         switch v.state {

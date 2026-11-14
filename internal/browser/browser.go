@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/mcp"
 )
 
@@ -40,7 +42,7 @@ type Options struct {
 
 // DefaultSearch is DuckDuckGo's page for browsers without JavaScript,
 // which answers with plain links.
-const DefaultSearch = "https://html.duckduckgo.com/html/?q=%s"
+const DefaultSearch = config.BrowserSearch
 
 // Limits on what one call returns, under the 50,000 characters past which
 // Claude Code saves a tool's result to a file instead.
@@ -182,14 +184,14 @@ func (b *Browser) ensure(ctx context.Context) (string, error) {
 	exe, err := Find(b.o.Path)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return "", errors.New("Mullvad Browser is not installed here. Ask the user to install it (`irie setup browser`, or `brew install --cask mullvad-browser` on a Mac), or to set browser.path in Irie's config to another Firefox-based browser")
+			return "", errors.New("Mullvad Browser is not installed here. Ask the user to install it (`" + brand.Slug + " setup browser`, or `brew install --cask mullvad-browser` on a Mac), or to set browser.path in " + brand.Name + "'s config to another Firefox-based browser")
 		}
 		return "", fmt.Errorf("the browser in browser.path: %w", err)
 	}
 	dir := b.o.Profile
 	if dir == "" {
 		if b.tmpDir == "" {
-			if b.tmpDir, err = os.MkdirTemp("", "irie-browser-"); err != nil {
+			if b.tmpDir, err = os.MkdirTemp("", brand.Slug+"-browser-"); err != nil {
 				return "", err
 			}
 		}

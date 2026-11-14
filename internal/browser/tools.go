@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // The tools an agent sees, as mcp__irie-browser__<name> in Claude Code.
@@ -38,7 +40,7 @@ func (b *Browser) instructions() string {
 	if b.o.Idle > 0 {
 		idle = fmt.Sprintf(" and closes after %s without a call", roundDur(b.o.Idle))
 	}
-	return "Irie's browser is a real web browser this session can drive (" + name + "). " +
+	return brand.Name + "'s browser is a real web browser this session can drive (" + name + "). " +
 		"Use it when WebFetch returns little or nothing, as for pages that build themselves with JavaScript (pricing pages, single-page apps), " +
 		"when a page needs clicks, typing or a form, when you need to see a page, or to search the web where WebSearch is not available. " +
 		"Start with open or search; read goes on through long pages; links numbers the links for click. " +
@@ -380,7 +382,7 @@ func (b *Browser) click(ctx context.Context, args json.RawMessage) toolResult {
 			"context": t.ctx,
 			"actions": []any{map[string]any{
 				"type":       "pointer",
-				"id":         "irie-mouse",
+				"id":         brand.Slug + "-mouse",
 				"parameters": map[string]any{"pointerType": "mouse"},
 				"actions": []any{
 					map[string]any{"type": "pointerMove", "x": 0, "y": 0, "origin": map[string]any{"type": "element", "element": local(el)}},
@@ -445,7 +447,7 @@ func (b *Browser) typeTool(ctx context.Context, args json.RawMessage) toolResult
 		if len(keys) > 0 {
 			err = b.run.conn.call(ctx, "input.performActions", map[string]any{
 				"context": t.ctx,
-				"actions": []any{map[string]any{"type": "key", "id": "irie-keyboard", "actions": keys}},
+				"actions": []any{map[string]any{"type": "key", "id": brand.Slug + "-keyboard", "actions": keys}},
 			}, nil)
 			if err != nil {
 				return errorResult("could not type into %s: %v", info.Label, err)

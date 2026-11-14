@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Plain words for tool calls. The sidebar's rows and the Mac app's
@@ -922,8 +924,8 @@ func programWords(prog string, args []string, out string) (words, int, bool) {
 		return say("check", "background services"), rankKnown, true
 	case "claude":
 		return say("run", "Claude Code"), rankKnown, true
-	case "irie":
-		return say("run", "Irie"), rankKnown, true
+	case brand.Slug:
+		return say("run", brand.Name), rankKnown, true
 	case "code", "cursor", "vim", "nvim", "vi", "nano", "emacs", "subl", "zed":
 		return say("open", or(base(first), "an editor")), rankKnown, true
 	case "man", "tldr":

@@ -85,10 +85,16 @@ final class Store {
     private(set) var canTrod = false
     /// The core gives a boost of Gabriel's (DESIGN §4.11).
     private(set) var canBoost = false
+    /// The core boosts always too (arch.gabriel.always), and its header
+    /// says how Gabriel boosts.
+    private(set) var canBoostAlways = false
     /// The core lists its arch agents (op arch).
     private(set) var canArch = false
     /// The core serves the plugins op (DESIGN §4.17).
     private(set) var canPlugins = false
+    /// The core serves the vpn op: its build has the privacy plugin
+    /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
+    private(set) var canVPN = false
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
     var plugins: [PluginInfo] = []
@@ -98,6 +104,9 @@ final class Store {
     private(set) var archAgents: [ArchAgent] = []
     /// While a boost is on, when it ends.
     private(set) var boostUntil: Date?
+    /// Gabriel boosts always while you're at the computer
+    /// (arch.gabriel.always), as the core's header says.
+    private(set) var boostAlways = false
     /// Whether the core keeps a history to undo, and what undo and redo
     /// would take next (Undo.swift).
     private(set) var canUndo = false
@@ -162,7 +171,7 @@ final class Store {
     /// round an empty terminal, as no core attaches one.
     private(set) var isFixture = false
     /// The right side shows the live terminal instead of the conversation
-    /// (View > Terminal, ⌥⌘T); remembered across launches.
+    /// (View › Show Terminal, ⌥⌘T); remembered across launches.
     var showTerminal = UserDefaults.standard.bool(forKey: "showTerminal") {
         didSet {
             UserDefaults.standard.set(showTerminal, forKey: "showTerminal")
@@ -255,7 +264,7 @@ final class Store {
         guard !started else { return }
         started = true
         if let seconds = FreezeDog.restartedAfter {
-            say("Irie stopped answering for \(seconds) s, so ❤️‍🩹 Raffi restarted it. Every agent kept running.",
+            say("\(Brand.name) stopped answering for \(seconds) s, so ❤️‍🩹 Raffi restarted it. Every agent kept running.",
                 error: false, seconds: 10)
         }
         // Behind another app, the window takes in the core's news less
@@ -278,7 +287,7 @@ final class Store {
             do {
                 let hello = try await client.call("hello", HelloArgs(), timeout: 2, as: HelloResult.self)
                 guard hello.features.contains("attach-info") else {
-                    link = .offline("This Irie is too old for the app. Run the new build's `irie up` to update it.")
+                    link = .offline("This \(Brand.name) is too old for the app. Run the new build's `\(Brand.slug) up` to update it.")
                     try await Task.sleep(nanoseconds: 3_000_000_000)
                     continue
                 }
@@ -300,6 +309,8 @@ final class Store {
                 canPin = hello.features.contains("pin")
                 canTrod = hello.features.contains("trod")
                 canBoost = hello.features.contains("gabriel")
+                canBoostAlways = hello.features.contains("boost-always")
+                canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
@@ -341,7 +352,7 @@ final class Store {
 
     private static func describe(_ error: Error) -> String {
         if notRunning(error) {
-            return "Irie isn’t running."
+            return "\(Brand.name) isn’t running."
         }
         return error.localizedDescription
     }
@@ -469,6 +480,14 @@ final class Store {
             // The VPN's part says how the VPN is now.
             loadPluginsSoon()
         }
+        // Gabriel's boost, however it was started: from ctl, Settings or
+        // this menu. An older core's header never says, so its boost is
+        // the one this app started.
+        if canBoostAlways {
+            let until = h.boost?.until, always = h.boost?.always ?? false
+            if until != boostUntil { boostUntil = until }
+            if always != boostAlways { boostAlways = always }
+        }
         if let s = h.spaces, s != spaces {
             spaces = s
             // A space removed leaves its cards in the first.
@@ -556,7 +575,7 @@ final class Store {
         sessions = rows.sorted(by: Self.before)
         self.selection = selection
         link = .online(version: "snapshot")
-        repoNames = ["bigup", "irie", "notes"]
+        repoNames = ["bigup", "\(Brand.slug)", "notes"]
         agents = [Agent(name: "auto", note: "routes each task to the cheapest profile that does it well"),
                   Agent(name: "claude", note: "claude-opus-5-5 · max")]
         canPickModel = true
@@ -566,10 +585,11 @@ final class Store {
         canPark = true
         canTrod = true
         canBoost = true
+        canBoostAlways = true
         canArch = true
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
-                      about: "Mikael, the first of Irie's arch agents, stands with the user against evil and for the good they want to see in the world.",
+                      about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",
                       on: true, status: "With every Claude Code session, weighing the calls that can’t be taken back.",
                       actions: [ArchAction(label: "Talk with Mikael", op: "spawn")],
                       settings: [ArchSetting(key: "arch.mikael.on", kind: "bool", label: "Mikael goes with every session", value: .bool(true)),
@@ -581,8 +601,8 @@ final class Store {
                       actions: [ArchAction(label: "Boost for 1 hour", op: "gabriel")],
                       settings: [ArchSetting(key: "arch.gabriel.on", kind: "bool", label: "Gabriel gives your focus the machine first", value: .bool(true)),
                                  ArchSetting(key: "arch.gabriel.away", kind: "duration", label: "You’re away after", value: .string("5m"))]),
-            ArchAgent(name: "raphael", nickname: "Raffi", icon: "❤️‍🩹", title: "heals Irie and your Mac",
-                      about: "Raphael keeps Irie and the computer it runs on well.",
+            ArchAgent(name: "raphael", nickname: "Raffi", icon: "❤️‍🩹", title: "heals \(Brand.name) and your Mac",
+                      about: "Raphael keeps \(Brand.name) and the computer it runs on well.",
                       on: true, status: "Looked at 14:05: 2 things need care, and 1 is worth a look.",
                       actions: [ArchAction(label: "Look over my Mac now", op: "raphael")],
                       items: [ArchItem(text: "Your disk is nearly full: 9.9 GB free of 995 GB (1%).",
@@ -598,7 +618,7 @@ final class Store {
                                  ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app when it has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
-        taskRepo = "irie"
+        taskRepo = "\(Brand.slug)"
     }
 
     /// The list's order, which the core keeps and the user sets: a new
@@ -795,7 +815,7 @@ final class Store {
     }
 
     /// The helper each session showed last, and the newest its conversation
-    /// names, which View > Show Helpers opens when none runs.
+    /// names, which View › Helpers opens when none runs.
     @ObservationIgnored private var lastHelpers: [String: String] = [:]
     @ObservationIgnored private var newestHelpers: [String: String] = [:]
 
@@ -810,11 +830,15 @@ final class Store {
         return side.open && side.tab == .helpers
     }
 
-    /// View > Show Helpers (⇧⌘H): opens the right sidebar's Helpers tab on
+    /// View › Helpers (⌥⌘3, ⇧⌘H): opens the right sidebar's Helpers tab on
     /// the selected session's helper (the one shown last, else the newest
-    /// running, else the newest), or closes it.
+    /// running, else the newest), or closes it. With no session of Irie's
+    /// selected, the tab opens or closes as the other tabs do.
     func toggleHelpers() {
-        guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else { return }
+        guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else {
+            toggleSideTab(.helpers)
+            return
+        }
         if helperShown {
             closeSide()
             return
@@ -919,6 +943,9 @@ final class Store {
             switch r.did {
             case "asked":
                 if let c = r.choice, let op = r.op { await answer(op, c) }
+            case "answered" where r.op == "markets":
+                // :markets: the Markets window says how the map stands.
+                NotificationCenter.default.post(name: .irieMarkets, object: nil)
             case "answered":
                 say(r.text, error: false, seconds: 8)
             case "added":
@@ -1087,6 +1114,23 @@ final class Store {
         }
     }
 
+    /// Boosts your focus whenever you're at the computer, or no longer:
+    /// arch.gabriel.always, in the config file, shown at once; the core's
+    /// header then says so (DESIGN §4.11). Off takes the key out of the
+    /// file, as boost off does.
+    func setBoostAlways(_ on: Bool) {
+        boostAlways = on
+        Task {
+            do {
+                _ = try await client.call("config", ConfigArgs(set: [ConfigSet(key: "arch.gabriel.always", value: on ? .bool(true) : .null)]), timeout: 10, as: ConfigResult.self)
+                say(on ? "Boosting your focus whenever you’re at the computer: the rest runs on the efficiency cores, so it finishes later." : "No longer boosting always: Gabriel holds back only while the Mac is busy.", error: false, seconds: 6)
+            } catch {
+                boostAlways = !on
+                say("Couldn’t \(on ? "boost always" : "stop boosting always"): \(error.localizedDescription)", error: true)
+            }
+        }
+    }
+
     /// Shows a notice at the top of the working area (NoticeToast), never
     /// over the task bar, has VoiceOver read it, and keeps it in the right
     /// sidebar's Notices tab. It goes by itself: a confirmation after
@@ -1163,7 +1207,7 @@ final class Store {
         }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = ["-na", "Ghostty", "--args", "--title=Irie", "-e", a.tmux, "-S", a.socket, "attach-session", "-t", a.target]
+        p.arguments = ["-na", "Ghostty", "--args", "--title=\(Brand.name)", "-e", a.tmux, "-S", a.socket, "attach-session", "-t", a.target]
         do {
             try p.run()
         } catch {

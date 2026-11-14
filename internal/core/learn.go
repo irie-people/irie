@@ -74,9 +74,15 @@ func (c *Core) learnOp(a ipc.LearnArgs) (ipc.LearnResult, error) {
 			return ipc.LearnResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 		}
 	}
+	var tips []string
+	for _, t := range learn.Get().Tips {
+		tips = append(tips, t.Text)
+	}
 	return ipc.LearnResult{
 		Resources: learn.Resources(c.cfg().Learn.Links, learn.Languages(dir)),
 		Glossary:  learn.Get().Glossary,
+		Bar:       c.cfg().UI.Bar,
+		Tips:      tips,
 	}, nil
 }
 

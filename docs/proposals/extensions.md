@@ -91,7 +91,7 @@ The rhythm is the user's: 14, 2 and 16 days are what the guide suggests.
 
 ### 2.2 The session
 
-The user types `:setup switch` in any task bar, or picks **File › Set Up a Dead Man's Switch…** in the Mac app. The core starts a Claude Code session called "Dead Man's Switch" on `+claude`, in a folder of its own, `<data>/guides/dead-mans-switch`, with `/irie:dead-mans-switch` as its task. The folder is the same every time, so Claude Code asks only once whether to trust it, and the reply says to choose Yes; the guide's files go in the folder the user picks. `+claude` is the most careful profile, and this session decides who can reach everything a person owns. The skill then takes the user through it, a step at a time, and they can stop after any step and reopen the session later:
+The user types `:setup switch` in any task bar, or picks **Plugins › Dead man's switch › Set Up…** in the Mac app. The core starts a Claude Code session called "Dead Man's Switch" on `+claude`, in a folder of its own, `<data>/guides/dead-mans-switch`, with `/irie:dead-mans-switch` as its task. The folder is the same every time, so Claude Code asks only once whether to trust it, and the reply says to choose Yes; the guide's files go in the folder the user picks. `+claude` is the most careful profile, and this session decides who can reach everything a person owns. The skill then takes the user through it, a step at a time, and they can stop after any step and reopen the session later:
 
 1. **Ask.** Who should be told, and for each of them an email address and whether they get full access or only a view; any number of people. Which password manager, and its plan. Which phone. Whether they have Google and Apple accounts. The rhythm. Where to keep the files, by default `~/Documents/Dead Man's Switch`.
 2. **Plan.** The agent writes `switch.md`, every step marked *agent* or *you*, and shows it.
@@ -175,7 +175,7 @@ The guide asks which one the user has, and follows that vendor's own page, read 
 | The skill, `internal/skills/builtin/dead-mans-switch/` | `SKILL.md`: the rules of §1.3 for this guide and the steps of §2.2, `disable-model-invocation: true`, no grants. `reference/`: `letter.md` (the outline of READ ME FIRST), `healthchecks.md`, `phone.md`, `password-managers.md`, `backups.md`, `helpers.md`. Markdown only, no personal data, and every vendor page by its URL |
 | `irie dms` | `key [--paste] [--api URL]`; `checks --alarm-name … [--alarm-desc-file …] [--every 14] [--remind 2] [--alarm 16]`; `status`; `ping`; `pause`, `resume`; `calendar --out FILE`; `shortcut --out FILE [--sign]`; `contact --out FILE` |
 | The core | `:setup switch`, a tool of its own that starts a Claude Code session on `+claude` with `/irie:dead-mans-switch` and Irie's plugin folder, again when it is reopened (§1.2) |
-| The Mac app | File › Set Up a Dead Man's Switch…, which sends `:setup switch` |
+| The Mac app | Plugins › Dead man's switch › Set Up…, which sends `:setup switch` |
 | The phone apps | Nothing new: their task bars send `:setup switch` too, and the session is theirs to follow and answer |
 
 ### 2.8 What it needs from the user

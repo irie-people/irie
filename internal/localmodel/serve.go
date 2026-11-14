@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Grace periods for stopping a server: how long it has to unload its
@@ -30,7 +32,7 @@ var (
 // exit code.
 func Serve(argv []string) int {
 	if len(argv) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: irie runtime -- COMMAND [ARGS...]")
+		fmt.Fprintln(os.Stderr, "usage: "+brand.Slug+" runtime -- COMMAND [ARGS...]")
 		return 2
 	}
 	sigs := make(chan os.Signal, 1)
@@ -39,7 +41,7 @@ func Serve(argv []string) int {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "irie runtime:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+" runtime:", err)
 		return 127
 	}
 	group := cmd.Process.Pid

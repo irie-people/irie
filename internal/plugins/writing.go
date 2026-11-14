@@ -1,8 +1,11 @@
+//go:build !nowriting
+
 package plugins
 
 import (
 	"os"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 )
 
@@ -20,6 +23,8 @@ const variorumSite = "https://stargazing.tech/variorum"
 // folders a Mac app is dragged into. Tests point them elsewhere.
 var variorumApps = []string{"/Applications/Variorum.app", "~/Applications/Variorum.app"}
 
+func init() { built["writing"] = writing }
+
 // writing is the writing plugin: agents that help a writer in Variorum
 // through its door for AI, beside the writer's words and never over them.
 func writing() Plugin {
@@ -35,7 +40,7 @@ func writing() Plugin {
 				Title:   "Writing in Variorum",
 				Summary: "`:write` starts a session that works in Variorum through its door for AI: editor's notes as comments, rewrites and translations as takes beside your paragraphs, books kept tidy.",
 				Setup:   ":write",
-				Brings:  []string{":write", "File › Write with Variorum…", "/irie:variorum"},
+				Brings:  []string{":write", "Plugins › Writing in Variorum", "/" + brand.Slug + ":variorum"},
 				Refused: "Writing in Variorum is left out: skills.disabled names variorum.",
 				Skills:  []string{variorumSkill},
 				own: func(c config.Config) bool {
@@ -53,7 +58,7 @@ func checkVariorum(e Env, on bool) (bool, string) {
 	}
 	for _, app := range variorumApps {
 		if st, err := os.Stat(expand(app)); err == nil && st.IsDir() {
-			return true, "Ready: :write, or File › Write with Variorum… in the Mac app, starts a writing session. The first one walks you through Variorum's door for AI."
+			return true, "Ready: :write, or Plugins › Writing in Variorum › Start Writing in Variorum… in the Mac app, starts a writing session. The first one walks you through Variorum's door for AI."
 		}
 	}
 	return false, "Variorum isn't installed: it's free from " + variorumSite + ", for macOS 26 or later on Apple silicon. Then :write walks you through its door for AI."

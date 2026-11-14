@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // MaxSocketPath is the longest unix socket path, in bytes, that Irie uses.
@@ -36,9 +38,9 @@ func New(getenv func(string) string, uid int) (Paths, error) {
 	// The XDG spec says relative values are invalid and must be ignored.
 	base := func(key, fallback string) string {
 		if v := getenv(key); filepath.IsAbs(v) {
-			return filepath.Join(v, "irie")
+			return filepath.Join(v, brand.Slug)
 		}
-		return filepath.Join(home, fallback, "irie")
+		return filepath.Join(home, fallback, brand.Slug)
 	}
 	p := Paths{
 		Config: base("XDG_CONFIG_HOME", ".config"),
@@ -46,12 +48,12 @@ func New(getenv func(string) string, uid int) (Paths, error) {
 		Data:   base("XDG_DATA_HOME", ".local/share"),
 		Cache:  base("XDG_CACHE_HOME", ".cache"),
 	}
-	short := filepath.Join("/tmp", "irie-"+strconv.Itoa(uid))
+	short := filepath.Join("/tmp", brand.Slug+"-"+strconv.Itoa(uid))
 	switch run, tmp := getenv("XDG_RUNTIME_DIR"), getenv("TMPDIR"); {
 	case filepath.IsAbs(run):
-		p.Runtime = filepath.Join(run, "irie")
+		p.Runtime = filepath.Join(run, brand.Slug)
 	case filepath.IsAbs(tmp):
-		p.Runtime = filepath.Join(tmp, "irie-"+strconv.Itoa(uid))
+		p.Runtime = filepath.Join(tmp, brand.Slug+"-"+strconv.Itoa(uid))
 	default:
 		p.Runtime = short
 	}

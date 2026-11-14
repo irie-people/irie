@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Shortcut is the iPhone's one-tap check-in, "I'm OK": an Apple Shortcuts
@@ -15,7 +17,7 @@ import (
 // signs a file of that format, which an iPhone needs before it imports it.
 func Shortcut(pingURLs []string) ([]byte, error) {
 	if len(pingURLs) == 0 {
-		return nil, fmt.Errorf("no ping URLs: make the checks first with `irie dms checks`")
+		return nil, fmt.Errorf("no ping URLs: make the checks first with `" + brand.Slug + " dms checks`")
 	}
 	var actions []any
 	for _, u := range pingURLs {
@@ -125,7 +127,7 @@ func CheckAddress(r Ref, domain string) (string, error) {
 // one email, sent, to check in.
 func Contact(addresses []string) ([]byte, error) {
 	if len(addresses) == 0 || slices.Contains(addresses, "") {
-		return nil, fmt.Errorf("no addresses: make the checks first with `irie dms checks`")
+		return nil, fmt.Errorf("no addresses: make the checks first with `" + brand.Slug + " dms checks`")
 	}
 	link := "mailto:" + strings.Join(addresses, ",") + "?subject=" + url.PathEscape("I'm OK") + "&body=" + url.PathEscape("I'm OK.")
 	var b bytes.Buffer

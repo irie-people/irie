@@ -14,7 +14,7 @@ import GhosttyKit
 // (SurfaceView_AppKit.swift, MIT; PROVENANCE.md).
 
 /// What draws the app's terminals: Ghostty's engine when this build has it
-/// and it starts, else SwiftTerm (View > Terminal Engine, Settings).
+/// and it starts, else SwiftTerm (Settings › Appearance, Terminal drawn by).
 enum TerminalEngine: String, CaseIterable, Identifiable {
     case ghostty, swiftterm
 
@@ -131,7 +131,7 @@ final class GhosttyRuntime {
         guard let config = ghostty_config_new() else { return nil }
         ghostty_config_load_default_files(config)
         ghostty_config_load_recursive_files(config)
-        let mine = FileManager.default.temporaryDirectory.appendingPathComponent("irie-ghostty-\(getpid()).conf")
+        let mine = FileManager.default.temporaryDirectory.appendingPathComponent("\(Brand.slug)-ghostty-\(getpid()).conf")
         let text = """
             background = \(hex(Theme.terminalBackground))
             foreground = \(hex(Theme.terminalForeground))

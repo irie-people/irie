@@ -13,7 +13,7 @@ enum Snapshot {
         // card, whichever view the app has saved, which a volatile domain
         // leaves untouched.
         UserDefaults.standard.setVolatileDomain(["showTerminal": true], forName: UserDefaults.argumentDomain)
-        let store = Store(socketPath: "/nonexistent/irie-snapshot.sock")
+        let store = Store(socketPath: "/nonexistent/\(Brand.slug)-snapshot.sock")
         store.loadFixture(Fixture.sessions, selection: Fixture.selected)
         // A theme and layouts of the fixture's own, never the files in
         // the config folder (Looks.swift).
@@ -225,20 +225,20 @@ enum Fixture {
       "summary": "Mullvad VPN, anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
       "parts": [
         {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "detail": "Connected in Malmö, Sweden.", "summary": "See the VPN in every client, and connect, disconnect or change its place from a task bar or the menu."},
-        {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through Irie's SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
+        {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through \#(Brand.name)'s SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
-        {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in Irie yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
-        {"name": "switch", "title": "Dead man's switch", "on": true, "state": "ready", "setup": ":setup switch", "detail": "The guide is ready: :setup switch, or File › Set Up a Dead Man's Switch… in the Mac app.", "summary": "A guided session sets up what your family needs if you stop checking in."}
+        {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
+        {"name": "switch", "title": "Dead man's switch", "on": true, "state": "ready", "setup": ":setup switch", "detail": "The guide is ready: :setup switch, or Plugins › Dead man's switch › Set Up… in the Mac app.", "summary": "A guided session sets up what your family needs if you stop checking in."}
       ]}]}
     """#
 
     /// The config op's answer for a file with a profile, repos, the jot dog
     /// and Mikael's good of its own, as the core writes it (config.Tree).
     static let config = #"""
-    {"path": "/home/alice/.config/irie/config.toml", "config": {
+    {"path": "/home/alice/.config/\#(Brand.slug)/config.toml", "config": {
         "arch": {"mikael": {"on": true, "door": true, "good": ["Give credit where it's due.", "Be honest with clients, even when it costs me the job."]},
             "gabriel": {"on": true, "outside": true, "away": "5m", "word": "10m", "heavy": 50, "spare": ["zoom.us", "FaceTime", "Music", "Spotify"], "boost": "1h"}},
-        "dog": {"land": {"irie": "live"}, "nudges": 2, "watch": true},
+        "dog": {"land": {"\#(Brand.slug)": "live"}, "nudges": 2, "watch": true},
         "trod": {"on": true, "start": "23:00", "end": "07:00", "away": "15m", "questions": true, "nudges": 8, "retry": "15m", "within": "24h", "max_working": 4, "max_plan_use": 90, "keep_awake": true,
             "rules": ["Don't spend money you didn't make.", "Don't go over the plan's weekly allotment: never buy usage credits or turn on extra usage.", "Don't push, publish or send anything off this machine: no git push, releases, posts, emails or messages."],
             "guidelines": ["When you have to choose, take the option you would recommend, and say in your last message which you took and why.", "Finish the task you were given; note new ideas and extra work for the morning instead of starting them."]},
@@ -251,59 +251,59 @@ enum Fixture {
             "local": {"command": "claude", "effort": "", "harness": "claude-code", "local": {"enforce": true, "min_context": 65536, "runtime": "ollama"}, "model": "", "permission_mode": ""},
             "sonnet": {"command": "claude", "effort": "medium", "harness": "claude-code", "model": "claude-sonnet-5-5", "permission_mode": "auto"}
         },
-        "repos": {"aliases": {"irie": "~/code/irie", "notes": "~/notes"}, "roots": ["~/code"]},
+        "repos": {"aliases": {"\#(Brand.slug)": "~/code/\#(Brand.slug)", "notes": "~/notes"}, "roots": ["~/code"]},
         "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
         "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "follow_up_delay": "8s", "follow_up_window": "2m", "hide_tmux": true, "ready_timeout": "30s", "teammates": "panes",
             "preferences": ["Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.", "Ask before you push."]},
         "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "new_tabs": "last", "freeze_dog": "10s", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
         "usage": {"status_line": true},
         "context": {"keep_days": 30},
-        "worktree": {"base": "", "branch_prefix": "irie/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
+        "worktree": {"base": "", "branch_prefix": "\#(Brand.slug)/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}
     }}
     """#
 
     static var sessions: [Session] {
         let now = Date()
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
-        let irie = "/home/alice/code/irie", bigup = "/home/alice/code/bigup"
+        let irie = "/home/alice/code/\(Brand.slug)", bigup = "/home/alice/code/bigup"
         // Each with the colour the core gives it, from the top of the list
         // down, so cards side by side stand apart (internal/core, hue.go).
         return [
             Session(id: "s01syncagent", name: "sync-agents", state: "needs_you", reason: "permission",
                     detail: "Asks: may it run rm -rf build?", command: "Bash · rm -rf build", created: ago(30), cwd: irie + "-sync-agents",
-                    repo: irie, branch: "irie/sync-agents", profile: "claude",
+                    repo: irie, branch: "\(Brand.slug)/sync-agents", profile: "claude",
                     tokens: Tokens(input: 1200, output: 3400, cacheRead: 40000, cacheWrite: 3600), hue: 1),
             Session(id: selected, name: "docs-guide", state: "working", detail: "Running the tests", command: "Bash · go test ./...",
-                    created: ago(26), cwd: irie + "-docs-guide", repo: irie, branch: "irie/docs-guide", profile: "claude",
+                    created: ago(26), cwd: irie + "-docs-guide", repo: irie, branch: "\(Brand.slug)/docs-guide", profile: "claude",
                     subagents: [Subagent(agent: "sub:a1", type: "Explore", started: ago(3), detail: "Reading DESIGN.md", command: "Read · docs/DESIGN.md"),
                                 Subagent(agent: "sub:a2", type: "Plan", started: ago(2))],
                     tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800), hue: 5),
             Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
-                    created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "irie/conversation-view", profile: "claude",
+                    created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "\(Brand.slug)/conversation-view", profile: "claude",
                     trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
-                    repo: irie, branch: "irie/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",
                     detail: "Waiting on its work in the background · Find the seed patents",
-                    created: ago(18), cwd: irie + "-patent-research", repo: irie, branch: "irie/patent-research", profile: "claude",
+                    created: ago(18), cwd: irie + "-patent-research", repo: irie, branch: "\(Brand.slug)/patent-research", profile: "claude",
                     subagents: [Subagent(agent: "sub:b1", type: "Explore", started: ago(5), detail: "Searching the web for expired patents")],
                     team: [Teammate(session: "s10patents00-1", name: "seed-finder", color: "blue", type: "general-purpose", title: "Reading the claims", working: true),
                            Teammate(session: "s10patents00-2", name: "expand-a", color: "green", type: "general-purpose", title: "Paging the citations", working: true)],
                     subs: Subs(helpers: 1, teammates: 2),
                     tokens: Tokens(input: 2100, output: 5200, cacheRead: 61000, cacheWrite: 4400), hue: 4),
             Session(id: "s05bigupm000", name: "bigup-m0", state: "working", detail: "Editing main.rs", command: "Edit · src/main.rs",
-                    created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "irie/bigup-m0", profile: "claude", hue: 3),
+                    created: ago(12), cwd: bigup + "-bigup-m0", repo: bigup, branch: "\(Brand.slug)/bigup-m0", profile: "claude", hue: 3),
             Session(id: "s06scratch01", name: "summarise-the-notes", state: "done", created: ago(9),
-                    cwd: "/home/alice/.local/share/irie/scratch/summarise-the-notes", profile: "claude", parked: true, hue: 2),
+                    cwd: "/home/alice/.local/share/\(Brand.slug)/scratch/summarise-the-notes", profile: "claude", parked: true, hue: 2),
             Session(id: "s07stalled01", name: "try-the-login", state: "stalled", reason: "stalled",
                     detail: "stalled: no hooks within 30s · Do you trust the files in this folder?", created: ago(6),
                     cwd: "/home/alice/scratch/try-the-login", profile: "claude", hue: 1),
             Session(id: "s08exited01", name: "old-experiment", state: "exited", detail: "exited 1", exitCode: 1,
                     created: ago(4), cwd: "/home/alice/scratch/old-experiment", profile: "claude", parked: true, hue: 6),
             Session(id: "s09starting", name: "write-the-changelog", state: "starting", created: ago(0.2),
-                    cwd: irie + "-write-the-changelog", repo: irie, branch: "irie/write-the-changelog", profile: "claude", hue: 4),
+                    cwd: irie + "-write-the-changelog", repo: irie, branch: "\(Brand.slug)/write-the-changelog", profile: "claude", hue: 4),
         ]
     }
 }

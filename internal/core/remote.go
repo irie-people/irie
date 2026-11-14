@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/tmux"
 )
 
 // remoteWindow names the window of the phone app's gateway.
-const remoteWindow = "irie-remote"
+const remoteWindow = brand.Slug + "-remote"
 
 // remoteSpec is what the gateway runs with: the version and the settings
 // it reads only as it starts. Its pane keeps it in @irie_version, so a

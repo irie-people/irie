@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
@@ -263,7 +264,7 @@ func (c *Core) deliver(x *session) {
 		return
 	}
 	if x.paste {
-		buf := "irie-task-" + x.id
+		buf := brand.Slug + "-task-" + x.id
 		if _, err := c.tmux.RunList([][]string{
 			{"load-buffer", "-b", buf, file},
 			{"paste-buffer", "-p", "-d", "-b", buf, "-t", x.pane},

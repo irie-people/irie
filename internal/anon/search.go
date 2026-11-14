@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // SearchQuery is one search of Irie's SearXNG.
@@ -67,11 +69,11 @@ func Search(ctx context.Context, base string, q SearchQuery) (Results, error) {
 	c := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: 60 * time.Second}
 	resp, err := c.Do(req)
 	if err != nil {
-		return Results{}, fmt.Errorf("Irie's SearXNG at %s did not answer (it may still be starting: try again in a minute): %v", base, err)
+		return Results{}, fmt.Errorf(brand.Name+"'s SearXNG at %s did not answer (it may still be starting: try again in a minute): %v", base, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return Results{}, fmt.Errorf("Irie's SearXNG answered %s", resp.Status)
+		return Results{}, fmt.Errorf(brand.Name+"'s SearXNG answered %s", resp.Status)
 	}
 	var raw struct {
 		Results      []Hit             `json:"results"`
@@ -82,7 +84,7 @@ func Search(ctx context.Context, base string, q SearchQuery) (Results, error) {
 		Unresponsive [][]any           `json:"unresponsive_engines"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(nil, resp.Body, 16<<20)).Decode(&raw); err != nil {
-		return Results{}, fmt.Errorf("Irie's SearXNG gave no JSON: %v", err)
+		return Results{}, fmt.Errorf(brand.Name+"'s SearXNG gave no JSON: %v", err)
 	}
 	r := Results{Hits: raw.Results, Suggestions: raw.Suggestions, Corrections: raw.Corrections}
 	if len(r.Hits) > maxHits {

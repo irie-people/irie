@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/filetx"
@@ -28,12 +29,19 @@ import (
 // Gabriel (DESIGN §4.11) carries the user's focus to the machine. While the
 // user is at the computer and it is busy, what they work on comes first:
 // the session on show while Irie is in front, a session they messaged or
-// started lately, a promoted one, and the app in front. Every other
-// session's process tree steps back into macOS's background state, as for
-// a promotion (priority.go), and so do the user's other heavy apps outside
-// Irie. All of it comes back once the machine is calm again, the user
-// walks away, Gabriel is turned off, or the core stops; a core that starts
-// first takes back what a core before it left, from gabriel.json.
+// started lately, a promoted one, the subtasks these delegated, and the app
+// in front. Every other session's process tree steps back into macOS's
+// background state, as for a promotion (priority.go), and so do the user's
+// other heavy apps outside Irie. All of it comes back once the machine is
+// calm again, the user walks away, Gabriel is turned off, or the core
+// stops; a core that starts first takes back what a core before it left,
+// from gabriel.json.
+//
+// The tab the user is on comes first of all: the top of the focus never
+// steps back, not even for a promotion, and while it works the machine
+// every other session but an install steps back for it, the rest of the
+// focus too. macOS has one background state a user may undo, so the order
+// top, rest of the focus, the rest is kept by when each steps back.
 
 // gabrielIdleEvery is how often the machine's idle time is read: ioreg is a
 // process to start.
@@ -48,7 +56,7 @@ const gabrielCalm = 30 * time.Second
 const gabrielMostOutside = 8
 
 // irieBundleID is Irie.app's (mac/Info.plist).
-const irieBundleID = "io.github.irie-hq.irie"
+const irieBundleID = brand.BundleID
 
 // terminalApps are terminals Irie's own window may be in: with one in
 // front, the session on show may be what the user looks at.
@@ -72,6 +80,17 @@ type gabState struct {
 	focus     map[string]bool // the sessions in the user's focus
 	installs  map[string]bool // the sessions that ran an install at the last sweep, in the focus too
 	outside   map[int]outProc // the apps outside Irie it slowed, by pid
+	// top is the tab the user is on, with the subtasks it delegated, while
+	// anything steps back (onTop): it never does.
+	top map[string]bool
+	// topBusy says the top works the machine (topBusyNext): every other
+	// session but an install steps back for it, the rest of the focus too.
+	topBusy bool
+	topCalm time.Time // since when the top has run light, while topBusy
+	topOf   string    // the session on show that topBusy was read for
+	// shownAt is when the user last turned to a tab in Irie (refocus): they
+	// were at the computer then, with Irie in front.
+	shownAt time.Time
 	// boostUntil is when the boost on ends: until then the user's focus
 	// gets the machine first whether it is busy or not.
 	boostUntil time.Time
@@ -87,7 +106,19 @@ type outProc struct {
 // gabrielOff reports whether Gabriel may not run in this core: a test core
 // (IRIE_GABRIEL=off, internal/testutil) would take the user's own agents
 // for apps outside it.
-func gabrielOff() bool { return os.Getenv("IRIE_GABRIEL") == "off" }
+func gabrielOff() bool { return os.Getenv(brand.Env("GABRIEL")) == "off" }
+
+// gabrielOn reports whether Gabriel works in this core: he is on, the
+// system has a background state, and it is not a test core.
+func gabrielOn(g config.Gabriel) bool { return g.On && proc.CanBackground && !gabrielOff() }
+
+// holds says whether Gabriel holds back: while he is on and the user is at
+// the computer, when the machine is busy or a boost is on, and at all times
+// then with arch.gabriel.always. While the user is away nothing is held
+// back, so work left running goes at full speed.
+func holds(on, present, busy, boosting, always bool) bool {
+	return on && present && (busy || boosting || always)
+}
 
 // busyNext says whether the machine is busy now, given whether it was:
 // busy as soon as the work waiting to run leaves less than a CPU free or
@@ -117,8 +148,8 @@ func busyNext(l sysload.Load, was bool, calmSince, now time.Time) (bool, time.Ti
 }
 
 // inFocus is the set of sessions in the user's focus: promoted ones, those
-// they messaged or started within word, and the one on show while Irie is
-// in front. The caller holds c.mu.
+// they messaged or started within word, the one on show while Irie is in
+// front, and the subtasks these delegated. The caller holds c.mu.
 func (c *Core) inFocus(irieFront bool, word time.Duration, now time.Time) map[string]bool {
 	f := map[string]bool{}
 	for id, x := range c.sessions {
@@ -129,19 +160,101 @@ func (c *Core) inFocus(irieFront bool, word time.Duration, now time.Time) map[st
 	if irieFront && c.selected != "" {
 		f[c.selected] = true
 	}
-	return f
+	return c.withDelegates(f)
 }
 
-// refocus takes the session now on show into the user's focus at once
-// while Gabriel holds back, and moves the trees before it returns: a show
-// never waits for his next sweep, up to sampleEvery ticks away, with the
-// session the user turned to still in the background. The caller holds
-// c.mu.
-func (c *Core) refocus() {
-	if !c.gab.holding {
+// withDelegates adds to set every live session that one in it delegated
+// (ctl delegate), and theirs in turn: a session waits on the subtasks it
+// hands out, so they go where it goes. The caller holds c.mu.
+func (c *Core) withDelegates(set map[string]bool) map[string]bool {
+	for grew := true; grew; {
+		grew = false
+		for id, x := range c.sessions {
+			if !set[id] && !x.dead && x.out != nil && x.out.parent != "" && set[x.out.parent] {
+				set[id] = true
+				grew = true
+			}
+		}
+	}
+	return set
+}
+
+// onTop is the tab the user is on: the session on show while Irie, or a
+// terminal it may be in, is in front, with the subtasks it delegated. It
+// comes first of all, and never steps back. The caller holds c.mu.
+func (c *Core) onTop(irieFront bool) map[string]bool {
+	x := c.sessions[c.selected]
+	if !irieFront || x == nil || x.dead {
+		return nil
+	}
+	return c.withDelegates(map[string]bool{x.id: true})
+}
+
+// topBusyNext says whether the top works the machine now, given whether it
+// did: at once when its trees use heavy of a CPU between them, as the last
+// sample read them, or memory is critically short; light again only after
+// gabrielCalm with neither, so the rest does not flap between the top's
+// tool calls.
+func topBusyNext(cpu, heavy float64, critical, was bool, calmSince, now time.Time) (bool, time.Time) {
+	if cpu >= heavy || critical {
+		return true, time.Time{}
+	}
+	if !was {
+		return false, time.Time{}
+	}
+	if calmSince.IsZero() {
+		calmSince = now
+	}
+	if now.Sub(calmSince) >= gabrielCalm {
+		return false, time.Time{}
+	}
+	return true, calmSince
+}
+
+// placeTop works out st's top and whether it works the machine. There is a
+// top whenever the user is at the computer, so that a promotion, which
+// puts the others in the background at once, never puts it there; whether
+// it works the machine counts only while Gabriel holds back. A tab the user
+// turns to starts afresh. The caller holds c.mu.
+func (c *Core) placeTop(st *gabState, now time.Time) {
+	st.top = nil
+	if st.present {
+		st.top = c.onTop(st.irieFront)
+	}
+	if !st.holding || len(st.top) == 0 {
+		st.topBusy, st.topCalm, st.topOf = false, time.Time{}, ""
 		return
 	}
-	c.gab.focus = c.focusNow(c.gab.irieFront, c.gab.installs, c.cfg().Arch.Gabriel.Word, time.Now())
+	if st.topOf != c.selected {
+		st.topBusy, st.topCalm, st.topOf = false, time.Time{}, c.selected
+	}
+	var cpu float64
+	for id := range st.top {
+		cpu += c.sessions[id].cpu
+	}
+	st.topBusy, st.topCalm = topBusyNext(cpu, c.cfg().Arch.Gabriel.Heavy, c.load.Pressure >= sysload.PressureCritical, st.topBusy, st.topCalm, now)
+}
+
+// refocus takes the session now on show into the user's focus, and to the
+// top of it, and moves the trees before it returns: a show never waits for
+// Gabriel's next sweep, up to sampleEvery ticks away, with the session the
+// user turned to still in the background. A show is the user's own doing:
+// they are at the computer, with Irie in front, whatever the last sweep
+// read. The caller holds c.mu.
+func (c *Core) refocus() {
+	g := c.cfg().Arch.Gabriel
+	if !gabrielOn(g) {
+		return
+	}
+	now := time.Now()
+	if !c.gab.present {
+		// Back from away: the next sweep reads the idle time afresh, and
+		// holds back again as it says.
+		c.gab.idleRead = time.Time{}
+	}
+	c.gab.shownAt, c.gab.present, c.gab.irieFront = now, true, true
+	c.gab.focus = c.focusNow(true, c.gab.installs, g.Word, now)
+	c.placeTop(&c.gab, now)
 	c.background()
 }
 
@@ -180,7 +293,7 @@ func (c *Core) gabrielSweep() {
 	load := c.load
 	c.mu.Unlock()
 
-	on := g.On && proc.CanBackground && !gabrielOff()
+	on := gabrielOn(g)
 	if on {
 		if now.Sub(st.idleRead) >= gabrielIdleEvery {
 			if idle, ok := machineIdle(); ok {
@@ -195,12 +308,15 @@ func (c *Core) gabrielSweep() {
 	} else {
 		st.present, st.busy, st.calmSince = false, false, time.Time{}
 	}
-	// A boost holds back as a busy machine does, until its time is up;
-	// while the user is away it waits like the rest.
-	boosting := now.Before(st.boostUntil)
-	st.holding = on && st.present && (st.busy || boosting)
+	// A boost holds back as a busy machine does, until its time is up, and
+	// arch.gabriel.always for good; while the user is away they wait like
+	// the rest.
+	st.holding = holds(on, st.present, st.busy, now.Before(st.boostUntil), g.Always)
 	st.frontOK, st.irieFront = false, false
-	if st.holding {
+	// What is in front says what the user looks at: the tab they are on
+	// never steps back (placeTop), not even for a promotion, which comes at
+	// once and needs it known.
+	if st.present {
 		if a, ok, err := focus.Front(); err == nil && ok {
 			st.front, st.frontOK = a, true
 			st.irieFront = a.BundleID == irieBundleID || slices.Contains(terminalApps, a.BundleID)
@@ -224,9 +340,17 @@ func (c *Core) gabrielSweep() {
 	outside := c.slowOutside(held, st, g, trees)
 
 	c.mu.Lock()
-	// The focus is read last, so a show made during the sweep keeps the
-	// session it brought into the focus (refocus).
+	// A show made during the sweep wins: the user turned to a tab in Irie,
+	// so they are at the computer with Irie in front, and the idle time is
+	// read afresh next time (refocus). The focus and its top are read last,
+	// so it keeps the session it brought there, and the top goes on from
+	// where the show left it.
+	if c.gab.shownAt.After(st.shownAt) {
+		st.shownAt, st.present, st.irieFront, st.idleRead = c.gab.shownAt, true, true, time.Time{}
+	}
+	st.topBusy, st.topCalm, st.topOf = c.gab.topBusy, c.gab.topCalm, c.gab.topOf
 	st.focus = c.focusNow(st.irieFront, st.installs, g.Word, now)
+	c.placeTop(&st, now)
 	st.outside = outside
 	// A boost started or stopped meanwhile wins; one whose time is up ends.
 	st.boostUntil = c.gab.boostUntil
@@ -344,7 +468,7 @@ func (c *Core) heavyOutside(ps []focus.Proc, t proc.Table, awake map[int]bool, s
 		case p.UID != mine || p.PID == os.Getpid() || !alive:
 		case !wasHeld && p.CPU < g.Heavy:
 		case inTree[p.PID] || front[p.PID] || awake[p.PID]:
-		case p.Path == c.bin || tmuxBin != "" && p.Path == tmuxBin || strings.Contains(p.Path, "/Irie.app/"):
+		case p.Path == c.bin || tmuxBin != "" && p.Path == tmuxBin || strings.Contains(p.Path, "/"+brand.Name+".app/"):
 		case st.frontOK && st.front.BundlePath != "" && strings.HasPrefix(p.Path, st.front.BundlePath+"/"):
 		case systemPath(p.Path) || spared(p.Path, g.Spare):
 		default:
@@ -473,7 +597,30 @@ func (c *Core) gabrielOp(a ipc.GabrielArgs) (ipc.GabrielResult, error) {
 	}
 	r := c.gabrielReport()
 	r.Freed = freed
+	if a.Boost || a.Stop {
+		// Every client hears at once (the header's boost).
+		c.publishHeader()
+	}
 	return r, nil
+}
+
+// boostHeader is Gabriel's boost for the header while one is on: when a
+// boost started by hand ends, and arch.gabriel.always; nil while none is,
+// or while he is off. The caller holds c.mu.
+func (c *Core) boostHeader(now time.Time) *ipc.Boost {
+	g := c.cfg().Arch.Gabriel
+	if !g.On || !proc.CanBackground || gabrielOff() {
+		return nil
+	}
+	b := ipc.Boost{Always: g.Always}
+	if now.Before(c.gab.boostUntil) {
+		until := c.gab.boostUntil
+		b.Until = &until
+	}
+	if b.Until == nil && !b.Always {
+		return nil
+	}
+	return &b
 }
 
 // freeModels lets the models of Irie's own Ollama go that no live session
@@ -524,8 +671,8 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 	defer c.mu.Unlock()
 	st := c.gab
 	r := ipc.GabrielResult{
-		On: g.On && proc.CanBackground && !gabrielOff(), Outside: g.Outside, Present: st.present, Idle: st.idle.Round(time.Second).String(),
-		Busy: st.busy, Holding: st.holding, CPUs: c.load.CPUs, RunQueue: c.load.RunQueue, Pressure: c.load.Pressure,
+		On: gabrielOn(g), Outside: g.Outside, Present: st.present, Idle: st.idle.Round(time.Second).String(),
+		Busy: st.busy, Holding: st.holding, Always: g.Always, CPUs: c.load.CPUs, RunQueue: c.load.RunQueue, Pressure: c.load.Pressure,
 	}
 	if st.frontOK {
 		r.Front = st.front.Name
@@ -540,9 +687,31 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 			r.Focus = append(r.Focus, ipc.GabrielSession{ID: id, Name: x.name})
 		}
 	}
+	// The tab the user is on first, then what it delegated.
+	top := slices.SortedFunc(maps.Keys(st.top), func(a, b string) int {
+		switch {
+		case a == c.selected:
+			return -1
+		case b == c.selected:
+			return 1
+		}
+		return strings.Compare(a, b)
+	})
+	for _, id := range top {
+		if x := c.sessions[id]; x != nil {
+			r.Top = append(r.Top, ipc.GabrielSession{ID: id, Name: x.name})
+			r.TopCPU += x.cpu
+		}
+	}
+	r.TopBusy = st.topBusy
 	for _, id := range slices.Sorted(maps.Keys(c.sessions)) {
-		if x := c.sessions[id]; x.demoted && x.track.priority == 0 && !st.focus[id] && st.holding {
+		x := c.sessions[id]
+		switch {
+		case !x.demoted || st.top[id]:
+		case x.track.priority == 0 && !st.focus[id] && st.holding:
 			r.Held = append(r.Held, ipc.GabrielSession{ID: id, Name: x.name})
+		case st.focus[id] && st.topBusy:
+			r.Back = append(r.Back, ipc.GabrielSession{ID: id, Name: x.name})
 		}
 	}
 	for _, pid := range slices.Sorted(maps.Keys(st.outside)) {
@@ -554,7 +723,7 @@ func (c *Core) gabrielReport() ipc.GabrielResult {
 
 // focusNote is what an agent is told when Gabriel turns away a call that
 // would take the user's focus.
-const focusNote = "[Irie] Gabriel turned this call away: it would bring an app, a window or a page to the front while your user works on something else, and take their focus. Do it without the front: open -g (and --background for Irie.app), a browser headless (--headless=new keeps the profile and its logins) or new pages in the background with no bringToFront, a Mac view checked with Irie.app's --snapshot. If your user must see it, say so in a line and let them open it."
+const focusNote = "[" + brand.Name + "] Gabriel turned this call away: it would bring an app, a window or a page to the front while your user works on something else, and take their focus. Do it without the front: open -g (and --background for " + brand.Name + ".app), a browser headless (--headless=new keeps the profile and its logins) or new pages in the background with no bringToFront, a Mac view checked with " + brand.Name + ".app's --snapshot. If your user must see it, say so in a line and let them open it."
 
 var (
 	// shellSplit cuts a shell command at the places a new one starts.

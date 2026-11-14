@@ -1,9 +1,12 @@
+//go:build !noprivacy
+
 package core
 
 import (
 	"errors"
 	"path/filepath"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/browser"
 	"github.com/irie-people/irie/internal/harness"
 	"github.com/irie-people/irie/internal/repo"
@@ -26,7 +29,7 @@ func (c *Core) browserServer(id string) (*harness.MCPServer, string) {
 	}
 	if _, err := browser.Find(path); err != nil {
 		if errors.Is(err, browser.ErrNotFound) {
-			return nil, "browser off: Mullvad Browser is not installed (irie setup browser)"
+			return nil, "browser off: Mullvad Browser is not installed (" + brand.Slug + " setup browser)"
 		}
 		return nil, "browser off: browser.path: " + err.Error()
 	}
@@ -40,4 +43,18 @@ func (c *Core) browserServer(id string) (*harness.MCPServer, string) {
 		Search:   b.Search,
 	}
 	return &harness.MCPServer{Command: c.bin, Args: browser.Args(o)}, ""
+}
+
+// privacyBuilt says whether this build has the privacy plugin (DESIGN
+// §4.17); privacy_off.go says not, for go build -tags noprivacy.
+const privacyBuilt = true
+
+// browserMCP is the session's MCP servers for Irie's browser, by name, or
+// nil and why not.
+func (c *Core) browserMCP(id string) (map[string]harness.MCPServer, string) {
+	srv, warn := c.browserServer(id)
+	if warn != "" || srv == nil {
+		return nil, warn
+	}
+	return map[string]harness.MCPServer{browser.ServerName: *srv}, ""
 }

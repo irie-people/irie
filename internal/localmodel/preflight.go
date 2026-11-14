@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Want is what a spawn needs of a local model, and what the machine and the
@@ -61,7 +63,7 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 		}
 	}
 	if m == nil {
-		problem("Ollama at %s has no model %s; `irie setup local --model %s` pulls it", o.URL, model, model)
+		problem("Ollama at %s has no model %s; `"+brand.Slug+" setup local --model %s` pulls it", o.URL, model, model)
 		return c
 	}
 	// The server's own name for it, which /api/ps uses too: qwen3.8 is
@@ -111,7 +113,7 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 			problem("%s needs about %s of memory at a %s context (%s of weights, %s of context cache), more than the %s local models may take here; pick a smaller model, or raise local.memory_gib", model, Bytes(need.Total), Tokens(ctxLen), Bytes(need.Weights), Bytes(need.Cache), Bytes(w.Budget))
 		}
 		if free := w.Machine.Available + freed - Reserve(w.Machine); w.Machine.Total > 0 && need.Total > free && !short {
-			msg := fmt.Sprintf("%s needs about %s of memory and the machine has %s free, of which Irie leaves %s for everything else", model, Bytes(need.Total), Bytes(w.Machine.Available+freed), Bytes(Reserve(w.Machine)))
+			msg := fmt.Sprintf("%s needs about %s of memory and the machine has %s free, of which "+brand.Name+" leaves %s for everything else", model, Bytes(need.Total), Bytes(w.Machine.Available+freed), Bytes(Reserve(w.Machine)))
 			if w.Force {
 				warn("%s; loading it anyway", msg)
 			} else {
@@ -145,9 +147,9 @@ func Preflight(ctx context.Context, o Ollama, model string, w Want) Check {
 		return c
 	}
 	if c.Context < w.MinContext {
-		fix := "set OLLAMA_CONTEXT_LENGTH for that server and restart it (for the macOS app: its context length setting, or `launchctl setenv OLLAMA_CONTEXT_LENGTH " + fmt.Sprint(w.MinContext) + "`, then restart Ollama), or leave local.url empty so Irie runs its own server"
+		fix := "set OLLAMA_CONTEXT_LENGTH for that server and restart it (for the macOS app: its context length setting, or `launchctl setenv OLLAMA_CONTEXT_LENGTH " + fmt.Sprint(w.MinContext) + "`, then restart Ollama), or leave local.url empty so " + brand.Name + " runs its own server"
 		if w.Own {
-			fix = "raise local.context in Irie's config"
+			fix = "raise local.context in " + brand.Name + "'s config"
 		}
 		problem("%s runs with a %s context at %s and the profile needs %s; Ollama would cut longer prompts without an error. To fix it, %s", model, Tokens(c.Context), o.URL, Tokens(w.MinContext), fix)
 	}

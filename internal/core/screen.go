@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -121,7 +122,7 @@ func (c *Core) keys(a ipc.KeysArgs) error {
 	}
 	for _, k := range a.Keys {
 		if !keyName(k) {
-			return ipc.Errorf(ipc.CodeBadArgs, "%q is not a key Irie presses: a letter, a digit, or one of %s", k, strings.Join(ipc.KeyNames, ", "))
+			return ipc.Errorf(ipc.CodeBadArgs, "%q is not a key "+brand.Name+" presses: a letter, a digit, or one of %s", k, strings.Join(ipc.KeyNames, ", "))
 		}
 	}
 	if len(a.Text) > maxKeysText {
@@ -164,7 +165,7 @@ func (c *Core) keys(a ipc.KeysArgs) error {
 			return err
 		}
 		defer os.Remove(file)
-		buf := "irie-keys-" + x.id
+		buf := brand.Slug + "-keys-" + x.id
 		cmds = append(cmds, []string{"load-buffer", "-b", buf, file}, []string{"paste-buffer", "-p", "-d", "-b", buf, "-t", x.pane})
 	}
 	if _, err := c.tmux.RunList(cmds); err != nil {

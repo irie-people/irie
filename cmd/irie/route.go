@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/route"
@@ -40,7 +41,7 @@ func ctlRoute(args []string) error {
 		return err
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl route [--json] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl route [--json] TASK...")
 	}
 	if err := up(nil); err != nil {
 		return err
@@ -100,7 +101,7 @@ func ctlDelegate(args []string) error {
 		return err
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: irie ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...")
+		return errors.New("usage: " + brand.Slug + " ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -117,7 +118,7 @@ func ctlDelegate(args []string) error {
 	if profile == "" {
 		profile = config.Auto
 	}
-	a := ipc.SpawnArgs{Task: task, Cwd: cwd, Profile: profile, Delegate: true, Parent: os.Getenv("IRIE_SESSION"), PermissionMode: *mode}
+	a := ipc.SpawnArgs{Task: task, Cwd: cwd, Profile: profile, Delegate: true, Parent: os.Getenv(brand.Env("SESSION")), PermissionMode: *mode}
 	var r ipc.SpawnResult
 	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		var ie *ipc.Error
@@ -127,7 +128,7 @@ func ctlDelegate(args []string) error {
 		return err
 	}
 	s := r.Session
-	fmt.Fprintf(os.Stderr, "irie: delegated to +%s as %s (%s)\n", s.Profile, s.Name, s.ID)
+	fmt.Fprintf(os.Stderr, brand.Slug+": delegated to +%s as %s (%s)\n", s.Profile, s.Name, s.ID)
 	return waitDone(os.Stdout, p.Socket(), s.ID, *timeout)
 }
 
@@ -165,13 +166,13 @@ func waitDone(w io.Writer, sock, id string, timeout time.Duration) error {
 				return errors.New(msg)
 			case s.State == ipc.StateNeedsYou, s.State == ipc.StateStalled:
 				if told != s.Detail {
-					fmt.Fprintf(os.Stderr, "irie: %s needs the user in Irie: %s\n", s.Name, s.Detail)
+					fmt.Fprintf(os.Stderr, brand.Slug+": %s needs the user in "+brand.Name+": %s\n", s.Name, s.Detail)
 					told = s.Detail
 				}
 			}
 		}
 		if time.Now().After(deadline) {
-			return exitCode{exitStillRunning, fmt.Errorf("session %s is still at work after %v; it goes on in Irie", id, timeout)}
+			return exitCode{exitStillRunning, fmt.Errorf("session %s is still at work after %v; it goes on in "+brand.Name, id, timeout)}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -179,7 +180,7 @@ func waitDone(w io.Writer, sock, id string, timeout time.Duration) error {
 
 func ctlRate(args []string) error {
 	if len(args) != 2 || (args[1] != ipc.Good && args[1] != ipc.Bad) {
-		return errors.New("usage: irie ctl rate SESSION good|bad")
+		return errors.New("usage: " + brand.Slug + " ctl rate SESSION good|bad")
 	}
 	sock, err := socket()
 	if err != nil {

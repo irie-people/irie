@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // cacheFloor is the smallest cache worth a line of its own.
@@ -42,7 +44,7 @@ var toolCaches = map[string]string{
 
 // keepCaches are folders he never offers to clear: Irie's own, which
 // Azrael looks after, browsers that tests run in, and the system's.
-var keepCaches = []string{"irie", "ms-playwright", "CloudKit", "com.apple", "familycircled", "GeoServices", "FamilyCircle"}
+var keepCaches = []string{brand.Slug, "ms-playwright", "CloudKit", "com.apple", "familycircled", "GeoServices", "FamilyCircle"}
 
 // appCaches are folders that a known app keeps under a name of its own
 // rather than its bundle id, by that name.

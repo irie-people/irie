@@ -28,14 +28,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/tmux"
 )
 
 const (
-	leftoverEvery  = 60             // ticks: a look a minute
-	leftoverMaxAge = 24 * time.Hour // no check runs a day
-	leftoverTests  = "irie-test-"   // testutil's sockets (DESIGN §8.1)
+	leftoverEvery  = 60                    // ticks: a look a minute
+	leftoverMaxAge = 24 * time.Hour        // no check runs a day
+	leftoverTests  = brand.Slug + "-test-" // testutil's sockets (DESIGN §8.1)
 )
 
 // leftoverGrace is how long an ended server and its panes' first processes
@@ -122,8 +123,8 @@ func readServer(argv, env []string, us string) (tmuxServer, bool) {
 			s.side = end
 		}
 	}
-	if us != "" && vars["IRIE_SOCKET"] == us {
-		s.ours, s.session = true, vars["IRIE_SESSION"]
+	if us != "" && vars[brand.Env("SOCKET")] == us {
+		s.ours, s.session = true, vars[brand.Env("SESSION")]
 	}
 	return s, true
 }
@@ -243,9 +244,9 @@ func (l leftoverLook) leftovers(open map[string]bool, now time.Time) map[string]
 		main := filepath.Join(filepath.Dir(s.path), strings.TrimSuffix(s.socket, s.side))
 		switch why, ok := stop[main]; {
 		case ok:
-			stop[s.path] = "its Irie stops: " + why
+			stop[s.path] = "its " + brand.Name + " stops: " + why
 		case !paths[main]:
-			stop[s.path] = "its Irie is gone"
+			stop[s.path] = "its " + brand.Name + " is gone"
 		}
 	}
 	return stop

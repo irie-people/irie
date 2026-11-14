@@ -331,7 +331,8 @@ struct ParkButton: View {
     }
 }
 
-/// The right-click menu's items for these.
+/// The right-click menu's items for these, in the hover buttons' order,
+/// one word each, then Move: in its group, or to another space.
 @MainActor
 struct ControlItems: View {
     @Environment(Store.self) private var store
@@ -347,17 +348,23 @@ struct ControlItems: View {
         } else {
             Button("Pause") { store.setFrozen(session, true) }.disabled(!session.canFreeze)
         }
-        Button(session.isPromoted ? "Stop Promoting" : "Promote to the Top") { store.setPromoted(session, !session.isPromoted) }
+        Button(session.isPromoted ? "Stop Promoting" : "Promote") { store.setPromoted(session, !session.isPromoted) }
         if store.canPark {
             Button(session.isParked ? "Unpark" : "Park") { store.setParked(session, !session.isParked) }
         }
         if store.canPin, session.peerName == nil {
-            Button(session.isPinned ? "Unpin" : "Pin to the Top") { store.setPinned(session, !session.isPinned) }
+            Button(session.isPinned ? "Unpin" : "Pin") { store.setPinned(session, !session.isPinned) }
         }
-        Button("Move Up") { store.move(session, by: -1) }.disabled(!canUp)
-        Button("Move Down") { store.move(session, by: 1) }.disabled(!canDown)
-        Button("Move to the Top of Its Group") { store.moveToEdge(session, top: true) }.disabled(!canUp)
-        Button("Move to the Bottom of Its Group") { store.moveToEdge(session, top: false) }.disabled(!canDown)
+        Menu("Move") {
+            Button("Up") { store.move(session, by: -1) }.disabled(!canUp)
+            Button("Down") { store.move(session, by: 1) }.disabled(!canDown)
+            Button("To Top of Group") { store.moveToEdge(session, top: true) }.disabled(!canUp)
+            Button("To Bottom of Group") { store.moveToEdge(session, top: false) }.disabled(!canDown)
+            if SpaceItems.shown(store, [session]) {
+                Divider()
+                SpaceItems(list: [session])
+            }
+        }
     }
 }
 
@@ -430,7 +437,7 @@ struct ControlLines: View {
         if session.isFrozen {
             if session.freezing == true {
                 lineText("Freezing at its next tool call",
-                         more: "Everything it started has stopped. The agent itself started before Irie could pause it whole, so it stops at its next tool call.")
+                         more: "Everything it started has stopped. The agent itself started before \(Brand.name) could pause it whole, so it stops at its next tool call.")
             } else {
                 lineText("Paused" + (session.frozen.map { " since " + $0.formatted(date: .omitted, time: .shortened) } ?? ""),
                          more: "It, its helpers and everything they started are stopped. Resume carries them on.")
