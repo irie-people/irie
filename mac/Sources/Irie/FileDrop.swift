@@ -44,7 +44,9 @@ struct FileDrop: ViewModifier {
         // A terminal ends a dropped path with a space, so the next word starts apart from it.
         let text = files.map { Self.shellEscaped($0.path(percentEncoded: false)) }.joined(separator: " ") + " "
         guard paste(text) else {
-            store.say("There’s no terminal in the window yet, so it can’t take a file.", error: true)
+            store.say(store.poppedOut != nil
+                      ? "The terminal is popped out, so drop the file on its Ghostty window."
+                      : "There’s no terminal in the window yet, so it can’t take a file.", error: true)
             return false
         }
         if !store.showTerminal, let session {
@@ -54,8 +56,12 @@ struct FileDrop: ViewModifier {
     }
 
     /// Types the text into the terminal as a paste; false when there is no
-    /// terminal, as in a build without SwiftTerm.
+    /// terminal, as in a build without one or while it is popped out. Either
+    /// engine's terminal takes it (GhosttyTerminal.swift).
     @MainActor private func paste(_ text: String) -> Bool {
+        #if canImport(GhosttyKit)
+        if let view = store.terminalView as? GhosttyTerminalView { return view.pasteText(text) }
+        #endif
         #if canImport(SwiftTerm)
         guard let view = store.terminalView as? IrieTerminalView else { return false }
         view.pasteText(text)

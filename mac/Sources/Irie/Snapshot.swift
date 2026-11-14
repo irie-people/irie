@@ -140,6 +140,18 @@ enum Snapshot {
             store.side = SideState()
             store.notice = nil
 
+            // The terminal popped out into Ghostty (PopOut.swift): the note
+            // in its frame, in both modes. Set directly, so nothing is saved.
+            store.poppedOut = PoppedOut(pid: 0, launched: .distantPast)
+            for (base, dark) in [("popped-out", false), ("popped-out-dark", true)] {
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1100, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.poppedOut = nil
+
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
             for dark in [false, true] {
