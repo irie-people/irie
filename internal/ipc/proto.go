@@ -109,6 +109,11 @@ const FeatureTutor = "spawn-tutor"
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
 
+// FeatureBoostAlways is in hello's features when the core boosts the
+// user's focus always with arch.gabriel.always, and its header says how
+// Gabriel boosts (Header.Boost).
+const FeatureBoostAlways = "boost-always"
+
 // FeatureWatch is in hello's features when subscribe takes ViewWatch: the
 // freeze dog watches the window that asks (DESIGN §2.4).
 const FeatureWatch = "watch"
@@ -630,12 +635,22 @@ type Header struct {
 	Trod *TrodShift `json:"trod,omitempty"`
 	// VPN is Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
 	VPN *VPN `json:"vpn,omitempty"`
+	// Boost is Gabriel's boost while one is on (DESIGN §4.11), however it
+	// was started, so every client can say so.
+	Boost *Boost `json:"boost,omitempty"`
 	// Spaces are the spaces, in their order, the first first (spaces.go).
 	Spaces []Space `json:"spaces,omitempty"`
 	// Theme is the palette the Mac app draws in, once it has said (the
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
 	Theme *Theme `json:"theme,omitempty"`
+}
+
+// Boost is Gabriel's boost as the header gives it: the user's focus gets
+// the machine first, busy or not.
+type Boost struct {
+	Until  *time.Time `json:"until,omitempty"`  // when a boost started by hand ends
+	Always bool       `json:"always,omitempty"` // arch.gabriel.always: whenever the user is at the computer
 }
 
 // Load is how busy the machine is, which a core also advertises to the

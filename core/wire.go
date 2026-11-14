@@ -78,6 +78,7 @@ type (
 	Subs             = ipc.Subs
 	Teammate         = ipc.Teammate
 	Header           = ipc.Header
+	Boost            = ipc.Boost
 	Load             = ipc.Load
 	Window           = ipc.Window
 	Plan             = ipc.Plan
@@ -244,6 +245,7 @@ const (
 	OpLearn            = ipc.OpLearn
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
+	FeatureBoostAlways = ipc.FeatureBoostAlways
 	FeatureWatch       = ipc.FeatureWatch
 	ViewApp            = ipc.ViewApp
 	ViewWatch          = ipc.ViewWatch
