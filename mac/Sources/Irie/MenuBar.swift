@@ -43,18 +43,25 @@ final class MenuState {
         var canBoostAlways = false
         var vpn = false
         var lockdown = false
+        /// The VPN has a lockdown mode, and an account's time to tell:
+        /// Mullvad's do.
+        var vpnLockdown = false
+        var vpnTime = false
         var undo: String?
         var redo: String?
         var helperShown = false
         var showTerminal = false
         /// The right sidebar's tab on show; nil while it is closed.
         var sideTab: SideTab?
+        /// The terminal is popped out, or could be (PopOut.swift).
+        var poppedOut = false
+        var canPopOut = false
         var canPlugins = false
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
         var plugins: [PluginInfo] = []
-        /// The core serves the vpn op: its build has the privacy plugin,
-        /// whose VPN items show only then.
+        /// The core serves the vpn op: its build has the VPN plugin, whose
+        /// items show only then.
         var canVPN = false
         /// The notepad shows (NotesPanel.swift).
         var notes = false
@@ -98,11 +105,15 @@ extension Store {
         f.canBoostAlways = canBoostAlways
         f.vpn = vpn != nil
         f.lockdown = vpn?.lockdown == true
+        f.vpnLockdown = vpn?.can("lockdown") ?? false
+        f.vpnTime = vpn?.can("time") ?? false
         f.undo = undoLabel
         f.redo = redoLabel
         f.helperShown = helperShown
         f.showTerminal = showTerminal
         f.sideTab = side.open ? side.tab : nil
+        f.poppedOut = poppedOut != nil
+        f.canPopOut = attach != nil
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.canVPN = canVPN
@@ -217,6 +228,11 @@ struct IrieCommands: Commands {
             // The conversation, or the live terminal in its place.
             Button(f.showTerminal ? "Show Conversation" : "Show Terminal", action: run { store.showTerminal.toggle() })
                 .keyboardShortcut("t", modifiers: [.command, .option])
+            // The terminal in a Ghostty window of its own, or back in this
+            // one, as the toolbar's window button (PopOut.swift).
+            Button(f.poppedOut ? "Pop Terminal Back In" : "Pop Out Terminal", action: run { store.togglePopOut() })
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                .disabled(!f.canPopOut)
             // The right sidebar (RightSidebar.swift), with the key cmux and
             // VS Code give a right side bar, and its tabs, the one on show
             // ticked. Helpers opens on the selected session's helper, as
@@ -224,7 +240,8 @@ struct IrieCommands: Commands {
             Section("Right Sidebar") {
                 Button(f.sideTab == nil ? "Show Right Sidebar" : "Hide Right Sidebar", action: run { store.toggleSide() })
                     .keyboardShortcut("b", modifiers: [.command, .option])
-                ForEach(SideTab.built) { t in
+                // Mail's tab, while the mail plugin is on (Mail.swift).
+                ForEach(SideTab.built.filter { $0 != .mail || f.plugins.contains { $0.name == "mail" && $0.on } }) { t in
                     Toggle(t.title, isOn: Binding(get: { f.sideTab == t }, set: { _ in
                         MainActor.assumeIsolated { t == .helpers ? store.toggleHelpers() : store.toggleSideTab(t) }
                     }))
@@ -315,7 +332,7 @@ private struct SessionItems: View {
             .disabled(f.name == nil)
         Button(f.frozen ? "Resume" : "Pause", action: run { store.setFrozen($0, !$0.isFrozen) })
             .disabled(f.name == nil || !f.frozen && !f.canFreeze)
-        Button(f.promoted ? "Stop Promoting" : "Promote", action: run { store.setPromoted($0, !$0.isPromoted) })
+        Button(f.promoted ? "Stop Boosting" : "Boost", action: run { store.setPromoted($0, !$0.isPromoted) })
             .disabled(f.name == nil)
         // The sidebar's z key does it while the list has the keyboard.
         Button(f.parked ? "Unpark" : "Park", action: run { store.setParked($0, !$0.isParked) })
@@ -327,7 +344,7 @@ private struct SessionItems: View {
         Button(f.picked > 1 ? "New Group of \(f.picked) Sessions" : "New Group") { MainActor.assumeIsolated { store.newGroupKey() } }
             .disabled(!f.canGroup)
         // The keys move the selected card in its group; with ⇧, to its
-        // top or bottom, without promoting it.
+        // top or bottom.
         Menu("Move") {
             Button("Up", action: run { store.move($0, by: -1) })
                 .keyboardShortcut(.upArrow, modifiers: [.command, .option])

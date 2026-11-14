@@ -8,7 +8,7 @@ enum NoteFocus: Hashable {
     case draft
 }
 
-/// The notepad (DESIGN §4.18), between the selected session's details and
+/// The notepad (DESIGN §4.20), between the selected session's details and
 /// the task bar: notes kept for later, each a line of a checklist, as in
 /// Notes. Whatever is typed in the last line becomes a note: Return makes
 /// it and the next one, Return in a note makes an empty one under it,

@@ -14,6 +14,7 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/localmodel"
 	"github.com/irie-people/irie/internal/peer"
 	"github.com/irie-people/irie/internal/route"
 	"github.com/irie-people/irie/internal/testutil"
@@ -106,6 +107,19 @@ fake = 1.0
 	t.Cleanup(func() { server.Process.Kill(); server.Wait() })
 	c.up()
 
+	// A spawn needs the peer followed and its server answering; on a busy
+	// machine either takes a while, so wait for both rather than race them.
+	waitUntil(t, "the core follows the peer", func() bool {
+		var pr ipc.PeersResult
+		return c.call("peers", ipc.PeersArgs{}, &pr) == nil && len(pr.Peers) == 1 && pr.Peers[0].Up
+	})
+	waitUntil(t, "the peer's llama-server answers", func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		ready, err := localmodel.Llama{URL: fmt.Sprintf("http://127.0.0.1:%d", tunnel)}.Ready(ctx)
+		return err == nil && ready
+	})
+
 	var r ipc.SpawnResult
 	if err := c.call("spawn", ipc.SpawnArgs{Task: "prompt", Profile: "dory"}, &r); err != nil {
 		t.Fatal(err)
@@ -140,9 +154,10 @@ fake = 1.0
 	// The fake server answers before the tunnel's ssh has started, so its
 	// words take a moment.
 	var data []byte
-	for deadline := time.Now().Add(10 * time.Second); len(data) == 0 && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+	waitUntil(t, "the tunnel's ssh runs", func() bool {
 		data, _ = os.ReadFile(log)
-	}
+		return len(data) > 0
+	})
 	if words := string(data); !strings.Contains(words, fmt.Sprintf("-L 127.0.0.1:%d:127.0.0.1:%d", tunnel, llamaPort)) || !strings.Contains(words, "BatchMode=yes") || !strings.Contains(words, "-- asahi-host") {
 		t.Errorf("ssh was run as %q", words)
 	}
@@ -157,5 +172,20 @@ fake = 1.0
 	i := slices.IndexFunc(ch.Candidates, func(cand route.Candidate) bool { return cand.Profile == "dory" })
 	if ch.Profile != "dory" || i < 0 || !ch.Candidates[i].Usable || ch.Candidates[i].Floor != 0.6 || ch.Candidates[i].Cost != 0 || !strings.Contains(ch.Candidates[i].Note, "Asahi's llama-server") {
 		t.Errorf("small work = %+v", ch)
+	}
+}
+
+// waitUntil waits until ok holds: up to 30 s, or 5 min on a machine too
+// busy for a time bound (slow).
+func waitUntil(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	limit := 30 * time.Second
+	if slow(t) {
+		limit = 5 * time.Minute
+	}
+	for deadline := time.Now().Add(limit); !ok(); time.Sleep(200 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: not within %v", what, limit)
+		}
 	}
 }

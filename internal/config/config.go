@@ -58,6 +58,7 @@ type Config struct {
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
 	Markets  Markets            `toml:"markets"`
+	Mail     Mail               `toml:"mail"`
 	Plugins  Plugins            `toml:"plugins"`
 }
 
@@ -65,9 +66,12 @@ type Config struct {
 // features that go on and off together. A plugin that is off turns all of
 // its parts off, whatever their own switches say.
 type Plugins struct {
-	// Privacy is Mullvad VPN control, anonymous research over Mullvad and
-	// Tor, Mullvad Browser for agents and the dead man's switch guide. Each
-	// part keeps its own switch too.
+	// VPN is the VPN in every client and the :vpn words, for whichever VPN
+	// vpn.provider names (DESIGN §4.18). vpn.on is its part's own switch.
+	VPN bool `toml:"vpn"`
+	// Privacy is anonymous research over Mullvad and Tor, Mullvad Browser
+	// for agents and the dead man's switch guide. Each part keeps its own
+	// switch too.
 	Privacy bool `toml:"privacy"`
 	// Writing is writing in Variorum: :write and the skill its sessions run
 	// (docs/proposals/writers.md).
@@ -75,6 +79,10 @@ type Plugins struct {
 	// Markets is a map of your own market research: the page in
 	// markets.folder in the Mac app's Markets window, and :markets.
 	Markets bool `toml:"markets"`
+	// Mail is Irie's own mail client: Gmail, Proton Mail and other IMAP
+	// accounts in one list, each in a colour of its own
+	// (docs/proposals/mail.md).
+	Mail bool `toml:"mail"`
 }
 
 // Markets is the markets plugin's map (DESIGN §4.17).
@@ -89,9 +97,13 @@ type Markets struct {
 // the plugin built in.
 func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 
-// VPNOn says whether Mullvad VPN control runs: vpn.on, with the privacy
-// plugin built in and on.
-func (c Config) VPNOn() bool { return PrivacyBuilt && c.Plugins.Privacy && c.VPN.On }
+// MailOn says whether the mail plugin runs: plugins.mail, with the plugin
+// built in.
+func (c Config) MailOn() bool { return MailBuilt && c.Plugins.Mail }
+
+// VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
+// in and on.
+func (c Config) VPNOn() bool { return VPNBuilt && c.Plugins.VPN && c.VPN.On }
 
 // AnonOn says whether +anon and +tor tasks run: anon.on, with the privacy
 // plugin built in and on.
@@ -129,11 +141,55 @@ const (
 	LidOff    = "off"
 )
 
-// VPN is Mullvad VPN control (docs/proposals/extensions.md §4): its state in
-// every client, and the :vpn words to change it.
+// VPN is VPN control (DESIGN §4.18): the VPN's state in every client, and
+// the :vpn words to change it, for the VPN that Provider names.
 type VPN struct {
-	On      bool   `toml:"on"`      // show the VPN in Irie and take the :vpn words
-	Mullvad string `toml:"mullvad"` // the mullvad CLI; "" = PATH, then /usr/local/bin and /usr/bin
+	On bool `toml:"on"` // show the VPN in Irie and take the :vpn words
+	// Provider is the VPN: one of VPNKinds that this copy offers
+	// (VPNOffered), the first of them by default.
+	Provider string `toml:"provider"`
+	// Mullvad is the mullvad CLI, for provider mullvad and anonymous
+	// research; "" = PATH, then /usr/local/bin and /usr/bin.
+	Mullvad string `toml:"mullvad"`
+	// CLI is another provider's own command, when it isn't where Irie
+	// looks: tailscale, netbird, warp-cli, nordvpn, Cisco's vpn,
+	// globalprotect, forticlient, scutil or nmcli. "" = where its app puts
+	// it.
+	CLI string `toml:"cli"`
+	// Server is what the VPN connects to: Cisco Secure Client's host,
+	// GlobalProtect's portal, FortiClient's connection, or for system the
+	// VPN's name in System Settings › VPN or NetworkManager. "" = the VPN's
+	// own choice.
+	Server string `toml:"server"`
+	// Status, Connect and Disconnect are provider command's commands, each
+	// a program and its arguments: Status prints the VPN's state, which
+	// Connected (and Connecting, when set) match as regular expressions.
+	Status     []string `toml:"status"`
+	Connect    []string `toml:"connect"`
+	Disconnect []string `toml:"disconnect"`
+	Connected  string   `toml:"connected"`
+	Connecting string   `toml:"connecting"`
+}
+
+// VPNKinds are the VPNs Irie drives (internal/vpn), as vpn.provider names
+// them, in the order they show.
+var VPNKinds = []string{"mullvad", "tailscale", "netbird", "warp", "nordvpn", "cisco", "globalprotect", "forticlient", "system", "command"}
+
+// VPNOffered are the VPNs this copy offers: brand.VPNs, or all of them
+// when it names none.
+func VPNOffered() []string { return offeredVPNs(brand.VPNs) }
+
+func offeredVPNs(list string) []string {
+	if strings.TrimSpace(list) == "" {
+		return slices.Clone(VPNKinds)
+	}
+	var out []string
+	for _, k := range strings.Split(list, ",") {
+		if k = strings.TrimSpace(k); k != "" && !slices.Contains(out, k) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // Browser is Irie's browser connector (DESIGN §4.15): a real browser,
@@ -457,6 +513,7 @@ type Profile struct {
 	Cost           string            `toml:"cost"`   // what the + list says it costs, such as "free, 50 requests a day"; "" = Irie's own reading
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
+	Skill          string            `toml:"skill"`  // the skill of Irie's its sessions start on, such as chaos: the task goes to /irie:<skill> (DESIGN §4.19); "" = none
 	// SDK runs the session on the Agent SDK: Irie's own pane program drives
 	// `claude -p`, instead of Claude Code's terminal app (DESIGN §3.5). It is
 	// for an API key whose credits cover the Agent SDK but not Claude Code,
@@ -518,6 +575,20 @@ type Usage struct {
 	// their cost, context and plan use. Irie runs the user's own status
 	// line and shows what it prints.
 	StatusLine bool `toml:"status_line"`
+	// Rebuilds is the prompt-cache meter (DESIGN §6.3): it counts each
+	// session's requests that wrote its context into the cache again
+	// instead of reading it, with what they cost at list price and what
+	// woke the session, and says what waking a cold session costs.
+	Rebuilds bool `toml:"rebuilds"`
+	// RebuildCard is how many dollars a session's rebuilds must cost in a
+	// day for its card to say how often it woke cold that day; 0 = from
+	// the first.
+	RebuildCard float64 `toml:"rebuild_card"`
+	// WakeMost is what a nudge is worth, in dollars at list price: the
+	// trod bot and the jot dog leave a session whose cache has run out be
+	// when waking it would cost more, and the trod bot leaves what it froze
+	// frozen; 0 = no limit.
+	WakeMost float64 `toml:"wake_most"`
 }
 
 // Dog is the jot dog (DESIGN §4.8): it sees each task you jot down through
@@ -793,6 +864,18 @@ func Default() Config {
 				Env:            map[string]string{},
 				Arch:           "mikael",
 			},
+			// The chaos monkey: it tries to break what the task names, in a
+			// copy of its own, and reports what broke (DESIGN §4.19).
+			"chaos": {
+				Harness:        "claude-code",
+				Command:        "claude",
+				Model:          "claude-opus-5-5",
+				Effort:         "high",
+				PermissionMode: "auto",
+				Args:           []string{},
+				Env:            map[string]string{},
+				Skill:          "chaos",
+			},
 		},
 		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
@@ -808,7 +891,7 @@ func Default() Config {
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},
 		Context: Context{KeepDays: 30},
 		Hold:    Hold{Max: 24 * time.Hour},
-		Usage:   Usage{StatusLine: true},
+		Usage:   Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4},
 		Skills:  Skills{Enabled: true, Disabled: []string{}},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
 		Env:     Env{Capture: "login-shell"},
@@ -828,7 +911,9 @@ func Default() Config {
 		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
 		Browser: Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
 		Anon:    Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
-		Plugins: Plugins{Privacy: true, Writing: true},
+		Mail:    defaultMail(),
+		VPN:     VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
+		Plugins: Plugins{VPN: true, Privacy: true, Writing: true, Mail: true},
 	}
 }
 
@@ -943,14 +1028,21 @@ func Parse(data []byte, path string) (Config, error) {
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
 		Markets  *Markets                  `toml:"markets"`
+		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
 	}
 	if file.Peers != nil {
 		c.Peers = file.Peers
+	}
+	// The VPN was the privacy plugin's until 2026-11-14 (DESIGN §4.18): a
+	// file that turned that plugin off, and says nothing of the VPN's own,
+	// keeps the VPN off too.
+	if md.IsDefined("plugins", "privacy") && !c.Plugins.Privacy && !md.IsDefined("plugins", "vpn") {
+		c.Plugins.VPN = false
 	}
 	for _, name := range slices.Sorted(maps.Keys(file.Profiles)) {
 		p, ok := c.Profiles[name]
@@ -1017,6 +1109,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Spawn.Preferences == nil {
 		c.Spawn.Preferences = []string{}
+	}
+	if c.Mail.Accounts == nil {
+		c.Mail.Accounts = map[string]MailAccount{}
 	}
 	fillRoute(&c.Route)
 	if keys := md.Undecoded(); len(keys) > 0 {
@@ -1244,6 +1339,17 @@ func (c Config) Validate() error {
 				bad("profiles.%s.args: a profile that runs as an arch agent passes no --agent or --agents of its own", name)
 			}
 		}
+		// Whether the skill is one of Irie's, and on, the spawn checks, and
+		// says why when it isn't (internal/core/guide.go).
+		switch s := p.Skill; {
+		case s == "":
+		case !skillName.MatchString(s) || len(s) > 64:
+			bad("profiles.%s.skill = %q: not a skill's name: lowercase letters, digits and single hyphens, at most 64", name, s)
+		case p.Harness != "claude-code":
+			bad("profiles.%s.skill: only the claude-code harness starts on a skill of %s's yet", name, brand.Name)
+		case !p.TakesSkills():
+			bad("profiles.%s.skill: a profile that starts on a skill takes %s's skills; drop skills = false", name, brand.Name)
+		}
 		if l := p.Local; l != nil {
 			switch {
 			case !slices.Contains(Runtimes, l.Runtime):
@@ -1362,6 +1468,12 @@ func (c Config) Validate() error {
 	if c.Hold.Max <= 0 {
 		bad("hold.max = %v: must be positive", c.Hold.Max)
 	}
+	if c.Usage.RebuildCard < 0 {
+		bad("usage.rebuild_card = %v: must not be negative", c.Usage.RebuildCard)
+	}
+	if c.Usage.WakeMost < 0 {
+		bad("usage.wake_most = %v: must be 0, for no limit, or more", c.Usage.WakeMost)
+	}
 	for _, n := range c.Skills.Disabled {
 		if !skillName.MatchString(n) || len(n) > 64 {
 			bad("skills.disabled: %q is not a skill's name: lowercase letters, digits and single hyphens, at most 64", n)
@@ -1465,8 +1577,32 @@ func (c Config) Validate() error {
 	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
 		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
 	}
-	if m := c.VPN.Mullvad; m != "" && !pathLike(m) {
+	v := c.VPN
+	if offered := VPNOffered(); !slices.Contains(offered, v.Provider) {
+		if slices.Contains(VPNKinds, v.Provider) {
+			bad("vpn.provider = %q: this copy of %s offers %s", v.Provider, brand.Name, strings.Join(offered, ", "))
+		} else {
+			bad("vpn.provider = %q: must be one of %s", v.Provider, strings.Join(offered, ", "))
+		}
+	}
+	if m := v.Mullvad; m != "" && !pathLike(m) {
 		bad("vpn.mullvad = %q: must be an absolute or ~ path, or empty for the usual places", m)
+	}
+	if m := v.CLI; m != "" && !pathLike(m) {
+		bad("vpn.cli = %q: must be an absolute or ~ path, or empty for where the VPN's app puts it", m)
+	}
+	if strings.ContainsFunc(v.Server, unicode.IsControl) || len(v.Server) > 200 {
+		bad("vpn.server = %q: must be one line of at most 200 characters", v.Server)
+	}
+	for key, argv := range map[string][]string{"vpn.status": v.Status, "vpn.connect": v.Connect, "vpn.disconnect": v.Disconnect} {
+		if len(argv) > 0 && (argv[0] == "" || strings.HasPrefix(argv[0], "-")) {
+			bad("%s = %q: must start with the program, by its path or its name", key, argv)
+		}
+	}
+	for key, pattern := range map[string]string{"vpn.connected": v.Connected, "vpn.connecting": v.Connecting} {
+		if _, err := regexp.Compile(pattern); err != nil {
+			bad("%s = %q: must be a regular expression: %v", key, pattern, err)
+		}
 	}
 	if f := c.Markets.Folder; f != "" && !pathLike(f) {
 		bad("markets.folder = %q: must be an absolute or ~ path to the folder that holds your map, or empty for none", f)
@@ -1513,12 +1649,14 @@ func (c Config) Validate() error {
 	if an.Tor != "" && !pathLike(an.Tor) {
 		bad("anon.tor = %q: must be an absolute or ~ path, or empty for the usual places", an.Tor)
 	}
+	checkMail(c.Mail, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
-	if PrivacyBuilt && WritingBuilt && MarketsBuilt {
+	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1532,8 +1670,20 @@ func (c Config) Write(w io.Writer) error {
 		return err
 	}
 	plugins, _ := m["plugins"].(map[string]any)
+	if !VPNBuilt {
+		// Anonymous research still finds Mullvad by vpn.mullvad.
+		if v, ok := m["vpn"].(map[string]any); ok && PrivacyBuilt {
+			m["vpn"] = map[string]any{"mullvad": v["mullvad"]}
+		} else {
+			delete(m, "vpn")
+		}
+		delete(plugins, "vpn")
+	} else if v, ok := m["vpn"].(map[string]any); ok && !mullvad {
+		// A copy that offers no Mullvad, and has no anonymous research,
+		// has no use for its CLI's path.
+		delete(v, "mullvad")
+	}
 	if !PrivacyBuilt {
-		delete(m, "vpn")
 		delete(m, "anon")
 		delete(m, "browser")
 		delete(plugins, "privacy")
@@ -1544,6 +1694,10 @@ func (c Config) Write(w io.Writer) error {
 	if !MarketsBuilt {
 		delete(m, "markets")
 		delete(plugins, "markets")
+	}
+	if !MailBuilt {
+		delete(m, "mail")
+		delete(plugins, "mail")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

@@ -111,8 +111,52 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // Mail (MailViews.swift): its tab with the list and with a
+            // message open, its window, and its two sheets.
+            for (base, opening, dark) in [("side-mail", false, false), ("side-mail-dark", false, true), ("side-mail-reading", true, false)] {
+                store.mail.loadFixture(opening: opening)
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .mail)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            for dark in [false, true] {
+                store.mail.loadFixture(opening: true)
+                let (rep, _) = window(MailWindow().environment(store), dark: dark, width: 1080, height: 700)
+                let name = "mail-window-\(dark ? "dark" : "light").png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            do {
+                let (add, _) = window(AddMailAccount().environment(store), dark: false, width: 480, height: 330)
+                try add.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("mail-add-account.png"))
+                print("mail-add-account.png")
+                store.mail.loadFixture(opening: true)
+                store.mail.reply()
+                if let c = store.mail.composing {
+                    let (rep, _) = window(MailComposer(draft: c).environment(store), dark: false, width: 560, height: 520)
+                    try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("mail-compose.png"))
+                    print("mail-compose.png")
+                }
+                store.mail.composing = nil
+                store.mail.loadFixture()
+            }
             store.side = SideState()
             store.notice = nil
+
+            // The terminal popped out into Ghostty (PopOut.swift): the note
+            // in its frame, in both modes. Set directly, so nothing is saved.
+            store.poppedOut = PoppedOut(pid: 0, launched: .distantPast)
+            for (base, dark) in [("popped-out", false), ("popped-out-dark", true)] {
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1100, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.poppedOut = nil
 
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
@@ -244,10 +288,14 @@ enum Fixture {
     /// The plugins op's answer, as `irie plugins` prints it on a Mac with
     /// Mullvad VPN and Mullvad Browser installed.
     static let plugins = #"""
-    {"plugins": [{"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
-      "summary": "Mullvad VPN, anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+    {"plugins": [{"name": "vpn", "title": "VPN", "on": true,
+      "summary": "Your VPN in every client, connected, disconnected or moved from any task bar or the menu: Mullvad VPN, Tailscale, NetBird, Cloudflare WARP, NordVPN, Cisco Secure Client, GlobalProtect, FortiClient, the system's own VPNs and any other through commands of your own.",
       "parts": [
-        {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "detail": "Connected in Malmö, Sweden.", "summary": "See the VPN in every client, and connect, disconnect or change its place from a task bar or the menu."},
+        {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "setup": ":setup vpn", "detail": "VPN on: Malmö, Sweden (se-mma-wg-002), lockdown on, 41 days left.", "summary": "See the VPN in every client, and connect or disconnect it from a task bar or the menu, or move it where the VPN has places."}
+      ]},
+     {"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
+      "summary": "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+      "parts": [
         {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through \#(Brand.name)'s SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
         {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
@@ -313,7 +361,11 @@ enum Fixture {
                     group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
                     repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "glooks000000",
-                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6,
+                    // It woke cold three times today, which the card says
+                    // (DESIGN §6.3).
+                    rebuilds: Rebuilds(today: 3, todayUSD: 4.10, week: 5, weekUSD: 7.30, cause: "you", words: "$4.10 today: woke cold 3 times"),
+                    cold: Cold(tokens: 310_000, usd: 2.48, words: "~$2.48 to wake")),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",

@@ -2,7 +2,7 @@ package ipc
 
 import "time"
 
-// The notepad (DESIGN §4.18): notes a person keeps for later, each one line
+// The notepad (DESIGN §4.20): notes a person keeps for later, each one line
 // of a checklist they tick off, which a sidebar shows between the selected
 // session's details and the task bar. A note goes to the task bar as if it
 // were typed there and sent: InputArgs.Note names it, and the core marks it

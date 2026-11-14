@@ -33,6 +33,7 @@ import (
 	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/journal"
+	"github.com/irie-people/irie/internal/rebuild"
 	"github.com/irie-people/irie/internal/tmux"
 )
 
@@ -48,6 +49,9 @@ type closes struct {
 	list   []closedRecord     // newest first
 	done   map[string]bool    // every session closed now, past maxClosed too, by id
 	ending map[string]*ending // closing panes whose agents are still ending, by pane id
+	// cold is when the next closed session's prompt cache runs out, after
+	// which the closed list says what reopening it costs (rebuilds.go).
+	cold time.Time
 }
 
 // closedRecord is a closed session, from its ui.closed event: what reopen
@@ -73,6 +77,10 @@ type closedRecord struct {
 	// Space and Group are the space and the group it was closed in, which
 	// reopen brings it back to (comeHome).
 	Space, Group string
+	// Wake is what its next turn costs in its prompt cache, once reopened:
+	// its context when it closed, and when its cache runs out (DESIGN
+	// §6.3). Zero when Irie did not know.
+	Wake rebuild.Wake
 }
 
 // ending is a closing pane's agent on its way out.
@@ -106,7 +114,45 @@ func closedFrom(e event.Event) closedRecord {
 	r.Space, r.Group = e.Str("space"), e.Str("group")
 	named, ok := e.Data["named"].(bool)
 	r.Named, r.Old = named, !ok
+	r.Wake = wakeFrom(e)
 	return r
+}
+
+// wakeData adds w, a closing session's context, to its ui.closed's data.
+func wakeData(data map[string]any, w rebuild.Wake) {
+	if w.Last.IsZero() || w.Tokens == 0 {
+		return
+	}
+	data["context"], data["cache_last"], data["cache_ttl"], data["model"] = w.Tokens, w.Last.UTC().Format(time.RFC3339Nano), ttlWord(w.TTL), w.Model
+	if w.Priced {
+		data["context_usd"] = roundCents(w.USD)
+	}
+}
+
+// wakeFrom is the context a ui.closed says its session had.
+func wakeFrom(e event.Event) rebuild.Wake {
+	var w rebuild.Wake
+	last, err := time.Parse(time.RFC3339Nano, e.Str("cache_last"))
+	if err != nil {
+		return w
+	}
+	w.Last, w.TTL, w.Model = last, rebuild.DefaultTTL, e.Str("model")
+	if e.Str("cache_ttl") == "1h" {
+		w.TTL = time.Hour
+	}
+	w.Cold = last.Add(w.TTL)
+	if n, ok := e.Data["context"].(float64); ok {
+		w.Tokens = int64(n)
+	} else if n, ok := e.Int("context"); ok {
+		w.Tokens = int64(n)
+	}
+	switch v := e.Data["context_usd"].(type) {
+	case float64:
+		w.USD, w.Priced = v, true
+	case int:
+		w.USD, w.Priced = float64(v), true
+	}
+	return w
 }
 
 // addClosed puts r first among the closed sessions. The caller holds c.mu.
@@ -132,12 +178,37 @@ func (c *Core) dropClosed(id string) {
 // first. A session that runs again is not closed. The caller holds c.mu.
 func (c *Core) closedList() []ipc.ClosedSession {
 	out := []ipc.ClosedSession{}
+	now := time.Now()
+	c.closes.cold = time.Time{}
 	for _, r := range c.closes.list {
 		if c.sessions[r.ID] == nil {
-			out = append(out, ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed, Auto: r.Auto, Lost: r.Lost})
+			cs := ipc.ClosedSession{ID: r.ID, Name: r.Name, Closed: r.Closed, Auto: r.Auto, Lost: r.Lost}
+			if w := r.Wake; c.cfg().Usage.Rebuilds && w.Priced && w.Tokens >= rebuild.MinTokens {
+				if w.IsCold(now) {
+					cs.Cold = coldOf(w)
+				} else if c.closes.cold.IsZero() || w.Cold.Before(c.closes.cold) {
+					c.closes.cold = w.Cold
+				}
+			}
+			out = append(out, cs)
 		}
 	}
 	return out
+}
+
+// closedGoesCold tells the clients that see the closed sessions once one
+// of their prompt caches runs out, so that the closed list says what
+// reopening it costs.
+func (c *Core) closedGoesCold(now time.Time) {
+	c.mu.Lock()
+	due := !c.closes.cold.IsZero() && !now.Before(c.closes.cold)
+	if due {
+		c.closes.cold = time.Time{}
+	}
+	c.mu.Unlock()
+	if due {
+		c.publishClosed()
+	}
 }
 
 // publishClosed tells every subscriber that sees the whole list that the
@@ -269,6 +340,11 @@ func (c *Core) closeLocked(id string, auto bool) error {
 		if v != "" {
 			data[k] = v
 		}
+	}
+	// What reopening it will cost, once its cache has run out.
+	if w, ok := x.tally.wake(x.conversation()); ok && !x.local {
+		r.Wake = w
+		wakeData(data, w)
 	}
 	c.record(x, event.Event{TS: event.Stamp(r.Closed), Source: source, Kind: event.UIClosed, Data: data})
 	c.addClosed(r)

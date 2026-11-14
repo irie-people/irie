@@ -44,10 +44,13 @@ struct Session: Decodable, Identifiable, Equatable {
     /// Which of the agents' colours it takes while it works, from 1; the
     /// core picks it so that cards side by side differ.
     var hue: Int?
+    /// Its prompt-cache rebuilds today, in the core's words for the card
+    /// once they matter (DESIGN §6.3).
+    var rebuilds: Rebuilds?
 
     enum CodingKeys: String, CodingKey {
         case id, name, state, reason, detail, command, warnings, created, cwd, repo, worktree, branch, profile, subagents, tokens
-        case model, context, memory, routed, rated, order, parked, priority, frozen, freezing, loose, hue
+        case model, context, memory, routed, rated, order, parked, priority, frozen, freezing, loose, hue, rebuilds
         case exitCode = "exit_code"
         case costUSD = "cost_usd"
         case taskClass = "class"
@@ -56,6 +59,13 @@ struct Session: Decodable, Identifiable, Equatable {
     var isParked: Bool { parked ?? false }
     var isPromoted: Bool { (priority ?? 0) > 0 }
     var isFrozen: Bool { state == "frozen" || frozen != nil }
+}
+
+/// How often a session's prompt cache was written again today: the core
+/// sends the card's words, "$4.10 today: woke cold 3 times", only once
+/// that matters.
+struct Rebuilds: Decodable, Equatable {
+    var words: String?
 }
 
 /// A running helper of a session.
@@ -134,8 +144,8 @@ struct Header: Decodable, Equatable {
     var version: String?
     var redOnDone: Bool?
     var plan: Plan?
-    /// Mullvad VPN on that machine, while its vpn.on
-    /// (docs/proposals/extensions.md §4).
+    /// The VPN on that machine, whichever its vpn.provider names, while
+    /// its vpn.on (DESIGN §4.18).
     var vpn: VPNMark?
     /// The palette its Mac app draws in, once it has said.
     var theme: ThemeColors?
@@ -153,7 +163,7 @@ struct ThemeColors: Decodable, Equatable {
     var dark: [String: String]?
 }
 
-/// Mullvad VPN as a machine's core sees it: its state and the state in one
+/// The VPN as a machine's core sees it: its state and the state in one
 /// line. Never an address or the account's number.
 struct VPNMark: Decodable, Equatable {
     var state: String?

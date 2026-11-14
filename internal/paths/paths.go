@@ -102,7 +102,7 @@ func (p Paths) StateFile() string             { return filepath.Join(p.State, "s
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 
 // Notepad is the person's notes for later, and NotepadCopies the folder of
-// its copies, one a day (DESIGN §4.18). They are the person's own words, so
+// its copies, one a day (DESIGN §4.20). They are the person's own words, so
 // they go with the data, not the state.
 func (p Paths) Notepad() string       { return filepath.Join(p.Data, "notepad.json") }
 func (p Paths) NotepadCopies() string { return filepath.Join(p.Data, "backups", "notepad") }
@@ -112,6 +112,11 @@ func (p Paths) ContextStore() string          { return filepath.Join(p.State, "c
 func (p Paths) Remote() string                { return filepath.Join(p.State, "remote") }
 func (p Paths) RemoteLog() string             { return filepath.Join(p.State, "remote.log") }
 func (p Paths) ScratchDir(slug string) string { return filepath.Join(p.Scratch(), slug) }
+
+// MissedFile holds the hook events of a session that its agent's shim
+// could not give the core, while it was down, for the core to take when it
+// is back (DESIGN §3.3).
+func (p Paths) MissedFile(id string) string { return filepath.Join(p.Session(id), "missed.ndjson") }
 
 // EnsureState creates the state and data directories with mode 0700.
 func (p Paths) EnsureState() error {

@@ -127,7 +127,7 @@ struct CoreConfig: Decodable, Equatable {
     var dog: Dog
     /// The trod bot; nil from a core from before it.
     var trod: Trod?
-    /// Mullvad VPN control; nil from a core from before it.
+    /// VPN control (DESIGN §4.18); nil from a core from before it.
     var vpn: VPN?
     /// The context store (DESIGN §4.13); nil from a core from before it.
     var context: Context?
@@ -1947,7 +1947,7 @@ private struct TabsSettings: View {
             } header: {
                 Text("Moving")
             } footer: {
-                footnote("Or drag a card. Dropped across Pinned’s edge it is pinned, and across Parked’s it is parked. Pin to the Top is in a card’s menu and in File; promoting a card is still the way to give it the machine first.")
+                footnote("Or drag a card. Dropped across Pinned’s edge it is pinned, and across Parked’s it is parked. Pin to the Top is in a card’s menu and in File; Boost gives a card the machine first and leaves it where it is.")
             }
         }
     }

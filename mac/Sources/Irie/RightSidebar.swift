@@ -15,9 +15,10 @@ import SwiftUI
 // helper starting only puts a count on a tab.
 
 /// A tab of the right sidebar, in the order the proposal gives them, then
-/// Notices, which also gives each its key: ⌥⌘1 to ⌥⌘6.
+/// Notices, then Mail, the mail plugin's (Mail.swift), which also gives
+/// each its key: ⌥⌘1 to ⌥⌘7.
 enum SideTab: String, CaseIterable, Identifiable {
-    case dock, changes, helpers, plan, review, notices
+    case dock, changes, helpers, plan, review, notices, mail
 
     var id: String { rawValue }
 
@@ -29,6 +30,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "Plan"
         case .review: return "Review"
         case .notices: return "Notices"
+        case .mail: return "Mail"
         }
     }
 
@@ -41,12 +43,13 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .plan: return "list.bullet"
         case .review: return "checkmark.circle"
         case .notices: return "bell"
+        case .mail: return "envelope"
         }
     }
 
     /// The tabs this build has, in their order. The others come with the
     /// core features they need.
-    static let built: [SideTab] = [.dock, .helpers, .review, .notices]
+    static let built: [SideTab] = [.dock, .helpers, .review, .notices, .mail]
 
     /// Its key with ⌥⌘, by its place among all the tabs, so a key keeps its
     /// tab as more tabs arrive.
@@ -90,6 +93,10 @@ struct SideState: Equatable {
 }
 
 extension Store {
+    /// The tabs the right sidebar shows: Mail only while its plugin is on
+    /// (Mail.swift). The toolbar's button names them too.
+    var sideTabs: [SideTab] { SideTab.built.filter { $0 != .mail || mailShown } }
+
     /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button.
     func toggleSide() {
         if side.open { closeSide() } else { openSide(side.tab) }
@@ -256,7 +263,7 @@ struct RightSidebar: View {
 
     private func tabs(tight: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(SideTab.built) { t in tabButton(t, tight: tight) }
+            ForEach(store.sideTabs) { t in tabButton(t, tight: tight) }
         }
     }
 
@@ -322,6 +329,9 @@ struct RightSidebar: View {
         case .notices:
             let n = store.unseenErrors
             return (n, n > 0)
+        case .mail:
+            // Unread mail is news, not something that needs you: never red.
+            return (store.mailShown ? store.mail.unread : 0, false)
         default:
             return (0, false)
         }
@@ -332,6 +342,12 @@ struct RightSidebar: View {
         case .dock: DockTab()
         case .review: ReviewTab()
         case .notices: NoticesTab()
+        case .mail:
+            if store.mailShown {
+                MailTab()
+            } else {
+                SideNote(title: "Mail is off", text: "The mail plugin is off, or this \(Brand.name) was built without it: Plugins › Mail turns it on.")
+            }
         default: HelpersTab()
         }
     }
@@ -348,13 +364,27 @@ private struct SideEdge: View {
     @Binding var guide: Double?
     let drawn: Double
     let most: Double
+    /// The resize pointer is pushed. It is popped once, and also when the
+    /// drawer closes under the pointer, which ends no hover: the pointer
+    /// would stay a resize one over the terminal.
+    @State private var pushed = false
 
     var body: some View {
         Color.clear
             .frame(width: 10)
             .contentShape(Rectangle())
             .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                if inside, !pushed {
+                    NSCursor.resizeLeftRight.push()
+                    pushed = true
+                } else if !inside, pushed {
+                    NSCursor.pop()
+                    pushed = false
+                }
+            }
+            .onDisappear {
+                if pushed { NSCursor.pop() }
+                pushed = false
             }
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { g in guide = min(SideState.clamp(drawn - Double(g.translation.width)), max(most, SideState.minWidth)) }

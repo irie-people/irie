@@ -1,6 +1,6 @@
 package core
 
-// The notepad (DESIGN §4.18): notes a person keeps for later, ticked off
+// The notepad (DESIGN §4.20): notes a person keeps for later, ticked off
 // like the lines of a checklist, which a sidebar shows between the selected
 // session's details and the task bar, and which go to the task bar as if
 // typed there when the time comes (InputArgs.Note).

@@ -54,9 +54,9 @@ func texts(notes []ipc.Note) []string {
 }
 
 // A day at a time from 9 Nov 2026, at noon.
-type days struct{ n int }
+type padDays struct{ n int }
 
-func (d *days) now() time.Time { return time.Date(2026, 11, 9+d.n, 12, 0, 0, 0, time.Local) }
+func (d *padDays) now() time.Time { return time.Date(2026, 11, 9+d.n, 12, 0, 0, 0, time.Local) }
 
 func TestTheNotepadKeepsItsNotesAcrossARestart(t *testing.T) {
 	home := t.TempDir()
@@ -227,7 +227,7 @@ func TestAnEditKeepsWhatWasTyped(t *testing.T) {
 // notes come from the newest daily copy.
 func TestABadNotepadFileComesBackFromItsCopy(t *testing.T) {
 	home := t.TempDir()
-	d := &days{}
+	d := &padDays{}
 	c := padCore(t, home, d.now)
 	c.padDo(t, ipc.NotepadArgs{Do: ipc.NotepadAdd, ID: "a", Text: "Monday's note"})
 	if copies := c.notepadCopyFiles(); len(copies) != 0 {
@@ -295,7 +295,7 @@ func TestANewerNotepadFileIsOnlyShown(t *testing.T) {
 }
 
 func TestTheNotepadKeepsThirtyDaysOfCopiesAndDeletedNotes(t *testing.T) {
-	d := &days{}
+	d := &padDays{}
 	c := padCore(t, t.TempDir(), d.now)
 	c.padDo(t, ipc.NotepadArgs{Do: ipc.NotepadAdd, ID: "old", Text: "deleted on day 0"})
 	c.padDo(t, ipc.NotepadArgs{Do: ipc.NotepadDelete, ID: "old"})

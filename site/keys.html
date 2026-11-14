@@ -227,6 +227,18 @@ SESSION        STATE      NAME            SENT ON                       LEFT FOR
 s38bvad9qgve0  working    fix-cart-total  01:12 question, 03:40 loose
 s38bvaf2kq7m1  needs_you  migrate-db      02:05 error                   Asks: may it run psql …?</code></pre>
 
+  <h3 id="ctl-rebuilds">irie ctl rebuilds [--json]</h3>
+  <p>The prompt-cache meter. A session whose cache has run out, after an hour or five minutes without a request, writes its whole conversation into the cache again on its next turn: on Opus 5.5 that costs as much as 40 turns that read it. This lists those rebuilds today and in the last seven days, what woke each session (your message after a long idle, a thaw, a reopen, the trod bot) and what they cost at list price, the costliest first. A card says it too once a day’s rebuilds cost a dollar, such as “$4.10 today: woke cold 3 times”, and the trod bot leaves a cold session be when waking it would cost more than <code>usage.wake_most</code>, $4.</p>
+<pre><code><span class="prompt">$ </span>irie ctl rebuilds
+Prompt-cache rebuilds at list price: today 3, $7.20; this week 4, $12.00.
+
+TODAY, WHAT WOKE THEM           REBUILDS  TOKENS  COST
+your message after a long idle  2         600k    $4.80
+the trod bot's thaw             1         300k    $2.40
+TODAY, BY SESSION
+fix-cart-total                  1         500k    $4.00
+migrate-db (closed)             2         400k    $3.20</code></pre>
+
   <p>More <code>irie ctl</code> commands arrive with the actions they control, such as pausing. Milestone 10 adds <code>irie ctl preflight</code> and <code>spawn --force</code> for local models. <a class="tag" href="roadmap.html#m5" data-m="5">Planned</a></p>
 
   <nav class="docs-nav" aria-label="Docs">

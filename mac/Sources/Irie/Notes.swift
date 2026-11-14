@@ -9,7 +9,7 @@ struct PendingNote: Codable, Equatable {
     var args: NotepadArgs
 }
 
-/// The notepad as the app has it (DESIGN §4.18): the person's notes for
+/// The notepad as the app has it (DESIGN §4.20): the person's notes for
 /// later, which the core keeps (NotesPanel.swift draws them).
 ///
 /// What the panel draws is the core's notepad with the app's changes not yet

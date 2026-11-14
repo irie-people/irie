@@ -340,7 +340,7 @@ extension View {
                         .foregroundStyle(quiet ? Theme.muted : Theme.ink)
                         .lineLimit(1)
                     if s.isPromoted {
-                        Text("▲").font(.system(size: 11)).foregroundStyle(Theme.accentInk).accessibilityLabel("Promoted")
+                        Text("▲").font(.system(size: 11)).foregroundStyle(Theme.accentInk).accessibilityLabel("Boosted")
                     }
                     Spacer(minLength: 4)
                     Text(Fmt.age(s.created, now: now)).font(.system(size: 13).monospacedDigit()).foregroundStyle(Theme.muted)
@@ -352,6 +352,9 @@ extension View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !meta.isEmpty {
                     Text(meta).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(1).padding(.top, 1)
+                }
+                if let words = s.rebuilds?.words {
+                    Text(words).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(1)
                 }
                 if !helpers.isEmpty {
                     VStack(alignment: .leading, spacing: 1) {
@@ -385,7 +388,7 @@ extension View {
         .shadow(color: Color(red: 30 / 255, green: 43 / 255, blue: 34 / 255).opacity(0.07), radius: 1, y: 1)
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([s.name, Look.label(s), detail != Look.label(s) ? detail : "", s.isPromoted ? "promoted" : "",
+        .accessibilityLabel([s.name, Look.label(s), detail != Look.label(s) ? detail : "", s.isPromoted ? "boosted" : "",
                              "started " + Fmt.ageSpoken(s.created, now: now)].filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHint("Opens its conversation")
     }

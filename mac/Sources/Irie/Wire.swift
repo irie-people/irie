@@ -36,7 +36,7 @@ struct Session: Codable, Identifiable, Equatable {
     var tokens: Tokens?
     /// Its place in the list, which the user sets; whether it is parked;
     /// when it was frozen, and whether its agent still runs on to its next
-    /// tool call; 1 while it is promoted (Controls.swift).
+    /// tool call; 1 while it is boosted (Controls.swift).
     var order: Int?
     var parked: Bool?
     /// Whether it is pinned, in the Pinned group at the top (Tabs.swift).
@@ -65,13 +65,56 @@ struct Session: Codable, Identifiable, Equatable {
     /// §2.8): its id is then that machine's name, a slash and its own id
     /// there, which the core passes on.
     var host: String?
+    /// How often its prompt cache was written again today and this week,
+    /// and what that cost; its words, for the card, come only once today's
+    /// cost enough to matter (DESIGN §6.3).
+    var rebuilds: Rebuilds?
+    /// What waking it costs now that its prompt cache has run out, which
+    /// Resume says (DESIGN §6.3); nil while its cache is warm.
+    var cold: Cold?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, pinned, space, group, frozen, freezing, priority, loose, trod, hue, tutor, host
+        case order, parked, pinned, space, group, frozen, freezing, priority, loose, trod, hue, tutor, host, rebuilds, cold
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
+}
+
+/// A session's prompt-cache rebuilds, today and this week, at list price
+/// (DESIGN §6.3). The core writes the card's words, "$4.10 today: woke cold 3
+/// times", once today's cost usage.rebuild_card.
+struct Rebuilds: Codable, Equatable {
+    var today: Int
+    var todayUSD: Double
+    var week: Int
+    var weekUSD: Double
+    var cause: String?
+    var words: String?
+
+    enum CodingKeys: String, CodingKey {
+        case today, week, cause, words
+        case todayUSD = "today_usd"
+        case weekUSD = "week_usd"
+    }
+
+    /// Today's and the week's, for the details panel: "Cache rebuilt 3×
+    /// today, $4.10 · 9× this week, $12.30".
+    var summary: String? {
+        guard week > 0 else { return nil }
+        let w = String(format: "%d× this week, $%.2f", week, weekUSD)
+        guard today > 0 else { return "Cache rebuilt " + w }
+        return String(format: "Cache rebuilt %d× today, $%.2f · ", today, todayUSD) + w
+    }
+}
+
+/// What waking a session costs once its prompt cache has run out: its next
+/// turn writes its whole context into the cache again. The core says the
+/// price in a few words, "~$2.40 to wake".
+struct Cold: Codable, Equatable {
+    var tokens: Int64
+    var usd: Double
+    var words: String
 }
 
 /// How often the trod bot sent a session on in one shift, when it last
@@ -204,7 +247,7 @@ struct Header: Decodable {
     var helperStyle: String?
     /// The trod bot, while it is within its hours (DESIGN §4.10).
     var trod: TrodShift?
-    /// Mullvad VPN, while vpn.on (docs/proposals/extensions.md §4).
+    /// The VPN, while vpn.on (DESIGN §4.18).
     var vpn: VPNMark?
     /// Gabriel's boost while one is on, however it was started (DESIGN
     /// §4.11), from a core whose hello lists boost-always.
@@ -248,9 +291,17 @@ struct MachineLoad: Decodable, Equatable {
     }
 }
 
-/// Mullvad VPN as the core sees it: its state, the relay's place and the
-/// state in one line. Never an address or the account's number.
+/// The VPN as the core sees it, whichever vpn.provider names: its state,
+/// where it goes and the state in one line. Never an address or an
+/// account's number.
 struct VPNMark: Decodable, Equatable {
+    /// Which VPN, as vpn.provider names it, such as mullvad or tailscale;
+    /// nil from a core from before there were others than Mullvad.
+    var kind: String?
+    /// Its name, such as Cisco Secure Client.
+    var title: String?
+    /// What its words do beyond on and off: place, lockdown, time.
+    var can: [String]?
     var state: String?
     var city: String?
     var country: String?
@@ -259,8 +310,15 @@ struct VPNMark: Decodable, Equatable {
     /// Off, and lockdown mode blocks the network.
     var blocked: Bool?
     var text: String
-    /// Why the core can't read the VPN, such as no mullvad CLI.
+    /// Why the core can't read the VPN, such as its command missing.
     var problem: String?
+
+    /// Whether its words do what (place, lockdown or time): a core from
+    /// before other VPNs drives only Mullvad, which does them all.
+    func can(_ what: String) -> Bool {
+        guard kind != nil else { return true }
+        return can?.contains(what) ?? false
+    }
 }
 
 /// The trod bot within its hours: until when, whether you are away so it
@@ -495,7 +553,7 @@ struct InputArgs: Encodable, Equatable {
     }
 }
 
-/// One note of the notepad (DESIGN §4.18): a line of a checklist, kept for
+/// One note of the notepad (DESIGN §4.20): a line of a checklist, kept for
 /// later (Notes.swift).
 struct Note: Codable, Identifiable, Equatable {
     var id: String

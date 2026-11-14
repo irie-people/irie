@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -81,8 +82,12 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if got := c.Profiles["mikael"]; !reflect.DeepEqual(got, wantMikael) {
 		t.Errorf("profiles.mikael = %+v, want %+v", got, wantMikael)
 	}
-	if len(c.Profiles) != 6 {
-		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local, big and mikael", c.Profiles)
+	wantChaos := Profile{Harness: "claude-code", Command: "claude", Model: "claude-opus-5-5", Effort: "high", PermissionMode: "auto", Args: []string{}, Env: map[string]string{}, Skill: "chaos"}
+	if got := c.Profiles["chaos"]; !reflect.DeepEqual(got, wantChaos) {
+		t.Errorf("profiles.chaos = %+v, want %+v", got, wantChaos)
+	}
+	if len(c.Profiles) != 7 {
+		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local, big, mikael and chaos", c.Profiles)
 	}
 	r := c.Route
 	if !reflect.DeepEqual(r.Profiles, []string{"local", "haiku", "sonnet", "claude"}) || r.MinAccuracy != 0.85 || r.LocalMinAccuracy != 0.6 || r.PriorWeight != 10 ||
@@ -101,7 +106,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
 		t.Errorf("local = %+v, want %+v", c.Local, want)
 	}
-	if want := (Usage{StatusLine: true}); c.Usage != want {
+	if want := (Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4}); c.Usage != want {
 		t.Errorf("usage = %+v, want %+v", c.Usage, want)
 	}
 	if want := (Repos{Roots: []string{}, Aliases: map[string]string{}}); !reflect.DeepEqual(c.Repos, want) {
@@ -759,8 +764,9 @@ command = "claude"
 }
 
 func TestVPNSection(t *testing.T) {
-	if v := Default().VPN; v.On || v.Mullvad != "" {
-		t.Errorf("default vpn = %+v, want off", v)
+	// Off in Irie; on in a copy whose brand names its VPNs.
+	if v := Default().VPN; v.On != (brand.VPNs != "") || v.Mullvad != "" {
+		t.Errorf("default vpn = %+v", v)
 	}
 	c, err := Load(writeFile(t, "[vpn]\non = true\nmullvad = \"/usr/local/bin/mullvad\"\n"))
 	if err != nil || !c.VPN.On || c.VPN.Mullvad != "/usr/local/bin/mullvad" {
@@ -768,6 +774,56 @@ func TestVPNSection(t *testing.T) {
 	}
 	if _, err := Load(writeFile(t, "[vpn]\nmullvad = \"mullvad\"\n")); err == nil || !strings.Contains(err.Error(), "vpn.mullvad") {
 		t.Errorf("a bare name: %v", err)
+	}
+	// Any VPN, chosen by vpn.provider (DESIGN §4.18).
+	if v := Default().VPN; v.Provider != VPNOffered()[0] || v.Server != brand.VPNServer {
+		t.Errorf("default vpn = %+v, want the first VPN offered and the brand's server", v)
+	}
+	custom := "[vpn]\non = true\nprovider = \"command\"\nserver = \"vpn.example.com\"\nstatus = [\"/usr/local/bin/myvpn\", \"status\"]\nconnect = [\"myvpn\", \"up\"]\nconnected = \"(?m)^State: Connected$\"\n"
+	c, err = Load(writeFile(t, custom))
+	switch {
+	case !slices.Contains(VPNOffered(), "command"):
+		if err == nil || !strings.Contains(err.Error(), "this copy of") {
+			t.Errorf("a VPN this copy doesn't offer: %v", err)
+		}
+	case err != nil || c.VPN.Provider != "command" || c.VPN.Status[1] != "status" || c.VPN.Connect[0] != "myvpn" || c.VPN.Connected != "(?m)^State: Connected$" || c.VPN.Server != "vpn.example.com":
+		t.Errorf("command vpn = %+v, %v", c.VPN, err)
+	}
+	// A file that turned the privacy plugin off kept its VPN off; it still
+	// does, unless it says the VPN plugin's own.
+	for file, want := range map[string]bool{
+		"[vpn]\non = true\n\n[plugins]\nprivacy = false\n":             false,
+		"[vpn]\non = true\n\n[plugins]\nprivacy = false\nvpn = true\n": true,
+		"[vpn]\non = true\n\n[plugins]\nprivacy = true\n":              true,
+	} {
+		if c, err := Load(writeFile(t, file)); err != nil || c.Plugins.VPN != want {
+			t.Errorf("%q: plugins.vpn = %v, %v; want %v", file, c.Plugins.VPN, err, want)
+		}
+	}
+	for file, want := range map[string]string{
+		"[vpn]\nprovider = \"openvpn9\"\n": "vpn.provider",
+		"[vpn]\ncli = \"warp-cli\"\n":      "vpn.cli",
+		"[vpn]\nconnected = \"(\"\n":       "vpn.connected",
+		"[vpn]\nstatus = [\"--json\"]\n":   "vpn.status",
+		"[vpn]\nserver = \"a\\nb\"\n":      "vpn.server",
+	} {
+		if _, err := Load(writeFile(t, file)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", file, err, want)
+		}
+	}
+}
+
+// TestTheVPNsACopyOffers: a copy's brand names its VPNs, the first the
+// default, each once; none names them all.
+func TestTheVPNsACopyOffers(t *testing.T) {
+	for list, want := range map[string][]string{
+		"":                       VPNKinds,
+		"cisco":                  {"cisco"},
+		" cisco, command ,cisco": {"cisco", "command"},
+	} {
+		if got := offeredVPNs(list); !slices.Equal(got, want) {
+			t.Errorf("offeredVPNs(%q) = %v, want %v", list, got, want)
+		}
 	}
 }
 
@@ -825,6 +881,28 @@ func TestArchValidation(t *testing.T) {
 	c, err := Load(writeFile(t, "[profiles.mikael-sonnet]\nmodel = \"claude-sonnet-5-5\"\narch = \"mikael\"\n"))
 	if err != nil || c.Profiles["mikael-sonnet"].Arch != "mikael" {
 		t.Errorf("a profile of the user's own that runs as Mikael: %+v, %v", c.Profiles["mikael-sonnet"], err)
+	}
+}
+
+// TestASkillProfile: a profile may start its sessions on one of Irie's
+// skills, as +chaos does, if it is a Claude Code profile that takes them.
+// Whether the skill is there and on, the spawn says.
+func TestASkillProfile(t *testing.T) {
+	for body, want := range map[string]string{
+		"[profiles.helper]\nskill = \"Chaos Monkey\"\n":                                      `profiles.helper.skill = "Chaos Monkey": not a skill's name`,
+		"[profiles.helper]\nharness = \"generic\"\ncommand = \"aider\"\nskill = \"chaos\"\n": "profiles.helper.skill: only the claude-code harness",
+		"[profiles.helper]\nskill = \"chaos\"\nskills = false\n":                             "profiles.helper.skill: a profile that starts on a skill takes Irie's skills",
+	} {
+		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", body, err, want)
+		}
+	}
+	c, err := Load(writeFile(t, "[profiles.chaos-sonnet]\nmodel = \"claude-sonnet-5-5\"\neffort = \"medium\"\nskill = \"chaos\"\n"))
+	if p := c.Profiles["chaos-sonnet"]; err != nil || p.Skill != "chaos" || p.Model != "claude-sonnet-5-5" || p.Harness != "claude-code" {
+		t.Errorf("a chaos monkey of the user's own on Sonnet: %+v, %v", p, err)
+	}
+	if c, err := Load(writeFile(t, "[profiles.chaos]\nskill = \"\"\n")); err != nil || c.Profiles["chaos"].Skill != "" || c.Profiles["chaos"].Model != "claude-opus-5-5" {
+		t.Errorf("+chaos with its skill taken off: %+v, %v", c.Profiles["chaos"], err)
 	}
 }
 

@@ -271,7 +271,7 @@
       <tbody>
         <tr><td>Freeze a session</td><td>Stops the agent and every process it started (SIGSTOP), and carries them on when you thaw it (SIGCONT).</td></tr>
         <tr><td>Close a session</td><td>Asks the agent to end (SIGTERM), and ends it (SIGKILL) if it hasn’t after 5 seconds.</td></tr>
-        <tr><td>Promote a session, on a Mac</td><td>Puts the other sessions’ processes in macOS’s background state: the lowest priority for the processor, and slower disk and network.</td></tr>
+        <tr><td>Boost a session, on a Mac</td><td>Puts the tools the other sessions run, such as builds and tests, in macOS’s background state: the lowest priority for the processor, and slower disk and network. Their agents keep full speed.</td></tr>
         <tr><td>Move a session into Irie</td><td>Ends the copy outside Irie, gently: <code>claude stop</code> for a background session, SIGTERM for one in a terminal.</td></tr>
       </tbody>
     </table>

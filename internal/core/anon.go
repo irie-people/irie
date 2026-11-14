@@ -67,11 +67,11 @@ func (c *Core) anonOptions() anon.Options {
 // anonymous session may leave from the Mac's own address, and Mullvad's
 // proxies answer only inside its tunnel.
 func (c *Core) macExit() (string, error) {
-	bin, err := vpn.Find(c.cfg().VPN.Mullvad)
+	bin, err := vpn.FindMullvad(c.cfg().VPN.Mullvad)
 	if err != nil {
 		return "", errors.New("anonymous research needs Mullvad VPN, which is not installed")
 	}
-	st, err := vpn.CLI{Bin: bin}.Status()
+	st, err := vpn.Mullvad{Bin: bin}.Status()
 	if err != nil {
 		return "", fmt.Errorf("anonymous research needs Mullvad VPN connected, and "+brand.Name+" can't read its state: %v", err)
 	}
