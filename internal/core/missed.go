@@ -8,11 +8,12 @@ package core
 // events as hooks that came late, at the time they came (takeHook): so a
 // turn that ended or failed meanwhile is not lost, and the row does not
 // stay "working" with its agent back at its prompt. An event no later than
-// the last one the core heard from the session's agent is left out: the
-// agent went on since, and each session's events stay in the order they
-// came.
+// the last one the core heard from the session's agent is left out, as is
+// one from before the session last started: the agent went on since, and
+// each session's events stay in the order they came.
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -23,6 +24,18 @@ import (
 // missedSettle is how long a missed.ndjson must stand unchanged before the
 // core takes it, so that a shim still writing its line finishes first.
 const missedSettle = time.Second
+
+// errStale is takeHook's answer for a late event of a session that went on
+// past it.
+var errStale = errors.New("the session went on since")
+
+// lateFits reports whether an event that came at at, which the shim kept,
+// still belongs to session x: later than the last its agent was heard of,
+// and no earlier than the session last started, as a reopen starts it
+// again. The caller holds c.mu.
+func lateFits(x *session, at time.Time) bool {
+	return at.After(x.track.heard) && !at.Before(x.track.requested)
+}
 
 // takeMissed records the events of each live session's missed.ndjson that
 // has settled, and removes the file. It holds no lock when it is called.
@@ -55,18 +68,14 @@ func (c *Core) takeMissed(now time.Time) {
 		os.Remove(taken)
 		n := 0
 		for _, m := range missed {
-			c.mu.Lock()
-			x := c.sessions[id]
-			stale := x == nil || !m.At.After(x.track.heard)
-			c.mu.Unlock()
-			if stale {
-				continue
-			}
-			if _, err := c.takeHook(ipc.HookArgs{Harness: m.Harness, Session: id, Payload: m.Payload}, m.At); err != nil {
+			_, err := c.takeHook(ipc.HookArgs{Harness: m.Harness, Session: id, Payload: m.Payload}, m.At)
+			switch {
+			case errors.Is(err, errStale):
+			case err != nil:
 				c.log.Warn("missed hook", "session", id, "err", err)
-				continue
+			default:
+				n++
 			}
-			n++
 		}
 		c.log.Info("missed hooks", "session", id, "kept", len(missed), "taken", n)
 	}

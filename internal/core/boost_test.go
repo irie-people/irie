@@ -188,7 +188,9 @@ func TestABoostedCardSaysSo(t *testing.T) {
 // turn that follows ends well, and the boost with it.
 func TestTwoFailedTurnsBoostASessionAndCarryItOn(t *testing.T) {
 	c := setupWith(t, agentConfig{env: map[string]string{"IRIE_FAKE_TURNS": "stopfail:server_error,sleep:3s+stop"}})
-	s := c.spawn("prompt,stopfail:server_error")
+	// box: its idle prompt shows, which the carry-on types into.
+	s := c.spawn("prompt,box,stopfail:server_error")
+
 	if r := c.waitState(s.ID, ipc.StateNeedsYou); r.Detail != "turn failed: server_error" {
 		t.Fatalf("detail %q", r.Detail)
 	}
@@ -233,7 +235,7 @@ func TestTwoFailedTurnsBoostASessionAndCarryItOn(t *testing.T) {
 // step back again once the boost ends.
 func TestABoostAfterAPIErrorsTakesItsToolsOutOfTheBackground(t *testing.T) {
 	c := setupWith(t, agentConfig{env: map[string]string{"IRIE_FAKE_TURNS": "stopfail:server_error,sleep:6s+stop"}})
-	alpha := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,kids,stopfail:server_error", Name: "alpha"})
+	alpha := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,kids,box,stopfail:server_error", Name: "alpha"})
 	agent := c.kids(alpha)
 	beta := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "beta"})
 	if err := c.call(ipc.OpPriority, ipc.PriorityArgs{Session: beta.ID, Level: 1}, nil); err != nil {
@@ -290,5 +292,61 @@ func TestABoostAfterAPIErrorsRanksWithTheRestOfTheFocus(t *testing.T) {
 	c.gab = gabState{}
 	if !c.stepsBack("s-gone", raised) {
 		t.Error("a session the core does not have stays out, as if it were boosted")
+	}
+}
+
+// Failures during a boost count toward no other, and a helper's never do:
+// after a boost that ran out of time, one more failure starts none, two do.
+func TestFailuresDuringABoostCountTowardNoOther(t *testing.T) {
+	c := historyCore(t)
+	x := &session{id: "s0000000000b4", name: "alpha", harness: "generic"}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sessions[x.id] = x
+	fail := func(agent string) bool {
+		t.Helper()
+		e := event.Event{Source: event.SourceHook, Agent: agent, Kind: event.TurnFailed, Data: map[string]any{"error": "server_error"}}
+		c.record(x, e)
+		return c.boostTurn(x, e)
+	}
+	fail(event.Main)
+	if !fail(event.Main) {
+		t.Fatal("two failures did not boost it")
+	}
+	fail(event.Main)
+	fail(event.Main)
+	if !c.endBoosts(time.Now().Add(boostFor)) || x.track.apiFails != 0 {
+		t.Fatalf("after the boost's time: %d failures counted", x.track.apiFails)
+	}
+	if fail(event.Main) || fail("sub:a1b2c3") || x.track.boost != nil {
+		t.Fatal("one failure after a boost, and a helper's, started another")
+	}
+	if !fail(event.Main) {
+		t.Fatal("two failures after a boost did not start another")
+	}
+}
+
+// A late event belongs to the session only if it came after the last the
+// core heard from its agent, and after the session last started.
+func TestALateEventFitsOnlyAfterWhatTheCoreHeard(t *testing.T) {
+	at := time.Date(2026, 11, 14, 15, 14, 7, 0, time.UTC)
+	x := &session{}
+	x.track.requested, x.track.heard = at.Add(-time.Hour), at.Add(-time.Minute)
+	for _, tc := range []struct {
+		at   time.Time
+		fits bool
+	}{
+		{at, true},
+		{at.Add(-time.Minute), false},
+		{at.Add(-2 * time.Minute), false},
+	} {
+		if got := lateFits(x, tc.at); got != tc.fits {
+			t.Errorf("lateFits(%v) = %v, want %v", tc.at, got, tc.fits)
+		}
+	}
+	// Reopened since: what its agent kept before is not this session's.
+	x.track = track{requested: at.Add(time.Second)}
+	if lateFits(x, at) {
+		t.Error("an event from before a reopen fits")
 	}
 }

@@ -180,21 +180,24 @@ func (c *Core) background() {
 			b, ok := c.bg[q.PID]
 			ok = ok && b.start == q.Start
 			// The agent keeps its network, and its own helpers theirs:
-			// only the rest of the tree steps back (keepup.go).
-			back := want && !keepsUp(t, p.PID, own, q)
+			// only the rest of the tree steps back (keepup.go). They come
+			// out once, as this core finds the tree, from where a core
+			// before it may have left them, and never go in.
+			kept := keepsUp(t, p.PID, own, q)
+			back := want && !kept
 			switch {
 			case back && !ok:
 				if err := proc.SetBackground(q.PID, true); err == nil {
 					c.bg[q.PID] = bgProc{start: q.Start, session: x.id}
 				}
-			case !back && (ok || x.demoted):
+			case !back && (ok || x.demoted && (!kept || !x.keptOut)):
 				// What it started while in the background inherited that,
 				// so every process of a tree that was there comes out.
 				proc.SetBackground(q.PID, false)
 				delete(c.bg, q.PID)
 			}
 		}
-		x.demoted = want
+		x.demoted, x.keptOut = want, true
 	}
 	for pid, b := range c.bg {
 		switch {

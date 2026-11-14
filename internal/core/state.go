@@ -53,7 +53,7 @@ type track struct {
 	stopped      time.Time
 	asked        bool
 	trod         []trodSend
-	trodTyped    time.Time
+	trodTyped    time.Time // also a boost's carry-on (boost.go)
 	trodAnswered bool
 
 	// For the boost after API errors (boost.go): how many of its turns in
@@ -210,17 +210,23 @@ func (t *track) apply(e event.Event) {
 		t.stopTools(event.Main)
 		t.need(e)
 		t.stopped, t.asked = e.Time(), false
-		// An API error that may pass counts toward a boost; one that only
-		// the user can mend, such as a usage limit or a login, ends the run.
-		if passing[e.Str("error")] {
+		// The main agent's API error that may pass counts toward a boost,
+		// but not during one; one that only the user can mend, such as a
+		// usage limit or a login, ends the run.
+		switch {
+		case e.Agent != event.Main || t.boost != nil:
+		case passing[e.Str("error")]:
 			t.apiFails++
-		} else {
+		default:
 			t.apiFails = 0
 		}
 	case event.BoostOn:
 		t.boost, t.apiFails = &e, 0
+		// The carry-on Irie types next is no prompt of the user's, as
+		// the trod bot's messages are not.
+		t.trodTyped = e.Time()
 	case event.BoostOff:
-		t.boost = nil
+		t.boost, t.apiFails = nil, 0
 	case event.SubagentStarted:
 		// A helper that starts once the turn is over, as an in-process
 		// teammate's does for each message, leaves it over.

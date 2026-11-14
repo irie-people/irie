@@ -84,6 +84,10 @@ func (c *Core) takeHook(a ipc.HookArgs, at time.Time) (ipc.HookResult, error) {
 		c.mu.Unlock()
 		return ipc.HookResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
 	}
+	if late && !lateFits(x, at) {
+		c.mu.Unlock()
+		return ipc.HookResult{}, errStale
+	}
 	var reply ipc.HookResult
 	failover, turnEnded, boosts := false, false, false
 	x.quiet++

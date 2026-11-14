@@ -102,23 +102,51 @@ func (c *Core) endBoosts(now time.Time) bool {
 }
 
 // carryOn types the carry-on message to session id's agent once the turn
-// that failed at failed has settled, unless the session no longer waits on
-// that turn: the user or the trod bot sent it on meanwhile, the boost ended,
-// or it was frozen or closed. It holds no lock.
+// that failed at failed has settled: as send does, but only into the
+// agent's own prompt with nothing typed in it, as continue types its word
+// (send.go), so it never joins what the user writes there. A long message
+// wraps in a narrow terminal, which Claude Code's prompt grows to hold, so
+// Enter waits on no look at the prompt. It leaves a session that no longer
+// waits on that turn: one sent on meanwhile, by the user, a follow-up or the
+// trod bot, one whose boost ended, and one frozen or closed. It holds no
+// lock.
 func (c *Core) carryOn(id string, failed time.Time) {
 	time.Sleep(carryOnDelay)
 	err := c.typeTo(id, carryOnText, func(x *session, _ string) error {
 		switch {
 		case x.dead || x.track.boost == nil || x.track.frozen != nil:
 			return ipc.Errorf(ipc.CodeBusy, "%s is not boosted any more", x.name)
-		case !failedTurn(x) || !x.track.needs[event.Main].Time().Equal(failed):
+		case !failedTurn(x) || !x.track.needs[event.Main].Time().Equal(failed) || typedSince(x, failed):
 			return ipc.Errorf(ipc.CodeBusy, "%s went on without it", x.name)
+		}
+		typed, shows, err := c.promptIn(x.pane)
+		switch {
+		case err != nil:
+			return err
+		case !shows:
+			return ipc.Errorf(ipc.CodeBusy, "%s shows no prompt to type to", x.name)
+		case typed != "":
+			return ipc.Errorf(ipc.CodeBusy, "%s's prompt has something typed in it", x.name)
 		}
 		return nil
 	}, nil)
 	if err != nil {
 		c.log.Info("boost: no carry-on", "session", id, "err", err)
 	}
+}
+
+// typedSince reports whether a message went to session x's agent after at
+// that has not come in as a prompt yet. The caller holds c.mu.
+func typedSince(x *session, at time.Time) bool {
+	if x.conv == nil {
+		return false
+	}
+	for _, it := range x.conv.pending {
+		if it.Time.After(at) {
+			return true
+		}
+	}
+	return false
 }
 
 // boosted reports whether session id is boosted after its API errors now.
