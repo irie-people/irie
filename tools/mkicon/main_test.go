@@ -120,3 +120,33 @@ func samePicture(a, b image.Image) bool {
 	}
 	return true
 }
+
+func TestWindowsIcon(t *testing.T) {
+	ico, err := windowsIcon()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ico) < 6 || ico[2] != 1 || int(ico[4]) != len(windowsSizes) {
+		t.Fatalf("not an icon of %d sizes: % x", len(windowsSizes), ico[:6])
+	}
+	for k, px := range windowsSizes {
+		e := ico[6+16*k:]
+		side := int(e[0])
+		if side == 0 {
+			side = 256
+		}
+		size := int(e[8]) | int(e[9])<<8 | int(e[10])<<16 | int(e[11])<<24
+		off := int(e[12]) | int(e[13])<<8 | int(e[14])<<16 | int(e[15])<<24
+		img, err := png.Decode(bytes.NewReader(ico[off : off+size]))
+		if err != nil || side != px || img.Bounds().Dx() != px {
+			t.Fatalf("size %d: entry says %d, %v", px, side, err)
+		}
+		// Its corners are clear and its middle opaque.
+		if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
+			t.Errorf("size %d: a corner is not clear", px)
+		}
+		if _, _, _, a := img.At(px/2, px/2).RGBA(); a != 0xffff {
+			t.Errorf("size %d: the middle is not opaque", px)
+		}
+	}
+}

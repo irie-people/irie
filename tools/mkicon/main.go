@@ -5,6 +5,12 @@
 //	go run ./tools/mkicon mac/.build/Irie.iconset
 //	iconutil -c icns -o Irie.icns mac/.build/Irie.iconset
 //
+// With -windows it writes the Windows app's icon, Irie.ico, whose sizes
+// are PNGs as Windows Vista and later read them, the shape filling each
+// square but a hairline with no shadow, as Windows draws icons:
+//
+//	go run ./tools/mkicon -windows cmd/windows-app
+//
 // With -phone it writes the phone app's icons instead: the same picture as
 // full squares, which iOS and the web app's manifest round themselves,
 // into the gateway's files (docs/PHONE.md); with -ios, the native iPhone
@@ -61,15 +67,17 @@ var phoneFiles = []struct {
 
 func main() {
 	args := os.Args[1:]
-	flagged := len(args) == 2 && (args[0] == "-phone" || args[0] == "-ios")
+	flagged := len(args) == 2 && (args[0] == "-phone" || args[0] == "-ios" || args[0] == "-windows")
 	if len(args) != 1 && !flagged {
-		fmt.Fprintln(os.Stderr, "usage: mkicon DIR.iconset | mkicon -phone DIR | mkicon -ios DIR.appiconset")
+		fmt.Fprintln(os.Stderr, "usage: mkicon DIR.iconset | mkicon -phone DIR | mkicon -ios DIR.appiconset | mkicon -windows DIR")
 		os.Exit(2)
 	}
 	var err error
 	switch {
 	case flagged && args[0] == "-phone":
 		err = writePhone(args[1])
+	case flagged && args[0] == "-windows":
+		err = writeWindows(args[1])
 	case flagged:
 		err = writeIOS(args[1])
 	default:
@@ -134,6 +142,85 @@ func writeIOS(dir string) error {
 // drawFull renders the inside of the icon's square, px pixels across, with
 // no corners or shadow: the square fills the picture, and whoever shows it
 // rounds it. It has no transparency, which iOS would show as black.
+// windowsSizes are the sizes of Irie.ico: the shell's small and large
+// icons at each scale it runs at, and the 256 it shrinks from.
+var windowsSizes = []int{16, 20, 24, 32, 40, 48, 64, 256}
+
+// writeWindows writes Irie.ico into dir: an ICONDIR, an entry for each
+// size, then each size as a PNG.
+func writeWindows(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	ico, err := windowsIcon()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "Irie.ico"), ico, 0o644)
+}
+
+func windowsIcon() ([]byte, error) {
+	var pngs [][]byte
+	for _, px := range windowsSizes {
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, drawWindows(px)); err != nil {
+			return nil, err
+		}
+		pngs = append(pngs, buf.Bytes())
+	}
+	var out bytes.Buffer
+	le := func(v ...uint16) {
+		for _, x := range v {
+			out.WriteByte(byte(x))
+			out.WriteByte(byte(x >> 8))
+		}
+	}
+	le32 := func(v uint32) { le(uint16(v), uint16(v>>16)) }
+	le(0, 1, uint16(len(pngs))) // reserved, type 1 (an icon), count
+	offset := 6 + 16*len(pngs)
+	for k, px := range windowsSizes {
+		side := byte(px)
+		if px >= 256 {
+			side = 0 // 0 is 256
+		}
+		out.Write([]byte{side, side, 0, 0}) // width, height, no palette, reserved
+		le(1, 32)                           // planes, bits per pixel
+		le32(uint32(len(pngs[k])))
+		le32(uint32(offset))
+		offset += len(pngs[k])
+	}
+	for _, b := range pngs {
+		out.Write(b)
+	}
+	return out.Bytes(), nil
+}
+
+// drawWindows draws the icon for Windows: the square and its continuous
+// corners filling the picture but a hairline, with no shadow, transparent
+// round it.
+func drawWindows(px int) *image.NRGBA {
+	m := newMark(px)
+	m.s = float64(px) / (2 * half * 1.02)
+	img := image.NewNRGBA(image.Rect(0, 0, px, px))
+	var wg sync.WaitGroup
+	for j := 0; j < px; j++ {
+		wg.Go(func() {
+			for i := 0; i < px; i++ {
+				x, y := mid-half*1.02+(float64(i)+0.5)/m.s, mid-half*1.02+(float64(j)+0.5)/m.s
+				a := m.cover(square(x, y))
+				if a <= 0 {
+					continue
+				}
+				c := m.inside(x, y)
+				c.A = channel(a)
+				img.SetNRGBA(i, j, c)
+			}
+		})
+	}
+	wg.Wait()
+	return img
+}
+
 func drawFull(px int) *image.NRGBA {
 	m := newMark(px)
 	m.s = float64(px) / (2 * half)

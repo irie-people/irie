@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,19 +32,11 @@ import (
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/remote/web"
 )
 
-//go:embed web
-var webFiles embed.FS
-
 // Web is the phone app's files.
-func Web() fs.FS {
-	sub, err := fs.Sub(webFiles, "web")
-	if err != nil {
-		panic(err)
-	}
-	return sub
-}
+func Web() fs.FS { return web.FS }
 
 // Ops are the ops a phone may send: what a person does from the phone app.
 // Left out are those that act on the machine's own screen (show, flip), on
