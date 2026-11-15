@@ -56,6 +56,7 @@ type (
 	OutsideSession   = ipc.OutsideSession
 	MoveArgs         = ipc.MoveArgs
 	MoveResult       = ipc.MoveResult
+	CardArgs         = ipc.CardArgs
 	PaneArgs         = ipc.PaneArgs
 	PaneResult       = ipc.PaneResult
 	PeersArgs        = ipc.PeersArgs
@@ -272,6 +273,7 @@ const (
 	StatusWaiting      = ipc.StatusWaiting
 	StatusIdle         = ipc.StatusIdle
 	OpPane             = ipc.OpPane
+	OpCard             = ipc.OpCard
 	OpPeers            = ipc.OpPeers
 	CodePeerDown       = ipc.CodePeerDown
 	OpPerf             = ipc.OpPerf
@@ -396,6 +398,7 @@ const (
 	FrameClosed        = ipc.FrameClosed
 	FrameHistory       = ipc.FrameHistory
 	FramePing          = ipc.FramePing
+	FrameCard          = ipc.FrameCard
 	OpScreen           = ipc.OpScreen
 	OpKeys             = ipc.OpKeys
 	FeatureScreenLive  = ipc.FeatureScreenLive
