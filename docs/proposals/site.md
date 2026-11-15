@@ -8,11 +8,11 @@ A small website, served by GitHub Pages from `site/`, that explains Irie so plai
 
 ## Pages
 
-Every page opens with its title and then its picture, before any text. Home puts the definition of the word above its title, as the README does.
+Every page opens with its title and then its picture, before any text. Home puts the definition of the word above its title, as the README does, and its picture, the intro film, beside the title and the two buttons on a wide screen; on a phone the film comes after the buttons (2026-11-15).
 
 | Page | File | Picture | What it says |
 |---|---|---|---|
-| Home | `index.html` | The Irie window: the sidebar beside the slot | The definition of "irie". The tagline, "If you could do anything, what would you do first?". What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
+| Home | `index.html` | The intro, a film of the Mac app | The definition of "irie". The tagline, "If you could do anything, what would you do first?". What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
 | What Irie is | `what-irie-is.html` | Your computer holding all of Irie, with one arrow out: from the agents to their AI companies | Added on 2026-10-27, first in the navigation so it is one click from every page. Everything, in full: what Irie does and never does, its parts, the programs it runs, every file it keeps and for how long, what it sends and where, what it does to agents and the three `[Irie]` notes word for word, what isn't built yet, who makes it, and commands to check each claim |
 | How it works | `how-it-works.html` | You, Irie, tmux, agents and worktrees | You type a task; Irie starts an agent in tmux; Enter shows it live; hooks tell Irie how it is doing; what the colours mean; worktrees and profiles; what stays on your computer |
 | Get started | `get-started.html` | How a spawn line reads | There is nothing to install yet. What you will need, and four steps of what using Irie will look like |
@@ -46,7 +46,6 @@ All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<titl
 
 | Picture | Page | Shows |
 |---|---|---|
-| The Irie window | Home | The sidebar as `internal/ui/view.go` draws it at its default 34 columns: header and counts, rows with glyphs and ages, the selected row's deep-green bar, the status strip and the command bar. Beside it, the slot with an agent at work. On a phone it crops to the sidebar |
 | Everything on your computer | What Irie is | Irie, its tmux with three agents, its files and Ollama on 127.0.0.1, all inside your computer; the one arrow out runs from the agents to their AI companies |
 | How it works | How it works | You, Irie, tmux, three agents and their worktrees, with hooks running back up to Irie |
 | What the colours mean | How it works | Every state of DESIGN §5.3 with its glyph and colour; paused and frozen marked planned |
@@ -58,21 +57,24 @@ All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<titl
 | A theme's sidebar | Themes | For each theme, in light and dark: the Mac app's sidebar as planned, with cards in every kind of state, then every state's mark in order. Each picture keeps its own colours in both of the site's themes |
 | The preview picture | Every page's link preview | Irie's mark beside the hero line, over a deep-green band with one wave: `preview.png`, 1200 × 630, drawn from `docs/preview.html` by Chrome's headless shell |
 
-Recordings come later. Each one has an empty box now, sized 16:10, whose caption doubles as its alt text and names the recording to come.
+Recordings are films of the Mac app from the docs/demo sandbox ([docs/demo/README.md](../demo/README.md), "Mac app recordings"), kept in `site/media` as WebM and MP4 with a poster. Each plays only when asked, and its caption doubles as its alt text.
 
-| Box | Page | Recording to come |
+| Recording | Page | Shows |
 |---|---|---|
-| `first-look` | Home | Opening Irie, typing a task and watching its row |
-| `swap-in` | How it works | Pressing Enter on a row; the agent's screen moves into the slot |
-| `first-task` | Get started | Typing a first task and watching it start |
-| `needs-you` | Get started | A row turns red, and answering the agent |
+| `intro` | Home, at the top | Irie in a minute, with sound, in place of the terminal drawing the home page opened with until 2026-11-15. It is 16:9, an AV1 WebM and an H.264 MP4, with captions in `intro.vtt` and its words to read under it. The voice is Kokoro's af_heart, made on a Mac, and the AI disclosure sits under the film. A narration kit outside the repository made it, from the same sandbox |
+| `first-look` | Home | A fourth task typed in beside three agents at work |
+| `close-the-window` | How it works | The window closes while three agents work, and they carry on |
+| `local` | Get started | A small task for a local model beside a hard one on `+claude` |
+| `needs-you` | Get started | A card turns red, and the agent is answered in its own screen |
 
 ## Look
 
 - **Colours.** Irie's own, from `internal/ui/view.go`: sun `#F2B544`, deep green `#1E5A42`, on-green `#EAF6EF`, rule green `#3D5247`, sea `#2E9E77` and deep sea `#1D7357`. The state colours in the pictures stand in for the terminal's own red, green, yellow and cyan.
-- **Themes.** Light and dark, following the system setting through `prefers-color-scheme`. Sun is too light for text on a light page (1.8:1), so there it only decorates and deep green carries text and links. On the dark page, sun carries links.
+- **Themes.** Light and dark, following the system setting through `prefers-color-scheme`. Sun is too light for text on a light page (1.8:1), so there it only decorates and deep green carries text and links. On the dark page, links are sea lightened to `#5CC59C` (8.6:1), and sun is the main button.
 - **Contrast.** Text meets WCAG 2.2 AA, 4.5:1, in both themes; large text and meaningful graphics meet 3:1. So "done" is deep green in the light theme and sea in the dark one, and a sun-coloured shape that means something gets a dark outline.
-- **Type.** The system's own fonts, sans for text and monospace for terminal text.
+- **Type.** The system's own fonts, sans for text and monospace for terminal text. Weights 400 to 600: headings 500, the name, buttons and defined words 600; size and colour make the hierarchy. No italics: the definition sets its kind of word and its example in the quiet text colour.
+- **One accent.** The sun means "now": the page you are on in the navigation, a milestone in progress, the picked agent. Beyond that it is only the main button on the dark page. It colours no bars, edges or tagline.
+- **Shapes.** Spacing on a 4 px grid, in 0.25rem steps. Corners by size: 4 px for tags, 8 px for buttons, 14 px for boxes and films; only the roadmap's milestones keep a numbered circle, and other lists use plain numbers. A note is a box a step up from the page with a hairline, not a coloured edge. These follow an audit with unslop (PROVENANCE.md).
 - **Nothing third-party.** Static HTML and one stylesheet. No JavaScript, no build step, no web fonts, no trackers or analytics.
 - **Status marks.** "Built" for what is on main, which is not the same as released: there is no release yet, only building from source. "Planned" for the rest, linking to its milestone on the roadmap.
 
@@ -110,6 +112,7 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 - **What Irie is stays complete.** A change that adds or removes a part, a file Irie keeps, a connection, a program it runs, or a word it says to an agent updates `what-irie-is.html` in the same pull request. The page quotes every `[Irie]` note word for word, so `grep -rn '\[Irie\]' internal` finds what to compare.
 - **When the themes are built.** The marks with `data-m="themes"` go, Themes' stone on the docs page fills, and the other pictures move to the default theme, Rosewater.
 - **When the first release ships.** Install gains the download, and the "no download yet" lines on Home, Get started, the FAQ and the README go.
+- **The intro.** Its words, its voice and its disclosure are the maintainer's, approved on 2026-11-15. A new cut, new words or a new voice waits for the maintainer's yes, as the roadmap does.
 - **Link previews.** Each page's head repeats its title and description in Open Graph and X card tags, beside its absolute address and the preview picture's. A new title or description changes there too, and a domain (open decision 1) changes every address: `grep -rn 'irie-people.github.io/irie' site/` finds them. When the hero line changes, `docs/preview.html` draws the picture again.
 - **Links out.** The site links to `github.com/irie-people/irie`, `irie-people/stake` and `irie-people/steak`. None of them was public on 2026-10-26, so those links fail until they are.
 
