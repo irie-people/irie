@@ -183,19 +183,14 @@ func printChoice(w io.Writer, ch route.Choice) {
 		}
 		took := "-"
 		if c.Timed > 0 {
-			took = answerTime(c.Time)
+			took = route.Took(c.Time)
+			if c.TimeAtLeast {
+				took = "≥" + took
+			}
 		}
 		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", mark, c.Profile, route.Percent(c.Accuracy), floor, c.Outcomes, route.Relative(c.Cost), route.Relative(c.PerSuccess), took, note)
 	}
 	tw.Flush()
-}
-
-// answerTime renders how long a profile takes to answer: 17s, 7m, 1h30m.
-func answerTime(d time.Duration) string {
-	if d < time.Minute {
-		return d.Round(time.Second).String()
-	}
-	return strings.TrimSuffix(d.Round(time.Minute).String(), "0s")
 }
 
 // Exit codes of `irie ctl delegate`.
@@ -262,7 +257,7 @@ func ctlDelegate(args []string) error {
 		fmt.Fprintf(os.Stderr, brand.Slug+": it could not be handed on (%v)\n", herr)
 		return err
 	}
-	fmt.Fprintf(os.Stderr, brand.Slug+": +%s was still at work after %s, so it handed the subtask on to +%s as %s (%s)\n", s.Profile, answerTime(*timeout), h.Session.Profile, h.Session.Name, h.Session.ID)
+	fmt.Fprintf(os.Stderr, brand.Slug+": +%s was still at work after %s, so it handed the subtask on to +%s as %s (%s)\n", s.Profile, route.Took(*timeout), h.Session.Profile, h.Session.Name, h.Session.ID)
 	return waitDone(os.Stdout, p.Socket(), h.Session.ID, *timeout)
 }
 

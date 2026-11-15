@@ -102,21 +102,19 @@ func (o *outcome) apply(e event.Event) {
 // caller gave up at. Only delegations count: a session the user started
 // may work for hours on a task of its class, which says nothing of how soon
 // a subtask comes back.
-func (o *outcome) answered() (time.Duration, bool) {
+func (o *outcome) answered() (d time.Duration, atLeast, ok bool) {
 	if o.parent == "" || o.profile == "" || o.class == "" || o.spawned.IsZero() {
-		return 0, false
+		return 0, false, false
 	}
-	var d time.Duration
-	ok := false
 	if !o.ended.IsZero() {
 		d, ok = max(o.ended.Sub(o.spawned), 0), true
 	}
 	// A turn can end with helpers still at work, which the caller waited
 	// on too.
 	if o.waited > d {
-		d, ok = o.waited, true
+		d, atLeast, ok = o.waited, true, true
 	}
-	return d, ok
+	return d, atLeast, ok
 }
 
 // verdict is how a session went, as far as Irie can tell: the user's
@@ -181,8 +179,8 @@ func (c *Core) loadOutcomes() {
 func (c *Core) stats(now time.Time) route.Stats {
 	var s route.Stats
 	for id, o := range c.outcomes {
-		if d, ok := o.answered(); ok {
-			s.AddTime(o.profile, o.class, o.spawned, d)
+		if d, atLeast, ok := o.answered(); ok {
+			s.AddTime(o.profile, o.class, o.spawned, d, atLeast)
 		}
 		good, known := o.verdict(now)
 		if !known {
@@ -325,12 +323,16 @@ func (c *Core) choose(class, why string, only []string, wait time.Duration, prob
 				cand.Cost = mean / refMean
 			}
 		}
-		cand.Time, cand.Timed = stats.Time(name, class)
+		cand.Time, cand.Timed, cand.TimeAtLeast = stats.Time(name, class)
 		switch {
 		case wait > 0 && cand.Timed > 0 && cand.Time >= wait:
 			// Its answer would come after the caller gave up waiting, so
 			// it is not probed either.
-			cand.Usable, cand.Note = false, fmt.Sprintf("answers in about %s, past the %s wait", roundTime(cand.Time), roundTime(wait))
+			took := "answers in about " + route.Took(cand.Time)
+			if cand.TimeAtLeast {
+				took = "takes " + route.Took(cand.Time) + " or more"
+			}
+			cand.Usable, cand.Note = false, fmt.Sprintf("%s, past the %s wait", took, route.Took(wait))
 		case p.Local != nil && cand.Accuracy < floor:
 			// Below the floor it cannot win, so it is not probed.
 			cand.Usable, cand.Note = false, "not accurate enough for "+class+" work"
@@ -350,14 +352,6 @@ func (c *Core) choose(class, why string, only []string, wait time.Duration, prob
 		cands = append(cands, cand)
 	}
 	return route.Choose(class, why, cands, r.MinAccuracy)
-}
-
-// roundTime renders a time to answer as people say it: 17s, 7m, 1h30m.
-func roundTime(d time.Duration) string {
-	if d < time.Minute {
-		return d.Round(time.Second).String()
-	}
-	return strings.TrimSuffix(d.Round(time.Minute).String(), "0s")
 }
 
 // parentProfile is the profile a delegated or carried-on task must be
@@ -529,38 +523,44 @@ func (c *Core) failover(id string) {
 // handOnNote opens a subtask taken over from a delegated session that was
 // still at work after its caller's wait.
 func handOnNote(profile string, wait time.Duration) string {
-	return fmt.Sprintf("["+brand.Name+"] This subtask ran on +%s, which was still at work after %s, so "+brand.Name+" stopped it. What it did so far is in this directory: check it, then finish the subtask.\n\n", profile, roundTime(wait))
+	return fmt.Sprintf("["+brand.Name+"] This subtask ran on +%s, which was still at work after %s, so "+brand.Name+" stopped it. What it did so far is in this directory: check it, then finish the subtask.\n\n", profile, route.Took(wait))
+}
+
+// takeOver is the delegated session a spawn takes a subtask over from.
+type takeOver struct {
+	profile, class, why string
+	name                string
+	named               bool // the name was the user's
 }
 
 // checkHandOn checks a spawn that takes a delegated subtask over from a
 // session still at work after its caller's wait (irie ctl delegate), and
-// returns that session's profile and class. Only a routed delegation of
-// the same caller's is taken over, and only once. The caller holds no
-// lock.
-func (c *Core) checkHandOn(a ipc.SpawnArgs) (profile, class, why string, err error) {
+// returns that session. Only a routed delegation of the same caller's is
+// taken over, and only once. The caller holds no lock.
+func (c *Core) checkHandOn(a ipc.SpawnArgs) (takeOver, error) {
 	if !a.Delegate || a.Profile != config.Auto || a.Wait <= 0 {
-		return "", "", "", ipc.Errorf(ipc.CodeBadArgs, "only a routed delegation with a wait is taken over")
+		return takeOver{}, ipc.Errorf(ipc.CodeBadArgs, "only a routed delegation with a wait is taken over")
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	x := c.sessions[a.Instead]
 	switch {
 	case x == nil || x.out == nil:
-		return "", "", "", ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Instead)
+		return takeOver{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Instead)
 	case x.out.parent != a.Parent || !x.out.routed:
-		return "", "", "", ipc.Errorf(ipc.CodeBadArgs, "%s is not a routed subtask of the caller's", x.name)
+		return takeOver{}, ipc.Errorf(ipc.CodeBadArgs, "%s is not a routed subtask of the caller's", x.name)
 	case x.out.waited > 0:
-		return "", "", "", ipc.Errorf(ipc.CodeBadArgs, "%s was taken over already", x.name)
+		return takeOver{}, ipc.Errorf(ipc.CodeBadArgs, "%s was taken over already", x.name)
 	}
 	// One that answered just as the wait ran out keeps its answer.
 	if _, helpers := x.subsAtWork(); !x.out.ended.IsZero() && !helpers {
-		return "", "", "", ipc.Errorf(ipc.CodeBadArgs, "%s has answered", x.name)
+		return takeOver{}, ipc.Errorf(ipc.CodeBadArgs, "%s has answered", x.name)
 	}
-	class = x.out.class
-	if class == "" {
-		class, _ = route.Classify(a.Task, c.cfg().Route.Words)
+	t := takeOver{profile: x.profile, class: x.out.class, why: "the class of the subtask it takes over", name: x.name, named: x.named}
+	if t.class == "" {
+		t.class, t.why = route.Classify(a.Task, c.cfg().Route.Words)
 	}
-	return x.profile, class, "the class of the subtask it takes over", nil
+	return t, nil
 }
 
 // handOn stops the delegated session that a's subtask is taken over from,

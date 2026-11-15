@@ -235,9 +235,11 @@ type Candidate struct {
 	Usable     bool    `json:"usable"`          // it can run the task now
 	Note       string  `json:"note,omitempty"`
 	// Time is how long it takes to answer such a task, from Timed of its
-	// sessions' answers; 0 when none says.
-	Time  time.Duration `json:"time,omitempty"`
-	Timed int           `json:"timed,omitempty"`
+	// sessions' answers; 0 when none says. TimeAtLeast says Time is only a
+	// least: a wait its sessions ran past.
+	Time        time.Duration `json:"time,omitempty"`
+	Timed       int           `json:"timed,omitempty"`
+	TimeAtLeast bool          `json:"time_at_least,omitempty"`
 }
 
 // need is the accuracy c needs to be chosen: its own floor, else floor.
