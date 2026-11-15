@@ -8,11 +8,11 @@ A small website, served by GitHub Pages from `site/`, that explains Irie so plai
 
 ## Pages
 
-Every page opens with its title and then its picture, before any text. Home puts the definition of the word above its title, as the README does.
+Every page opens with its title and then its picture, before any text. Home puts the definition of the word above its title, as the README does, and its picture, the intro film, beside the title and the two buttons on a wide screen; on a phone the film comes after the buttons (2026-11-15).
 
 | Page | File | Picture | What it says |
 |---|---|---|---|
-| Home | `index.html` | The Irie window: the sidebar beside the slot | The definition of "irie". The tagline, "If you could do anything, what would you do first?". What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
+| Home | `index.html` | The intro, a film of the Mac app | The definition of "irie". The tagline, "If you could do anything, what would you do first?". What Irie is, in one sentence. Then the four reasons from the README, each with a line on what is true today |
 | What Irie is | `what-irie-is.html` | Your computer holding all of Irie, with one arrow out: from the agents to their AI companies | Added on 2026-10-27, first in the navigation so it is one click from every page. Everything, in full: what Irie does and never does, its parts, the programs it runs, every file it keeps and for how long, what it sends and where, what it does to agents and the three `[Irie]` notes word for word, what isn't built yet, who makes it, and commands to check each claim |
 | How it works | `how-it-works.html` | You, Irie, tmux, agents and worktrees | You type a task; Irie starts an agent in tmux; Enter shows it live; hooks tell Irie how it is doing; what the colours mean; worktrees and profiles; what stays on your computer |
 | Get started | `get-started.html` | How a spawn line reads | There is nothing to install yet. What you will need, and four steps of what using Irie will look like |
@@ -70,9 +70,11 @@ Recordings are films of the Mac app from the docs/demo sandbox ([docs/demo/READM
 ## Look
 
 - **Colours.** Irie's own, from `internal/ui/view.go`: sun `#F2B544`, deep green `#1E5A42`, on-green `#EAF6EF`, rule green `#3D5247`, sea `#2E9E77` and deep sea `#1D7357`. The state colours in the pictures stand in for the terminal's own red, green, yellow and cyan.
-- **Themes.** Light and dark, following the system setting through `prefers-color-scheme`. Sun is too light for text on a light page (1.8:1), so there it only decorates and deep green carries text and links. On the dark page, sun carries links.
+- **Themes.** Light and dark, following the system setting through `prefers-color-scheme`. Sun is too light for text on a light page (1.8:1), so there it only decorates and deep green carries text and links. On the dark page, links are sea lightened to `#5CC59C` (8.6:1), and sun is the main button.
 - **Contrast.** Text meets WCAG 2.2 AA, 4.5:1, in both themes; large text and meaningful graphics meet 3:1. So "done" is deep green in the light theme and sea in the dark one, and a sun-coloured shape that means something gets a dark outline.
-- **Type.** The system's own fonts, sans for text and monospace for terminal text.
+- **Type.** The system's own fonts, sans for text and monospace for terminal text. Weights 400 to 600: headings 500, the name, buttons and defined words 600; size and colour make the hierarchy. No italics: the definition sets its kind of word and its example in the quiet text colour.
+- **One accent.** The sun means "now": the page you are on in the navigation, a milestone in progress, the picked agent. Beyond that it is only the main button on the dark page. It colours no bars, edges or tagline.
+- **Shapes.** Spacing on a 4 px grid, in 0.25rem steps. Corners by size: 4 px for tags, 8 px for buttons, 14 px for boxes and films; only the roadmap's milestones keep a numbered circle, and other lists use plain numbers. A note is a box a step up from the page with a hairline, not a coloured edge. These follow an audit with unslop (PROVENANCE.md).
 - **Nothing third-party.** Static HTML and one stylesheet. No JavaScript, no build step, no web fonts, no trackers or analytics.
 - **Status marks.** "Built" for what is on main, which is not the same as released: there is no release yet, only building from source. "Planned" for the rest, linking to its milestone on the roadmap.
 

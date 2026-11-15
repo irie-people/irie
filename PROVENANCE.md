@@ -637,6 +637,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-15 | https://aomediacodec.github.io/av1-isobmff/#codecsparam | The intro's WebM `<source>` type, `av01.0.08M.08`: profile 0, `seq_level_idx` 8, Main tier, 8-bit, as ffprobe reads the file, so a browser that can't decode AV1 skips to the H.264 MP4 |
 | 2026-11-15 | https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/track | The intro's captions: `<track kind="captions">` with a same-origin WebVTT file, `site/media/intro.vtt`, made from the narration's SRT |
 | 2026-11-15 | The owner's go-ahead, 2026-11-15: the intro made on 2026-11-14 goes on the home page, with the af_heart voice, its script as drafted, and both disclosure lines | `site/media/intro.{webm,mp4,jpg,vtt}` and the home page's opening film, in place of the terminal drawing |
+| 2026-11-15 | https://github.com/heydamir/unslop at commit 97daa3e (unslop, by Damir Sokolovsky; CC BY 4.0): SKILL.md, references/signs.md and references/tokens.md | The site's restyle (site/style.css, site/index.html, site/faq.html, the Look section of docs/proposals/site.md), from an audit with its signs of slop and their fixes, read as rules and not copied: the home hero with its buttons before the film, one accent for "now" and the main button, corners by size (4, 8 and 14 px), weights 400 to 600, spacing on a 4 px grid, plain numbers outside the roadmap, notes as a step up from the page with a hairline, and colour instead of italics |
 
 ## Third-party code
 

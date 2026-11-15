@@ -1,6 +1,14 @@
 /* Irie's site. One stylesheet, no build step, no web fonts.
    Irie's colours come from internal/ui/view.go. The page follows the
-   system's light or dark setting; terminal pictures stay dark in both. */
+   system's light or dark setting; terminal pictures stay dark in both.
+
+   Spacing sits on a 4 px grid, in steps of 0.25rem. Weights stay at 400
+   to 600, and size and colour make the hierarchy. The sun marks only
+   what is happening now (this page in the navigation, a milestone in
+   progress, the picked agent) and the main button on a dark page; links
+   are green in both themes. These rules follow an audit with unslop,
+   by Damir Sokolovsky (github.com/heydamir/unslop, CC BY 4.0), as
+   PROVENANCE.md records. */
 
 :root {
   color-scheme: light dark;
@@ -25,6 +33,7 @@
   --mark: #1E5A42;
   --done: #1E5A42;
   --done-ink: #EAF6EF;
+  --done-text: #1E5A42;
   --button: #1E5A42;
   --button-ink: #EAF6EF;
   --focus: #1D7357;
@@ -50,9 +59,14 @@
   --page: 62rem;
   --measure: 40rem;
   --gutter: 1.25rem;
+  /* Corners by size: boxes and pictures, then buttons, then tags */
   --radius: 14px;
+  --radius-control: 8px;
+  --radius-tag: 4px;
 }
 
+/* Dark theme. Links take sea, lightened to 8.6:1 on the page; the sun is
+   left for the main button and the marks of "now". */
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0D1713;
@@ -61,14 +75,15 @@
     --ink-soft: #A7BBB0;
     --line: #2C3D34;
     --line-strong: #5E7A6B;
-    --link: #F2B544;
-    --link-hover: #F7CD7A;
+    --link: #5CC59C;
+    --link-hover: #EAF6EF;
     --mark: #F2B544;
     --done: #2E9E77;
     --done-ink: #0D1713;
+    --done-text: #5CC59C;
     --button: #F2B544;
     --button-ink: #10231A;
-    --focus: #F2B544;
+    --focus: #5CC59C;
     --code-bg: #1B2B23;
   }
 }
@@ -88,12 +103,13 @@ body {
   line-height: 1.6;
 }
 
-h1, h2, h3 { line-height: 1.2; margin: 0; text-wrap: balance; }
+h1, h2, h3 { line-height: 1.2; margin: 0; font-weight: 500; text-wrap: balance; }
 h1 { font-size: clamp(1.9rem, 1.1rem + 3.2vw, 3rem); letter-spacing: -0.015em; }
 h2 { font-size: clamp(1.35rem, 1.1rem + 1vw, 1.65rem); margin-top: 3rem; }
 h3 { font-size: 1.15rem; margin-top: 1.75rem; }
 p, ul, ol, dl { margin: 0.75rem 0 0; }
 p, li { max-width: var(--measure); }
+strong, b { font-weight: 600; }
 
 a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
 a:hover { color: var(--link-hover); text-decoration-thickness: 2px; }
@@ -104,12 +120,12 @@ code, kbd {
   font-size: 0.9em;
   background: var(--code-bg);
   border-radius: 6px;
-  padding: 0.08em 0.35em;
+  padding: 0.125rem 0.375rem;
   overflow-wrap: anywhere;
 }
 kbd { border: 1px solid var(--line-strong); border-bottom-width: 2px; }
 
-dfn { font-style: normal; font-weight: 650; }
+dfn { font-style: normal; font-weight: 600; }
 
 /* Page frame */
 
@@ -118,10 +134,10 @@ dfn { font-style: normal; font-weight: 650; }
   left: var(--gutter);
   top: -3rem;
   z-index: 1;
-  padding: 0.5rem 0.9rem;
+  padding: 0.5rem 1rem;
   background: var(--button);
   color: var(--button-ink);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 .skip:focus { top: 0.75rem; }
 
@@ -148,9 +164,9 @@ main,
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.5rem;
   color: var(--ink);
-  font-weight: 750;
+  font-weight: 600;
   font-size: 1.3rem;
   text-decoration: none;
 }
@@ -160,22 +176,23 @@ main,
 .site-header ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1.1rem;
+  gap: 0.25rem 1rem;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 .site-header nav a {
   display: inline-block;
-  padding: 0.3rem 0;
+  padding: 0.25rem 0;
   color: var(--ink);
   font-size: 0.98rem;
   text-decoration: none;
   border-bottom: 3px solid transparent;
 }
 .site-header nav a:hover { border-bottom-color: var(--line-strong); }
+/* The page you are on: the sun, which means "now" */
 .site-header nav a[aria-current="page"],
-.site-header nav a[aria-current="true"] { border-bottom-color: var(--sun); font-weight: 650; }
+.site-header nav a[aria-current="true"] { border-bottom-color: var(--sun); font-weight: 600; }
 
 main { padding-top: 2.5rem; padding-bottom: 4rem; }
 
@@ -186,10 +203,11 @@ main { padding-top: 2.5rem; padding-bottom: 4rem; }
   color: var(--ink-soft);
   font-size: 0.95rem;
 }
-.site-footer p { margin: 0.35rem 0 0; }
+.site-footer p { margin: 0.25rem 0 0; }
 
 /* Links to the other irie-people sites. The same rules are in the base
-   stylesheet of Riddim, Steak and the home page (irie-people.github.io). */
+   stylesheet of Riddim, Steak and the home page (irie-people.github.io),
+   so they keep their values here until those change with them. */
 .family { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; margin: 0 0 0.8rem; }
 .family strong { color: var(--ink); }
 .family a { display: inline-flex; align-items: center; gap: 0.35rem; }
@@ -206,7 +224,7 @@ main { padding-top: 2.5rem; padding-bottom: 4rem; }
 .picture { margin: 1.75rem 0 0; }
 .picture svg { display: block; width: 100%; height: auto; }
 .picture figcaption {
-  margin: 0.8rem auto 0;
+  margin: 0.75rem auto 0;
   max-width: var(--measure);
   color: var(--ink-soft);
   font-size: 0.95rem;
@@ -274,78 +292,117 @@ svg .mono { font-family: var(--mono); }
 .t-deep-green { fill: var(--deep-green); }
 .t-rule { stroke: var(--rule-green); }
 
-/* Home */
+/* Home. The hero is the headline, what Irie does and the two buttons,
+   beside the intro film; on a phone the film comes after the buttons.
+   Both columns start at the top, so opening the film's words never moves
+   the buttons. */
 
-.lead { font-size: 1.2rem; color: var(--ink-soft); }
-.hero .definition { margin: 0 0 1.75rem; }
+.hero { display: grid; gap: 2rem; align-items: start; }
+.hero .definition { margin: 0 0 1.5rem; }
 .hero hgroup { margin: 0; }
-.tagline { margin: 0 0 0.6rem; color: var(--mark); font-size: 1.15rem; font-weight: 700; text-wrap: balance; }
+.tagline { margin: 0 0 0.5rem; color: var(--ink-soft); font-size: 1.15rem; text-wrap: balance; }
 .hero h1 { max-width: 22ch; }
+.lead { font-size: 1.2rem; color: var(--ink-soft); }
 .hero .actions { margin-top: 1.5rem; }
+.hero .demo { margin: 0; }
+@media (min-width: 60rem) {
+  .hero { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 3rem; }
+  .hero h1 { font-size: clamp(2rem, 1rem + 1.6vw, 2.5rem); }
+  .hero .lead { font-size: 1.125rem; }
+}
+.hero + .note { margin-top: 2.5rem; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem; }
 .button {
-  display: inline-block;
-  padding: 0.7rem 1.3rem;
-  border: 2px solid var(--button);
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0 1.25rem;
+  border: 1px solid var(--button);
+  border-radius: var(--radius-control);
   background: var(--button);
   color: var(--button-ink);
-  font-weight: 650;
+  font-weight: 600;
+  line-height: 1.25;
   text-decoration: none;
 }
 .button:hover { color: var(--button-ink); filter: brightness(1.08); text-decoration: none; }
-.button.quiet { background: transparent; color: var(--link); }
-.button.quiet:hover { color: var(--link-hover); background: var(--bg-soft); filter: none; }
+.button.quiet { border-color: var(--line-strong); background: var(--bg-soft); color: var(--ink); }
+.button.quiet:hover { color: var(--ink); border-color: var(--ink-soft); background: var(--code-bg); filter: none; }
 
+/* A note beside the text: a step up from the page, with a hairline */
 .note {
   margin-top: 1.5rem;
   padding: 0.75rem 1rem;
   max-width: var(--measure);
-  border-left: 4px solid var(--sun);
-  background: var(--bg-soft);
-  border-radius: 0 10px 10px 0;
-}
-
-.reasons {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: 1rem;
-  margin-top: 1.25rem;
-  padding: 0;
-  list-style: none;
-}
-.reasons li {
-  max-width: none;
-  padding: 1.25rem 1.25rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-soft);
 }
-.reasons h3 { margin: 0; }
-.reasons h3::before {
-  content: "";
-  display: block;
-  width: 2.25rem;
-  height: 4px;
-  margin-bottom: 0.75rem;
-  border-radius: 2px;
-  background: var(--sun);
+
+/* Why Irie: one row per reason, its line on the left and what it means
+   on the right, with what is built and planned in quiet text. */
+.reasons {
+  margin-top: 1.25rem;
+  padding: 0;
+  max-width: 52rem;
+  list-style: none;
+  border-top: 1px solid var(--line);
 }
-.reasons .status { font-size: 0.95rem; color: var(--ink-soft); }
+.reasons li {
+  max-width: none;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.reasons h3 { margin: 0; font-size: 1.25rem; }
+.reasons h3 + p { margin-top: 0.5rem; }
+@media (min-width: 47.5rem) {
+  .reasons li {
+    display: grid;
+    grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+    column-gap: 2rem;
+    align-items: baseline;
+  }
+  .reasons h3 { grid-row: span 3; }
+  .reasons li > :not(h3) { grid-column: 2; }
+  .reasons h3 + p { margin-top: 0; }
+}
+.reasons .status {
+  margin-top: 0.5rem;
+  padding-left: 4.5rem;
+  text-indent: -4.5rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+.reasons .status .tag {
+  width: 4.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font-size: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  text-indent: 0;
+  vertical-align: baseline;
+}
+.reasons .status .tag.built { color: var(--done-text); }
+.reasons .status a.tag { text-decoration: underline; text-decoration-thickness: 1px; }
+.reasons .status a.tag:hover { color: var(--ink); text-decoration-thickness: 2px; }
 
 /* Status marks: what works on main today, and what is planned */
 
 .tag {
   display: inline-block;
-  margin-right: 0.35rem;
-  padding: 0.05rem 0.6rem;
-  border: 1px solid var(--ink-soft);
-  border-radius: 999px;
+  margin-right: 0.375rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-tag);
   color: var(--ink-soft);
   font-size: 0.8rem;
-  font-weight: 650;
-  line-height: 1.5;
+  font-weight: 500;
+  line-height: 1.25rem;
   white-space: nowrap;
   text-decoration: none;
   vertical-align: 0.1em;
@@ -353,7 +410,7 @@ svg .mono { font-family: var(--mono); }
 a.tag:hover { color: var(--ink); border-color: var(--ink); text-decoration: none; }
 .tag.built { border-color: var(--done); background: var(--done); color: var(--done-ink); }
 .tag.next { border-color: var(--sun); background: var(--sun); color: #14261D; }
-h2 .tag, h3 .tag { font-size: 0.8rem; margin-left: 0.4rem; }
+h2 .tag, h3 .tag { font-size: 0.8rem; margin-left: 0.5rem; }
 
 /* Recording boxes: 16:10 films of the Mac app from docs/demo, which play
    only when asked. A box without its film yet is dashed. */
@@ -380,52 +437,48 @@ video.demo-box {
 }
 .demo figcaption {
   max-width: 42rem;
-  margin-top: 0.6rem;
+  margin-top: 0.5rem;
   color: var(--ink-soft);
   font-size: 0.95rem;
 }
 
-/* The intro at the top of Home: 16:9 and as wide as the page, with sound.
-   Its disclosure sits under it, and its words open on request. */
+/* The intro on Home: 16:9, with sound. Its disclosure sits under it,
+   and its words open on request. */
 .demo-box.wide { aspect-ratio: 16 / 9; max-width: none; }
-.intro { margin-top: 1.75rem; }
-.intro .disclosure { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
+.intro .disclosure { display: block; margin-top: 0.25rem; font-size: 0.85rem; }
 .script { margin-top: 0.75rem; max-width: 42rem; }
-.script summary { cursor: pointer; color: var(--link); font-weight: 650; }
+.script summary { cursor: pointer; color: var(--link); font-weight: 600; }
 .script p { color: var(--ink-soft); }
 
-/* Steps (Get started) */
+/* Steps (Get started), numbered in plain figures */
 
 .steps { counter-reset: step; list-style: none; padding: 0; margin-top: 1.25rem; }
 .steps > li {
   counter-increment: step;
   position: relative;
-  padding-left: 3.25rem;
+  padding-left: 2.5rem;
   margin-top: 1.5rem;
 }
 .steps > li::before {
   content: counter(step);
   position: absolute;
   left: 0;
-  top: -0.1rem;
-  width: 2.3rem;
-  height: 2.3rem;
-  border-radius: 50%;
-  background: var(--deep-green);
-  color: var(--on-green);
-  font-weight: 750;
-  line-height: 2.3rem;
-  text-align: center;
+  top: 0;
+  color: var(--ink-soft);
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 .steps h3 { margin: 0; }
 
 .needs { padding-left: 1.25rem; }
-.needs li { margin-top: 0.4rem; }
+.needs li { margin-top: 0.5rem; }
 
 .spawn-parts { margin-top: 1rem; }
-.spawn-parts dt { margin-top: 1.25rem; font-weight: 650; }
-.spawn-parts dt code { margin-right: 0.35rem; }
-.spawn-parts dd { margin: 0.35rem 0 0; max-width: var(--measure); }
+.spawn-parts dt { margin-top: 1.25rem; font-weight: 600; }
+.spawn-parts dt code { margin-right: 0.25rem; }
+.spawn-parts dd { margin: 0.25rem 0 0; max-width: var(--measure); }
 
 /* State list (How it works) */
 
@@ -443,13 +496,13 @@ video.demo-box {
 }
 
 .states { margin: 0; padding: 0; list-style: none; }
-.states li { display: flex; gap: 0.75rem; align-items: baseline; margin-top: 0.55rem; }
+.states li { display: flex; gap: 0.75rem; align-items: baseline; margin-top: 0.5rem; }
 .states li:first-child { margin-top: 0; }
 .glyph {
   flex: none;
   display: inline-block;
-  min-width: 2.1rem;
-  padding: 0 0.4rem;
+  min-width: 2rem;
+  padding: 0 0.5rem;
   border-radius: 6px;
   background: var(--term-bg);
   font-family: var(--mono);
@@ -464,12 +517,12 @@ video.demo-box {
 .glyph.ink { color: var(--term-ink); }
 .glyph.faint { color: var(--term-faint); }
 
-/* Roadmap */
+/* Roadmap. Its numbered stones stay: there the number is the milestone. */
 
 .milestones { list-style: none; padding: 0; margin-top: 1.25rem; }
 .milestones > li {
   display: grid;
-  grid-template-columns: 2.6rem minmax(0, 1fr);
+  grid-template-columns: 2.5rem minmax(0, 1fr);
   gap: 0 1rem;
   max-width: 46rem;
   padding: 1rem 0;
@@ -479,52 +532,57 @@ video.demo-box {
 .milestones > li > :not(.num) { grid-column: 2; }
 .milestones .num {
   grid-row: span 2;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border: 2px solid var(--ink-soft);
   border-radius: 50%;
   color: var(--ink-soft);
-  font-weight: 750;
-  line-height: 2.1rem;
+  font-weight: 600;
+  line-height: 2.25rem;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .milestones .done .num { border-color: var(--done); background: var(--done); color: var(--done-ink); }
 .milestones .now .num { border-color: #14261D; background: var(--sun); color: #14261D; }
-.milestones h3 { margin: 0.35rem 0 0; font-size: 1.1rem; }
+.milestones h3 { margin: 0.5rem 0 0; font-size: 1.1rem; }
 .milestones h3 .tag { margin-left: 0.5rem; }
-.milestones p { margin-top: 0.35rem; }
+.milestones p { margin-top: 0.25rem; }
 
 .after { padding-left: 1.25rem; }
 .after li { margin-top: 0.5rem; }
 
 /* FAQ and Contribute */
 
-/* The definition from the README, word for word (docs/PHRASES.md) */
+/* The definition from the README, word for word (docs/PHRASES.md). A
+   dictionary entry: colour, not italics, sets the word's kind and its
+   example apart. */
 .definition {
   margin: 1rem 0 0;
-  padding: 0.75rem 1.1rem;
+  padding: 0.75rem 1rem;
   max-width: var(--measure);
-  border-left: 4px solid var(--sun);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--bg-soft);
-  border-radius: 0 10px 10px 0;
 }
-.definition p { margin: 0.15rem 0 0; }
+.definition p { margin: 0.25rem 0 0; }
 .definition p:first-child { margin-top: 0; }
+.definition .pos,
+.definition .example { color: var(--ink-soft); }
 
 .qa h2 { font-size: 1.25rem; margin-top: 2.25rem; }
 .rules { padding-left: 1.25rem; }
-.rules li { margin-top: 0.6rem; }
+.rules li { margin-top: 0.5rem; }
 
 .links { padding-left: 1.25rem; }
-.links li { margin-top: 0.35rem; }
+.links li { margin-top: 0.25rem; }
 
 /* Docs */
 
 /* Commands and files. They scroll sideways rather than wrap, so a
    command can be copied as it is. */
 pre {
-  margin: 0.9rem 0 0;
-  padding: 0.8rem 1rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
   max-width: 46rem;
   overflow-x: auto;
   background: var(--code-bg);
@@ -538,22 +596,22 @@ pre code { padding: 0; background: none; border-radius: 0; font-size: inherit; o
 
 .table-wrap { margin-top: 1rem; max-width: 52rem; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 0.97rem; line-height: 1.5; }
-caption { padding-bottom: 0.4rem; color: var(--ink-soft); font-size: 0.95rem; text-align: left; }
+caption { padding-bottom: 0.5rem; color: var(--ink-soft); font-size: 0.95rem; text-align: left; }
 th, td { padding: 0.5rem 1rem 0.5rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-th { border-bottom: 2px solid var(--line-strong); font-weight: 650; }
+th { border-bottom: 2px solid var(--line-strong); font-weight: 600; }
 td code, th code { white-space: nowrap; }
-td .tag { margin-top: 0.2rem; }
+td .tag { margin-top: 0.25rem; }
 
 .doc h2 { scroll-margin-top: 1rem; }
 .doc h3 { font-size: 1.08rem; }
 .doc ul.rules, .doc ol.rules { max-width: var(--measure); }
 
-/* The list of docs pages, on the docs index */
+/* The list of docs pages, on the docs index, numbered in plain figures */
 .doc-list { margin-top: 1.25rem; padding: 0; list-style: none; counter-reset: doc; max-width: 46rem; }
 .doc-list > li {
   counter-increment: doc;
   position: relative;
-  padding: 0.9rem 0 0.9rem 3.25rem;
+  padding: 1rem 0 1rem 2.5rem;
   border-bottom: 1px solid var(--line);
 }
 .doc-list > li:first-child { border-top: 1px solid var(--line); }
@@ -561,42 +619,38 @@ td .tag { margin-top: 0.2rem; }
   content: counter(doc);
   position: absolute;
   left: 0;
-  top: 0.9rem;
-  width: 2.3rem;
-  height: 2.3rem;
-  border-radius: 50%;
-  background: var(--done);
-  color: var(--done-ink);
-  font-weight: 750;
-  line-height: 2.3rem;
-  text-align: center;
+  top: 1.25rem;
+  color: var(--ink-soft);
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
-.doc-list > li.planned::before { border: 2px solid var(--ink-soft); background: transparent; color: var(--ink-soft); line-height: calc(2.3rem - 4px); }
-.doc-list h2 { margin: 0.2rem 0 0; font-size: 1.15rem; }
-.doc-list p { margin-top: 0.3rem; }
+.doc-list h2 { margin: 0.25rem 0 0; font-size: 1.15rem; }
+.doc-list p { margin-top: 0.25rem; }
 
 /* At the foot of each docs page: the next page, then all of them */
 .docs-nav {
   margin-top: 3.5rem;
-  padding: 1.1rem 1.25rem 1.2rem;
+  padding: 1rem 1.25rem 1.25rem;
   max-width: 46rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-soft);
 }
-.docs-nav .next { margin: 0; font-weight: 650; }
+.docs-nav .next { margin: 0; font-weight: 600; }
 .docs-nav .next a { font-size: 1.1rem; }
 .docs-nav ol {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem 1.25rem;
-  margin: 0.9rem 0 0;
-  padding: 0.9rem 0 0;
+  gap: 0.25rem 1.25rem;
+  margin: 1rem 0 0;
+  padding: 1rem 0 0;
   border-top: 1px solid var(--line);
   list-style: none;
 }
 .docs-nav li { max-width: none; }
-.docs-nav a[aria-current="page"] { color: var(--ink); font-weight: 650; text-decoration: none; }
+.docs-nav a[aria-current="page"] { color: var(--ink); font-weight: 600; text-decoration: none; }
 
 /* Themes. Each picture carries its theme's own colours, so it looks the
    same in the site's light and dark. */
@@ -609,10 +663,10 @@ svg .rounded { font-family: ui-rounded, "SF Pro Rounded", var(--sans); }
 }
 .pair .picture svg { max-width: 21rem; margin: 0 auto; }
 .colours { margin-top: 1.25rem; max-width: 44rem; }
-.colours summary { cursor: pointer; color: var(--link); font-weight: 650; }
+.colours summary { cursor: pointer; color: var(--link); font-weight: 600; }
 .colours .role { display: block; color: var(--ink-soft); font-size: 0.85rem; font-weight: 400; }
 .colours td { white-space: nowrap; }
-.sw { width: 0.9rem; height: 0.9rem; margin-right: 0.4rem; vertical-align: -0.1rem; }
+.sw { width: 1rem; height: 1rem; margin-right: 0.5rem; vertical-align: -0.125rem; }
 
 @media (max-width: 32.5rem) {
   :root { --gutter: 1rem; }
