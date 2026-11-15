@@ -3,17 +3,19 @@
 #   powershell -ExecutionPolicy ByPass -c "irm https://irie-people.github.io/irie/install.ps1 | iex"
 #
 # Irie runs inside WSL 2, Windows' own Linux, as it runs on any Linux. This
-# downloads irie.exe, the small program that starts it there, from the
-# latest release on GitHub, checks its SHA-256, puts it in
-# %LOCALAPPDATA%\irie\bin and adds that folder to your PATH. Then
-# `irie setup` installs what is missing (WSL, Ubuntu, Irie inside it, and
-# its shortcuts), asking before each step. Running it again updates
-# irie.exe; Irie inside WSL updates the same way it does on Linux.
+# downloads Irie for Windows from the latest release on GitHub, checks its
+# SHA-256, and puts Irie.exe, its window, in %LOCALAPPDATA%\irie, with an
+# Irie in the Start menu, and irie.exe, the small program that starts Irie
+# in WSL from a terminal, in %LOCALAPPDATA%\irie\bin, which it adds to
+# your PATH. Then `irie setup` installs what is missing (WSL, Ubuntu, Irie
+# inside it, and its shortcuts), asking before each step, and Irie opens.
+# Running it again updates both; Irie inside WSL updates the same way it
+# does on Linux.
 #
 # What it reads from the environment:
 #
 #   $env:IRIE_VERSION = "1.3.0"   install that release, not the latest
-#   $env:IRIE_NO_SETUP = "1"      don't run irie setup at the end
+#   $env:IRIE_NO_SETUP = "1"      don't run irie setup, or open Irie, at the end
 #   $env:IRIE_DOWNLOADS = "URL"   where the release files are, such as a mirror
 #
 # The source of this file is site/install.ps1 in github.com/irie-people/irie.
@@ -68,21 +70,48 @@ function Install-Irie {
 		if ($got -ne $want) { throw "The SHA-256 of $name is $got, not the release's $want; nothing was installed" }
 
 		Expand-Archive -Path (Join-Path $tmp $name) -DestinationPath (Join-Path $tmp 'x') -Force
-		$bin = Join-Path $env:LOCALAPPDATA 'irie\bin'
+		$root = Join-Path $env:LOCALAPPDATA 'irie'
+		$bin = Join-Path $root 'bin'
 		New-Item -ItemType Directory -Force -Path $bin | Out-Null
-		$exe = Join-Path $bin 'irie.exe'
-		# A running irie.exe can't be written over, but it can be moved
+		# A running program can't be written over, but it can be moved
 		# aside; the copy left from the last update goes first, unless it
 		# still runs.
-		$old = "$exe.old"
-		if (Test-Path $old) { Remove-Item -Force $old -ErrorAction SilentlyContinue }
-		if (Test-Path $exe) {
-			if (Test-Path $old) { $old = "$exe.$([guid]::NewGuid().ToString('N')).old" }
-			Move-Item -Force $exe $old
+		function Put($from, $to) {
+			$old = "$to.old"
+			if (Test-Path $old) { Remove-Item -Force $old -ErrorAction SilentlyContinue }
+			if (Test-Path $to) {
+				if (Test-Path $old) { $old = "$to.$([guid]::NewGuid().ToString('N')).old" }
+				Move-Item -Force $to $old
+			}
+			Copy-Item -Force $from $to
 		}
-		Copy-Item -Force (Join-Path $tmp 'x\irie.exe') $exe
+		# The wrapper is in bin since releases had the app; at the top before.
+		$from = Join-Path $tmp 'x\bin\irie.exe'
+		if (-not (Test-Path $from)) { $from = Join-Path $tmp 'x\irie.exe' }
+		$exe = Join-Path $bin 'irie.exe'
+		Put $from $exe
 		Copy-Item -Force (Join-Path $tmp 'x\LICENSE') (Join-Path $bin 'LICENSE')
 		Write-Host "Installed $exe"
+
+		# Irie for Windows, the window, where the release has it.
+		$app = $null
+		if (Test-Path (Join-Path $tmp 'x\Irie.exe')) {
+			$app = Join-Path $root 'Irie.exe'
+			Put (Join-Path $tmp 'x\Irie.exe') $app
+			foreach ($f in 'Irie.ico', 'LICENSE', 'THIRD-PARTY-NOTICES.txt') {
+				if (Test-Path (Join-Path $tmp "x\$f")) { Copy-Item -Force (Join-Path $tmp "x\$f") (Join-Path $root $f) }
+			}
+			# The Start menu's Irie opens it, now and after a restart that
+			# setting up WSL needs.
+			$lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'Irie.lnk'
+			$s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+			$s.TargetPath = $app
+			$s.WorkingDirectory = $env:USERPROFILE
+			$s.Description = 'Your agents, in Irie'
+			$s.IconLocation = "$(Join-Path $root 'Irie.ico'),0"
+			$s.Save()
+			Write-Host "Installed $app, and Irie in the Start menu"
+		}
 
 		$path = [Environment]::GetEnvironmentVariable('Path', 'User')
 		$parts = @()
@@ -98,6 +127,10 @@ function Install-Irie {
 
 	if ($env:IRIE_NO_SETUP) { return }
 	& $exe setup
+	if ($LASTEXITCODE -eq 0 -and $app) {
+		Write-Host 'Opening Irie'
+		Start-Process -FilePath $app
+	}
 }
 
 Install-Irie

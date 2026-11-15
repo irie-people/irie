@@ -25,9 +25,16 @@ type Machine interface {
 	Run(name string, args ...string) (int, error)
 }
 
+// Lister is a Machine that can also read the distributions WSL keeps in
+// the registry, for a wsl.exe that lists nothing.
+type Lister interface {
+	Distros() []Distro
+}
+
 // Env is where things are on this Windows computer, from its environment.
 type Env struct {
-	Exe          string // irie.exe itself
+	Exe          string // irie.exe itself, the wrapper
+	App          string // the Windows app, Irie.exe, when it is installed; the Start menu opens it rather than the wrapper
 	Profile      string // %USERPROFILE%, where .wslconfig lives
 	AppData      string // %APPDATA%, which holds the Start menu
 	LocalAppData string // %LOCALAPPDATA%, which holds Windows Terminal's fragments and the wrapper's own folder
@@ -40,7 +47,7 @@ type Env struct {
 // setup --distro.
 func EnvFromOS() Env {
 	exe, _ := os.Executable()
-	e := Env{Exe: exe, Profile: os.Getenv("USERPROFILE"), AppData: os.Getenv("APPDATA"), LocalAppData: os.Getenv("LOCALAPPDATA"),
+	e := Env{Exe: exe, App: AppBeside(exe), Profile: os.Getenv("USERPROFILE"), AppData: os.Getenv("APPDATA"), LocalAppData: os.Getenv("LOCALAPPDATA"),
 		ProgramFiles: os.Getenv("ProgramW6432"), SystemRoot: os.Getenv("SystemRoot")}
 	if e.ProgramFiles == "" {
 		e.ProgramFiles = os.Getenv("ProgramFiles")
@@ -52,6 +59,26 @@ func EnvFromOS() Env {
 		}
 	}
 	return e
+}
+
+// AppBeside is the Windows app installed with the wrapper exe, as
+// install.ps1 and the release's zip lay them out: Irie.exe in the folder
+// above the wrapper's bin; "" when it is not there.
+func AppBeside(exe string) string {
+	if exe == "" {
+		return ""
+	}
+	app := filepath.Join(filepath.Dir(filepath.Dir(exe)), brand.Exe+".exe")
+	if !exists(app) {
+		return ""
+	}
+	return app
+}
+
+// WrapperBeside is the wrapper installed with the Windows app at app: its
+// bin folder's irie.exe.
+func WrapperBeside(app string) string {
+	return filepath.Join(filepath.Dir(app), "bin", brand.Slug+".exe")
 }
 
 func (e Env) distroFile() string { return filepath.Join(e.LocalAppData, brand.Slug, "distro") }
@@ -99,10 +126,15 @@ func Look(m Machine, e Env) State {
 	if out, err := m.Output("cmd.exe", "/c", "ver"); err == nil {
 		st.Build, _ = Build(out)
 	}
-	// With no distribution, wsl.exe lists none and exits non-zero.
+	// With no distribution, wsl.exe lists none and exits non-zero. Some
+	// versions write nothing at all into a pipe (microsoft/WSL#41937), so
+	// a machine that can read WSL's own list in the registry does.
 	if st.WSL = e.HasWSL(); st.WSL {
 		out, _ := m.Output("wsl.exe", "--list", "--verbose")
 		st.Distros = ParseList(out)
+		if l, ok := m.(Lister); ok && len(st.Distros) == 0 {
+			st.Distros = l.Distros()
+		}
 	}
 	st.Distro, st.HasDistro = Choose(st.Distros, e.Distro)
 	if st.HasDistro && st.Distro.Version == 2 {
@@ -206,7 +238,12 @@ func Fix(m Machine, e Env, st State, step Step) error {
 		}
 		return os.WriteFile(e.wslconfig(), []byte(KeepRunning(old)), 0o644)
 	case "shortcut":
-		if err := shortcut(m, e.Shortcut(), e.Exe, "", "Your agents, in "+brand.Name, false); err != nil {
+		// The app when it is installed, and the wrapper's terminal without it.
+		target := e.App
+		if target == "" {
+			target = e.Exe
+		}
+		if err := shortcut(m, e.Shortcut(), target, "", "Your agents, in "+brand.Name, false); err != nil {
 			return err
 		}
 		// Windows Terminal reads every fragment in its folder as it starts;
@@ -259,8 +296,14 @@ func ShortcutScript(lnk, target, args, desc string, minimized bool) string {
 	if minimized {
 		style = 7
 	}
-	return fmt.Sprintf("$l = %s; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $l) | Out-Null; $s = (New-Object -ComObject WScript.Shell).CreateShortcut($l); $s.TargetPath = %s; $s.Arguments = %s; $s.WorkingDirectory = $env:USERPROFILE; $s.Description = %s; $s.WindowStyle = %d; $s.Save()",
-		quote(lnk), quote(target), quote(args), quote(desc), style)
+	icon := ""
+	// A program with its icon beside it, as the Windows app's Irie.ico is,
+	// since the program carries none of its own.
+	if ico := strings.TrimSuffix(target, filepath.Ext(target)) + ".ico"; ico != target && exists(ico) {
+		icon = "$s.IconLocation = " + quote(ico+",0") + "; "
+	}
+	return fmt.Sprintf("$l = %s; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $l) | Out-Null; $s = (New-Object -ComObject WScript.Shell).CreateShortcut($l); $s.TargetPath = %s; $s.Arguments = %s; $s.WorkingDirectory = $env:USERPROFILE; $s.Description = %s; $s.WindowStyle = %d; %s$s.Save()",
+		quote(lnk), quote(target), quote(args), quote(desc), style, icon)
 }
 
 func shortcut(m Machine, lnk, target, args, desc string, minimized bool) error {

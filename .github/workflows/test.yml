@@ -1,6 +1,6 @@
 # tools/check.sh (gofmt, go vet, go test and PROVENANCE.md's rows) on Linux and macOS, for every
-# push to main and every pull request, as tools/live.sh runs it before an install, and the
-# Windows wrapper on Windows. The Mac app (mac/) is not built here; mac/build.sh takes about ten
+# push to main and every pull request, as tools/live.sh runs it before an install, and Irie for
+# Windows and its wrapper on Windows. The Mac app (mac/) is not built here; mac/build.sh takes about ten
 # minutes and needs Xcode.
 name: test
 on:
@@ -33,33 +33,38 @@ jobs:
           fi
           tmux -V
       - run: sh tools/check.sh
-  # The Windows wrapper (cmd/windows, docs/WINDOWS.md) on Windows itself: its
-  # tests, then site/install.ps1 from a local mirror of the downloads, and
-  # irie.exe's own look at the machine. GitHub's Windows has no WSL 2 to run
+  # Irie for Windows (cmd/windows-app) and the wrapper (cmd/windows, docs/WINDOWS.md) on Windows
+  # itself: their checks, then site/install.ps1 from a local mirror of the downloads, irie.exe's
+  # own look at the machine, and the app's window drawn into PNGs against a stand-in for Irie in
+  # Linux (tools/winpreview -bridge), which the run keeps. GitHub's Windows has no WSL 2 to run
   # Irie in, so the look says what is missing and changes nothing.
   windows:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
-      - name: wrapper
+      - name: wrapper and app
         shell: bash
         run: |
-          go vet ./cmd/windows ./internal/wsl
-          go test ./internal/wsl
+          go vet ./cmd/windows ./cmd/windows-app ./internal/wsl ./internal/mux ./internal/winapp/fixture ./internal/winapp/web ./tools/winpreview
+          go test ./internal/wsl ./internal/mux
       - name: install.ps1
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $dist = Join-Path $env:RUNNER_TEMP 'dist'
-          New-Item -ItemType Directory -Force -Path "$dist\x" | Out-Null
-          go build -trimpath -o "$dist\x\irie.exe" ./cmd/windows
+          New-Item -ItemType Directory -Force -Path "$dist\x\bin" | Out-Null
+          go build -trimpath -o "$dist\x\bin\irie.exe" ./cmd/windows
           if ($LASTEXITCODE -ne 0) { throw 'go build failed' }
+          go build -trimpath -ldflags "-H windowsgui" -o "$dist\x\Irie.exe" ./cmd/windows-app
+          if ($LASTEXITCODE -ne 0) { throw 'go build of the app failed' }
+          Copy-Item cmd/windows-app/Irie.ico "$dist\x\Irie.ico"
+          Copy-Item internal/winapp/web/vendor/NOTICES.txt "$dist\x\THIRD-PARTY-NOTICES.txt"
           Copy-Item LICENSE "$dist\x\LICENSE"
-          Compress-Archive -Path "$dist\x\irie.exe", "$dist\x\LICENSE" -DestinationPath "$dist\irie-windows-amd64.zip"
+          Compress-Archive -Path "$dist\x\Irie.exe", "$dist\x\Irie.ico", "$dist\x\bin", "$dist\x\LICENSE", "$dist\x\THIRD-PARTY-NOTICES.txt" -DestinationPath "$dist\irie-windows-amd64.zip"
           $h = (Get-FileHash -Algorithm SHA256 "$dist\irie-windows-amd64.zip").Hash.ToLower()
           Set-Content -Path "$dist\SHA256SUMS" -Value "$h  irie-windows-amd64.zip" -Encoding ascii
           $server = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1', '--directory', $dist -PassThru -WindowStyle Hidden
@@ -74,6 +79,11 @@ jobs:
           $exe = Join-Path $env:LOCALAPPDATA 'irie\bin\irie.exe'
           & $exe version
           if ($LASTEXITCODE -ne 0) { throw "irie.exe version exited $LASTEXITCODE" }
+          $app = Join-Path $env:LOCALAPPDATA 'irie\Irie.exe'
+          if (-not (Test-Path $app)) { throw 'install.ps1 did not install Irie.exe' }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'Irie.lnk'
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+          if ($target -ne $app) { throw "the Start menu's Irie opens $target, not $app" }
           $look = & $exe setup --check | Out-String
           $code = $LASTEXITCODE
           Write-Host $look
@@ -87,3 +97,28 @@ jobs:
           # The runner ends the step with the last program's exit code, which
           # is setup --check's 1 on a Windows without WSL 2.
           exit 0
+      - name: the app's window
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $t = $env:RUNNER_TEMP
+          go build -o "$t\winpreview.exe" ./tools/winpreview
+          if ($LASTEXITCODE -ne 0) { throw 'go build of winpreview failed' }
+          go build -ldflags "-H windowsgui" -o "$t\Irie.exe" ./cmd/windows-app
+          if ($LASTEXITCODE -ne 0) { throw 'go build of the app failed' }
+          $env:IRIE_APP_BRIDGE = "`"$t\winpreview.exe`" -bridge"
+          $shots = Join-Path $t 'shots'
+          $p = Start-Process -FilePath "$t\Irie.exe" -ArgumentList '--snapshot', "`"$shots`"" -PassThru -Wait
+          $log = Join-Path $env:LOCALAPPDATA 'irie\app.log'
+          if (Test-Path $log) { Get-Content $log }
+          if ($p.ExitCode -ne 0) { throw "Irie.exe --snapshot exited $($p.ExitCode)" }
+          foreach ($f in 'window.png', 'settings.png', 'menu.png') {
+            $png = Join-Path $shots $f
+            if (-not (Test-Path $png) -or (Get-Item $png).Length -lt 20000) { throw "$f is missing or blank" }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: irie-for-windows-snapshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore

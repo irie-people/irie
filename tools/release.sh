@@ -4,8 +4,10 @@
 #   irie-darwin-arm64.tar.gz  irie-darwin-amd64.tar.gz
 #   irie-linux-amd64.tar.gz   irie-linux-arm64.tar.gz
 #   irie-windows-amd64.zip    irie-windows-arm64.zip
-#                             irie.exe, the Windows wrapper, which runs
-#                             Irie inside WSL 2 (docs/WINDOWS.md)
+#                             Irie.exe, Irie for Windows, with its icon and
+#                             the notices of what it carries, and
+#                             bin\irie.exe, the wrapper, which runs Irie
+#                             inside WSL 2 (docs/WINDOWS.md)
 #   Irie-macos.zip            Irie.app, with irie inside, for Apple silicon
 #                             and Intel Macs
 #   SHA256SUMS                the SHA-256 of each
@@ -51,15 +53,21 @@ for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
 	COPYFILE_DISABLE=1 tar -czf "$out/$BRAND_SLUG-$os-$arch.tar.gz" -C "$dir" "$BRAND_SLUG" LICENSE
 done
 
-# The Windows wrapper (cmd/windows): irie.exe, which runs the Linux irie
-# inside WSL 2. A zip, which Windows opens without anything more.
+# Irie for Windows (cmd/windows-app), the window, and the wrapper
+# (cmd/windows) in bin beside it, which runs the Linux irie inside WSL 2,
+# laid out as install.ps1 puts them in %LOCALAPPDATA%\irie. A zip, which
+# Windows opens without anything more. Both are Go alone, so any computer
+# builds them.
 for arch in amd64 arm64; do
 	dir=$work/$BRAND_SLUG-windows-$arch
-	mkdir -p "$dir"
-	say "$BRAND_SLUG.exe for windows/$arch"
-	CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -tags "$BRAND_TAGS" -ldflags "-s -w" -o "$dir/$BRAND_SLUG.exe" ./cmd/windows
+	mkdir -p "$dir/bin"
+	say "$BRAND_EXE.exe and $BRAND_SLUG.exe for windows/$arch"
+	CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -tags "$BRAND_TAGS" -ldflags "-s -w" -o "$dir/bin/$BRAND_SLUG.exe" ./cmd/windows
+	CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -tags "$BRAND_TAGS" -ldflags "-s -w -H windowsgui" -o "$dir/$BRAND_EXE.exe" ./cmd/windows-app
+	cp cmd/windows-app/Irie.ico "$dir/$BRAND_EXE.ico"
+	cp internal/winapp/web/vendor/NOTICES.txt "$dir/THIRD-PARTY-NOTICES.txt"
 	cp LICENSE "$dir/"
-	(cd "$dir" && zip -q -X "$out/$BRAND_SLUG-windows-$arch.zip" "$BRAND_SLUG.exe" LICENSE)
+	(cd "$dir" && zip -q -X -r "$out/$BRAND_SLUG-windows-$arch.zip" "$BRAND_EXE.exe" "$BRAND_EXE.ico" bin LICENSE THIRD-PARTY-NOTICES.txt)
 done
 
 if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then

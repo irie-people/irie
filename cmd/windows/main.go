@@ -95,7 +95,11 @@ func distro(m machine, e wsl.Env) (wsl.Distro, bool) {
 		return wsl.Distro{}, false
 	}
 	list, _ := m.Output("wsl.exe", "--list", "--verbose")
-	d, ok := wsl.Choose(wsl.ParseList(list), e.Distro)
+	ds := wsl.ParseList(list)
+	if len(ds) == 0 {
+		ds = m.Distros()
+	}
+	d, ok := wsl.Choose(ds, e.Distro)
 	return d, ok && d.Version == 2
 }
 
@@ -121,6 +125,10 @@ func setup(m machine, e wsl.Env, args []string, in io.Reader, out io.Writer) int
 
 // machine runs Windows' programs.
 type machine struct{}
+
+// Distros is wsl.Lister's: WSL's list in the registry, for a wsl.exe
+// that writes nothing into a pipe.
+func (machine) Distros() []wsl.Distro { return wsl.RegistryDistros() }
 
 // env is the programs' environment: wsl.exe writes UTF-8 with WSL_UTF8=1,
 // which wsl.Decode reads either way.

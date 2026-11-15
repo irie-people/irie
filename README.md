@@ -38,7 +38,7 @@ On a Mac or Linux, paste this into a terminal:
 curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 ```
 
-On Windows, Irie runs inside WSL 2, and one line in PowerShell sets it up ([Windows](docs/WINDOWS.md)):
+On Windows, Irie runs inside WSL 2 with a window of its own, Irie for Windows, and one line in PowerShell sets it up ([Windows](docs/WINDOWS.md)):
 
 ```
 powershell -ExecutionPolicy ByPass -c "irm https://irie-people.github.io/irie/install.ps1 | iex"

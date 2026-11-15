@@ -446,3 +446,71 @@ func TestSaveDistroIsReadBack(t *testing.T) {
 		t.Errorf("Distro = %q with the variable set", e.Distro)
 	}
 }
+
+// lister is a machine whose wsl.exe writes nothing into a pipe, as some
+// versions do, but whose registry lists the distributions.
+type lister struct {
+	*machine
+	reg []Distro
+}
+
+func (l lister) Distros() []Distro { return l.reg }
+
+func TestLookReadsTheRegistryWhenWSLListsNothing(t *testing.T) {
+	m := newMachine(t)
+	m.irie = true
+	l := lister{machine: m, reg: []Distro{{Name: "Ubuntu", State: "Unknown", Version: 2, Default: true}}}
+	st := Look(l, m.e)
+	if !st.HasDistro || st.Distro.Name != "Ubuntu" || st.Distro.Version != 2 || !st.Installed {
+		t.Fatalf("Look = %+v", st)
+	}
+	// Without the registry, the same machine has none.
+	if st := Look(m, m.e); st.HasDistro {
+		t.Fatalf("Look without a registry = %+v", st)
+	}
+}
+
+func TestTheStartMenuOpensTheAppWhenItIsInstalled(t *testing.T) {
+	m := newMachine(t)
+	app := filepath.Join(filepath.Dir(filepath.Dir(m.e.Exe)), brand.Exe+".exe")
+	if AppBeside(m.e.Exe) != "" {
+		t.Fatal("found an app that is not there")
+	}
+	if err := os.MkdirAll(filepath.Dir(app), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(app, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := AppBeside(m.e.Exe); got != app {
+		t.Fatalf("AppBeside = %q, want %q", got, app)
+	}
+	if got := WrapperBeside(app); got != m.e.Exe {
+		t.Fatalf("WrapperBeside = %q, want %q", got, m.e.Exe)
+	}
+	m.e.App = app
+	if err := Fix(m, m.e, State{}, Step{ID: "shortcut"}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := base64.StdEncoding.DecodeString(strings.Fields(m.ran[0])[len(strings.Fields(m.ran[0]))-1])
+	script := Decode(b)
+	if !strings.Contains(script, "$s.TargetPath = "+quote(app)) {
+		t.Fatalf("the shortcut does not open the app:\n%s", script)
+	}
+	// With its icon beside it, the shortcut takes that.
+	ico := strings.TrimSuffix(app, ".exe") + ".ico"
+	if err := os.WriteFile(ico, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s := ShortcutScript(m.e.Shortcut(), app, "", "x", false); !strings.Contains(s, "$s.IconLocation = "+quote(ico+",0")) {
+		t.Fatalf("no icon in:\n%s", s)
+	}
+}
+
+func TestInstallWindowWaitsAndKeepsTheInstallersExit(t *testing.T) {
+	args := InstallWindow("Ubuntu")
+	script := args[len(args)-1]
+	if !strings.Contains(script, installScript) || !strings.Contains(script, "read _") || !strings.HasSuffix(script, "exit $s") {
+		t.Fatalf("script = %q", script)
+	}
+}

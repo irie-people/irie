@@ -82,7 +82,7 @@
 
   <h2 id="one-line">Install it with one line</h2>
 <pre><code>curl -fsSL https://irie-people.github.io/irie/install.sh | sh</code></pre>
-  <p>It works on a Mac or a Linux computer, with an Apple silicon, Intel or ARM processor. Windows isn’t planned yet. The line:</p>
+  <p>It works on a Mac or a Linux computer, with an Apple silicon, Intel or ARM processor. On Windows, Irie runs inside WSL 2, Windows’ own Linux, with a window of its own, and one line in PowerShell sets it up: see <a href="https://github.com/irie-people/irie/blob/main/docs/WINDOWS.md">Irie on Windows</a>. The line:</p>
   <ol class="rules">
     <li>downloads the latest release of Irie for your computer from GitHub, and checks the download against the <dfn>SHA-256</dfn>, a fingerprint, that the release lists for it, so a file that was changed is refused;</li>
     <li>puts the <code>irie</code> program in <code>~/.local/share/irie/bin</code>, with a link in <code>~/.local/bin</code>, where Claude Code’s own installer puts <code>claude</code> too;</li>

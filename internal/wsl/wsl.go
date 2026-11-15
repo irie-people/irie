@@ -157,6 +157,14 @@ func Installed(distro string) []string {
 // which then runs `irie setup` there: tmux, Claude Code and its sign-in,
 // each after a yes.
 func Install(distro string) []string {
-	script := "command -v curl >/dev/null 2>&1 || { echo 'curl is missing: run sudo apt install curl, then this again' >&2; exit 1; }; curl -fsSL " + brand.Site + "install.sh | sh"
-	return []string{"-d", distro, "--cd", "~", "-e", "sh", "-lc", script}
+	return []string{"-d", distro, "--cd", "~", "-e", "sh", "-lc", installScript}
 }
+
+// InstallWindow is Install for a console window of its own, as the
+// Windows app opens one: it waits for Enter before the window closes, so
+// its last words can be read, and exits as the installer did.
+func InstallWindow(distro string) []string {
+	return []string{"-d", distro, "--cd", "~", "-e", "sh", "-lc", "(" + installScript + "); s=$?; echo; printf 'Press Enter to close this window. '; read _; exit $s"}
+}
+
+const installScript = "command -v curl >/dev/null 2>&1 || { echo 'curl is missing: run sudo apt install curl, then this again' >&2; exit 1; }; curl -fsSL " + brand.Site + "install.sh | sh"
