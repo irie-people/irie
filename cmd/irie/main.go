@@ -59,7 +59,7 @@ const usage = `usage: ` + brand.Slug + ` [command]
                           each part is set up; turn a plugin or a part on or off
 ` + mailUsage + vpnSetupUsage + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
                           started on with ^NAME (` + brand.Slug + ` peer for help)
-  ` + brand.Slug + ` version            print the version
+` + lockUsage + `  ` + brand.Slug + ` version            print the version
   ` + brand.Slug + ` config path|print  show the config file's path, or the config in effect
   ` + brand.Slug + ` config set KEY VALUE
                           change one setting, such as
@@ -144,6 +144,8 @@ func run(args []string) int {
 		err = pluginsCmd(args, os.Stdout)
 	case "peer":
 		err = peerCmd(args)
+	case "lock":
+		err = lockCmd(args)
 	case "lid":
 		err = lidCmd(args)
 	case "away":
