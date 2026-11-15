@@ -233,6 +233,9 @@ struct Frame: Decodable {
     var redo: String?
     /// A notepad frame: the notes for later (Notes.swift).
     var notepad: Notepad?
+    /// A card frame: show a card of this kind beside the session id
+    /// (Rolodex.swift, `irie ctl card`).
+    var kind: String?
 }
 
 /// What a snapshot says besides its rows.

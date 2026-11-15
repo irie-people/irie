@@ -105,6 +105,10 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          restart lost, one at a time, pinned,
                                          parked or frozen as it was
   ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
+  ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets
+                                         or mail) beside SESSION, the one this runs
+                                         in by default, in the Mac app's panes;
+                                         the app alone reads what it shows
   ` + brand.Slug + ` ctl rename SESSION NAME...        rename a session, by its id or name,
                                          and print the name it got: numbered
                                          when another session has it
@@ -236,6 +240,8 @@ func ctl(args []string) error {
 		return ctlContext(args[1:])
 	case "fork":
 		return ctlFork(args[1:])
+	case "card":
+		return ctlCard(args[1:])
 	case "ps":
 		return ctlPs(args[1:])
 	case "race":
@@ -998,4 +1004,26 @@ func ctlFlip(args []string) error {
 	}
 	var r ipc.FlipResult
 	return ipc.Call(sock, 10*time.Second, ipc.OpFlip, nil, &r)
+}
+
+// ctlCard asks the Mac app to show a card of a kind beside a session, the
+// one it runs in unless named: an agent asked to open its person's mail
+// beside it runs `irie ctl card mail`.
+func ctlCard(args []string) error {
+	if len(args) < 1 || len(args) > 2 {
+		return errors.New("usage: " + brand.Slug + " ctl card KIND [SESSION]: KIND is " + strings.Join(ipc.CardKinds, ", "))
+	}
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+		return err
+	}
+	id, err := sessionTarget("card", args[1:], os.Getenv(brand.Env("SESSION")), l.Sessions)
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpCard, ipc.CardArgs{Session: id, Kind: args[0]}, nil)
 }

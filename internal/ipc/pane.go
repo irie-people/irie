@@ -9,7 +9,23 @@ package ipc
 const (
 	// OpPane says how a pane's shell stands, and starts, restarts or ends it.
 	OpPane = "pane"
+	// OpCard asks the Mac app to show a card of a kind beside a session,
+	// adding one when the session has none of that kind: what `irie ctl
+	// card` sends, as for an agent its person asked to open their mail
+	// beside it. The app alone reads what the card shows. It answers with
+	// nothing, or an error when no Mac app is open.
+	OpCard = "card"
 )
+
+// CardArgs name the session and the kind of card to show beside it.
+type CardArgs struct {
+	Session string `json:"session"`
+	Kind    string `json:"kind"`
+}
+
+// CardKinds are the kinds of card a client can be asked to show: the
+// Mac app's PaneKind, by name.
+var CardKinds = []string{"terminal", "browser", "markets", "mail"}
 
 // PaneArgs name the session and one of its panes, by an id the client
 // picks: one to twenty-four lower-case letters and digits. Start starts the

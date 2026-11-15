@@ -1470,6 +1470,9 @@ const (
 	// frame a ViewWatch subscription gets. The window answers it with a
 	// Pong.
 	FramePing = "ping"
+	// FrameCard asks the Mac app to show a card of Kind beside the session
+	// ID (OpCard). Only the app's subscriptions get it.
+	FrameCard = "card"
 )
 
 // Frame is one streamed message. Which fields are set depends on T.
@@ -1486,6 +1489,7 @@ type Frame struct {
 	Undo     string           `json:"undo,omitempty"`     // history
 	Redo     string           `json:"redo,omitempty"`     // history
 	Ping     uint64           `json:"ping,omitempty"`     // ping
+	Kind     string           `json:"kind,omitempty"`     // card
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 	Screen       *Screen       `json:"screen,omitempty"`       // screen
@@ -1609,6 +1613,12 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T      string  `json:"t"`
 			Screen *Screen `json:"screen"`
 		}{f.T, sc})
+	case FrameCard:
+		return json.Marshal(struct {
+			T    string `json:"t"`
+			ID   string `json:"id"`
+			Kind string `json:"kind"`
+		}{f.T, f.ID, f.Kind})
 	}
 	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)
 }
