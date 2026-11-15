@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.6.0](https://github.com/irie-people/irie/compare/v1.5.0...v1.6.0) (2026-11-15)
+
+
+### Features
+
+* **bench:** close a judged bench's runs and judge ([49656a0](https://github.com/irie-people/irie/commit/49656a006aa9fd82e80db0db4d27287a5f11d8ab))
+* **core:** drop a closed session's worktree once its work has landed ([39d0c43](https://github.com/irie-people/irie/commit/39d0c435e21cadf161b55a4322bfcb9958cc8d8a))
+* **core:** lock each session's setup and check it against OSV.dev ([51cd323](https://github.com/irie-people/irie/commit/51cd323da144b653f00c625691250689186e5ff2))
+* **core:** make freezing or thawing them all one step of the history ([5076366](https://github.com/irie-people/irie/commit/507636660ee663c3dbaf474510b3b8ec6b03b18a))
+* **core:** mark each op inside or outside, and ask only where its effect leaves Irie ([2dafac4](https://github.com/irie-people/irie/commit/2dafac4c7e6b0ed47b545588e547ce65527ddb00))
+* **core:** open a file beside the selected session with :open ([67e7a89](https://github.com/irie-people/irie/commit/67e7a89173ae077f05a139471f5702bf1f81e58d))
+* **core:** open a file in a code card with irie ctl open ([03c8132](https://github.com/irie-people/irie/commit/03c81329c2742893e5bc8e6d7c8d9b4688cf7232))
+* **core:** open a shell card beside a peer's session over ssh ([c72861f](https://github.com/irie-people/irie/commit/c72861fca6ba4764e6f52e2a77b8648743b2ba05))
+* **mac:** calm the panes into one tab row and add a code card ([3680100](https://github.com/irie-people/irie/commit/3680100d111ade33e2fb19aa4df9bbbd53187325))
+* **mac:** show the session's folder as a tree in a code card ([f8a959a](https://github.com/irie-people/irie/commit/f8a959ada543cedde916906c8b24f05010358d5c))
+* **route:** sort tasks by labelled ones and hand slow delegations on ([78768d3](https://github.com/irie-people/irie/commit/78768d320a8ec525e54f7a1ac480b9a52aac5c3b))
+
+
+### Bug Fixes
+
+* **bench:** keep the profile in a peer run's playbook ([a4cbde3](https://github.com/irie-people/irie/commit/a4cbde37314f4d6502278d7ef634189bb95107b1))
+* **bench:** refuse prompts no one will answer in a bench's sessions ([e0bb5f7](https://github.com/irie-people/irie/commit/e0bb5f71fa4f7fc571cbe786fbc8dc9e55f77abe))
+* **bench:** show a bench given its id rather than bench the id ([2808cb8](https://github.com/irie-people/irie/commit/2808cb8751895584ce7b8ab22da02ee58e8f0ef1))
+* **core:** keep a worktree that holds a checkout or a local file of its own ([f40bdea](https://github.com/irie-people/irie/commit/f40bdea0877152673e69b849ff66eddc167fb4de))
+* **core:** name the product through internal/brand in a drop's word ([410e43d](https://github.com/irie-people/irie/commit/410e43db1fe2d79be1f8cd1c735fd4bd447db0b6))
+* **core:** start a question that names no session as a task, and keep why a task was refused in view ([7a0508e](https://github.com/irie-people/irie/commit/7a0508e6cc392c5debeca7aab88e7d1750caa915))
+* **jot:** start a jot that opens with “dont think” as a task of its own ([2eeac16](https://github.com/irie-people/irie/commit/2eeac160423773f27e9351cd299ba077737add4d))
+* **live:** rebuild irie when the core package changed ([bb29203](https://github.com/irie-people/irie/commit/bb292036c8a1a1706e01e3d2b7802f63e67c4ecc))
+* **mac:** keep a code card's typing safe and its editor on its file ([3e5ac7e](https://github.com/irie-people/irie/commit/3e5ac7e687a10053220371ab2bc104d606e6b10d))
+* **mac:** keep the selected card, its lines and the terminal's frame on one session ([daae8f7](https://github.com/irie-people/irie/commit/daae8f780001668e5ad8b9e4de0c23f1f7a5de71))
+* **route:** keep a handed-on subtask's name and show a wait run past as a least ([d57829a](https://github.com/irie-people/irie/commit/d57829a8d006a0cffc14749283b99a5bcb20958a))
+* **route:** let the words' hard stand over the nearest labelled task ([11d86dd](https://github.com/irie-people/irie/commit/11d86dd08aa93917fbc56f2bcb45516cfc04fd81))
+* **route:** regenerate the SDK's wire types and name the product through brand ([462ae08](https://github.com/irie-people/irie/commit/462ae080137b54ece8298f67ac3fb2351b36b25b))
+* **theme:** tell needs from paused and done from frozen for colour-blind viewers ([378f197](https://github.com/irie-people/irie/commit/378f197ae9847c4a059fa6214ab6c9216a6ee8c7))
+
 ## [1.5.0](https://github.com/irie-people/irie/compare/v1.4.0...v1.5.0) (2026-11-15)
 
 
