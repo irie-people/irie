@@ -42,7 +42,7 @@ func writing() Plugin {
 				Title:   "Writing in Variorum",
 				Summary: "`:write` starts a session that works in Variorum through its door for AI: editor's notes as comments, rewrites and translations as takes beside your paragraphs, books kept tidy.",
 				Setup:   ":write",
-				Brings:  []string{":write", "Plugins › Writing in Variorum", "/" + brand.Slug + ":variorum"},
+				Brings:  []string{":write", "Plugins › Writing in Variorum", "/" + brand.Slug + ":variorum", "Variorum's door in `:write` sessions", brand.Slug + " variorum"},
 				Refused: "Writing in Variorum is left out: skills.disabled names variorum.",
 				Skills:  []string{variorumSkill},
 				own: func(c config.Config) bool {
@@ -54,11 +54,15 @@ func writing() Plugin {
 				Name:    VariorumTab,
 				Title:   "Variorum tab",
 				Summary: "The note a writing session works on, in the Mac app's right sidebar as Variorum holds it, each paragraph with its takes and comments and Show in Variorum beside it.",
+				// Its own switch, so a bundle can take the tab away again:
+				// off, :write sessions keep Variorum's door.
+				Switch: "variorum.tab", On: true, Off: false,
 				// No words set it up, so no Set Up… button: the tab's
 				// Connect button does, which the detail names.
-				Brings: []string{"the Variorum tab in the right sidebar", "Variorum's door in `:write` sessions", brand.Slug + " variorum"},
-				own:    func(config.Config) bool { return true },
-				check:  checkTab,
+				Brings:  []string{"the Variorum tab in the right sidebar"},
+				Refused: "The Variorum tab is off: `" + brand.Slug + " plugins on writing tab` turns it on.",
+				own:     func(c config.Config) bool { return c.Variorum.Tab },
+				check:   checkTab,
 			},
 		},
 	}
@@ -78,6 +82,9 @@ func checkVariorum(e Env, on bool) (bool, string) {
 // Variorum is installed and both its setups are kept, their programs its
 // door. It calls no door, which would put a line in Variorum's log.
 func checkTab(e Env, on bool) (bool, string) {
+	if !on {
+		return true, "Off: the right sidebar has no Variorum tab, and :write sessions still get Variorum's door. `" + brand.Slug + " plugins on writing tab` turns it on."
+	}
 	st := variorum.Status(e.Paths.Data)
 	text := st.Text
 	if userScope() {
