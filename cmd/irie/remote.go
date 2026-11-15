@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -21,6 +23,7 @@ import (
 	"time"
 
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/core"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
@@ -45,6 +48,8 @@ keeps it running.
                           prints only the pairing link, which another
                           machine's ` + brand.Slug + ` peer add takes
   ` + brand.Slug + ` remote devices     list the phones paired with this machine
+  ` + brand.Slug + ` remote panes       list the panes phones reach (remote.panes), each at
+                          its address for the phone's Home Screen
   ` + brand.Slug + ` remote forget ID|NAME|all
                           unpair a phone
   ` + brand.Slug + ` remote ca export   print the certificate authority with its key, for
@@ -85,7 +90,7 @@ func remoteCmd(args []string) error {
 		}
 		srv, err := remote.New(remote.Options{
 			Socket: p.Socket(), Dir: dir, Listen: cfg.Remote.Listen, Port: cfg.Remote.Port,
-			Name: cfg.Remote.Name, Version: version.String(), Log: log,
+			Name: cfg.Remote.Name, Version: version.String(), Log: log, Panes: cfg.Remote.Panes,
 		})
 		if err != nil {
 			log.Error("start", "err", err)
@@ -155,6 +160,22 @@ func remoteCmd(args []string) error {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", d.ID, d.Name, d.Created.Local().Format("2006-01-02 15:04"), seen)
 		}
 		return w.Flush()
+	case "panes":
+		var res *ipc.PluginsResult
+		var got ipc.PluginsResult
+		if len(cfg.Remote.Panes) > 0 && ipc.Call(p.Socket(), 3*time.Second, ipc.OpPlugins, ipc.PluginsArgs{}, &got) == nil {
+			res = &got
+		}
+		hosts := slices.Clone(remote.LocalNames())
+		if ip := remote.LANAddr(); ip != nil {
+			hosts = append(hosts, ip.String())
+		}
+		name := cfg.Remote.Name
+		if name == "" {
+			name = remote.MachineName()
+		}
+		fmt.Print(panesText(cfg.Remote, name, hosts, res, p.ConfigFile()))
+		return nil
 	case "forget":
 		if len(args) != 1 {
 			return errors.New("usage: " + brand.Slug + " remote forget ID|NAME|all")
@@ -395,4 +416,58 @@ small{color:var(--muted)}
 <p style="margin:20px 0 0;font-size:14px">Before you trust `+brand.Name+`'s certificate on the phone, check under its More Details that its SHA-256 begins<br><b style="font:600 15px ui-monospace,Menlo,monospace">%[7]s</b></p>
 %[8]s
 </main>`, esc(name), svg, esc(urls[0]), more.String(), esc(code), until.Format("15:04"), esc(fingerprint), native), nil
+}
+
+// panesText is what `remote panes` prints: each pane of remote.panes at
+// its addresses on hosts, with its title and how it stands when res, the
+// core's plugins op, says.
+func panesText(rm config.Remote, name string, hosts []string, res *ipc.PluginsResult, configFile string) string {
+	var b strings.Builder
+	if !rm.On {
+		b.WriteString("The phone app is off on this machine: set remote.on = true in the config, and the core starts it.\n\n")
+	}
+	if len(rm.Panes) == 0 {
+		b.WriteString("No pane reaches the phone yet. Name one under [remote.panes] in " + configFile + ",\nsuch as \"invoices.invoices\" = 7390: its plugin's name, a dot and the pane's. `" + brand.Slug + " plugins` lists the panes.\n")
+		return b.String()
+	}
+	if len(hosts) == 0 {
+		hosts = []string{"<this machine's address>"}
+	}
+	panes := map[string]ipc.PluginPart{}
+	on := map[string]bool{}
+	if res != nil {
+		for _, pl := range res.Plugins {
+			for _, part := range pl.Parts {
+				if part.Pane != nil {
+					panes[part.Pane.ID], on[part.Pane.ID] = part, pl.On && (part.State == ipc.PartReady || part.State == ipc.PartNeeds)
+				}
+			}
+		}
+	}
+	fmt.Fprintf(&b, "The panes phones reach on %s (remote.panes in %s):\n", name, configFile)
+	for _, id := range slices.Sorted(maps.Keys(rm.Panes)) {
+		b.WriteString("\n")
+		part, known := panes[id]
+		switch {
+		case res == nil:
+			fmt.Fprintf(&b, "  %s\n", id)
+		case !known:
+			fmt.Fprintf(&b, "  %s: no manifest in the plugins folder has it\n", id)
+		case part.Pane.Kind != ipc.PaneWeb || part.Pane.Remote:
+			fmt.Fprintf(&b, "  %s (%s): not a page on this machine, so the phone can't reach it here\n", part.Pane.Title, id)
+		case !on[id]:
+			fmt.Fprintf(&b, "  %s (%s): off; turn its plugin on in Settings › Plugins\n", part.Pane.Title, id)
+		default:
+			fmt.Fprintf(&b, "  %s (%s)\n", part.Pane.Title, id)
+		}
+		for i, h := range hosts {
+			or := ""
+			if i > 0 {
+				or = "or "
+			}
+			fmt.Fprintf(&b, "    %shttps://%s/\n", or, net.JoinHostPort(h, strconv.Itoa(rm.Panes[id])))
+		}
+	}
+	b.WriteString("\nOpen one in Safari on a phone set up for the phone app, on this machine's Wi-Fi, then Share › Add to Home Screen.\n")
+	return b.String()
 }

@@ -42,6 +42,24 @@ The HTTPS port (`remote.port`, 7387) serves the app and its API; the port below 
 
 Every call but `info` and `pair` takes `Authorization: Bearer <token>`; an unknown token is 401 `unpaired`. The app on one machine talks to every other machine's gateway, so the API lets a page from any local name or address ask (CORS), and no page on the internet; a token, never a cookie, says who calls. Every POST must say `Content-Type: application/json`, which no page can send to another origin without asking first, so no page elsewhere can spend a pairing code's tries. The setup port serves only the setup page, its script, its icons and the profile.
 
+### 2.2 Panes on the phone
+
+A web pane of the plugins folder (DESIGN §4.17), a web app of yours on this machine, can be on the phone too, at a port of its own. Name it in config.toml by its id, its plugin's name, a dot and the pane's:
+
+```toml
+[remote.panes]
+"invoices.invoices" = 7390
+```
+
+The gateway then serves `https://<this machine>.local:7390/`, and the same port at each of the machine's addresses, over HTTPS with the app's certificates (§3), and passes each request on to the app at the pane's address. So an app that listens only on 127.0.0.1 goes on the phone's Home Screen: open its address in Safari on the phone, then Share › Add to Home Screen. `irie remote panes` prints each address. Nothing in the app changes; macOS asks no firewall question for it, since the gateway is what listens; and nothing goes over the network unencrypted.
+
+- **The core says which panes are on**, as for the Mac app's tabs: the gateway asks with the `plugins` op and goes by the answer for 15 s, or for a minute while the core doesn't answer, as during an install. A pane that is off, gone, off this machine (`remote = true`) or a view of the Mac app's own gets a page that says so, and nothing reaches the app. When the app itself doesn't answer, the page says that.
+- **Each request reaches the app as from one of its own pages** on this machine. The Host header is the pane's address. An Origin or a Referer of the address the phone sees becomes the app's, so the app's own check that a form came from its own pages holds, and a form from any other site still fails it. A redirect to the app's own address comes back as the phone's. The phone's own X-Forwarded headers are dropped, and the gateway's say who asked, by which name, over HTTPS. The gateway adds nothing to the app's answers and keeps none of its cookies.
+- **Only the local network**, as for the app, and **only a pane on this machine**: its origin must be 127.0.0.1, ::1 or localhost, so `remote.panes` can't make the gateway reach another machine.
+- **What to put there.** Every request reaches the app from this machine, so name only an app with a login of its own: an app that trusts whatever comes from 127.0.0.1 would trust the whole local network. The panes share the machine's name, and a cookie keeps to a name, not a port (RFC 6265 §8.5), so a cookie one pane's app sets goes to the others too. They are already your apps, on your account, so that gives none of them more than it had.
+- **The setting is yours, never a manifest's**: `remote.panes` lives in config.toml, so a manifest, shared or dropped into the folder, can't bring a pane to the phone by itself. Each port is from 1024 to 65535, neither of the app's two, and a pane's own. A change starts the gateway again (`internal/core/remote.go`), and a port that another program holds is left out, with a warning in `remote.log`.
+- **An app that writes its own address** into links or codes, as a sign-in link or a QR code, needs to know the phone's: start it with that address as its public one, such as `https://<this machine>.local:7390`.
+
 ## 3. Trust
 
 - **Turning it on.** `irie remote on --name Studio` sets `remote.on` and the name the phone shows, through the core's `config` op, which starts the gateway within a second; `irie remote off` stops it.
@@ -93,7 +111,7 @@ They go through the phone's own push service (Apple's, for an iPhone on iOS 16.4
 
 | Path | What |
 |---|---|
-| `internal/remote` | The gateway: `remote.go` (server, relay), `certs.go` (authority, certificates, profile), `devices.go` (pairing, tokens), `push.go` (notifications), `qr.go` |
+| `internal/remote` | The gateway: `remote.go` (server, relay), `panes.go` (the panes on the phone, §2.2), `certs.go` (authority, certificates, profile), `devices.go` (pairing, tokens), `push.go` (notifications), `qr.go` |
 | `internal/remote/web` | The app: `index.html`, `app.js`, `app.css`, `js/`, `manifest.webmanifest`, `sw.js`, `setup.html`, and icons that `go run ./tools/mkicon -phone internal/remote/web` draws |
 | `ios/Irie.swiftpm` | The native app (§4.1): `Package.swift`, `Sources/` and its icon, which `go run ./tools/mkicon -ios ios/Irie.swiftpm/Sources/Assets.xcassets/AppIcon.appiconset` draws; `ios/README.md` |
 | `internal/core/remote.go` | The core keeps the gateway's window |

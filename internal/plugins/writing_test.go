@@ -125,8 +125,8 @@ func fakeVariorum(t *testing.T, folder string) string {
 	return door
 }
 
-// TestTheVariorumTabNeedsBothSetups: the tab's part is on while its
-// plugin is, has no words to set it up, and is ready once Variorum is
+// TestTheVariorumTabNeedsBothSetups: the tab's part has a switch of its
+// own, on by default, has no words to set it up, and is ready once Variorum is
 // installed and both setups are kept; its detail says what is missing
 // and what fixes it, and warns while Claude Code adds Variorum's door to
 // every session. Its check reads files alone.
@@ -136,7 +136,7 @@ func TestTheVariorumTabNeedsBothSetups(t *testing.T) {
 	tab := func() ipc.PluginPart { return part(t, writingStatus(t, e), VariorumTab) }
 
 	x := tab()
-	if x.State != ipc.PartNeeds || !x.On || x.Switch != "" || x.Setup != "" || x.Title != "Variorum tab" || !strings.Contains(x.Detail, variorum.Site) || len(x.Brings) != 3 {
+	if x.State != ipc.PartNeeds || !x.On || x.Switch != "variorum.tab" || x.Setup != "" || x.Title != "Variorum tab" || !strings.Contains(x.Detail, variorum.Site) || len(x.Brings) != 1 {
 		t.Errorf("without Variorum: %+v", x)
 	}
 	door := fakeVariorum(t, folder)
@@ -180,7 +180,39 @@ func TestTheVariorumTabNeedsBothSetups(t *testing.T) {
 	if why := Why(e.Config, VariorumTab); why != "" {
 		t.Errorf("Why with the plugin on = %q", why)
 	}
-	if _, err := Edits("writing", VariorumTab, false); err == nil || !strings.Contains(err.Error(), "no switch of its own") {
-		t.Errorf("Edits = %v", err)
+	if es, err := Edits("writing", VariorumTab, false); err != nil || len(es) != 1 || es[0] != (config.Edit{Key: "variorum.tab", Value: false}) {
+		t.Errorf("Edits = %v, %v", es, err)
+	}
+
+	// Its switch is the tab's alone: :write sessions keep the door.
+	e.Config.Variorum.Tab = false
+	if x := tab(); x.State != ipc.PartOff || x.On || !strings.Contains(x.Detail, ":write sessions still get Variorum's door") {
+		t.Errorf("tab off: %+v", x)
+	}
+	if why := Why(e.Config, VariorumTab); !strings.Contains(why, "irie plugins on writing tab") {
+		t.Errorf("Why with the tab off = %q", why)
+	}
+	if why := Why(e.Config, Variorum); why != "" {
+		t.Errorf("writing in Variorum with the tab off: %q", why)
+	}
+}
+
+// TestABundleTurnsTheVariorumTabOff: the tab's own switch lets a bundle
+// take it away again, and bring it back with its plugin.
+func TestABundleTurnsTheVariorumTabOff(t *testing.T) {
+	e := env(t)
+	manifest(t, e, "desk.toml", "plugins = [\"writing.tab\"]\n")
+	dir := e.Paths.Plugins()
+	off, err := BundleEdits(dir, "desk", false)
+	if err != nil || len(off) != 1 || off[0] != (config.Edit{Key: "variorum.tab", Value: false}) {
+		t.Fatalf("off = %v, %v", off, err)
+	}
+	on, err := BundleEdits(dir, "desk", true)
+	if err != nil || len(on) != 2 || on[0] != (config.Edit{Key: "plugins.writing", Value: true}) || on[1] != (config.Edit{Key: "variorum.tab", Value: true}) {
+		t.Fatalf("on = %v, %v", on, err)
+	}
+	e.Config.Variorum.Tab = false
+	if b := bundle(t, e, "desk"); b.State != ipc.BundleOff || b.Plugins[0].On || strings.Contains(b.Plugins[0].Detail, "no switch of its own") {
+		t.Errorf("the tab off: %+v", b)
 	}
 }

@@ -59,6 +59,7 @@ type Config struct {
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
 	Markets  Markets            `toml:"markets"`
+	Variorum Variorum           `toml:"variorum"`
 	Mail     Mail               `toml:"mail"`
 	Plugins  Plugins            `toml:"plugins"`
 }
@@ -103,6 +104,13 @@ type Markets struct {
 	// shows, and :markets TASK starts a session there. "" = none chosen
 	// yet.
 	Folder string `toml:"folder"`
+}
+
+// Variorum is the writing plugin's Variorum tab (docs/proposals/writers.md).
+type Variorum struct {
+	// Tab shows the note a writing session works on in the Mac app's right
+	// sidebar. Off, :write sessions still get Variorum's door.
+	Tab bool `toml:"tab"`
 }
 
 // MarketsOn says whether the markets plugin runs: plugins.markets, with
@@ -360,6 +368,11 @@ type Remote struct {
 	Port   int    `toml:"port"`   // its HTTPS port; the setup page is on the port below, over plain HTTP
 	Name   string `toml:"name"`   // what the phone calls this machine; "" = its host name
 	Listen string `toml:"listen"` // the address to listen on, such as 192.168.1.20; "" = every address of this machine
+	// Panes are the web panes of the plugins folder that phones reach,
+	// each over HTTPS at a port of its own (docs/PHONE.md §2.2): a pane's
+	// id, its plugin's name, a dot and the pane's, and the port, as
+	// "invoices.invoices" = 7390.
+	Panes map[string]int `toml:"panes"`
 }
 
 // DefaultRemotePort is the phone app's HTTPS port; the setup page is on the
@@ -970,14 +983,15 @@ func Default() Config {
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
 		},
-		Remote:  Remote{Port: DefaultRemotePort},
-		Place:   Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
-		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
-		Browser: Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
-		Anon:    Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
-		Mail:    defaultMail(),
-		VPN:     VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins: Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
+		Remote:   Remote{Port: DefaultRemotePort},
+		Place:    Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
+		Learn:    Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
+		Browser:  Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
+		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
+		Mail:     defaultMail(),
+		Variorum: Variorum{Tab: true},
+		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1098,9 +1112,10 @@ func Parse(data []byte, path string) (Config, error) {
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
 		Markets  *Markets                  `toml:"markets"`
+		Variorum *Variorum                 `toml:"variorum"`
 		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1206,6 +1221,9 @@ var (
 	repoName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	branchChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 	skillName   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`) // the Agent Skills spec's names
+	// paneID is a plugin pane's id: a manifest's name, a dot and its
+	// [panes.<id>] table's (internal/plugins).
+	paneID = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*\.[a-z0-9]+(-[a-z0-9]+)*$`)
 )
 
 // hasPrior reports whether a route profile has an accuracy for every class
@@ -1686,6 +1704,21 @@ func (c Config) Validate() error {
 	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
 		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
 	}
+	paneAt := map[int]string{}
+	for _, id := range slices.Sorted(maps.Keys(rm.Panes)) {
+		port := rm.Panes[id]
+		switch {
+		case !paneID.MatchString(id):
+			bad("remote.panes: %q isn't a pane's id: its plugin's name, a dot and the pane's, as \"invoices.invoices\" = 7390", id)
+		case port < 1024 || port > 65535:
+			bad("remote.panes.%q = %d: must be a port from 1024 to 65535", id, port)
+		case port == rm.Port || port == rm.Port-1:
+			bad("remote.panes.%q = %d: the phone app has that port (remote.port and the one below it)", id, port)
+		case paneAt[port] != "":
+			bad("remote.panes.%q = %d: %s has that port too", id, port, paneAt[port])
+		}
+		paneAt[port] = id
+	}
 	v := c.VPN
 	if offered := VPNOffered(); !slices.Contains(offered, v.Provider) {
 		if slices.Contains(VPNKinds, v.Provider) {
@@ -1798,6 +1831,7 @@ func (c Config) Write(w io.Writer) error {
 		delete(plugins, "privacy")
 	}
 	if !WritingBuilt {
+		delete(m, "variorum")
 		delete(plugins, "writing")
 	}
 	if !MarketsBuilt {
