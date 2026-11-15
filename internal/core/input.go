@@ -17,7 +17,17 @@ import (
 // peer is the process that sent the words, so that a change only the person
 // may make, the VPN's, is refused when an agent types it (vpn.go); 0 is
 // unknown.
-func (c *Core) input(a ipc.InputArgs, peer int) (ipc.InputResult, error) {
+//
+// Words sent from a note of the notepad mark the note sent once they went
+// through, whatever they did but ask (notepad.go).
+func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error) {
+	if note, typed := a.Note, a.Text; note != "" {
+		defer func() {
+			if err == nil && out.Did != ipc.InputAsked {
+				c.noteSent(note, typed, out)
+			}
+		}()
+	}
 	// :move names a session outside Irie, so that list must be fresh.
 	if first, _, _ := strings.Cut(strings.TrimSpace(a.Text), "\n"); strings.HasPrefix(first, ":move") {
 		c.refreshOutside("input", outsideEvery, false)

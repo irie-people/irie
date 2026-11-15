@@ -231,6 +231,8 @@ struct Frame: Decodable {
     /// nothing (Undo.swift).
     var undo: String?
     var redo: String?
+    /// A notepad frame: the notes for later (Notes.swift).
+    var notepad: Notepad?
     /// A card frame: show a card of this kind beside the session id
     /// (Rolodex.swift, `irie ctl card`).
     var kind: String?
@@ -544,10 +546,79 @@ struct InputArgs: Encodable, Equatable {
     var tutor: String?
     /// The space on show, where a task starts (Spaces.swift).
     var space: String?
+    /// The note of the notepad the text came from: the core ticks it off
+    /// once the input goes through (Notes.swift).
+    var note: String?
 
     enum CodingKeys: String, CodingKey {
-        case text, session, outside, repo, profile, model, apart, tutor, space
+        case text, session, outside, repo, profile, model, apart, tutor, space, note
         case inPlace = "in_place"
+    }
+}
+
+/// One note of the notepad (DESIGN §4.20): a line of a checklist, kept for
+/// later (Notes.swift).
+struct Note: Codable, Identifiable, Equatable {
+    var id: String
+    var text: String
+    var done: Bool?
+    var created: Date?
+    var changed: Date?
+    /// When it last went to the task bar, and the session it started or
+    /// went to.
+    var sent: Date?
+    var session: String?
+    /// When a note in Recently Deleted was deleted.
+    var deleted: Date?
+
+    var isDone: Bool { done ?? false }
+}
+
+/// The notes in their order, and Recently Deleted, the last deleted first.
+/// problem says what went wrong with the file and what the core did; while
+/// readOnly the core only shows them. rev counts the file's changes, so the
+/// app keeps the newest of a reply and a frame.
+struct Notepad: Codable, Equatable {
+    var notes: [Note] = []
+    var deleted: [Note] = []
+    var problem: String?
+    var readOnly: Bool?
+    var path: String?
+    var rev: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case notes, deleted, problem, path, rev
+        case readOnly = "read_only"
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        notes = try c.decodeIfPresent([Note].self, forKey: .notes) ?? []
+        deleted = try c.decodeIfPresent([Note].self, forKey: .deleted) ?? []
+        problem = try c.decodeIfPresent(String.self, forKey: .problem)
+        readOnly = try c.decodeIfPresent(Bool.self, forKey: .readOnly)
+        path = try c.decodeIfPresent(String.self, forKey: .path)
+        rev = try c.decodeIfPresent(UInt64.self, forKey: .rev)
+    }
+}
+
+/// A change to the notepad. Each is the same however often it is sent, so
+/// the app sends again what it is not sure went through: add, edit, check,
+/// move, delete or restore; none lists.
+struct NotepadArgs: Codable, Equatable {
+    var action: String
+    var id: String?
+    var ids: [String]?
+    var text: String?
+    var done: Bool?
+    var after: String?
+    var before: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, ids, text, done, after, before
+        case action = "do"
     }
 }
 

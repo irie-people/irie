@@ -101,6 +101,12 @@ func (p Paths) Playbooks() string             { return filepath.Join(p.State, "p
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 
+// Notepad is the person's notes for later, and NotepadCopies the folder of
+// its copies, one a day (DESIGN §4.20). They are the person's own words, so
+// they go with the data, not the state.
+func (p Paths) Notepad() string       { return filepath.Join(p.Data, "notepad.json") }
+func (p Paths) NotepadCopies() string { return filepath.Join(p.Data, "backups", "notepad") }
+
 // ContextStore is the git repository of agents' contexts (DESIGN §4.13).
 func (p Paths) ContextStore() string          { return filepath.Join(p.State, "context.git") }
 func (p Paths) Remote() string                { return filepath.Join(p.State, "remote") }

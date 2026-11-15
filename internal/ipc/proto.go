@@ -1488,11 +1488,13 @@ type Frame struct {
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 	Screen       *Screen       `json:"screen,omitempty"`       // screen
+	Notepad      *Notepad      `json:"notepad,omitempty"`      // notepad
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
 // the sessions of a snapshot, an outside frame and a closed frame, even when
-// there are none, and both labels of a history frame.
+// there are none, both labels of a history frame, and both lists of a
+// notepad frame.
 func (f Frame) MarshalJSON() ([]byte, error) {
 	switch f.T {
 	case FrameSnapshot:
@@ -1543,6 +1545,21 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T      string          `json:"t"`
 			Closed []ClosedSession `json:"closed"`
 		}{f.T, c})
+	case FrameNotepad:
+		n := Notepad{}
+		if f.Notepad != nil {
+			n = *f.Notepad
+		}
+		if n.Notes == nil {
+			n.Notes = []Note{}
+		}
+		if n.Deleted == nil {
+			n.Deleted = []Note{}
+		}
+		return json.Marshal(struct {
+			T       string   `json:"t"`
+			Notepad *Notepad `json:"notepad"`
+		}{f.T, &n})
 	case FrameHistory:
 		return json.Marshal(struct {
 			T    string `json:"t"`
