@@ -13,6 +13,7 @@ import (
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/host"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/testutil"
 	"github.com/irie-people/irie/internal/worktree"
@@ -112,14 +113,19 @@ func TestClosingALandedSessionDropsItsWorktreeAndReopenAddsItBack(t *testing.T) 
 		t.Errorf("after the undo, the journal's records = %+v", evs)
 	}
 
-	// A close and a reopen do it again.
+	// A close and a reopen do it again, even once the merged branch is
+	// deleted, as a merged pull request's often is: its commit is known.
 	c.closeSession(landed.ID)
 	testutil.Eventually(t, 20*time.Second, "the worktree did not go again", func() bool { return !there(landed.Worktree) })
+	testutil.Git(t, repo, "branch", "-D", landed.Branch)
 	if _, err := c.reopen(landed.ID); err != nil {
 		t.Fatal(err)
 	}
-	if !there(landed.Worktree) {
-		t.Error("reopen did not add the worktree back")
+	if !there(landed.Worktree) || testutil.Git(t, landed.Worktree, "rev-parse", "HEAD") != live {
+		t.Error("reopen did not add the worktree back at its commit")
+	}
+	if b := testutil.Git(t, repo, "rev-parse", "--verify", "refs/heads/"+landed.Branch); b != live {
+		t.Errorf("its branch came back at %s, want %s", b, live)
 	}
 	if n := len(c.treeEvents(landed.ID)); n != 4 {
 		t.Errorf("%d records, want 4", n)
@@ -143,9 +149,15 @@ func TestTheSweepDropsOnlyWhatCanGo(t *testing.T) {
 	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Repo: repo, Name: "a"})
 	busy := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Repo: repo, Name: "busy"})
 	dirty := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,write:notes.md,stop", Repo: repo, Name: "dirty"})
-	for _, s := range []ipc.Session{a, busy, dirty} {
+	nested := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop", Repo: repo, Name: "nested"})
+	for _, s := range []ipc.Session{a, busy, dirty, nested} {
 		c.waitState(s.ID, ipc.StateDone)
 	}
+	// An agent's own worktree inside its session's, in a folder git ignores
+	// as Claude Code keeps them, with work of its own.
+	inner := filepath.Join(nested.Worktree, "build", "worktrees", "helper")
+	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "helper", inner)
+	testutil.WriteFiles(t, inner, map[string]string{"wip.md": "not committed\n"})
 	// Something that is not its agent's runs in one, and outlives it.
 	sleeper := exec.Command("sleep", "60")
 	sleeper.Dir = busy.Worktree
@@ -153,7 +165,7 @@ func TestTheSweepDropsOnlyWhatCanGo(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { sleeper.Process.Kill(); sleeper.Wait() })
-	for _, s := range []ipc.Session{a, busy, dirty} {
+	for _, s := range []ipc.Session{a, busy, dirty, nested} {
 		c.closeSession(s.ID)
 		c.waitGone(s.Pane, 10*time.Second)
 	}
@@ -182,8 +194,11 @@ func TestTheSweepDropsOnlyWhatCanGo(t *testing.T) {
 		return ipc.ClosedTree{}
 	}
 	r := sweep(false)
-	if len(r.Trees) != 3 || r.Can != 1 || r.Trees[0].Session != a.ID || r.Trees[0].Keep != "" || r.Trees[0].Bytes <= 0 || r.Bytes != r.Trees[0].Bytes || r.Dropped != 0 {
+	if len(r.Trees) != 4 || r.Can != 1 || r.Trees[0].Session != a.ID || r.Trees[0].Keep != "" || r.Trees[0].Bytes <= 0 || r.Bytes != r.Trees[0].Bytes || r.Dropped != 0 {
 		t.Errorf("dry run = %+v", r)
+	}
+	if k := keep(r, nested.ID); !strings.HasPrefix(k.Keep, "another worktree is inside it: ") {
+		t.Errorf("nested = %+v", k)
 	}
 	if k := keep(r, busy.ID); !k.Busy || !strings.HasPrefix(k.Keep, "sleep (pid ") || !strings.Contains(k.Keep, " works in it") {
 		t.Errorf("busy = %+v", k)
@@ -200,8 +215,8 @@ func TestTheSweepDropsOnlyWhatCanGo(t *testing.T) {
 	if r.Dropped != 1 || r.Can != 1 || !r.Trees[0].Dropped || r.Trees[0].Session != a.ID {
 		t.Errorf("sweep = %+v", r)
 	}
-	if there(a.Worktree) || !there(busy.Worktree) || !there(dirty.Worktree) {
-		t.Errorf("after the sweep: a %v, busy %v, dirty %v", there(a.Worktree), there(busy.Worktree), there(dirty.Worktree))
+	if there(a.Worktree) || !there(busy.Worktree) || !there(dirty.Worktree) || !there(filepath.Join(inner, "wip.md")) {
+		t.Errorf("after the sweep: a %v, busy %v, dirty %v, the nested work %v", there(a.Worktree), there(busy.Worktree), there(dirty.Worktree), there(filepath.Join(inner, "wip.md")))
 	}
 	if evs := c.treeEvents(a.ID); len(evs) != 1 || evs[0].Kind != event.WorktreeDropped {
 		t.Errorf("the journal's records = %+v", evs)
@@ -209,7 +224,7 @@ func TestTheSweepDropsOnlyWhatCanGo(t *testing.T) {
 	// Once nothing runs there, the busy one can go too; a's is gone.
 	sleeper.Process.Kill()
 	sleeper.Wait()
-	if r := sweep(false); len(r.Trees) != 2 || r.Can != 1 || r.Trees[0].Session != busy.ID {
+	if r := sweep(false); len(r.Trees) != 3 || r.Can != 1 || r.Trees[0].Session != busy.ID {
 		t.Errorf("dry run once the sleeper ended = %+v", r)
 	}
 	if _, err := c.reopen(a.ID); err != nil || !there(a.Worktree) {
@@ -233,7 +248,7 @@ func TestTheDogReadsADroppedWorktreeFromItsBranch(t *testing.T) {
 	testutil.Git(t, res.Dir, "add", "fix.md")
 	testutil.Git(t, res.Dir, "commit", "-q", "-m", "Fix it")
 	testutil.Git(t, repo, "branch", "-f", "live", res.Branch)
-	if err := worktree.Drop(res.Dir, repo, nil, time.Minute); err != nil {
+	if _, err := worktree.Drop(res.Dir, repo, nil, time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	l := jotLook{id: "s38aaaaaaaaaa", cwd: res.Dir, repo: repo, worktree: res.Dir, branch: res.Branch, dropped: true, created: start, fresh: true}
@@ -264,5 +279,27 @@ func TestANewWorktreeNeverTakesADroppedOnesPath(t *testing.T) {
 	}
 	if res.Slug != "fix-2" || res.Dir != filepath.Join(root, "website", "fix-2") {
 		t.Errorf("the new worktree = %+v, want fix-2", res)
+	}
+}
+
+func TestAFolderInsideADroppedWorktreeComesBackWithIt(t *testing.T) {
+	c := &Core{}
+	c.useConfig(config.Default())
+	repo := t.TempDir()
+	tree := filepath.Join(t.TempDir(), "website", "fix")
+	c.noteDropped(tree, droppedTree{session: "s38aaaaaaaaaa", repo: repo, branch: "irie/fix", commit: "abc"})
+	for _, s := range []host.Spec{
+		{Cwd: tree, Worktree: tree, Repo: repo, Branch: "irie/fix"},
+		// A delegated subtask works in its caller's folder, with no
+		// worktree of its own.
+		{Cwd: filepath.Join(tree, "sub")},
+	} {
+		if !c.restorable(s) {
+			t.Errorf("%+v is not restorable", s)
+		}
+	}
+	// A worktree removed some other way stays gone, as before.
+	if c.restorable(host.Spec{Cwd: filepath.Join(t.TempDir(), "gone"), Worktree: filepath.Join(t.TempDir(), "gone"), Repo: repo, Branch: "irie/gone"}) {
+		t.Error("a worktree Irie did not drop is restorable")
 	}
 }

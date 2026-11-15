@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -39,6 +40,9 @@ func holders() ([]Holder, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), lsofTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "-n", "-P", "-w", "-F", "pcfn")
+	// A UTF-8 locale, so lsof prints a name's letters as they are rather
+	// than as \x escapes (lsof(8)).
+	cmd.Env = append(os.Environ(), "LANG=en_US.UTF-8", "LC_ALL=en_US.UTF-8")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

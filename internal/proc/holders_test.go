@@ -83,13 +83,53 @@ func TestHoldingMatchesWholeFoldersInEitherForm(t *testing.T) {
 		{PID: 2, What: "3", Path: resolved + "-2/b"},
 		{PID: 3, What: "txt", Path: filepath.Join(resolved, "a", "bin")},
 	}
-	got := holding(all, []string{link, filepath.Join(link, "a")})
+	got := holding(all, []string{link, filepath.Join(link, "a")}, fileKey)
 	if pids := pidsOf(got[link]); !slices.Equal(pids, []int{1, 3}) {
 		t.Errorf("held through the link: %v", pids)
 	}
 	// The inner folder is held by what is in it, and so is the outer.
 	if pids := pidsOf(got[filepath.Join(link, "a")]); !slices.Equal(pids, []int{1, 3}) {
 		t.Errorf("held inner: %v", pids)
+	}
+}
+
+func TestHoldingKnowsAFolderByItsFileWhateverItsName(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := filepath.Join(base, "caf\u00e9", "Tree")
+	if err := os.MkdirAll(tree, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// lsof under a locale that cannot print the letter escapes its bytes.
+	escaped := filepath.Join(base, `caf\xc3\xa9`, "Tree", "x.txt")
+	all := []Holder{{PID: 1, What: "cwd", Path: escaped}}
+	// A disk that ignores case, as macOS's do by default, names it as it is
+	// on disk while the dir may be given in another case.
+	lower := filepath.Join(base, "caf\u00e9", "tree")
+	folds := false
+	if fi, err := os.Stat(lower); err == nil {
+		want, _ := os.Stat(tree)
+		folds = os.SameFile(fi, want)
+	}
+	if folds {
+		all = append(all, Holder{PID: 2, What: "cwd", Path: filepath.Join(tree, "sub")})
+	}
+	dir := tree
+	if folds {
+		dir = lower
+	}
+	got := holding(all, []string{dir}, fileKey)
+	want := []int{1}
+	if folds {
+		want = []int{1, 2}
+	}
+	if pids := pidsOf(got[dir]); !slices.Equal(pids, want) {
+		t.Errorf("held %v, want %v (case folds: %v)", pids, want, folds)
+	}
+	if u := unescape(`a\x41\tb^@`); u != "aA\tb\x00" {
+		t.Errorf("unescape = %q", u)
 	}
 }
 

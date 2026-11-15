@@ -26,3 +26,6 @@ func SetBackground(pid int, on bool) error { return errors.ErrUnsupported }
 
 // holders is not available here: no folder is known to be free.
 func holders() ([]Holder, error) { return nil, errors.ErrUnsupported }
+
+// fileKey is not available here, nor needed: holders finds none.
+func fileKey(string) (fileID, bool) { return fileID{}, false }

@@ -52,8 +52,10 @@ type closes struct {
 	done   map[string]bool    // every session closed now, past maxClosed too, by id
 	ending map[string]*ending // closing panes whose agents are still ending, by pane id
 	// dropped are the worktrees Irie dropped that no reopen has added back,
-	// by path (drop.go).
-	dropped map[string]droppedTree
+	// and dropping those whose files go now, which a reopen waits for, by
+	// path (drop.go).
+	dropped  map[string]droppedTree
+	dropping map[string]chan struct{}
 	// cold is when the next closed session's prompt cache runs out, after
 	// which the closed list says what reopening it costs (rebuilds.go).
 	cold time.Time
@@ -716,7 +718,10 @@ func (c *Core) reopenJob(r closedRecord) (job, error) {
 		return job{}, fmt.Errorf("cannot reopen %s: %v", r.Name, err)
 	}
 	// A worktree Irie dropped comes back as the session reopens.
-	if fi, err := os.Stat(spec.Cwd); (err != nil || !fi.IsDir()) && !restorable(spec) {
+	c.mu.Lock()
+	back := c.restorable(spec)
+	c.mu.Unlock()
+	if fi, err := os.Stat(spec.Cwd); (err != nil || !fi.IsDir()) && !back {
 		return job{}, ipc.Errorf(ipc.CodeBadArgs, "%s ran in %s, which is gone", r.Name, spec.Cwd)
 	}
 	profile, ok := c.profile(spec.Profile)
