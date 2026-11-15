@@ -59,6 +59,7 @@ type Config struct {
 	Browser  Browser            `toml:"browser"`
 	Anon     Anon               `toml:"anon"`
 	Markets  Markets            `toml:"markets"`
+	Variorum Variorum           `toml:"variorum"`
 	Mail     Mail               `toml:"mail"`
 	Plugins  Plugins            `toml:"plugins"`
 }
@@ -103,6 +104,13 @@ type Markets struct {
 	// shows, and :markets TASK starts a session there. "" = none chosen
 	// yet.
 	Folder string `toml:"folder"`
+}
+
+// Variorum is the writing plugin's Variorum tab (docs/proposals/writers.md).
+type Variorum struct {
+	// Tab shows the note a writing session works on in the Mac app's right
+	// sidebar. Off, :write sessions still get Variorum's door.
+	Tab bool `toml:"tab"`
 }
 
 // MarketsOn says whether the markets plugin runs: plugins.markets, with
@@ -975,14 +983,15 @@ func Default() Config {
 			Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 			Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
 		},
-		Remote:  Remote{Port: DefaultRemotePort},
-		Place:   Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
-		Learn:   Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
-		Browser: Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
-		Anon:    Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
-		Mail:    defaultMail(),
-		VPN:     VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins: Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
+		Remote:   Remote{Port: DefaultRemotePort},
+		Place:    Place{Mode: PlaceLocal, HeadroomCPUs: 2, HeadroomGiB: 2},
+		Learn:    Learn{Tutor: TutorOff, Visual: true, AgentTips: true, Links: map[string]string{}},
+		Browser:  Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
+		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
+		Mail:     defaultMail(),
+		Variorum: Variorum{Tab: true},
+		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1103,9 +1112,10 @@ func Parse(data []byte, path string) (Config, error) {
 		Browser  *Browser                  `toml:"browser"`
 		Anon     *Anon                     `toml:"anon"`
 		Markets  *Markets                  `toml:"markets"`
+		Variorum *Variorum                 `toml:"variorum"`
 		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1821,6 +1831,7 @@ func (c Config) Write(w io.Writer) error {
 		delete(plugins, "privacy")
 	}
 	if !WritingBuilt {
+		delete(m, "variorum")
 		delete(plugins, "writing")
 	}
 	if !MarketsBuilt {
