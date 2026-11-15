@@ -329,7 +329,6 @@ private struct SpaceDrop: DropDelegate {
 @MainActor
 private struct NewSpaceChip: View {
     @Environment(Store.self) private var store
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var targeted = false
 
     /// Its id in the bar, to scroll it into sight.
@@ -356,7 +355,6 @@ private struct NewSpaceChip: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(targeted ? Theme.ink : Theme.muted)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: holding)
         .onDrop(of: [.text], delegate: SpaceDrop(store: store, key: nil, targeted: $targeted))
         .help("New space. Drop a card or a group here to give it a space of its own.")
         .accessibilityLabel("New space")
