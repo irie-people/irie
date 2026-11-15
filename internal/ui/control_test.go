@@ -86,12 +86,27 @@ func TestFFreezesAndThawsAndShowsTheDiamond(t *testing.T) {
 	if !slices.Equal(b.calls, want) {
 		t.Errorf("calls = %v, want %v", b.calls, want)
 	}
-	// With every session frozen, F thaws them all.
+	// With every session frozen, F thaws them all, but only at a second F,
+	// since each agent signs in again; it says what waking the cold costs.
+	// Any other key in between cancels it, and so does waiting too long.
 	rows := sessions(2)
 	for i := range rows {
 		rows[i].State = ipc.StateFrozen
 	}
+	rows[1].Cold = &ipc.Cold{USD: 2.4, Words: "~$2.40 to wake"}
 	m, b = ctlModel(t, rows)
+	m = send(m, keyMsg("F"))
+	if ask := "Press F again to thaw 2 sessions, one every 30 s: each agent signs in again, and waking the one gone cold costs ~$2.40."; len(b.calls) != 0 || m.status != ask {
+		t.Fatalf("one F: calls %v, status %q", b.calls, m.status)
+	}
+	m = send(m, keyMsg("j"))
+	m = send(m, keyMsg("F"))
+	at := m.now()
+	m.now = func() time.Time { return at.Add(thawAllConfirm + time.Second) }
+	m = send(m, keyMsg("F"))
+	if len(b.calls) != 0 || !strings.Contains(m.status, "Press F again") {
+		t.Fatalf("F j F, and a late F: calls %v, status %q", b.calls, m.status)
+	}
 	m = send(m, keyMsg("F"))
 	if want := []string{"freeze  false true"}; !slices.Equal(b.calls, want) {
 		t.Errorf("calls = %v, want %v", b.calls, want)
