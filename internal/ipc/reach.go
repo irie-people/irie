@@ -51,7 +51,7 @@ var reaches = map[string]Reach{
 	OpSpaces: ReachInside, OpNotepad: ReachInside, OpConfig: ReachInside, OpTheme: ReachInside,
 	OpPlugins: ReachInside, OpHelpers: ReachInside, OpGabriel: ReachInside, OpLocal: ReachInside, OpPreflight: ReachInside,
 	OpRate: ReachInside, OpLabel: ReachInside, OpPeers: ReachInside, OpContext: ReachInside, OpShow: ReachInside,
-	OpFlip: ReachInside, OpCard: ReachInside, OpPane: ReachInside, OpHook: ReachInside,
+	OpFlip: ReachInside, OpCard: ReachInside, OpPane: ReachInside, OpSizes: ReachInside, OpHook: ReachInside,
 	OpStatus: ReachInside,
 
 	// What leaves Irie.
