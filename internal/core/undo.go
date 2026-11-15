@@ -163,8 +163,9 @@ func (h *history) labels() (undo, redo string) {
 }
 
 // label is what the header shows for what dir takes next: its step's
-// label, or for a batch its own label, or the verb and how many sessions,
-// `close 6 sessions`; "" when there is nothing to take.
+// label, or for a batch its own label, or one its kind gives from the
+// names of its sessions, `freeze "a", "b" and "c"`, or the verb and how
+// many sessions, `close 6 sessions`; "" when there is nothing to take.
 func (h *history) label(dir string) string {
 	a, ok := h.top(dir)
 	if !ok {
@@ -178,11 +179,51 @@ func (h *history) label(dir string) string {
 	if l, _ := a.Data["batch_label"].(string); l != "" {
 		return l
 	}
+	k, known := actionKinds[a.Kind]
+	if known && k.batch != nil {
+		return k.batch(h.batchNames(dir, n))
+	}
 	verb := a.Kind
-	if k, ok := actionKinds[a.Kind]; ok {
+	if known {
 		verb = k.verb
 	}
 	return fmt.Sprintf("%s %d sessions", verb, n)
+}
+
+// batchNames are the names of the n steps at the top of dir's stack, in
+// the order they were taken: undo took them from the top down, so the redo
+// stack holds them the other way round.
+func (h *history) batchNames(dir string, n int) []string {
+	from, _ := h.stack(dir)
+	top := (*from)[len(*from)-n:]
+	names := make([]string, len(top))
+	for i, a := range top {
+		names[i] = a.Name
+	}
+	if dir == dirRedo {
+		slices.Reverse(names)
+	}
+	return names
+}
+
+// namesLabel is a label that names its sessions, as `freeze "a", "b" and
+// "c"`. Past four it names the first three and counts the rest, `freeze
+// "a", "b", "c" and 4 more`, so that it still fits a menu.
+func namesLabel(verb string, names []string) string {
+	q := make([]string, 0, len(names))
+	for _, n := range names {
+		q = append(q, fmt.Sprintf("%q", n))
+	}
+	if len(q) > 4 {
+		q = append(q[:3], fmt.Sprintf("%d more", len(names)-3))
+	}
+	switch len(q) {
+	case 0:
+		return verb
+	case 1:
+		return verb + " " + q[0]
+	}
+	return verb + " " + strings.Join(q[:len(q)-1], ", ") + " and " + q[len(q)-1]
 }
 
 // batched is how many steps at the top of dir's stack share the batch of
@@ -294,9 +335,13 @@ func (c *Core) saveState() {
 // actionKind is one kind of undoable action: the verb of its label, and
 // what its undo and its redo do. A kind whose label needs more than the
 // verb and the session's name, such as rename's two names, gives label.
+// One whose steps are taken together, as freezing them all, gives batch:
+// the label of such a batch, from the names of its sessions in the order
+// they were taken; without it the batch says how many, `close 6 sessions`.
 type actionKind struct {
 	verb       string
 	label      func(a action) string
+	batch      func(names []string) string
 	undo, redo effect
 }
 
