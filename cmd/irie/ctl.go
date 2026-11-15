@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -105,10 +106,15 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          restart lost, one at a time, pinned,
                                          parked or frozen as it was
   ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
-  ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets
-                                         or mail) beside SESSION, the one this runs
+  ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets,
+                                         mail or code) beside SESSION, the one this runs
                                          in by default, in the Mac app's panes;
                                          the app alone reads what it shows
+  ` + brand.Slug + ` ctl open FILE[:LINE[:COL]] [SESSION]
+                                         show a file in a code card beside SESSION,
+                                         the one this runs in by default, in the
+                                         Mac app's panes, at LINE and COL: the
+                                         user reads and edits it there
   ` + brand.Slug + ` ctl rename SESSION NAME...        rename a session, by its id or name,
                                          and print the name it got: numbered
                                          when another session has it
@@ -242,6 +248,8 @@ func ctl(args []string) error {
 		return ctlFork(args[1:])
 	case "card":
 		return ctlCard(args[1:])
+	case "open":
+		return ctlOpen(args[1:])
 	case "ps":
 		return ctlPs(args[1:])
 	case "race":
@@ -1026,4 +1034,67 @@ func ctlCard(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpCard, ipc.CardArgs{Session: id, Kind: args[0]}, nil)
+}
+
+// ctlOpen asks the Mac app to show a file in a code card beside a session,
+// the one it runs in unless named: an agent asked to pull up a file for its
+// person runs `irie ctl open FILE:LINE`. A relative FILE is the current
+// directory's, as the agent's is.
+func ctlOpen(args []string) error {
+	if len(args) < 1 || len(args) > 2 {
+		return errors.New("usage: " + brand.Slug + " ctl open FILE[:LINE[:COL]] [SESSION]")
+	}
+	name := args[0]
+	if strings.HasPrefix(name, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		name = filepath.Join(home, name[2:])
+	}
+	if !filepath.IsAbs(name) {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		name = filepath.Join(wd, name)
+	}
+	file, line, col := splitFilePos(name, func(p string) bool { _, err := os.Stat(p); return err == nil })
+	sock, err := socket()
+	if err != nil {
+		return err
+	}
+	var l ipc.ListResult
+	if err := ipc.Call(sock, 5*time.Second, ipc.OpList, nil, &l); err != nil {
+		return err
+	}
+	id, err := sessionTarget("open", args[1:], os.Getenv(brand.Env("SESSION")), l.Sessions)
+	if err != nil {
+		return err
+	}
+	return ipc.Call(sock, 10*time.Second, ipc.OpCard, ipc.CardArgs{Session: id, Kind: "code", Path: filepath.Clean(file), Line: line, Col: col}, nil)
+}
+
+// splitFilePos splits a trailing :LINE or :LINE:COL (numbers from 1) off a
+// file name, unless the name as given exists, as a file may have a colon
+// in its name.
+func splitFilePos(name string, exists func(string) bool) (file string, line, col int) {
+	if exists(name) {
+		return name, 0, 0
+	}
+	num := func(s string) (int, bool) {
+		n, err := strconv.Atoi(s)
+		return n, err == nil && n >= 1 && s[0] != '+'
+	}
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		if n, ok := num(name[i+1:]); ok {
+			if j := strings.LastIndex(name[:i], ":"); j >= 0 {
+				if m, ok := num(name[j+1 : i]); ok {
+					return name[:j], m, n
+				}
+			}
+			return name[:i], n, 0
+		}
+	}
+	return name, 0, 0
 }

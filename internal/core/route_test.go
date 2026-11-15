@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/host"
@@ -323,5 +324,29 @@ func TestTheDelegationNoteNamesTheFreeProfiles(t *testing.T) {
 	// A session on a local model is told nothing: none is cheaper.
 	if h := c.delegateHint(&session{harness: "claude-code", profile: "dory", local: true, out: &outcome{}}); h != "" {
 		t.Errorf("a local session is told %q", h)
+	}
+}
+
+// A Claude Code session is told how to show its person a file, after the
+// delegation note; an anonymous session, whose shell can't reach ctl, and
+// another harness's are not.
+func TestAClaudeCodeSessionIsToldToOpenFiles(t *testing.T) {
+	cfg := config.Default()
+	cfg.Route.Delegate = true
+	c := bareCore(t, cfg)
+	x := &session{harness: "claude-code", profile: "claude", out: &outcome{}}
+	note := c.startNote(x)
+	want := "[" + brand.Name + "] To show the user a file beside your terminal, run `\"$" + brand.EnvPrefix + "_BIN\" ctl open FILE[:LINE]`: it opens in their code pane, where they can read and edit it, and their edits save to the file as they type."
+	if !strings.Contains(note, want) {
+		t.Errorf("a Claude Code session is told %q", note)
+	}
+	if d := c.delegateHint(x); d != "" && strings.Index(note, d) > strings.Index(note, want) {
+		t.Errorf("the note comes before the delegation note: %q", note)
+	}
+	if n := codeNote(&session{harness: "claude-code", anon: "acme"}); n != "" {
+		t.Errorf("an anonymous session is told %q", n)
+	}
+	if n := codeNote(&session{harness: "codex"}); n != "" {
+		t.Errorf("another harness is told %q", n)
 	}
 }
