@@ -703,6 +703,112 @@ struct RenameResult: Decodable {
     var session: Session
 }
 
+/// The variorum op (internal/core/variorum.go), which only a core whose
+/// hello lists variorum serves: the Writing plugin's tab asks where things
+/// stand, keeps one of Variorum's setups, lists the notes shared with
+/// Irie, reads one, or shows one in Variorum (VariorumTab.swift). The core
+/// calls Variorum's door; the app never does.
+struct VariorumArgs: Codable, Equatable {
+    /// status (the default), connect, forget, notes, read or show.
+    var action: String?
+    /// read: whose note, when note is empty.
+    var session: String?
+    var note: String?
+    /// show: the paragraph whose takes to show.
+    var block: String?
+    /// show: note (the default) or takes.
+    var target: String?
+    /// connect: the setup as copied in Variorum, which the app never shows
+    /// or keeps.
+    var setup: String?
+}
+
+struct VariorumResult: Codable, Equatable {
+    /// ready; setup, while a setup is missing; needs, while Variorum is
+    /// missing or a kept setup is broken; or off.
+    var state: String
+    /// Where things stand, in words.
+    var text: String
+    /// Claude Code's setup is kept, for the writing sessions.
+    var sessions: Bool?
+    /// Any MCP client's setup is kept, which the tab reads with.
+    var tab: Bool?
+    /// Variorum.app is in an Applications folder.
+    var installed: Bool?
+    /// The action failed: a sentence to show as it is.
+    var error: String?
+    var notes: [VariorumNoteRef]?
+    var note: VariorumNote?
+    /// show: shown, or offered while Variorum offers it to the writer.
+    var shown: String?
+}
+
+/// A note shared with Irie, for the tab's menu of notes.
+struct VariorumNoteRef: Codable, Equatable, Identifiable {
+    var id: String
+    var title: String
+    /// When it was last changed, in RFC 3339, kept as text so that a time
+    /// that doesn't parse costs only itself.
+    var edited: String?
+}
+
+/// A note as Variorum holds it, as far as the core read it.
+struct VariorumNote: Codable, Equatable, Identifiable {
+    var id: String
+    var title: String
+    var blocks: [VariorumBlock]
+    /// It goes on past the blocks read.
+    var more: Bool?
+    /// When the core read it.
+    var read: Date
+}
+
+/// A paragraph, with its takes and its comments.
+struct VariorumBlock: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String?
+    /// The take the note shows.
+    var shown: String?
+    var takes: [VariorumTake]
+    var comments: [VariorumComment]?
+}
+
+struct VariorumTake: Codable, Equatable, Identifiable {
+    var id: String
+    var label: String?
+    var text: String
+    var chosen: Bool?
+}
+
+struct VariorumComment: Codable, Equatable, Identifiable {
+    var id: String
+    var text: String
+}
+
+// Go writes an empty list as null; a note without paragraphs, or a
+// paragraph without takes, still reads.
+extension VariorumNote {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        blocks = try c.decodeIfPresent([VariorumBlock].self, forKey: .blocks) ?? []
+        more = try c.decodeIfPresent(Bool.self, forKey: .more)
+        read = try c.decode(Date.self, forKey: .read)
+    }
+}
+
+extension VariorumBlock {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        shown = try c.decodeIfPresent(String.self, forKey: .shown)
+        takes = try c.decodeIfPresent([VariorumTake].self, forKey: .takes) ?? []
+        comments = try c.decodeIfPresent([VariorumComment].self, forKey: .comments)
+    }
+}
+
 struct Empty: Codable {}
 
 struct WireError: Decodable, Error, LocalizedError {

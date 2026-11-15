@@ -105,6 +105,11 @@ const (
 	// OpLearn gives what the Help menu shows: the learning resources, the
 	// user's own links and the glossary (docs/proposals/learning.md).
 	OpLearn = "learn"
+	// OpVariorum is the writing plugin's Variorum tab
+	// (docs/proposals/writers.md): where Irie's part of Variorum stands,
+	// Variorum's two setups kept or forgotten, and the notes shared with
+	// Irie read through Variorum's door. It answers a VariorumResult.
+	OpVariorum = "variorum"
 	// OpRebuilds is the prompt-cache meter's report (DESIGN §6.3): the
 	// sessions and the causes that rebuilt their caches most today and in
 	// the last seven days, and what that cost. It answers a RebuildsResult.

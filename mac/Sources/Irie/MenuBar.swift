@@ -53,6 +53,8 @@ final class MenuState {
         var showTerminal = false
         /// The right sidebar's tab on show; nil while it is closed.
         var sideTab: SideTab?
+        /// The right sidebar's tabs, each with its key (Store.sideTabs).
+        var sideTabs = SideTab.built(variorum: false)
         /// The terminal is popped out, or could be (PopOut.swift).
         var poppedOut = false
         var canPopOut = false
@@ -121,6 +123,7 @@ extension Store {
         f.plugins = plugins
         f.canVPN = canVPN
         f.notes = notes.shown
+        f.sideTabs = sideTabs
         return f
     }
 
@@ -243,8 +246,9 @@ struct IrieCommands: Commands {
             Section("Right Sidebar") {
                 Button(f.sideTab == nil ? "Show Right Sidebar" : "Hide Right Sidebar", action: run { store.toggleSide() })
                     .keyboardShortcut("b", modifiers: [.command, .option])
-                // Mail's tab, while the mail plugin is on (Mail.swift).
-                ForEach(SideTab.built.filter { $0 != .mail || f.plugins.contains { $0.name == "mail" && $0.on } }) { t in
+                // Mail's tab while the mail plugin is on (Mail.swift), and
+                // Variorum's while it is there or set up (VariorumTab.swift).
+                ForEach(f.sideTabs) { t in
                     Toggle(t.title, isOn: Binding(get: { f.sideTab == t }, set: { _ in
                         MainActor.assumeIsolated { t == .helpers ? store.toggleHelpers() : store.toggleSideTab(t) }
                     }))
