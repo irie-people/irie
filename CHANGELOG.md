@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.0](https://github.com/irie-people/irie/compare/v1.6.0...v1.7.0) (2026-11-15)
+
+
+### Features
+
+* **design:** start a design library for every client ([9245b1f](https://github.com/irie-people/irie/commit/9245b1fa52ce1231ef089cd7d198dffd2dd2b2f3))
+* **groups:** move a group to another space or a new one, by menu or drag ([3b2d76a](https://github.com/irie-people/irie/commit/3b2d76aba83dd054c1558333a5946edce4ff503c))
+* **mac:** fn+tab steps through the spaces ([4c7601b](https://github.com/irie-people/irie/commit/4c7601ba07201d7a9ec316de3d9ca25ca797cf22))
+* **mac:** land a drag anywhere in the session list, groups into groups too ([34ae482](https://github.com/irie-people/irie/commit/34ae482acdaf6da02e5eef030e744e3a189ad938))
+* **mac:** panes go over the terminal past its narrowest, and focus picks the one on top ([b36025b](https://github.com/irie-people/irie/commit/b36025becf2d21c3cd928215e73cfdf2aa28d224))
+* **mac:** View › Panes Over the Terminal, and the overlap in the design library ([94232f8](https://github.com/irie-people/irie/commit/94232f80c93ef57499ba5b722879da4a7d1fd2e5))
+* **plugins:** give the Variorum tab a switch of its own, so a bundle can turn it off ([5eff329](https://github.com/irie-people/irie/commit/5eff329a7b96cad9d5c98860d639f1cb4cb860ae))
+* **remote:** open plugin panes on the phone ([f417507](https://github.com/irie-people/irie/commit/f417507df320854e51d29d2c09d3bef65be00676))
+
+
+### Bug Fixes
+
+* **mac:** redraw a card pinned or parked while the window is open ([dc81f78](https://github.com/irie-people/irie/commit/dc81f78612a4b9a579a18cbba7b0af0d51f4f94a))
+* **theme:** keep every state colour apart for colour-blind viewers ([0545b5b](https://github.com/irie-people/irie/commit/0545b5bbef1ea2bfe5db50fafba172eba3e86366))
+
 ## [1.6.0](https://github.com/irie-people/irie/compare/v1.5.0...v1.6.0) (2026-11-15)
 
 
