@@ -639,7 +639,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | Plain text | A new task, kept verbatim, with no length cap; or, when it reads as more for the jot just sent, a message to that jot's agent ("More for the last jot", below) |
 | `@name`, `@path` | Run in a new worktree of that git repo (M3). A path that is not a git repo runs in place. M1 accepts only absolute or `~` paths and runs in place |
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
-| `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10) |
+| `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10). A profile with a `folder` is an agent of your own: its task runs in that folder, in place, where the agent's CLAUDE.md, skills and records are, unless the task names a place with `@` |
 | `+explain`, `+teach` | Run this one task in that tutor mode, beside any `+profile` (`+sonnet +teach …`): Claude Code's Explanatory or Learning output style. The words are reserved: a profile cannot take either name ([learning.md](proposals/learning.md)) |
 | `+anon`, `+anon:name`, `+tor`, `+tor:name` | Run this one task as anonymous research, beside any `+profile`: in a compartment of its own, or the named one, which tasks share, leaving through a Mullvad exit of its own, or Tor (§4.16). The words are reserved as profile names too |
 | (the Mac app's sheet) | A model for this one task, `model` in `spawn`: an alias Claude Code's `--model` takes (`fable`, `opus`, `sonnet`) or a model's full name. Only a Claude Code profile takes it; a core that does lists `spawn-model` in `hello` |
@@ -651,7 +651,7 @@ The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3),
 
 **Spawn pipeline.** Reliable headless spawning means the task never travels through tmux and is never typed into a TUI:
 1. Parse the first line: `@…` and `+…` tokens are removed, and the rest is the task.
-2. Resolve the working directory: a worktree (rules below), the main checkout (`@name!`), a plain path, or with no token `spawn.default_cwd`. Empty means a new scratch dir under `$XDG_DATA_HOME/irie/scratch/`, so an untargeted task never runs in `$HOME`.
+2. Resolve the working directory: a worktree (rules below), the main checkout (`@name!`), a plain path, the profile's `folder` in place, or with no token `spawn.default_cwd`. Empty means a new scratch dir under `$XDG_DATA_HOME/irie/scratch/`, so an untargeted task never runs in `$HOME`.
 3. Write `sessions/<id>/task.md` and `spec.json` (argv, env, cwd).
 4. In one command list, run `new-window -d -t irie-agents: -n <id> -P -F '#{pane_id}' '<irie> host --spec <path>'`, set the pane options and the window size, and name the window after the session.
 5. The host calls `setpgid`, makes the agent the foreground process group of its terminal, execs it, then waits with `WUNTRACED` and writes `exit.json`.
@@ -1487,6 +1487,11 @@ model = "claude-opus-5-5"
 effort = "high"
 permission_mode = "auto"
 skill = "chaos"               # the skill of Irie's its sessions start on, the task after /irie:chaos; any Claude Code profile may name one
+
+# [profiles.helper]           # example: an agent of your own (§4.2)
+# folder = "~/Helper"         # its sessions run here, in place, where its CLAUDE.md, skills and records are; a task's own @place wins
+# model = "claude-sonnet-5-5"
+# `irie config set profiles.helper.folder ~/Helper` makes one; set and unset change any key through the core
 
 # [profiles.aider]            # example: generic harness
 # harness = "generic"

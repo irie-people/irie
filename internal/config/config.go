@@ -514,6 +514,11 @@ type Profile struct {
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
 	Skill          string            `toml:"skill"`  // the skill of Irie's its sessions start on, such as chaos: the task goes to /irie:<skill> (DESIGN §4.19); "" = none
+	// Folder is where the profile's sessions run, in place, when a task
+	// names no place of its own: an agent of your own, whose CLAUDE.md,
+	// skills and records live in that folder (DESIGN §4.2). It is a /…
+	// or ~/… path. "" = a scratch folder, as for any task.
+	Folder string `toml:"folder"`
 	// SDK runs the session on the Agent SDK: Irie's own pane program drives
 	// `claude -p`, instead of Claude Code's terminal app (DESIGN §3.5). It is
 	// for an API key whose credits cover the Agent SDK but not Claude Code,
@@ -1324,6 +1329,9 @@ func (c Config) Validate() error {
 		}
 		if strings.ContainsAny(p.Cost, "\n\r") {
 			bad("profiles.%s.cost: must be one line", name)
+		}
+		if f := p.Folder; f != "" && (strings.ContainsAny(f, "\n\r") || !filepath.IsAbs(f) && f != "~" && !strings.HasPrefix(f, "~/")) {
+			bad("profiles.%s.folder = %q: must be a /… or ~/… path", name, f)
 		}
 		if p.SDK && p.Harness != "claude-code" {
 			bad("profiles.%s.sdk: only the claude-code harness runs on the Agent SDK", name)

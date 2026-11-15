@@ -382,6 +382,34 @@ func TestSpawnInPlace(t *testing.T) {
 	}
 }
 
+// TestAProfilesFolderIsWhereItsSessionsRun: an agent of your own, a profile
+// with a folder, works in that folder, in place, unless the task names a
+// place of its own (DESIGN §4.2).
+func TestAProfilesFolderIsWhereItsSessionsRun(t *testing.T) {
+	dir, other := t.TempDir(), t.TempDir()
+	fake := testutil.BuildFakeAgent(t)
+	c := setupWith(t, agentConfig{extra: fmt.Sprintf("[profiles.helper]\ncommand = %q\nfolder = %q\n", fake, dir)})
+	var r ipc.SpawnResult
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "look at the week", Profile: "helper"}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Session.Cwd != dir {
+		t.Errorf("cwd = %q, want the profile's folder %q", r.Session.Cwd, dir)
+	}
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "look elsewhere", Profile: "helper", Cwd: other}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Session.Cwd != other {
+		t.Errorf("cwd = %q, want the task's own %q", r.Session.Cwd, other)
+	}
+	if err := c.call("spawn", ipc.SpawnArgs{Task: "a plain task"}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Session.Cwd == dir {
+		t.Errorf("a task on another profile ran in the helper's folder")
+	}
+}
+
 func TestShowSwapsTheSessionIntoTheSlot(t *testing.T) {
 	c := setupWith(t, agentConfig{terminal: true})
 	a, b := c.spawn("task a"), c.spawn("task b")

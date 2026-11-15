@@ -61,6 +61,10 @@ const usage = `usage: ` + brand.Slug + ` [command]
                           started on with ^NAME (` + brand.Slug + ` peer for help)
   ` + brand.Slug + ` version            print the version
   ` + brand.Slug + ` config path|print  show the config file's path, or the config in effect
+  ` + brand.Slug + ` config set KEY VALUE
+                          change one setting, such as
+                          profiles.helper.folder ~/Helper; unset KEY puts
+                          it back to its default
   ` + brand.Slug + ` skills             list the skills that come with ` + brand.Name + `, and whether
                           sessions get each
 
@@ -301,9 +305,28 @@ func openLog(p paths.Paths, path string) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, nil))
 }
 
+const configUsage = "usage: " + brand.Slug + " config path|print|set KEY VALUE|unset KEY"
+
 func configCmd(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: " + brand.Slug + " config path|print")
+	switch {
+	case len(args) == 3 && args[0] == "set", len(args) == 2 && args[0] == "unset":
+		// A change goes through the core when it runs, which checks it and
+		// runs on it at once, else into the file (setConfig).
+		p, err := paths.FromEnv()
+		if err != nil {
+			return err
+		}
+		var v any
+		if args[0] == "set" {
+			if v, err = config.ParseText(args[1], args[2]); err != nil {
+				return err
+			}
+		} else if err := config.CheckKey(args[1]); err != nil {
+			return err
+		}
+		return setConfig(p, []config.Edit{{Key: args[1], Value: v}})
+	case len(args) != 1:
+		return errors.New(configUsage)
 	}
 	switch args[0] {
 	case "path":
@@ -320,7 +343,7 @@ func configCmd(args []string) error {
 		}
 		return cfg.Write(os.Stdout)
 	}
-	return errors.New("usage: " + brand.Slug + " config path|print")
+	return errors.New(configUsage)
 }
 
 // teamTmux is `irie team-tmux`, the tmux shim of a session with teams
