@@ -274,9 +274,11 @@ func TestAJotYouCloseIsDoneAndOneThatClosedOnItsOwnIsWatched(t *testing.T) {
 	testutil.IsolateGit(t)
 	repo := website(t, filepath.Join(t.TempDir(), "website"))
 	testutil.Git(t, repo, "branch", "live")
+	// Closes keep their worktrees here, as a landed jot's would go once
+	// closed (drop.go).
 	c := setupWith(t, agentConfig{
 		spawn: "close_when_done = true\nclose_delay = \"1s\"\n",
-		extra: "[dog]\nnudges = 0\nland = { website = \"live\" }\n",
+		extra: "[dog]\nnudges = 0\nland = { website = \"live\" }\n\n[worktree]\ndrop = false\n",
 	})
 
 	// A jot whose work is not through stays open under close_when_done,

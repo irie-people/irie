@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	irie "github.com/irie-people/irie/core"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
@@ -18,8 +20,9 @@ import (
 )
 
 // benching makes the fake agent a cheap profile to bench and a judge whose
-// turn ends with the text of the file say.
-func benching(t *testing.T, say string) agentConfig {
+// turn ends with the text of the file say. bench is more of the [bench]
+// table.
+func benching(t *testing.T, say string, bench ...string) agentConfig {
 	fake := testutil.BuildFakeAgent(t)
 	return agentConfig{extra: fmt.Sprintf(`[profiles.cheap]
 command = %q
@@ -45,7 +48,8 @@ fake = 1.0
 
 [bench]
 judge = "judge"
-`, fake, fake, say)}
+%s
+`, fake, fake, say, strings.Join(bench, "\n"))}
 }
 
 func (c *coreEnv) benches() []ipc.Bench {
@@ -84,7 +88,8 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 	if err := os.WriteFile(say, []byte(verdict), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := setupWith(t, benching(t, say))
+	// Its runs stay open once judged, for their rows to be read here.
+	c := setupWith(t, benching(t, say, "close = false"))
 
 	// A bench runs one profile: auto, and a profile it doesn't know, are
 	// refused, and with no local profile in route.profiles it needs one.
@@ -273,5 +278,72 @@ func TestCleanRules(t *testing.T) {
 	}
 	if fileSafe("llama:Ternary-2.9B/x") != "llama_Ternary-2.9B_x" {
 		t.Error(fileSafe("llama:Ternary-2.9B/x"))
+	}
+}
+
+// A judged bench closes its runs and its judge, with bench.close (on by
+// default): they go to the history, from which reopen brings one back, and
+// the bench keeps their scores and what they missed. A run you pinned
+// stays open.
+func TestAJudgedBenchClosesItsSessions(t *testing.T) {
+	say := filepath.Join(t.TempDir(), "verdict.md")
+	verdict := "```json\n" + `{"runs": [{"run": 1, "score": 80, "missed": "no doc comment"}, {"run": 2, "score": 30, "missed": "no tests"}], "final": "run 1, in my folder", "playbook": ["Test every case the task names."]}` + "\n```\n"
+	if err := os.WriteFile(say, []byte(verdict), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := setupWith(t, benching(t, say))
+	var r ipc.BenchResult
+	if err := c.call("bench", ipc.BenchArgs{Task: "prompt,write:out.txt,stop\nfix the typo in README", Profile: "cheap", Runs: 2}, &r); err != nil {
+		t.Fatal(err)
+	}
+	runs := r.Bench.Runs
+	if err := c.call(ipc.OpPin, ipc.ParkArgs{Session: runs[1].Session}, nil); err != nil {
+		t.Fatal(err)
+	}
+	done := c.waitBench(r.Bench.ID)
+	if done.State != ipc.BenchDone || done.Runs[0].Score == nil || *done.Runs[0].Score != 80 || done.Runs[1].Missed != "no tests" {
+		t.Fatalf("judged bench = %+v", done)
+	}
+	// The verdict closes them as the sweep goes on.
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		_, run1 := c.row(runs[0].Session)
+		_, judge := c.row(done.JudgeID)
+		if !run1 && !judge {
+			break
+		}
+	}
+	for name, id := range map[string]string{"run 1": runs[0].Session, "the judge": done.JudgeID} {
+		if s, ok := c.row(id); ok {
+			t.Errorf("%s is still open: %+v", name, s)
+		}
+	}
+	if s, ok := c.row(runs[1].Session); !ok || !s.Pinned {
+		t.Errorf("the pinned run = %+v, %v; want it open", s, ok)
+	}
+	// Each counts for the router as before, and comes back with reopen.
+	ch := c.routeDry("prompt,write:out.txt,stop\nfix the typo in README")
+	i := slices.IndexFunc(ch.Candidates, func(cand route.Candidate) bool { return cand.Profile == "cheap" })
+	if i < 0 || ch.Candidates[i].Outcomes != 2 {
+		t.Errorf("after the bench = %+v", ch)
+	}
+	if s, err := c.reopen(runs[0].Session); err != nil || s.ID != runs[0].Session {
+		t.Errorf("reopen run 1 = %+v, %v", s, err)
+	}
+}
+
+// A run on a peer is typed there, and the peer reads a typed task's first
+// line for @ and + words: that line is the run's number alone, so the
+// playbook, which names the +profile, reaches the run whole.
+func TestARunOnAPeerGetsItsPlaybookWhole(t *testing.T) {
+	b := &benchFile{Bench: ipc.Bench{Task: "fix the typo in README", Profile: "dory", Host: "Asahi"}, Playbook: []string{"Read a file before you edit it."}}
+	text := b.runTask(1, 3)
+	st, err := irie.Read(ipc.InputArgs{Text: text, Profile: "dory", Unattended: true}, irie.View{Home: "/home/alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Args.(ipc.SpawnArgs)
+	want := "[" + brand.Name + " bench] Run 2 of 3.\n" + playbookIntro("dory") + "\n- Read a file before you edit it.\n\nThe task:\n\nfix the typo in README"
+	if st.Op != ipc.OpSpawn || a.Task != want || a.Profile != "dory" || !a.Unattended {
+		t.Errorf("the peer reads %q as %s %+v, want the task %q", text, st.Op, a, want)
 	}
 }

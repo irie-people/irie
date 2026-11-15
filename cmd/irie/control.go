@@ -80,9 +80,15 @@ func ctlFreeze(args []string, on bool) error {
 	}
 	if *all {
 		fmt.Println(strings.Join(r.Sessions, "\n"))
+		// A thaw of several goes in turn (DESIGN §4.3).
+		if len(r.Queued) > 0 {
+			fmt.Fprintf(os.Stderr, "%d more thaw in turn, one every 30 s, so that each agent finds the sign-in the one before renewed: %s\n",
+				len(r.Queued), strings.Join(r.Queued, " "))
+		}
 	}
 	for _, s := range before.Sessions {
-		thawed := slices.Contains(r.Sessions, s.ID) || len(r.Sessions) == 0 && (s.ID == fs.Arg(0) || strings.EqualFold(s.Name, fs.Arg(0)))
+		thawed := slices.Contains(r.Sessions, s.ID) || slices.Contains(r.Queued, s.ID) ||
+			len(r.Sessions) == 0 && len(r.Queued) == 0 && (s.ID == fs.Arg(0) || strings.EqualFold(s.Name, fs.Arg(0)))
 		if c := s.Cold; c != nil && s.Frozen != nil && thawed {
 			fmt.Fprintf(os.Stderr, "%s: its prompt cache has run out, so its next turn writes %s tokens into it again, ~%s\n",
 				s.Name, rebuild.Tokens(c.Tokens), rebuild.Dollars(c.USD))

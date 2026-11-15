@@ -182,6 +182,7 @@ type (
 	HookArgs         = ipc.HookArgs
 	HookResult       = ipc.HookResult
 	Frame            = ipc.Frame
+	Reach            = ipc.Reach
 	ScreenArgs       = ipc.ScreenArgs
 	ScreenResult     = ipc.ScreenResult
 	ScreenOption     = ipc.ScreenOption
@@ -203,6 +204,9 @@ type (
 	VariorumBlock    = ipc.VariorumBlock
 	VariorumTake     = ipc.VariorumTake
 	VariorumComment  = ipc.VariorumComment
+	WorktreesArgs    = ipc.WorktreesArgs
+	WorktreesResult  = ipc.WorktreesResult
+	ClosedTree       = ipc.ClosedTree
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -453,6 +457,10 @@ const (
 	FrameHistory       = ipc.FrameHistory
 	FramePing          = ipc.FramePing
 	FrameCard          = ipc.FrameCard
+	ReachRead          = ipc.ReachRead
+	ReachInside        = ipc.ReachInside
+	ReachInsideOut     = ipc.ReachInsideOut
+	ReachOutside       = ipc.ReachOutside
 	OpScreen           = ipc.OpScreen
 	OpKeys             = ipc.OpKeys
 	FeatureScreenLive  = ipc.FeatureScreenLive
@@ -475,4 +483,5 @@ const (
 	VariorumSetup      = ipc.VariorumSetup
 	VariorumNeeds      = ipc.VariorumNeeds
 	VariorumOff        = ipc.VariorumOff
+	OpWorktrees        = ipc.OpWorktrees
 )

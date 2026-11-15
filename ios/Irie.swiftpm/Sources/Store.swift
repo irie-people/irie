@@ -246,7 +246,6 @@ final class AppModel {
     var choice: ChoicePrompt?
     var renaming: SessionPrompt?
     var renameText = ""
-    var closing: SessionPrompt?
     @ObservationIgnored var backgroundAt: Date?
     @ObservationIgnored weak var conversation: ConversationModel?
 

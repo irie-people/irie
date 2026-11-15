@@ -136,8 +136,8 @@ func (m *Model) open(focus bool) tea.Cmd {
 const moveConfirm = 5 * time.Second
 
 // moveSelected is m on a row. A move ends the outside copy and anything it
-// runs in the background, so it takes a second m, as closing takes x x
-// (DESIGN §4.1); any other key in between cancels it.
+// runs in the background, which no undo brings back, so it takes a second
+// m (DESIGN §4.1, §4.5); any other key in between cancels it.
 func (m *Model) moveSelected() tea.Cmd {
 	o, ok := m.selOutside()
 	if !ok {

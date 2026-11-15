@@ -163,7 +163,6 @@ func TestReadRefusesInWords(t *testing.T) {
 		{":move bg02", "", "", CodeBusy, "web can't move yet: it is busy."},
 		{":bogus", "", "", CodeBadArgs, "Irie has no :bogus. The commands are :rename NAME, :move [NAME]"},
 		{":pause", "s1", "", CodeBadArgs, ":undo, :redo"},
-		{"hows the weather", "", "", CodeNotFound, "No agent matches “weather”."},
 		{"+a +b fix it", "", "", CodeBadArgs, "Only one +profile per task."},
 		{"@web", "", "", CodeBadArgs, "Empty task: type what you want done after the @ or + words."},
 		{":bench +dory", "", "", CodeBadArgs, "Empty task"},
@@ -241,6 +240,15 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 	if err != nil || st.Op != "" || st.Session == nil || st.Session.ID != "s1" || st.Answer != "fix login: working" {
 		t.Errorf("hows: %+v, %v", st, err)
 	}
+	// One that names no agent is a task for a new one, where the menus say,
+	// rather than a refusal that sends nothing.
+	in := menus
+	in.Text = "hows the plugin pane"
+	st, err = Read(in, view())
+	want := SpawnArgs{Task: "hows the plugin pane", Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Jot: true}
+	if a, ok := st.Args.(SpawnArgs); err != nil || st.Op != OpSpawn || !ok || !reflect.DeepEqual(a, want) {
+		t.Errorf("hows, no agent: %s %+v, %v; want spawn %+v", st.Op, st.Args, err, want)
+	}
 }
 
 // Said words each step's outcome, and tells the client what to do with it.
@@ -295,6 +303,9 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 			InputResult{Did: InputRan, Op: OpFreeze, Session: login, Text: "Froze fix login."}},
 		{"thaw all", Step{Op: OpThaw}, FreezeResult{Sessions: []string{"s2", "s3"}}, nil,
 			InputResult{Did: InputRan, Op: OpThaw, Text: "Thawed 2 sessions."}},
+		// A thaw of several goes in turn.
+		{"thaw all in turn", Step{Op: OpThaw}, FreezeResult{Sessions: []string{"s1"}, Queued: []string{"s2", "s3"}}, nil,
+			InputResult{Did: InputRan, Op: OpThaw, Text: "Thawing 3 sessions in turn, one every 30 s, so that each agent finds the sign-in the one before renewed."}},
 		{"freeze none", Step{Op: OpFreeze}, FreezeResult{}, nil,
 			InputResult{Did: InputRan, Op: OpFreeze, Text: "Nothing to freeze."}},
 		{"promote", Step{Op: OpPriority, Args: PriorityArgs{Level: 1}, Session: parser}, nil, nil,

@@ -46,9 +46,12 @@ type FreezeArgs struct {
 	All     bool   `json:"all,omitempty"`
 }
 
-// FreezeResult lists the sessions that were frozen or thawed.
+// FreezeResult lists the sessions that were frozen or thawed. A thaw of
+// several thaws them in turn, one every 30 s (DESIGN §4.3): Queued are
+// those still to come.
 type FreezeResult struct {
 	Sessions []string `json:"sessions"`
+	Queued   []string `json:"queued,omitempty"`
 }
 
 // PriorityArgs set a session's priority level: 1 promotes it, which puts it

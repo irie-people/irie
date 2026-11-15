@@ -210,6 +210,15 @@ func (h *history) batchNames(dir string, n int) []string {
 // "c"`. Past four it names the first three and counts the rest, `freeze
 // "a", "b", "c" and 4 more`, so that it still fits a menu.
 func namesLabel(verb string, names []string) string {
+	if len(names) == 0 {
+		return verb
+	}
+	return verb + " " + namesList(names)
+}
+
+// namesList names sessions as a label does: `"a", "b" and "c"`, and past
+// four the first three and how many more.
+func namesList(names []string) string {
 	q := make([]string, 0, len(names))
 	for _, n := range names {
 		q = append(q, fmt.Sprintf("%q", n))
@@ -217,13 +226,10 @@ func namesLabel(verb string, names []string) string {
 	if len(q) > 4 {
 		q = append(q[:3], fmt.Sprintf("%d more", len(names)-3))
 	}
-	switch len(q) {
-	case 0:
-		return verb
-	case 1:
-		return verb + " " + q[0]
+	if len(q) < 2 {
+		return strings.Join(q, "")
 	}
-	return verb + " " + strings.Join(q[:len(q)-1], ", ") + " and " + q[len(q)-1]
+	return strings.Join(q[:len(q)-1], ", ") + " and " + q[len(q)-1]
 }
 
 // batched is how many steps at the top of dir's stack share the batch of
@@ -244,12 +250,17 @@ func (h *history) batched(dir string) int {
 	return n
 }
 
-// stateFile is state.json. Keys this version does not know, such as a later
-// version's, are kept as they are.
+// stateFile is state.json: the history, and a thaw of several under way
+// (freeze.go). Keys this version does not know, such as a later version's,
+// are kept as they are.
 type stateFile struct {
 	hist  history
+	thaws thawQueue
 	extra map[string]json.RawMessage
 }
+
+// stateThawing is state.json's key for a thaw of several under way.
+const stateThawing = "thawing"
 
 // readState reads state.json. A missing file is an empty history; so are
 // missing stacks, as in a file from before undo. A file that is not JSON is
@@ -286,6 +297,13 @@ func readState(path string) (stateFile, error) {
 			st.hist.Redo = list
 		}
 	}
+	if raw, ok := st.extra[stateThawing]; ok {
+		delete(st.extra, stateThawing)
+		if err := json.Unmarshal(raw, &st.thaws); err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", stateThawing, err))
+			st.thaws = thawQueue{}
+		}
+	}
 	delete(st.extra, "version")
 	if n := len(st.hist.Undo) - maxHistory; n > 0 {
 		st.hist.Undo = st.hist.Undo[n:]
@@ -313,6 +331,9 @@ func writeState(path string, st stateFile) error {
 		redo = []action{}
 	}
 	out["version"], out[dirUndo], out[dirRedo] = stateVersion, undo, redo
+	if len(st.thaws.IDs) > 0 {
+		out[stateThawing] = st.thaws
+	}
 	return writeJSON(path, out)
 }
 
@@ -891,7 +912,7 @@ func checkReopen(c *Core, a action) []problem {
 	if err != nil {
 		return cannot("no-spec", brand.Name+" lost how it ran")
 	}
-	if fi, err := os.Stat(spec.Cwd); err != nil || !fi.IsDir() {
+	if fi, err := os.Stat(spec.Cwd); (err != nil || !fi.IsDir()) && !c.restorable(spec) {
 		return cannot("no-folder", fmt.Sprintf("its folder %s is gone", spec.Cwd))
 	}
 	profile, ok := c.profile(spec.Profile)
