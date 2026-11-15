@@ -105,6 +105,10 @@ private struct SessionList: View {
         } else if groups.isEmpty && store.drawnOutside.isEmpty {
             Hint(text: "No sessions match “\(store.filter)”.")
         } else {
+            // Where the selected card is drawn, which the list keeps in
+            // sight: it scrolls there when the selection moves, and when the
+            // card goes to another group, as a pin takes it to the top.
+            let shown = store.outsideSelection == nil ? store.selection.flatMap { CardPlace.of($0, in: groups) } : nil
             ScrollViewReader { proxy in
                 ScrollView {
                     // One clock for every card's age.
@@ -131,7 +135,7 @@ private struct SessionList: View {
                                     if let node = g.node {
                                         // Your group's cards and groups hang off
                                         // a rail, so where the group ends shows.
-                                        GroupTree(node: node, order: g.sessions, listFocused: listFocused, now: ctx.date)
+                                        GroupTree(node: node, group: g.id, order: g.sessions, listFocused: listFocused, now: ctx.date)
                                     } else {
                                         cards(g, now: ctx.date)
                                     }
@@ -156,15 +160,15 @@ private struct SessionList: View {
                     .overlayPreferenceValue(DropRowFrames.self) { DropLine(frames: $0) }
                     .onDrop(of: [.text], delegate: ListDrop(store: store))
                 }
-                .onChange(of: store.selection) {
-                    guard let id = store.selection else { return }
-                    proxy.scrollTo(id)
+                .onChange(of: shown) { _, to in
+                    guard let to else { return }
+                    proxy.scrollTo(to)
                     // Cards far down the list are made as they come into
                     // sight, so the first scroll can stop short of one, as
                     // when the terminal moves to it by another hand. Once
                     // they are made, again: nothing, when it's in sight.
                     DispatchQueue.main.async {
-                        if store.selection == id { proxy.scrollTo(id) }
+                        if store.selection == to.session { proxy.scrollTo(to) }
                     }
                 }
                 .onChange(of: store.outsideSelection) {
@@ -181,8 +185,8 @@ private struct SessionList: View {
                     DispatchQueue.main.async {
                         if let k = store.outsideSelection {
                             proxy.scrollTo("outside:" + k)
-                        } else if let id = store.selection {
-                            proxy.scrollTo(id)
+                        } else if let id = store.selection, let to = CardPlace.of(id, in: store.drawnGroups) {
+                            proxy.scrollTo(to)
                         }
                     }
                 }
@@ -245,7 +249,7 @@ private struct SessionList: View {
                         picked: store.picked.contains(s.id),
                         listFocused: listFocused, now: now, first: i == 0, last: i == last)
                 .equatable()
-                .id(s.id)
+                .id(CardPlace(group: g.id, session: s.id))
                 .dropRow(s.id)
             // Only a session with helpers has the rows: wrapped, empty ones
             // would take the stack's spacing. They count with the card for
@@ -259,6 +263,24 @@ private struct SessionList: View {
     }
 }
 
+/// Where the list draws a card: the group it is in, the outermost for a card
+/// in one of your groups, and its session. The list knows each card by both.
+/// Known by its session alone, a card that went to another group while the
+/// window was open, as a pin or a park takes it, kept the view the lazy list
+/// had made for it in the group it left: drawn in its new place, but never
+/// brought up to date, so it never showed the selection, nor the lines from
+/// it to the terminal (TabLink.swift). Known by both, it is made afresh in
+/// its new group.
+private struct CardPlace: Hashable {
+    let group: String
+    let session: String
+
+    /// Where session id's card is among groups, if any of them holds it.
+    static func of(_ id: String, in groups: [SessionGroup]) -> CardPlace? {
+        groups.first { g in g.sessions.contains { $0.id == id } }.map { CardPlace(group: $0.id, session: id) }
+    }
+}
+
 /// What one of your groups holds, under its header: its cards and the
 /// groups inside it, in the list's one order, off a rail that shows where
 /// the group ends. A group inside draws its own header and rail, one step
@@ -267,6 +289,8 @@ private struct SessionList: View {
 private struct GroupTree: View {
     @Environment(Store.self) private var store
     let node: GroupNode
+    /// The outermost group's id, which its cards' places name.
+    let group: String
     /// Every card of the outermost group, which the Move keys walk.
     let order: [Session]
     let listFocused: Bool
@@ -283,7 +307,7 @@ private struct GroupTree: View {
                                 picked: store.picked.contains(s.id), listFocused: listFocused, now: now,
                                 first: s.id == order.first?.id, last: s.id == order.last?.id)
                         .equatable()
-                        .id(s.id)
+                        .id(CardPlace(group: group, session: s.id))
                         .dropRow(s.id)
                     if HelperRows.has(s) {
                         HelperRows(session: s)
@@ -294,7 +318,7 @@ private struct GroupTree: View {
                     let g = SessionGroup.of(sub)
                     GroupHeader(group: g)
                     if store.isOpen(g) {
-                        GroupTree(node: sub, order: order, listFocused: listFocused, now: now)
+                        GroupTree(node: sub, group: group, order: order, listFocused: listFocused, now: now)
                     }
                 }
             }

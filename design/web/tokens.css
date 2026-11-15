@@ -1,0 +1,313 @@
+/* Irie's palettes as CSS variables. Made by tools/design.sh from design/palettes and design/tokens.json: change those, not this.
+   data-palette on an element picks a palette for it and what is inside it, and
+   data-mode="light" or "dark" on the same element picks its mode, which
+   otherwise follows the system's. */
+
+:root {
+  --term-ground: #14110D;
+  --term-ink: #EEE5D5;
+}
+
+/* Rosewater */
+:root, [data-palette="rosewater"] {
+  --sidebar: #FBF1EE;
+  --ground: #F3E3DE;
+  --card: #FFF9F7;
+  --panel: #FCEFEB;
+  --field: #FFFCFB;
+  --edge: #EBD3CB;
+  --hover: #FFF3EF;
+  --selection: #F3DDEA;
+  --needs-tint: #FEE4D8;
+  --ink: #3D2236;
+  --muted: #75566A;
+  --accent: #C4577A;
+  --accent-ink: #A23E62;
+  --accent-fill: #E58FA8;
+  --on-accent: #3D2236;
+  --needs: #892319;
+  --done: #44694B;
+  --paused: #895A07;
+  --frozen: #286873;
+  --sun: #F2B544;
+  --waves: #D9819C;
+  color-scheme: light;
+}
+:root[data-mode="dark"], [data-palette="rosewater"][data-mode="dark"] {
+  --sidebar: #251B22;
+  --ground: #1D151B;
+  --card: #30242C;
+  --panel: #2C2129;
+  --field: #33262F;
+  --edge: #4A3843;
+  --hover: #392B34;
+  --selection: #45293F;
+  --needs-tint: #4A251C;
+  --ink: #F7E9EF;
+  --muted: #C2AAB7;
+  --accent: #EE8FAD;
+  --accent-ink: #F4A7BF;
+  --accent-fill: #EE8FAD;
+  --on-accent: #2A1A24;
+  --needs: #FF8070;
+  --done: #9BC9A2;
+  --paused: #EFC468;
+  --frozen: #7DC4CE;
+  --sun: #F2B544;
+  --waves: #EE8FAD;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode="light"]), [data-palette="rosewater"]:not([data-mode="light"]) {
+    --sidebar: #251B22;
+    --ground: #1D151B;
+    --card: #30242C;
+    --panel: #2C2129;
+    --field: #33262F;
+    --edge: #4A3843;
+    --hover: #392B34;
+    --selection: #45293F;
+    --needs-tint: #4A251C;
+    --ink: #F7E9EF;
+    --muted: #C2AAB7;
+    --accent: #EE8FAD;
+    --accent-ink: #F4A7BF;
+    --accent-fill: #EE8FAD;
+    --on-accent: #2A1A24;
+    --needs: #FF8070;
+    --done: #9BC9A2;
+    --paused: #EFC468;
+    --frozen: #7DC4CE;
+    --sun: #F2B544;
+    --waves: #EE8FAD;
+    color-scheme: dark;
+  }
+}
+
+/* Terracotta */
+[data-palette="terracotta"] {
+  --sidebar: #F9F2EA;
+  --ground: #F0E4D6;
+  --card: #FFFBF6;
+  --panel: #FBF3EA;
+  --field: #FFFDF9;
+  --edge: #E7D6C3;
+  --hover: #FFF6EC;
+  --selection: #F8E0CF;
+  --needs-tint: #FBE2E4;
+  --ink: #3A2629;
+  --muted: #735E58;
+  --accent: #C2603A;
+  --accent-ink: #A24A26;
+  --accent-fill: #E58A62;
+  --on-accent: #2B1A14;
+  --needs: #891F32;
+  --done: #46694A;
+  --paused: #845600;
+  --frozen: #286773;
+  --sun: #F2B544;
+  --waves: #7FA383;
+  color-scheme: light;
+}
+[data-palette="terracotta"][data-mode="dark"] {
+  --sidebar: #231B17;
+  --ground: #1B1411;
+  --card: #2E241F;
+  --panel: #2A211C;
+  --field: #312722;
+  --edge: #48392F;
+  --hover: #372B24;
+  --selection: #4A2F22;
+  --needs-tint: #46202A;
+  --ink: #F6EBE2;
+  --muted: #BFAA9B;
+  --accent: #EE9469;
+  --accent-ink: #F4A983;
+  --accent-fill: #EE9469;
+  --on-accent: #2A1810;
+  --needs: #FF7F96;
+  --done: #9CC79C;
+  --paused: #EFC468;
+  --frozen: #7EC3CC;
+  --sun: #F2B544;
+  --waves: #9CC79C;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  [data-palette="terracotta"]:not([data-mode="light"]) {
+    --sidebar: #231B17;
+    --ground: #1B1411;
+    --card: #2E241F;
+    --panel: #2A211C;
+    --field: #312722;
+    --edge: #48392F;
+    --hover: #372B24;
+    --selection: #4A2F22;
+    --needs-tint: #46202A;
+    --ink: #F6EBE2;
+    --muted: #BFAA9B;
+    --accent: #EE9469;
+    --accent-ink: #F4A983;
+    --accent-fill: #EE9469;
+    --on-accent: #2A1810;
+    --needs: #FF7F96;
+    --done: #9CC79C;
+    --paused: #EFC468;
+    --frozen: #7EC3CC;
+    --sun: #F2B544;
+    --waves: #9CC79C;
+    color-scheme: dark;
+  }
+}
+
+/* Lilac */
+[data-palette="lilac"] {
+  --sidebar: #F7F2F7;
+  --ground: #EEE5EF;
+  --card: #FFFCFF;
+  --panel: #F9F3F9;
+  --field: #FFFDFF;
+  --edge: #E2D5E4;
+  --hover: #FBF5FB;
+  --selection: #EBDDF1;
+  --needs-tint: #FBE4E0;
+  --ink: #33223F;
+  --muted: #6C5A75;
+  --accent: #9A5CB0;
+  --accent-ink: #7F4495;
+  --accent-fill: #C39AD3;
+  --on-accent: #2A1838;
+  --needs: #882416;
+  --done: #426A4F;
+  --paused: #875A07;
+  --frozen: #276776;
+  --sun: #F2B544;
+  --waves: #B58BC9;
+  color-scheme: light;
+}
+[data-palette="lilac"][data-mode="dark"] {
+  --sidebar: #1F1A26;
+  --ground: #18141E;
+  --card: #2A2332;
+  --panel: #26202E;
+  --field: #2D2636;
+  --edge: #433950;
+  --hover: #332B3C;
+  --selection: #3E2E4D;
+  --needs-tint: #44221F;
+  --ink: #F2EAF6;
+  --muted: #B9A9C4;
+  --accent: #C79BE0;
+  --accent-ink: #D2AEE8;
+  --accent-fill: #C79BE0;
+  --on-accent: #241731;
+  --needs: #FF836F;
+  --done: #9CC9A6;
+  --paused: #EFC468;
+  --frozen: #80C3D0;
+  --sun: #F2B544;
+  --waves: #C79BE0;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  [data-palette="lilac"]:not([data-mode="light"]) {
+    --sidebar: #1F1A26;
+    --ground: #18141E;
+    --card: #2A2332;
+    --panel: #26202E;
+    --field: #2D2636;
+    --edge: #433950;
+    --hover: #332B3C;
+    --selection: #3E2E4D;
+    --needs-tint: #44221F;
+    --ink: #F2EAF6;
+    --muted: #B9A9C4;
+    --accent: #C79BE0;
+    --accent-ink: #D2AEE8;
+    --accent-fill: #C79BE0;
+    --on-accent: #241731;
+    --needs: #FF836F;
+    --done: #9CC9A6;
+    --paused: #EFC468;
+    --frozen: #80C3D0;
+    --sun: #F2B544;
+    --waves: #C79BE0;
+    color-scheme: dark;
+  }
+}
+
+/* Evergreen */
+[data-palette="evergreen"] {
+  --sidebar: #F4F4EC;
+  --ground: #E9EBDF;
+  --card: #FBFBF6;
+  --panel: #F1F2E8;
+  --field: #FDFDF9;
+  --edge: #D8DCC9;
+  --hover: #F6F7EF;
+  --selection: #DDE5D3;
+  --needs-tint: #FBE5DC;
+  --ink: #1E2B22;
+  --muted: #56635A;
+  --accent: #2F5D46;
+  --accent-ink: #264D3A;
+  --accent-fill: #9DB8A3;
+  --on-accent: #1E2B22;
+  --needs: #892319;
+  --done: #3F6A5F;
+  --paused: #885A07;
+  --frozen: #00566B;
+  --sun: #D9A93F;
+  --waves: #5E8A6E;
+  color-scheme: light;
+}
+[data-palette="evergreen"][data-mode="dark"] {
+  --sidebar: #141C17;
+  --ground: #0E1410;
+  --card: #1C2620;
+  --panel: #18221C;
+  --field: #202B24;
+  --edge: #34443A;
+  --hover: #25322A;
+  --selection: #2A3D31;
+  --needs-tint: #4A251C;
+  --ink: #ECF0E6;
+  --muted: #B3BFB5;
+  --accent: #9CC5A1;
+  --accent-ink: #B3D6B8;
+  --accent-fill: #9CC5A1;
+  --on-accent: #12201A;
+  --needs: #FF9585;
+  --done: #8FC3B2;
+  --paused: #EFC468;
+  --frozen: #86E0FD;
+  --sun: #D9A93F;
+  --waves: #9CC5A1;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  [data-palette="evergreen"]:not([data-mode="light"]) {
+    --sidebar: #141C17;
+    --ground: #0E1410;
+    --card: #1C2620;
+    --panel: #18221C;
+    --field: #202B24;
+    --edge: #34443A;
+    --hover: #25322A;
+    --selection: #2A3D31;
+    --needs-tint: #4A251C;
+    --ink: #ECF0E6;
+    --muted: #B3BFB5;
+    --accent: #9CC5A1;
+    --accent-ink: #B3D6B8;
+    --accent-fill: #9CC5A1;
+    --on-accent: #12201A;
+    --needs: #FF9585;
+    --done: #8FC3B2;
+    --paused: #EFC468;
+    --frozen: #86E0FD;
+    --sun: #D9A93F;
+    --waves: #9CC5A1;
+    color-scheme: dark;
+  }
+}

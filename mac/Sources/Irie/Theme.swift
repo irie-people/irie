@@ -37,7 +37,9 @@ struct TerminalColors: Equatable {
     var ink: UInt32
 
     /// Irie's warm near-black and cream.
+    // design: terminal
     static let standard = TerminalColors(ground: 0x14110D, ink: 0xEEE5D5)
+    // design: end
 }
 
 /// One mode of a palette, as 0xRRGGBB.
@@ -59,6 +61,7 @@ struct Swatches: Equatable {
 }
 
 extension Palette {
+    // design: rosewater
     static let rosewater = Palette(
         id: "rosewater", name: "Rosewater",
         light: Swatches(
@@ -75,7 +78,9 @@ extension Palette {
             accent: 0xEE8FAD, accentInk: 0xF4A7BF, accentFill: 0xEE8FAD, onAccent: 0x2A1A24,
             needs: 0xFF8070, done: 0x9BC9A2, paused: 0xEFC468, frozen: 0x7DC4CE,
             sun: 0xF2B544, waves: 0xEE8FAD))
+    // design: end
 
+    // design: terracotta
     static let terracotta = Palette(
         id: "terracotta", name: "Terracotta",
         light: Swatches(
@@ -92,7 +97,9 @@ extension Palette {
             accent: 0xEE9469, accentInk: 0xF4A983, accentFill: 0xEE9469, onAccent: 0x2A1810,
             needs: 0xFF7F96, done: 0x9CC79C, paused: 0xEFC468, frozen: 0x7EC3CC,
             sun: 0xF2B544, waves: 0x9CC79C))
+    // design: end
 
+    // design: lilac
     static let lilac = Palette(
         id: "lilac", name: "Lilac",
         light: Swatches(
@@ -109,7 +116,9 @@ extension Palette {
             accent: 0xC79BE0, accentInk: 0xD2AEE8, accentFill: 0xC79BE0, onAccent: 0x241731,
             needs: 0xFF836F, done: 0x9CC9A6, paused: 0xEFC468, frozen: 0x80C3D0,
             sun: 0xF2B544, waves: 0xC79BE0))
+    // design: end
 
+    // design: evergreen
     static let evergreen = Palette(
         id: "evergreen", name: "Evergreen",
         light: Swatches(
@@ -126,6 +135,7 @@ extension Palette {
             accent: 0x9CC5A1, accentInk: 0xB3D6B8, accentFill: 0x9CC5A1, onAccent: 0x12201A,
             needs: 0xFF9585, done: 0x8FC3B2, paused: 0xEFC468, frozen: 0x86E0FD,
             sun: 0xD9A93F, waves: 0x9CC5A1))
+    // design: end
 }
 
 /// Irie's colours, from the palette in use. Each follows the window's
