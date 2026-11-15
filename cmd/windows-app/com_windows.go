@@ -26,7 +26,12 @@ func (c com) slot(i int) uintptr {
 	return *ptr[uintptr](table + uintptr(i)*unsafe.Sizeof(uintptr(0)))
 }
 
-// call calls method i of c with args, and gives its HRESULT.
+// call calls method i of c with args, and gives its HRESULT. An argument
+// may be a pointer made a uintptr: the directive keeps what it points to
+// on the heap for the call, as x/sys/windows' Proc.Call does, since
+// WebView2 may call back into Go, and a stack that grows then moves.
+//
+//go:uintptrescapes
 func (c com) call(i int, args ...uintptr) uintptr {
 	r, _, _ := syscall.SyscallN(c.slot(i), append([]uintptr{uintptr(c)}, args...)...)
 	return r

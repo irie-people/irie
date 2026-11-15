@@ -118,6 +118,8 @@ func run(args []string) int {
 		return 1
 	}
 	a.view = view
+	// What the backend said while the web view started goes now.
+	a.ui(func() {})
 	if a.snapshot != "" {
 		// A snapshot that never shows its sessions fails rather than hang.
 		go func() {
@@ -425,7 +427,15 @@ func (a *app) flush() {
 			f()
 		}
 	}()
-	if a.view == nil || len(q) == 0 {
+	if len(q) == 0 {
+		return
+	}
+	if a.view == nil || a.view.wv == 0 {
+		// The web view is still starting: they wait for it, ahead of what
+		// comes next.
+		a.mu.Lock()
+		a.queue = append(q, a.queue...)
+		a.mu.Unlock()
 		return
 	}
 	var b strings.Builder
