@@ -84,3 +84,6 @@ jobs:
           try { Get-Content site/install.ps1 -Raw | Invoke-Expression } catch { $failed = $_.Exception.Message -match 'SHA-256' }
           if (-not $failed) { throw 'install.ps1 took a download whose checksum was wrong' }
           Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
+          # The runner ends the step with the last program's exit code, which
+          # is setup --check's 1 on a Windows without WSL 2.
+          exit 0
