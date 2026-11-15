@@ -92,6 +92,18 @@ extension Store {
         setSpace(spaceKey(at: n - 1))
     }
 
+    /// Fn+Tab (+1) and Fn+Shift+Tab (-1): the next or the previous space in
+    /// the chips' order, round from the last to the first, as ⌃1–9 shows one.
+    func stepSpace(_ delta: Int) {
+        let n = spaces.count
+        guard n > 1 else {
+            NSSound.beep()
+            return
+        }
+        let i = spaces.indices.first { spaceKey(at: $0) == space } ?? 0
+        setSpace(spaceKey(at: ((i + delta) % n + n) % n))
+    }
+
     /// ⌃⌥1–9: the cards picked, or the selected one, go to the space of that
     /// number.
     func sendToSpace(number n: Int) {

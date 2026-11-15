@@ -204,6 +204,14 @@ While a drag holds something, the place it would land lights, and only a place w
 - **From:** asked for on 2026-11-15 ("drag groups to new workspaces"; the drags should be "super great and easy").
 - **Check:** unchecked (the Mac app's `SpaceDrop` and `DropModel`).
 
+### 4.7 A key with fn belongs to the key router
+
+A key with fn in it, such as Fn+Tab for the next space, is caught by the Mac app's key router (KeyRouter), and its menu item names it in its help, never as its shortcut.
+
+- **Why:** AppKit takes fn out of an app's own menu keys ("only supported for system-provided menu items"), so the item would show and take the key without fn: tried with fn⌃Tab, the item read and acted as ⌃Tab, Next Session.
+- **From:** asked for on 2026-11-15; AppKit's message on macOS 14.1, and SwiftUI's [`EventModifiers.function`](https://developer.apple.com/documentation/swiftui/eventmodifiers/function), "reserved for system applications".
+- **Check:** `TestNoMenuKeyTakesFn` (design).
+
 ## 5. Motion
 
 ### 5.1 Motion only explains
