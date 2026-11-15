@@ -386,6 +386,18 @@ type Route struct {
 	Accuracy         map[string]map[string]float64 `toml:"accuracy"`      // starting guesses: first-time success, by profile and class
 	Cost             map[string]float64            `toml:"cost"`          // starting guesses: a task's cost relative to one on +claude
 	Words            route.Words                   `toml:"words"`         // what makes a task small, medium or hard
+	Embed            RouteEmbed                    `toml:"embed"`         // a class from the tasks given one before
+}
+
+// RouteEmbed is how a task takes its class from the tasks given one before
+// (DESIGN §6.4): the nearest of them by an embedding model, which an
+// Ollama server runs.
+type RouteEmbed struct {
+	Model string `toml:"model"` // the embedding model; "" = route.words alone give classes
+	URL   string `toml:"url"`   // the Ollama server that runs it
+	// Near is the least cosine at which the nearest task decides; below it
+	// the task is unlike any, and route.words give its class.
+	Near float64 `toml:"near"`
 }
 
 // Prior returns where a profile starts, for the router.
@@ -990,6 +1002,11 @@ func DefaultRoute() Route {
 			Medium: slices.Clone(route.DefaultWords.Medium),
 			Hard:   slices.Clone(route.DefaultWords.Hard),
 		},
+		// The user's own Ollama, at its usual address: Irie's own server
+		// holds one model, which an embedding would push out. Its cosines
+		// run from about 0.7 up, so 0.75 hands only tasks unlike every
+		// labelled one to the words.
+		Embed: RouteEmbed{Model: "embeddinggemma-2:270m", URL: "http://127.0.0.1:11434", Near: 0.75},
 	}
 }
 
@@ -1304,6 +1321,14 @@ func (c Config) Validate() error {
 	}
 	if r.LocalMinAccuracy <= 0 || r.LocalMinAccuracy > 1 {
 		bad("route.local_min_accuracy = %v: must be above 0 and at most 1", r.LocalMinAccuracy)
+	}
+	if e := r.Embed; e.Model != "" {
+		if u, err := url.Parse(e.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			bad("route.embed.url = %q: must be an http or https address, such as http://127.0.0.1:11434", e.URL)
+		}
+		if e.Near < 0 || e.Near >= 1 {
+			bad("route.embed.near = %v: must be from 0 to below 1", e.Near)
+		}
 	}
 	b := c.Bench
 	if b.Runs < 1 || b.Runs > MaxBenchRuns {
