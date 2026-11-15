@@ -1,0 +1,16 @@
+[package]
+name = "testrunner"
+version = "0.1.0"
+edition = "2024"
+# let chains, std::io::pipe and File::try_lock.
+rust-version = "1.89"
+description = "Runs a Go module's tests in the least wall time: every package at once, each package's tests over many processes"
+license = "Apache-2.0"
+publish = false
+
+# No dependencies: std only, so the runner builds offline and adds no
+# third-party code to the repository.
+[dependencies]
+
+[profile.release]
+opt-level = 3

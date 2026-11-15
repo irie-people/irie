@@ -24,7 +24,7 @@ Contributions earn Steak under [irie-people/stake](https://github.com/irie-peopl
 
 ## Stack
 
-Go. The client runs every agent in tmux and draws its UI with Bubble Tea. Check a change with `tools/check.sh`: gofmt, `go vet`, `go test` and PROVENANCE.md's rows, as the install and CI check them. Name packages, such as `tools/check.sh ./internal/core`, to check fewer while the machine is busy.
+Go. The client runs every agent in tmux and draws its UI with Bubble Tea. Check a change with `tools/check.sh`: gofmt, `go vet`, the tests and PROVENANCE.md's rows, as the install and CI check them. The tests run through `tools/test.sh`, a runner in Rust (`tools/testrunner`) that spreads every package's tests over the CPUs and reruns only what changed; without cargo it is `go test`. Name packages, such as `tools/check.sh ./internal/core`, to check fewer while the machine is busy.
 
 Read a doc by its sections: `tools/doc.sh DESIGN 4.8` prints §4.8 of DESIGN.md, and `tools/doc.sh DESIGN` its outline, so you read only the part you need.
 
