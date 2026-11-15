@@ -132,3 +132,31 @@ func TestPaneSessionNamesHoldOnlyWhatTmuxTakes(t *testing.T) {
 		}
 	}
 }
+
+// TestAShellBesideAPeersSessionRunsThere: a pane beside a session on a
+// peer is ssh to that machine and a login shell there, in the session's
+// folder quoted as one word; with no ssh name for the peer it says what to
+// set, and the Dock's sweep counts the peer's rows as live.
+func TestAShellBesideAPeersSessionRunsThere(t *testing.T) {
+	want := []string{"ssh", "-t", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "--", "asahi",
+		`cd '/home/alice/code/it'\''s here' 2>/dev/null; exec "$SHELL" -l`}
+	if got := remoteShell("asahi", "/home/alice/code/it's here"); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("remoteShell = %q, want %q", got, want)
+	}
+	if got := remoteShell("asahi", ""); got[len(got)-1] != `exec "$SHELL" -l` {
+		t.Fatalf("with no folder it runs %q, want the login shell at home", got[len(got)-1])
+	}
+
+	c := newPeerCore(t)
+	p := &peerState{name: "Asahi", up: true, stop: func() {}, rows: map[string]ipc.Session{
+		"s1": {ID: "s1", Name: "far", State: ipc.StateWorking, Cwd: "/home/alice/far"},
+	}}
+	c.peers = map[string]*peerState{"Asahi": p}
+	_, err := c.paneOp(ipc.PaneArgs{Session: "Asahi/s1", Pane: "p1"})
+	if err == nil || !strings.Contains(err.Error(), "set peers.Asahi.ssh") {
+		t.Fatalf("a shell beside a peer with no ssh name: %v, want it to say to set peers.Asahi.ssh", err)
+	}
+	if _, err := c.paneOp(ipc.PaneArgs{Session: "Asahi/nope", Pane: "p1"}); err == nil {
+		t.Fatal("a pane beside a row the peer doesn't have was taken")
+	}
+}

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -1077,7 +1076,7 @@ func ctlOpen(args []string) error {
 		}
 		name = filepath.Join(wd, name)
 	}
-	file, line, col := splitFilePos(name, func(p string) bool { _, err := os.Stat(p); return err == nil })
+	file, line, col := irie.SplitFilePos(name, func(p string) bool { _, err := os.Stat(p); return err == nil })
 	sock, err := socket()
 	if err != nil {
 		return err
@@ -1091,28 +1090,4 @@ func ctlOpen(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpCard, ipc.CardArgs{Session: id, Kind: "code", Path: filepath.Clean(file), Line: line, Col: col}, nil)
-}
-
-// splitFilePos splits a trailing :LINE or :LINE:COL (numbers from 1) off a
-// file name, unless the name as given exists, as a file may have a colon
-// in its name.
-func splitFilePos(name string, exists func(string) bool) (file string, line, col int) {
-	if exists(name) {
-		return name, 0, 0
-	}
-	num := func(s string) (int, bool) {
-		n, err := strconv.Atoi(s)
-		return n, err == nil && n >= 1 && s[0] != '+'
-	}
-	if i := strings.LastIndex(name, ":"); i >= 0 {
-		if n, ok := num(name[i+1:]); ok {
-			if j := strings.LastIndex(name[:i], ":"); j >= 0 {
-				if m, ok := num(name[j+1 : i]); ok {
-					return name[:j], m, n
-				}
-			}
-			return name[:i], n, 0
-		}
-	}
-	return name, 0, 0
 }

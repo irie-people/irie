@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 
 // The files open in code cards (CodePane.swift). Each file is read once into
@@ -8,7 +9,10 @@ import Foundation
 // when the session's agent edits it, comes in at once while nothing typed
 // is unsaved: only its changed lines change, so the caret stays where it
 // was, the lines are marked in the gutter, and ⌘Z takes the change back.
-// While something typed is unsaved, the card asks which to keep.
+// While something typed is unsaved, the card asks which to keep. Typing
+// that can't reach its file, as in a conflict, a file gone or a failed save,
+// waits in a rescue file beside the app's own until it can, and comes back
+// as a conflict when the file next opens, so a quit or a kill loses none.
 
 /// How a file stands on disk: enough to tell another's change from our own
 /// save.
@@ -111,6 +115,7 @@ final class CodeDocument {
         colorer = SyntaxColorer(language: language)
         self.theme = theme
         self.font = font
+        undo.levelsOfUndo = 100
         storage.delegate = watch
     }
 
@@ -140,6 +145,7 @@ final class CodeDocument {
             revision += 1
             phase = .ready
             recolourAll()
+            restore()
         case .gone: phase = .missing
         case .notText: phase = .notText
         case .tooBig: phase = .tooBig
@@ -183,7 +189,7 @@ final class CodeDocument {
     nonisolated static func indent(of text: String, tabs: Bool) -> String {
         var tabbed = 0, spaced = 0, last = 0
         var steps: [Int: Int] = [:]
-        for line in text.split(separator: "\n").prefix(4000) {
+        for line in text.split(separator: "\n", maxSplits: 4000).prefix(4000) {
             if line.first == "\t" {
                 tabbed += 1
                 continue
@@ -208,8 +214,22 @@ final class CodeDocument {
         // A NUL early on means a binary file, whatever it decodes as.
         if data.prefix(8000).contains(0) { return .notText }
         guard let text = String(data: data, encoding: .utf8) else { return .notText }
-        let crlf = text.contains("\r\n")
+        let crlf = allCRLF(text)
         return .text(crlf ? text.replacingOccurrences(of: "\r\n", with: "\n") : text, crlf: crlf, stamp: st)
+    }
+
+    /// Whether every line ends in "\r\n": a file with any lone "\n" keeps
+    /// its line ends as they are, mixed or not.
+    nonisolated static func allCRLF(_ text: String) -> Bool {
+        var last: UInt8 = 0, any = false
+        for b in text.utf8 {
+            if b == 10 {
+                if last != 13 { return false }
+                any = true
+            }
+            last = b
+        }
+        return any
     }
 
     // MARK: Drawing
@@ -384,22 +404,71 @@ final class CodeDocument {
         saveTask = Task { [weak self] in await self?.save() }
     }
 
-    /// Saves at once, on the main thread, as the app quits.
+    /// Saves at once, on the main thread, as the app quits: to the file, or
+    /// to its rescue file when it can't go there.
     func saveBeforeQuitting() {
-        guard dirty, !conflict, phase == .ready else { return }
+        guard dirty else { return }
+        guard !conflict, phase == .ready else {
+            rescue(now: true)
+            return
+        }
         let text = storage.string
         if case .success = Self.write(text, crlf: crlf, to: real, expecting: stamp) {
             base = text
             dirty = false
+            rescue(now: true)
+        } else {
+            rescue(now: true)
         }
+    }
+
+    /// Typing that can't reach the file now: a conflict waits on the card,
+    /// the file is gone, or the last save failed.
+    var stranded: Bool { dirty && (conflict || phase == .missing || problem != nil) }
+
+    /// Keeps stranded typing in the rescue file, or drops the file once the
+    /// typing is saved or settled.
+    func rescue(now: Bool = false) {
+        let file = CodeDocs.rescueFile(path)
+        let keep: CodeDocs.Rescued? = stranded ? CodeDocs.Rescued(path: path, text: storage.string, at: Date()) : nil
+        // One queue, in the order asked, so a late keep never lands after
+        // the drop that followed it.
+        if now {
+            CodeDocs.rescues.sync { CodeDocs.keep(keep, at: file) }
+        } else {
+            CodeDocs.rescues.async { CodeDocs.keep(keep, at: file) }
+        }
+    }
+
+    /// Brings back typing a rescue file kept for this file: as a conflict
+    /// with the disk's text when they differ.
+    private func restore() {
+        guard let r = CodeDocs.rescued(path) else { return }
+        guard !r.text.utf8.elementsEqual(storage.string.utf8) else {
+            let file = CodeDocs.rescueFile(path)
+            CodeDocs.rescues.async { CodeDocs.keep(nil, at: file) }
+            return
+        }
+        theirs = storage.string
+        storage.replaceCharacters(in: NSRange(location: 0, length: storage.length),
+                                  with: NSAttributedString(string: r.text, attributes: baseAttributes))
+        dirty = true
+        conflict = true
+        problem = nil
     }
 
     /// Writes the text, unless the disk changed under it since it was last
     /// read or saved: that is a conflict, for the card to settle. Over is
-    /// the card's Keep Mine, which writes over the disk's text.
+    /// the card's Keep Mine, which writes over the disk's text, and its Save
+    /// It Again for a file gone; typing on a file gone waits for that.
     func save(over: Bool = false) async {
-        guard dirty || over, phase == .ready || phase == .missing, !saving else { return }
-        guard !conflict || over else { return }
+        // Never across a look at the disk, which might take its text in.
+        while checking { try? await Task.sleep(nanoseconds: 40_000_000) }
+        guard dirty || over, !saving else { return }
+        guard (phase == .ready && (!conflict || over)) || (phase == .missing && over) else {
+            rescue()
+            return
+        }
         let text = storage.string, crlf = crlf, real = real
         let mark = edits
         let expect = over || phase == .missing ? nil : stamp
@@ -417,12 +486,14 @@ final class CodeDocument {
             conflict = false
             theirs = nil
             if phase == .missing { phase = .ready }
+            rescue()
             // Typed on while it saved: those keys save in turn.
             if dirty { saveSoon() }
         case .changed:
             await check()
         case let .failed(why):
             problem = why
+            rescue()
         }
     }
 
@@ -433,32 +504,29 @@ final class CodeDocument {
         case failed(String)
     }
 
-    /// Writes text to the file through a copy put in its place, which keeps
-    /// the file's permissions; where that can't be done, over it in place.
+    /// Writes text to the file only whole: through a copy put in its place,
+    /// which keeps the file's permissions, or else an atomic write in its
+    /// folder with its permissions put back. A write that fails leaves the
+    /// file as it was. A file gone is written new.
     nonisolated private static func write(_ text: String, crlf: Bool, to path: String, expecting: DiskStamp?) -> Wrote {
         if let expecting, DiskStamp.of(path) != expecting { return .changed }
         let data = Data((crlf ? text.replacingOccurrences(of: "\n", with: "\r\n") : text).utf8)
         let url = URL(fileURLWithPath: path)
         let fm = FileManager.default
-        do {
-            if fm.fileExists(atPath: path),
-               let dir = try? fm.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: url, create: true) {
-                defer { try? fm.removeItem(at: dir) }
-                let copy = dir.appendingPathComponent(url.lastPathComponent)
-                try data.write(to: copy)
-                _ = try fm.replaceItemAt(url, withItemAt: copy)
-            } else {
-                try data.write(to: url)
-            }
+        guard fm.fileExists(atPath: path) else {
+            do { try data.write(to: url, options: .atomic) } catch { return .failed(error.localizedDescription) }
             return .success(DiskStamp.of(path))
-        } catch {
-            do {
-                try data.write(to: url)
-                return .success(DiskStamp.of(path))
-            } catch {
-                return .failed(error.localizedDescription)
-            }
         }
+        if let dir = try? fm.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: url, create: true) {
+            defer { try? fm.removeItem(at: dir) }
+            let copy = dir.appendingPathComponent(url.lastPathComponent)
+            do { try data.write(to: copy) } catch { return .failed(error.localizedDescription) }
+            if (try? fm.replaceItemAt(url, withItemAt: copy)) != nil { return .success(DiskStamp.of(path)) }
+        }
+        let perms = (try? fm.attributesOfItem(atPath: path))?[.posixPermissions]
+        do { try data.write(to: url, options: .atomic) } catch { return .failed(error.localizedDescription) }
+        if let perms { try? fm.setAttributes([.posixPermissions: perms], ofItemAtPath: path) }
+        return .success(DiskStamp.of(path))
     }
 
     // MARK: The disk
@@ -468,28 +536,61 @@ final class CodeDocument {
     /// unsaved, else as a conflict.
     func check() async {
         guard !checking, !saving, phase == .ready || phase == .missing else { return }
-        let now = DiskStamp.of(real)
-        guard now != stamp else { return }
-        guard now != nil else {
-            if phase != .missing, !FileManager.default.fileExists(atPath: real) { phase = .missing }
-            return
-        }
         checking = true
         defer { checking = false }
-        let real = real
-        let read = await Task.detached(priority: .userInitiated) { Self.read(real) }.value
-        guard case let .text(text, crlf, st) = read else { return }
-        if phase == .missing { phase = .ready }
-        stamp = st
-        guard text != base else { return }
-        base = text
-        self.crlf = crlf
-        if dirty {
-            theirs = text
-            conflict = true
-        } else {
-            take(text)
+        // The disk is looked at, read and compared off the main thread, a
+        // hung mount or a big file holding up no key.
+        let real = real, known = stamp, base = base, mark = edits
+        let seen = await Task.detached(priority: .utility) { Self.look(real, known: known, base: base) }.value
+        // A save of ours landed meanwhile: what was read is older.
+        guard stamp == known, !saving else { return }
+        switch seen {
+        case .same:
+            return
+        case .gone:
+            if phase != .missing {
+                phase = .missing
+                rescue()
+            }
+        case .unreadable:
+            if dirty {
+                problem = "\(name) on disk is no longer text this card can edit."
+                rescue()
+            }
+        case let .touched(st):
+            stamp = st
+            if phase == .missing { phase = .ready }
+        case let .changed(text, crlf, st, hunks):
+            if phase == .missing { phase = .ready }
+            stamp = st
+            self.base = text
+            self.crlf = crlf
+            if dirty || edits != mark {
+                theirs = text
+                conflict = true
+                rescue()
+            } else {
+                take(hunks)
+            }
         }
+    }
+
+    private enum Seen: Sendable {
+        case same, gone, unreadable
+        /// Its stamp changed and its text did not.
+        case touched(DiskStamp?)
+        case changed(String, crlf: Bool, stamp: DiskStamp?, hunks: [Hunk])
+    }
+
+    /// How the file stands against what was last read or saved, base, with
+    /// the runs of lines that changed worked out.
+    nonisolated private static func look(_ path: String, known: DiskStamp?, base: String) -> Seen {
+        let now = DiskStamp.of(path)
+        if now == known { return .same }
+        if now == nil { return FileManager.default.fileExists(atPath: path) ? .unreadable : .gone }
+        guard case let .text(text, crlf, st) = read(path) else { return .unreadable }
+        if text.utf8.elementsEqual(base.utf8) { return .touched(st) }
+        return .changed(text, crlf: crlf, stamp: st, hunks: hunks(from: base, to: text))
     }
 
     /// The card's Keep Mine: the typed text goes over the disk's.
@@ -501,19 +602,26 @@ final class CodeDocument {
     /// typed text back.
     func takeTheirs() {
         guard let t = theirs else { return }
-        theirs = nil
-        conflict = false
-        take(t)
-        dirty = false
-        savedEdits = edits
+        let old = storage.string, mark = edits
+        Task {
+            let hunks = await Task.detached(priority: .userInitiated) { Self.hunks(from: old, to: t) }.value
+            // Typed on meanwhile: the disk's text stays waiting.
+            guard edits == mark, theirs == t else { return }
+            theirs = nil
+            conflict = false
+            take(hunks)
+            dirty = false
+            savedEdits = edits
+            problem = nil
+            rescue()
+        }
     }
 
     /// Puts the disk's text in, a changed run of lines at a time, the last
-    /// first, as one step ⌘Z takes back, and marks what changed.
-    private func take(_ text: String) {
-        let old = storage.string
-        let hunks = Self.hunks(from: old, to: text)
-        guard !hunks.isEmpty else { return }
+    /// first, as one step ⌘Z takes back, and marks what changed. The hunks
+    /// are against the text as it stands.
+    private func take(_ hunks: [Hunk]) {
+        guard !hunks.isEmpty, hunks.allSatisfy({ NSMaxRange($0.old) <= storage.length }) else { return }
         for v in views.allObjects { v.breakUndoCoalescing() }
         quiet = true
         undo.beginUndoGrouping()
@@ -575,7 +683,9 @@ final class CodeDocument {
             let length = midA[i0..<i1].reduce(0) { $0 + $1.utf16.count }
             return Hunk(old: NSRange(location: at, length: length), text: midB[j0..<j1].joined())
         }
-        guard midA.count + midB.count <= 20_000, !midA.isEmpty, !midB.isEmpty else {
+        // A diff's cost grows with both lengths: past a million pairs of
+        // lines, the whole middle is one run.
+        guard midA.count * midB.count <= 1_000_000, !midA.isEmpty, !midB.isEmpty else {
             return [hunk(0, midA.count, 0, midB.count)]
         }
         let diff = midB.difference(from: midA)
@@ -638,8 +748,12 @@ private final class StorageWatch: NSObject, NSTextStorageDelegate {
 final class CodeDocs {
     static let shared = CodeDocs()
     private var open: [String: CodeDocument] = [:]
+    /// A stop asked of the app, as an install or a restart asks: typing is
+    /// saved, or kept in rescue files, before it goes.
+    private var term: DispatchSourceSignal?
 
-    /// Typing is saved as the app steps back, and before it quits.
+    /// Typing is saved as the app steps back, and before it quits or is
+    /// stopped.
     private init() {
         let nc = NotificationCenter.default
         nc.addObserver(forName: NSApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -648,6 +762,14 @@ final class CodeDocs {
         nc.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveAll(quitting: true) }
         }
+        signal(SIGTERM, SIG_IGN)
+        let t = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        t.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.saveAll(quitting: true) }
+            exit(0)
+        }
+        t.resume()
+        term = t
     }
 
     /// `--snapshot`'s file, with its text and no disk.
@@ -677,11 +799,66 @@ final class CodeDocs {
         }
     }
 
-    /// Lets go of files no card shows any more, once saved.
+    /// Lets go of files no card shows any more, once saved; an editor still
+    /// on one keeps it until it goes, and takes its layout off then.
     func keep(only paths: Set<String>) {
         for (p, d) in open where !paths.contains(p) && !d.dirty && !d.conflict {
-            for lm in d.storage.layoutManagers { d.storage.removeLayoutManager(lm) }
             open[p] = nil
         }
+    }
+
+    /// Whether a file has typing that must stay: unsaved or in conflict.
+    func holds(_ path: String) -> Bool {
+        guard let d = open[path] else { return false }
+        return d.dirty || d.conflict
+    }
+
+    // MARK: Rescue
+
+    /// Typing kept for a file it couldn't reach.
+    struct Rescued: Codable, Sendable {
+        var path: String
+        var text: String
+        var at: Date
+    }
+
+    /// The queue rescue files are written and dropped on, in turn.
+    nonisolated static let rescues = DispatchQueue(label: "code-rescue", qos: .utility)
+
+    /// Where rescue files are: the app's own support folder, or the folder
+    /// IRIE_CODE_RESCUE names, as a test's.
+    nonisolated static var rescueFolder: URL {
+        if let d = ProcessInfo.processInfo.environment[Brand.env("CODE_RESCUE")], !d.isEmpty { return URL(fileURLWithPath: d) }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        return base.appendingPathComponent(Brand.bundleID).appendingPathComponent("Recovered Code")
+    }
+
+    /// A file's rescue file, named by a hash of its path.
+    nonisolated static func rescueFile(_ path: String) -> URL {
+        let h = SHA256.hash(data: Data(path.utf8)).prefix(10).map { String(format: "%02x", $0) }.joined()
+        return rescueFolder.appendingPathComponent(h + ".json")
+    }
+
+    /// Keeps a rescue, whole or not at all, or drops the file for none.
+    nonisolated static func keep(_ r: Rescued?, at file: URL) {
+        let fm = FileManager.default
+        guard let r else {
+            try? fm.removeItem(at: file)
+            return
+        }
+        try? fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        if let data = try? e.encode(r) { try? data.write(to: file, options: .atomic) }
+    }
+
+    /// The typing a rescue file keeps for a path, if any.
+    nonisolated static func rescued(_ path: String) -> Rescued? {
+        guard let data = try? Data(contentsOf: rescueFile(path)) else { return nil }
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        guard let r = try? d.decode(Rescued.self, from: data), r.path == path else { return nil }
+        return r
     }
 }

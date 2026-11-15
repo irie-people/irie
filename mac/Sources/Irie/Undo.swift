@@ -107,6 +107,12 @@ extension Store {
             NSApp.sendAction(Selector(redo ? "redo:" : "undo:"), to: nil, from: nil)
             return
         }
+        // A code card's editor keeps ⌘Z to its file even with nothing left
+        // to take back: the sessions' history is not what it shows.
+        if NSApp.keyWindow?.firstResponder is CodeTextView {
+            NSSound.beep()
+            return
+        }
         guard canUndo, (redo ? redoLabel : undoLabel) != nil else {
             NSSound.beep()
             return
