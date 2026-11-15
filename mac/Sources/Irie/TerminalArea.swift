@@ -45,38 +45,78 @@ struct TerminalArea: View {
                 // strip of their tabs, and fold and unfold the same way.
                 let side = store.sideDocked ? width : 0
                 let room = geo.size.width - side
-                let deck = RolodexModel.width(share: store.rolodex.share, in: room, keep: keepBesidePanes)
+                let r = store.rolodex
+                let keep = keepBesidePanes
+                // Beside the terminal the wheel leaves it at least keep. Let
+                // go of the divider past that point, and the wheel goes over
+                // the terminal instead, which keeps the room it had beside the
+                // wheel at its widest; where they overlap, the one with the
+                // keyboard lies on top, and nothing changes size as they swap.
+                let fit = RolodexModel.width(share: r.share, in: room, keep: keep)
+                let deck = r.over ? RolodexModel.overWidth(share: r.share, in: room, fit: fit) : fit
+                let overlap = r.noteOverlap(deck - fit)
+                let overlaps = overlap > 0 && !r.folded
+                // A fold or an unfold slides over the terminal's edge, as
+                // before; the one with the keyboard comes up as it ends.
+                let behind = overlaps && !r.raised && !r.folding
                 let strip = RolodexModel.stripWidth
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
-                        .padding(.trailing, side + store.rolodex.kept(deck))
-                    if store.rolodex.open {
-                        if store.rolodex.folded {
+                        .background { PlaceProbe { r.mainProbe = $0 } }
+                        .padding(.trailing, side + r.kept(fit, behind: behind))
+                        // Over the wheel while it has the keyboard, under the
+                        // right sidebar still.
+                        .zIndex(behind ? 0.5 : 0)
+                    if r.open {
+                        if r.folded {
                             RolodexStrip()
                                 .padding(.leading, 4)
                                 .padding(.trailing, 10)
                                 .padding(.vertical, 12)
                                 .frame(width: strip)
-                                .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: strip, keep: keepBesidePanes).offset(x: -4) }
+                                .background { PlaceProbe { r.wheelProbe = $0 } }
                                 .padding(.trailing, side)
                                 .transition(.move(edge: .trailing))
                         } else {
-                            RolodexView()
+                            // Over the terminal its tabs start where the
+                            // terminal ends, so they show whichever is on
+                            // top, and on top it stands on a window's ground.
+                            RolodexView(lead: overlaps ? overlap : 0)
                                 .padding(.leading, 4)
                                 .padding(.trailing, 12)
+                                .background { if overlaps, !behind { PanesGround() } }
                                 .padding(.vertical, 12)
                                 .frame(width: deck)
-                                .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: deck, keep: keepBesidePanes).offset(x: -4) }
+                                .background { PlaceProbe { r.wheelProbe = $0 } }
                                 .padding(.trailing, side)
                                 .transition(.move(edge: .trailing))
                         }
+                        // The divider, at the edge that shows between them:
+                        // the wheel's, or the terminal frame's while the
+                        // terminal lies over the wheel.
+                        let seam = r.folded ? strip : (behind ? fit + 11 : deck)
+                        RolodexEdge(room: room, from: seam, keep: keep)
+                            .padding(.trailing, side + seam - 6)
+                            .zIndex(1.5)
+                            .transition(.opacity)
                     }
-                    if let g = store.rolodex.guide {
+                    if let g = r.guide {
+                        // Over the terminal, the part of it the panes will
+                        // cover, from the guide to the terminal frame's edge
+                        // at its narrowest.
+                        if g.place == .over {
+                            let widest = RolodexModel.widest(in: room, keep: keep)
+                            OverBand(width: g.width - widest - 12)
+                                .padding(.vertical, 12)
+                                .padding(.trailing, side + widest + 12)
+                                .allowsHitTesting(false)
+                                .zIndex(2)
+                        }
                         Rectangle()
                             .fill(Theme.accent)
                             .frame(width: 2)
                             .padding(.vertical, 12)
-                            .padding(.trailing, side + CGFloat(g) - 1)
+                            .padding(.trailing, side + g.width - 1)
                             .allowsHitTesting(false)
                             .zIndex(2)
                     }

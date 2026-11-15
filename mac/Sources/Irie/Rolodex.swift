@@ -24,6 +24,13 @@ import SwiftUI
 // never resizes the agents, whose windows all take the slot's size (DESIGN
 // §2.3); opening, closing or a release of the divider resizes them once, as
 // the right sidebar does.
+//
+// Beside the terminal the wheel stops where the terminal would have less
+// than its narrowest, about 60 columns. A drag on past that point holds
+// there a moment, with a tick, then lets the wheel go over the terminal, as
+// one window goes over another: the terminal keeps its narrowest, and
+// whichever of the two has the keyboard lies on top. A click on what shows
+// of the other, or ⌥Tab, brings it up; nothing changes size as they swap.
 
 // MARK: Model
 
@@ -196,6 +203,15 @@ final class RolodexModel {
     /// How the cards behind settle after a turn.
     static let settle = Animation.spring(response: 0.34, dampingFraction: 0.7)
     static let startShare = 0.42
+    /// The narrowest and widest share of the room the wheel takes.
+    static let minShare = 0.2
+    static let maxShare = 0.95
+    /// The least of the terminal that shows beside a wheel over it, enough
+    /// to see it is there and click it back to the front.
+    static let peek: CGFloat = 120
+    /// How far past its widest beside the terminal a drag holds the wheel
+    /// there, before it goes over the terminal.
+    static let detent: CGFloat = 16
 
     /// The folded wheel's width, its margins included.
     static let stripWidth: CGFloat = 46
@@ -203,6 +219,7 @@ final class RolodexModel {
     private static let openKey = "rolodexOpen"
     private static let foldedKey = "rolodexFolded"
     private static let shareKey = "rolodexShare"
+    private static let overKey = "rolodexOver"
     private static let decksKey = "rolodexDecks"
     private static let recentKey = "rolodexRecent"
 
@@ -220,6 +237,21 @@ final class RolodexModel {
     var share = RolodexModel.savedShare() {
         didSet { if !fixture, share != oldValue { UserDefaults.standard.set(share, forKey: Self.shareKey) } }
     }
+    /// Wider than fits beside the terminal, the wheel goes over it rather
+    /// than leave it less than its narrowest: chosen by letting go of the
+    /// divider past that point, and undone by letting go of it short of it.
+    /// One choice for every session, as the width is.
+    var over = UserDefaults.standard.bool(forKey: RolodexModel.overKey) {
+        didSet { if !fixture, over != oldValue { UserDefaults.standard.set(over, forKey: Self.overKey) } }
+    }
+    /// Where the wheel and the terminal overlap, whether the wheel lies over
+    /// the terminal: the one that has the keyboard lies on top, as a window
+    /// does, and stays there while the keyboard is elsewhere, such as in the
+    /// list.
+    private(set) var raised = false
+    /// How far the wheel, unfolded, goes over the terminal, as last laid out:
+    /// 0 beside it.
+    @ObservationIgnored var overlap: CGFloat = 0
     /// Sliding in or out, over the terminal's edge: the terminal keeps no
     /// room for it meanwhile, so its width changes once.
     var sliding = false
@@ -231,8 +263,11 @@ final class RolodexModel {
     /// Each session's cards, by session.
     private(set) var decks: [String: Deck] = RolodexModel.savedDecks()
     /// Where the keyboard is: a card's id, blank, or nil for the terminal,
-    /// the conversation or anything else.
-    var keys: String?
+    /// the conversation or anything else. A card that takes it brings the
+    /// wheel over the terminal where they overlap.
+    var keys: String? {
+        didSet { if keys != nil, keys != oldValue { setRaised(true) } }
+    }
     /// The turns on show, the oldest first, and the card whose live pane
     /// shows meanwhile.
     private(set) var flips: [Flip] = []
@@ -242,8 +277,8 @@ final class RolodexModel {
     private(set) var focus: [String: Int] = [:]
     /// The core runs panes' shells (op pane).
     var canShell = false
-    /// The width a drag of the divider asks for, while it lasts.
-    var guide: Double?
+    /// Where a drag of the divider would leave the wheel, while it lasts.
+    var guide: RolodexAim?
     /// The pages typed lately, for a new browser card's start.
     private(set) var recent: [String] = UserDefaults.standard.stringArray(forKey: RolodexModel.recentKey) ?? []
     /// `--snapshot`'s: nothing saved, nothing moves, and a turn drawn still
@@ -256,18 +291,48 @@ final class RolodexModel {
     /// wheel over: the row of tabs.
     @ObservationIgnored weak var frontProbe: NSView?
     @ObservationIgnored let rowProbes = NSHashTable<NSView>.weakObjects()
+    /// Where the terminal (or the conversation), the wheel and the divider
+    /// between them are in the window, for a click to bring up the side it
+    /// lands on.
+    @ObservationIgnored weak var mainProbe: NSView?
+    @ObservationIgnored weak var wheelProbe: NSView?
+    @ObservationIgnored weak var seamProbe: NSView?
     @ObservationIgnored private var spin: Task<Void, Never>?
     @ObservationIgnored private var saving: Task<Void, Never>?
     @ObservationIgnored private var monitors: [Any] = []
     @ObservationIgnored private var scrolled: CGFloat = 0
     @ObservationIgnored private var lastNotch = Date.distantPast
 
-    /// The room the terminal leaves it, beside a wheel as wide as wheel:
-    /// none while it slides in or out, the strip's while folded or folding,
-    /// else the wheel's.
-    func kept(_ wheel: CGFloat) -> CGFloat {
-        guard open, !sliding else { return 0 }
-        return folded || folding ? Self.stripWidth : wheel
+    /// The room the terminal leaves it, beside a wheel as wide as fit (its
+    /// width beside the terminal, over it or not): none while it slides in or
+    /// out over the terminal, the strip's while folded or folding, else
+    /// fit's. A wheel that slides in or out behind the terminal, as one that
+    /// goes over it does while the terminal has the keyboard, keeps its room
+    /// all along, sliding under the terminal's edge: the terminal makes room
+    /// before it comes and takes the room back after it goes. `sliding` is
+    /// set quietly before a slide and after it, never in its animation, so
+    /// either way the terminal's width changes once, not at each step.
+    func kept(_ fit: CGFloat, behind: Bool) -> CGFloat {
+        if sliding { return behind ? fit : 0 }
+        guard open else { return 0 }
+        return folded || folding ? Self.stripWidth : fit
+    }
+
+    /// Brings the wheel over the terminal where they overlap, or the
+    /// terminal over the wheel.
+    func setRaised(_ on: Bool) {
+        if raised != on { raised = on }
+    }
+
+    /// The wheel goes over the terminal, as last laid out.
+    var overlaps: Bool { open && !folded && overlap > 0 }
+
+    /// Notes how far the wheel, unfolded, goes over the terminal as it is
+    /// laid out, for clicks to tell which side they land on: none beside it.
+    func noteOverlap(_ amount: CGFloat) -> CGFloat {
+        let o = amount > 0.5 ? amount : 0
+        if overlap != o { overlap = o }
+        return o
     }
 
     var turning: Bool { !flips.isEmpty || spin != nil }
@@ -284,9 +349,11 @@ final class RolodexModel {
     /// A card's keyboard token.
     func token(_ id: String) -> Int { focus[id] ?? 0 }
 
-    /// Gives a card the keyboard, once its live pane shows.
+    /// Gives a card the keyboard, once its live pane shows, which brings the
+    /// wheel over the terminal where they overlap.
     func bump(_ id: String) {
         focus[id, default: 0] += 1
+        setRaised(true)
         if id != Self.blank, !fixture { settle(id) }
     }
 
@@ -357,23 +424,41 @@ final class RolodexModel {
     }
 
     func setShare(_ s: Double) {
-        quietly { share = min(max(s, 0.2), 0.75) }
+        quietly { share = min(max(s, Self.minShare), Self.maxShare) }
     }
 
-    /// The wheel's width in a room as wide as room, leaving the terminal at
-    /// least keep, down to its own narrowest.
+    /// The wheel's width beside the terminal in a room as wide as room,
+    /// leaving the terminal at least keep, down to its own narrowest.
     static func width(share: Double, in room: CGFloat, keep: CGFloat) -> CGFloat {
         let want = room * CGFloat(share)
         return max(min(want, room - keep), min(260, room * 0.5)).rounded()
     }
 
-    /// The width a drag of the divider asks for, as want: the strip's once
-    /// past halfway from the wheel's narrowest to the strip, which folds the
-    /// wheel on release, else the wheel's width nearest it.
-    static func dragged(to want: CGFloat, in room: CGFloat, keep: CGFloat) -> CGFloat {
-        let narrowest = width(share: 0.2, in: room, keep: keep)
-        if want < (narrowest + stripWidth) / 2 { return stripWidth }
-        return width(share: min(max(Double(want / max(room, 1)), 0.2), 0.75), in: room, keep: keep)
+    /// The widest the wheel stands beside the terminal.
+    static func widest(in room: CGFloat, keep: CGFloat) -> CGFloat {
+        width(share: 1, in: room, keep: keep)
+    }
+
+    /// The wheel's width over the terminal: its share of the room, but never
+    /// narrower than fit, its width beside the terminal, nor so wide that
+    /// less than a peek of the terminal shows.
+    static func overWidth(share: Double, in room: CGFloat, fit: CGFloat) -> CGFloat {
+        max(fit, min(room * CGFloat(share), room - peek)).rounded()
+    }
+
+    /// Where a drag of the divider that asks for want would leave the wheel:
+    /// folded to its strip once past halfway from its narrowest to the
+    /// strip; beside the terminal up to its widest there, and held there
+    /// for the detent past it; then over the terminal, up to a peek of it.
+    static func aim(_ want: CGFloat, in room: CGFloat, keep: CGFloat) -> RolodexAim {
+        let narrowest = width(share: minShare, in: room, keep: keep)
+        if want < (narrowest + stripWidth) / 2 { return RolodexAim(width: stripWidth, place: .folded) }
+        let widest = widest(in: room, keep: keep)
+        let most = (room - peek).rounded()
+        if want <= widest + detent || most <= widest + detent {
+            return RolodexAim(width: min(max(want, narrowest), widest).rounded(), place: .beside)
+        }
+        return RolodexAim(width: min(want, most).rounded(), place: .over)
     }
 
     private func quietly(_ work: () -> Void) {
@@ -609,12 +694,30 @@ final class RolodexModel {
         if blankHasKeys { return Self.blank }
         guard let window, let r = window.firstResponder as? NSView else { return keys }
         guard open, !folded, let probe = frontProbe, probe.window === window else { return nil }
-        // What shows of it: a text view's bounds are its whole text.
+        // What shows of it: a text view's bounds are its whole text. Where
+        // the wheel goes over the terminal, the terminal's middle can lie
+        // inside the card too, but it starts further left.
         let a = r.convert(r.visibleRect, to: nil), b = probe.convert(probe.bounds, to: nil)
-        if b.insetBy(dx: -4, dy: -40).contains(CGPoint(x: a.midX, y: a.midY)), a.width <= b.width + 8, a.height <= b.height + 60 {
+        if b.insetBy(dx: -4, dy: -40).contains(CGPoint(x: a.midX, y: a.midY)), a.minX >= b.minX - 4,
+           a.width <= b.width + 8, a.height <= b.height + 60 {
             return deck.frontPane?.id ?? Self.blank
         }
         return nil
+    }
+
+    /// The side of the window's working area a point lands on where the
+    /// wheel and the terminal overlap: what shows of the terminal (or the
+    /// conversation) left of the divider, what shows of the wheel right of
+    /// it, or neither, as on the divider itself or the list.
+    enum Side { case main, wheel }
+
+    private func side(of p: CGPoint, in window: NSWindow?) -> Side? {
+        guard let window, let m = mainProbe, let w = wheelProbe, let s = seamProbe,
+              m.window === window, w.window === window, s.window === window else { return nil }
+        let seam = s.convert(s.bounds, to: nil)
+        guard !seam.contains(p) else { return nil }
+        if p.x < seam.minX { return m.convert(m.bounds, to: nil).contains(p) ? .main : nil }
+        return w.convert(w.bounds, to: nil).contains(p) ? .wheel : nil
     }
 
     /// Watches clicks, which move the keyboard, and scrolls over the tabs,
@@ -628,6 +731,7 @@ final class RolodexModel {
         if let m = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self, weak store] event in
             guard let self, let store else { return event }
             let window = event.window
+            let at = event.locationInWindow
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     // A click counts even mid-turn: it sends the keyboard
@@ -635,6 +739,17 @@ final class RolodexModel {
                     guard let s = store.paneSession, window != nil, window === WindowPanes.window else { return }
                     let k = self.place(in: window, deck: self.deck(s.id))
                     if k != self.keys { self.keys = k }
+                    // Where they overlap, a click on what shows of the
+                    // terminal or of the wheel brings it to the front, as a
+                    // click on a window does: on the wheel's own parts, such
+                    // as its tab row, with the keyboard on its front card.
+                    // The terminal comes up even while the window itself
+                    // holds the keyboard, after a card that took none.
+                    guard self.overlaps, let side = self.side(of: at, in: window) else { return }
+                    switch side {
+                    case .main: self.setRaised(false)
+                    case .wheel: if k == nil { store.raisePanes() } else { self.setRaised(true) }
+                    }
                 }
             }
             return event
@@ -692,13 +807,15 @@ final class RolodexModel {
 
     private static func savedShare() -> Double {
         let v = UserDefaults.standard.double(forKey: shareKey)
-        return v >= 0.2 && v <= 0.75 ? v : startShare
+        return v >= minShare && v <= maxShare ? v : startShare
     }
 
     /// `--snapshot`'s wheel: the fixture's session with a card of each kind,
     /// that kind in front, or a blank card for none; or, closed, none.
-    /// Folded, its strip.
-    func loadFixture(session: String, front: PaneKind?, open on: Bool = true, folded fold: Bool = false) {
+    /// Folded, its strip. With over, as wide as share of the room, over the
+    /// terminal, raised or under it.
+    func loadFixture(session: String, front: PaneKind?, open on: Bool = true, folded fold: Bool = false,
+                     over goesOver: Bool = false, share wide: Double = RolodexModel.startShare, raised up: Bool = true, guide aim: RolodexAim? = nil) {
         fixture = true
         open = on
         folded = fold
@@ -708,6 +825,14 @@ final class RolodexModel {
         swapped = nil
         still = nil
         keys = nil
+        over = goesOver
+        share = wide
+        guide = aim
+        defer {
+            // Under the terminal, the terminal has the keyboard.
+            if !up { keys = nil }
+            raised = up
+        }
         guard on, let front else {
             decks = [:]
             return
@@ -739,6 +864,15 @@ final class RolodexModel {
         swapped = progress < flip.swap ? d.panes[f].id : d.panes[t].id
         still = progress
     }
+}
+
+/// Where a drag of the divider would leave the wheel: its width, and
+/// whether that folds it, stands it beside the terminal or puts it over the
+/// terminal.
+struct RolodexAim: Equatable {
+    enum Place { case folded, beside, over }
+    var width: CGFloat
+    var place: Place
 }
 
 // MARK: Store
@@ -779,8 +913,8 @@ extension Store {
     /// width as last drawn.
     func tabPlace(for session: String) -> (Int) -> CGFloat {
         let n = rolodex.deck(session).panes.count
-        let w = RolodexLayout.lastSize
-        return { i in RolodexLayout(size: w, count: n).frontTabX(i) }
+        let w = RolodexLayout.lastSize, lead = RolodexLayout.lastLead
+        return { i in RolodexLayout(size: w, count: n, lead: lead).frontTabX(i) }
     }
 
     /// View › Show Panes (⌥⌘P), and the toolbar's button. Closing hands the
@@ -819,10 +953,46 @@ extension Store {
     }
 
     /// Gives the keyboard back to the terminal, or to the message box while
-    /// the conversation shows.
+    /// the conversation shows, which brings it over the wheel where they
+    /// overlap (Store's focusTerminal and focusMessage).
     func giveMainKeys() {
         rolodex.keys = nil
         if showTerminal { focusTerminal += 1 } else { focusMessage += 1 }
+    }
+
+    /// Brings the panes over the terminal where they overlap, with the
+    /// keyboard on the front card, or the blank card, unless a card has it
+    /// already: as a click on a window brings it up and gives it the keys.
+    func raisePanes() {
+        let r = rolodex
+        r.setRaised(true)
+        guard r.keys == nil, let s = paneSession else { return }
+        let id = r.deck(s.id).frontPane?.id ?? RolodexModel.blank
+        r.keys = id
+        r.bump(id)
+    }
+
+    /// Lets go of the divider where a drag aimed: the panes fold, stand
+    /// beside the terminal, or go over it, on top and with the keyboard.
+    /// Each changes the terminal's width once at the most; over it, the
+    /// terminal keeps its narrowest, so a drag from one width over it to
+    /// another changes nothing of the terminal.
+    func letGo(_ aim: RolodexAim, in room: CGFloat) {
+        let r = rolodex
+        switch aim.place {
+        case .folded:
+            if !r.folded { toggleFold() }
+        case .beside:
+            r.setShare(Double(aim.width / max(room, 1)))
+            r.over = false
+            r.setFolded(false)
+        case .over:
+            r.setShare(Double(aim.width / max(room, 1)))
+            r.over = true
+            // Up first, so a folded wheel unfolds over the terminal.
+            raisePanes()
+            r.setFolded(false)
+        }
     }
 
     /// ⌥Tab (+1) and ⌥⇧Tab (-1): the keyboard goes from the terminal to the
@@ -945,7 +1115,7 @@ extension Store {
         let calm = r.fixture || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         // The closed card falls from where it stood, already over the live pane.
         let nextTab = next.flatMap { n in after.panes.firstIndex { $0.id == n.id } }
-            .map { RolodexLayout(size: RolodexLayout.lastSize, count: after.panes.count).frontTabX($0) } ?? place(0)
+            .map { RolodexLayout(size: RolodexLayout.lastSize, count: after.panes.count, lead: RolodexLayout.lastLead).frontTabX($0) } ?? place(0)
         let flip = Flip(id: 0, session: s.id, from: p, to: next, forward: true, start: Date().addingTimeInterval(-0.06),
                         duration: RolodexModel.flipTime, fromTab: place(i), toTab: nextTab)
         r.play(flip, calm: calm, keys: hadKeys ? next?.id : nil)
@@ -970,6 +1140,10 @@ struct RolodexLayout {
     let size: CGSize
     /// How many cards; 0 draws a blank one.
     let count: Int
+    /// How far in from the wheel's left its tabs start: the part of it the
+    /// terminal covers while it lies over a wheel that goes over it, so
+    /// every tab shows whichever is on top.
+    var lead: CGFloat = 0
 
     /// The row of tabs.
     static let tabHeight: CGFloat = 28
@@ -987,9 +1161,10 @@ struct RolodexLayout {
     static let radius: CGFloat = Theme.frameRadius
     static let slope: CGFloat = 8
 
-    /// The size the wheel was last drawn at, for the tabs' places as a key
-    /// turns it.
+    /// The size the wheel was last drawn at, and its tabs' lead, for the
+    /// tabs' places as a key turns it.
     @MainActor static var lastSize = CGSize(width: 480, height: 600)
+    @MainActor static var lastLead: CGFloat = 0
 
     /// The front card, its tab included: the whole frame.
     var front: CGRect { CGRect(x: 0, y: 0, width: max(120, size.width), height: max(120, size.height)) }
@@ -1010,9 +1185,9 @@ struct RolodexLayout {
                       height: body.height + k * Self.step)
     }
 
-    /// The room the tabs stand in: from the body's rounded corner to the
-    /// buttons.
-    private var room: CGFloat { max(80, front.width - (Self.radius + 2) - Self.buttons) }
+    /// The room the tabs stand in: from the body's rounded corner, or the
+    /// lead, to the buttons.
+    private var room: CGFloat { max(80, front.width - lead - (Self.radius + 2) - Self.buttons) }
 
     /// The tabs' widths, the front one's and each of the others': all alike
     /// while there is room, at most 168 points; when the cards are many, the
@@ -1030,7 +1205,7 @@ struct RolodexLayout {
     /// at front is in front: left to right by place, their slopes
     /// overlapping, and all squeezed alike when they don't fit.
     func tabX(_ i: Int, front f: Int) -> CGFloat {
-        let start = Self.radius + 2
+        let start = lead + Self.radius + 2
         guard count > 1, i > 0 else { return start }
         let w = widths
         let steps = (0..<(count - 1)).map { j in (j == f ? w.front : w.back) - 6 }
@@ -1141,15 +1316,17 @@ struct PaneOwner: Equatable {
     }
 }
 
-/// The rolodex beside the terminal, for the session on show.
+/// The rolodex beside the terminal, for the session on show. Where it goes
+/// over the terminal, its tabs start lead in from its left.
 @MainActor
 struct RolodexView: View {
     @Environment(Store.self) private var store
+    var lead: CGFloat = 0
 
     var body: some View {
         let r = store.rolodex
         let owner = store.paneSession.map(PaneOwner.init)
-        RolodexWheel(owner: owner)
+        RolodexWheel(owner: owner, lead: lead)
             .onAppear { r.install(store) }
             // A key that sends the keyboard to the terminal takes it off the cards.
             .onChange(of: store.focusTerminal) { if r.keys != nil, !r.turning { r.keys = nil } }
@@ -1165,6 +1342,7 @@ struct RolodexView: View {
 @MainActor
 private struct RolodexWheel: View {
     let owner: PaneOwner?
+    let lead: CGFloat
     @Environment(Store.self) private var store
     @Environment(\.colorScheme) private var scheme
     @AppStorage(CodeThemes.defaultsKey) private var codeTheme = CodeThemes.standard
@@ -1174,7 +1352,7 @@ private struct RolodexWheel: View {
         let r = store.rolodex
         let deck = owner.map { r.deck($0.id) } ?? Deck()
         GeometryReader { geo in
-            let lay = RolodexLayout(size: geo.size, count: deck.panes.count)
+            let lay = RolodexLayout(size: geo.size, count: deck.panes.count, lead: lead)
             ZStack(alignment: .topLeading) {
                 edges(deck, lay: lay)
                 // The tabs of the cards behind, the furthest lowest.
@@ -1185,16 +1363,22 @@ private struct RolodexWheel: View {
                 live(deck, lay: lay)
                 flaps(lay)
                 buttons(lay)
-                // The band a scroll turns the wheel over; a turn drawn still
-                // has no window to scroll in.
+                // The band a scroll turns the wheel over, from the lead, so a
+                // scroll over the terminal lying on it scrolls the terminal;
+                // a turn drawn still has no window to scroll in.
                 if r.still == nil {
-                    Probe { r.rowProbes.add($0) }
-                        .frame(width: lay.size.width, height: RolodexLayout.tabHeight + 2)
+                    PlaceProbe { r.rowProbes.add($0) }
+                        .frame(width: max(0, lay.size.width - lead), height: RolodexLayout.tabHeight + 2)
+                        .offset(x: lead)
                         .allowsHitTesting(false)
                 }
             }
-            .onAppear { RolodexLayout.lastSize = geo.size }
+            .onAppear {
+                RolodexLayout.lastSize = geo.size
+                RolodexLayout.lastLead = lead
+            }
             .onChange(of: geo.size) { _, s in RolodexLayout.lastSize = s }
+            .onChange(of: lead) { _, l in RolodexLayout.lastLead = l }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Panes, \(deck.panes.count) " + (deck.panes.count == 1 ? "card" : "cards"))
@@ -1303,7 +1487,7 @@ private struct RolodexWheel: View {
             // Where the live pane is in the window; a turn drawn still has
             // no window, and its renderer would paint the probe in.
             .background {
-                if r.still == nil { Probe { r.frontProbe = $0 }.allowsHitTesting(false) }
+                if r.still == nil { PlaceProbe { r.frontProbe = $0 }.allowsHitTesting(false) }
             }
             .offset(x: c.minX, y: c.minY)
             .transaction { $0.animation = nil }
@@ -1532,7 +1716,12 @@ private struct FoldedTabs: View {
                     .padding(.top, StripLayout.top + StripLayout.button + StripLayout.gap)
                     .allowsHitTesting(false)
                 VStack(alignment: .trailing, spacing: StripLayout.gap) {
-                    Button { store.toggleFold() } label: {
+                    Button {
+                        // A wheel that goes over the terminal unfolds on
+                        // top, with the keyboard, as a click on it does.
+                        if store.rolodex.overlap > 0 { store.raisePanes() }
+                        store.toggleFold()
+                    } label: {
                         RoundButton(symbol: "chevron.left")
                     }
                     .buttonStyle(.plain)
@@ -1749,18 +1938,24 @@ private struct BlankCard: View {
     }
 }
 
-/// The wheel's leading edge, the divider from the terminal, which a drag
-/// moves. A guide shows where it would go, and the width applies on release:
-/// one resize of the terminal, and of every agent, not one per frame. A drag
-/// well past the wheel's narrowest folds it down to its strip, and a drag
-/// out from the strip unfolds it to the width let go at.
+/// The divider between the terminal and the wheel, at the edge that shows
+/// between them, which a drag moves: the wheel's leading edge, or the
+/// terminal frame's while it lies over a wheel that goes over it. A guide
+/// shows where the edge would go, and the width applies on release: one
+/// resize of the terminal, and of every agent, not one per frame. Past the
+/// terminal's narrowest the guide holds a moment, then goes on over the
+/// terminal, where a band shows what the panes will cover; a tick on the
+/// trackpad marks each change of where it would leave the wheel. A drag well
+/// past the wheel's narrowest folds it down to its strip, and a drag out from
+/// the strip unfolds it to the width let go at.
 @MainActor
 struct RolodexEdge: View {
     @Environment(Store.self) private var store
-    /// The room beside the right sidebar, the wheel's width in it (the
-    /// strip's while folded), and what the terminal keeps of it.
+    /// The room beside the right sidebar; the wheel's width at the edge
+    /// that shows, the strip's while folded, where a drag starts; and what
+    /// the terminal keeps beside the wheel.
     let room: CGFloat
-    let drawn: CGFloat
+    let from: CGFloat
     let keep: CGFloat
     @State private var hovering = false
 
@@ -1770,37 +1965,86 @@ struct RolodexEdge: View {
             .frame(width: 10)
             .overlay(Capsule().fill(Theme.edge).frame(width: 3, height: 34).opacity(hovering || r.guide != nil ? 1 : 0))
             .contentShape(Rectangle())
+            .background { PlaceProbe { r.seamProbe = $0 } }
             .onHover { inside in
                 hovering = inside
                 if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
             }
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { g in
-                    r.guide = Double(RolodexModel.dragged(to: drawn - g.translation.width, in: room, keep: keep))
+                    let aim = RolodexModel.aim(from - g.translation.width, in: room, keep: keep)
+                    if let was = r.guide, was.place != aim.place {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    }
+                    if r.guide != aim { r.guide = aim }
                 }
                 .onEnded { _ in
-                    if let g = r.guide {
-                        if g <= Double(RolodexModel.stripWidth) {
-                            if !r.folded { store.toggleFold() }
-                        } else {
-                            r.setShare(g / Double(max(room, 1)))
-                            r.setFolded(false)
-                        }
-                    }
+                    if let g = r.guide { store.letGo(g, in: room) }
                     r.guide = nil
                 })
             .onTapGesture(count: 2) {
                 r.setShare(RolodexModel.startShare)
+                r.over = false
                 r.setFolded(false)
             }
-            .help("Drag to make the panes wider or narrower, or on past their narrowest to fold them; double-click for their first width")
+            .help("Drag to make the panes wider or narrower. Past the terminal’s narrowest they go over it, and whichever you type in comes to the front; on past their own narrowest they fold. Double-click for their first width")
+            .accessibilityHidden(true)
+    }
+}
+
+/// The wheel's ground while it lies over the terminal, so it reads as a
+/// window over it: opaque under its tabs, edged and shadowed where it meets
+/// the terminal, and taking the clicks there, so none reaches the terminal.
+struct PanesGround: View {
+    var body: some View {
+        let radius = Theme.frameRadius + 2
+        let shape = UnevenRoundedRectangle(topLeadingRadius: radius, bottomLeadingRadius: radius, bottomTrailingRadius: 0,
+                                           topTrailingRadius: 0, style: .continuous)
+        shape.fill(Theme.ground)
+            .shadow(color: .black.opacity(0.28), radius: 14, x: -2, y: 3)
+            // Its edge on the terminal's side only: the rest meets the
+            // window's own ground.
+            .overlay {
+                shape.strokeBorder(Theme.edge, lineWidth: 1)
+                    .mask(alignment: .leading) { Rectangle().frame(width: radius + 2) }
+            }
+            .padding(.vertical, -2)
+            .accessibilityHidden(true)
+    }
+}
+
+/// What a drag of the divider over the terminal shows: the part of the
+/// terminal the panes will cover, tinted, and a label saying where they
+/// go, inside the band while it is wide enough, else beside it.
+struct OverBand: View {
+    let width: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
+        let inside = width >= 170
+        shape.fill(Theme.accent.opacity(0.1))
+            .overlay(shape.strokeBorder(Theme.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            .frame(width: max(width, 1))
+            .overlay(alignment: .topLeading) {
+                Label("Over the terminal", systemImage: "square.on.square")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Theme.accentInk)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Theme.field).shadow(color: Theme.shadow, radius: 3, y: 1))
+                    .overlay(Capsule().strokeBorder(Theme.edge, lineWidth: 1))
+                    .fixedSize()
+                    .alignmentGuide(.leading) { d in inside ? -12 : d.width + 12 }
+                    .padding(.top, 12)
+            }
             .accessibilityHidden(true)
     }
 }
 
 /// A view that hands over its NSView, for the wheel to find where the live
-/// pane and its scroll bands are in the window. It takes no clicks.
-private struct Probe: NSViewRepresentable {
+/// pane and its scroll bands are in the window, and where the terminal, the
+/// wheel and the divider between them are. It takes no clicks.
+struct PlaceProbe: NSViewRepresentable {
     let found: (NSView) -> Void
 
     func makeNSView(context _: Context) -> NSView {
