@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0](https://github.com/irie-people/irie/compare/v1.4.0...v1.5.0) (2026-11-15)
+
+
+### Features
+
+* **mac:** fold the panes down to a strip of their tabs ([5d09cfa](https://github.com/irie-people/irie/commit/5d09cfa934705fd5f566f5335ddecb7c3b0eeac0))
+* **windows:** carry the core and the slot's terminal over one wsl.exe ([c9ff76b](https://github.com/irie-people/irie/commit/c9ff76b7641664b8eb98f79177cdc547e937f06f))
+* **windows:** draw Irie in a window of its own on Windows ([34b05b2](https://github.com/irie-people/irie/commit/34b05b26e78722850ddeb56c55cb12e2a2de1aca))
+* **windows:** install Irie for Windows and ship it in every release ([71959e7](https://github.com/irie-people/irie/commit/71959e7d577dff01bfc7204a221de2e8f3762b52))
+
+
+### Bug Fixes
+
+* **windows:** call WebView2 without go-webview2's generated binding ([5dfe0d0](https://github.com/irie-people/irie/commit/5dfe0d0b80d1cf2d1010dbc0443d7d2e67032a2e))
+* **windows:** keep the page's first messages and COM's pointers safe ([aaf784e](https://github.com/irie-people/irie/commit/aaf784e99328b04cce3ca9244990b6db79c07edd))
+* **windows:** name the product through internal/brand ([63361fc](https://github.com/irie-people/irie/commit/63361fcf4a14331ae1a41f58ea13426c55bc1ed2))
+
 ## [1.4.0](https://github.com/irie-people/irie/compare/v1.3.0...v1.4.0) (2026-11-15)
 
 
