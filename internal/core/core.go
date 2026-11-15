@@ -65,6 +65,7 @@ type Core struct {
 
 	spawnMu     turns        // one spawn at a time, a promoted session's first; taken before mu
 	sendMu      turns        // one message typed to an agent at a time, likewise
+	switchMu    sync.Mutex   // one model switch at a usage limit at a time, taken before sendMu and mu (fallback.go)
 	localMu     sync.Mutex   // one start of the local server at a time, taken before mu
 	undoMu      sync.Mutex   // one undo or redo at a time, taken before spawnMu and mu
 	http        *http.Client // for local servers
@@ -128,6 +129,7 @@ type Core struct {
 	plan       ipc.Plan                 // the plan's use: each window's newest figure (status.go)
 
 	outcomes   map[string]*outcome   // every session's route and outcome, those gone included
+	limits     map[string]time.Time  // when each model family's own usage limit last stopped a turn, such as fable's (fallback.go)
 	order      []string              // the list's order from the top, which the user sets (order.go)
 	spaces     []ipc.Space           // the spaces, the first first (spaces.go)
 	groups     []ipc.Group           // your groups, in the order they were made (groups.go)
@@ -186,7 +188,8 @@ type session struct {
 	tally     tokenTally // read from the transcripts track names
 	statusN   uint64     // its status line updates, counted for perf
 	tokens    *ipc.Tokens
-	model     string                 // the model the agent runs, as its profile said
+	model     string                 // the model the agent runs, as its profile said; track.model once it switched
+	switching *modelSwitch           // Irie's switch of its model at a usage limit, under way (fallback.go)
 	local     bool                   // a model of a local runtime
 	tutor     string                 // its tutor mode, explain or teach; "" when off (learn.tutor)
 	anon      string                 // the compartment it researches in, anonymously; "" when it doesn't (anon.go)
@@ -224,6 +227,9 @@ func (x *session) wire() ipc.Session {
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
 		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: shownMemory(x.memory), Team: wireTeam(x.team), Hue: x.hue,
 		Tutor: x.tutor, Anon: x.anon,
+	}
+	if m := x.track.model; m != "" {
+		s.Model = m
 	}
 	if s.Model == "" {
 		s.Model = x.usage.Model
@@ -305,7 +311,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		dock:     &tmux.Runner{Bin: r.Bin, Socket: tmux.DockSocket(r.Socket)},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
-		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, hues: map[string]int{},
+		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, limits: map[string]time.Time{}, hues: map[string]int{},
 		fdog: newFreezeDog(), started: time.Now(),
 	}
 	c.useConfig(o.Config)

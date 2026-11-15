@@ -148,7 +148,7 @@ func settleFile(path string, quiet, most time.Duration) {
 func (c *Core) ctxSnapOf(x *session) ctxSnap {
 	return ctxSnap{
 		s: ctxgit.Session{
-			ID: x.id, Name: x.name, Conversation: x.vendorID, Model: x.model, Profile: x.profile,
+			ID: x.id, Name: x.name, Conversation: x.vendorID, Model: x.runs(), Profile: x.profile,
 			Working: x.track.live() == ipc.StateWorking, Transcripts: c.transcriptsOf(x),
 		},
 		code:  codeDir(x),
@@ -521,13 +521,17 @@ func (c *Core) fork(a ipc.ForkArgs) (ipc.ForkResult, error) {
 	if err != nil {
 		return ipc.ForkResult{}, err
 	}
+	asked := false
 	switch {
 	case a.Model != "" && profile.Local != nil:
 		return ipc.ForkResult{}, ipc.Errorf(ipc.CodeBadArgs, "+%s takes no model for one fork", profileName)
 	case a.Model != "":
 		profile.Model = a.Model
-	case a.Profile == "" && src.model != "" && profile.Local == nil:
-		profile.Model = src.model
+		asked = true
+	case a.Profile == "" && src.runs() != "" && profile.Local == nil:
+		// The model it runs now, which a switch at a usage limit may
+		// have changed (fallback.go).
+		profile.Model = src.runs()
 	}
 	h, err := harnessFor(profile.Harness)
 	if err != nil {
@@ -586,7 +590,7 @@ func (c *Core) fork(a ipc.ForkArgs) (ipc.ForkResult, error) {
 	c.mu.Lock()
 	pl.name, pl.named = unique(name, c.names(nil)), true
 	nx, err := c.launch(job{
-		place: pl, profile: profileName, run: profile, h: h, probe: probe, next: task, resume: vendor, anon: comp,
+		place: pl, profile: profileName, run: profile, h: h, probe: probe, next: task, resume: vendor, anon: comp, asked: asked,
 		data: map[string]any{"resume": vendor, "kind": "fork", "fork_of": src.id, "fork_at": commit, "fork_turn": at.Turn},
 	})
 	if err == nil {

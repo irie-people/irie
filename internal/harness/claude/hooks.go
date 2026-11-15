@@ -182,9 +182,14 @@ func (h Harness) Normalize(raw []byte) ([]event.Event, error) {
 	case "StopFailure":
 		// The error's type, what the API said of it, and the error as the
 		// conversation shows it, such as "API Error: The response stopped
-		// arriving", for whoever reads the journal later.
+		// arriving", for whoever reads the journal later. The message also
+		// says whose usage limit stopped a turn: the plan's, or its model's
+		// own, such as "You've reached your Fable limit" (DESIGN §6.4).
 		return []event.Event{ev(event.TurnFailed, with(map[string]any{}, "error", p.str("error"),
 			"details", p.str("error_details"), "message", p.str("last_assistant_message")))}, nil
+	case "PostModelSwitch":
+		return []event.Event{ev(event.ModelSwitched, with(map[string]any{}, "model", p.str("to_model"), "from", p.str("from_model"),
+			"requested", p.str("requested_model"), "source", p.str("source")))}, nil
 	case "SubagentStart":
 		return []event.Event{ev(event.SubagentStarted, with(map[string]any{}, "agent_type", p.str("agent_type")))}, nil
 	case "SubagentStop":
@@ -286,9 +291,10 @@ type hookSpecific struct {
 }
 
 // Respond renders a reply as Claude Code's hook output (DESIGN §3.3): context
-// on the events that take it, a deny on PreToolUse, and on Stop what is left
-// to finish (DESIGN §4.8). It never allows a call, which would bypass the
-// user's permission rules, and it says nothing on other events.
+// on the events that take it, a deny on PreToolUse, on Stop what is left to
+// finish (DESIGN §4.8), and an allow on PreModelSwitch for Irie's own switch
+// (DESIGN §6.4). It never allows a tool call, which would bypass the user's
+// permission rules, and it says nothing on other events.
 func (Harness) Respond(e event.Event, r harness.HookReply) []byte {
 	name := ""
 	if e.Vendor != nil {
@@ -307,6 +313,13 @@ func (Harness) Respond(e event.Event, r harness.HookReply) []byte {
 		// Feedback, not an error: the turn goes on so the agent can finish
 		// what is left, within Claude Code's own loop guards.
 		out.AdditionalContext = r.Unfinished
+	case "PreModelSwitch":
+		// Irie's own switch at a usage limit goes ahead without the
+		// confirmation Claude Code asks while the prompt cache is warm
+		// (DESIGN §6.4); any other switch is the user's to confirm.
+		if r.Allow {
+			out.PermissionDecision = "allow"
+		}
 	default:
 		return nil
 	}

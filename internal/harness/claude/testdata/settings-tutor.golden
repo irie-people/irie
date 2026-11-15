@@ -34,6 +34,17 @@
         ]
       }
     ],
+    "PostModelSwitch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/home/alice/.local/bin/irie' hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "*",
@@ -54,6 +65,17 @@
             "type": "command",
             "command": "'/home/alice/.local/bin/irie' hook",
             "timeout": 86520
+          }
+        ]
+      }
+    ],
+    "PreModelSwitch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/home/alice/.local/bin/irie' hook",
+            "timeout": 10
           }
         ]
       }

@@ -26,6 +26,9 @@
 //	write:<file>      write a file in the agent's folder, as an edit does
 //	commit            git add -A and git commit in the agent's folder
 //	stopfail:<error>  StopFailure
+//	limit:<family>    StopFailure at a model family's own usage limit, as
+//	                  Claude Code reports Fable's: rate_limit, with its
+//	                  message "You've reached your Fable limit. …"
 //	sub:<id>:<steps>  SubagentStart, the steps (joined by +) inside the
 //	                  subagent, then SubagentStop
 //	sleep:<duration>  a pause
@@ -49,7 +52,9 @@
 //
 // Any other task runs the script "prompt". After the script the agent idles:
 // each line typed is a prompt and a turn, and EOF, Ctrl-D at the start of a
-// line or a hangup ends the session with SessionEnd. As Claude Code runs
+// line or a hangup ends the session with SessionEnd. A line that starts with
+// / is a command, run as Claude Code runs its own, with no turn: /model NAME
+// switches the model (command), any other is unknown. As Claude Code runs
 // its terminal raw, the agent turns the terminal's line editing off, so a
 // line of any length reaches it whole: a terminal that edits lines cuts one
 // longer than MAX_CANON, 1024 bytes on macOS. With --resume and no task it starts from a
@@ -468,7 +473,7 @@ func atLeast(v, min string) bool {
 var matcherSupport = map[string]bool{
 	"PreToolUse": true, "PostToolUse": true, "PostToolUseFailure": true, "PermissionRequest": true,
 	"Notification": true, "SessionStart": true, "SessionEnd": true, "StopFailure": true,
-	"SubagentStart": true, "SubagentStop": true,
+	"SubagentStart": true, "SubagentStop": true, "PreModelSwitch": true, "PostModelSwitch": true,
 }
 
 var exact = regexp.MustCompile(`^[A-Za-z0-9_\- ,|]+$`)
@@ -507,6 +512,7 @@ type agent struct {
 	turns      int // the turns of typed lines that IRIE_FAKE_TURNS scripted so far
 
 	mu     sync.Mutex // one hook at a time
+	warm   bool       // a prompt went to the model, so its prompt cache is warm
 	tools  int
 	writes int
 	box    string // the box step: idle, it draws Claude Code's prompt; "in" or "away", where the cursor waits
@@ -641,6 +647,10 @@ func (a *agent) run() int {
 			continue
 		}
 		fmt.Println("› " + line)
+		if strings.HasPrefix(line, "/") {
+			a.command(line)
+			continue
+		}
 		a.fire("UserPromptSubmit", "", map[string]any{"prompt": line})
 		steps := a.nextTurn()
 		if steps == nil {
@@ -671,6 +681,89 @@ func (a *agent) nextTurn() []step {
 	}
 	a.record(map[string]any{"t": "turn", "n": a.turns, "script": script})
 	return steps
+}
+
+// command runs a command typed at the prompt as Claude Code runs its own,
+// with no turn and no UserPromptSubmit. /model NAME runs the PreModelSwitch
+// hooks; when none allows the switch and the prompt cache is warm, it asks
+// first, and a line of 1 confirms. It then switches, saves NAME as the
+// default for new sessions in CLAUDE_CONFIG_DIR's settings.json, when that
+// is set, so a test never writes the user's own, and runs the
+// PostModelSwitch hooks. The log records each.
+func (a *agent) command(line string) {
+	name, to, _ := strings.Cut(strings.TrimPrefix(line, "/"), " ")
+	to = strings.TrimSpace(to)
+	if name != "model" || to == "" {
+		fmt.Println("⏺ Unknown command: /" + name)
+		a.record(map[string]any{"t": "command", "line": line})
+		return
+	}
+	fields := func() map[string]any {
+		return map[string]any{"from_model": a.model, "to_model": to, "requested_model": to, "source": "command",
+			"context_tokens": 1000, "prompt_cache_warm": a.warm, "cache_ttl": "1h"}
+	}
+	decision := ""
+	rank := map[string]int{"": 0, "allow": 1, "ask": 2, "deny": 3}
+	for _, out := range a.fire("PreModelSwitch", to, fields()) {
+		var r struct {
+			Decision string `json:"decision"`
+			Specific struct {
+				PermissionDecision string `json:"permissionDecision"`
+			} `json:"hookSpecificOutput"`
+		}
+		if json.Unmarshal([]byte(out), &r) != nil {
+			continue
+		}
+		d := r.Specific.PermissionDecision
+		if r.Decision == "block" {
+			d = "deny"
+		}
+		if rank[d] > rank[decision] {
+			decision = d
+		}
+	}
+	asked := decision == "ask" || decision == "" && a.warm
+	rec := map[string]any{"t": "model", "from": a.model, "to": to, "decision": decision, "asked": asked}
+	if decision == "deny" {
+		fmt.Println("⏺ A PreModelSwitch hook blocked the switch")
+		rec["switched"] = false
+		a.record(rec)
+		return
+	}
+	if asked {
+		fmt.Println("Switch to " + to + "? The prompt cache is warm, so the next request reads it all again. 1. Yes  2. No")
+		if l, ok := a.line(); !ok || strings.TrimSpace(l) != "1" {
+			rec["switched"] = false
+			a.record(rec)
+			return
+		}
+	}
+	a.model = to
+	a.saveModel(to)
+	a.fire("PostModelSwitch", to, fields())
+	fmt.Println("  ⎿  Set model to " + to + " and saved as your default for new sessions")
+	rec["switched"] = true
+	a.record(rec)
+}
+
+// saveModel saves model as the default for new sessions, as /model does:
+// in CLAUDE_CONFIG_DIR's settings.json, keeping its other keys; with none
+// set it saves nothing.
+func (a *agent) saveModel(model string) {
+	dir := os.Getenv("CLAUDE_CONFIG_DIR")
+	if dir == "" {
+		return
+	}
+	path := filepath.Join(dir, "settings.json")
+	m := map[string]any{}
+	if b, err := os.ReadFile(path); err == nil {
+		json.Unmarshal(b, &m)
+	}
+	m["model"] = model
+	b, _ := json.MarshalIndent(m, "", "  ")
+	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
+		a.record(map[string]any{"t": "save_model", "err": err.Error()})
+	}
 }
 
 func (a *agent) end(reason string) {
@@ -710,6 +803,10 @@ func (a *agent) do(s step, sub *subagent) (int, bool) {
 	case "commit":
 		out, err := exec.Command("/bin/sh", "-c", `git add -A && git commit -q -m "Fake work"`).CombinedOutput()
 		a.record(map[string]any{"t": "commit", "out": string(out), "err": errText(err)})
+	case "limit":
+		msg := "You've reached your " + strings.ToUpper(s.arg[:1]) + s.arg[1:] + " limit. Run /usage-credits to continue or switch models with /model."
+		fmt.Println("  ⎿  " + msg)
+		a.fire("StopFailure", "rate_limit", map[string]any{"error": "rate_limit", "error_details": "429 Too Many Requests", "last_assistant_message": msg})
 	case "stopfail":
 		fmt.Println("✕ API Error: " + s.arg)
 		a.fire("StopFailure", s.arg, map[string]any{"error": s.arg, "error_details": "fake " + s.arg, "last_assistant_message": "API Error: " + s.arg})
@@ -1073,6 +1170,9 @@ func (a *agent) fire(event, value string, fields map[string]any) []string {
 	}
 	for k, v := range fields {
 		payload[k] = v
+	}
+	if event == "UserPromptSubmit" {
+		a.warm = true
 	}
 	body, _ := json.Marshal(payload)
 	var outputs []string
