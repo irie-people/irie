@@ -181,7 +181,12 @@ private struct PluginWebPane: View {
                 if PluginPaneFixture.down.contains(pane.id) {
                     PluginPaneDown(pane: pane, retry: {})
                 } else {
-                    PluginPaneFixture.Page(pane: pane)
+                    VStack(spacing: 0) {
+                        if PluginPaneFixture.signIn.contains(pane.id) {
+                            BitwardenBarContent(unlocking: false, unlock: {})
+                        }
+                        PluginPaneFixture.Page(pane: pane)
+                    }
                 }
             }
         } else if let holder = PluginPaneWebs.shared.holder(for: pane, say: { store.say($0, error: $1) }) {
@@ -200,19 +205,23 @@ private struct PluginLiveWebPane: View {
 
     var body: some View {
         PluginPaneFrame(pane: pane, place: holder.place, canGoBack: holder.canGoBack,
-                  back: { holder.web.goBack() }, reload: { holder.reload() }, browser: { holder.openInBrowser() }) {
-            ZStack {
-                PluginPaneWebHost(web: holder.web)
-                    .opacity(holder.state == .shown ? 1 : 0)
-                switch holder.state {
-                case .loading:
-                    ProgressView().controlSize(.small)
-                case .shown:
-                    EmptyView()
-                case .down:
-                    PluginPaneDown(pane: pane) { holder.retry() }
-                case let .failed(why):
-                    SideNote(title: "\(pane.title) didn’t load", text: why)
+                  back: { holder.web.goBack() }, reload: { holder.reload() }, browser: { holder.openInBrowser() }, holder: holder) {
+            VStack(spacing: 0) {
+                // While Bitwarden is locked, over a sign-in page it could fill.
+                if holder.state == .shown { BitwardenBar(holder: holder) }
+                ZStack {
+                    PluginPaneWebHost(web: holder.web)
+                        .opacity(holder.state == .shown ? 1 : 0)
+                    switch holder.state {
+                    case .loading:
+                        ProgressView().controlSize(.small)
+                    case .shown:
+                        EmptyView()
+                    case .down:
+                        PluginPaneDown(pane: pane) { holder.retry() }
+                    case let .failed(why):
+                        SideNote(title: "\(pane.title) didn’t load", text: why)
+                    }
                 }
             }
         }
@@ -229,15 +238,18 @@ private struct PluginLiveWebPane: View {
 }
 
 /// A web pane's header, over what it shows: its title and place, and back,
-/// reload and open in the browser.
+/// reload and open in the browser, with Bitwarden's key while its plugin is
+/// on (Bitwarden.swift).
 @MainActor
 private struct PluginPaneFrame<Content: View>: View {
+    @Environment(Store.self) private var store
     let pane: PluginPaneInfo
     let place: String
     let canGoBack: Bool
     let back: () -> Void
     let reload: () -> Void
     let browser: () -> Void
+    var holder: PluginPaneHolder?
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -256,6 +268,9 @@ private struct PluginPaneFrame<Content: View>: View {
                     .truncationMode(.middle)
                     .help(place)
                 Spacer(minLength: 4)
+                if store.bitwardenPart != nil {
+                    BitwardenKey(pane: pane, holder: holder)
+                }
                 icon("chevron.left", help: "Back", action: back)
                     .disabled(!canGoBack)
                 icon("arrow.clockwise", help: "Reload the page", action: reload)
@@ -390,6 +405,13 @@ final class PluginPaneWebs {
         return h
     }
 
+    /// Each pane looks at its page again, as Bitwarden unlocks.
+    func lookAgain() {
+        for h in holders.values {
+            Task { await BitwardenFill.look(h) }
+        }
+    }
+
     /// Keeps only the panes that are on.
     func keep(_ ids: Set<String>) {
         for (id, h) in holders where !ids.contains(id) {
@@ -401,7 +423,7 @@ final class PluginPaneWebs {
 
 /// One web pane's web view, and how its page stands.
 @MainActor
-final class PluginPaneHolder: NSObject, ObservableObject {
+final class PluginPaneHolder: NSObject, ObservableObject, BitwardenPage {
     enum State: Equatable {
         case loading, shown, down
         case failed(String)
@@ -413,6 +435,10 @@ final class PluginPaneHolder: NSObject, ObservableObject {
     @Published private(set) var canGoBack = false
     /// The page's place, its host, port and path, for the header.
     @Published private(set) var place: String
+    /// The page shows a sign-in form Bitwarden could fill, and Bitwarden
+    /// filled this page's already (Bitwarden.swift).
+    @Published var signIn = false
+    var filled = false
     private let address: URL
     private let origin: URL
     private let say: (String, Bool) -> Void
@@ -423,7 +449,7 @@ final class PluginPaneHolder: NSObject, ObservableObject {
     /// when each is done.
     private var downloads: [ObjectIdentifier: String] = [:]
     /// The page's origin as text, without a slash at its end.
-    private let originText: String
+    let originText: String
     /// When the page last asked something in a dialog, and whether the
     /// pane now answers its dialogs itself, until the page loads again.
     private var dialogs: [Date] = []
@@ -508,6 +534,12 @@ final class PluginPaneHolder: NSObject, ObservableObject {
     """
 
     // MARK: Origin
+
+    /// The page on show, while it is on the pane's own origin.
+    var page: URL? { web.url.flatMap { sameOrigin($0) ? $0 : nil } }
+
+    /// Its web view, for Bitwarden's fill.
+    var webView: WKWebView { web }
 
     func sameOrigin(_ u: URL) -> Bool {
         u.scheme?.lowercased() == origin.scheme?.lowercased() && u.host?.lowercased() == origin.host?.lowercased() && Self.port(u) == Self.port(origin)
@@ -600,10 +632,14 @@ extension PluginPaneHolder: WKNavigationDelegate {
         state = .shown
         dialogs = []
         hushed = false
+        signIn = false
+        filled = false
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         state = .shown
+        // A sign-in page fills itself while Bitwarden is unlocked.
+        Task { await BitwardenFill.look(self) }
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -795,6 +831,8 @@ enum PluginPaneStores {
 enum PluginPaneFixture {
     /// The panes drawn as their app not running.
     static var down: Set<String> = []
+    /// The panes drawn with Bitwarden's banner over a sign-in page.
+    static var signIn: Set<String> = []
 
     static func place(_ pane: PluginPaneInfo) -> String {
         pane.address.flatMap(URL.init(string:)).map(PluginPaneHolder.place) ?? ""

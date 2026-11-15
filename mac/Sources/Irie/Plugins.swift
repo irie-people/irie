@@ -77,6 +77,17 @@ struct PluginCommands: Commands {
                         // (DESIGN §4.18), while the core serves the vpn op,
                         // and off until vpn.on. Lockdown and the account's
                         // time only for a VPN that has them, as Mullvad does.
+                        // Bitwarden: the panes' key's Unlock and Lock
+                        // (Bitwarden.swift), while its part is ready.
+                        if p.name == "bitwarden", x.name == "autofill", x.state == "ready" {
+                            if acts || !lines.isEmpty { Divider() }
+                            if f.bitwarden == BitwardenVault.State.unlocked.rawValue {
+                                Button("Lock Bitwarden", action: run { BitwardenVault.shared.lock() })
+                            } else {
+                                Button("Unlock Bitwarden…", action: run { store.askBitwarden(on: NSApp.keyWindow) })
+                                    .disabled(f.bitwarden == BitwardenVault.State.unlocking.rawValue)
+                            }
+                        }
                         if x.name == "vpn", f.canVPN {
                             if acts || !lines.isEmpty { Divider() }
                             Group {
@@ -203,6 +214,7 @@ extension Store {
         plugins = all
         bundles = bs
         PluginPaneWebs.shared.keep(Set(panes.map(\.id)))
+        takeBitwarden()
     }
 
     /// Reads the plugins once a minute while the app runs, for a part set up

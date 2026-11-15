@@ -15,11 +15,11 @@ import (
 )
 
 // The privacy plugin's parts, by name. The VPN, once its first part, is a
-// plugin of its own (vpn.go), which a company's copy keeps.
+// plugin of its own (vpn.go), which a company's copy keeps, and Bitwarden
+// for agents, held back, is the Bitwarden plugin's (bitwarden.go).
 const (
 	Anon    = "anon"
 	Browser = "browser"
-	Vault   = "vault"
 	Switch  = "switch"
 )
 
@@ -38,7 +38,7 @@ func privacy() Plugin {
 	return Plugin{
 		Name:    "privacy",
 		Title:   "Privacy",
-		Summary: "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+		Summary: "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family.",
 		Setup:   ":setup privacy",
 		key:     "plugins.privacy",
 		on:      func(c config.Config) bool { return c.Plugins.Privacy },
@@ -64,17 +64,6 @@ func privacy() Plugin {
 				Refused: brand.Name + "'s browser is off: `" + brand.Slug + " setup browser` sets it up.",
 				own:     func(c config.Config) bool { return c.Browser.Connector == "on" },
 				check:   checkBrowser,
-			},
-			{
-				Name:    Vault,
-				Title:   "Bitwarden for agents",
-				Summary: "An agent uses a login from your Bitwarden vault without ever seeing it, once you allow each request with Touch ID.",
-				// Built on 2026-11-01 (irie/irie-extensions) and held back
-				// on 2026-11-09: a review found that an agent could allow
-				// its own requests and read the master password while bw
-				// runs. docs/proposals/extensions.md §3.8 lists what must
-				// change before it comes in.
-				Held: "A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.",
 			},
 			{
 				Name:    Switch,

@@ -53,7 +53,7 @@ func TestPluginsTurnsAPartAndThePluginOnAndOff(t *testing.T) {
 	if fi, err := os.Stat(p.ConfigFile()); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("config.toml's mode: %v, %v", fi.Mode(), err)
 	}
-	for _, args := range [][]string{{"on", "privacy", "vault"}, {"on", "nothing"}, {"on"}, {"toggle", "privacy"}} {
+	for _, args := range [][]string{{"on", "bitwarden", "vault"}, {"on", "privacy", "vault"}, {"on", "nothing"}, {"on"}, {"toggle", "privacy"}} {
 		if err := pluginsCmd(args, &out); err == nil {
 			t.Errorf("irie plugins %s went through", strings.Join(args, " "))
 		}

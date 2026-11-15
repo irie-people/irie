@@ -164,9 +164,13 @@ enum Snapshot {
             let withPanes = try Wire.decoder.decode(PluginsResult.self, from: Data(Fixture.plugins.utf8))
             store.plugins = withPanes.plugins
             store.bundles = withPanes.bundles ?? []
-            for (base, pane, down, dark) in [("side-pane", "invoices.invoices", false, false), ("side-pane-dark", "invoices.invoices", false, true),
-                                             ("side-pane-down", "bookings.bookings", true, false)] {
+            // With the Bitwarden plugin on, each web pane's header has its key,
+            // and a sign-in page has its banner while Bitwarden is locked.
+            for (base, pane, down, dark, signIn) in [("side-pane", "invoices.invoices", false, false, false), ("side-pane-dark", "invoices.invoices", false, true, false),
+                                                     ("side-pane-down", "bookings.bookings", true, false, false),
+                                                     ("side-pane-bitwarden", "invoices.invoices", false, false, true), ("side-pane-bitwarden-dark", "invoices.invoices", false, true, true)] {
                 PluginPaneFixture.down = down ? [pane] : []
+                PluginPaneFixture.signIn = signIn ? [pane] : []
                 store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: pane)
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
@@ -175,6 +179,7 @@ enum Snapshot {
                 print(name)
             }
             PluginPaneFixture.down = []
+            PluginPaneFixture.signIn = []
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -478,17 +483,23 @@ enum Fixture {
         {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "setup": ":setup vpn", "detail": "VPN on: Malmö, Sweden (se-mma-wg-002), lockdown on, 41 days left.", "summary": "See the VPN in every client, and connect or disconnect it from a task bar or the menu, or move it where the VPN has places."}
       ]},
      {"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
-      "summary": "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+      "summary": "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family.",
       "parts": [
         {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through \#(Brand.name)'s SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
-        {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
         {"name": "switch", "title": "Dead man's switch", "on": true, "state": "ready", "setup": ":setup switch", "detail": "The guide is ready: :setup switch, or Plugins › Dead man's switch › Set Up… in the Mac app.", "summary": "A guided session sets up what your family needs if you stop checking in."}
       ]},
       {"name": "writing", "title": "Writing", "on": true,
        "summary": "Agents that help with your writing in Variorum, Lillian Duarte's writing app, with notes and other versions beside your words, never over them.",
        "parts": [
         {"name": "variorum", "title": "Writing in Variorum", "on": true, "state": "ready", "setup": ":write", "detail": "Ready: :write, or Plugins › Writing in Variorum › Start Writing in Variorum… in the Mac app, starts a writing session.", "summary": "`:write` starts a session that works in Variorum through its door for AI."}
+      ]},
+      {"name": "bitwarden", "title": "Bitwarden", "on": true,
+       "summary": "Your Bitwarden logins fill the sign-in pages of your panes in the right sidebar.",
+       "parts": [
+        {"name": "autofill", "title": "Fill sign-ins in panes", "on": true, "state": "ready", "summary": "A pane's sign-in page fills itself with the login your vault has for its address.",
+         "detail": "Ready: unlock Bitwarden with a pane's key, or in the Plugins menu, and each pane's sign-in fills itself."},
+        {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."}
       ]},
       {"name": "bookings", "title": "Bookings", "on": true, "manifest": "/home/alice/.config/\#(Brand.slug)/plugins/bookings.toml",
        "summary": "The booking calendar, beside your sessions.",

@@ -81,6 +81,8 @@ final class MenuState {
         var canVPN = false
         /// The notepad shows (NotesPanel.swift).
         var notes = false
+        /// Bitwarden is locked, unlocking or unlocked (Bitwarden.swift).
+        var bitwarden = BitwardenVault.State.locked.rawValue
     }
 
     private(set) var facts = Facts()
@@ -138,6 +140,7 @@ extension Store {
         f.plugins = plugins
         f.bundles = bundles
         f.panes = panes
+        f.bitwarden = BitwardenVault.shared.state.rawValue
         f.sidePane = side.open && side.tab == .plugin ? side.pane : nil
         f.canVPN = canVPN
         f.notes = notes.shown
