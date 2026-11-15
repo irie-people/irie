@@ -464,11 +464,14 @@ final class RolodexModel {
         guard var d = decks[session], let i = d.panes.firstIndex(where: { $0.id == pane }) else { return }
         var files = d.panes[i].files ?? []
         if !files.contains(path) { files.append(path) }
-        while files.count > Self.mostFiles, let old = files.first(where: { $0 != path }) { files.removeAll { $0 == old } }
+        // A file with typing unsaved or in conflict never goes.
+        while files.count > Self.mostFiles, let old = files.first(where: { $0 != path && !CodeDocs.shared.holds($0) }) {
+            files.removeAll { $0 == old }
+        }
         d.panes[i].files = files
         d.panes[i].file = path
         decks[session] = d
-        if let line, line > 0 { go(to: line, column: column ?? 1, on: pane) }
+        if let line, line > 0 { go(to: line, column: column ?? 1, in: path, on: pane) }
         saveSoon()
     }
 
@@ -492,9 +495,15 @@ final class RolodexModel {
         saveSoon()
     }
 
-    func go(to line: Int, column: Int = 1, on pane: String) {
+    /// Asks a code card's editor to go to a line of a file, once.
+    func go(to line: Int, column: Int = 1, in path: String, on pane: String) {
         goes += 1
-        goTo[pane] = CodeGoTo(line: line, column: column, serial: goes)
+        goTo[pane] = CodeGoTo(path: path, line: line, column: column, serial: goes)
+    }
+
+    /// The editor went there: the ask is done.
+    func went(_ g: CodeGoTo, on pane: String) {
+        if goTo[pane] == g { goTo[pane] = nil }
     }
 
     /// Every file a code card has open, in every session.
@@ -600,7 +609,8 @@ final class RolodexModel {
         if blankHasKeys { return Self.blank }
         guard let window, let r = window.firstResponder as? NSView else { return keys }
         guard open, !folded, let probe = frontProbe, probe.window === window else { return nil }
-        let a = r.convert(r.bounds, to: nil), b = probe.convert(probe.bounds, to: nil)
+        // What shows of it: a text view's bounds are its whole text.
+        let a = r.convert(r.visibleRect, to: nil), b = probe.convert(probe.bounds, to: nil)
         if b.insetBy(dx: -4, dy: -40).contains(CGPoint(x: a.midX, y: a.midY)), a.width <= b.width + 8, a.height <= b.height + 60 {
             return deck.frontPane?.id ?? Self.blank
         }

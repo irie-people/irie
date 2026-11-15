@@ -54,7 +54,10 @@ struct CodePane: View {
         .background(Color(nsColor: t.background))
         .overlay(alignment: .top) {
             if finding, pane.file != nil {
-                QuickOpen(folder: owner.folder, theme: t, focusToken: token, takesKeys: true, open: open) { finding = false }
+                QuickOpen(folder: owner.folder, theme: t, focusToken: token, takesKeys: true, shows: shows, open: open) {
+                    finding = false
+                    store.rolodex.bump(pane.id)
+                }
                     .frame(maxWidth: 460, maxHeight: 360)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(nsColor: t.background))
                         .shadow(color: .black.opacity(0.3), radius: 12, y: 4))
@@ -64,7 +67,9 @@ struct CodePane: View {
             } else if going, pane.file != nil {
                 GoToLine(theme: t) { line in
                     going = false
-                    if let line { store.rolodex.go(to: line, on: pane.id) }
+                    if let line, let path = pane.file { store.rolodex.go(to: line, in: path, on: pane.id) }
+                    // The keyboard goes back to the file.
+                    store.rolodex.bump(pane.id)
                 }
                 .padding(.top, 36)
             }
@@ -73,7 +78,11 @@ struct CodePane: View {
         // and saved as it stops showing.
         .task(id: "\(pane.file ?? "")/\(shows)") { await follow() }
         .onChange(of: shows) { _, on in
-            if !on, let p = pane.file { CodeDocs.shared.existing(p)?.saveNow() }
+            guard !on else { return }
+            if let p = pane.file { CodeDocs.shared.existing(p)?.saveNow() }
+            // A card turned away keeps no field of its own open.
+            finding = false
+            going = false
         }
         // As another session shows, and its cards with it.
         .onDisappear {
@@ -93,7 +102,7 @@ struct CodePane: View {
             }
             footer(doc, t)
         } else {
-            QuickOpen(folder: owner.folder, theme: t, focusToken: token, takesKeys: shows && keys,
+            QuickOpen(folder: owner.folder, theme: t, focusToken: token, takesKeys: shows && keys, shows: shows,
                       open: open, close: nil)
         }
     }
@@ -111,9 +120,12 @@ struct CodePane: View {
         case .loading:
             ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready, .missing:
+            // An editor of its own for each file, so another file never
+            // shows in one bound to the last.
             CodeEditorView(doc: doc, theme: t, fontSize: fontSize, mark: NSColor(Theme.agent(slot: pane.slot)),
                            focusToken: token, takesKeysOnStart: shows && keys, shows: shows,
                            goTo: store.rolodex.goTo[pane.id], caret: caret, actions: actions(doc))
+                .id(ObjectIdentifier(doc))
         case .notText:
             note("\(doc.name) isn’t text this card can edit.", t, finder: doc.path)
         case .tooBig:
@@ -129,6 +141,7 @@ struct CodePane: View {
         a.quickOpen = { finding = true }
         a.goToLine = { going = true }
         a.closeFile = { close(doc.path) }
+        a.went = { g in store.rolodex.went(g, on: pane.id) }
         if store.paneSession?.id == owner.id {
             a.ask = { lines in store.askAgent(about: doc.path, lines: lines, folder: owner.folder) }
         }
@@ -445,19 +458,20 @@ struct QuickOpen: View {
     let theme: CodeTheme
     let focusToken: Int
     let takesKeys: Bool
+    /// Its card shows: one turned away lets the keyboard go.
+    var shows = true
     let open: @MainActor (String) -> Void
     /// Closes it; none for the card's own when no file is open.
     var close: (@MainActor () -> Void)?
     @State private var query = ""
     @State private var files: [String] = []
+    /// What matches the query, worked out off the main thread as it changes.
+    @State private var list: [String] = []
     @State private var picked = 0
     @State private var loading = true
     @FocusState private var focused: Bool
 
-    private var results: [String] { CodeFiles.best(files, query) }
-
     var body: some View {
-        let list = results
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -511,9 +525,16 @@ struct QuickOpen: View {
             files = await CodeFiles.shared.list(folder)
             loading = false
         }
-        .onChange(of: query) { picked = 0 }
+        .task(id: "\(files.count) \(query)") {
+            let files = files, query = query
+            let found = await Task.detached(priority: .userInitiated) { CodeFiles.best(files, query) }.value
+            guard !Task.isCancelled else { return }
+            list = found
+            picked = 0
+        }
         .onAppear { if takesKeys || close != nil { focused = true } }
-        .onChange(of: focusToken) { focused = true }
+        .onChange(of: focusToken) { if shows { focused = true } }
+        .onChange(of: shows) { _, on in if !on { focused = false } }
     }
 
     private func row(_ f: String, on: Bool) -> some View {
@@ -622,10 +643,10 @@ final class CodeFiles {
     /// The files that match what was typed, the best first, at most 60.
     nonisolated static func best(_ files: [String], _ query: String) -> [String] {
         let q = Array(query.lowercased().utf8.filter { $0 != 32 })
-        guard !q.isEmpty else { return Array(files.sorted { $0.count < $1.count }.prefix(60)) }
+        guard !q.isEmpty else { return Array(files.sorted { $0.utf8.count < $1.utf8.count }.prefix(60)) }
         var scored: [(Int, String)] = []
         for f in files { if let s = score(f, q) { scored.append((s, f)) } }
-        scored.sort { $0.0 != $1.0 ? $0.0 > $1.0 : $0.1.count < $1.1.count }
+        scored.sort { $0.0 != $1.0 ? $0.0 > $1.0 : $0.1.utf8.count < $1.1.utf8.count }
         return scored.prefix(60).map(\.1)
     }
 
@@ -659,11 +680,36 @@ final class CodeFiles {
 }
 
 extension Store {
+    /// ⌘W while a code card has the keyboard, in its editor or any field of
+    /// its own: its file closes, or the card when it has none. False when no
+    /// code card has the keyboard.
+    func closeInCodeCard(window: NSWindow?) -> Bool {
+        guard let s = paneSession else { return false }
+        let r = rolodex
+        let d = r.deck(s.id)
+        guard let id = r.keysNow(in: window, deck: d), let p = d.panes.first(where: { $0.id == id }), p.kind == .code else {
+            return false
+        }
+        guard let f = p.file else {
+            closePane(p.id)
+            return true
+        }
+        CodeDocs.shared.existing(f)?.saveNow()
+        r.close(file: f, on: p.id, in: s.id)
+        CodeDocs.shared.keep(only: r.openFiles)
+        r.bump(p.id)
+        return true
+    }
+
     /// Puts a file's lines in the shown agent's prompt, as
     /// `internal/core/pane.go:12-20 `, and gives the terminal the keyboard,
     /// to ask about them.
     func askAgent(about path: String, lines: ClosedRange<Int>, folder: String?) {
-        guard pasteToTerminal(CodeReference.text(path, lines: lines, folder: folder) + " ") else {
+        // A file's name could hold the escape that ends a paste early.
+        let ref = String(CodeReference.text(path, lines: lines, folder: folder).unicodeScalars.filter {
+            !CharacterSet.controlCharacters.contains($0)
+        })
+        guard pasteToTerminal(ref + " ") else {
             say("There’s no terminal to ask in yet.", error: true)
             return
         }
