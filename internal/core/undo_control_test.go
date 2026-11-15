@@ -144,18 +144,82 @@ func TestUndoAndRedoOfAFreezeAndAThaw(t *testing.T) {
 		t.Errorf("journal %v, want %v", got, want)
 	}
 
-	// Thawed by some other hand, redoing the thaw only moves on.
+	// Thawing them all, when that thaws only alpha, is a step that names it.
 	redo := c.history().Redo
 	var r ipc.FreezeResult
 	if err := c.call(ipc.OpThaw, ipc.FreezeArgs{All: true}, &r); err != nil || !slices.Equal(r.Sessions, []string{a.ID}) {
 		t.Fatalf("thaw all: %v, %v", r.Sessions, err)
 	}
-	if h := c.history(); !slices.Equal(labels(h.Redo), labels(redo)) || len(h.Undo) != 2 {
-		t.Errorf("thawing them all made a step: %v / %v", labels(h.Undo), labels(h.Redo))
+	if h := c.history(); !slices.Equal(labels(h.Undo), []string{`start "alpha"`, `freeze "alpha"`, `thaw "alpha"`}) || len(h.Redo) != 0 {
+		t.Errorf("after thawing them all: %v / %v", labels(h.Undo), labels(h.Redo))
 	}
+	// Thawed by some other hand, redoing the thaw only moves on.
+	c.dropLast(redo)
 	ch := c.ask(dirRedo)
 	if ch.Question != `"alpha" is not frozen any more.` || ch.Options[0].Key != ipc.ChoiceSettle {
 		t.Errorf("question %+v", ch)
+	}
+}
+
+// Freezing or thawing them all at once is one step, whose label names the
+// sessions it changed (DESIGN §4.5): one undo takes them all back, one
+// redo does it again, and a session that was that way already is not in
+// it.
+func TestUndoAndRedoOfFreezingAndThawingThemAll(t *testing.T) {
+	c := setup(t)
+	var all []ipc.Session
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: name})
+		c.waitState(s.ID, ipc.StateWorking)
+		all = append(all, s)
+	}
+	a, b, g := all[0], all[1], all[2]
+	c.freeze(g.ID, true)
+	c.waitState(g.ID, ipc.StateFrozen)
+	var r ipc.FreezeResult
+	if err := c.call(ipc.OpFreeze, ipc.FreezeArgs{All: true}, &r); err != nil {
+		t.Fatalf("freeze all: %v", err)
+	}
+	h := c.history()
+	if got := labels(h.Undo); len(got) < 3 || !slices.Equal(got[len(got)-3:], []string{`freeze "gamma"`, `freeze "alpha"`, `freeze "beta"`}) {
+		t.Fatalf("history %v", got)
+	}
+	if u, _ := h.labels(); u != `freeze "alpha" and "beta"` {
+		t.Errorf("the header says %q", u)
+	}
+	if r := c.step(dirUndo); r.Label != `freeze "alpha" and "beta"` {
+		t.Errorf("undo %+v", r)
+	}
+	c.waitState(a.ID, ipc.StateWorking)
+	c.waitState(b.ID, ipc.StateWorking)
+	if s, _ := c.row(g.ID); s.State != ipc.StateFrozen {
+		t.Errorf("gamma is %s after the undo, want frozen still", s.State)
+	}
+	if h := c.history(); h.label(dirUndo) != `freeze "gamma"` || h.label(dirRedo) != `freeze "alpha" and "beta"` {
+		u, rd := h.labels()
+		t.Errorf("after the undo the header says %q and %q", u, rd)
+	}
+	c.step(dirRedo)
+	c.waitState(a.ID, ipc.StateFrozen)
+	c.waitState(b.ID, ipc.StateFrozen)
+
+	// Thawing them all is one step too, and undoing it freezes them all
+	// again.
+	if err := c.call(ipc.OpThaw, ipc.FreezeArgs{All: true}, &r); err != nil {
+		t.Fatalf("thaw all: %v", err)
+	}
+	for _, s := range all {
+		c.waitState(s.ID, ipc.StateWorking)
+	}
+	if h := c.history(); h.label(dirUndo) != `thaw "alpha", "beta" and "gamma"` {
+		t.Errorf("after thawing them all the header says %q", h.label(dirUndo))
+	}
+	c.step(dirUndo)
+	for _, s := range all {
+		c.waitState(s.ID, ipc.StateFrozen)
+	}
+	if got, want := c.uiSteps(b.ID), []string{"ui.undo freeze open>open", "ui.redo freeze open>open", "ui.undo thaw open>open"}; !slices.Equal(got, want) {
+		t.Errorf("beta's journal %v, want %v", got, want)
 	}
 }
 
