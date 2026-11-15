@@ -131,3 +131,27 @@ A reel's cut lines name moments by what the film did, such as `reached:needs_you
 | `needs-you` | Get started, "a card turns red" | "A card turns red when an agent needs you." "Answer it. The rest stay calm." |
 | `close-the-window` | How it works, "Each agent runs in tmux" | "Close the window. They keep working." "Open it again: nothing stopped." |
 | `local` | Get started, a first task | "Small job. Local model. $0 per token." "Hard job: the strongest model." |
+
+## Launch kits
+
+```sh
+docs/demo/kit.sh              # the newest release's kit
+docs/demo/kit.sh 1.1.0        # another release's
+docs/demo/kit.sh check        # go over the newest kit before posting
+```
+
+A launch kit says what to show and what to say when a release goes out ([the proposal](../proposals/launch-kits.md)). `kit.sh` reads the release's features from `CHANGELOG.md`, what their commits say and the reels, and writes `dist/kits/VERSION/`:
+
+- **`brief.md`**: each feature, with the first paragraph of its commit's message, and the reel that films it. A reel names the commit it films on a `# feature: HASH` line, a hash of seven characters or more; a feature without one needs a reel written. After the features come the clips any post can use, with their captions, and the rules every post keeps.
+- **`post.md`**: drafts for Threads and Instagram from the release's first three features, with a link to the release notes. Edit them as you like: `kit.sh` never writes over a `post.md` that is already there.
+- **`NAME.phone.mp4`**: each phone cut that `record.sh` and `cut.sh` have made, copied in to attach.
+
+`kit.sh check` fails a kit when:
+
+- a Threads draft is longer than 500 characters, or has more than five links or more than one topic tag. Every character past ASCII counts as its UTF-8 bytes, as Threads counts an emoji.
+- an Instagram draft is longer than 2,200 characters or has more than five hashtags.
+- `post.md` links anywhere but the project's own pages on GitHub.
+- the brief or a draft names the user, their machine or their home, or has an email address outside example.com.
+- a clip isn't 1080×1920, runs under 3 seconds, or names anyone in its metadata.
+
+`kit.sh` never posts anything: the maintainer reads the kit and posts by hand.
