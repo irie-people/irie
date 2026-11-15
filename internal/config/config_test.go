@@ -100,7 +100,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if len(r.Words.Small) == 0 || len(r.Words.Hard) == 0 {
 		t.Errorf("route words = %+v", r.Words)
 	}
-	if want := (Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30}); c.Bench != want {
+	if want := (Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30, Close: true}); c.Bench != want {
 		t.Errorf("bench = %+v, want %+v", c.Bench, want)
 	}
 	if want := (Local{Port: 11435, Context: 65536, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1}); !reflect.DeepEqual(c.Local, want) {
