@@ -95,38 +95,53 @@ func TestDichromatsMatchTheResearch(t *testing.T) {
 	}
 }
 
-// TestStatesStayApartForColourBlindViewers: in every palette and mode,
-// needs you and paused look apart in full colour vision and to protans,
-// deutans and tritans alike, and done and frozen to all but tritans. In
-// light mode both of the first are dark enough for 4.5:1 text, so a red and
-// an amber of one lightness turn one olive for a deutan: needs you is
-// deeper than paused instead. Tritans, about 1 in 10,000, see done and
-// frozen close in three palettes; each state's glyph tells them apart
-// (DESIGN §5.3).
+// TestStatesStayApartForColourBlindViewers: in every palette and mode, the
+// four state colours (needs you, paused, done and frozen) look apart in full
+// colour vision and to protans, deutans and tritans alike. Each stays apart
+// from ink, which working rows take, and from muted, which dim rows take
+// (DESIGN §5.3): clearly in full colour vision, and never the same to a
+// dichromat. Done never takes the accent's colour either.
+//
+// Text colours of one lightness keep only that lightness and one hue axis
+// for a dichromat, so the states differ in lightness too: in light mode
+// needs you is deeper than paused, as a red and an amber both at 4.5:1 are
+// one olive to a deutan. Two pairs stop short of 0.06 for dichromats, as
+// far as their hues allow: Evergreen's done, a green among green neutrals,
+// and muted (0.033), and Terracotta's dark needs you and muted (0.055).
 func TestStatesStayApartForColourBlindViewers(t *testing.T) {
+	type role struct {
+		name string
+		c    color.Color
+	}
+	normal := viewers()[0]
 	for _, name := range config.Themes {
 		for _, mode := range []struct {
 			name string
 			p    palette
 		}{{"light", themes[name].light}, {"dark", themes[name].dark}} {
 			p := mode.p
-			for _, c := range []struct {
-				a, b    string
-				x, y    color.Color
-				tritans bool
-				min     float64
-			}{
-				{"needs", "paused", p.needs, p.paused, true, 0.07},
-				{"done", "frozen", p.done, p.frozen, false, 0.06},
-			} {
-				for _, v := range viewers() {
-					if v.name == "tritan" && !c.tritans {
-						continue
-					}
-					if got := v.d.apart(c.x, c.y); got < c.min {
-						t.Errorf("%s %s: %s and %s are %.3f apart for %s vision, want at least %.2f", name, mode.name, c.a, c.b, got, v.name, c.min)
+			states := []role{{"needs", p.needs}, {"paused", p.paused}, {"done", p.done}, {"frozen", p.frozen}}
+			for i, a := range states {
+				for _, b := range states[i+1:] {
+					for _, v := range viewers() {
+						if got := v.d.apart(a.c, b.c); got < 0.06 {
+							t.Errorf("%s %s: %s and %s are %.3f apart for %s vision, want at least 0.06", name, mode.name, a.name, b.name, got, v.name)
+						}
 					}
 				}
+				for _, b := range []role{{"ink", p.ink}, {"muted", p.muted}} {
+					if got := normal.d.apart(a.c, b.c); got < 0.06 {
+						t.Errorf("%s %s: %s and %s are %.3f apart for normal vision, want at least 0.06", name, mode.name, a.name, b.name, got)
+					}
+					for _, v := range viewers()[1:] {
+						if got := v.d.apart(a.c, b.c); got < 0.03 {
+							t.Errorf("%s %s: %s and %s are %.3f apart for %s vision, want at least 0.03", name, mode.name, a.name, b.name, got, v.name)
+						}
+					}
+				}
+			}
+			if got := normal.d.apart(p.done, p.accent); got < 0.06 {
+				t.Errorf("%s %s: done and the accent are %.3f apart for normal vision, want at least 0.06", name, mode.name, got)
 			}
 		}
 	}

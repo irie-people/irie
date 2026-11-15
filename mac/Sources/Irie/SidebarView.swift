@@ -118,7 +118,8 @@ private struct SessionList: View {
                             // view's cards start.
                             let underPinned = groups.first?.id == SessionGroup.pinned ? groups.dropFirst().first?.id : nil
                             // Under the List view's last card, a strip takes a
-                            // dropped card or group to the top of the list.
+                            // dropped card or group to the top of the list,
+                            // last (Drops.swift).
                             let lastList = store.canGroup && store.mode == .list ? groups.last(where: { $0.bare || $0.userGroup != nil })?.id : nil
                             ForEach(groups) { g in
                                 // The List view's cards of no group of yours
@@ -140,15 +141,24 @@ private struct SessionList: View {
                                     }
                                 }
                                 if g.id == lastList {
-                                    TopDropStrip()
+                                    EndStrip()
                                 }
                             }
                             OutsideSection(now: ctx.date, listFocused: listFocused)
                         }
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, ListLayout.inset)
                         .padding(.top, 3)
                         .padding(.bottom, 8)
                     }
+                    // A drag held near the list's top or bottom edge
+                    // scrolls it (DragScroll.swift).
+                    .background(alignment: .topLeading) {
+                        DragScrolling().frame(width: 1, height: 1).accessibilityHidden(true)
+                    }
+                    // What a drag holds lands anywhere in the list, and a
+                    // line shows where (Drops.swift).
+                    .overlayPreferenceValue(DropRowFrames.self) { DropLine(frames: $0) }
+                    .onDrop(of: [.text], delegate: ListDrop(store: store))
                 }
                 .onChange(of: shown) { _, to in
                     guard let to else { return }
@@ -240,11 +250,14 @@ private struct SessionList: View {
                         listFocused: listFocused, now: now, first: i == 0, last: i == last)
                 .equatable()
                 .id(CardPlace(group: g.id, session: s.id))
+                .dropRow(s.id)
             // Only a session with helpers has the rows: wrapped, empty ones
-            // would take the stack's spacing.
+            // would take the stack's spacing. They count with the card for
+            // drops.
             if HelperRows.has(s) {
                 HelperRows(session: s)
                     .equatable()
+                    .dropRow(s.id)
             }
         }
     }
@@ -284,6 +297,8 @@ private struct GroupTree: View {
     let now: Date
 
     var body: some View {
+        // Its rail lights while a drop aims inside it (Drops.swift).
+        let lit = store.drop?.lit == SessionGroup.userID(node.id) && store.drop?.same == false
         VStack(alignment: .leading, spacing: 6) {
             ForEach(node.items) { item in
                 switch item {
@@ -293,9 +308,11 @@ private struct GroupTree: View {
                                 first: s.id == order.first?.id, last: s.id == order.last?.id)
                         .equatable()
                         .id(CardPlace(group: group, session: s.id))
+                        .dropRow(s.id)
                     if HelperRows.has(s) {
                         HelperRows(session: s)
                             .equatable()
+                            .dropRow(s.id)
                     }
                 case let .group(sub):
                     let g = SessionGroup.of(sub)
@@ -306,51 +323,27 @@ private struct GroupTree: View {
                 }
             }
         }
-        .padding(.leading, 9)
+        .padding(.leading, ListLayout.indent)
         .overlay(alignment: .leading) {
-            Capsule().fill(Theme.muted.opacity(0.3)).frame(width: 2)
+            Capsule().fill(lit ? Theme.accent : Theme.muted.opacity(0.3)).frame(width: 2)
                 .padding(.leading, 2).padding(.vertical, 3)
                 .accessibilityHidden(true)
         }
+        // Faded while its header drags it.
+        .opacity(store.draggingGroup == node.id ? 0.45 : 1)
     }
 }
 
 /// The strip under the List view's last card: a card or a group dropped on
-/// it goes last at the top of the list, out of any group. It shows only as
-/// a line while something held is over it.
+/// it goes to the top of the list, last, or, moved to the right, last in
+/// the groups that end there (Drops.swift).
 @MainActor
-private struct TopDropStrip: View {
-    @Environment(Store.self) private var store
-    @State private var targeted = false
-
+private struct EndStrip: View {
     var body: some View {
         Color.clear
             .frame(height: 10)
-            .contentShape(Rectangle())
-            .overlay(alignment: .center) {
-                if targeted {
-                    Capsule().fill(Theme.accent).frame(height: 3).padding(.horizontal, 6)
-                        .allowsHitTesting(false)
-                }
-            }
-            .onDrop(of: [.text], delegate: TopDrop(store: store, targeted: $targeted))
+            .dropRow(DropModel.end)
             .accessibilityHidden(true)
-    }
-}
-
-@MainActor
-private struct TopDrop: DropDelegate {
-    let store: Store
-    @Binding var targeted: Bool
-
-    func validateDrop(info: DropInfo) -> Bool { store.canDropAtTop }
-    func dropEntered(info: DropInfo) { targeted = store.canDropAtTop }
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: store.canDropAtTop ? .move : .forbidden) }
-    func dropExited(info: DropInfo) { targeted = false }
-    func performDrop(info: DropInfo) -> Bool {
-        targeted = false
-        guard store.canDropAtTop else { return false }
-        return store.carrying(info.itemProviders(for: [.text])) { _ = store.dropAtTop() }
     }
 }
 
@@ -716,23 +709,19 @@ private struct RenameField: View {
 /// folded group says how many of its sessions need you, in red, and the
 /// Parked header turns red while any parked session needs you. Your group's
 /// header wears a folder, renames it in place, on a double click or Rename
-/// Group…, and drags: a card or group dropped on it goes inside the group,
-/// and one dropped on its top edge just before it (Groups.swift). Its count
-/// takes in the groups inside it.
+/// Group…, and drags its group, as a chip with its name and count; a card
+/// or group dropped on it goes inside the group, and it lights while one
+/// aims there (Drops.swift). Its count takes in the groups inside it.
 @MainActor
 private struct GroupHeader: View {
     @Environment(Store.self) private var store
     let group: SessionGroup
-    /// How tall it is, which splits it into the edge that drops before the
-    /// group and the rest, which drops inside it.
-    @State private var height: CGFloat = 20
 
     var body: some View {
         let open = store.isOpen(group)
         let needs = group.sessions.filter { Look($0).loud }.count
         let note = !open && needs > 0 ? "\(needs) \(needs == 1 ? "needs" : "need") you" : nil
-        let mark = group.userGroup.flatMap { id in store.headerMark?.group == id ? store.headerMark : nil }
-        let into = mark?.before == false
+        let lit = store.drop?.lit == group.id && store.drop?.same == false
         if let id = group.userGroup, store.renamingGroup == id {
             HStack(spacing: 5) {
                 chevron(open)
@@ -759,31 +748,18 @@ private struct GroupHeader: View {
                     count
                 }
                 .padding(.horizontal, 4)
-                .padding(.vertical, into ? 2 : 0)
                 .padding(.top, 3)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(into ? Theme.hover : .clear))
-                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(into ? Theme.accent : .clear, lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(lit ? Theme.hover : .clear))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(lit ? Theme.accent : .clear, lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(help)
             .contextMenu { GroupActions(group: group) }
-            // Held over its top edge, a line shows the drop goes just
-            // before the group.
-            .overlay(alignment: .top) {
-                if mark?.before == true {
-                    Capsule().fill(Theme.accent).frame(height: 3).padding(.horizontal, 6)
-                        .offset(y: -3)
-                        .allowsHitTesting(false)
-                }
-            }
-            .background(GeometryReader { g in
-                Color.clear
-                    .onAppear { height = g.size.height }
-                    .onChange(of: g.size.height) { _, h in height = h }
-            })
-            .modifier(HeaderDrag(store: store, id: group.userGroup))
-            .onDrop(of: group.userGroup == nil ? [] : [.text], delegate: HeaderDrop(store: store, group: group, height: height))
+            .modifier(HeaderDrag(store: store, group: group))
+            // Where it is, for drops; faded while it drags its group.
+            .dropRow(group.id)
+            .opacity(store.draggingGroup != nil && store.draggingGroup == group.userGroup ? 0.45 : 1)
             .simultaneousGesture(TapGesture(count: 2).onEnded {
                 if let id = group.userGroup { store.renamingGroup = id }
             })
@@ -798,6 +774,15 @@ private struct GroupHeader: View {
                     Button("Put in a new group") { store.wrapGroup(id) }
                     if store.parentGroup(id) != nil {
                         Button("Move out of \(store.groupName(store.parentGroup(id) ?? ""))") { store.moveOut(id) }
+                    }
+                    if store.canSpaces {
+                        ForEach(Array(store.spaces.enumerated()), id: \.element.id) { i, s in
+                            let key = store.spaceKey(at: i)
+                            if key != store.space {
+                                Button("Move to the space \(s.name)") { store.sendGroupToSpace(id, key) }
+                            }
+                        }
+                        Button("Move to a new space") { store.newSpace(forGroup: id) }
                     }
                     Button("Ungroup") { store.ungroup(id) }
                 }
@@ -838,66 +823,29 @@ private struct GroupHeader: View {
         if let id = group.userGroup {
             let path = store.groupTitle(id)
             let name = path.contains("›") ? path : "\(group.title), a group of yours"
-            return "\(name). Drop a card or a group here to put it inside, or on this header’s top edge to put it just before; drag the header to move the group; double-click to rename it; right-click to move it, ungroup it or close its sessions."
+            return "\(name). Drag the header to move the group, into another group or out of one, or onto a space under the list, or its + for a new space; drop a card or a group on it to put it inside, or on its top edge just before it; double-click to rename it; right-click to move it, ungroup it or close its sessions."
         }
         return group.path.map(Age.tilde) ?? group.title
     }
 }
 
-/// Lets your group's header be dragged, the group with it.
+/// Lets your group's header be dragged, the group with it, as a chip with
+/// its name and count (Drops.swift).
 @MainActor
 private struct HeaderDrag: ViewModifier {
     let store: Store
-    let id: String?
+    let group: SessionGroup
 
     func body(content: Content) -> some View {
-        if let id {
+        if let id = group.userGroup {
             content.onDrag {
-                store.dragging = nil
-                store.draggingGroup = id
-                return NSItemProvider(object: ("group:" + id) as NSString)
+                store.beginDrag(group: id)
+            } preview: {
+                GroupChip(name: group.title, count: group.sessions.count)
             }
         } else {
             content
         }
-    }
-}
-
-/// A card or group held over your group's header: on its top edge it goes
-/// just before the group, and anywhere else inside it, last.
-@MainActor
-private struct HeaderDrop: DropDelegate {
-    let store: Store
-    let group: SessionGroup
-    let height: CGFloat
-
-    private func before(_ info: DropInfo) -> Bool { info.location.y < max(6, height * 0.35) }
-
-    func validateDrop(info: DropInfo) -> Bool { store.canDropOnHeader(group, before: before(info)) }
-
-    func dropEntered(info: DropInfo) { show(info) }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        show(info)
-        return DropProposal(operation: store.canDropOnHeader(group, before: before(info)) ? .move : .forbidden)
-    }
-
-    func dropExited(info: DropInfo) {
-        if store.headerMark?.group == group.userGroup { store.headerMark = nil }
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        let b = before(info)
-        store.headerMark = nil
-        guard store.canDropOnHeader(group, before: b) else { return false }
-        return store.carrying(info.itemProviders(for: [.text])) { _ = store.dropOnHeader(group, before: b) }
-    }
-
-    private func show(_ info: DropInfo) {
-        guard let id = group.userGroup else { return }
-        let b = before(info)
-        let mark = store.canDropOnHeader(group, before: b) ? HeaderMark(group: id, before: b) : nil
-        if store.headerMark != mark { store.headerMark = mark }
     }
 }
 

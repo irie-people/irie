@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -103,5 +104,43 @@ func TestTheMixIsThePicturesMix(t *testing.T) {
 	rw, _ := roots.PaletteByID("rosewater")
 	if got := roots.Mix(rw.Light["needs"], rw.Light["needs_tint"], 0.45); got != "#C98D82" {
 		t.Errorf("Mix = %s, want #C98D82", got)
+	}
+}
+
+// fnKey finds a shortcut that takes fn: a SwiftUI keyboardShortcut whose
+// modifiers have .function, or an AppKit item's mask set with it. It gives
+// each one's line.
+var fnKey = regexp.MustCompile(`\.keyboardShortcut\([^)]*\.function\b|keyEquivalentModifierMask\s*=[^\n]*\.function\b`)
+
+func fnKeyLines(src string) []int {
+	var lines []int
+	for _, m := range fnKey.FindAllStringIndex(src, -1) {
+		lines = append(lines, strings.Count(src[:m[0]], "\n")+1)
+	}
+	return lines
+}
+
+// TestNoMenuKeyTakesFn: no shortcut in the Mac app takes fn (Roots'
+// principles §4.8). AppKit drops fn from an app's own menu keys, so fn⌃Tab would show
+// and act as ⌃Tab; KeyRouter catches such a key instead.
+func TestNoMenuKeyTakesFn(t *testing.T) {
+	planted := "Button(\"Next Space\") {}\n    .keyboardShortcut(.tab,\n        modifiers: [.control, .function])\n" +
+		"Button(\"Next\") {}.keyboardShortcut(KeyEquivalent(Character(\"1\")), modifiers: .command)\n" +
+		"let tokens: [Token: Color] = [.keyword: violet, .function: blue]\n"
+	if got := fnKeyLines(planted); !slices.Equal(got, []int{2}) {
+		t.Fatalf("the check finds a key with fn on lines %v of the sample, want [2]", got)
+	}
+	files, _ := filepath.Glob(filepath.Join(root, "mac", "Sources", "Irie", "*.swift"))
+	if len(files) == 0 {
+		t.Skip("no mac/Sources/Irie")
+	}
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range fnKeyLines(string(src)) {
+			t.Errorf("%s:%d: a shortcut with fn, which AppKit drops from an app's menus: catch the key in KeyRouter (IrieApp.swift) and name it in the item's help", filepath.Base(f), n)
+		}
 	}
 }

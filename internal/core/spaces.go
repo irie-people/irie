@@ -189,19 +189,35 @@ func newSpaceID() string {
 	return string(out)
 }
 
-// spaceOp puts the sessions a names in a space, as one step of the history,
-// and returns those it moved. Another machine's sessions stay where they
-// are, in that machine's own group.
+// spaceOp puts the sessions a names in a space, and those of the groups it
+// names, which go whole, as one step of the history, and returns those it
+// moved. Another machine's sessions stay where they are, in that machine's
+// own group.
 func (c *Core) spaceOp(a ipc.SpaceArgs) (ipc.SpaceResult, error) {
 	c.mu.Lock()
 	if a.Space != "" && c.spaceIndex(a.Space) < 0 {
 		c.mu.Unlock()
 		return ipc.SpaceResult{}, ipc.Errorf(ipc.CodeNotFound, "no space %q", a.Space)
 	}
+	gs, err := c.groupsIn(a.Groups)
+	if err != nil {
+		c.mu.Unlock()
+		return ipc.SpaceResult{}, err
+	}
+	// A group goes with every session in it or in a group inside it, as
+	// they are now: one that joined it a moment ago, which the client
+	// asking may not have heard of yet, goes too.
+	ids := slices.Clone(a.Sessions)
+	for _, s := range c.fullOrder() {
+		x := c.sessions[s]
+		if x != nil && slices.ContainsFunc(gs, func(g string) bool { return c.within(c.groupOf(x), g) }) {
+			ids = append(ids, s)
+		}
+	}
 	to := c.spaceKey(a.Space)
 	from := map[string]string{}
 	var moved []string
-	for _, id := range a.Sessions {
+	for _, id := range ids {
 		x := c.sessions[id]
 		if x == nil || slices.Contains(moved, id) {
 			continue
@@ -236,6 +252,18 @@ func (c *Core) spaceOp(a ipc.SpaceArgs) (ipc.SpaceResult, error) {
 		c.tidyOrder()
 		c.saveGroups()
 	}
+	// A group sent whole names the step by itself, `move "Steak" to
+	// another space`, as it is named then (renameInHistory), when what
+	// else a names is in it: a client lists the group's sessions too, for
+	// a core from before groups went whole.
+	named := ""
+	if len(gs) == 1 && !slices.ContainsFunc(a.Sessions, func(id string) bool {
+		x := c.sessions[id]
+		return x != nil && !c.within(c.groupOf(x), gs[0])
+	}) {
+		named = gs[0]
+	}
+	name := c.groupNameOf(named)
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
@@ -251,6 +279,10 @@ func (c *Core) spaceOp(a ipc.SpaceArgs) (ipc.SpaceResult, error) {
 		if chain, ok := out[id]; ok {
 			d["nest"], d["nest_groups"] = chain[len(chain)-1].ID, shotOf(chain)
 		}
+		if name != "" && len(moved) > 1 {
+			d["batch_label"] = fmt.Sprintf("move %q%s", name, spaceTail)
+			d["batch_group"], d["batch_verb"], d["batch_tail"] = named, "move", spaceTail
+		}
 		return d
 	})
 	return ipc.SpaceResult{Sessions: moved}, nil
@@ -261,9 +293,13 @@ func (c *Core) spaceOp(a ipc.SpaceArgs) (ipc.SpaceResult, error) {
 // to; when that space is gone, in the first.
 const actSpace = "space"
 
+// spaceTail ends a move to another space's label: `move "api-fix" to
+// another space`.
+const spaceTail = " to another space"
+
 func init() {
 	registerAction(actSpace, actionKind{verb: "move",
-		label: func(a action) string { return label("move", a.Name) + " to another space" },
+		label: func(a action) string { return label("move", a.Name) + spaceTail },
 		undo:  effect{check: checkSpace("from"), do: doSpace("from")},
 		redo:  effect{check: checkSpace("to"), do: doSpace("to")}})
 }

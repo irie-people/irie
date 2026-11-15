@@ -16,9 +16,10 @@ import (
 // every surface (WCAG 2.2, 1.4.3 and 1.4.11), which TestPalettesMeetWCAG
 // checks. The sidebar paints its own ground, so this holds whatever the
 // terminal's theme is. The state colours stay apart for colour-blind
-// viewers too, which TestStatesStayApartForColourBlindViewers checks: in
-// light mode needs is deeper than paused, as a deutan sees the two as one
-// olive at one lightness (DESIGN §5.3).
+// viewers too, from each other and from ink and muted, which
+// TestStatesStayApartForColourBlindViewers checks: they differ in lightness
+// as well as hue, as a deutan sees a red and an amber of one lightness as
+// one olive (DESIGN §5.3).
 type palette struct {
 	// Surfaces: the pane's ground; card fills (quiet, hovered, selected, and
 	// one that needs you); the details card and the command bar.
