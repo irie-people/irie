@@ -24,6 +24,7 @@ enum Theme {
 
     /// The palette in use, each set's colours by their names in a theme
     /// file: Evergreen until a machine's core says what its Mac app draws in.
+    // design: evergreen
     static var light: [String: UInt32] = [
         "sidebar": 0xF4F4EC, "ground": 0xE9EBDF, "card": 0xFBFBF6, "panel": 0xF1F2E8, "field": 0xFDFDF9,
         "edge": 0xD8DCC9, "hover": 0xF6F7EF, "selection": 0xDDE5D3, "needs_tint": 0xFBE5DC,
@@ -36,6 +37,7 @@ enum Theme {
         "ink": 0xECF0E6, "muted": 0xB3BFB5, "accent": 0x9CC5A1, "accent_ink": 0xB3D6B8, "accent_fill": 0x9CC5A1, "on_accent": 0x12201A,
         "needs": 0xFF9585, "done": 0x8FC3B2, "paused": 0xEFC468, "frozen": 0x86E0FD, "sun": 0xD9A93F, "waves": 0x9CC5A1,
     ]
+    // design: end
     /// The bars, dark in both modes: Evergreen's, until a palette comes.
     private static var bars: (light: UInt32, dark: UInt32, edge: UInt32) = (0x183F30, 0x0F1712, 0x26332B)
 
@@ -105,8 +107,10 @@ enum Theme {
 
     static func bar(_ scheme: ColorScheme) -> Color { fixed(scheme == .dark ? bars.dark : bars.light) }
     static let barEdge = Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(bars.edge) : .clear })
+    // design: terminal termBack=ground termInk=ink
     static let termBack = fixed(0x14110D)
     static let termInk = fixed(0xEEE5D5)
+    // design: end
     /// The toasts, in the inks: the light set's on the dark one's.
     static let toastBack = roles("ink", "ink")
     static let toastInk = roles("ink", "ink", darkSet: (true, false))
@@ -165,8 +169,10 @@ enum AgentColor {
         var sidebar, ground, card, panel, selection, muted, needs: UInt32
     }
 
+    // design: evergreen
     private static var light = Swatches(sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, selection: 0xDDE5D3, muted: 0x56635A, needs: 0x892319)
     private static var dark = Swatches(sidebar: 0x141C17, ground: 0x0E1410, card: 0x1C2620, panel: 0x18221C, selection: 0x2A3D31, muted: 0xB3BFB5, needs: 0xFF9585)
+    // design: end
 
     // Theme.swift's numbers: the chroma of a mark and its text, the
     // lightness each starts from (light mode, dark mode), and a wash's

@@ -12,7 +12,7 @@ import (
 // macMarks are the marks of the six colours on each palette's dark working
 // cards, as the Mac app's Theme.agentHex(slot:palette:dark:high:) gives
 // them with high false.
-var macMarks = map[string][AgentColors]string{
+var macMarks = map[string][]string{
 	"rosewater":  {"#d1b377", "#a1c48c", "#75c9bd", "#7fc1e6", "#b0b1ed", "#d9a3ce"},
 	"terracotta": {"#ddad7d", "#b5be7f", "#81c9aa", "#73c6da", "#9db7ef", "#cca7dd"},
 	"lilac":      {"#d0b477", "#9fc48e", "#74c9bf", "#81c0e7", "#b2b0ec", "#daa3cd"},
@@ -24,8 +24,8 @@ var macMarks = map[string][AgentColors]string{
 func TestAgentColorsMatchTheMacApp(t *testing.T) {
 	for _, name := range config.Themes {
 		want, ok := macMarks[name]
-		if !ok {
-			t.Errorf("no marks to check for the palette %s", name)
+		if !ok || len(want) != AgentColors {
+			t.Errorf("%d marks to check for the palette %s, want %d", len(want), name, AgentColors)
 			continue
 		}
 		for n := 1; n <= AgentColors; n++ {
@@ -95,7 +95,7 @@ func TestHuesApart(t *testing.T) {
 		_, _, red := toOKLCH(channels(p.needs))
 		for a := 1; a <= AgentColors; a++ {
 			h := agentHue(a-1, p)
-			if d := math.Abs(math.Mod(h-red+540, 360) - 180); d < hueGap {
+			if d := math.Abs(math.Mod(h-red+540, 360) - 180); d < agents.NeedsGap {
 				t.Errorf("%s colour %d: hue %.0f° is %.0f° from the needs red", name, a, h, d)
 			}
 			for b := 1; b <= AgentColors; b++ {
