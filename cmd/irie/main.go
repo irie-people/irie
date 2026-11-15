@@ -54,13 +54,17 @@ const usage = `usage: ` + brand.Slug + ` [command]
                           you are not looking at, never the one you work on
   ` + brand.Slug + ` remote <command>   the phone app: pair a phone, list or forget phones,
                           share the certificate authority (` + brand.Slug + ` remote for help)
-` + privacyUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
+` + privacyUsage + writingUsage + `  ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
                           ` + brand.Name + `'s plugins in this build, and how far
                           each part is set up; turn a plugin or a part on or off
 ` + mailUsage + vpnSetupUsage + privacySetupUsage + `  ` + brand.Slug + ` peer <command>     your other machines' ` + brand.Name + `, shown in this list and
                           started on with ^NAME (` + brand.Slug + ` peer for help)
   ` + brand.Slug + ` version            print the version
   ` + brand.Slug + ` config path|print  show the config file's path, or the config in effect
+  ` + brand.Slug + ` config set KEY VALUE
+                          change one setting, such as
+                          profiles.helper.folder ~/Helper; unset KEY puts
+                          it back to its default
   ` + brand.Slug + ` skills             list the skills that come with ` + brand.Name + `, and whether
                           sessions get each
 
@@ -75,7 +79,7 @@ Used by ` + brand.Name + ` itself:
   ` + brand.Slug + ` statusline [--then COMMAND]
                             the status line of Claude Code sessions, which runs
                             the user's own
-` + privacyServerUsage + `  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
+` + privacyServerUsage + writingServerUsage + `  ` + brand.Slug + ` runtime -- COMMAND   ` + brand.Name + `'s own Ollama server, whose model runners stop
                             with it` + privacyRuntimeUsage + `
   ` + brand.Slug + ` placeholder          what the slot shows when no session is shown
   ` + brand.Slug + ` team-tmux --tmux BIN --socket PATH --session ID --env-file FILE -- ARGS
@@ -301,9 +305,28 @@ func openLog(p paths.Paths, path string) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, nil))
 }
 
+const configUsage = "usage: " + brand.Slug + " config path|print|set KEY VALUE|unset KEY"
+
 func configCmd(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: " + brand.Slug + " config path|print")
+	switch {
+	case len(args) == 3 && args[0] == "set", len(args) == 2 && args[0] == "unset":
+		// A change goes through the core when it runs, which checks it and
+		// runs on it at once, else into the file (setConfig).
+		p, err := paths.FromEnv()
+		if err != nil {
+			return err
+		}
+		var v any
+		if args[0] == "set" {
+			if v, err = config.ParseText(args[1], args[2]); err != nil {
+				return err
+			}
+		} else if err := config.CheckKey(args[1]); err != nil {
+			return err
+		}
+		return setConfig(p, []config.Edit{{Key: args[1], Value: v}})
+	case len(args) != 1:
+		return errors.New(configUsage)
 	}
 	switch args[0] {
 	case "path":
@@ -320,7 +343,7 @@ func configCmd(args []string) error {
 		}
 		return cfg.Write(os.Stdout)
 	}
-	return errors.New("usage: " + brand.Slug + " config path|print")
+	return errors.New(configUsage)
 }
 
 // teamTmux is `irie team-tmux`, the tmux shim of a session with teams

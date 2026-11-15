@@ -206,6 +206,11 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	case a.Delegate:
 		profile.PermissionMode = c.cfg().Route.DelegateMode
 	}
+	// An agent of your own works in its folder, in place, where its
+	// CLAUDE.md, skills and records are, unless the task names a place.
+	if profile.Folder != "" && a.Repo == "" && a.Cwd == "" {
+		a.Repo, a.InPlace = profile.Folder, true
+	}
 	if a.Model != "" {
 		if profile.Harness != "claude-code" || profile.Local != nil {
 			return ipc.Session{}, ipc.Errorf(ipc.CodeBadArgs, "+%s takes no model for one task: pick a Claude Code profile, or +%s<model> or +%s<model> for a local model", profileName, localPrefix, llamaPrefix)
@@ -465,6 +470,13 @@ func (c *Core) launch(j job) (*session, error) {
 			x.warnings = append(x.warnings, warn)
 		} else if mcp != nil {
 			s.MCP = mcp
+		}
+		// A writing session's own way to Variorum (docs/proposals/writers.md).
+		for name, srv := range c.variorumMCP(x.cwd) {
+			if s.MCP == nil {
+				s.MCP = map[string]harness.MCPServer{}
+			}
+			s.MCP[name] = srv
 		}
 	}
 	launch := h.Launch

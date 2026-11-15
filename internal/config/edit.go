@@ -84,6 +84,44 @@ func pruned(m map[string]any) map[string]any {
 	return out
 }
 
+// CheckKey says whether key names a setting, such as spawn.close_delay or
+// profiles.helper.folder.
+func CheckKey(key string) error {
+	path, err := splitKey(key)
+	if err == nil {
+		_, err = keyType(path)
+	}
+	return err
+}
+
+// ParseText reads a value for key as typed on a command line: a string or
+// a duration as it is, such as ~/Helper or 30s, and anything else as JSON,
+// such as true, 3 or ["a", "b"].
+func ParseText(key, text string) (any, error) {
+	path, err := splitKey(key)
+	if err != nil {
+		return nil, err
+	}
+	t, err := keyType(path)
+	if err != nil {
+		return nil, err
+	}
+	if t.Kind() == reflect.String || t == reflect.TypeFor[time.Duration]() {
+		if text == "" {
+			return nil, fmt.Errorf("%s needs a value; unset puts it back to its default", key)
+		}
+		raw, err := json.Marshal(text)
+		if err != nil {
+			return nil, err
+		}
+		return ParseValue(key, raw)
+	}
+	if strings.TrimSpace(text) == "" || strings.TrimSpace(text) == "null" {
+		return nil, fmt.Errorf("%s needs a value; unset puts it back to its default", key)
+	}
+	return ParseValue(key, []byte(text))
+}
+
 // ParseValue reads a value for key from JSON, as the type the key takes; a
 // duration is a string such as "30s". JSON null, or nothing, gives nil,
 // which puts the key back to its default.

@@ -156,6 +156,7 @@ type Core struct {
 	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
+	variorum   variorumState         // Variorum's door: the note each session named last (variorum.go)
 	mail       mailState             // the mail plugin's accounts and connections (mail.go)
 }
 
@@ -774,6 +775,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.raphaelOp(peer, a)
+	case ipc.OpVariorum:
+		var a ipc.VariorumArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.variorumOp(peer, a)
 	case ipc.OpMail:
 		var a ipc.MailArgs
 		if err := decode(raw, &a); err != nil {
@@ -811,7 +818,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 		})}, nil
 	case ipc.OpPerf:
@@ -1009,12 +1016,24 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.pluginsOp(a)
+	case ipc.OpVariorum:
+		var a ipc.VariorumArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.variorumOp(0, a)
 	case ipc.OpMarkets:
 		var a ipc.MarketsArgs
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
 		return c.marketsOp(a)
+	case ipc.OpCard:
+		var a ipc.CardArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.cardOp(a)
 	case ipc.OpMail:
 		// A call with no process to it, such as one from within the core.
 		var a ipc.MailArgs

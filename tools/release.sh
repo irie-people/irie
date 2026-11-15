@@ -3,6 +3,9 @@
 #
 #   irie-darwin-arm64.tar.gz  irie-darwin-amd64.tar.gz
 #   irie-linux-amd64.tar.gz   irie-linux-arm64.tar.gz
+#   irie-windows-amd64.zip    irie-windows-arm64.zip
+#                             irie.exe, the Windows wrapper, which runs
+#                             Irie inside WSL 2 (docs/WINDOWS.md)
 #   Irie-macos.zip            Irie.app, with irie inside, for Apple silicon
 #                             and Intel Macs
 #   SHA256SUMS                the SHA-256 of each
@@ -48,6 +51,17 @@ for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
 	COPYFILE_DISABLE=1 tar -czf "$out/$BRAND_SLUG-$os-$arch.tar.gz" -C "$dir" "$BRAND_SLUG" LICENSE
 done
 
+# The Windows wrapper (cmd/windows): irie.exe, which runs the Linux irie
+# inside WSL 2. A zip, which Windows opens without anything more.
+for arch in amd64 arm64; do
+	dir=$work/$BRAND_SLUG-windows-$arch
+	mkdir -p "$dir"
+	say "$BRAND_SLUG.exe for windows/$arch"
+	CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -trimpath -tags "$BRAND_TAGS" -ldflags "-s -w" -o "$dir/$BRAND_SLUG.exe" ./cmd/windows
+	cp LICENSE "$dir/"
+	(cd "$dir" && zip -q -X "$out/$BRAND_SLUG-windows-$arch.zip" "$BRAND_SLUG.exe" LICENSE)
+done
+
 if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ]; then
 	say "$BRAND_NAME.app, for Apple silicon and Intel"
 	# A build to install: its version is internal/version's, checked
@@ -78,7 +92,7 @@ else
 fi
 
 cd "$out"
-sums=$(for f in "$BRAND_SLUG"-*.tar.gz "$BRAND_EXE"-*.zip; do [ -e "$f" ] && printf '%s\n' "$f"; done)
+sums=$(for f in "$BRAND_SLUG"-*.tar.gz "$BRAND_SLUG"-windows-*.zip "$BRAND_EXE"-*.zip; do [ -e "$f" ] && printf '%s\n' "$f"; done | sort -u)
 if command -v sha256sum >/dev/null 2>&1; then
 	echo "$sums" | xargs sha256sum >SHA256SUMS
 else
