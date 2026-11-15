@@ -142,6 +142,12 @@ final class KeyRouter {
             if irie, MainActor.assumeIsolated({ self.continueKey.route(event, store: store) }) == nil {
                 return nil
             }
+            // A code card's editor has its own keys while it has the
+            // keyboard: find, save, open a file, go to a line, comment, and
+            // ⌘W for its file rather than the session (CodeEditor.swift).
+            if irie, MainActor.assumeIsolated({ (event.window?.firstResponder as? CodeTextView)?.command(event) == true }) {
+                return nil
+            }
             if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
