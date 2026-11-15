@@ -1,5 +1,5 @@
 // Command design keeps Irie's copies of its design library's values in
-// step with the library (github.com/irie-people/design;
+// step with the library (github.com/irie-people/roots;
 // internal/designcheck). With no argument it says which are not; sync
 // writes the library's values into them.
 package main
@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/irie-people/design"
 	"github.com/irie-people/irie/internal/designcheck"
+	"github.com/irie-people/roots"
 )
 
 func main() {
@@ -32,7 +32,7 @@ func main() {
 	report(probs)
 }
 
-func report(probs []design.Problem) {
+func report(probs []roots.Problem) {
 	for _, p := range probs {
 		fmt.Fprintln(os.Stderr, p)
 	}

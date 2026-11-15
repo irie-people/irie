@@ -17,13 +17,13 @@ import (
 	"image/color"
 	"math"
 
-	"github.com/irie-people/design"
+	"github.com/irie-people/roots"
 )
 
 // agents are the steps of the agents' colours and their numbers, which
 // the design library keeps for every client that draws them
-// (github.com/irie-people/design, tokens.json).
-var agents = design.TheAgents()
+// (github.com/irie-people/roots, tokens.json).
+var agents = roots.TheAgents()
 
 // AgentColors is how many colours the agents have.
 var AgentColors = agents.Slots
@@ -44,7 +44,7 @@ var (
 
 // terminalGround is the ground of the Mac app's terminal (Theme.swift,
 // terminalBackground), the library's.
-var terminalGround = channels(hex(design.TheTerminal().Ground))
+var terminalGround = channels(hex(roots.TheTerminal().Ground))
 
 // AgentColor is the agents' colour n, from 1 to AgentColors, as "#rrggbb":
 // a working card's mark in the Mac app's dark mode, in the palette theme

@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/irie-people/design"
+	"github.com/irie-people/roots"
 )
 
 // ThemesPage is the site's page of the palettes.
@@ -50,10 +50,10 @@ var tableRows = map[string]string{
 var tableGrounds = []string{"card", "selection", "needs_tint", "panel", "field"}
 
 // lowest is a colour's lowest contrast on the table's grounds.
-func lowest(s design.Set, role string) float64 {
+func lowest(s roots.Set, role string) float64 {
 	low := math.Inf(1)
 	for _, g := range tableGrounds {
-		low = min(low, design.Contrast(s[role], s[g]))
+		low = min(low, roots.Contrast(s[role], s[g]))
 	}
 	return low
 }
@@ -69,10 +69,10 @@ var (
 
 // themesPage checks the page, and gives it back with its tables written
 // from the library.
-func themesPage(src string) (string, []design.Problem) {
-	var probs []design.Problem
+func themesPage(src string) (string, []roots.Problem) {
+	var probs []roots.Problem
 	bad := func(at int, f string, a ...any) {
-		probs = append(probs, design.Problem{Path: ThemesPage, Line: strings.Count(src[:at], "\n") + 1, What: fmt.Sprintf(f, a...)})
+		probs = append(probs, roots.Problem{Path: ThemesPage, Line: strings.Count(src[:at], "\n") + 1, What: fmt.Sprintf(f, a...)})
 	}
 	type span struct {
 		id         string
@@ -82,7 +82,7 @@ func themesPage(src string) (string, []design.Problem) {
 	all := section.FindAllStringSubmatchIndex(src, -1)
 	for i, m := range all {
 		id := src[m[2]:m[3]]
-		if _, ok := design.PaletteByID(id); !ok {
+		if _, ok := roots.PaletteByID(id); !ok {
 			continue
 		}
 		end := len(src)
@@ -95,8 +95,8 @@ func themesPage(src string) (string, []design.Problem) {
 	// ink, accent, done and needs.
 	if o := strings.Index(src, `<figure class="picture small">`); o >= 0 && (len(secs) == 0 || o < secs[0].start) {
 		known := map[string]bool{}
-		for _, p := range design.Palettes() {
-			for _, s := range []design.Set{p.Light, p.Dark} {
+		for _, p := range roots.Palettes() {
+			for _, s := range []roots.Set{p.Light, p.Dark} {
 				for _, v := range s {
 					known[v] = true
 				}
@@ -115,7 +115,7 @@ func themesPage(src string) (string, []design.Problem) {
 	var out strings.Builder
 	last := 0
 	for _, sec := range secs {
-		p, _ := design.PaletteByID(sec.id)
+		p, _ := roots.PaletteByID(sec.id)
 		seen[sec.id] = true
 		body := src[sec.start:sec.end]
 		table := strings.Index(body, "<table")
@@ -138,7 +138,7 @@ func themesPage(src string) (string, []design.Problem) {
 				ok[v] = k
 			}
 			for _, x := range pictureMixes {
-				ok[design.Mix(s[x.a], s[x.b], x.t)] = fmt.Sprintf("%.0f%% %s over %s", x.t*100, x.a, x.b)
+				ok[roots.Mix(s[x.a], s[x.b], x.t)] = fmt.Sprintf("%.0f%% %s over %s", x.t*100, x.a, x.b)
 			}
 			for _, h := range anyHex.FindAllStringIndex(body[f[0]:end], -1) {
 				c := strings.ToUpper(body[f[0]+h[0] : f[0]+h[1]])
@@ -180,19 +180,19 @@ func themesPage(src string) (string, []design.Problem) {
 		}
 	}
 	out.WriteString(src[last:])
-	for _, id := range design.IDs() {
+	for _, id := range roots.IDs() {
 		if !seen[id] {
-			probs = append(probs, design.Problem{Path: ThemesPage, What: fmt.Sprintf("has no section for %s", id)})
+			probs = append(probs, roots.Problem{Path: ThemesPage, What: fmt.Sprintf("has no section for %s", id)})
 		}
 	}
 	return out.String(), probs
 }
 
 // checkThemesPage reads the page under root.
-func checkThemesPage(root string) []design.Problem {
+func checkThemesPage(root string) []roots.Problem {
 	src, err := os.ReadFile(filepath.Join(root, ThemesPage))
 	if err != nil {
-		return []design.Problem{{Path: ThemesPage, What: err.Error()}}
+		return []roots.Problem{{Path: ThemesPage, What: err.Error()}}
 	}
 	_, probs := themesPage(string(src))
 	return probs
@@ -200,16 +200,16 @@ func checkThemesPage(root string) []design.Problem {
 
 // syncThemesPage writes the page's tables from the library, and says what
 // only a new drawing fixes.
-func syncThemesPage(root string) (changed bool, probs []design.Problem) {
+func syncThemesPage(root string) (changed bool, probs []roots.Problem) {
 	path := filepath.Join(root, ThemesPage)
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return false, []design.Problem{{Path: ThemesPage, What: err.Error()}}
+		return false, []roots.Problem{{Path: ThemesPage, What: err.Error()}}
 	}
 	fixed, _ := themesPage(string(src))
 	if fixed != string(src) {
 		if err := os.WriteFile(path, []byte(fixed), 0o644); err != nil {
-			return false, []design.Problem{{Path: ThemesPage, What: err.Error()}}
+			return false, []roots.Problem{{Path: ThemesPage, What: err.Error()}}
 		}
 		changed = true
 	}

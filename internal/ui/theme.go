@@ -7,8 +7,8 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/lipgloss/v2"
 
-	"github.com/irie-people/design"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/roots"
 )
 
 // palette is one set of Irie's colours, the same as the Mac app's (DESIGN
@@ -38,20 +38,20 @@ func hex(s string) color.Color { return lipgloss.Color(s) }
 
 // themes are the sidebar's palettes, by their ui.theme names: Irie's
 // built-in palettes, which the design library keeps
-// (github.com/irie-people/design, palettes/).
+// (github.com/irie-people/roots, palettes/).
 var themes = builtIns()
 
 // builtIns are the design library's palettes as the sidebar's.
 func builtIns() map[string]theme {
 	out := map[string]theme{}
-	for _, p := range design.Palettes() {
+	for _, p := range roots.Palettes() {
 		out[p.ID] = theme{light: setOf(p.Light), dark: setOf(p.Dark)}
 	}
 	return out
 }
 
 // setOf is one of the library's sets as a palette.
-func setOf(s design.Set) palette {
+func setOf(s roots.Set) palette {
 	var p palette
 	for k, dst := range p.roles() {
 		*dst = hex(s[k])
@@ -60,7 +60,7 @@ func setOf(s design.Set) palette {
 }
 
 // defaultTheme is ui.theme's default.
-var defaultTheme = design.Default()
+var defaultTheme = roots.Default()
 
 // setDark picks the theme's dark or light set. The sidebar asks the terminal
 // for its background and uses the dark set until it answers.

@@ -9,7 +9,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/emersion/go-message v0.18.2
-	github.com/irie-people/design v0.0.0-20261115205348-d0d1c4d1a5e0
+	github.com/irie-people/roots v0.0.0-20261115220058-c090f396e510
 	github.com/toon-format/toon-go v1.0.1
 	github.com/wailsapp/go-webview2 v1.0.23
 	golang.org/x/sys v0.47.0

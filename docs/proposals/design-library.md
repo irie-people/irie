@@ -6,7 +6,7 @@ Date: 2026-11-15. Status: step 1 is built (below); the rest is proposed. This fi
 
 Irie looks and behaves as one product in all six of its clients: the Mac app, the iPhone app, the phone's web app, the Windows app, the terminal sidebar and the site. What Irie learns about design (about colour, about how a part should be used, about which parts are built from which) is written down once, checked where it can be, and reaches every client from one place.
 
-The request, 2026-11-15: start a front-end design and component library from what has been learned about design and colours, and about how components are used and built from one another; then, the same day, put the library under the irie-people organisation on GitHub.
+The request, 2026-11-15: start a front-end design and component library from what has been learned about design and colours, and about how components are used and built from one another; then, the same day, put the library under the irie-people organisation on GitHub, and name it: Roots, for roots reggae.
 
 ## Why now
 
@@ -14,7 +14,7 @@ On 2026-11-15 the colours of the states were changed for colour-blind viewers. T
 
 ## Step 1: the library and its checks (built)
 
-The library is its own repository, [irie-people/design](https://github.com/irie-people/design), a Go module (`github.com/irie-people/design`) with no dependencies. It began as `design/` in Irie (9245b1f) and moved out the same day.
+The library is Roots, its own repository, [irie-people/roots](https://github.com/irie-people/roots), a Go module (`github.com/irie-people/roots`) with no dependencies; it was irie-people/design for its first hours. It began as `design/` in Irie (9245b1f) and moved out the same day.
 
 - **The values.** The four palettes as files of their own in `palettes/`, in the shape of a theme file of one's own, and `tokens.json` for the rest every client must agree on: the palettes' order and default, the contrast floors, the terminal's colours and the agents' colours' numbers. The library's own test holds every palette to its contrast floors.
 - **Go reads them.** Irie's terminal sidebar, status line and config take their palettes, the agents' numbers and the list of theme names from the module, so Irie's Go keeps no copy.
@@ -36,7 +36,7 @@ In order; each is its own change.
 
 ## Decisions
 
-- **Its own repository, under irie-people.** Asked for on 2026-11-15, so the library is a home of its own for every Irie People project that draws, and lessons learned outside Irie's repository can go straight into it. Irie depends on it as a Go module; a change to the palettes is a change there, then a `go get` and `tools/design.sh sync` here, in one commit with the copies it changes.
+- **Its own repository, under irie-people, named Roots.** Asked for on 2026-11-15, and the name chosen the same day from names that refer to roots reggae, leaving out Rastafari's religious words, artists' and labels' names, and names already a company's, so the library is a home of its own for every Irie People project that draws, and lessons learned outside Irie's repository can go straight into it. Irie depends on it as a Go module; a change to the palettes is a change there, then a `go get` and `tools/design.sh sync` here, in one commit with the copies it changes.
 - **Theme files, not a token standard, for the palettes.** The built-in palettes are written as a person's own theme file is, so making one's own starts from copying one. The [Design Tokens format](https://www.designtokens.org/tr/2025.10/) can be an export when a tool needs it.
 - **Markers in the copies, not templates.** A comment around each block keeps every copy's own layout and lets one command check and write all of them, with no change to how any client is built.
 - **Public sources only.** Every rule's source is public or a request recorded here; rules known only from private notes are left out.

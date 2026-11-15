@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/irie-people/design"
+	"github.com/irie-people/roots"
 )
 
 // root is Irie's checkout, which holds the copies.
@@ -38,7 +38,7 @@ func TestRolesMatchTheMacApp(t *testing.T) {
 	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
 		swift[m[1]] = [2]string{m[2], m[3]}
 	}
-	roles := design.Roles()
+	roles := roots.Roles()
 	if len(swift) != len(roles) {
 		t.Errorf("Looks.swift has %d roles, the library %d", len(swift), len(roles))
 	}
@@ -59,7 +59,7 @@ func TestRolesMatchTheMacApp(t *testing.T) {
 // written again; an old colour in a picture is found and left for a new
 // drawing.
 func TestTheThemesPageIsChecked(t *testing.T) {
-	rw, _ := design.PaletteByID("rosewater")
+	rw, _ := roots.PaletteByID("rosewater")
 	oldNeeds := "#A23B2E"
 	src, err := os.ReadFile(filepath.Join(root, ThemesPage))
 	if err != nil {
@@ -100,8 +100,8 @@ func TestTheThemesPageIsChecked(t *testing.T) {
 // TestTheMixIsThePicturesMix: the needs card's edge in Rosewater's light
 // picture is 45% needs over its tint, as the page drew it.
 func TestTheMixIsThePicturesMix(t *testing.T) {
-	rw, _ := design.PaletteByID("rosewater")
-	if got := design.Mix(rw.Light["needs"], rw.Light["needs_tint"], 0.45); got != "#C98D82" {
+	rw, _ := roots.PaletteByID("rosewater")
+	if got := roots.Mix(rw.Light["needs"], rw.Light["needs_tint"], 0.45); got != "#C98D82" {
 		t.Errorf("Mix = %s, want #C98D82", got)
 	}
 }
