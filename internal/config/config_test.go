@@ -1016,3 +1016,24 @@ func TestFallbackModel(t *testing.T) {
 		}
 	}
 }
+
+// TestRemotePanes: remote.panes names the panes phones reach, each at a
+// port of its own that isn't the phone app's or another pane's.
+func TestRemotePanes(t *testing.T) {
+	c, err := Load(writeFile(t, "[remote.panes]\n\"invoices.invoices\" = 7390\n\"shop-front.till\" = 7391\n"))
+	if err != nil || !reflect.DeepEqual(c.Remote.Panes, map[string]int{"invoices.invoices": 7390, "shop-front.till": 7391}) {
+		t.Fatalf("remote.panes = %v, %v", c.Remote.Panes, err)
+	}
+	for body, want := range map[string]string{
+		"[remote.panes]\ninvoices = 7390\n":                                     `"invoices" isn't a pane's id`,
+		"[remote.panes]\n\"Invoices.invoices\" = 7390\n":                        `"Invoices.invoices" isn't a pane's id`,
+		"[remote.panes]\n\"invoices.invoices\" = 80\n":                          `remote.panes."invoices.invoices" = 80: must be a port from 1024`,
+		"[remote.panes]\n\"invoices.invoices\" = 7387\n":                        "the phone app has that port",
+		"[remote]\nport = 7500\n[remote.panes]\n\"invoices.invoices\" = 7499\n": "the phone app has that port",
+		"[remote.panes]\n\"a.a\" = 7390\n\"b.b\" = 7390\n":                      `remote.panes."b.b" = 7390: a.a has that port too`,
+	} {
+		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", body, err, want)
+		}
+	}
+}

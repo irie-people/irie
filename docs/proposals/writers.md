@@ -72,8 +72,10 @@ The writer doesn't run either setup in Terminal. Variorum lets `claude-code` in 
 | The setups (both shapes), the checks on the door's program, one call over stdio | `internal/variorum` |
 | The `variorum` op (`status`, `connect`, `forget`, `notes`, `read`, `show`) and each session's note from its hooks; the door for `:write` sessions | `internal/core/variorum.go`, `internal/core/guide.go` |
 | `irie variorum [status\|connect\|forget\|door]` | `cmd/irie` |
-| The plugin's second part, ready once Variorum is installed and both setups are kept | `internal/plugins/writing.go` |
+| The plugin's second part, ready once Variorum is installed and both setups are kept, with a switch of its own, `variorum.tab` | `internal/plugins/writing.go` |
 | The tab | `mac/Sources/Irie/VariorumTab.swift` and `RightSidebar.swift` |
+
+**Its switch.** `variorum.tab`, on by default, is the tab's own, so a bundle that names `writing.tab` can take it away as well as bring it (plugin-panes.md). Off, the tab and the `variorum` op behind it go, and nothing else does: `:write` sessions keep Variorum's door, which goes with writing in Variorum, the plugin's first part, and `irie variorum` keeps the setups while either part is on. `irie plugins off writing tab`, or its toggle in Settings › Plugins, turns it off.
 
 `go build -tags nowriting` leaves all of it out, with the rest of the plugin.
 
