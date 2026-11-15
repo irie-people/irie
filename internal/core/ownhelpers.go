@@ -204,7 +204,7 @@ func (c *Core) helpersOp(a ipc.HelpersArgs) (ipc.HelpersResult, error) {
 		case why[h.ID] != "":
 			w.Problem = why[h.ID]
 		case ok && p.Dead:
-			w.Problem = fmt.Sprintf("It stopped (exit %d). %s starts it again within %d seconds; its window in irie-agents keeps what it printed last.", p.DeadStatus, brand.Name, int(ownHelperRetry/time.Second))
+			w.Problem = fmt.Sprintf("It stopped (exit %d). %s starts it again within %d seconds; its window in %s keeps what it printed last.", p.DeadStatus, brand.Name, int(ownHelperRetry/time.Second), tmux.AgentsSession)
 		}
 		if h.Status != "" {
 			readOwnHelperStatus(h.Status, &w)
