@@ -208,6 +208,22 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // A code card (CodePane.swift): a file with the lines its agent
+            // changed marked, in the app's own code colours in both modes,
+            // and in GitHub's.
+            for (base, dark, colours) in [("panes-code", false, CodeThemes.standard), ("panes-code-dark", true, CodeThemes.standard),
+                                          ("panes-code-github", false, "github")] {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .code)
+                let doc = CodeDocs.shared.fixture(Fixture.codeFile, text: Fixture.code, theme: CodeThemes.theme(colours, dark: dark),
+                                                  font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                doc.markFixture(28...29)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: colours], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             // A turn tilts the flap in 3D, which only SwiftUI's own renderer
             // draws, so these are the wheel alone.
             for (base, forward, at, dark) in [("panes-turn-forward", true, 0.45, false), ("panes-turn-back", false, 0.35, false), ("panes-turn-forward-dark", true, 0.3, true)] {
@@ -296,6 +312,8 @@ enum Snapshot {
         frame.cacheDisplay(in: frame.bounds, to: rep)
         let titlebar = w.frame.height - w.contentLayoutRect.height
         w.orderOut(nil)
+        // Its views go, so they no longer act on what the next pictures set.
+        w.contentView = nil
         return (rep, titlebar)
     }
 
@@ -335,6 +353,55 @@ enum Snapshot {
 /// helper and teammates.
 enum Fixture {
     static let selected = "s02docsguide"
+    /// The code card's file, in the selected session's folder, and another
+    /// it has open.
+    static var codeFile: String { "/home/alice/code/\(Brand.slug)-docs-guide/internal/session/store.go" }
+    static var codeOther: String { "/home/alice/code/\(Brand.slug)-docs-guide/README.md" }
+    static let code = """
+    package session
+
+    import (
+    \t"errors"
+    \t"sync"
+    \t"time"
+    )
+
+    // ErrClosed is returned once the store has been closed.
+    var ErrClosed = errors.New("session store closed")
+
+    // Store keeps each signed-in session until it expires.
+    type Store struct {
+    \tmu       sync.Mutex
+    \tsessions map[string]Session
+    \tttl      time.Duration
+    \tclosed   bool
+    }
+
+    // Put saves a session and waits for the write to land, so a
+    // sign-in that follows reads it back.
+    func (s *Store) Put(id string, sess Session) error {
+    \ts.mu.Lock()
+    \tdefer s.mu.Unlock()
+    \tif s.closed {
+    \t\treturn ErrClosed
+    \t}
+    \tsess.Expires = time.Now().Add(s.ttl)
+    \ts.sessions[id] = sess
+    \treturn nil
+    }
+
+    // Get returns a session that has not expired.
+    func (s *Store) Get(id string) (Session, bool) {
+    \ts.mu.Lock()
+    \tdefer s.mu.Unlock()
+    \tsess, ok := s.sessions[id]
+    \tif !ok || time.Now().After(sess.Expires) {
+    \t\treturn Session{}, false
+    \t}
+    \treturn sess, true
+    }
+
+    """
 
     /// The notepad's notes (NotesPanel.swift): two to do, one ticked off by
     /// hand, and one sent as a jot to the selected session.
