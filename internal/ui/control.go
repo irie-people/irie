@@ -49,7 +49,20 @@ type drag struct {
 	parked bool   // whether it was parked
 	at     int    // where it is in m.sessions while it moves
 	moved  bool   // it left its place
+	// Where the pointer went down and where it is, as screen rows, and
+	// whether it has left the row it went down on, which the list's edges
+	// wait for (holdAt); and whether the next scroll is on its way.
+	down, row int
+	left      bool
+	scrolling bool
 }
+
+// dragScrollEvery is how often a drag held on the list's edge scrolls it an
+// entry further.
+const dragScrollEvery = 100 * time.Millisecond
+
+// dragScrollMsg is drag d's next scroll, while it holds on an edge.
+type dragScrollMsg struct{ d *drag }
 
 // sortByOrder puts the rows in the core's order (DESIGN §4.1). The sort is
 // stable, so a core that sends no order keeps the order rows came in.
@@ -323,6 +336,69 @@ func (m *Model) dragTo(y int) {
 		m.setStatus("drop "+s.Name+" where it goes, among "+it.group.title, false)
 		return
 	}
+}
+
+// holdAt notes that the held session's pointer is on screen row y. Held on
+// the list's first line or above it, or on its last line or below it, it
+// scrolls the list that way an entry at a time (dragScroll), but only once
+// the pointer has left the row it went down on, so a press on an edge
+// doesn't set the list off.
+func (m *Model) holdAt(y int) tea.Cmd {
+	d := m.drag
+	if d == nil || d.id == "" {
+		return nil
+	}
+	d.row = y
+	d.left = d.left || y != d.down
+	if d.scrolling || !d.left || m.edge(y) == 0 {
+		return nil
+	}
+	d.scrolling = true
+	return d.next()
+}
+
+// next is drag d's next scroll.
+func (d *drag) next() tea.Cmd {
+	return tea.Tick(dragScrollEvery, func(time.Time) tea.Msg { return dragScrollMsg{d} })
+}
+
+// edge is which way a drag held on screen row y scrolls the list: up (-1)
+// on its first line or above it, down (1) on its last line or below it,
+// else not at all.
+func (m Model) edge(y int) int {
+	top, h := m.listTop(), m.listHeight()
+	switch {
+	case h < 2:
+		return 0
+	case y <= top:
+		return -1
+	case y >= top+h-1:
+		return 1
+	}
+	return 0
+}
+
+// dragScroll scrolls the list an entry toward the edge drag d holds on, and
+// carries its session along to the entry the pointer is on, or the nearest
+// one when the pointer is off the list. It goes on while d holds there, until
+// the list can go no further.
+func (m *Model) dragScroll(d *drag) tea.Cmd {
+	if d != m.drag {
+		return nil // a drag let go of
+	}
+	d.scrolling = false
+	n := m.edge(d.row)
+	if n == 0 {
+		return nil
+	}
+	was := m.offset
+	m.scroll(n)
+	if m.offset == was {
+		return nil
+	}
+	m.dragTo(min(max(d.row, m.listTop()), m.listTop()+m.listHeight()-1))
+	d.scrolling = true
+	return d.next()
 }
 
 // putBack sends a dragged session back where it was, parked as it was.

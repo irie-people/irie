@@ -145,6 +145,11 @@ private struct SessionList: View {
                         .padding(.top, 3)
                         .padding(.bottom, 8)
                     }
+                    // A drag held near the list's top or bottom edge
+                    // scrolls it (DragScroll.swift).
+                    .background(alignment: .topLeading) {
+                        DragScrolling().frame(width: 1, height: 1).accessibilityHidden(true)
+                    }
                 }
                 .onChange(of: store.selection) {
                     guard let id = store.selection else { return }
@@ -831,6 +836,7 @@ private struct HeaderDrag: ViewModifier {
             content.onDrag {
                 store.dragging = nil
                 store.draggingGroup = id
+                NotificationCenter.default.post(name: .irieDragBegan, object: nil)
                 return NSItemProvider(object: ("group:" + id) as NSString)
             }
         } else {

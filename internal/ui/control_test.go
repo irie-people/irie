@@ -474,6 +474,73 @@ func TestDraggingACardStaysInItsInnermostGroup(t *testing.T) {
 	}
 }
 
+// A row held on the list's top line, or above it, scrolls the list up an
+// entry at a time and comes along, to the top of its group; one held on
+// the bottom line scrolls it down, to the end. The test's runtime waits out
+// each step, so a hold here lasts until the list can go no further.
+func TestDraggingOnTheListsEdgeScrollsIt(t *testing.T) {
+	m, b := ctlAt(t, sessions(12), 34, 12) // one-line rows, more than fit
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("end"))
+	top, bottom := m.listTop(), m.listTop()+m.listHeight()-1
+	if m.offset == 0 || lineOf(t, m, "task-011") != bottom {
+		t.Fatalf("the list did not scroll to its end: offset %d", m.offset)
+	}
+	// Up from the last row, through the middle, onto the top line.
+	m = send(m, tea.MouseClickMsg{X: 5, Y: bottom, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: bottom - 1, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: top, Button: tea.MouseLeft})
+	if m.offset != 0 {
+		t.Errorf("held on the top line, the list stopped at offset %d", m.offset)
+	}
+	if got := order(m); got[0] != "s000000000011" {
+		t.Errorf("the held row did not come along to the top: %v", got)
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 5, Y: top, Button: tea.MouseLeft})
+	if want := []string{`reorder s000000000011 before "s000000000000"`}; !slices.Equal(b.calls, want) {
+		t.Errorf("calls = %v, want %v", b.calls, want)
+	}
+
+	// Down from the first row onto the command bar, below the list.
+	first := lineOf(t, m, "task-011")
+	m = send(m, tea.MouseClickMsg{X: 5, Y: first, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: first + 1, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: m.barTop(), Button: tea.MouseLeft})
+	if want := m.maxOffset(m.items()); m.offset != want {
+		t.Errorf("held below the list, it stopped at offset %d, not %d", m.offset, want)
+	}
+	if got := order(m); got[len(got)-1] != "s000000000011" {
+		t.Errorf("the held row did not come along to the end: %v", got)
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 5, Y: m.barTop(), Button: tea.MouseLeft})
+	if last := b.calls[len(b.calls)-1]; last != `reorder s000000000011 before ""` {
+		t.Errorf("drop at the end: %q", last)
+	}
+}
+
+// A press on the list's edge that never leaves its row scrolls nothing, and
+// a scroll still on its way when the drag is let go of moves nothing.
+func TestAnEdgeWaitsForTheDragToMove(t *testing.T) {
+	m, b := ctlAt(t, sessions(12), 34, 12)
+	m = send(m, keyMsg("esc"))
+	m = send(m, keyMsg("end"))
+	top, at := m.listTop(), m.offset
+	m = send(m, tea.MouseClickMsg{X: 5, Y: top, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 9, Y: top, Button: tea.MouseLeft})
+	if m.offset != at {
+		t.Errorf("a press on the top line that stayed on it scrolled the list to %d", m.offset)
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 9, Y: top, Button: tea.MouseLeft})
+	// A scroll that comes after the drag ends moves nothing.
+	d := &drag{id: "s000000000000", row: top, left: true}
+	m.drag = d
+	m = send(m, tea.MouseReleaseMsg{X: 5, Y: top + 2, Button: tea.MouseLeft})
+	m = send(m, dragScrollMsg{d})
+	if m.offset != at || len(b.calls) != 0 {
+		t.Errorf("a late scroll moved the list to %d, calls %v", m.offset, b.calls)
+	}
+}
+
 func TestWithoutControlsTheKeysSaySo(t *testing.T) {
 	m, _ := newModel(t, 34, 24, 2)
 	m = send(m, keyMsg("f"))
