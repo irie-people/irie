@@ -14,7 +14,7 @@ import (
 // them with high false.
 var macMarks = map[string][]string{
 	"rosewater":  {"#d1b377", "#a1c48c", "#75c9bd", "#7fc1e6", "#b0b1ed", "#d9a3ce"},
-	"terracotta": {"#ddad7d", "#b5be7f", "#81c9aa", "#73c6da", "#9db7ef", "#cca7dd"},
+	"terracotta": {"#d4b278", "#a6c389", "#77cab9", "#7cc2e3", "#acb2ed", "#d7a4d2"},
 	"lilac":      {"#d0b477", "#9fc48e", "#74c9bf", "#81c0e7", "#b2b0ec", "#daa3cd"},
 	"evergreen":  {"#d1b377", "#a1c48d", "#74c9be", "#80c1e6", "#b1b0ec", "#daa3ce"},
 }
