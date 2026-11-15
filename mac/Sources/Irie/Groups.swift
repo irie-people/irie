@@ -551,7 +551,8 @@ struct GroupMenu: View {
 }
 
 /// A group header's own items, for one of your groups: put it in a new
-/// group, move it into another or out of the one around it.
+/// group, move it into another or out of the one around it, or to another
+/// space or a new one, whole (Spaces.swift).
 @MainActor
 struct GroupPlaceMenu: View {
     @Environment(Store.self) private var store
@@ -576,6 +577,9 @@ struct GroupPlaceMenu: View {
         }
         if let parent {
             Button("Move Out of “\(store.groupName(parent))”") { store.moveOut(id) }
+        }
+        if store.canSpaces {
+            Menu("Move “\(name)” to Space") { GroupSpaceItems(id: id) }
         }
     }
 }

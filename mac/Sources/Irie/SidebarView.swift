@@ -751,6 +751,15 @@ private struct GroupHeader: View {
                     if store.parentGroup(id) != nil {
                         Button("Move out of \(store.groupName(store.parentGroup(id) ?? ""))") { store.moveOut(id) }
                     }
+                    if store.canSpaces {
+                        ForEach(Array(store.spaces.enumerated()), id: \.element.id) { i, s in
+                            let key = store.spaceKey(at: i)
+                            if key != store.space {
+                                Button("Move to the space \(s.name)") { store.sendGroupToSpace(id, key) }
+                            }
+                        }
+                        Button("Move to a new space") { store.newSpace(forGroup: id) }
+                    }
                     Button("Ungroup") { store.ungroup(id) }
                 }
             }
@@ -790,7 +799,7 @@ private struct GroupHeader: View {
         if let id = group.userGroup {
             let path = store.groupTitle(id)
             let name = path.contains("›") ? path : "\(group.title), a group of yours"
-            return "\(name). Drag the header to move the group, into another group or out of one; drop a card or a group on it to put it inside, or on its top edge just before it; double-click to rename it; right-click to move it, ungroup it or close its sessions."
+            return "\(name). Drag the header to move the group, into another group or out of one, or onto a space under the list, or its + for a new space; drop a card or a group on it to put it inside, or on its top edge just before it; double-click to rename it; right-click to move it, ungroup it or close its sessions."
         }
         return group.path.map(Age.tilde) ?? group.title
     }
