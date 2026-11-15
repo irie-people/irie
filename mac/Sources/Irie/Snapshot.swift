@@ -158,7 +158,7 @@ enum Snapshot {
             // blank card, and two turns drawn still, forward and back.
             let panes: [(String, PaneKind?, Bool, CGFloat)] = [
                 ("panes", .terminal, false, 1500), ("panes-dark", .terminal, true, 1500), ("panes-browser", .browser, false, 1500),
-                ("panes-narrow", .terminal, false, 1100), ("panes-blank", nil, false, 1500),
+                ("panes-narrow", .terminal, false, 1100), ("panes-blank", nil, false, 1500), ("panes-mail", .mail, false, 1500),
             ]
             for (base, front, dark, width) in panes {
                 store.rolodex.loadFixture(session: Fixture.selected, front: front)

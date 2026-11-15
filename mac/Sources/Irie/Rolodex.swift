@@ -28,7 +28,7 @@ import SwiftUI
 
 /// What a pane shows.
 enum PaneKind: String, Codable, CaseIterable, Identifiable {
-    case terminal, browser, markets
+    case terminal, browser, markets, mail
 
     var id: String { rawValue }
 
@@ -37,6 +37,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "Terminal"
         case .browser: return "Browser"
         case .markets: return "Markets"
+        case .mail: return "Mail"
         }
     }
 
@@ -45,6 +46,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "terminal"
         case .browser: return "globe"
         case .markets: return "chart.bar.doc.horizontal"
+        case .mail: return "envelope"
         }
     }
 
@@ -54,6 +56,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "t"
         case .browser: return "b"
         case .markets: return "m"
+        case .mail: return "e"
         }
     }
 
@@ -63,11 +66,18 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .terminal: return "Your own shell in this session’s folder"
         case .browser: return "A page: your app, docs, anything"
         case .markets: return "Your market map"
+        case .mail: return "Your Gmail and Proton Mail, in one list"
         }
     }
 
     /// The plugin it comes with, which must be on for it to be offered.
-    var plugin: String? { self == .markets ? "markets" : nil }
+    var plugin: String? {
+        switch self {
+        case .markets: return "markets"
+        case .mail: return "mail"
+        default: return nil
+        }
+    }
 
     /// The kinds on offer with these plugins: a plugin's only while it is on.
     static func offered(_ plugins: [PluginInfo], all: Bool = false) -> [PaneKind] {
@@ -572,7 +582,7 @@ final class RolodexModel {
             DeckPane(id: "fixtureterm", kind: .terminal, slot: 1),
             DeckPane(id: "fixtureweb", kind: .browser, slot: 4, url: "http://localhost:5173/", title: "Acme · Sign in"),
             DeckPane(id: "fixturemap", kind: .markets, slot: 2),
-        ]
+        ] + (front == .mail ? [DeckPane(id: "fixturemail", kind: .mail, slot: 5)] : [])
         decks = [session: Deck(panes: panes, front: panes.first { $0.kind == front }?.id)]
         keys = panes.first { $0.kind == front }?.id
     }
@@ -671,6 +681,31 @@ extension Store {
             return
         }
         r.turn(to: next, in: s.id, prefer: delta > 0, keys: true, layout: tabPlace(for: s.id))
+    }
+
+    /// Shows a card of a kind beside a session, as `irie ctl card` asks
+    /// through the core (a card frame): the session's card of that kind, or
+    /// a new one. Beside the session on show the cards slide in and turn to
+    /// it; beside another it waits in front of that session's cards. The
+    /// keyboard stays where it is.
+    func showCard(_ kind: PaneKind, in session: String) {
+        guard paneKinds.contains(kind), let row = sessions.first(where: { $0.id == session }) else { return }
+        let r = rolodex
+        let own = row.hue.map { ($0 - 1) % Theme.agentSlots }
+        let had = r.deck(session).panes.first { $0.kind == kind }
+        if paneSession?.id == session {
+            if !r.open { r.setOpen(true) }
+            if let had {
+                r.turn(to: had.id, in: session, keys: false, layout: tabPlace(for: session))
+            } else {
+                r.prune(keeping: Set(sessions.map(\.id) + closed.map(\.id)))
+                let p = r.add(kind, to: session, avoiding: own)
+                r.turn(to: p.id, in: session, keys: false, layout: tabPlace(for: session))
+            }
+            return
+        }
+        let p = had ?? r.add(kind, to: session, avoiding: own)
+        r.turn(to: p.id, in: session, keys: false, layout: tabPlace(for: session))
     }
 
     /// A click on a card's tab: the wheel turns to it, and it takes the
@@ -1497,6 +1532,9 @@ private struct PaneContent: View {
         case .terminal: ShellPane(owner: owner, pane: pane, shows: shows, keys: keys, token: token)
         case .browser: BrowserPane(session: owner.id, pane: pane, shows: shows, keys: keys, token: token)
         case .markets: MarketsPane(shows: shows, keys: keys, token: token)
+        // Every account's mail beside the session, as the right sidebar's
+        // Mail tab shows it (MailViews.swift).
+        case .mail: MailTab()
         }
     }
 }

@@ -231,6 +231,9 @@ struct Frame: Decodable {
     /// nothing (Undo.swift).
     var undo: String?
     var redo: String?
+    /// A card frame: show a card of this kind beside the session id
+    /// (Rolodex.swift, `irie ctl card`).
+    var kind: String?
 }
 
 /// What a snapshot says besides its rows.
