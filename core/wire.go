@@ -320,6 +320,7 @@ const (
 	StatusIdle         = ipc.StatusIdle
 	OpPane             = ipc.OpPane
 	OpCard             = ipc.OpCard
+	CardFileMax        = ipc.CardFileMax
 	OpPeers            = ipc.OpPeers
 	CodePeerDown       = ipc.CodePeerDown
 	OpPerf             = ipc.OpPerf
