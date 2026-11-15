@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/irie-people/irie/compare/v1.3.0...v1.4.0) (2026-11-15)
+
+
+### Features
+
+* **demo:** make a launch kit for each release ([532707a](https://github.com/irie-people/irie/commit/532707aac5ac1bd37b6d05c6b8c4ac5ce5aea2ad))
+
+
+### Bug Fixes
+
+* **plugins:** keep a broken manifest from hiding the plugins, and tighten panes ([deac4c4](https://github.com/irie-people/irie/commit/deac4c47aa1f404f417feea43e0d7b1cd7b031c9))
+
 ## [1.3.0](https://github.com/irie-people/irie/compare/v1.2.0...v1.3.0) (2026-11-15)
 
 

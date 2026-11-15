@@ -41,22 +41,35 @@ struct TerminalArea: View {
                 let width = min(CGFloat(store.side.width), max(CGFloat(SideState.minWidth), geo.size.width - minTerminal))
                 // The panes, a rolodex of cards between the terminal and the
                 // right sidebar (Rolodex.swift), slide in the same way: the
-                // terminal makes room once they are in.
+                // terminal makes room once they are in. Folded, they are a
+                // strip of their tabs, and fold and unfold the same way.
                 let side = store.sideDocked ? width : 0
                 let room = geo.size.width - side
                 let deck = RolodexModel.width(share: store.rolodex.share, in: room, keep: keepBesidePanes)
+                let strip = RolodexModel.stripWidth
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
-                        .padding(.trailing, side + (store.rolodex.docked ? deck : 0))
+                        .padding(.trailing, side + store.rolodex.kept(deck))
                     if store.rolodex.open {
-                        RolodexView()
-                            .padding(.leading, 4)
-                            .padding(.trailing, 12)
-                            .padding(.vertical, 12)
-                            .frame(width: deck)
-                            .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: deck, keep: keepBesidePanes).offset(x: -4) }
-                            .padding(.trailing, side)
-                            .transition(.move(edge: .trailing))
+                        if store.rolodex.folded {
+                            RolodexStrip()
+                                .padding(.leading, 4)
+                                .padding(.trailing, 10)
+                                .padding(.vertical, 12)
+                                .frame(width: strip)
+                                .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: strip, keep: keepBesidePanes).offset(x: -4) }
+                                .padding(.trailing, side)
+                                .transition(.move(edge: .trailing))
+                        } else {
+                            RolodexView()
+                                .padding(.leading, 4)
+                                .padding(.trailing, 12)
+                                .padding(.vertical, 12)
+                                .frame(width: deck)
+                                .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: deck, keep: keepBesidePanes).offset(x: -4) }
+                                .padding(.trailing, side)
+                                .transition(.move(edge: .trailing))
+                        }
                     }
                     if let g = store.rolodex.guide {
                         Rectangle()

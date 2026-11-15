@@ -187,7 +187,11 @@ final class RolodexModel {
     static let settle = Animation.spring(response: 0.34, dampingFraction: 0.7)
     static let startShare = 0.42
 
+    /// The folded wheel's width, its margins included.
+    static let stripWidth: CGFloat = 46
+
     private static let openKey = "rolodexOpen"
+    private static let foldedKey = "rolodexFolded"
     private static let shareKey = "rolodexShare"
     private static let decksKey = "rolodexDecks"
     private static let recentKey = "rolodexRecent"
@@ -197,6 +201,12 @@ final class RolodexModel {
     var open = UserDefaults.standard.bool(forKey: RolodexModel.openKey) {
         didSet { if !fixture, open != oldValue { UserDefaults.standard.set(open, forKey: Self.openKey) } }
     }
+    /// Folded down to a strip at the window's edge, the cards' tabs standing
+    /// along it, so the terminal takes nearly all the room: one choice for
+    /// every session, as whether they show is.
+    var folded = UserDefaults.standard.bool(forKey: RolodexModel.foldedKey) {
+        didSet { if !fixture, folded != oldValue { UserDefaults.standard.set(folded, forKey: Self.foldedKey) } }
+    }
     var share = RolodexModel.savedShare() {
         didSet { if !fixture, share != oldValue { UserDefaults.standard.set(share, forKey: Self.shareKey) } }
     }
@@ -204,6 +214,10 @@ final class RolodexModel {
     /// room for it meanwhile, so its width changes once.
     var sliding = false
     @ObservationIgnored private var slides = 0
+    /// Folding or unfolding: the terminal keeps only the strip's room
+    /// meanwhile, so its width changes once.
+    var folding = false
+    @ObservationIgnored private var folds = 0
     /// Each session's cards, by session.
     private(set) var decks: [String: Deck] = RolodexModel.savedDecks()
     /// Where the keyboard is: a card's id, blank, or nil for the terminal,
@@ -240,8 +254,13 @@ final class RolodexModel {
     @ObservationIgnored private var scrolled: CGFloat = 0
     @ObservationIgnored private var lastNotch = Date.distantPast
 
-    /// Whether the terminal makes room and sits beside it.
-    var docked: Bool { open && !sliding }
+    /// The room the terminal leaves it, beside a wheel as wide as wheel:
+    /// none while it slides in or out, the strip's while folded or folding,
+    /// else the wheel's.
+    func kept(_ wheel: CGFloat) -> CGFloat {
+        guard open, !sliding else { return 0 }
+        return folded || folding ? Self.stripWidth : wheel
+    }
 
     var turning: Bool { !flips.isEmpty || spin != nil }
 
@@ -285,12 +304,13 @@ final class RolodexModel {
 
     // MARK: Showing
 
-    /// Slides the wheel in from the window's edge, or out. With Reduce
-    /// Motion on, in one step.
-    func setOpen(_ on: Bool) {
+    /// Slides the wheel in from the window's edge, or out: in, unfolded
+    /// unless fold asks for its strip. With Reduce Motion on, in one step.
+    func setOpen(_ on: Bool, folded fold: Bool = false) {
         guard on != open else { return }
         slides += 1
         let n = slides
+        if on { quietly { folds += 1; folding = false; folded = fold } }
         if fixture || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             quietly { sliding = false; open = on }
             return
@@ -302,6 +322,32 @@ final class RolodexModel {
         }
     }
 
+    /// Folds the wheel down to its strip, or unfolds it. A fold gives the
+    /// terminal its room back as it starts, under the wheel sliding out; an
+    /// unfold slides the wheel in over the terminal's edge, and the terminal
+    /// makes room once it is in, as an open does. With Reduce Motion on, or
+    /// while hidden, in one step.
+    func setFolded(_ on: Bool) {
+        guard on != folded else { return }
+        folds += 1
+        let n = folds
+        if !open || fixture || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            quietly { folding = false; folded = on }
+            return
+        }
+        quietly { folding = true }
+        withAnimation(Self.slide) { folded = on } completion: { [weak self] in
+            guard let self, self.folds == n else { return }
+            self.quietly { self.folding = false }
+        }
+    }
+
+    /// Shows the whole wheel, as ⌥Tab, a new card or a card asked for
+    /// does: a hidden one slides in, and a folded one unfolds.
+    func reveal() {
+        if !open { setOpen(true) } else if folded { setFolded(false) }
+    }
+
     func setShare(_ s: Double) {
         quietly { share = min(max(s, 0.2), 0.75) }
     }
@@ -311,6 +357,15 @@ final class RolodexModel {
     static func width(share: Double, in room: CGFloat, keep: CGFloat) -> CGFloat {
         let want = room * CGFloat(share)
         return max(min(want, room - keep), min(260, room * 0.5)).rounded()
+    }
+
+    /// The width a drag of the divider asks for, as want: the strip's once
+    /// past halfway from the wheel's narrowest to the strip, which folds the
+    /// wheel on release, else the wheel's width nearest it.
+    static func dragged(to want: CGFloat, in room: CGFloat, keep: CGFloat) -> CGFloat {
+        let narrowest = width(share: 0.2, in: room, keep: keep)
+        if want < (narrowest + stripWidth) / 2 { return stripWidth }
+        return width(share: min(max(Double(want / max(room, 1)), 0.2), 0.75), in: room, keep: keep)
     }
 
     private func quietly(_ work: () -> Void) {
@@ -355,6 +410,16 @@ final class RolodexModel {
         guard let i = d.panes.firstIndex(where: { $0.id == pane }), d.panes.indices.contains(i + delta) else { return }
         d.panes.swapAt(i, i + delta)
         withAnimation(fixture ? nil : Self.settle) { decks[session] = d }
+        saveSoon()
+    }
+
+    /// Puts a card in front at once, with no turn: a folded wheel has no
+    /// cards on show to turn.
+    func bringFront(_ pane: String, in session: String) {
+        var d = deck(session)
+        guard d.frontPane?.id != pane, d.panes.contains(where: { $0.id == pane }) else { return }
+        d.front = pane
+        decks[session] = d
         saveSoon()
     }
 
@@ -478,7 +543,7 @@ final class RolodexModel {
     private func place(in window: NSWindow?, deck: Deck) -> String? {
         if blankHasKeys { return Self.blank }
         guard let window, let r = window.firstResponder as? NSView else { return keys }
-        guard open, let probe = frontProbe, probe.window === window else { return nil }
+        guard open, !folded, let probe = frontProbe, probe.window === window else { return nil }
         let a = r.convert(r.bounds, to: nil), b = probe.convert(probe.bounds, to: nil)
         if b.insetBy(dx: -4, dy: -40).contains(CGPoint(x: a.midX, y: a.midY)), a.width <= b.width + 8, a.height <= b.height + 60 {
             return deck.frontPane?.id ?? Self.blank
@@ -513,7 +578,7 @@ final class RolodexModel {
     /// A scroll over the tabs or the rail turns the wheel a notch per step,
     /// with a tick on the trackpad while fingers are on it.
     private func scroll(_ event: NSEvent, store: Store) -> Bool {
-        guard open, overRail(event), let s = store.paneSession else { return false }
+        guard open, !folded, overRail(event), let s = store.paneSession else { return false }
         let d = deck(s.id)
         guard d.panes.count > 1 else { return true }
         if event.phase == .began || event.phase == .mayBegin { scrolled = 0 }
@@ -566,9 +631,12 @@ final class RolodexModel {
 
     /// `--snapshot`'s wheel: the fixture's session with a card of each kind,
     /// that kind in front, or a blank card for none; or, closed, none.
-    func loadFixture(session: String, front: PaneKind?, open on: Bool = true) {
+    /// Folded, its strip.
+    func loadFixture(session: String, front: PaneKind?, open on: Bool = true, folded fold: Bool = false) {
         fixture = true
         open = on
+        folded = fold
+        folding = false
         sliding = false
         flips = []
         swapped = nil
@@ -649,6 +717,33 @@ extension Store {
         if !opening, rolodex.keys != nil { giveMainKeys() }
     }
 
+    /// View › Fold Panes (⇧⌥⌘P), the wheel's fold button and the strip's
+    /// unfold one: the wheel folds down to a strip of its tabs at the
+    /// window's edge, or unfolds. A fold hands the keyboard back to the
+    /// terminal; hidden, the wheel slides in folded.
+    func toggleFold() {
+        let r = rolodex
+        guard r.open else {
+            r.setOpen(true, folded: true)
+            return
+        }
+        let folding = !r.folded
+        r.setFolded(folding)
+        if folding, r.keys != nil { giveMainKeys() }
+    }
+
+    /// A click on a folded tab: the wheel unfolds with that card in front,
+    /// and the card takes the keyboard as it shows.
+    func unfoldPanes(at id: String) {
+        guard let s = paneSession else { return }
+        let r = rolodex
+        r.stopSpin()
+        r.bringFront(id, in: s.id)
+        r.keys = id
+        r.bump(id)
+        r.reveal()
+    }
+
     /// Gives the keyboard back to the terminal, or to the message box while
     /// the conversation shows.
     func giveMainKeys() {
@@ -658,13 +753,14 @@ extension Store {
 
     /// ⌥Tab (+1) and ⌥⇧Tab (-1): the keyboard goes from the terminal to the
     /// first card, then to each card in turn, left to right, and back to the
-    /// terminal after the last. A closed wheel slides in first.
+    /// terminal after the last. A closed wheel slides in first, and a folded
+    /// one unfolds.
     func cyclePanes(_ delta: Int, in window: NSWindow?) {
         guard let s = paneSession, window == nil || window === WindowPanes.window else { return }
         let r = rolodex
         let d = r.deck(s.id)
-        let at = r.open ? r.keysNow(in: window, deck: d) : nil
-        if !r.open { r.setOpen(true) }
+        let at = r.open && !r.folded ? r.keysNow(in: window, deck: d) : nil
+        r.reveal()
         if d.panes.isEmpty {
             if at == RolodexModel.blank {
                 giveMainKeys()
@@ -694,7 +790,7 @@ extension Store {
         let own = row.hue.map { ($0 - 1) % Theme.agentSlots }
         let had = r.deck(session).panes.first { $0.kind == kind }
         if paneSession?.id == session {
-            if !r.open { r.setOpen(true) }
+            r.reveal()
             if let had {
                 r.turn(to: had.id, in: session, keys: false, layout: tabPlace(for: session))
             } else {
@@ -720,7 +816,7 @@ extension Store {
     func newPane(_ kind: PaneKind) {
         guard let s = paneSession else { return }
         let r = rolodex
-        if !r.open { r.setOpen(true) }
+        r.reveal()
         let was = r.deck(s.id)
         let own = s.hue.map { ($0 - 1) % Theme.agentSlots }
         r.prune(keeping: Set(sessions.map(\.id) + closed.map(\.id)))
@@ -977,6 +1073,7 @@ private struct RolodexWheel: View {
                 live(deck, lay: lay)
                 flaps(lay)
                 plus(lay)
+                fold(lay)
                 // The bands a scroll turns the wheel over; a turn drawn still
                 // has no window to scroll in.
                 if r.still == nil {
@@ -1286,6 +1383,163 @@ private struct RolodexWheel: View {
         .offset(x: lay.size.width - 27, y: lay.front.minY + 1)
         .zIndex(6)
     }
+
+    /// The fold under the +: the wheel folds down to a strip of its tabs at
+    /// the window's edge, and the terminal takes the room.
+    private func fold(_ lay: RolodexLayout) -> some View {
+        Button { store.toggleFold() } label: {
+            RoundButton(symbol: "chevron.right")
+        }
+        .buttonStyle(.plain)
+        .help("Fold the panes down to a strip (⇧⌥⌘P)")
+        .accessibilityLabel("Fold the panes")
+        .offset(x: lay.size.width - 27, y: lay.front.minY + 31)
+        .zIndex(6)
+    }
+}
+
+/// A small round button's face, as the wheel's + wears: a mark on the
+/// panel's colour, ringed.
+private struct RoundButton: View {
+    let symbol: String
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(Theme.muted)
+            .frame(width: 24, height: 24)
+            .background(Circle().fill(Theme.panel).overlay(Circle().strokeBorder(Theme.edge, lineWidth: 1)))
+            .contentShape(Circle())
+    }
+}
+
+// MARK: Folded
+
+/// The wheel folded down (View › Fold Panes), for the session on show: a
+/// strip at the terminal's edge, the cards seen from the side with their
+/// tabs standing out along it, the front card's out furthest and in its
+/// colour, under a button that unfolds them. A click on a tab unfolds the
+/// wheel at that card.
+@MainActor
+struct RolodexStrip: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        FoldedTabs(owner: store.paneSession.map(PaneOwner.init))
+    }
+}
+
+/// Where the strip's parts go in its height: the unfold button level with
+/// the wheel's +, then a tab a card, as tall as fit up to a most, whose
+/// words stand on their side while there is room for some.
+struct StripLayout {
+    static let top: CGFloat = RolodexLayout.step * CGFloat(RolodexLayout.deepest) + 1
+    static let button: CGFloat = 24
+    static let gap: CGFloat = 6
+    static let tabWidth: CGFloat = 24
+    /// The cards' edges, which the tabs stand out from.
+    static let spine: CGFloat = 6
+    /// A tab's height, and the length of its words, nil for none.
+    let tab: CGFloat
+    let words: CGFloat?
+
+    init(height: CGFloat, count: Int) {
+        let room = height - Self.top - Self.button - Self.gap * CGFloat(count + 1) - 8
+        tab = count > 0 ? min(128, max(30, (room / CGFloat(count)).rounded(.down))) : 0
+        // Its padding, the kind's mark and the space under it.
+        let length = tab - 16 - 13 - 5
+        words = length >= 34 ? length : nil
+    }
+}
+
+@MainActor
+private struct FoldedTabs: View {
+    let owner: PaneOwner?
+    @Environment(Store.self) private var store
+    @State private var hovered: String?
+
+    var body: some View {
+        let deck = owner.map { store.rolodex.deck($0.id) } ?? Deck()
+        GeometryReader { geo in
+            let fit = StripLayout(height: geo.size.height, count: deck.panes.count)
+            ZStack(alignment: .topTrailing) {
+                // The cards' edges, seen from the side, below the button.
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(Theme.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                    .frame(width: StripLayout.spine)
+                    .padding(.top, StripLayout.top + StripLayout.button + StripLayout.gap)
+                    .allowsHitTesting(false)
+                VStack(alignment: .trailing, spacing: StripLayout.gap) {
+                    Button { store.toggleFold() } label: {
+                        RoundButton(symbol: "chevron.left")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Unfold the panes (⇧⌥⌘P; ⌥Tab walks them)")
+                    .accessibilityLabel("Unfold the panes")
+                    .frame(maxWidth: .infinity)
+                    ForEach(deck.panes) { p in
+                        tab(p, front: p.id == deck.frontPane?.id, fit: fit)
+                    }
+                }
+                .padding(.top, StripLayout.top)
+                // Each tab overlaps the cards' edges a little.
+                .padding(.trailing, StripLayout.spine - 2)
+            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            // Tabs too many for the height stop at its foot; the front tab
+            // and the shadows may stand out at the sides.
+            .mask { Rectangle().padding(.horizontal, -12) }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Panes, folded, \(deck.panes.count) " + (deck.panes.count == 1 ? "card" : "cards"))
+    }
+
+    private func tab(_ p: DeckPane, front: Bool, fit: StripLayout) -> some View {
+        let hover = hovered == p.id
+        let shape = UnevenRoundedRectangle(topLeadingRadius: 8, bottomLeadingRadius: 8, bottomTrailingRadius: 2,
+                                           topTrailingRadius: 2, style: .continuous)
+        return VStack(spacing: 5) {
+            Image(systemName: p.kind.symbol)
+                .font(.system(size: 10.5, weight: .semibold))
+                .frame(height: 13)
+            if let length = fit.words {
+                Text(p.label)
+                    .font(Theme.font(11, front ? .bold : .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: length, alignment: .leading)
+                    // On its side, reading down, as a spine's title does.
+                    .rotationEffect(.degrees(90))
+                    .frame(width: 14, height: length)
+            }
+        }
+        .foregroundStyle(front ? Theme.agentInk(slot: p.slot) : Theme.muted)
+        .padding(.vertical, 8)
+        .frame(width: StripLayout.tabWidth, height: fit.tab, alignment: .top)
+        .background {
+            shape.fill(Theme.agentWash(slot: p.slot))
+                .overlay(shape.fill(Theme.panel.opacity(front ? 0 : 0.35)))
+                .overlay(shape.stroke(Theme.edge, lineWidth: 1))
+                .shadow(color: .black.opacity(front ? 0.14 : 0.06), radius: front ? 4 : 2, y: 1)
+        }
+        .contentShape(shape)
+        // The front tab stands out furthest; a hovered one comes out a little.
+        .offset(x: front ? -4 : (hover ? -2 : 0))
+        .animation(.easeOut(duration: 0.12), value: hover)
+        .onHover { inside in hovered = inside ? p.id : (hovered == p.id ? nil : hovered) }
+        .onTapGesture { store.unfoldPanes(at: p.id) }
+        .contextMenu {
+            Button("Show") { store.unfoldPanes(at: p.id) }
+            Divider()
+            Button("Close Pane") { store.closePane(p.id) }
+        }
+        .help("\(p.label): click to unfold the panes at it")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(p.label)
+        .accessibilityAddTraits(front ? [.isButton, .isSelected] : [.isButton])
+    }
 }
 
 /// The knob at the rail's end: ridges round its rim, and a dot in the
@@ -1465,12 +1719,14 @@ private struct BlankCard: View {
 
 /// The wheel's leading edge, the divider from the terminal, which a drag
 /// moves. A guide shows where it would go, and the width applies on release:
-/// one resize of the terminal, and of every agent, not one per frame.
+/// one resize of the terminal, and of every agent, not one per frame. A drag
+/// well past the wheel's narrowest folds it down to its strip, and a drag
+/// out from the strip unfolds it to the width let go at.
 @MainActor
 struct RolodexEdge: View {
     @Environment(Store.self) private var store
-    /// The room beside the right sidebar, the wheel's width in it, and what
-    /// the terminal keeps of it.
+    /// The room beside the right sidebar, the wheel's width in it (the
+    /// strip's while folded), and what the terminal keeps of it.
     let room: CGFloat
     let drawn: CGFloat
     let keep: CGFloat
@@ -1488,15 +1744,24 @@ struct RolodexEdge: View {
             }
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { g in
-                    let share = Double((drawn - g.translation.width) / max(room, 1))
-                    r.guide = Double(RolodexModel.width(share: min(max(share, 0.2), 0.75), in: room, keep: keep))
+                    r.guide = Double(RolodexModel.dragged(to: drawn - g.translation.width, in: room, keep: keep))
                 }
                 .onEnded { _ in
-                    if let g = r.guide { r.setShare(g / Double(max(room, 1))) }
+                    if let g = r.guide {
+                        if g <= Double(RolodexModel.stripWidth) {
+                            if !r.folded { store.toggleFold() }
+                        } else {
+                            r.setShare(g / Double(max(room, 1)))
+                            r.setFolded(false)
+                        }
+                    }
                     r.guide = nil
                 })
-            .onTapGesture(count: 2) { r.setShare(RolodexModel.startShare) }
-            .help("Drag to make the panes wider or narrower; double-click for their first width")
+            .onTapGesture(count: 2) {
+                r.setShare(RolodexModel.startShare)
+                r.setFolded(false)
+            }
+            .help("Drag to make the panes wider or narrower, or on past their narrowest to fold them; double-click for their first width")
             .accessibilityHidden(true)
     }
 }
