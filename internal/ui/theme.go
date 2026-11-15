@@ -7,7 +7,7 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/lipgloss/v2"
 
-	"github.com/irie-people/irie/design"
+	"github.com/irie-people/design"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -37,7 +37,8 @@ type theme struct{ light, dark palette }
 func hex(s string) color.Color { return lipgloss.Color(s) }
 
 // themes are the sidebar's palettes, by their ui.theme names: Irie's
-// built-in palettes, which the design library keeps (design/palettes).
+// built-in palettes, which the design library keeps
+// (github.com/irie-people/design, palettes/).
 var themes = builtIns()
 
 // builtIns are the design library's palettes as the sidebar's.

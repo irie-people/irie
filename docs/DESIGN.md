@@ -315,7 +315,7 @@ Until M11 the core polls `list-panes -a -F …` once per second for pane ids, op
 | `internal/host/` | Pane host: process group, freeze/thaw, exit status | M1 |
 | `internal/harness/` | Adapter interface; `claude/` (M1), `generic/` (M3) | M1 |
 | `internal/ui/` | Bubble Tea sidebar | M1 |
-| `design/`, `tools/design.sh` | The design library (§2.11): the palettes and the numbers every client draws with, Go's reading of them, the checks and writing of the clients' copies, the principles, the parts and their gallery | §2.11 |
+| `internal/designcheck/`, `tools/design.sh` | Irie's copies of its design library's values (§2.11): which files keep them, the check of the site's themes page, and the command that checks and writes them | §2.11 |
 | `internal/event/`, `internal/journal/` | Envelope, kinds, NDJSON journal | M2 |
 | `internal/hook/` | Shim logic | M2 |
 | `internal/testutil/` | `BuildIrie`, tmux test server, `ShortDir`; `fakeagent/` from M2; `fakeollama/` and `ollamafake/` from M10 | M1–M2, M10 |
@@ -422,11 +422,11 @@ Made from them: `App` (`Irie.app`) and `Exe`, the Mac app's executable and so it
 
 ### 2.11 The design library
 
-How Irie looks and behaves is kept in one place, `design/` ([design/README.md](../design/README.md)), for all six clients: the Mac and iPhone apps, the phone's web app, the Windows app, the terminal sidebar and the site. It holds the four palettes, one file each in the form of a theme file of one's own (§5.5, `ui.theme`), and `tokens.json`: the palettes' order and default, the contrast floors, the terminal's colours and the numbers of the agents' colours (§4.1). Package `design` embeds them, and the Go clients read them from it: the sidebar's palettes, the status line's agent colours and `ui.theme`'s names.
+How Irie looks and behaves is kept in one place for all six clients (the Mac and iPhone apps, the phone's web app, the Windows app, the terminal sidebar and the site): Irie People's design library, a repository of its own, [irie-people/design](https://github.com/irie-people/design). It holds the four palettes, one file each in the form of a theme file of one's own (§5.5, `ui.theme`), and `tokens.json`: the palettes' order and default, the contrast floors, the terminal's colours and the numbers of the agents' colours (§4.1). Irie takes it as a Go module, `github.com/irie-people/design`, and the Go clients read it: the sidebar's palettes, the status line's agent colours and `ui.theme`'s names.
 
-A client that cannot read the library where it runs keeps a copy: Theme.swift, the iPhone app's Look.swift, look.js, the two web apps' app.css, the phone's setup page and the site's themes page. Each block of the library's colours in a copy sits between two comments, `design: evergreen light` and `design: end`. `tools/design.sh` says where a copy is not the library's, `tools/design.sh sync` writes the library's values into every copy and makes the web pages' `design/web/tokens.css` and `tokens.js`, and `TestCopiesMatchTheLibrary` fails the tests when a copy was changed by hand. So a colour changes in one file and one command.
+A client that cannot read the library where it runs keeps a copy: Theme.swift, the iPhone app's Look.swift, look.js, the two web apps' app.css, the phone's setup page and the site's themes page. Each block of the library's colours in a copy sits between two comments, `design: evergreen light` and `design: end`. `internal/designcheck` lists the copies; `tools/design.sh` says where one is not the library's, `tools/design.sh sync` writes the library's values into every copy and into the themes page's tables, and `TestCopiesMatchTheLibrary` fails the tests when a copy was changed by hand. So a colour changes in the library, then here with `go get github.com/irie-people/design@main` and one command.
 
-The library also holds what Irie has learned about design: [design/principles.md](../design/principles.md), each rule with its reason, its source and its check, and [design/components.md](../design/components.md), each part every client draws, its states, when to use it and where each client draws it. [design/gallery.html](../design/gallery.html) draws every role, state and part in each palette and mode. What comes next is in [proposals/design-library.md](proposals/design-library.md).
+The library also holds what Irie has learned about design: `principles.md`, each rule with its reason, its source and its check, and `components.md`, each part every client draws, its states, when to use it and where each client draws it; its `gallery.html` draws every role, state and part in each palette and mode. What comes next is in [proposals/design-library.md](proposals/design-library.md).
 
 ## 3. Harness support
 

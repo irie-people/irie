@@ -1,8 +1,9 @@
-package design
+package designcheck
 
 // The site's themes page (site/themes.html) draws each palette in pictures
 // and gives its text colours in a table, all as plain colours, since the
-// site is static pages. Check reads both: each colour in a palette's
+// site is static pages. Check reads both, as Irie's own check beside the
+// library's of the other copies: each colour in a palette's
 // pictures must be one of its colours, or one of the mixes the pictures
 // use; each row of its table must give the role's colour and its lowest
 // contrast. Sync writes the tables; a picture with an old colour has to
@@ -11,9 +12,13 @@ package design
 import (
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/irie-people/design"
 )
 
 // ThemesPage is the site's page of the palettes.
@@ -44,19 +49,11 @@ var tableRows = map[string]string{
 // on.
 var tableGrounds = []string{"card", "selection", "needs_tint", "panel", "field"}
 
-// Mix is t of a over b in sRGB, each channel rounded half to even.
-func Mix(a, b string, t float64) string {
-	ar, ag, ab, _ := RGB(a)
-	br, bg, bb, _ := RGB(b)
-	m := func(x, y uint8) uint8 { return uint8(math.RoundToEven(float64(x)*t + float64(y)*(1-t))) }
-	return fmt.Sprintf("#%02X%02X%02X", m(ar, br), m(ag, bg), m(ab, bb))
-}
-
 // lowest is a colour's lowest contrast on the table's grounds.
-func lowest(s Set, role string) float64 {
+func lowest(s design.Set, role string) float64 {
 	low := math.Inf(1)
 	for _, g := range tableGrounds {
-		low = min(low, Contrast(s[role], s[g]))
+		low = min(low, design.Contrast(s[role], s[g]))
 	}
 	return low
 }
@@ -72,10 +69,10 @@ var (
 
 // themesPage checks the page, and gives it back with its tables written
 // from the library.
-func themesPage(src string) (string, []Problem) {
-	var probs []Problem
+func themesPage(src string) (string, []design.Problem) {
+	var probs []design.Problem
 	bad := func(at int, f string, a ...any) {
-		probs = append(probs, Problem{ThemesPage, strings.Count(src[:at], "\n") + 1, fmt.Sprintf(f, a...)})
+		probs = append(probs, design.Problem{Path: ThemesPage, Line: strings.Count(src[:at], "\n") + 1, What: fmt.Sprintf(f, a...)})
 	}
 	type span struct {
 		id         string
@@ -85,7 +82,7 @@ func themesPage(src string) (string, []Problem) {
 	all := section.FindAllStringSubmatchIndex(src, -1)
 	for i, m := range all {
 		id := src[m[2]:m[3]]
-		if _, ok := PaletteByID(id); !ok {
+		if _, ok := design.PaletteByID(id); !ok {
 			continue
 		}
 		end := len(src)
@@ -98,8 +95,8 @@ func themesPage(src string) (string, []Problem) {
 	// ink, accent, done and needs.
 	if o := strings.Index(src, `<figure class="picture small">`); o >= 0 && (len(secs) == 0 || o < secs[0].start) {
 		known := map[string]bool{}
-		for _, p := range lib.palettes {
-			for _, s := range []Set{p.Light, p.Dark} {
+		for _, p := range design.Palettes() {
+			for _, s := range []design.Set{p.Light, p.Dark} {
 				for _, v := range s {
 					known[v] = true
 				}
@@ -118,7 +115,7 @@ func themesPage(src string) (string, []Problem) {
 	var out strings.Builder
 	last := 0
 	for _, sec := range secs {
-		p, _ := PaletteByID(sec.id)
+		p, _ := design.PaletteByID(sec.id)
 		seen[sec.id] = true
 		body := src[sec.start:sec.end]
 		table := strings.Index(body, "<table")
@@ -141,7 +138,7 @@ func themesPage(src string) (string, []Problem) {
 				ok[v] = k
 			}
 			for _, x := range pictureMixes {
-				ok[Mix(s[x.a], s[x.b], x.t)] = fmt.Sprintf("%.0f%% %s over %s", x.t*100, x.a, x.b)
+				ok[design.Mix(s[x.a], s[x.b], x.t)] = fmt.Sprintf("%.0f%% %s over %s", x.t*100, x.a, x.b)
 			}
 			for _, h := range anyHex.FindAllStringIndex(body[f[0]:end], -1) {
 				c := strings.ToUpper(body[f[0]+h[0] : f[0]+h[1]])
@@ -183,10 +180,39 @@ func themesPage(src string) (string, []Problem) {
 		}
 	}
 	out.WriteString(src[last:])
-	for _, id := range IDs() {
+	for _, id := range design.IDs() {
 		if !seen[id] {
-			probs = append(probs, Problem{ThemesPage, 0, fmt.Sprintf("has no section for %s", id)})
+			probs = append(probs, design.Problem{Path: ThemesPage, What: fmt.Sprintf("has no section for %s", id)})
 		}
 	}
 	return out.String(), probs
+}
+
+// checkThemesPage reads the page under root.
+func checkThemesPage(root string) []design.Problem {
+	src, err := os.ReadFile(filepath.Join(root, ThemesPage))
+	if err != nil {
+		return []design.Problem{{Path: ThemesPage, What: err.Error()}}
+	}
+	_, probs := themesPage(string(src))
+	return probs
+}
+
+// syncThemesPage writes the page's tables from the library, and says what
+// only a new drawing fixes.
+func syncThemesPage(root string) (changed bool, probs []design.Problem) {
+	path := filepath.Join(root, ThemesPage)
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return false, []design.Problem{{Path: ThemesPage, What: err.Error()}}
+	}
+	fixed, _ := themesPage(string(src))
+	if fixed != string(src) {
+		if err := os.WriteFile(path, []byte(fixed), 0o644); err != nil {
+			return false, []design.Problem{{Path: ThemesPage, What: err.Error()}}
+		}
+		changed = true
+	}
+	_, left := themesPage(fixed)
+	return changed, left
 }

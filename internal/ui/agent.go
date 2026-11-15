@@ -17,12 +17,12 @@ import (
 	"image/color"
 	"math"
 
-	"github.com/irie-people/irie/design"
+	"github.com/irie-people/design"
 )
 
 // agents are the steps of the agents' colours and their numbers, which
 // the design library keeps for every client that draws them
-// (design/tokens.json).
+// (github.com/irie-people/design, tokens.json).
 var agents = design.TheAgents()
 
 // AgentColors is how many colours the agents have.

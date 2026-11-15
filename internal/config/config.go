@@ -25,7 +25,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/irie-people/irie/design"
+	"github.com/irie-people/design"
 	"github.com/irie-people/irie/internal/arch"
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/route"
@@ -500,7 +500,7 @@ const MinFreezeDog = 3 * time.Second
 var HelperStyles = []string{"browser", "terminal"}
 
 // Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's, which the
-// design library keeps (design/tokens.json). Each has a light and a dark
+// design library keeps (github.com/irie-people/design, tokens.json). Each has a light and a dark
 // set; the terminal's background picks one.
 var Themes = design.IDs()
 
