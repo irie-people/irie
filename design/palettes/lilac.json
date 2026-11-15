@@ -17,9 +17,9 @@
     "accent_fill": "#C39AD3",
     "on_accent": "#2A1838",
     "needs": "#882416",
-    "done": "#426A4F",
+    "done": "#33604C",
     "paused": "#875A07",
-    "frozen": "#276776",
+    "frozen": "#004D60",
     "sun": "#F2B544",
     "waves": "#B58BC9"
   },
@@ -42,7 +42,7 @@
     "needs": "#FF836F",
     "done": "#9CC9A6",
     "paused": "#EFC468",
-    "frozen": "#80C3D0",
+    "frozen": "#6FDBE2",
     "sun": "#F2B544",
     "waves": "#C79BE0"
   }

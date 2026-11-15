@@ -56,9 +56,9 @@ A working session's card takes one of six colours: hues 50° apart round the who
 
 ### 1.7 Colour is never the only cue
 
-Every state has a glyph of its own and words of its own, so a colour-blind viewer, or anyone on a grey screen, reads it as well as anyone. The states' colours also stay apart in colour-blind vision: `needs` and `paused` at least deltaE-OK 0.07 apart in normal, protan, deutan and tritan vision; `done` and `frozen` at least 0.06 in all but tritan. In light mode `needs` is the deeper of the pair.
+Every state has a glyph of its own and words of its own, so a colour-blind viewer, or anyone on a grey screen, reads it as well as anyone. The states' colours also stay apart in colour-blind vision: every pair of `needs`, `paused`, `done` and `frozen` at least deltaE-OK 0.06 apart in normal, protan, deutan and tritan vision; each state at least 0.06 from `ink` and `muted` in normal vision and 0.03 for dichromats, since working rows take ink and dim rows muted; and `done` at least 0.06 from the accent. So the states differ in lightness as well as hue, each in its own hue family: in light mode the ones moved apart go deeper and in dark mode paler, and `needs` is deeper than `paused`.
 
-- **Why:** about one man in twelve of Northern European descent has a red-green deficiency, and before this rule `needs` and `paused` met at deltaE-OK 0.014 to 0.017 for deutans.
+- **Why:** about one man in twelve of Northern European descent has a red-green deficiency, and before this rule `needs` and `paused` met at deltaE-OK 0.014 to 0.017 for deutans. A sweep of every pair then found `done` and `frozen` alike to tritans (0.034 to 0.042) and Evergreen's `done` within 0.008 of its muted text for deutans. Two pairs stop short of 0.06 for dichromats as far as their hues allow: Evergreen's light `done` and `muted` (0.033), and Terracotta's dark `needs` and `muted` (0.055).
 - **From:** [WCAG 2.2](https://www.w3.org/TR/WCAG22/) 1.4.1; [MedlinePlus, colour vision deficiency](https://medlineplus.gov/genetics/condition/color-vision-deficiency/); [libDaltonLens](https://github.com/DaltonLens/libDaltonLens) (Brettel, Viénot and Mollon 1997); the floors are Irie's own, set on 2026-11-15.
 - **Check:** `TestEveryStateHasItsGlyph`, `TestRedIsNeverTheOnlyCue`, `TestStatesStayApartForColourBlindViewers` (internal/ui).
 
