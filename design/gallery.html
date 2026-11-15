@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Irie design library</title>
+<!-- Irie's design library, drawn: every palette's roles, the states, the
+     agents' colours and the parts (design/README.md). It reads only the
+     library's own files, so open it straight from the folder. -->
+<link rel="stylesheet" href="web/tokens.css">
+<link rel="stylesheet" href="web/components.css">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); }
+.page { max-width: 1120px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left)); }
+a { color: var(--accent-ink); text-underline-offset: .18em; }
+h1, h2, h3 { font-family: var(--ir-round); line-height: 1.2; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(24px, 4vw, 32px); font-weight: 750; }
+h2 { font-size: 20px; font-weight: 700; margin-top: 40px; }
+h3 { font-size: 15px; font-weight: 700; margin-top: 22px; }
+p { margin: 6px 0 0; max-width: 68ch; color: var(--muted); }
+p.lead { font-size: 15px; }
+code { font: 12px var(--ir-mono); }
+
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; padding-bottom: 18px; border-bottom: 1px solid var(--edge); }
+.brand { display: flex; align-items: center; gap: 12px; flex: 1 1 320px; min-width: 0; }
+.brand svg { width: 44px; height: 44px; flex: none; }
+.brand p { margin-top: 2px; }
+.pickers { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.swatch-dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent); }
+.ir-seg button { display: inline-flex; align-items: center; gap: 6px; }
+.pickers .ir-seg { flex-wrap: wrap; max-width: 100%; }
+@media (max-width: 480px) { .pickers .ir-seg button { padding: 0 9px; } }
+
+nav.toc { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 14px; font-size: 13px; }
+
+.panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; margin-top: 14px; }
+.pane { min-width: 0; padding: 14px; border-radius: 18px; background: var(--sidebar); color: var(--ink); box-shadow: inset 0 0 0 1px var(--edge); }
+.pane-label { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+.stack { display: grid; gap: 6px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Roles */
+.roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.role { min-width: 0; border-radius: 12px; overflow: hidden; background: var(--card); box-shadow: inset 0 0 0 1px var(--edge); }
+.role .chip { height: 44px; display: flex; align-items: center; padding: 0 10px; font: 700 15px var(--ir-round); }
+.role .meta { padding: 6px 10px 8px; font-size: 11.5px; line-height: 1.35; }
+.role .meta b { display: block; font: 600 12px var(--ir-mono); color: var(--ink); }
+.role .meta span { color: var(--muted); }
+.role .ok { color: var(--done); font-weight: 650; }
+.role .low { color: var(--needs); font-weight: 650; }
+.group-name { margin: 12px 0 6px; font-size: 12px; font-weight: 650; color: var(--muted); }
+.group-name:first-child { margin-top: 0; }
+
+/* States */
+.states { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+.state { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 13px; }
+.state span:last-child { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+
+/* Agents */
+.wheel { display: flex; gap: 6px; margin-bottom: 10px; }
+.wheel i { flex: 1; height: 10px; border-radius: 5px; }
+
+.rules { margin: 10px 0 0; padding-left: 20px; max-width: 76ch; }
+.rules li { margin-top: 6px; }
+.rules li span { color: var(--muted); }
+footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--edge); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body class="ir">
+<div class="page">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 14v5M18.5 20.5l3.5 3.5M45.5 20.5l-3.5 3.5M12.5 35h5M46.5 35h5" stroke="var(--sun)" stroke-width="3" stroke-linecap="round"/><path d="M20 38a12 12 0 0 1 24 0z" fill="var(--sun)"/><path d="M11 43q5.25-4 10.5 0t10.5 0t10.5 0t10.5 0" fill="none" stroke="var(--waves)" stroke-width="3.2" stroke-linecap="round"/><path d="M16 51q4-3.2 8 0t8 0t8 0t8 0" fill="none" stroke="var(--accent)" stroke-width="3.2" stroke-linecap="round"/></svg>
+      <div>
+        <h1>Irie design library</h1>
+        <p>The palettes, states and parts every Irie client draws, in every palette and mode.</p>
+      </div>
+    </div>
+    <div class="pickers">
+      <div class="ir-seg" role="group" aria-label="Palette" id="palettes"></div>
+      <div class="ir-seg" role="group" aria-label="Mode" id="modes">
+        <button type="button" data-pick-mode="light">Light</button>
+        <button type="button" data-pick-mode="dark">Dark</button>
+        <button type="button" data-pick-mode="both">Both</button>
+      </div>
+    </div>
+  </header>
+  <nav class="toc" aria-label="On this page">
+    <a href="#roles">Roles</a><a href="#states">States</a><a href="#agents">Agents' colours</a>
+    <a href="#cards">Session cards</a><a href="#controls">Controls</a><a href="#notes">Banners and notices</a><a href="#rules">Principles</a>
+  </nav>
+  <p id="nojs">This page draws itself from web/tokens.js: it needs JavaScript.</p>
+
+  <section>
+    <h2 id="roles">Roles</h2>
+    <p class="lead">A palette's 21 colours, each for one job. Text keeps 4.5:1 and the accent 3:1 on all eight surfaces; each tile gives its lowest. Parts name these roles, never colours (README §2).</p>
+    <div class="panes" data-board="roles"></div>
+  </section>
+
+  <section>
+    <h2 id="states">States</h2>
+    <p class="lead">Each state has a glyph and words of its own, so colour never carries it alone. Red is only for what needs you (principles §1.5, §1.7).</p>
+    <div class="panes" data-board="states"></div>
+  </section>
+
+  <section>
+    <h2 id="agents">Agents' colours</h2>
+    <p class="lead">Six hues 50° apart, clear of the needs red, at one low chroma. Cards side by side take hues at least 100° apart. Shown here at the library's starting lightness; each client then moves a mark only as far as 3.2:1 on its wash needs (tokens.json, <code>agents</code>).</p>
+    <div class="panes" data-board="agents"></div>
+  </section>
+
+  <section>
+    <h2 id="cards">Session cards</h2>
+    <p class="lead">Flat at rest; washed while working; tinted red when it needs you; raised when selected. Under the pointer the age gives way to the card's buttons, and a boosted card keeps its boost button, filled, as its one mark (components §3.1, §3.2).</p>
+    <div class="panes" data-board="cards" data-template="t-cards"></div>
+  </section>
+
+  <section>
+    <h2 id="controls">Controls</h2>
+    <p class="lead">Counts, the task bar, buttons, the segmented control and a field. One prominent button per view; the rest are soft (components §2.3, §3.5 to §3.8).</p>
+    <div class="panes" data-board="controls" data-template="t-controls"></div>
+  </section>
+
+  <section>
+    <h2 id="notes">Banners and notices</h2>
+    <p class="lead">A banner stays while what it says is true; a notice comes and goes, with Undo where it can. The details panel holds what a card's two lines cannot (components §3.9, §3.10).</p>
+    <div class="panes" data-board="notes" data-template="t-notes"></div>
+  </section>
+
+  <section>
+    <h2 id="rules">Principles</h2>
+    <p class="lead">The rules these follow, each with its reason, source and check, are in <a href="principles.md">principles.md</a>; the parts in <a href="components.md">components.md</a>. The ones that shape this page most:</p>
+    <ol class="rules">
+      <li>Lightness carries the meaning. <span>§1.1</span></li>
+      <li>Text reads at 4.5:1 and marks at 3:1, on every surface. <span>§1.2</span></li>
+      <li>Calm: low chroma, never neon. <span>§1.4</span></li>
+      <li>Red means one thing: it needs you. <span>§1.5</span></li>
+      <li>Colour is never the only cue. <span>§1.7</span></li>
+      <li>Only the person moves a card. <span>§2.1</span></li>
+      <li>Nothing moves under the pointer. <span>§2.3</span></li>
+      <li>Plain words first, the exact thing one step away. <span>§3.1</span></li>
+      <li>The button is the mark. <span>§4.1</span></li>
+      <li>Act at once, then offer undo. <span>§4.2</span></li>
+    </ol>
+  </section>
+
+  <footer>Made from design/palettes and design/tokens.json. Change a colour there and run <code>tools/design.sh sync</code>; this page follows.</footer>
+</div>
+
+<template id="t-cards">
+  <div class="stack">
+    <button class="ir-group" type="button" aria-expanded="true"><span class="ir-group-chev">›</span><span class="ir-group-title">irie</span><span class="ir-group-count">5</span></button>
+    <div class="ir-card is-working" data-slot="0">
+      <span class="ir-mark" data-state="working"></span>
+      <div class="ir-card-main">
+        <div class="ir-card-top"><span class="ir-card-name">irie-tests</span><span class="ir-card-slot"><span class="ir-age">4m</span></span></div>
+        <div class="ir-card-line">Running the tests</div>
+        <div class="ir-card-helpers"><div class="ir-card-helper">↳ <b>Explore</b>Reading DESIGN.md</div></div>
+      </div>
+    </div>
+    <div class="ir-card is-loud">
+      <span class="ir-mark" data-state="needs"></span>
+      <div class="ir-card-main">
+        <div class="ir-card-top"><span class="ir-card-name">api-fix</span><span class="ir-card-slot"><span class="ir-age">12m</span></span></div>
+        <div class="ir-card-line">Asks: may it push to main?</div>
+      </div>
+    </div>
+    <div class="ir-card is-working is-selected is-keyboard" data-slot="3">
+      <span class="ir-mark" data-state="working"></span>
+      <div class="ir-card-main">
+        <div class="ir-card-top"><span class="ir-card-name">theme-fix</span><span class="ir-card-slot"><span class="ir-age">1m</span></span></div>
+        <div class="ir-card-line">Editing the palettes</div>
+      </div>
+    </div>
+    <div class="ir-card is-hover" data-slot="1">
+      <span class="ir-mark" data-state="waiting"></span>
+      <div class="ir-card-main">
+        <div class="ir-card-top"><span class="ir-card-name">site-copy</span><span class="ir-card-slot"><span class="ir-age">26m</span><span class="ir-actions">
+          <button class="ir-act" type="button" aria-label="Pause"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+          <button class="ir-act" type="button" aria-label="Boost"><svg viewBox="0 0 16 16" aria-hidden="true"><circle class="ir-fill" cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path class="ir-cut" d="M8 11.2V4.9M5.4 7.4 8 4.8l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="ir-act" type="button" aria-label="Park"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.8 9.5v3.2h10.4V9.5M8 2.8v6.6M5.2 6.8 8 9.6l2.8-2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="ir-act" type="button" aria-label="More"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+        </span></span></div>
+        <div class="ir-card-line">Waiting on its helpers</div>
+      </div>
+    </div>
+    <div class="ir-card" >
+      <span class="ir-mark" data-state="done"></span>
+      <div class="ir-card-main">
+        <div class="ir-card-top"><span class="ir-card-name">docs-pass</span><span class="ir-card-slot"><button class="ir-act is-on" type="button" aria-label="Stop boosting"><svg viewBox="0 0 16 16" aria-hidden="true"><circle class="ir-fill" cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path class="ir-cut" d="M8 11.2V4.9M5.4 7.4 8 4.8l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="ir-age">2h</span></span></div>
+        <div class="ir-card-line">Finished: to verify</div>
+      </div>
+    </div>
+    <div class="ir-card is-quiet is-loose">
+      <span class="ir-mark" data-state="idle"></span>
+      <div class="ir-card-main">
+        <div class="ir-card-top"><span class="ir-card-name">old-branch</span><span class="ir-card-slot"><span class="ir-age">1d</span></span></div>
+        <div class="ir-card-line">Its work has not landed</div>
+      </div>
+    </div>
+    <button class="ir-group" type="button" aria-expanded="false"><span class="ir-group-chev">›</span><span class="ir-group-title">Parked</span><span class="ir-group-need">· 1 needs you</span><span class="ir-group-count">3</span></button>
+  </div>
+</template>
+
+<template id="t-controls">
+  <div class="stack">
+    <div class="row">
+      <button class="ir-count is-needs" type="button"><span class="ir-mark" data-state="needs"></span>2</button>
+      <button class="ir-count" type="button"><span class="ir-mark" data-state="working"></span>3</button>
+      <button class="ir-count is-zero" type="button"><span class="ir-mark" data-state="paused"></span>0</button>
+      <button class="ir-count" type="button"><span class="ir-mark" data-state="done"></span>1</button>
+    </div>
+    <div class="ir-taskbar">
+      <textarea aria-label="New task" placeholder="Start a task: say what to do"></textarea>
+      <button class="ir-start" type="button" aria-label="Start"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12.5V3.8M4.4 7.2 8 3.6l3.6 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="row">
+      <button class="ir-button is-prominent" type="button">Start the task</button>
+      <button class="ir-button" type="button">Open its terminal</button>
+      <button class="ir-button is-danger" type="button">Close “api-fix”</button>
+      <button class="ir-icon-button" type="button" aria-label="Settings"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.8v2M10 15.2v2M2.8 10h2M15.2 10h2M4.9 4.9l1.4 1.4M13.7 13.7l1.4 1.4M4.9 15.1l1.4-1.4M13.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="row">
+      <div class="ir-seg" role="group" aria-label="View"><button type="button" aria-pressed="true">List</button><button type="button" aria-pressed="false">Repo</button></div>
+      <input class="ir-field" type="search" placeholder="Find a session" aria-label="Find a session">
+    </div>
+  </div>
+</template>
+
+<template id="t-notes">
+  <div class="stack">
+    <div class="ir-banner">Irie is getting ready: 2 of 3 done</div>
+    <div class="ir-banner is-loud">Another machine can’t be reached: its sessions wait</div>
+    <div class="ir-notice"><span class="ir-mark" data-state="idle"></span><span class="ir-notice-text">Parked “api-fix”</span><button class="ir-notice-undo" type="button">Undo</button></div>
+    <div class="ir-notice is-error"><span class="ir-mark" data-state="failed"></span><span class="ir-notice-text">Couldn’t start “docs”: the repo has no main branch</span><button class="ir-notice-undo" type="button">Try again</button></div>
+    <div class="ir-panel">
+      <dl>
+        <dt>Doing</dt><dd><code>go test ./internal/ui</code></dd>
+        <dt>Repo</dt><dd>irie, on irie/theme-fix</dd>
+        <dt>Started</dt><dd>14:02, 4 minutes ago</dd>
+        <dt>Used</dt><dd>41k tokens</dd>
+      </dl>
+    </div>
+  </div>
+</template>
+
+<script src="web/tokens.js"></script>
+<script>
+(function () {
+  'use strict';
+  const D = window.IRIE_DESIGN;
+  if (!D) return;
+  document.getElementById('nojs').hidden = true;
+  const root = document.documentElement;
+
+  // Remembered between visits in this browser only; the page works without.
+  const remember = {
+    get(k) { try { return localStorage.getItem('irie-design.' + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem('irie-design.' + k, v); } catch (e) { /* none kept */ } },
+  };
+  // A link may name both: gallery.html#palette=lilac&mode=dark. The pickers'
+  // own attributes are data-pick-*, since data-palette and data-mode draw an
+  // element in a palette (web/tokens.css).
+  const asked = new URLSearchParams(location.hash.slice(1));
+  let palette = asked.get('palette') || remember.get('palette');
+  if (!D.palettes.some((p) => p.id === palette)) palette = D.default;
+  let mode = asked.get('mode') || remember.get('mode');
+  if (!['light', 'dark', 'both'].includes(mode)) mode = 'both';
+
+  // WCAG 2.2's contrast ratio, as design.Contrast works it out.
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (h) => { const [r, g, b] = rgb(h).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+  // A colour's OKLCH lightness and hue (Ottosson's Oklab).
+  function oklch(h) {
+    const [r, g, b] = rgb(h).map(lin);
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+    const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+    const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+    return { l: L, h: (Math.atan2(B, A) * 180 / Math.PI + 360) % 360 };
+  }
+
+  // The agents' hues and their colours at the library's starting points.
+  const A = D.agents;
+  function agentVars(set, dark, slot) {
+    const step = (360 - 2 * A.needs_gap) / A.slots;
+    const hue = (oklch(set.needs).h + A.needs_gap + step / 2 + slot * step) % 360;
+    const pick = (pair) => (dark ? pair.dark : pair.light);
+    const clamp = (x) => Math.min(1, Math.max(0, x));
+    const card = oklch(set.card).l;
+    return {
+      hue,
+      '--a-mark': `oklch(${pick(A.mark.lightness)} ${A.mark.chroma} ${hue.toFixed(1)})`,
+      '--a-ink': `oklch(${pick(A.ink.lightness)} ${A.mark.chroma} ${hue.toFixed(1)})`,
+      '--a-wash': `oklch(${clamp(card + pick(A.wash.lift)).toFixed(3)} ${pick(A.wash.chroma)} ${hue.toFixed(1)})`,
+    };
+  }
+  // Cards side by side, as the core spreads them: 150° and 100° apart.
+  const neighbours = [0, 3, 1, 4, 2, 5];
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const surfaces = D.roles.filter((r) => r.use === 'surface').map((r) => r.key);
+
+  const boards = {
+    roles(set) {
+      const groups = [
+        ['Surfaces', ['surface', 'line']],
+        ['Text', ['text']],
+        ['Accent and the start button', ['mark', 'fill', 'on_fill']],
+        ['Icon', ['picture']],
+      ];
+      return groups.map(([name, uses]) => {
+        const tiles = D.roles.filter((r) => uses.includes(r.use)).map((r) => {
+          const c = set[r.key];
+          let note = '';
+          if (r.use === 'text' || r.use === 'mark') {
+            const floor = r.use === 'text' ? D.contrast.text : D.contrast.mark;
+            const low = Math.min(...surfaces.map((s) => ratio(c, set[s])));
+            note = `<span class="${low >= floor ? 'ok' : 'low'}">${low.toFixed(2)}:1</span> <span>lowest, needs ${floor}:1</span>`;
+          } else if (r.use === 'on_fill') {
+            const on = ratio(c, set.accent_fill);
+            note = `<span class="${on >= D.contrast.text ? 'ok' : 'low'}">${on.toFixed(2)}:1</span> <span>on the start button</span>`;
+          } else {
+            note = `<span>${r.use === 'surface' ? 'a ground' : r.use === 'line' ? 'a hairline' : 'the icon'}</span>`;
+          }
+          // Each role drawn as it is used: text and marks on a card, the
+          // start button's arrow on the button, the rest as a ground.
+          let ground = c, ink = lum(c) > 0.3 ? set.ink : set.card;
+          if (r.use === 'text' || r.use === 'mark') [ground, ink] = [set.card, c];
+          else if (r.use === 'on_fill') [ground, ink] = [set.accent_fill, c];
+          else if (r.use === 'fill') ink = set.on_accent;
+          else if (r.use === 'surface') ink = set.ink;
+          const sample = `<div class="chip" style="background:${ground};color:${ink}">Aa</div>`;
+          return `<div class="role">${sample}<div class="meta"><b>${r.key}</b><span>${esc(r.title)} · ${c}</span><br>${note}</div></div>`;
+        }).join('');
+        return `<div class="group-name">${name}</div><div class="roles">${tiles}</div>`;
+      }).join('');
+    },
+    states() {
+      const states = [
+        ['needs', 'Needs you', 'needs'], ['stalled', 'Stalled', 'needs'], ['failed', 'Failed', 'needs'],
+        ['working', 'Working', 'agent'], ['waiting', 'Waiting on helpers', 'agent'], ['starting', 'Starting', 'muted'],
+        ['paused', 'Paused', 'paused'], ['pausing', 'Pausing', 'paused'], ['frozen', 'Frozen', 'frozen'],
+        ['done', 'Done, to verify', 'done'], ['idle', 'Idle', 'muted'], ['exited', 'Exited', 'muted'],
+      ];
+      return `<div class="states">${states.map(([s, words, role]) => `<div class="state"><span class="ir-mark" data-state="${s}" data-slot="2"></span><span>${words}</span><span>${role}</span></div>`).join('')}</div>`;
+    },
+    agents(set, dark) {
+      const wheel = neighbours.map((i) => `<i style="background:${agentVars(set, dark, i)['--a-mark']}"></i>`).join('');
+      const cards = neighbours.map((i, n) => {
+        const v = agentVars(set, dark, i);
+        return `<div class="ir-card is-working" data-slot="${i}"><span class="ir-mark" data-state="working"></span><div class="ir-card-main"><div class="ir-card-top"><span class="ir-card-name">Agent colour ${i + 1}</span><span class="ir-card-slot">${Math.round(v.hue)}°</span></div><div class="ir-card-line">${n ? Math.round(Math.min(Math.abs(v.hue - agentVars(set, dark, neighbours[n - 1]).hue), 360 - Math.abs(v.hue - agentVars(set, dark, neighbours[n - 1]).hue))) + '° from the card above' : 'Hues spread from the needs red'}</div></div></div>`;
+      }).join('');
+      return `<div class="wheel" aria-hidden="true">${wheel}</div><div class="stack">${cards}</div>`;
+    },
+  };
+
+  function fill(board, set, dark) {
+    if (boards[board.dataset.board]) return boards[board.dataset.board](set, dark);
+    return document.getElementById(board.dataset.template).innerHTML;
+  }
+
+  function draw() {
+    const p = D.palettes.find((x) => x.id === palette);
+    root.dataset.palette = palette;
+    if (mode === 'both') delete root.dataset.mode; else root.dataset.mode = mode;
+    document.querySelectorAll('#palettes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pickPalette === palette)));
+    document.querySelectorAll('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pickMode === mode)));
+    const modes = mode === 'both' ? ['light', 'dark'] : [mode];
+    document.querySelectorAll('[data-board]').forEach((board) => {
+      board.innerHTML = modes.map((m) => {
+        const dark = m === 'dark';
+        const set = dark ? p.dark : p.light;
+        return `<div class="pane ir" data-palette="${p.id}" data-mode="${m}"><div class="pane-label"><span>${esc(p.name)}, ${m}</span></div>${fill(board, set, dark)}</div>`;
+      }).join('');
+      board.querySelectorAll('.pane').forEach((pane) => {
+        const dark = pane.dataset.mode === 'dark';
+        const set = dark ? p.dark : p.light;
+        pane.querySelectorAll('[data-slot]').forEach((el) => {
+          const v = agentVars(set, dark, Number(el.dataset.slot));
+          for (const k of ['--a-mark', '--a-ink', '--a-wash']) el.style.setProperty(k, v[k]);
+        });
+      });
+    });
+  }
+
+  const pickers = document.getElementById('palettes');
+  pickers.innerHTML = D.palettes.map((p) => `<button type="button" data-pick-palette="${p.id}"><span class="swatch-dot" style="background:${p.light.accent}"></span>${esc(p.name)}</button>`).join('');
+  pickers.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    palette = b.dataset.pickPalette;
+    remember.set('palette', palette);
+    draw();
+  });
+  document.getElementById('modes').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    mode = b.dataset.pickMode;
+    remember.set('mode', mode);
+    draw();
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

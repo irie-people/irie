@@ -16,31 +16,35 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+
+	"github.com/irie-people/irie/design"
 )
+
+// agents are the steps of the agents' colours and their numbers, which
+// the design library keeps for every client that draws them
+// (design/tokens.json).
+var agents = design.TheAgents()
 
 // AgentColors is how many colours the agents have.
-const AgentColors = 6
+var AgentColors = agents.Slots
 
-// The hues leave out hueGap degrees either side of the palette's needs red,
-// which is only for what needs you (DESIGN §5.3), and spread evenly over
-// the rest of the wheel, hueStep degrees apart.
-const (
-	hueGap  = 30.0
-	hueStep = (360 - 2*hueGap) / AgentColors
-)
+// The hues leave out agents.NeedsGap degrees either side of the palette's
+// needs red, which is only for what needs you (DESIGN §5.3), and spread
+// evenly over the rest of the wheel, hueStep degrees apart.
+var hueStep = (360 - 2*agents.NeedsGap) / float64(AgentColors)
 
 // A dark palette's working card: the mark's chroma and the lightness it
 // starts from, and the chroma and the lift of the card's wash.
-const (
-	markChroma     = 0.085
-	darkMarkL      = 0.78
-	darkWashChroma = 0.04
-	darkWashLift   = 0.025
+var (
+	markChroma     = agents.Mark.Chroma
+	darkMarkL      = agents.Mark.Lightness.Dark
+	darkWashChroma = agents.Wash.Chroma.Dark
+	darkWashLift   = agents.Wash.Lift.Dark
 )
 
 // terminalGround is the ground of the Mac app's terminal (Theme.swift,
-// terminalBackground).
-var terminalGround = rgb8{0x14, 0x11, 0x0D}
+// terminalBackground), the library's.
+var terminalGround = channels(hex(design.TheTerminal().Ground))
 
 // AgentColor is the agents' colour n, from 1 to AgentColors, as "#rrggbb":
 // a working card's mark in the Mac app's dark mode, in the palette theme
@@ -53,7 +57,7 @@ func AgentColor(theme string, n int) string {
 	}
 	t, ok := themes[theme]
 	if !ok {
-		t = themes["rosewater"]
+		t = themes[defaultTheme]
 	}
 	c := agentMark((n-1)%AgentColors, t.dark)
 	return fmt.Sprintf("#%02x%02x%02x", c.r, c.g, c.b)
@@ -70,31 +74,31 @@ func HuesApart(a, b int) float64 {
 // agentHue is a slot's hue, from 0, in OKLCH degrees.
 func agentHue(slot int, p palette) float64 {
 	_, _, red := toOKLCH(channels(p.needs))
-	return math.Mod(red+hueGap+hueStep/2+float64(slot%AgentColors)*hueStep, 360)
+	return math.Mod(red+agents.NeedsGap+hueStep/2+float64(slot%AgentColors)*hueStep, 360)
 }
 
 // agentMark is a slot's mark on a dark palette's working card: at
-// darkMarkL, or lighter where that keeps less than 3.2:1 on the card's wash
-// or on the selection.
+// darkMarkL, or lighter where that keeps less than agents.Mark.Contrast
+// (3.2:1) on the card's wash or on the selection.
 func agentMark(slot int, p palette) rgb8 {
 	hue := agentHue(slot, p)
 	wash, selection := agentWash(hue, p).luminance(), channels(p.selection).luminance()
 	l := reach(darkMarkL, 1, func(l float64) bool {
 		y := fromOKLCH(l, markChroma, hue).luminance()
-		return ratio(y, wash) >= 3.2 && ratio(y, selection) >= 3.2
+		return ratio(y, wash) >= agents.Mark.Contrast && ratio(y, selection) >= agents.Mark.Contrast
 	})
 	return fromOKLCH(l, markChroma, hue)
 }
 
 // agentWash is a dark palette's working card: the card's lightness, lifted
 // a little, in the hue, as far toward that as keeps its muted text at
-// 4.6:1.
+// agents.Wash.Contrast (4.6:1).
 func agentWash(hue float64, p palette) rgb8 {
 	card := channels(p.card)
 	l, _, _ := toOKLCH(card)
 	full := fromOKLCH(l+darkWashLift, darkWashChroma, hue)
 	muted := channels(p.muted).luminance()
-	fits := func(t float64) bool { return ratio(mix(card, full, t).luminance(), muted) >= 4.6 }
+	fits := func(t float64) bool { return ratio(mix(card, full, t).luminance(), muted) >= agents.Wash.Contrast }
 	if fits(1) {
 		return full
 	}
