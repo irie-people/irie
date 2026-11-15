@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/paths"
 	"github.com/irie-people/irie/internal/variorum"
 )
@@ -95,5 +96,24 @@ func TestIrieVariorumDoorSaysWhatToDo(t *testing.T) {
 	}
 	if err := json.Unmarshal(out.Bytes(), &m); err != nil || m.Error.Code != -32000 || !strings.Contains(m.Error.Message, "pbpaste | irie variorum connect") {
 		t.Errorf("the door answered %q (%v)", out.String(), err)
+	}
+}
+
+// TestIrieVariorumWithTheTabOff: the setups serve :write sessions too, so
+// irie variorum keeps them with the tab's switch off, and names that
+// switch only once writing in Variorum is off as well.
+func TestIrieVariorumWithTheTabOff(t *testing.T) {
+	bare(t)
+	cfg, p, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Variorum.Tab = false
+	if r, err := variorumAction(cfg, p, ipc.VariorumStatus, strings.NewReader("")); err != nil || r.State == ipc.VariorumOff {
+		t.Errorf("the tab off: %+v, %v", r, err)
+	}
+	cfg.Skills.Disabled = []string{"variorum"}
+	if r, err := variorumAction(cfg, p, ipc.VariorumConnect, strings.NewReader("claude mcp add")); err != nil || r.State != ipc.VariorumOff || !strings.Contains(r.Error, "irie plugins on writing tab") {
+		t.Errorf("both parts off: %+v, %v", r, err)
 	}
 }

@@ -99,7 +99,14 @@ func TestTheVariorumOp(t *testing.T) {
 		t.Fatalf("plugin off: %+v", r)
 	}
 
-	cfg.Plugins.Writing = true
+	// The op is the tab's: off with the tab's switch.
+	cfg.Plugins.Writing, cfg.Variorum.Tab = true, false
+	c.useConfig(cfg)
+	if r := op(ipc.VariorumArgs{Action: ipc.VariorumNotes}); r.State != ipc.VariorumOff || !strings.Contains(r.Text, "irie plugins on writing tab") || r.Notes != nil {
+		t.Fatalf("tab off: %+v", r)
+	}
+
+	cfg.Variorum.Tab = true
 	c.useConfig(cfg)
 	if r := op(ipc.VariorumArgs{Action: ipc.VariorumStatus}); r.State != ipc.VariorumSetup || r.Sessions || r.Tab || !r.Installed {
 		t.Errorf("nothing kept: %+v", r)
@@ -226,6 +233,12 @@ func TestOnlyAWritingSessionGetsVariorumsDoor(t *testing.T) {
 		if mcp := c.variorumMCP(dir); mcp != nil {
 			t.Errorf("%s: %+v", dir, mcp)
 		}
+	}
+	// The tab's switch is the tab's: the session keeps its door.
+	cfg.Variorum.Tab = false
+	c.useConfig(cfg)
+	if mcp := c.variorumMCP(writing); len(mcp) != 1 {
+		t.Errorf("tab off: %+v", mcp)
 	}
 	cfg.Plugins.Writing = false
 	c.useConfig(cfg)
