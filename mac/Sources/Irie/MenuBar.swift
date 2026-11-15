@@ -58,8 +58,10 @@ final class MenuState {
         /// The terminal is popped out, or could be (PopOut.swift).
         var poppedOut = false
         var canPopOut = false
-        /// The panes beside the terminal show (Rolodex.swift).
+        /// The panes beside the terminal show (Rolodex.swift), and are
+        /// folded down to a strip.
         var panesOpen = false
+        var panesFolded = false
         var canPlugins = false
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
@@ -125,6 +127,7 @@ extension Store {
         f.poppedOut = poppedOut != nil
         f.canPopOut = attach != nil
         f.panesOpen = rolodex.open
+        f.panesFolded = rolodex.open && rolodex.folded
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.bundles = bundles
@@ -275,6 +278,9 @@ struct IrieCommands: Commands {
             // (Rolodex.swift); Go walks them.
             Button(f.panesOpen ? "Hide Panes" : "Show Panes", action: run { store.togglePanes() })
                 .keyboardShortcut("p", modifiers: [.command, .option])
+            // Down to a strip of their tabs at the window's edge, or back.
+            Button(f.panesFolded ? "Unfold Panes" : "Fold Panes", action: run { store.toggleFold() })
+                .keyboardShortcut("p", modifiers: [.command, .option, .shift])
             Menu("New Pane") {
                 ForEach(PaneKind.offered(f.plugins)) { k in
                     Button(k.title, action: run { store.newPane(k) })

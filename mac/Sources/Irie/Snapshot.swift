@@ -192,13 +192,16 @@ enum Snapshot {
 
             // The panes beside the terminal (Rolodex.swift): a card of each
             // kind with one in front, in both modes and a narrower window, a
-            // blank card, and two turns drawn still, forward and back.
-            let panes: [(String, PaneKind?, Bool, CGFloat)] = [
-                ("panes", .terminal, false, 1500), ("panes-dark", .terminal, true, 1500), ("panes-browser", .browser, false, 1500),
-                ("panes-narrow", .terminal, false, 1100), ("panes-blank", nil, false, 1500), ("panes-mail", .mail, false, 1500),
+            // blank card, the wheel folded down to its strip, and two turns
+            // drawn still, forward and back.
+            let panes: [(String, PaneKind?, Bool, CGFloat, Bool)] = [
+                ("panes", .terminal, false, 1500, false), ("panes-dark", .terminal, true, 1500, false),
+                ("panes-browser", .browser, false, 1500, false), ("panes-narrow", .terminal, false, 1100, false),
+                ("panes-blank", nil, false, 1500, false), ("panes-mail", .mail, false, 1500, false),
+                ("panes-folded", .browser, false, 1500, true), ("panes-folded-dark", .browser, true, 1500, true),
             ]
-            for (base, front, dark, width) in panes {
-                store.rolodex.loadFixture(session: Fixture.selected, front: front)
+            for (base, front, dark, width, folded) in panes {
+                store.rolodex.loadFixture(session: Fixture.selected, front: front, folded: folded)
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: width, height: 720)
                 let name = base + ".png"
