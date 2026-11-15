@@ -164,18 +164,24 @@ func ratio(a, b float64) float64 {
 // toOKLCH is a colour's OKLCH: its lightness, chroma and hue in degrees
 // (Björn Ottosson, "A perceptual color space for image processing", 2020).
 func toOKLCH(c rgb8) (l, chroma, hue float64) {
-	r, g, b := linear(c.r), linear(c.g), linear(c.b)
-	l1 := math.Cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
-	m1 := math.Cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
-	s1 := math.Cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
-	l = 0.2104542553*l1 + 0.7936177850*m1 - 0.0040720468*s1
-	a := 1.9779984951*l1 - 2.4285922050*m1 + 0.4505937099*s1
-	bb := 0.0259040371*l1 + 0.7827717662*m1 - 0.8086757660*s1
+	l, a, bb := oklab(linear(c.r), linear(c.g), linear(c.b))
 	hue = math.Atan2(bb, a) * 180 / math.Pi
 	if hue < 0 {
 		hue += 360
 	}
 	return l, math.Sqrt(a*a + bb*bb), hue
+}
+
+// oklab is the Oklab lightness, a and b of a colour's linear sRGB
+// channels.
+func oklab(r, g, b float64) (l, a, bb float64) {
+	l1 := math.Cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
+	m1 := math.Cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
+	s1 := math.Cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
+	l = 0.2104542553*l1 + 0.7936177850*m1 - 0.0040720468*s1
+	a = 1.9779984951*l1 - 2.4285922050*m1 + 0.4505937099*s1
+	bb = 0.0259040371*l1 + 0.7827717662*m1 - 0.8086757660*s1
+	return l, a, bb
 }
 
 // fromOKLCH is the sRGB colour of a lightness, a chroma and a hue in
