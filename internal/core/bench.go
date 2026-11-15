@@ -131,10 +131,22 @@ func (c *Core) benchFor(a ipc.BenchArgs) (profile, judge string, p *peerState, e
 	return profile, judge, p, nil
 }
 
-// benchOp is the bench op: it starts a bench of a.Task, or lists them.
+// benchOp is the bench op: it starts a bench of a.Task, or lists them. A
+// task of nothing but a bench's id shows that bench: it reads as asking
+// after it, and a bench of the id as its task would measure nothing.
 func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	if strings.TrimSpace(a.Task) == "" {
 		return ipc.BenchResult{Benches: c.benchList()}, nil
+	}
+	c.benches.mu.Lock()
+	known := c.benches.all[strings.TrimSpace(a.Task)]
+	var shown ipc.Bench
+	if known != nil {
+		shown = known.Bench
+	}
+	c.benches.mu.Unlock()
+	if known != nil {
+		return ipc.BenchResult{Bench: &shown, Shown: true}, nil
 	}
 	runs := a.Runs
 	if runs == 0 {

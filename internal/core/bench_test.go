@@ -117,6 +117,18 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 		}
 	}
 
+	// A task of nothing but a bench's id shows that bench, and starts none.
+	var shown ipc.BenchResult
+	if err := c.call("bench", ipc.BenchArgs{Task: " " + b.ID + "\n", Profile: "cheap"}, &shown); err != nil {
+		t.Fatal(err)
+	}
+	if !shown.Shown || shown.Bench == nil || shown.Bench.ID != b.ID || len(shown.Bench.Runs) != 3 {
+		t.Errorf("bench %s by its id = %+v", b.ID, shown)
+	}
+	if all := c.benches(); len(all) != 1 {
+		t.Errorf("asking after a bench by its id started one: %d benches", len(all))
+	}
+
 	// Once they are through, the judge's verdict rates them by its scores
 	// (bench.pass is 70) and its rules become the profile's playbook.
 	done := c.waitBench(b.ID)

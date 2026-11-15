@@ -473,7 +473,11 @@ func Said(st Step, result any, err error) (InputResult, error) {
 	case OpRoute:
 		r.Did, r.Text = InputAnswered, as[RouteChoice](result).Reason
 	case OpBench:
-		r.Text = BenchStarted(as[BenchResult](result).Bench)
+		if br := as[BenchResult](result); br.Shown && br.Bench != nil {
+			r.Did, r.Text = InputAnswered, BenchLine(*br.Bench)
+		} else {
+			r.Text = BenchStarted(br.Bench)
+		}
 	case OpVPN:
 		r.Text = as[VPNResult](result).Text
 		if d := as[VPNArgs](st.Args).Do; d == "" || d == VPNTime {
