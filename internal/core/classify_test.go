@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -161,7 +162,8 @@ func TestADelegationPassesOverAProfileTooSlowForItsWait(t *testing.T) {
 	// soon a subtask comes back.
 	u := c.outcome("s00000000000u")
 	u.profile, u.class, u.spawned, u.ended = "claude", route.Small, start, start.Add(5*time.Hour)
-	if ch := c.choose(route.Small, "", only, 10*time.Minute, false); ch.Profile != "claude" || find(ch, "sonnet").Usable || find(ch, "claude").Timed != 0 {
+	ch = c.choose(route.Small, "", only, 10*time.Minute, false)
+	if s := find(ch, "sonnet"); ch.Profile != "claude" || s.Usable || !s.TimeAtLeast || s.Note != "takes 10m or more, past the 10m wait" || find(ch, "claude").Timed != 0 {
 		t.Errorf("after sonnet ran past the wait = %+v", ch)
 	}
 }
@@ -232,6 +234,11 @@ fake = 1.0
 	}
 	if second.ID == "" || !second.Routed || second.Class != route.Small {
 		t.Fatalf("the session that took it over = %+v", second)
+	}
+	// It goes on under the subtask's name, not the note's: the session it
+	// takes over from is closed by then, so the name is free.
+	if m := regexp.MustCompile(`delegated to \+slow as (.+) \(s\w+\)`).FindStringSubmatch(errOut); m == nil || second.Name != m[1] {
+		t.Errorf("the session that took it over is named %q; %q", second.Name, errOut)
 	}
 	task, _ := os.ReadFile(c.paths.TaskFile(second.ID))
 	if !strings.HasPrefix(string(task), "[Irie] This subtask ran on +slow, which was still at work after 8s, so Irie stopped it.") || !strings.Contains(string(task), "fix the typo") {

@@ -1,8 +1,10 @@
 package route
 
 import (
+	"cmp"
 	"math"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -65,25 +67,27 @@ func Nearest(v []float32, labels []Labelled) (Labelled, float64, bool) {
 const timesKept = 9
 
 type timed struct {
-	at time.Time
-	d  time.Duration
+	at      time.Time
+	d       time.Duration
+	atLeast bool // it had not answered by then
 }
 
 // AddTime notes how long a session took to answer a task of class on
-// profile: from its spawn, at, to the end of its first turn; or the wait it
-// ran past, which it took at least.
-func (s *Stats) AddTime(profile, class string, at time.Time, d time.Duration) {
+// profile: from its spawn, at, to the end of its first turn; or, atLeast,
+// the wait it ran past, which it took at least.
+func (s *Stats) AddTime(profile, class string, at time.Time, d time.Duration, atLeast bool) {
 	if s.times == nil {
 		s.times = map[[2]string][]timed{}
 	}
 	k := [2]string{profile, class}
-	s.times[k] = append(s.times[k], timed{at, d})
+	s.times[k] = append(s.times[k], timed{at, d, atLeast})
 }
 
 // Time is how long profile takes to answer a task of class: the median of
 // its latest answers on that class, else of its latest on every class,
-// since a model's speed is mostly its own; and how many answers that is.
-func (s Stats) Time(profile, class string) (time.Duration, int) {
+// since a model's speed is mostly its own; how many answers that is; and
+// whether the median is only a least, a wait the session ran past.
+func (s Stats) Time(profile, class string) (time.Duration, int, bool) {
 	ts := s.times[[2]string{profile, class}]
 	if len(ts) == 0 {
 		for k, more := range s.times {
@@ -93,19 +97,33 @@ func (s Stats) Time(profile, class string) (time.Duration, int) {
 		}
 	}
 	if len(ts) == 0 {
-		return 0, 0
+		return 0, 0, false
 	}
 	ts = slices.Clone(ts)
 	slices.SortFunc(ts, func(a, b timed) int { return b.at.Compare(a.at) })
 	ts = ts[:min(len(ts), timesKept)]
-	ds := make([]time.Duration, len(ts))
-	for i, t := range ts {
-		ds[i] = t.d
-	}
-	slices.Sort(ds)
-	n := len(ds)
+	slices.SortStableFunc(ts, func(a, b timed) int { return cmp.Compare(a.d, b.d) })
+	n := len(ts)
 	if n%2 == 1 {
-		return ds[n/2], n
+		return ts[n/2].d, n, ts[n/2].atLeast
 	}
-	return (ds[n/2-1] + ds[n/2]) / 2, n
+	return (ts[n/2-1].d + ts[n/2].d) / 2, n, ts[n/2].atLeast
+}
+
+// Took renders how long something took as people say it: 8s and 1m30s
+// under ten minutes, 25m and 1h30m past that.
+func Took(d time.Duration) string {
+	if d < 10*time.Minute {
+		d = d.Round(time.Second)
+	} else {
+		d = d.Round(time.Minute)
+	}
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
 }
