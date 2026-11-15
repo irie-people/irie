@@ -36,7 +36,7 @@ const routeUsage = "usage: " + brand.Slug + " ctl route [--json] [--wait D] TASK
 func ctlRoute(args []string) error {
 	fs := flag.NewFlagSet("ctl route", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the choice as JSON")
-	wait := fs.Duration("wait", 0, "as a subtask its caller waits this long for, as irie ctl delegate does")
+	wait := fs.Duration("wait", 0, "as a subtask its caller waits this long for, as "+brand.Slug+" ctl delegate does")
 	label := fs.String("label", "", "give the task this class, which the router sorts tasks by: small, medium or hard")
 	from := fs.String("import", "", "give tasks their classes from a file of JSON lines, each with text and class")
 	if err := fs.Parse(args); err != nil {
