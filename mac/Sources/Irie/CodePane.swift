@@ -24,6 +24,8 @@ struct CodePane: View {
     @State private var finding = false
     @State private var going = false
     @State private var hovered: String?
+    /// The session's folder as a tree beside the file, for every code card.
+    @AppStorage("codeTree") private var tree = false
 
     private var theme: CodeTheme { CodeThemes.theme(themeID, dark: scheme == .dark) }
     private var font: NSFont { NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular) }
@@ -36,17 +38,17 @@ struct CodePane: View {
             Rectangle().fill(Color(nsColor: t.gutterInk).opacity(0.22)).frame(height: 1)
             if owner.peer != nil {
                 note("Code from a session on another machine opens there; that comes later.", t)
-            } else if let path = pane.file {
-                let doc = document(path, t)
-                ZStack(alignment: .top) {
-                    content(doc, t)
-                    if doc.conflict { conflict(doc, t) }
-                    if doc.phase == .missing { missing(doc, t) }
-                }
-                footer(doc, t)
             } else {
-                QuickOpen(folder: owner.folder, theme: t, focusToken: token, takesKeys: shows && keys,
-                          open: open, close: nil)
+                GeometryReader { geo in
+                    HStack(spacing: 0) {
+                        if tree, let folder = owner.folder {
+                            CodeTree(folder: folder, theme: t, shown: pane.file, open: open)
+                                .frame(width: min(260, max(150, geo.size.width * 0.3)))
+                            Rectangle().fill(Color(nsColor: t.gutterInk).opacity(0.22)).frame(width: 1)
+                        }
+                        VStack(spacing: 0) { main(t) }
+                    }
+                }
             }
         }
         .background(Color(nsColor: t.background))
@@ -76,6 +78,23 @@ struct CodePane: View {
         // As another session shows, and its cards with it.
         .onDisappear {
             if let p = pane.file { CodeDocs.shared.existing(p)?.saveNow() }
+        }
+    }
+
+    /// The file on show and its foot, or a way to open one.
+    @ViewBuilder
+    private func main(_ t: CodeTheme) -> some View {
+        if let path = pane.file {
+            let doc = document(path, t)
+            ZStack(alignment: .top) {
+                content(doc, t)
+                if doc.conflict { conflict(doc, t) }
+                if doc.phase == .missing { missing(doc, t) }
+            }
+            footer(doc, t)
+        } else {
+            QuickOpen(folder: owner.folder, theme: t, focusToken: token, takesKeys: shows && keys,
+                      open: open, close: nil)
         }
     }
 
@@ -124,6 +143,17 @@ struct CodePane: View {
     /// with typing unsaved, which a hover makes a ×.
     private func header(_ t: CodeTheme) -> some View {
         HStack(spacing: 4) {
+            Button { tree.toggle() } label: {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 24, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color(nsColor: tree ? t.foreground : t.gutterActiveInk))
+            .help(tree ? "Hide the folder’s files" : "Show the session’s folder beside the file")
+            .accessibilityLabel(tree ? "Hide the files" : "Show the files")
+            .disabled(owner.peer != nil || owner.folder == nil)
             Button { finding.toggle() } label: {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11, weight: .semibold))
@@ -530,6 +560,9 @@ final class CodeFiles {
     static let shared = CodeFiles()
     private var cache: [String: (at: Date, files: [String])] = [:]
 
+    /// `--snapshot`'s files for a folder, kept for good.
+    func fixture(_ folder: String, files: [String]) { cache[folder] = (.distantFuture, files) }
+
     func list(_ folder: String) async -> [String] {
         if let c = cache[folder], Date().timeIntervalSince(c.at) < 15 { return c.files }
         let files = await Task.detached(priority: .userInitiated) { Self.read(folder) }.value
@@ -674,5 +707,149 @@ struct CodeSample: View {
             out.addAttribute(.foregroundColor, value: theme.color(kind), range: r)
         }
         return (try? AttributedString(out, including: \.appKit)) ?? AttributedString(text)
+    }
+}
+
+/// A session's folder as a tree, beside a code card's file: folders first,
+/// each folding open with a click, and a click on a file opens it. The
+/// folders down to the file on show open by themselves.
+@MainActor
+struct CodeTree: View {
+    let folder: String
+    let theme: CodeTheme
+    let shown: String?
+    let open: @MainActor (String) -> Void
+    @State private var root = Folder(name: "")
+    @State private var expanded: Set<String> = []
+    @State private var loading = true
+
+    /// A folder of the tree, and what is in it, each list in name order.
+    final class Folder {
+        let name: String
+        var folders: [String: Folder] = [:]
+        var files: [String] = []
+        init(name: String) { self.name = name }
+
+        static func of(_ paths: [String]) -> Folder {
+            let root = Folder(name: "")
+            for p in paths {
+                var at = root
+                let parts = p.split(separator: "/").map(String.init)
+                for part in parts.dropLast() {
+                    if let f = at.folders[part] {
+                        at = f
+                    } else {
+                        let f = Folder(name: part)
+                        at.folders[part] = f
+                        at = f
+                    }
+                }
+                if let last = parts.last { at.files.append(last) }
+            }
+            return root
+        }
+    }
+
+    /// One line of the tree as it shows: a folder or a file, by its path
+    /// from the session's folder.
+    struct Row: Identifiable {
+        let id: String
+        let name: String
+        let depth: Int
+        let folder: Bool
+    }
+
+    /// The lines on show: every folder open lists what is in it.
+    static func rows(_ root: Folder, open: Set<String>) -> [Row] {
+        var out: [Row] = []
+        func walk(_ f: Folder, _ path: String, _ depth: Int) {
+            let order: (String, String) -> Bool = { $0.localizedStandardCompare($1) == .orderedAscending }
+            for name in f.folders.keys.sorted(by: order) {
+                let p = path.isEmpty ? name : path + "/" + name
+                out.append(Row(id: p + "/", name: name, depth: depth, folder: true))
+                if open.contains(p), let sub = f.folders[name] { walk(sub, p, depth + 1) }
+            }
+            for name in f.files.sorted(by: order) {
+                out.append(Row(id: path.isEmpty ? name : path + "/" + name, name: name, depth: depth, folder: false))
+            }
+        }
+        walk(root, "", 0)
+        return out
+    }
+
+    var body: some View {
+        let rows = Self.rows(root, open: expanded)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(rows) { row in line(row) }
+            }
+            .padding(.vertical, 4)
+        }
+        .overlay {
+            if loading { ProgressView().controlSize(.small) }
+        }
+        .background(Color(nsColor: theme.currentLine).opacity(0.5))
+        .task(id: folder) {
+            loading = true
+            let files = await CodeFiles.shared.list(folder)
+            root = Folder.of(files)
+            loading = false
+            openDown()
+        }
+        .onChange(of: shown) { openDown() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Files of \((folder as NSString).lastPathComponent)")
+    }
+
+    private func line(_ row: Row) -> some View {
+        let full = (folder as NSString).appendingPathComponent(row.folder ? String(row.id.dropLast()) : row.id)
+        let on = !row.folder && full == shown
+        let isOpen = row.folder && expanded.contains(String(row.id.dropLast()))
+        return HStack(spacing: 4) {
+            Image(systemName: row.folder ? (isOpen ? "chevron.down" : "chevron.right") : "doc.text")
+                .font(.system(size: row.folder ? 8 : 9.5, weight: .semibold))
+                .frame(width: 10)
+                .foregroundStyle(Color(nsColor: theme.gutterInk))
+            Text(row.name)
+                .font(.system(size: 11.5, weight: on ? .semibold : .regular))
+                .foregroundStyle(Color(nsColor: on || row.folder ? theme.foreground : theme.gutterActiveInk))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 8 + CGFloat(row.depth) * 12)
+        .padding(.trailing, 6)
+        .frame(height: 21)
+        .background(Color(nsColor: on ? theme.selection : .clear).opacity(0.55))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if row.folder {
+                let p = String(row.id.dropLast())
+                if expanded.contains(p) { expanded.remove(p) } else { expanded.insert(p) }
+            } else {
+                open(full)
+            }
+        }
+        .contextMenu {
+            if !row.folder { Button("Open") { open(full) } }
+            Button("Copy Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(full, forType: .string)
+            }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: full)]) }
+        }
+        .help(row.id)
+    }
+
+    /// Opens the folders down to the file on show.
+    private func openDown() {
+        guard let shown, shown.hasPrefix(folder + "/") else { return }
+        var parts = String(shown.dropFirst(folder.count + 1)).split(separator: "/").map(String.init)
+        parts.removeLast()
+        var p = ""
+        for part in parts {
+            p = p.isEmpty ? part : p + "/" + part
+            expanded.insert(p)
+        }
     }
 }
