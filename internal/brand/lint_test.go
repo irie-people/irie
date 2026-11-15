@@ -22,6 +22,9 @@ var keep = map[string][]string{
 	// event's source.
 	"internal/core/undo.go":   {"irie"},
 	"internal/event/event.go": {"irie"},
+	// The design library's copies in the Mac and iPhone apps' sources,
+	// whose folders keep Irie's name in every copy (DESIGN §2.10).
+	"internal/designcheck/designcheck.go": {"mac/Sources/Irie/Theme.swift", "ios/Irie.swiftpm/Sources/Look.swift"},
 }
 
 // named says whether s holds the name: Irie, or irie as a word, as in
