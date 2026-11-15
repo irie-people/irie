@@ -346,6 +346,7 @@ curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 | The server's PATH | A new server gets `~/.local/bin` at the end of its PATH when that folder exists and the PATH lacks it (`ready.PathEnv`). The installers of Irie and of Claude Code put their programs there, and a terminal finds them only once a startup file says so, which `irie setup` offers. A running server keeps its environment |
 | From the app | Opened with no Irie running, the app runs `irie up --login-env` (§7.2), once a launch and only before it has ever reached a core, so a core that restarts is left to the supervisor. It asks the core's `ready` op, the same check in the server's environment, which is the agents', every 4 s while something blocks. A fix runs as the `ready` tool: a session running `irie setup`, whose terminal the app shows ([MAC.md](MAC.md)) |
 | A first task | Both sidebars offer `+haiku Write a haiku about my city. Ask me which city first.` with no sessions. It makes the agent ask before it works, so a newcomer sees a session start, ask and finish in about a minute, on Claude's quickest model, in a scratch folder of its own. The Mac app follows it with a card of steps, the walkthrough of [learning.md](proposals/learning.md) §5.1 in brief |
+| Windows | Irie runs inside WSL 2, Windows' own Linux, as on any Linux ([WINDOWS.md](WINDOWS.md)). `site/install.ps1`, run as `powershell -ExecutionPolicy ByPass -c "irm https://irie-people.github.io/irie/install.ps1 \| iex"`, downloads `irie-windows-<arch>.zip`, checks it against `SHA256SUMS`, puts the wrapper `irie.exe` (`cmd/windows`, `internal/wsl`) in `%LOCALAPPDATA%\irie\bin` and on the user's PATH, and runs `irie setup`. On Windows that installs WSL (an administrator's OK, then a restart), Ubuntu, and Irie inside it by `install.sh`, whose own `irie setup` brings tmux, Claude Code and the sign-in; then it offers `.wslconfig`'s `instanceIdleTimeout=-1`, so agents keep working once the last window closes, a Start menu shortcut with a Windows Terminal profile, and a start at sign-in (`irie up`). Every other command runs the Linux `irie` in the distribution through a login shell, Windows paths among its arguments made WSL's. It finds WSL by its files rather than by asking `wsl.exe`, which on a Windows without WSL may offer to install it |
 | Not yet | A signed and notarized app, and so a direct download of it that opens without a warning; Ghostty in the Intel slice; a Homebrew tap; and a tmux of Irie's own for a Mac without Homebrew, which needs a terminfo of its own, as macOS's lacks `tmux-256color` |
 
 ---
@@ -1980,7 +1981,7 @@ From M9, `irie` and Irie.app drive Ghostty through its macOS AppleScript diction
 
 ### 7.3 Linux and other terminals
 
-Plain `irie` attaches in the current terminal, and everything outside §7.1 and §7.2 works the same. The Ghostty-specific parts are optional.
+Plain `irie` attaches in the current terminal, and everything outside §7.1 and §7.2 works the same. The Ghostty-specific parts are optional. On Windows, Irie is the Linux one inside WSL 2, and `irie.exe` attaches it in the Windows terminal it is started from (§2.7, [WINDOWS.md](WINDOWS.md)).
 
 ### 7.4 Later: pop-out tabs
 

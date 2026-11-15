@@ -1,6 +1,7 @@
 # tools/check.sh (gofmt, go vet, go test and PROVENANCE.md's rows) on Linux and macOS, for every
-# push to main and every pull request, as tools/live.sh runs it before an install. The Mac app
-# (mac/) is not built here; mac/build.sh takes about ten minutes and needs Xcode.
+# push to main and every pull request, as tools/live.sh runs it before an install, and the
+# Windows wrapper on Windows. The Mac app (mac/) is not built here; mac/build.sh takes about ten
+# minutes and needs Xcode.
 name: test
 on:
   push:
@@ -32,3 +33,54 @@ jobs:
           fi
           tmux -V
       - run: sh tools/check.sh
+  # The Windows wrapper (cmd/windows, docs/WINDOWS.md) on Windows itself: its
+  # tests, then site/install.ps1 from a local mirror of the downloads, and
+  # irie.exe's own look at the machine. GitHub's Windows has no WSL 2 to run
+  # Irie in, so the look says what is missing and changes nothing.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: wrapper
+        shell: bash
+        run: |
+          go vet ./cmd/windows ./internal/wsl
+          go test ./internal/wsl
+      - name: install.ps1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = Join-Path $env:RUNNER_TEMP 'dist'
+          New-Item -ItemType Directory -Force -Path "$dist\x" | Out-Null
+          go build -trimpath -o "$dist\x\irie.exe" ./cmd/windows
+          if ($LASTEXITCODE -ne 0) { throw 'go build failed' }
+          Copy-Item LICENSE "$dist\x\LICENSE"
+          Compress-Archive -Path "$dist\x\irie.exe", "$dist\x\LICENSE" -DestinationPath "$dist\irie-windows-amd64.zip"
+          $h = (Get-FileHash -Algorithm SHA256 "$dist\irie-windows-amd64.zip").Hash.ToLower()
+          Set-Content -Path "$dist\SHA256SUMS" -Value "$h  irie-windows-amd64.zip" -Encoding ascii
+          $server = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1', '--directory', $dist -PassThru -WindowStyle Hidden
+          for ($i = 0; $i -lt 50; $i++) {
+            try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/SHA256SUMS | Out-Null; break } catch { Start-Sleep -Milliseconds 200 }
+          }
+          $env:IRIE_DOWNLOADS = 'http://127.0.0.1:8765'
+          $env:IRIE_NO_SETUP = '1'
+          # Twice: an install, then an update over it.
+          Get-Content site/install.ps1 -Raw | Invoke-Expression
+          Get-Content site/install.ps1 -Raw | Invoke-Expression
+          $exe = Join-Path $env:LOCALAPPDATA 'irie\bin\irie.exe'
+          & $exe version
+          if ($LASTEXITCODE -ne 0) { throw "irie.exe version exited $LASTEXITCODE" }
+          $look = & $exe setup --check | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $look
+          if ($code -gt 1 -or $look -notmatch 'Windows build \d+') { throw "irie.exe setup --check exited $code" }
+          # A wrong checksum installs nothing.
+          Set-Content -Path "$dist\SHA256SUMS" -Value "$('0' * 64)  irie-windows-amd64.zip" -Encoding ascii
+          $failed = $false
+          try { Get-Content site/install.ps1 -Raw | Invoke-Expression } catch { $failed = $_.Exception.Message -match 'SHA-256' }
+          if (-not $failed) { throw 'install.ps1 took a download whose checksum was wrong' }
+          Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
