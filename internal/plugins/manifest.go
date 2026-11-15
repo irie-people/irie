@@ -47,6 +47,8 @@ type manifestFile struct {
 	Title   string              `toml:"title"`
 	Summary string              `toml:"summary"`
 	Panes   map[string]paneFile `toml:"panes"`
+	// Helpers are programs of yours that Irie keeps running (helpers.go).
+	Helpers map[string]helperFile `toml:"helpers"`
 	// Schedules are kept for a later build, which reads them: until then
 	// each shows as a part that is held.
 	Schedules map[string]toml.Primitive `toml:"schedules"`
@@ -132,7 +134,7 @@ func readManifest(path string) (Plugin, *Bundle) {
 		return broken("It doesn't read as TOML: " + err.Error())
 	}
 	if keys := undecoded(md); len(keys) > 0 {
-		return broken("It has keys " + brand.Name + " doesn't know: " + strings.Join(keys, ", ") + ". A plugin has title, summary and [panes.NAME] tables; a bundle has title, summary and plugins.")
+		return broken("It has keys " + brand.Name + " doesn't know: " + strings.Join(keys, ", ") + ". A plugin has title, summary, [panes.NAME] and [helpers.NAME] tables; a bundle has title, summary and plugins.")
 	}
 	title, summary := line(mf.Title, 60), line(mf.Summary, 300)
 	if title == "" {
@@ -140,8 +142,8 @@ func readManifest(path string) (Plugin, *Bundle) {
 	}
 	if md.IsDefined("plugins") {
 		b := &Bundle{Name: name, Title: title, Summary: summary, Manifest: path}
-		if len(mf.Panes) > 0 || len(mf.Schedules) > 0 {
-			b.Problem = "A bundle names plugins and has no parts of its own: put its panes or schedules in a manifest of their own, and name that in the bundle's plugins."
+		if len(mf.Panes) > 0 || len(mf.Helpers) > 0 || len(mf.Schedules) > 0 {
+			b.Problem = "A bundle names plugins and has no parts of its own: put its panes, helpers or schedules in a manifest of their own, and name that in the bundle's plugins."
 			return Plugin{}, b
 		}
 		for _, ref := range mf.Plugins {
@@ -173,6 +175,16 @@ func readManifest(path string) (Plugin, *Bundle) {
 			// folder, by an agent say, can't bring one by itself.
 			p.on = func(c config.Config) bool { on, set := c.Plugins.Manifests[name]; return set && on }
 			p.remote = true
+		}
+		p.Parts = append(p.Parts, x)
+	}
+	for _, id := range slices.Sorted(maps.Keys(mf.Helpers)) {
+		x := helperPart(p, id, mf.Helpers[id])
+		if len(x.Helper.Run) > 0 {
+			// A program of yours runs only once the owner has said so,
+			// with the plugin's switch, as a page off this computer.
+			p.on = func(c config.Config) bool { on, set := c.Plugins.Manifests[name]; return set && on }
+			p.runs = true
 		}
 		p.Parts = append(p.Parts, x)
 	}

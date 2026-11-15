@@ -36,7 +36,7 @@ icon = "doc.text"                     # an SF Symbols name; a globe when left ou
 start = "cd ~/code/invoices && make serve"   # shown when nothing answers; never run
 ```
 
-A manifest is data: Irie reads it and runs nothing from it. `[schedules.<id>]` tables are kept for the schedules another session is adding: until a build reads them, each shows as a part that is held, so a manifest written today keeps working. A manifest that doesn't read shows as its plugin with a part that says what is wrong.
+A manifest is data: Irie reads it and runs nothing from it, but a helper's program once you turn its plugin on: a `[helpers.<id>]` table names a program of yours that Irie keeps running in a window of its own, a status file it keeps and a file to open, and the right sidebar's Helpers tab shows it (DESIGN §4.17). `[schedules.<id>]` tables are kept for the schedules another session is adding: until a build reads them, each shows as a part that is held, so a manifest written today keeps working. A manifest that doesn't read shows as its plugin with a part that says what is wrong.
 
 ## 3. Bundles
 

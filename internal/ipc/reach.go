@@ -49,7 +49,7 @@ var reaches = map[string]Reach{
 	// Irie's own settings, views and files, and the agents' own channel
 	// into Irie.
 	OpSpaces: ReachInside, OpNotepad: ReachInside, OpConfig: ReachInside, OpTheme: ReachInside,
-	OpPlugins: ReachInside, OpGabriel: ReachInside, OpLocal: ReachInside, OpPreflight: ReachInside,
+	OpPlugins: ReachInside, OpHelpers: ReachInside, OpGabriel: ReachInside, OpLocal: ReachInside, OpPreflight: ReachInside,
 	OpRate: ReachInside, OpLabel: ReachInside, OpPeers: ReachInside, OpContext: ReachInside, OpShow: ReachInside,
 	OpFlip: ReachInside, OpCard: ReachInside, OpPane: ReachInside, OpHook: ReachInside,
 	OpStatus: ReachInside,

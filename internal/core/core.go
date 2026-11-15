@@ -144,6 +144,7 @@ type Core struct {
 	peers      map[string]*peerState // the other machines' cores this one is paired with, by name (peers.go)
 	benches    benchState            // the benches this core started, and the playbooks (bench.go); a lock of its own, but its playbooks are under mu
 	tunnelAt   map[string]time.Time  // when each peer's tunnel last started (tunnel.go)
+	ownHelpers ownHelperKeep         // your helpers that the core keeps running (ownhelpers.go)
 	raw        bool                  // the slot shows the picked session's raw terminal, not its conversation
 	split      string                // the session the Mac app shows beside its teammates, in the view session (view.go)
 	team       *tmux.Runner          // the team server, where sessions' teammates run (team.go)
@@ -522,6 +523,7 @@ func (c *Core) tick() {
 	c.followConversations()
 	c.keepRemote()
 	c.keepTunnels()
+	c.keepOwnHelpers(time.Now())
 	c.keepVPN()
 	frames := c.changes()
 	c.mu.Unlock()
@@ -842,7 +844,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 			ipc.OpLock,
 			ipc.OpWorktrees,
@@ -1048,6 +1050,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.pluginsOp(a)
+	case ipc.OpHelpers:
+		var a ipc.HelpersArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.helpersOp(a)
 	case ipc.OpVariorum:
 		var a ipc.VariorumArgs
 		if err := decode(raw, &a); err != nil {
