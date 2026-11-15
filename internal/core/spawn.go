@@ -173,8 +173,17 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 		profileName = c.cfg().Spawn.DefaultProfile
 	}
 	// A task's class teaches the router whichever profile runs it; a task
-	// carried on keeps the class of the one it continues.
-	class, why := route.Classify(a.Task, c.cfg().Route.Words)
+	// carried on keeps the class of the one it continues, and a subtask
+	// taken over that of the session it takes over from.
+	var class, why, slow string
+	if a.Instead != "" {
+		var err error
+		if slow, class, why, err = c.checkHandOn(a); err != nil {
+			return ipc.Session{}, err
+		}
+	} else {
+		class, why = c.classify(a.Task)
+	}
 	if a.Continues != "" {
 		c.mu.Lock()
 		if o := c.outcomes[a.Continues]; o != nil && o.class != "" {
@@ -191,7 +200,7 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 		}
 		profileName, extra["routed"], extra["route"] = ch.Profile, true, ch.Reason
 	}
-	for k, v := range map[string]string{"parent": a.Parent, "continues": a.Continues} {
+	for k, v := range map[string]string{"parent": a.Parent, "continues": a.Continues, "instead": a.Instead} {
 		if v != "" {
 			extra[k] = v
 		}
@@ -239,6 +248,12 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 			c.log.Warn("spawn refused", "profile", profileName, "err", err)
 			return ipc.Session{}, err
 		}
+	}
+	// The session a subtask is taken over from stops only now, once
+	// nothing but the spawn itself can fail.
+	if a.Instead != "" {
+		c.handOn(a, profileName)
+		a.Task = handOnNote(slow, a.Wait) + a.Task
 	}
 	return c.spawnProfile(a, named, profileName, profile, warnings, extra)
 }
@@ -330,7 +345,9 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	}
 	c.mu.Lock()
 	pl.name, pl.named = unique(name, c.names(nil)), named
-	if hash, _ := extra["task_hash"].(string); hash != "" {
+	// A subtask taken over is the same task on purpose: the session before
+	// it was slow, not wrong.
+	if hash, _ := extra["task_hash"].(string); hash != "" && a.Instead == "" {
 		class, _ := extra["class"].(string)
 		c.escalate(hash, class, profileName, time.Now())
 	}

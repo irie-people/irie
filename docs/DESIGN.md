@@ -1416,6 +1416,7 @@ One JSON object per journal line and per `event` frame:
 | `outcome.rated` | `verdict`: `good` or `bad` | user (M10, §6.4) | none |
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
 | `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |
+| `delegate.timed_out` | `wait_ms`, the wait its caller gave up at, and `to_profile`, where the subtask went on | irie (§6.4) | none |
 | `route.fallback` | `from` and `to`, the models of a switch at a model's own usage limit, `limit`, what the failed turn said, and `reason` when the session waits for the reset instead | irie (§6.4) | none |
 | `model.switched` | `model`, the one it runs from then on; `from`, `requested` and `source` (`command`, `picker`, `sdk`, `auto`, `resume`) | PostModelSwitch | none |
 | `dog.nudged` | `dirty`, `ahead`, `land`, `unproven`, `message`: what the jot left, what its record contradicts, and what its agent had said. It stands in for that stop's `turn.ended`, since the turn goes on | irie (§4.8) | none |
@@ -1625,6 +1626,11 @@ claude = 1.0
 # small = ["typo", "rename", "docstring", …]
 # medium = ["implement", "fix", "test", …]
 # hard = ["design", "refactor", "debug", "review", "orchestrat", …]
+
+[route.embed]                 # a task takes the class of the nearest task given one (irie ctl route --label)
+model = "embeddinggemma-2:270m" # an Ollama embedding model; "" = route.words alone
+url = "http://127.0.0.1:11434"  # the Ollama that runs it: your own, as Irie's holds one model
+near = 0.75                   # below this cosine the nearest is unlike the task, and route.words decide
 
 [bench]                       # several runs of one task, then a judge (§6.6)
 runs = 3                      # how many sessions do the task
@@ -1924,7 +1930,7 @@ The status strip shows a session's cost (`$1.23 ctx 41% 640 MB`, or `local` for 
 A cheap model that gets a task wrong costs a retry and the user's attention, so the router does not pick the cheapest profile. It picks the cheapest **per successful task**, and only among profiles accurate enough for the task. Hard work, orchestration included, stays on the strongest model, where Opus orchestrators give the best results; mechanical work goes where it costs least.
 
 **The rule.** `spawn.default_profile` is `auto`, so a task with no `+profile` is routed; `+auto` routes explicitly, and any other `+profile` overrides.
-1. **Class.** The task gets a class, `small`, `medium` or `hard`, from its words (`route.words`) and its size. Hard words count three, medium words one, and small words minus two; a long task or one with a list of steps counts more. Hard words include `design`, `refactor`, `debug`, `review`, `orchestrat`, `milestone` and `why`; small ones include `typo`, `rename`, `docstring`, `summarize` and `README`.
+1. **Class.** The task gets a class, `small`, `medium` or `hard`, from its words (`route.words`) and its size. Hard words count three, medium words one, and small words minus two; a long task or one with a list of steps counts more. Hard words include `design`, `refactor`, `debug`, `review`, `orchestrat`, `milestone` and `why`; small ones include `typo`, `rename`, `docstring`, `summarize` and `README`. Once the user has given 30 or more tasks their classes, every class among them, the class of the one nearest the task decides instead (below).
 2. **Accuracy.** For each profile in `route.profiles`, its accuracy on that class is the mean of a beta distribution: the starting guess (`route.accuracy`), counted as `route.prior_weight` outcomes, plus the user's own outcomes on that profile and class.
 3. **Cost.** Cost per attempt is relative to the strongest profile: the starting guess (`route.cost`), replaced by what its sessions of that class cost, from their status lines, once three or more say.
    - A local model costs no tokens, only a hundredth of an Opus task in memory weight when its model takes the whole budget. It can be chosen only when Irie's Ollama server has a model for it and the machine can hold that model now (§6.3).
@@ -1959,6 +1965,17 @@ So measured, a 4B-class model belongs at 60–80% for small work in `route.accur
 
 As judges they gained little. On 72 pairs of the user's jots, the follow-up rule (§4.2) was right on 90%. The best local model scored 92%, Haiku 81%, and any one of them allowed only to overrule the rule's "yes" lifted it to 94%. On the class of 153 of the user's tasks, the rule was right on 50%, Bonsai 2 9B on 61% and Haiku on 68%.
 
+**Classes from labelled tasks (measured 2026-11-15).** A small embedding model gets the class right more often than every local chat model measured. Each of the same 153 tasks took the class of the one nearest it among the other 152, by the cosine of their embeddings:
+- **embeddinggemma-2 270M** (378 MB, 0.35 GB loaded, about 0.1 s a task) was right on 71%, as often as Haiku within the set's ±7 points. With every neighbour at a cosine of 0.9 or more left out, for jots sent twice, it was right on 72%. It called 3 of the 67 hard tasks small.
+- **qwen3-embedding 0.6B** was right on 59%.
+- **Neighbours voting.** The three to nine nearest voting were right on 64–67%, so the one nearest decides.
+- **Follow-ups.** The cosine of two jots says nothing about whether the second is more for the first: the rule with it as a veto stayed at 90%.
+
+So `route.embed` sorts tasks this way:
+- **The labels.** `irie ctl route --label small|medium|hard TASK` gives one task its class, and `--import FILE` many: JSON lines, each with `text` and `class` (or a bench's eval set, with `fields.text` and `label`). They are kept in `route-labels.jsonl` in the state folder, never in a repository; a task given again takes its new class.
+- **The model.** It runs on the user's own Ollama at `route.embed.url`, since Irie's own server holds one model, which an embedding would push out. The core embeds the labelled tasks in the background and keeps the embeddings in `route-vectors.json`, so a restarted core embeds only the task.
+- **A task.** A spawn waits at most 3 s for its task's embedding. The class of the nearest labelled task decides when its cosine is at least `route.embed.near` (0.75); this model's cosines run from about 0.7 up, so only a task unlike every labelled one is left to `route.words`, as is every task while fewer than 30 are embedded or a class has none. A server that fails is left alone for a minute, and the words decide meanwhile. `irie ctl route` says which decided: `like “…”, 0.82`, or the words.
+
 **Learning.** Outcomes are folded from the journal, like every row's state, over its 30 days:
 
 | Outcome | Counts as |
@@ -1972,9 +1989,11 @@ With a weight of 10, a profile's own record outweighs the guess after about ten 
 
 **Delegation.** A Claude Code session on a profile with cheaper ones in `route.profiles`, which was not itself delegated, is told at session start (SessionStart `additionalContext`) that it can delegate.
 - **The call.** `"$IRIE_BIN" ctl delegate "<subtask>"` routes the subtask among the profiles cheaper than the caller's. A profile with no starting cost counts as the dearest.
+- **In time.** The caller waits `--timeout` (10 minutes) for the answer, so a profile that takes longer than that to answer such a task is passed over (`answers in about 25m, past the 10m wait`). How long a profile takes is the median of its latest nine delegated subtasks of the class, from spawn to the end of the first turn, or of every class when the class has none, since a model's speed is mostly its own; a subtask its caller gave up on counts as taking at least the wait. Only delegations count: a session the user started may work for hours on a task of the same class. With no one waiting, as for a task spawned on `auto`, time does not count. `irie ctl route` shows each profile's time, and `--wait D` weighs a task as a subtask waited D for.
 - **Where it runs.** In the caller's directory, with `route.delegate_mode` (`acceptEdits`), so it can edit without asking; a command still needs the user.
 - **The result.** The call waits until the session's turn ends and prints the agent's last message: Stop's `last_assistant_message`, which the shim passes whole and the core keeps in `result.md`.
-- **Exit codes.** 3 when no cheaper profile is accurate enough ("do it yourself"); 4 when the session is still at work at `--timeout` (10 minutes), where it goes on as a row marked `↳ delegated`.
+- **Handed on.** A routed session still at work at `--timeout` is stopped (`delegate.timed_out`; Irie closes it, so reopen brings it back), and the subtask goes to the next profile accurate enough, in the same directory, with a note that its work so far is there to check. The call waits for that one as long, once. Running the same task again this way says nothing against the first session's accuracy: it was slow, not wrong.
+- **Exit codes.** 3 when no cheaper profile is accurate enough ("do it yourself"); 4 when the session is still at work at `--timeout` and no other profile can take it over, or the one that did is still at work too, where it goes on as a row marked `↳ delegated`.
 - **Choosing what to hand on.** The note asks for self-contained, mechanical subtasks on files the caller is not editing, and keeps planning, design and review with the caller. It names the local profiles among those it may hand work to, which cost no tokens, and asks it to prefer them for every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and to check what comes back.
 
 **Fallback models.** Beside the plan's session and weekly limits, which every model shares, a model family can have a usage limit of its own, as Fable has. Claude Code stops the turn with `rate_limit` and says whose limit it was ("You've reached your Fable limit. Run /usage-credits to continue or switch models with /model."), and a model outside that family keeps working. A profile with `fallback_model` makes that switch on its own, in the same session:

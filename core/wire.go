@@ -147,6 +147,9 @@ type (
 	LocalModel       = ipc.LocalModel
 	RateArgs         = ipc.RateArgs
 	RouteArgs        = ipc.RouteArgs
+	LabelArgs        = ipc.LabelArgs
+	Label            = ipc.Label
+	LabelResult      = ipc.LabelResult
 	ResultArgs       = ipc.ResultArgs
 	ResultResult     = ipc.ResultResult
 	ToolArgs         = ipc.ToolArgs
@@ -341,6 +344,7 @@ const (
 	OpRoute            = ipc.OpRoute
 	OpResult           = ipc.OpResult
 	OpTool             = ipc.OpTool
+	OpLabel            = ipc.OpLabel
 	OpClose            = ipc.OpClose
 	OpReopen           = ipc.OpReopen
 	OpUndo             = ipc.OpUndo
