@@ -292,6 +292,74 @@ func TestAWholeGroupSentToAnotherSpaceComesOutOfItsGroup(t *testing.T) {
 	}
 }
 
+// A group named to the space op goes whole, with what the core has in it
+// then: its pinned and parked sessions, the groups inside it, and sessions
+// the client asking has not heard of.
+func TestAGroupSentToAnotherSpaceGoesWithAllItHolds(t *testing.T) {
+	c := setup(t)
+	id := c.spawnNamed("a", "b", "c", "d", "e", "f")
+	// Work holds e and Steak; Steak holds a, c and d, and Cuts b.
+	cuts := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work/Steak/Cuts", Sessions: []string{id["b"]}}).Group
+	steak := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work/Steak", Sessions: []string{id["a"], id["c"], id["d"]}}).Group
+	work := c.group(ipc.GroupArgs{Do: ipc.GroupAdd, Name: "Work", Sessions: []string{id["e"]}}).Group
+	// c waits in Pinned and d in Parked, both still of Steak.
+	c.pin(id["c"], true)
+	c.park(id["d"], true)
+	other := c.spaces(ipc.SpacesArgs{Do: ipc.SpacesNew, Name: "Elsewhere"}).Space
+	if err := c.call(ipc.OpSpace, ipc.SpaceArgs{Groups: []string{"gnope"}, Space: other}, nil); err == nil {
+		t.Error("a group that isn't there went to another space")
+	}
+	// The client knows only of a, as if the rest joined a moment ago.
+	var moved ipc.SpaceResult
+	if err := c.call(ipc.OpSpace, ipc.SpaceArgs{Sessions: []string{id["a"]}, Groups: []string{steak}, Space: other}, &moved); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{id["a"], id["b"], id["c"], id["d"]}
+	slices.Sort(want)
+	if got := slices.Sorted(slices.Values(moved.Sessions)); !slices.Equal(got, want) {
+		t.Errorf("moved %v, want a, b, c and d", moved.Sessions)
+	}
+	check := func(when string, space, steakIn string) {
+		t.Helper()
+		for n, g := range map[string]string{"a": steak, "b": cuts, "c": steak, "d": steak, "e": work, "f": ""} {
+			row, _ := c.row(id[n])
+			s := space
+			if n == "e" || n == "f" {
+				s = ""
+			}
+			if row.Space != s || row.Group != g {
+				t.Errorf("%s, %s is in space %q, group %q; want %q, %q", when, n, row.Space, row.Group, s, g)
+			}
+		}
+		if row, _ := c.row(id["c"]); !row.Pinned {
+			t.Errorf("%s, c is not pinned", when)
+		}
+		if row, _ := c.row(id["d"]); !row.Parked {
+			t.Errorf("%s, d is not parked", when)
+		}
+		r := c.group(ipc.GroupArgs{})
+		if p, ok := parentIn(r, steak); !ok || p != steakIn {
+			t.Errorf("%s, Steak is in %q (%v), want %q", when, p, ok, steakIn)
+		}
+		if p, _ := parentIn(r, cuts); p != steak {
+			t.Errorf("%s, Cuts is in %q, want Steak", when, p)
+		}
+	}
+	// Steak came out of Work, which stays with e.
+	check("moved", other, "")
+	// One step, under the group's name as it is now, takes it all back,
+	// Steak into Work, and one redo sends it again.
+	c.group(ipc.GroupArgs{Do: ipc.GroupRename, Group: steak, Name: "Beef"})
+	if res := c.step(dirUndo); res.Label != `move "Beef" to another space` {
+		t.Errorf("undo label %q", res.Label)
+	}
+	check("after undo", "", work)
+	if res := c.step(dirRedo); res.Label != `move "Beef" to another space` {
+		t.Errorf("redo label %q", res.Label)
+	}
+	check("after redo", other, "")
+}
+
 func TestADropInItsOwnGroupMovesACardThereAndARenameRelabelsTheHistory(t *testing.T) {
 	c := setup(t)
 	id := c.spawnNamed("a", "b", "c")

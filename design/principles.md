@@ -196,6 +196,14 @@ The selected card keeps its fill, and its edge goes bolder while the list has th
 - **From:** [WCAG 2.2](https://www.w3.org/TR/WCAG22/) 2.4.7.
 - **Check:** unchecked.
 
+### 4.6 A drop shows where it lands, and only where it acts
+
+While a drag holds something, the place it would land lights, and only a place where the drop would change something: a group held over its own space's chip lights nothing. A target that is plain until a drag, as the + after the space chips, says what a drop there does while one is held ("New Space").
+
+- **Why:** a drag is a guess until the target answers; a target that lights for nothing teaches people to distrust the rest.
+- **From:** asked for on 2026-11-15 ("drag groups to new workspaces"; the drags should be "super great and easy").
+- **Check:** unchecked (the Mac app's `SpaceDrop` and `DropModel`).
+
 ## 5. Motion
 
 ### 5.1 Motion only explains

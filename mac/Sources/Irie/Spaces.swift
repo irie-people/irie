@@ -5,9 +5,13 @@ import SwiftUI
 // time, like a browser's spaces, each with its own Pinned and Parked. The
 // chips under the list show them: a click or ⌃1–9 shows one, ⌃⌥1–9 sends
 // the selected or picked cards to one, and a card dropped on a chip moves
-// there. Every paired machine's group and Outside Irie show in every space,
-// and the title bar's counts count them all; showing a card in another
-// space takes the sidebar there.
+// there, or a group of yours, whole. The + after them makes a space; while
+// a drag holds a card or a group it reads New Space, and what is dropped on
+// it goes to a new space, a group to one named after it. A group header's
+// menu moves its group the same way (Move to Space). Every paired
+// machine's group and Outside Irie show in every space, and the title
+// bar's counts count them all; showing a card in another space takes the
+// sidebar there.
 
 /// One space, as the core's header lists it.
 struct SpaceInfo: Codable, Equatable, Identifiable {
@@ -39,6 +43,10 @@ struct SpacesResult: Decodable {
 
 struct SpaceArgs: Encodable {
     var sessions: [String]
+    /// Groups of yours that go whole, with what the core has in them then,
+    /// their groups' cards too: a card that joined one a moment ago goes as
+    /// well. The cards go in sessions too, for a core from before.
+    var groups: [String]?
     var space: String
 }
 
@@ -97,25 +105,32 @@ extension Store {
 
     /// Puts cards in a space, as one step that ⌘Z takes back. They leave the
     /// sidebar at once, and when the shown one goes, the next card here
-    /// takes its place.
-    func sendToSpace(_ list: [Session], _ key: String) {
+    /// takes its place. With group, they are a group of yours, which goes
+    /// whole, its groups with it; fresh says the space was just made for
+    /// them.
+    func sendToSpace(_ list: [Session], _ key: String, group: String? = nil, fresh: Bool = false) {
         let moving = list.filter { $0.peerName == nil && $0.spaceKey != key }
         guard !moving.isEmpty else { return }
         let ids = Set(moving.map(\.id))
+        let was = sessions, wasGroups = groups
         showNext(after: ids)
         pickNone()
-        preview { rows in
-            for i in rows.indices where ids.contains(rows[i].id) { rows[i].space = key }
-        }
-        let what = moving.count == 1 ? moving[0].name : "\(moving.count) sessions"
+        previewSpace(moving, key)
+        let what = group.map(groupName) ?? (moving.count == 1 ? moving[0].name : "\(moving.count) sessions")
+        let it = group != nil || moving.count == 1 ? "it" : "them"
+        let to = fresh ? "a new space" : spaceName(key)
         Task {
             do {
-                _ = try await client.call("space", SpaceArgs(sessions: moving.map(\.id), space: key), as: SpaceResult.self)
-                say("Moved \(what) to \(spaceName(key)). ⌘Z brings \(moving.count == 1 ? "it" : "them") back.", error: false, seconds: 6, undo: true)
+                let a = SpaceArgs(sessions: moving.map(\.id), groups: group.map { [$0] }, space: key)
+                _ = try await client.call("space", a, as: SpaceResult.self)
+                say("Moved \(what) to \(to). ⌘Z brings \(it) back.", error: false, seconds: 6, undo: true)
             } catch {
+                groups = wasGroups
                 preview { rows in
                     for i in rows.indices {
-                        if let old = moving.first(where: { $0.id == rows[i].id }) { rows[i].space = old.space }
+                        guard let old = was.first(where: { $0.id == rows[i].id }), ids.contains(old.id) else { continue }
+                        rows[i].space = old.space
+                        rows[i].group = old.group
                     }
                 }
                 say("Couldn’t move \(what): \(error.localizedDescription)", error: true)
@@ -123,37 +138,100 @@ extension Store {
         }
     }
 
-    /// A card dropped on a space's chip: it, or every card picked with it,
-    /// goes there. A group of yours dropped there goes whole, with every
-    /// card in it and in its groups (Groups.swift).
-    func dropOnSpace(_ key: String) -> Bool {
-        defer { endDrag() }
-        if let g = draggingGroup {
-            let cards = sessions.filter { $0.peerName == nil && $0.spaceKey == space && isWithin($0.groupKey, g) }
-            guard !cards.isEmpty else { return false }
-            sendToSpace(cards, key)
-            return true
+    /// Shows cards going to space key at once, as the core's space op will
+    /// have them (spaces.go), so that the space they go to draws them in
+    /// their groups from the first: a card leaves its group unless the
+    /// whole group goes with it, which then comes out of a group around it
+    /// that stays.
+    private func previewSpace(_ moving: [Session], _ key: String) {
+        let ids = Set(moving.map(\.id))
+        // Whether every card of this Mac's in group g goes, or is there.
+        func whole(_ g: String) -> Bool {
+            !sessions.contains { $0.peerName == nil && !ids.contains($0.id) && $0.spaceKey != key && isWithin($0.groupKey, g) }
         }
-        guard let id = dragging, let s = sessions.first(where: { $0.id == id }) else { return false }
-        sendToSpace(targets(for: s), key)
-        return true
+        var leave: Set<String> = [], out: Set<String> = []
+        for s in moving {
+            guard let g = s.groupKey else { continue }
+            guard whole(g) else {
+                leave.insert(s.id)
+                continue
+            }
+            var top = g
+            while let p = parentGroup(top), whole(p) { top = p }
+            if parentGroup(top) != nil { out.insert(top) }
+        }
+        for i in groups.indices where out.contains(groups[i].id) { groups[i].parent = "" }
+        preview { rows in
+            for i in rows.indices where ids.contains(rows[i].id) {
+                rows[i].space = key
+                if leave.contains(rows[i].id) { rows[i].group = nil }
+            }
+        }
+    }
+
+    /// Group id's cards of this Mac's in the space on show, those of its
+    /// groups too, the pinned and parked ones among them: what goes with
+    /// it to another space.
+    func spaceCards(of id: String) -> [Session] {
+        sessions.filter { $0.peerName == nil && $0.spaceKey == space && isWithin($0.groupKey, id) }
+    }
+
+    /// Sends group id, whole, to space key: its header's Move to Space, or
+    /// a drop on a chip.
+    func sendGroupToSpace(_ id: String, _ key: String) {
+        sendToSpace(spaceCards(of: id), key, group: id)
+    }
+
+    /// Whether what the drag holds can go to space key, or to a new space
+    /// for nil: a group of yours, or the cards held, of this Mac's, one of
+    /// them in another space at least.
+    func canDrop(onSpace key: String?) -> Bool {
+        if let g = draggingGroup {
+            return spaceCards(of: g).contains { key == nil || $0.spaceKey != key }
+        }
+        guard !heldCards.isEmpty else { return false }
+        return sessions.contains { heldCards.contains($0.id) && $0.peerName == nil && (key == nil || $0.spaceKey != key) }
+    }
+
+    /// What a drag held, dropped on space key's chip, or on + for a new
+    /// space (nil): group, a group of yours, goes whole; else the cards
+    /// held, in the list's order.
+    func dropOnSpace(_ key: String?, group: String?, held: Set<String>) {
+        if let g = group {
+            if let key { sendGroupToSpace(g, key) } else { newSpace(forGroup: g) }
+            return
+        }
+        var cards = drawnGroups.flatMap(\.sessions).filter { held.contains($0.id) }
+        if cards.isEmpty { cards = sessions.filter { held.contains($0.id) } }
+        guard !cards.isEmpty else { return }
+        if let key { sendToSpace(cards, key) } else { newSpace(moving: cards) }
     }
 
     /// Makes a space and shows it with its name open to edit, taking cards
-    /// there first when moving names some.
-    func newSpace(moving: [Session] = []) {
+    /// there first when moving names some. For a group of yours, it takes
+    /// the group's name, and the group goes whole: the space is named
+    /// already, so it shows without the name open.
+    func newSpace(moving: [Session] = [], group: String? = nil) {
+        let name = group.map(groupName)
         Task {
             do {
-                let r = try await client.call("spaces", SpacesArgs(action: "new"), as: SpacesResult.self)
+                let r = try await client.call("spaces", SpacesArgs(action: "new", name: name), as: SpacesResult.self)
                 spaces = r.spaces
                 guard let id = r.space else { return }
-                if !moving.isEmpty { sendToSpace(moving, id) }
+                if !moving.isEmpty { sendToSpace(moving, id, group: group, fresh: true) }
                 setSpace(id)
-                renamingSpace = id
+                if group == nil { renamingSpace = id }
             } catch {
                 say("Couldn’t make a space: \(error.localizedDescription)", error: true)
             }
         }
+    }
+
+    /// Group id, whole, to a new space named after it.
+    func newSpace(forGroup id: String) {
+        let cards = spaceCards(of: id)
+        guard !cards.isEmpty else { return }
+        newSpace(moving: cards, group: id)
     }
 
     func renameSpace(_ id: String, _ name: String) {
@@ -195,32 +273,97 @@ struct SpaceBar: View {
     @Environment(Store.self) private var store
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(Array(store.spaces.enumerated()), id: \.element.id) { i, s in
-                    SpaceChip(space: s, key: store.spaceKey(at: i), number: i + 1)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(Array(store.spaces.enumerated()), id: \.element.id) { i, s in
+                        SpaceChip(space: s, key: store.spaceKey(at: i), number: i + 1)
+                    }
+                    NewSpaceChip()
+                        .id(NewSpaceChip.id)
                 }
-                Button { store.newSpace() } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold))
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.muted)
-                .help("New space")
-                .accessibilityLabel("New space")
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            // A drag that takes hold of a card or a group brings + into
+            // sight, should the chips fill the bar.
+            .onChange(of: store.heldText != nil) { _, holding in
+                if holding { proxy.scrollTo(NewSpaceChip.id) }
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spaces")
     }
 }
 
+/// A drop on a space's chip, or on + for a new space (a nil key): it lights
+/// the chip while what the drag holds would move there, and takes it there.
+/// A chip lights for nothing that would stay where it is, as a group on
+/// its own space's chip.
+@MainActor
+private struct SpaceDrop: DropDelegate {
+    let store: Store
+    let key: String?
+    @Binding var targeted: Bool
+
+    func validateDrop(info: DropInfo) -> Bool { store.heldText != nil && store.canDrop(onSpace: key) }
+
+    func dropEntered(info: DropInfo) { targeted = true }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func dropExited(info: DropInfo) { targeted = false }
+
+    func performDrop(info: DropInfo) -> Bool {
+        targeted = false
+        // What the drag holds, kept here: the hold may end before the
+        // dropped item has been read.
+        let group = store.draggingGroup, held = store.heldCards, key = key
+        return store.carrying(info.itemProviders(for: [.text])) { store.dropOnSpace(key, group: group, held: held) }
+    }
+}
+
+/// The + after the chips: a click makes a space and opens its name. While a
+/// drag holds a card or a group of yours, it reads New Space, and what is
+/// dropped on it goes to a new space: a group to one named after it.
+@MainActor
+private struct NewSpaceChip: View {
+    @Environment(Store.self) private var store
+    @State private var targeted = false
+
+    /// Its id in the bar, to scroll it into sight.
+    static let id = "space:new"
+
+    var body: some View {
+        let holding = store.canDrop(onSpace: nil)
+        Button { store.newSpace() } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .bold))
+                if holding {
+                    Text("New Space")
+                        .font(Theme.font(12, .medium))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            .padding(.horizontal, holding ? 9 : 0)
+            .frame(minWidth: 22, minHeight: 22)
+            .background(Capsule().fill(targeted ? Theme.hover : Color.clear))
+            .overlay(Capsule().strokeBorder(targeted ? Theme.accent : holding ? Theme.muted.opacity(0.25) : Color.clear, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(targeted ? Theme.ink : Theme.muted)
+        .onDrop(of: [.text], delegate: SpaceDrop(store: store, key: nil, targeted: $targeted))
+        .help("New space. Drop a card or a group here to give it a space of its own.")
+        .accessibilityLabel("New space")
+    }
+}
+
 /// One space's chip: a click shows it, and its menu names, moves or
-/// removes it. A card dropped on it moves there.
+/// removes it. A card dropped on it moves there, and a group of yours,
+/// whole.
 @MainActor
 private struct SpaceChip: View {
     @Environment(Store.self) private var store
@@ -264,7 +407,7 @@ private struct SpaceChip: View {
         // One click shows it at once; Rename… is in its menu, and a new
         // space opens its name to edit by itself.
         .onTapGesture { store.setSpace(key) }
-        .onDrop(of: [.text], isTargeted: $targeted) { _ in store.dropOnSpace(key) }
+        .onDrop(of: [.text], delegate: SpaceDrop(store: store, key: key, targeted: $targeted))
         .contextMenu {
             Button("Rename…") { store.renamingSpace = space.id }
             if number > 1 { Button("Move Left") { store.moveSpace(space.id, by: -1) } }
@@ -274,7 +417,7 @@ private struct SpaceChip: View {
                 Button("Remove Space") { store.removeSpace(space.id) }
             }
         }
-        .help(number <= 9 ? "\(space.name) (⌃\(number)). Drop a card here to move it; ⌃⌥\(number) sends the selected card." : space.name)
+        .help(number <= 9 ? "\(space.name) (⌃\(number)). Drop a card or a group here to move it; ⌃⌥\(number) sends the selected card." : "\(space.name). Drop a card or a group here to move it.")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(space.name)
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
@@ -304,5 +447,23 @@ struct SpaceItems: View {
             }
             Button("To New Space") { store.newSpace(moving: list) }
         }
+    }
+}
+
+/// The spaces a group of yours can go to, whole, as items of its header's
+/// Move to Space menu: every other space, then New Space, named after it.
+@MainActor
+struct GroupSpaceItems: View {
+    @Environment(Store.self) private var store
+    let id: String
+
+    var body: some View {
+        ForEach(Array(store.spaces.enumerated()), id: \.element.id) { i, s in
+            let key = store.spaceKey(at: i)
+            Button(s.name) { store.sendGroupToSpace(id, key) }
+                .disabled(key == store.space)
+        }
+        Divider()
+        Button("New Space") { store.newSpace(forGroup: id) }
     }
 }
