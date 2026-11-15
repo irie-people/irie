@@ -141,6 +141,26 @@ enum Snapshot {
             store.side = SideState()
             store.notice = nil
 
+            // A plugin's pane (PluginPanes.swift): a web pane's page, and a pane
+            // whose app isn't running, with the panes' tabs after Irie's.
+            let withPanes = try Wire.decoder.decode(PluginsResult.self, from: Data(Fixture.plugins.utf8))
+            store.plugins = withPanes.plugins
+            store.bundles = withPanes.bundles ?? []
+            for (base, pane, down, dark) in [("side-pane", "invoices.invoices", false, false), ("side-pane-dark", "invoices.invoices", false, true),
+                                             ("side-pane-down", "bookings.bookings", true, false)] {
+                PluginPaneFixture.down = down ? [pane] : []
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: pane)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            PluginPaneFixture.down = []
+            store.plugins = []
+            store.bundles = []
+            store.side = SideState()
+
             // The terminal popped out into Ghostty (PopOut.swift): the note
             // in its frame, in both modes. Set directly, so nothing is saved.
             store.poppedOut = PoppedOut(pid: 0, launched: .distantPast)
@@ -199,7 +219,7 @@ enum Snapshot {
             }
             // Each tab of the Settings window, from a fixture config.
             store.settings.loadFixture(try Wire.decoder.decode(ConfigResult.self, from: Data(Fixture.config.utf8)),
-                                       plugins: try Wire.decoder.decode(PluginsResult.self, from: Data(Fixture.plugins.utf8)).plugins)
+                                       plugins: withPanes.plugins, bundles: withPanes.bundles ?? [])
             for tab in SettingsView.Tab.allCases {
                 for dark in [false, true] {
                     let page = SettingsView.page(tab, model: store.settings).environment(store).tint(Theme.accent)
@@ -318,6 +338,31 @@ enum Fixture {
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
         {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
         {"name": "switch", "title": "Dead man's switch", "on": true, "state": "ready", "setup": ":setup switch", "detail": "The guide is ready: :setup switch, or Plugins › Dead man's switch › Set Up… in the Mac app.", "summary": "A guided session sets up what your family needs if you stop checking in."}
+      ]},
+      {"name": "writing", "title": "Writing", "on": true,
+       "summary": "Agents that help with your writing in Variorum, Lillian Duarte's writing app, with notes and other versions beside your words, never over them.",
+       "parts": [
+        {"name": "variorum", "title": "Writing in Variorum", "on": true, "state": "ready", "setup": ":write", "detail": "Ready: :write, or Plugins › Writing in Variorum › Start Writing in Variorum… in the Mac app, starts a writing session.", "summary": "`:write` starts a session that works in Variorum through its door for AI."}
+      ]},
+      {"name": "bookings", "title": "Bookings", "on": true, "manifest": "/home/alice/.config/\#(Brand.slug)/plugins/bookings.toml",
+       "summary": "The booking calendar, beside your sessions.",
+       "parts": [
+        {"name": "bookings", "title": "Bookings", "on": true, "state": "needs", "detail": "Nothing answers at 127.0.0.1:8090 yet. Start it: cd ~/code/bookings && make serve",
+         "summary": "A tab in the Mac app's right sidebar that shows http://127.0.0.1:8090/, with logins of its own that last.",
+         "pane": {"id": "bookings.bookings", "title": "Bookings", "icon": "calendar", "kind": "web", "address": "http://127.0.0.1:8090/", "origin": "http://127.0.0.1:8090", "start": "cd ~/code/bookings && make serve", "store": "bookings"}}
+      ]},
+      {"name": "invoices", "title": "Invoices", "on": true, "manifest": "/home/alice/.config/\#(Brand.slug)/plugins/invoices.toml",
+       "summary": "The invoicing app on this Mac, beside your sessions.",
+       "parts": [
+        {"name": "invoices", "title": "Invoices", "on": true, "state": "ready", "detail": "Ready: its tab in the right sidebar shows http://127.0.0.1:8080/.",
+         "summary": "A tab in the Mac app's right sidebar that shows http://127.0.0.1:8080/, with logins of its own that last.",
+         "pane": {"id": "invoices.invoices", "title": "Invoices", "icon": "doc.text", "kind": "web", "address": "http://127.0.0.1:8080/", "origin": "http://127.0.0.1:8080", "start": "cd ~/code/invoices && make serve", "store": "invoices"}}
+      ]}],
+     "bundles": [{"name": "shop", "title": "Shop", "summary": "The apps that run the shop, with one switch for all of them.", "manifest": "/home/alice/.config/\#(Brand.slug)/plugins/shop.toml", "state": "on",
+      "plugins": [
+        {"name": "invoices", "plugin": "invoices", "title": "Invoices", "on": true, "state": "ready", "detail": "Ready: its tab in the right sidebar shows http://127.0.0.1:8080/."},
+        {"name": "bookings", "plugin": "bookings", "title": "Bookings", "on": true, "state": "needs", "detail": "Nothing answers at 127.0.0.1:8090 yet. Start it: cd ~/code/bookings && make serve"},
+        {"name": "writing.variorum", "plugin": "writing", "part": "variorum", "title": "Writing in Variorum", "on": true, "state": "ready", "detail": "Ready: :write starts a writing session. It has no switch of its own: it is on while the Writing plugin is."}
       ]}]}
     """#
 

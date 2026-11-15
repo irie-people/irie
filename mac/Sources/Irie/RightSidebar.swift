@@ -16,9 +16,10 @@ import SwiftUI
 
 /// A tab of the right sidebar, in the order the proposal gives them, then
 /// Notices, then Mail, the mail plugin's (Mail.swift), which also gives
-/// each its key: ⌥⌘1 to ⌥⌘7.
+/// each its key: ⌥⌘1 to ⌥⌘7. Plugin, last and with no key, is any plugin's
+/// pane (PluginPanes.swift): SideState.pane says which.
 enum SideTab: String, CaseIterable, Identifiable {
-    case dock, changes, helpers, plan, review, notices, mail
+    case dock, changes, helpers, plan, review, notices, mail, plugin
 
     var id: String { rawValue }
 
@@ -31,6 +32,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .review: return "Review"
         case .notices: return "Notices"
         case .mail: return "Mail"
+        case .plugin: return "Plugin"
         }
     }
 
@@ -44,6 +46,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .review: return "checkmark.circle"
         case .notices: return "bell"
         case .mail: return "envelope"
+        case .plugin: return "puzzlepiece.extension"
         }
     }
 
@@ -63,6 +66,8 @@ struct SideState: Equatable {
     var open = false
     var width = SideState.startWidth
     var tab = SideTab.dock
+    /// The plugin's pane on show while tab is plugin, by its id.
+    var pane: String?
 
     static let startWidth = 340.0
     static let minWidth = 260.0
@@ -73,6 +78,7 @@ struct SideState: Equatable {
     private static let openKey = "rightSidebarOpen"
     private static let widthKey = "rightSidebarWidth"
     private static let tabKey = "rightSidebarTab"
+    private static let paneKey = "rightSidebarPane"
 
     static func saved() -> SideState {
         let d = UserDefaults.standard
@@ -80,7 +86,8 @@ struct SideState: Equatable {
         s.open = d.bool(forKey: openKey)
         let w = d.double(forKey: widthKey)
         if w > 0 { s.width = clamp(w) }
-        if let t = d.string(forKey: tabKey).flatMap(SideTab.init(rawValue:)), SideTab.built.contains(t) { s.tab = t }
+        s.pane = d.string(forKey: paneKey)
+        if let t = d.string(forKey: tabKey).flatMap(SideTab.init(rawValue:)), SideTab.built.contains(t) || t == .plugin && s.pane != nil { s.tab = t }
         return s
     }
 
@@ -89,6 +96,7 @@ struct SideState: Equatable {
         d.set(open, forKey: Self.openKey)
         d.set(width, forKey: Self.widthKey)
         d.set(tab.rawValue, forKey: Self.tabKey)
+        d.set(pane, forKey: Self.paneKey)
     }
 }
 
@@ -120,6 +128,16 @@ extension Store {
         var s = side
         s.open = true
         s.tab = SideTab.built.contains(tab) ? tab : SideTab.built[0]
+        if side.open { change(s) } else { slide(to: s) }
+    }
+
+    /// Opens the right sidebar on a plugin's pane (PluginPanes.swift): a closed
+    /// one slides in.
+    func openPane(_ id: String) {
+        var s = side
+        s.open = true
+        s.tab = .plugin
+        s.pane = id
         if side.open { change(s) } else { slide(to: s) }
     }
 
@@ -243,7 +261,7 @@ struct RightSidebar: View {
             if store.showTerminal { store.focusTerminal += 1 } else { store.focusMessage += 1 }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Right sidebar, \(store.side.tab.title)")
+        .accessibilityLabel("Right sidebar, \(store.side.tab == .plugin ? store.shownPane?.title ?? "a pane" : store.side.tab.title)")
     }
 
     private var header: some View {
@@ -264,7 +282,37 @@ struct RightSidebar: View {
     private func tabs(tight: Bool) -> some View {
         HStack(spacing: 2) {
             ForEach(store.sideTabs) { t in tabButton(t, tight: tight) }
+            // Each plugin's pane that is on, after Irie's own tabs.
+            ForEach(store.panes) { p in paneButton(p, tight: tight) }
         }
+    }
+
+    /// A plugin's pane's tab: its name, or its icon when the sidebar is
+    /// narrow.
+    private func paneButton(_ p: PluginPaneInfo, tight: Bool) -> some View {
+        let on = store.side.tab == .plugin && store.side.pane == p.id
+        return Button { store.openPane(p.id) } label: {
+            HStack(spacing: 4) {
+                if tight {
+                    Text(Image(systemName: p.symbol))
+                        .font(.system(size: 12, weight: on ? .bold : .medium))
+                } else {
+                    Text(p.title)
+                        .font(Theme.font(12, on ? .bold : .medium))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            .foregroundStyle(on ? Theme.ink : Theme.muted)
+            .padding(.horizontal, tight ? 5 : 7)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.selection : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("\(p.title), a plugin's pane")
+        .accessibilityLabel(p.title)
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
     private func tabButton(_ t: SideTab, tight: Bool) -> some View {
@@ -348,6 +396,7 @@ struct RightSidebar: View {
             } else {
                 SideNote(title: "Mail is off", text: "The mail plugin is off, or this \(Brand.name) was built without it: Plugins › Mail turns it on.")
             }
+        case .plugin: PluginPaneTab()
         default: HelpersTab()
         }
     }

@@ -110,6 +110,8 @@ final class Store {
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
     var plugins: [PluginInfo] = []
+    /// Your bundles (PluginPanes.swift); empty from a core from before them.
+    var bundles: [BundleInfo] = []
     /// Reads the plugins once a minute (keepPlugins).
     @ObservationIgnored var pluginsTimer: Task<Void, Never>?
     /// The arch agents, as the core last listed them.

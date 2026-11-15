@@ -23,21 +23,46 @@ struct PluginCommands: Commands {
             if f.plugins.isEmpty {
                 Text(f.canPlugins ? "Reading the plugins…" : "This \(Brand.name) has no plugins yet")
             }
+            // Your bundles first: one switch for several plugins, ticked
+            // while all of them are on (PluginPanes.swift).
+            ForEach(f.bundles) { b in
+                if b.problem == nil {
+                    Toggle(b.state == "some" ? "\(b.title) Bundle (\(b.stateWords))" : "\(b.title) Bundle", isOn: Binding(get: { b.state == "on" }, set: { on in
+                        MainActor.assumeIsolated { store.setBundle(b.name, on: on) }
+                    }))
+                } else {
+                    Menu("\(b.title) Bundle — its manifest doesn’t read") {
+                        ForEach(Self.sentences(b.problem ?? ""), id: \.self) { Text($0) }
+                    }
+                }
+            }
+            if !f.bundles.isEmpty, !f.plugins.isEmpty { Divider() }
             // A plugin's switch heads its parts, with a line between plugins.
             // Lines are Dividers: a Section draws one before and after itself,
             // so at the menu's top, or two side by side, it drew a stray or a
             // double line.
             ForEach(Array(f.plugins.enumerated()), id: \.element.id) { i, p in
                 if i > 0 { Divider() }
-                Toggle("\(p.title) Plugin", isOn: Binding(get: { p.on }, set: { on in
-                    MainActor.assumeIsolated { store.setPlugin(p.name, on: on) }
-                }))
+                if let problem = p.problem {
+                    // A manifest of yours that doesn't read has no switch.
+                    Menu("\(p.title) Plugin — its manifest doesn’t read") {
+                        ForEach(Self.sentences(problem), id: \.self) { Text($0) }
+                    }
+                } else {
+                    Toggle("\(p.title) Plugin", isOn: Binding(get: { p.on }, set: { on in
+                        MainActor.assumeIsolated { store.setPlugin(p.name, on: on) }
+                    }))
+                }
                 ForEach(p.parts) { x in
                     Menu(Self.title(x)) {
                         let lines = Self.sentences(x.detail)
-                        let acts = x.switch != nil || x.setup != nil
+                        let acts = x.switch != nil || x.setup != nil || x.pane != nil && x.isOn
                         ForEach(lines, id: \.self) { Text($0) }
                         if acts, !lines.isEmpty { Divider() }
+                        // A pane's part shows its pane.
+                        if let pane = x.pane, x.isOn {
+                            Button("Show in Right Sidebar", action: run { store.openPane(pane.id) })
+                        }
                         if x.switch != nil {
                             Toggle("On", isOn: Binding(get: { x.on }, set: { on in
                                 MainActor.assumeIsolated { store.setPlugin(p.name, part: x.name, on: on) }
@@ -131,7 +156,7 @@ extension Store {
         }
         Task {
             guard let r = try? await client.call("plugins", PluginsArgs(), timeout: 5, as: PluginsResult.self) else { return }
-            takePlugins(r.plugins)
+            takePlugins(r)
         }
     }
 
@@ -141,7 +166,7 @@ extension Store {
         Task {
             do {
                 let r = try await client.call("plugins", PluginsArgs(plugin: plugin, part: part, on: on), timeout: 10, as: PluginsResult.self)
-                takePlugins(r.plugins)
+                takePlugins(r)
                 // Settings › Plugins and the switches elsewhere in Settings
                 // show the change too.
                 await settings.load()
@@ -159,17 +184,21 @@ extension Store {
         Task { _ = await input(words) }
     }
 
-    /// Takes the plugins in once no menu is open: a change under an open
-    /// menu would rebuild it under the pointer (take(_:)).
-    private func takePlugins(_ all: [PluginInfo]) {
-        guard all != plugins else { return }
+    /// Takes the plugins and bundles in once no menu is open: a change
+    /// under an open menu would rebuild it under the pointer (take(_:)). A
+    /// pane whose part went off lets its web view go (PluginPanes.swift).
+    func takePlugins(_ r: PluginsResult) {
+        let all = r.plugins, bs = r.bundles ?? []
+        guard all != plugins || bs != bundles else { return }
         if RunLoop.current.currentMode == .eventTracking {
             RunLoop.main.perform(inModes: [.default]) { [weak self] in
-                MainActor.assumeIsolated { self?.takePlugins(all) }
+                MainActor.assumeIsolated { self?.takePlugins(r) }
             }
             return
         }
         plugins = all
+        bundles = bs
+        PluginPaneWebs.shared.keep(Set(panes.map(\.id)))
     }
 
     /// Reads the plugins once a minute while the app runs, for a part set up

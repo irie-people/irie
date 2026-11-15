@@ -62,6 +62,12 @@ final class MenuState {
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
         var plugins: [PluginInfo] = []
+        /// Your bundles, which head the Plugins menu, and the plugins'
+        /// panes, which View > Right Sidebar lists, with the one on show
+        /// (PluginPanes.swift).
+        var bundles: [BundleInfo] = []
+        var panes: [PluginPaneInfo] = []
+        var sidePane: String?
         /// The core serves the vpn op: its build has the VPN plugin, whose
         /// items show only then.
         var canVPN = false
@@ -117,6 +123,9 @@ extension Store {
         f.panesOpen = rolodex.open
         f.canPlugins = canPlugins
         f.plugins = plugins
+        f.bundles = bundles
+        f.panes = panes
+        f.sidePane = side.open && side.tab == .plugin ? side.pane : nil
         f.canVPN = canVPN
         return f
     }
@@ -242,6 +251,13 @@ struct IrieCommands: Commands {
                         MainActor.assumeIsolated { t == .helpers ? store.toggleHelpers() : store.toggleSideTab(t) }
                     }))
                     .keyboardShortcut(t.key, modifiers: [.command, .option])
+                }
+                // The plugins' panes, after Irie's own tabs, with no key:
+                // a pane's place moves as plugins come and go.
+                ForEach(f.panes) { p in
+                    Toggle(p.title, isOn: Binding(get: { f.sidePane == p.id }, set: { _ in
+                        MainActor.assumeIsolated { store.togglePane(p.id) }
+                    }))
                 }
             }
             // The panes beside the terminal, a rolodex of cards
