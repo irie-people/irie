@@ -7,9 +7,11 @@ package core
 // resizes an agent, it outlives a restart of the app or the core, and the
 // Dock's sweep ends it with its session. When the shell exits, its last
 // screen stays, as an ended Dock command's does, until the pane restarts it
-// or closes.
+// or closes. Beside a session on a peer, the shell is ssh to that machine
+// and a login shell there, in the session's folder (remoteShell).
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -54,18 +56,39 @@ func (c *Core) paneOp(a ipc.PaneArgs) (ipc.PaneResult, error) {
 	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]
-	if x == nil {
-		c.mu.Unlock()
-		return ipc.PaneResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
-	}
-	dir := x.worktree
-	if dir == "" {
-		dir = x.cwd
+	var dir string
+	// What the shell runs beside a session on a peer, from home here.
+	var remote []string
+	switch {
+	case x != nil:
+		dir = cmp.Or(x.worktree, x.cwd)
+	default:
+		p, rest, ok := c.splitPeerID(a.Session)
+		var row ipc.Session
+		if ok {
+			row, ok = p.rows[rest]
+		}
+		if !ok {
+			c.mu.Unlock()
+			return ipc.PaneResult{}, ipc.Errorf(ipc.CodeNotFound, "no session %q", a.Session)
+		}
+		ssh := c.peerSSH(p)
+		if ssh == "" {
+			c.mu.Unlock()
+			return ipc.PaneResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s runs on %s, and a shell beside it reaches %s over ssh: set peers.%s.ssh in the config", row.Name, p.name, p.name, p.name)
+		}
+		dir = cmp.Or(row.Worktree, row.Cwd)
+		remote = remoteShell(ssh, dir)
 	}
 	c.mu.Unlock()
-	if st, err := os.Stat(dir); dir == "" || err != nil || !st.IsDir() {
-		// A session whose folder has gone opens its shell at home.
-		dir, _ = os.UserHomeDir()
+	start := dir
+	if st, err := os.Stat(dir); remote != nil || dir == "" || err != nil || !st.IsDir() {
+		// A session whose folder has gone opens its shell at home, as one
+		// on a peer starts its ssh from home.
+		start, _ = os.UserHomeDir()
+		if remote == nil {
+			dir = start
+		}
 	}
 
 	name := paneSession(a.Session, a.Pane)
@@ -90,12 +113,12 @@ func (c *Core) paneOp(a ipc.PaneArgs) (ipc.PaneResult, error) {
 		if exists {
 			_ = end()
 		}
-		if err := c.paneStart(name, a.Session, a.Pane, dir); err != nil {
+		if err := c.paneStart(name, a.Session, a.Pane, start, remote); err != nil {
 			return ipc.PaneResult{}, err
 		}
 	case a.Start:
 		if !exists {
-			if err := c.paneStart(name, a.Session, a.Pane, dir); err != nil {
+			if err := c.paneStart(name, a.Session, a.Pane, start, remote); err != nil {
 				return ipc.PaneResult{}, err
 			}
 		}
@@ -116,15 +139,20 @@ func (c *Core) paneOp(a ipc.PaneArgs) (ipc.PaneResult, error) {
 	return res, nil
 }
 
-// paneStart starts a pane's shell, a login shell in dir, and marks its tmux
-// session as its session's, so the Dock's sweep ends it with that session.
-func (c *Core) paneStart(name, session, pane, dir string) error {
+// paneStart starts a pane's shell, a login shell in dir, or remote in its
+// place, and marks its tmux session as its session's, so the Dock's sweep
+// ends it with that session.
+func (c *Core) paneStart(name, session, pane, dir string, remote []string) error {
 	conf, err := c.dockConf()
 	if err != nil {
 		return err
 	}
-	if _, err := c.dock.StartWith(conf, "new-session", "-d", "-s", name, "-x", "100", "-y", "30", "-c", dir,
-		"--", loginShell(), "-l"); err != nil {
+	run := []string{loginShell(), "-l"}
+	if remote != nil {
+		run = remote
+	}
+	args := append([]string{"new-session", "-d", "-s", name, "-x", "100", "-y", "30", "-c", dir, "--"}, run...)
+	if _, err := c.dock.StartWith(conf, args...); err != nil {
 		// Another core's start won: the shell is there.
 		if strings.Contains(err.Error(), "duplicate session") {
 			return nil
@@ -138,4 +166,21 @@ func (c *Core) paneStart(name, session, pane, dir string) error {
 		return fmt.Errorf("mark the pane's shell as its session's: %w", err)
 	}
 	return nil
+}
+
+// remoteShell is what a pane's shell runs beside a session on a peer: ssh
+// to that machine with a terminal, and there a login shell in the session's
+// folder, or at home when the folder has gone. A link gone quiet ends it
+// within a minute, keeping its last screen, rather than freezing it.
+func remoteShell(ssh, dir string) []string {
+	cd := ""
+	if dir != "" {
+		cd = "cd " + quoteForShell(dir) + " 2>/dev/null; "
+	}
+	return []string{"ssh", "-t", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "--", ssh, cd + `exec "$SHELL" -l`}
+}
+
+// quoteForShell quotes s as one word for a POSIX shell.
+func quoteForShell(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

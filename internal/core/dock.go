@@ -334,6 +334,13 @@ func (c *Core) dockSweep() {
 	c.mu.Lock()
 	live := map[string]bool{}
 	var places []string
+	// A shell beside a session on a peer lives while that session's row
+	// does, which stays while the peer is down.
+	for name, p := range c.peers {
+		for id := range p.rows {
+			live[name+"/"+id] = true
+		}
+	}
 	for id, x := range c.sessions {
 		live[id] = true
 		p := x.repo

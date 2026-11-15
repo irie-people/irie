@@ -1845,8 +1845,9 @@ private struct PaneContent: View {
 }
 
 /// A card's own shell, in the session's folder: a tmux client of its session
-/// on the dock server. When the shell exits its last screen stays, with New
-/// Shell and Close.
+/// on the dock server; beside a session on another machine, ssh to it and a
+/// shell there (internal/core/pane.go). When the shell exits its last
+/// screen stays, with New Shell and Close.
 @MainActor
 private struct ShellPane: View {
     @Environment(Store.self) private var store
@@ -1865,8 +1866,6 @@ private struct ShellPane: View {
                                       "", "❯ git log --oneline -3", "a1b2c3d Wait for the session write", "9f8e7d6 Add a helper that reads it back"])
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
-            } else if let peer = owner.peer {
-                note("A shell beside a session on \(peer) runs there; that comes later.")
             } else if !store.rolodex.canShell {
                 note("This \(Brand.name)’s core can’t run a pane’s shell yet. The next install brings it.")
             } else if let s = shell, s.state != "stopped", let target = s.target, let tmux = s.tmux, let socket = s.socket {
@@ -1921,7 +1920,7 @@ private struct ShellPane: View {
     /// it has gone, as after a start that failed; one that ended keeps its
     /// last screen until New Shell.
     private func follow() async {
-        guard !store.isFixture, owner.peer == nil, store.rolodex.canShell else { return }
+        guard !store.isFixture, store.rolodex.canShell else { return }
         await load(PaneArgs(session: owner.id, pane: pane.id, start: true))
         while shows, !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 4_000_000_000)
