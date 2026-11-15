@@ -28,13 +28,13 @@ enum Theme {
         "sidebar": 0xF4F4EC, "ground": 0xE9EBDF, "card": 0xFBFBF6, "panel": 0xF1F2E8, "field": 0xFDFDF9,
         "edge": 0xD8DCC9, "hover": 0xF6F7EF, "selection": 0xDDE5D3, "needs_tint": 0xFBE5DC,
         "ink": 0x1E2B22, "muted": 0x56635A, "accent": 0x2F5D46, "accent_ink": 0x264D3A, "accent_fill": 0x9DB8A3, "on_accent": 0x1E2B22,
-        "needs": 0x892319, "done": 0x3F6A5F, "paused": 0x885A07, "frozen": 0x00566B, "sun": 0xD9A93F, "waves": 0x5E8A6E,
+        "needs": 0x892319, "done": 0x2C7043, "paused": 0x8C5500, "frozen": 0x00566B, "sun": 0xD9A93F, "waves": 0x5E8A6E,
     ]
     static var dark: [String: UInt32] = [
         "sidebar": 0x141C17, "ground": 0x0E1410, "card": 0x1C2620, "panel": 0x18221C, "field": 0x202B24,
         "edge": 0x34443A, "hover": 0x25322A, "selection": 0x2A3D31, "needs_tint": 0x4A251C,
         "ink": 0xECF0E6, "muted": 0xB3BFB5, "accent": 0x9CC5A1, "accent_ink": 0xB3D6B8, "accent_fill": 0x9CC5A1, "on_accent": 0x12201A,
-        "needs": 0xFF9585, "done": 0x8FC3B2, "paused": 0xEFC468, "frozen": 0x86E0FD, "sun": 0xD9A93F, "waves": 0x9CC5A1,
+        "needs": 0xFF9585, "done": 0xB0F2B1, "paused": 0xEFC468, "frozen": 0x86E0FD, "sun": 0xD9A93F, "waves": 0x9CC5A1,
     ]
     /// The bars, dark in both modes: Evergreen's, until a palette comes.
     private static var bars: (light: UInt32, dark: UInt32, edge: UInt32) = (0x183F30, 0x0F1712, 0x26332B)

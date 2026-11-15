@@ -5,7 +5,7 @@
   --sidebar: #F4F4EC; --ground: #E9EBDF; --card: #FBFBF6; --panel: #F1F2E8; --field: #FDFDF9;
   --edge: #D8DCC9; --hover: #F6F7EF; --selection: #DDE5D3; --needs-tint: #FBE5DC;
   --ink: #1E2B22; --muted: #56635A; --accent: #2F5D46; --accent-ink: #264D3A; --accent-fill: #9DB8A3; --on-accent: #1E2B22;
-  --needs: #892319; --done: #3F6A5F; --paused: #885A07; --frozen: #00566B; --sun: #D9A93F; --waves: #5E8A6E;
+  --needs: #892319; --done: #2C7043; --paused: #8C5500; --frozen: #00566B; --sun: #D9A93F; --waves: #5E8A6E;
   --term: #14110D; --term-ink: #EEE5D5;
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
@@ -21,7 +21,7 @@
     --sidebar: #141C17; --ground: #0E1410; --card: #1C2620; --panel: #18221C; --field: #202B24;
     --edge: #34443A; --hover: #25322A; --selection: #2A3D31; --needs-tint: #4A251C;
     --ink: #ECF0E6; --muted: #B3BFB5; --accent: #9CC5A1; --accent-ink: #B3D6B8; --accent-fill: #9CC5A1; --on-accent: #12201A;
-    --needs: #FF9585; --done: #8FC3B2; --paused: #EFC468; --frozen: #86E0FD; --waves: #9CC5A1;
+    --needs: #FF9585; --done: #B0F2B1; --paused: #EFC468; --frozen: #86E0FD; --waves: #9CC5A1;
   }
 }
 
