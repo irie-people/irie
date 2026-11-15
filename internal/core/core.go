@@ -152,7 +152,7 @@ type Core struct {
 	trodNow    trodNow               // the trod bot as its last sweep found it (trod.go)
 	trodReset  time.Time             // when the plan's usage limit last reset, as far as the trod bot saw
 	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
-	trodThawed time.Time             // when the trod bot last thawed a session it froze (trod.go)
+	lastThaw   time.Time             // when Irie last thawed a session, which a thaw in turn waits thawGap after: the trod bot's and a thaw of several (freeze.go)
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
 	locks      lockState             // what the agent locks' checks found (locks.go)
@@ -513,6 +513,7 @@ func (c *Core) tick() {
 	c.observe(time.Now())
 	c.sendFollowUps(time.Now())
 	c.keepFrozen()
+	c.thawNext(time.Now())
 	c.refreezeLost()
 	c.endBoosts(time.Now())
 	c.background()
@@ -719,6 +720,10 @@ func (c *Core) row(x *session, from time.Time) ipc.Session {
 	s.Rebuilds = c.rebuildsRow(x.id, now)
 	s.Cold = c.coldRow(x, s.State, now)
 	s.Lock = c.lockRow(x.lockPkgs)
+	// A frozen row whose thaw waits its turn says so (freeze.go).
+	if w := c.thawWait(x); w != "" {
+		s.Detail = joinDetail(w, s.Detail)
+	}
 	return s
 }
 

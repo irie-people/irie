@@ -1594,7 +1594,8 @@ const (
 	// Pong.
 	FramePing = "ping"
 	// FrameCard asks the Mac app to show a card of Kind beside the session
-	// ID (OpCard). Only the app's subscriptions get it.
+	// ID (OpCard), a code card with the file Path open at Line and Col when
+	// it has them. Only the app's subscriptions get it.
 	FrameCard = "card"
 )
 
@@ -1613,6 +1614,9 @@ type Frame struct {
 	Redo     string           `json:"redo,omitempty"`     // history
 	Ping     uint64           `json:"ping,omitempty"`     // ping
 	Kind     string           `json:"kind,omitempty"`     // card
+	Path     string           `json:"path,omitempty"`     // card: a code card's file
+	Line     int              `json:"line,omitempty"`     // card: a code card's cursor line, from 1
+	Col      int              `json:"col,omitempty"`      // card: a code card's cursor column, from 1
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 	Screen       *Screen       `json:"screen,omitempty"`       // screen
@@ -1741,7 +1745,10 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T    string `json:"t"`
 			ID   string `json:"id"`
 			Kind string `json:"kind"`
-		}{f.T, f.ID, f.Kind})
+			Path string `json:"path,omitempty"`
+			Line int    `json:"line,omitempty"`
+			Col  int    `json:"col,omitempty"`
+		}{f.T, f.ID, f.Kind, f.Path, f.Line, f.Col})
 	}
 	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)
 }

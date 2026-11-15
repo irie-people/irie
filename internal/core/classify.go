@@ -4,9 +4,12 @@ package core
 // words get a task's class right about half the time. The class of the
 // labelled task nearest it, by a small embedding model, was right about
 // seven times in ten on 153 of a user's tasks: as often as Haiku, and more
-// often than any local chat model measured. The model runs on the user's
-// own Ollama (route.embed.url), since Irie's own server holds one model,
-// which an embedding would push out. With too few labelled tasks, no
+// often than any local chat model measured. When the words call a task
+// hard, that stands: calling hard work easier is the costly mistake, and on
+// the same tasks letting it stand was right on 72.5% and made that mistake
+// 11 times, where the nearest alone made it 20. The model runs on the
+// user's own Ollama (route.embed.url), since Irie's own server holds one
+// model, which an embedding would push out. With too few labelled tasks, no
 // server, or a task unlike any of them, the words decide.
 
 import (
@@ -151,15 +154,19 @@ func (l *routeLabels) unembedded() int {
 	return n
 }
 
-// classify gives a task its class, and why: that of the nearest labelled
-// task when there are enough of them and one is near enough, else the
-// words'. The caller holds no lock: it may wait embedWait for the
-// embedding.
+// classify gives a task its class, and why: hard when its words say so,
+// else that of the nearest labelled task when there are enough of them and
+// one is near enough, else the words'. The caller holds no lock: it may
+// wait embedWait for the embedding.
 func (c *Core) classify(task string) (string, string) {
-	if class, why, ok := c.nearestClass(task); ok {
+	class, why := route.Classify(task, c.cfg().Route.Words)
+	if class == route.Hard {
 		return class, why
 	}
-	return route.Classify(task, c.cfg().Route.Words)
+	if near, nwhy, ok := c.nearestClass(task); ok {
+		return near, nwhy
+	}
+	return class, why
 }
 
 func (c *Core) nearestClass(task string) (string, string, bool) {
@@ -291,10 +298,20 @@ func (c *Core) label(a ipc.LabelArgs) (ipc.LabelResult, error) {
 	l := &c.labels
 	l.mu.Lock()
 	c.loadLabels(e.Model)
-	var add []ipc.Label
+	// A task given twice in one call takes its last class.
+	last := map[string]ipc.Label{}
+	var order []string
 	for _, lb := range a.Labels {
 		lb.Text = strings.TrimSpace(lb.Text)
-		if l.changes(lb) {
+		k := route.Fingerprint(lb.Text)
+		if _, ok := last[k]; !ok {
+			order = append(order, k)
+		}
+		last[k] = lb
+	}
+	var add []ipc.Label
+	for _, k := range order {
+		if lb := last[k]; l.changes(lb) {
 			add = append(add, lb)
 		}
 	}

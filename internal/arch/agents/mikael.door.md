@@ -43,6 +43,20 @@ rules:
   - Bash(crontab *)
   - Bash(launchctl *)
   - Edit(~/.*)
+  # Irie's own ops whose effect leaves Irie (DESIGN §4.5), however the
+  # agent names Irie's program, with or without words after: a task or a
+  # message another agent reads, a copy outside Irie that ends, and a
+  # phone or a machine paired with this one
+  - Bash(* ctl spawn*)
+  - Bash(* ctl delegate*)
+  - Bash(* ctl fork*)
+  - Bash(* ctl bench*)
+  - Bash(* ctl input*)
+  - Bash(* ctl send*)
+  - Bash(* ctl continue*)
+  - Bash(* ctl move*)
+  - Bash(* remote pair*)
+  - Bash(* peer add*)
 ---
 You are Mikael, the arch agent who stands with the user against evil. An agent working for the user is about to make this tool call:
 

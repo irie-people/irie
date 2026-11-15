@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -77,6 +78,24 @@ func TestTasksTakeTheClassOfTheNearestLabelledTask(t *testing.T) {
 	if ch := c.routeDry("fix the typo in README"); ch.Class != route.Small || !strings.Contains(ch.Why, "typo") {
 		t.Errorf("an unlike task: %s (%s)", ch.Class, ch.Why)
 	}
+	// Hard work by its words stays hard, though the nearest task was small:
+	// calling hard work easier is the costly mistake.
+	r = c.label(labelled(route.Small, "investigate sidebar freeze", 12)...)
+	if r.Added != 12 || r.Labels != 48 {
+		t.Errorf("12 more labels = %+v", r)
+	}
+	testutil.Eventually(t, 15*time.Second, "the new labelled tasks were never embedded", func() bool {
+		ch := c.routeDry("rename sidebar freeze")
+		return ch.Class == route.Small && strings.Contains(ch.Why, "like “investigate sidebar freeze item")
+	})
+	if ch := c.routeDry("investigate sidebar freeze again"); ch.Class != route.Hard || !strings.Contains(ch.Why, "investigate") {
+		t.Errorf("hard by its words: %s (%s)", ch.Class, ch.Why)
+	}
+	// A task given twice in one call counts once, with its last class.
+	r = c.label(ipc.Label{Text: "brand new task", Class: route.Small}, ipc.Label{Text: "Brand  new task", Class: route.Medium})
+	if r.Added != 1 || r.Labels != 49 {
+		t.Errorf("a task given twice in one call = %+v", r)
+	}
 	// Spawns take the class too.
 	if s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop\n" + task, Profile: "auto"}); s.Class != route.Hard || s.Profile != "fake" {
 		t.Errorf("spawned %+v", s)
@@ -143,7 +162,8 @@ func TestADelegationPassesOverAProfileTooSlowForItsWait(t *testing.T) {
 	// soon a subtask comes back.
 	u := c.outcome("s00000000000u")
 	u.profile, u.class, u.spawned, u.ended = "claude", route.Small, start, start.Add(5*time.Hour)
-	if ch := c.choose(route.Small, "", only, 10*time.Minute, false); ch.Profile != "claude" || find(ch, "sonnet").Usable || find(ch, "claude").Timed != 0 {
+	ch = c.choose(route.Small, "", only, 10*time.Minute, false)
+	if s := find(ch, "sonnet"); ch.Profile != "claude" || s.Usable || !s.TimeAtLeast || s.Note != "takes 10m or more, past the 10m wait" || find(ch, "claude").Timed != 0 {
 		t.Errorf("after sonnet ran past the wait = %+v", ch)
 	}
 }
@@ -214,6 +234,11 @@ fake = 1.0
 	}
 	if second.ID == "" || !second.Routed || second.Class != route.Small {
 		t.Fatalf("the session that took it over = %+v", second)
+	}
+	// It goes on under the subtask's name, not the note's: the session it
+	// takes over from is closed by then, so the name is free.
+	if m := regexp.MustCompile(`delegated to \+slow as (.+) \(s\w+\)`).FindStringSubmatch(errOut); m == nil || second.Name != m[1] {
+		t.Errorf("the session that took it over is named %q; %q", second.Name, errOut)
 	}
 	task, _ := os.ReadFile(c.paths.TaskFile(second.ID))
 	if !strings.HasPrefix(string(task), "[Irie] This subtask ran on +slow, which was still at work after 8s, so Irie stopped it.") || !strings.Contains(string(task), "fix the typo") {

@@ -175,11 +175,18 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	// A task's class teaches the router whichever profile runs it; a task
 	// carried on keeps the class of the one it continues, and a subtask
 	// taken over that of the session it takes over from.
-	var class, why, slow string
+	var class, why string
+	var over takeOver
 	if a.Instead != "" {
 		var err error
-		if slow, class, why, err = c.checkHandOn(a); err != nil {
+		if over, err = c.checkHandOn(a); err != nil {
 			return ipc.Session{}, err
+		}
+		class, why = over.class, over.why
+		// It goes on under the name of the subtask it takes over, which
+		// was the user's only when it was theirs, as a failover's does.
+		if a.Name == "" {
+			a.Name, named = over.name, over.named
 		}
 	} else {
 		class, why = c.classify(a.Task)
@@ -253,7 +260,7 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 	// nothing but the spawn itself can fail.
 	if a.Instead != "" {
 		c.handOn(a, profileName)
-		a.Task = handOnNote(slow, a.Wait) + a.Task
+		a.Task = handOnNote(over.profile, a.Wait) + a.Task
 	}
 	return c.spawnProfile(a, named, profileName, profile, warnings, extra)
 }
