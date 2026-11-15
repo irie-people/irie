@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/bridge"
 	"github.com/irie-people/irie/internal/version"
 )
@@ -19,7 +20,7 @@ import (
 // the irie inside it.
 func bridgeCmd(args []string) error {
 	if len(args) > 0 {
-		return fmt.Errorf("usage: irie bridge")
+		return fmt.Errorf("usage: " + brand.Slug + " bridge")
 	}
 	out, err := takeStdout()
 	if err != nil {
@@ -29,7 +30,7 @@ func bridgeCmd(args []string) error {
 	if err != nil {
 		// A config that does not read still leaves the core's socket where
 		// it always is; the app shows the core's own words about the file.
-		fmt.Fprintln(os.Stderr, "irie bridge:", err)
+		fmt.Fprintln(os.Stderr, brand.Slug+" bridge:", err)
 	}
 	err = bridge.Serve(os.Stdin, out, bridge.Options{
 		Socket:  p.Socket(),

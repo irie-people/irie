@@ -13,6 +13,7 @@ import (
 
 	"github.com/wailsapp/go-webview2/webviewloader"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/winapp/web"
 )
 
@@ -257,7 +258,7 @@ func (v *webView) processFailed(_, args com) {
 	log.Printf("WebView2 process failed: kind %d", kind)
 	switch kind {
 	case failedBrowserExited:
-		v.a.problem("WebView2 stopped. Open Irie again; your agents kept running.")
+		v.a.problem("WebView2 stopped. Open " + brand.Name + " again; your agents kept running.")
 		pPostMessageW.Call(uintptr(v.a.hwnd), wmClose, 0, 0)
 	case failedRenderExited, failedUnresponsive:
 		v.wv.call(wvReload)

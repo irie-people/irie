@@ -13,6 +13,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/irie-people/irie/internal/brand"
 	phone "github.com/irie-people/irie/internal/remote/web"
 )
 
@@ -29,7 +30,7 @@ var shared = map[string]string{
 
 // Origin is where the page is loaded from: a name that no network has, so
 // nothing but the app answers for it.
-const Origin = "https://app.irie.invalid"
+const Origin = "https://app." + brand.Slug + ".invalid"
 
 // FS is the page's files, the phone app's shared modules among them.
 func FS() fs.FS { return files{} }

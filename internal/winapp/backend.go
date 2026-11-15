@@ -303,7 +303,7 @@ func whyNoBridge(code int, stderr string, err error) (state, text string, steady
 	case msg != "":
 		return LinkDown, lastLine(msg), false
 	}
-	return LinkDown, "Irie inside Linux did not answer: " + err.Error(), false
+	return LinkDown, brand.Name + " inside Linux did not answer: " + err.Error(), false
 }
 
 func lastLine(s string) string {

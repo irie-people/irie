@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/mux"
 )
@@ -126,20 +127,20 @@ func NewCore() *Core {
 	c := &Core{subs: map[chan ipc.Frame]bool{}, next: 20}
 	c.rows = []ipc.Session{
 		{ID: "s1", Name: "Fix the flaky parser test", State: "working", Detail: "Running the tests", Command: "Bash · go test ./internal/parse/ -run TestDates -count=20",
-			Created: ago(42 * time.Minute), Repo: "/home/alice/src/shop", Branch: "irie/fix-the-flaky-parser", Profile: "claude", Model: "claude-opus-5-5", Hue: 1, Shown: true,
+			Created: ago(42 * time.Minute), Repo: "/home/alice/src/shop", Branch: brand.Slug + "/fix-the-flaky-parser", Profile: "claude", Model: "claude-opus-5-5", Hue: 1, Shown: true,
 			Tokens: &ipc.Tokens{Input: 21000, Output: 9200, CacheRead: 160000}, CostUSD: n(1.84), Context: n(38),
 			Subagents: []ipc.Subagent{{Agent: "sub:a1", Type: "Explore", Detail: "Reading parse_test.go", Started: ago(3 * time.Minute)}}},
-		{ID: "s2", Name: "Docs: install on Windows", State: "working", Detail: "Editing docs/WINDOWS.md", Created: ago(2 * time.Hour), Repo: "/home/alice/src/irie",
-			Branch: "irie/docs-install-windows", Profile: "claude", Hue: 4, Pinned: true, Tokens: &ipc.Tokens{Input: 8000, Output: 4100, CacheRead: 52000}},
+		{ID: "s2", Name: "Docs: install on Windows", State: "working", Detail: "Editing docs/WINDOWS.md", Created: ago(2 * time.Hour), Repo: "/home/alice/src/" + brand.Slug,
+			Branch: brand.Slug + "/docs-install-windows", Profile: "claude", Hue: 4, Pinned: true, Tokens: &ipc.Tokens{Input: 8000, Output: 4100, CacheRead: 52000}},
 		{ID: "s3", Name: "Checkout page copy", State: "needs_you", Reason: "permission", Detail: "Asks: may it run npm install?", Created: ago(18 * time.Minute),
-			Repo: "/home/alice/src/shop", Branch: "irie/checkout-copy", Profile: "claude", Hue: 2, Group: "g1", Tokens: &ipc.Tokens{Input: 3100, Output: 900}},
-		{ID: "s4", Name: "Upgrade the date library", State: "done", Created: ago(3 * time.Hour), Repo: "/home/alice/src/shop", Branch: "irie/upgrade-dates",
+			Repo: "/home/alice/src/shop", Branch: brand.Slug + "/checkout-copy", Profile: "claude", Hue: 2, Group: "g1", Tokens: &ipc.Tokens{Input: 3100, Output: 900}},
+		{ID: "s4", Name: "Upgrade the date library", State: "done", Created: ago(3 * time.Hour), Repo: "/home/alice/src/shop", Branch: brand.Slug + "/upgrade-dates",
 			Profile: "sonnet", Hue: 3, Group: "g1", Loose: &ipc.Loose{Ahead: 2, Land: "main"}, Tokens: &ipc.Tokens{Input: 12000, Output: 5300, CacheRead: 98000}},
 		{ID: "s5", Name: "Nightly report", State: "idle", Created: ago(26 * time.Hour), Cwd: "/home/alice/reports", Profile: "haiku", Hue: 5},
-		{ID: "s6", Name: "Refactor the cart", State: "frozen", Created: ago(5 * time.Hour), Repo: "/home/alice/src/shop", Branch: "irie/refactor-cart",
+		{ID: "s6", Name: "Refactor the cart", State: "frozen", Created: ago(5 * time.Hour), Repo: "/home/alice/src/shop", Branch: brand.Slug + "/refactor-cart",
 			Profile: "claude", Hue: 6, Frozen: &now},
 		{ID: "s7", Name: "Migrate the tests", State: "stalled", Reason: "stalled", Detail: "No output for 12 minutes", Created: ago(50 * time.Minute),
-			Repo: "/home/alice/src/irie", Branch: "irie/migrate-tests", Profile: "local", Local: true, Hue: 1},
+			Repo: "/home/alice/src/" + brand.Slug, Branch: brand.Slug + "/migrate-tests", Profile: "local", Local: true, Hue: 1},
 		{ID: "studio/s1", Name: "Benchmark the local model", State: "working", Detail: "on studio · Running the bench", Created: ago(9 * time.Minute),
 			Host: "studio", Profile: "local", Local: true, Hue: 3},
 		{ID: "s8", Name: "Old spike", State: "done", Created: ago(72 * time.Hour), Parked: true, Profile: "claude", Hue: 2},
@@ -212,7 +213,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 	case ipc.OpHello:
 		return ipc.HelloResult{Version: "1.4.0", API: ipc.API, Features: []string{ipc.OpInput, ipc.OpArch, ipc.OpPlugins, ipc.OpReady}}, nil
 	case ipc.OpAttachInfo:
-		return ipc.AttachInfoResult{Tmux: "/usr/bin/tmux", Socket: "/tmp/irie-1000/tmux", Target: "irie"}, nil
+		return ipc.AttachInfoResult{Tmux: "/usr/bin/tmux", Socket: "/tmp/" + brand.Slug + "-1000/tmux", Target: brand.Slug}, nil
 	case ipc.OpShow:
 		c.mu.Lock()
 		for i := range c.rows {
@@ -274,7 +275,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 	case ipc.OpInput:
 		return c.input(a.Text)
 	case ipc.OpConfig:
-		return ipc.ConfigResult{Path: "/home/alice/.config/irie/config.toml", Config: map[string]any{
+		return ipc.ConfigResult{Path: "/home/alice/.config/" + brand.Slug + "/config.toml", Config: map[string]any{
 			"spawn": map[string]any{"default_profile": "claude", "close_when_done": false},
 			"ui":    map[string]any{"theme": "rosewater", "red_on_done": false, "new_tabs": "last"},
 		}}, nil
@@ -288,7 +289,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		}}, nil
 	case ipc.OpPlugins:
 		return ipc.PluginsResult{Plugins: []ipc.Plugin{{Name: "privacy", Title: "Privacy", Summary: "Research without being followed.", On: true,
-			Parts: []ipc.PluginPart{{Name: "vpn", Title: "Mullvad VPN", Summary: "A VPN you drive from Irie.", Switch: "vpn.on", On: false, State: "off", Detail: "Off: turn it on to drive Mullvad from Irie."}}}}}, nil
+			Parts: []ipc.PluginPart{{Name: "vpn", Title: "Mullvad VPN", Summary: "A VPN you drive from " + brand.Name + ".", Switch: "vpn.on", On: false, State: "off", Detail: "Off: turn it on to drive Mullvad from " + brand.Name + "."}}}}}, nil
 	}
 	return struct{}{}, nil
 }

@@ -31,7 +31,8 @@ func init() { runtime.LockOSThread() }
 //go:embed Irie.ico
 var icoFile []byte
 
-const className = "IrieWindow"
+// className is the window class, which a second start finds the first by.
+var className = brand.Exe + "Window"
 
 // app is the window and what it holds.
 type app struct {
