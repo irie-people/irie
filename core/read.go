@@ -50,12 +50,14 @@ func Read(in InputArgs, v View) (Step, error) {
 		name, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
 		return command(name, strings.TrimSpace(arg), in, v)
 	}
+	// A status question about a session is answered from the rows and
+	// starts nothing. One that names no session is a task, typed for an
+	// agent to look into, as "hows the plugin pane" is: refused, it never
+	// went anywhere (DESIGN §4.2).
 	if q, ok := ParseHows(in.Text); ok {
-		s := FindSession(v.Sessions, q)
-		if s == nil {
-			return Step{}, Errorf(CodeNotFound, "No agent matches “%s”.", q)
+		if s := FindSession(v.Sessions, q); s != nil {
+			return Step{Answer: Hows(*s), Session: s}, nil
 		}
-		return Step{Answer: Hows(*s), Session: s}, nil
 	}
 	a, err := ParseTask(in.Text, v.Home)
 	if err != nil {
