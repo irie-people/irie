@@ -474,6 +474,9 @@ final class Store {
     private func apply(_ frames: [Frame]) {
         var rows = sessions
         var touched = false
+        // Cards asked for (`irie ctl card`) show once the rows are in.
+        var cards: [(PaneKind, String)] = []
+        defer { for (kind, id) in cards { showCard(kind, in: id) } }
         for f in frames {
             if let h = f.header { applyHeader(h) }
             switch f.t {
@@ -503,6 +506,8 @@ final class Store {
             case "closed":
                 let c = f.closed ?? []
                 if c != closed { closed = c }
+            case "card":
+                if let id = f.id, let kind = f.kind.flatMap(PaneKind.init(rawValue:)) { cards.append((kind, id)) }
             case "history":
                 let undo = f.undo.flatMap { $0.isEmpty ? nil : $0 }
                 let redo = f.redo.flatMap { $0.isEmpty ? nil : $0 }
