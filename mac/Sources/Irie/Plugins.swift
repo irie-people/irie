@@ -166,6 +166,8 @@ extension Store {
             return
         }
         Task {
+            // Your helpers too, for the Helpers tab's count (YourHelpers.swift).
+            await loadHelpers()
             guard let r = try? await client.call("plugins", PluginsArgs(), timeout: 5, as: PluginsResult.self) else { return }
             takePlugins(r)
         }
@@ -178,6 +180,8 @@ extension Store {
             do {
                 let r = try await client.call("plugins", PluginsArgs(plugin: plugin, part: part, on: on), timeout: 10, as: PluginsResult.self)
                 takePlugins(r)
+                // A helper of yours goes on and off with its plugin.
+                await loadHelpers()
                 // Settings › Plugins and the switches elsewhere in Settings
                 // show the change too.
                 await settings.load()

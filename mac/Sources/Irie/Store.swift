@@ -101,6 +101,12 @@ final class Store {
     private(set) var canArch = false
     /// The core serves the plugins op (DESIGN §4.17).
     private(set) var canPlugins = false
+    /// The core serves the helpers op: your helpers, which the right
+    /// sidebar's Helpers tab shows (YourHelpers.swift).
+    private(set) var canHelpers = false
+    /// Your helpers as the core last said they stand; empty from a core
+    /// from before them.
+    var ownHelpers: [HelperInfo] = []
     /// The core serves the vpn op: its build has the privacy plugin
     /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
     private(set) var canVPN = false
@@ -393,6 +399,7 @@ final class Store {
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
+                canHelpers = hello.features.contains("helpers")
                 notes.connected(serves: hello.features.contains("notepad"))
                 canVariorum = hello.features.contains("variorum")
                 knowsFeatures = true
@@ -988,13 +995,15 @@ final class Store {
 
     // MARK: Requests
 
-    /// Shows a helper in the right sidebar's Helpers tab, beside the
-    /// conversation or the terminal, whichever shows. The terminal never
-    /// splits for a helper, which has no terminal of its own.
+    /// Shows a helper in its session's Helpers card, in the panes beside the
+    /// conversation or the terminal, whichever shows (Rolodex.swift): a
+    /// session's helpers are its own, and the right sidebar is the same for
+    /// every session. The terminal never splits for a helper, which has no
+    /// terminal of its own.
     func openHelper(_ agent: String, in session: String) {
         if selection != session || outsideSelection != nil { show(session) }
         openHelpers[session] = agent
-        if !side.open || side.tab != .helpers { openSide(.helpers) }
+        showCard(.helpers, in: session)
     }
 
     /// Shows a session's terminal beside its teammates'.
@@ -1019,29 +1028,27 @@ final class Store {
         newestHelpers[session] = agent
     }
 
-    /// Whether the right sidebar shows the selected session's helpers.
+    /// Whether the panes show the selected session's Helpers card in front.
     var helperShown: Bool {
-        guard selection != nil, outsideSelection == nil else { return false }
-        return side.open && side.tab == .helpers
+        guard let id = selection, outsideSelection == nil else { return false }
+        let r = rolodex
+        return r.open && !r.folded && r.deck(id).frontPane?.kind == .helpers
     }
 
-    /// View › Helpers (⌥⌘3, ⇧⌘H): opens the right sidebar's Helpers tab on
-    /// the selected session's helper (the one shown last, else the newest
-    /// running, else the newest), or closes it. With no session of Irie's
-    /// selected, the tab opens or closes as the other tabs do.
+    /// View › Session Helpers (⇧⌘H) and the toolbar's button: turns the
+    /// panes beside the selected session to its Helpers card, on its helper
+    /// shown last, else the newest running, else the newest, or hides the
+    /// panes when that card is in front.
     func toggleHelpers() {
-        guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else {
-            toggleSideTab(.helpers)
-            return
-        }
+        guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else { return }
         if helperShown {
-            closeSide()
+            togglePanes()
             return
         }
         if let a = openHelpers[id] ?? lastHelpers[id] ?? s.subagents?.last?.agent ?? newestHelpers[id] {
             openHelper(a, in: id)
         } else {
-            openSide(.helpers)
+            showCard(.helpers, in: id)
         }
     }
 

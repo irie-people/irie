@@ -85,11 +85,12 @@ enum Snapshot {
             store.loadFixture(Fixture.sessions, selection: Fixture.selected)
 
             // The right sidebar (RightSidebar.swift), inline after the
-            // terminal: its Dock in both modes, Helpers and Review, then
+            // terminal: your helpers in both modes, Review, then
             // Variorum's note in both modes and half set up, last, since
             // its tab shows only once Variorum is there.
-            for (base, tab, dark) in [("side-dock", SideTab.dock, false), ("side-dock-dark", SideTab.dock, true),
-                                      ("side-helpers", SideTab.helpers, false), ("side-review", SideTab.review, false),
+            store.ownHelpers = Fixture.helpers
+            for (base, tab, dark) in [("side-helpers", SideTab.helpers, false), ("side-helpers-dark", SideTab.helpers, true),
+                                      ("side-review", SideTab.review, false),
                                       ("side-notices", SideTab.notices, false), ("side-notices-dark", SideTab.notices, true),
                                       ("side-narrow", SideTab.review, false),
                                       ("side-variorum", SideTab.variorum, false), ("side-variorum-dark", SideTab.variorum, true),
@@ -204,6 +205,9 @@ enum Snapshot {
                 ("panes-browser", .browser, false, 1500, false), ("panes-narrow", .terminal, false, 1100, false),
                 ("panes-blank", nil, false, 1500, false), ("panes-mail", .mail, false, 1500, false),
                 ("panes-folded", .browser, false, 1500, true), ("panes-folded-dark", .browser, true, 1500, true),
+                // A session's own helpers and controls, once tabs of the right
+                // sidebar.
+                ("panes-helpers", .helpers, false, 1500, false), ("panes-dock", .dock, false, 1500, false),
             ]
             for (base, front, dark, width, folded) in panes {
                 store.rolodex.loadFixture(session: Fixture.selected, front: front, folded: folded)
@@ -376,6 +380,24 @@ enum Snapshot {
 /// turn, which says Parked and is not counted to verify; one waits on its
 /// helper and teammates.
 enum Fixture {
+    /// Your helpers (YourHelpers.swift): one at work with three items, and
+    /// one whose plugin is off.
+    static var helpers: [HelperInfo] {
+        let since = ISO8601DateFormatter().string(from: Calendar.current.date(bySettingHour: 9, minute: 12, second: 0, of: Date()) ?? Date())
+        return [
+            HelperInfo(id: "inbox.listen", plugin: "inbox", title: "Texts to tasks", icon: "tray", on: true, runs: true, running: true,
+                       since: since, state: "working", line: "Watching what you text yourself: 2 at work, 5 done today",
+                       items: [
+                           HelperItemInfo(title: "Tabs that join their panel", detail: "With a session since 15:01", state: "working", session: selected),
+                           HelperItemInfo(title: "Upscaling video", detail: "Report ready: oversold, one tip worth keeping", state: "done",
+                                          open: "/Users/alice/Documents/Inbox/upscaling.md"),
+                           HelperItemInfo(title: "A reel from a private account", detail: "Couldn’t fetch it after 5 tries", state: "error"),
+                       ],
+                       open: "/Users/alice/Documents/Inbox"),
+            HelperInfo(id: "backups.watch", plugin: "backups", title: "Backups", icon: "externaldrive", on: false, runs: true, running: false),
+        ]
+    }
+
     static let selected = "s02docsguide"
     /// The code card's file, in the selected session's folder, and another
     /// it has open.

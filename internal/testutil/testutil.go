@@ -29,6 +29,12 @@ var (
 	buildMu  sync.Mutex
 	buildDir string
 	builds   = map[string]*build{}
+	// buildEnv is the environment the test binary started in, taken before
+	// any test sets HOME with t.Setenv. A build runs in it, so that it uses
+	// the person's own module and build caches whichever test builds first:
+	// under a test's temp HOME, go fetched every module afresh, slowly, and
+	// left them read-only where the test's cleanup could not remove them.
+	buildEnv = os.Environ()
 )
 
 // Main runs a package's tests, then removes the binaries BuildIrie and
@@ -87,7 +93,9 @@ func buildOnce(t testing.TB, pkg, name string) string {
 			return
 		}
 		b.bin = filepath.Join(dir, name)
-		if out, err := exec.Command(goBin, "build", "-o", b.bin, pkg).CombinedOutput(); err != nil {
+		cmd := exec.Command(goBin, "build", "-o", b.bin, pkg)
+		cmd.Env = buildEnv
+		if out, err := cmd.CombinedOutput(); err != nil {
 			b.err = fmt.Errorf("go build %s: %v\n%s", pkg, err, out)
 		}
 	})

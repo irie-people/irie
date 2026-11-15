@@ -101,6 +101,11 @@ const (
 	// OpPlugins lists Irie's plugins, each with its parts and how far each
 	// is set up on this computer (DESIGN §4.17).
 	OpPlugins = "plugins"
+	// OpHelpers lists your helpers, the programs of yours that Irie keeps
+	// running from your plugins' manifests, each with whether it runs and
+	// what its status file says (DESIGN §4.17); it starts one again when
+	// asked.
+	OpHelpers = "helpers"
 	// OpMarkets is the markets plugin's map (DESIGN §4.17): where the page
 	// in markets.folder is, for :markets and the Mac app's Markets window,
 	// or with a task, a session that works on the map in its folder.
@@ -1257,6 +1262,62 @@ type PluginsResult struct {
 	Bundles []PluginBundle `json:"bundles,omitempty"`
 	Text    string         `json:"text"` // them in words, a line for each part, as :plugins answers
 }
+
+// HelpersArgs asks for your helpers; with Restart, it first starts the one
+// named by ID again.
+type HelpersArgs struct {
+	ID      string `json:"id,omitempty"`
+	Restart bool   `json:"restart,omitempty"`
+}
+
+// HelpersResult is your helpers, in the order of their manifests.
+type HelpersResult struct {
+	Helpers []HelperInfo `json:"helpers"`
+}
+
+// HelperInfo is one helper of yours: a program of yours that Irie keeps
+// running while its plugin is on, from a manifest's [helpers.<id>] table,
+// and what its status file says.
+type HelperInfo struct {
+	ID     string `json:"id"`             // its plugin's name, a dot and its own, such as inbox.listen
+	Plugin string `json:"plugin"`         // the plugin it comes with, whose switch turns it on
+	Title  string `json:"title"`          // its name
+	Icon   string `json:"icon,omitempty"` // an SF Symbols name; "" = the client's own
+	On     bool   `json:"on"`             // its plugin is on
+	// Runs is set when it has a program for Irie to keep running, and
+	// Running while that program runs now, Since when Irie last started it.
+	Runs    bool   `json:"runs"`
+	Running bool   `json:"running"`
+	Since   string `json:"since,omitempty"`
+	// Problem says why it doesn't run while its plugin is on, or why its
+	// table or status file doesn't read, in a sentence.
+	Problem string `json:"problem,omitempty"`
+	// What its status file says: State is ok, working, needs_you or
+	// error; Line is the one line that says how it does; Items are what
+	// it works on, at most HelperItemsMax; Updated is when the file was
+	// last written.
+	State   string       `json:"state,omitempty"`
+	Line    string       `json:"line,omitempty"`
+	Items   []HelperItem `json:"items"`
+	Updated string       `json:"updated,omitempty"`
+	// Open is the file or folder its Open button opens, on this computer.
+	Open     string `json:"open,omitempty"`
+	Manifest string `json:"manifest"` // the manifest it comes from
+}
+
+// HelperItem is one thing a helper works on, as its status file lists it.
+type HelperItem struct {
+	Title  string `json:"title"`
+	Detail string `json:"detail,omitempty"`
+	State  string `json:"state,omitempty"` // working, waiting, needs_you, done or error
+	// Session is a session of Irie's it is about, which a click shows.
+	Session string `json:"session,omitempty"`
+	// Open is a file on this computer that a click opens.
+	Open string `json:"open,omitempty"`
+}
+
+// HelperItemsMax is the most items a helper's status shows.
+const HelperItemsMax = 20
 
 // Plugin is one of Irie's plugins: features that go on and off together.
 type Plugin struct {
