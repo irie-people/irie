@@ -1049,7 +1049,11 @@ private struct RolodexWheel: View {
                 }
             }
             .frame(width: c.width, height: c.height)
-            .background(Probe { r.frontProbe = $0 }.allowsHitTesting(false))
+            // Where the live pane is in the window; a turn drawn still has
+            // no window, and its renderer would paint the probe in.
+            .background {
+                if r.still == nil { Probe { r.frontProbe = $0 }.allowsHitTesting(false) }
+            }
             .offset(x: c.minX, y: c.minY)
             .transaction { $0.animation = nil }
             .zIndex(2)

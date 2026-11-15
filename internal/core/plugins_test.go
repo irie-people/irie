@@ -16,7 +16,7 @@ func TestThePluginsOp(t *testing.T) {
 	c := bareCore(t, config.Default())
 	r, err := c.pluginsOp(ipc.PluginsArgs{})
 	if err != nil || len(r.Plugins) != 5 || r.Plugins[0].Name != "vpn" || !r.Plugins[0].On || len(r.Plugins[0].Parts) != 1 || r.Plugins[1].Name != "privacy" || !r.Plugins[1].On || len(r.Plugins[1].Parts) != 4 ||
-		r.Plugins[2].Name != "writing" || !r.Plugins[2].On || len(r.Plugins[2].Parts) != 1 || r.Plugins[3].Name != "markets" || r.Plugins[3].On || len(r.Plugins[3].Parts) != 1 ||
+		r.Plugins[2].Name != "writing" || !r.Plugins[2].On || len(r.Plugins[2].Parts) != 2 || r.Plugins[3].Name != "markets" || r.Plugins[3].On || len(r.Plugins[3].Parts) != 1 ||
 		r.Plugins[4].Name != "mail" || !r.Plugins[4].On || len(r.Plugins[4].Parts) != 2 {
 		t.Fatalf("plugins = %+v", r.Plugins)
 	}

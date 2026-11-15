@@ -471,6 +471,13 @@ func (c *Core) launch(j job) (*session, error) {
 		} else if mcp != nil {
 			s.MCP = mcp
 		}
+		// A writing session's own way to Variorum (docs/proposals/writers.md).
+		for name, srv := range c.variorumMCP(x.cwd) {
+			if s.MCP == nil {
+				s.MCP = map[string]harness.MCPServer{}
+			}
+			s.MCP[name] = srv
+		}
 	}
 	launch := h.Launch
 	if j.resume != "" {
