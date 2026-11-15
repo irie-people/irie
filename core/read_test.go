@@ -211,6 +211,12 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 	if want := (SpawnArgs{Task: "also check the docs", Jot: true, Apart: "s1"}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) || st.Session == nil || st.Session.ID != "s1" {
 		t.Errorf("apart: %+v, %v", st, err)
 	}
+	// A task no one will watch, as a bench's run on a peer, starts as such,
+	// and is no one's jot: the bench's next run would read as more for it.
+	st, err = Read(InputArgs{Text: "+dory [Irie bench] Run 2 of 3.\n\nThe task:\n\nfix it", Unattended: true}, view())
+	if want := (SpawnArgs{Task: "[Irie bench] Run 2 of 3.\n\nThe task:\n\nfix it", Profile: "dory", Unattended: true}); err != nil || st.Op != OpSpawn || !reflect.DeepEqual(st.Args, want) {
+		t.Errorf("unattended: %+v, %v", st, err)
+	}
 	// :markets TASK takes the menus' agent, model and tutor mode as a task
 	// does, and its own + words before them, but never their repo: its
 	// task runs in the map's folder, which the core knows. It isn't a jot,

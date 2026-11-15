@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/event"
+	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/route"
 	"github.com/irie-people/irie/internal/testutil"
@@ -22,11 +24,12 @@ func benching(t *testing.T, say string) agentConfig {
 	return agentConfig{extra: fmt.Sprintf(`[profiles.cheap]
 command = %q
 permission_mode = "auto"
+env = { IRIE_FAKE_VERSION = "2.1.319" }
 
 [profiles.judge]
 command = %q
 permission_mode = "auto"
-env = { IRIE_FAKE_SCRIPT = "prompt,stop", IRIE_FAKE_SAY = %q }
+env = { IRIE_FAKE_SCRIPT = "prompt,stop", IRIE_FAKE_SAY = %q, IRIE_FAKE_VERSION = "2.1.319" }
 
 [route]
 profiles = ["cheap", "fake"]
@@ -107,6 +110,11 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 		if !ok || s.Profile != "cheap" || !strings.HasPrefix(s.Name, fmt.Sprintf("bench %d/3 · ", i+1)) || s.Class != route.Small {
 			t.Errorf("run %d = %+v", i+1, s)
 		}
+		// No one watches a run, so it refuses what would wait on a
+		// permission prompt.
+		if refuses, unattended := c.unattended(run.Session); !refuses || !unattended {
+			t.Errorf("run %d: refuses prompts %v, unattended %v", i+1, refuses, unattended)
+		}
 	}
 
 	// Once they are through, the judge's verdict rates them by its scores
@@ -131,6 +139,9 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 	if !ok || judge.Profile != "judge" || !strings.HasPrefix(judge.Name, "bench judge · ") {
 		t.Errorf("judge = %+v", judge)
 	}
+	if refuses, unattended := c.unattended(done.JudgeID); !refuses || !unattended {
+		t.Errorf("judge: refuses prompts %v, unattended %v", refuses, unattended)
+	}
 	if task, err := os.ReadFile(c.paths.TaskFile(done.JudgeID)); err != nil || !strings.Contains(string(task), "<task>\n"+"prompt,write:out.txt,stop") || !strings.Contains(string(task), "Run 3 (session "+done.Runs[2].Session+")") {
 		t.Errorf("the judge's brief = %q, %v", task, err)
 	}
@@ -153,6 +164,10 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.waitState(sr.Session.ID, ipc.StateWorking)
+	// Someone may answer this one's prompts, so it asks.
+	if refuses, unattended := c.unattended(sr.Session.ID); refuses || unattended {
+		t.Errorf("a session started by hand: refuses prompts %v, unattended %v", refuses, unattended)
+	}
 	if told := c.startNoteOf(sr.Session.ID); !strings.Contains(told, "These rules for +cheap come from judging earlier work on it; follow them on every task:\n- Read a file before you edit it.\n- Run the tests before you finish.") {
 		t.Errorf("a session on +cheap was told %q", told)
 	}
@@ -162,6 +177,31 @@ func TestBenchJudgesItsRunsAndKeepsAPlaybook(t *testing.T) {
 	if told := c.startNoteOf(other.ID); strings.Contains(told, "These rules") {
 		t.Errorf("a session on +fake was told %q", told)
 	}
+}
+
+// unattended reports whether session id's settings refuse what would wait
+// on a permission prompt, and whether its spawn was recorded as one no one
+// watches.
+func (c *coreEnv) unattended(id string) (refuses, unattended bool) {
+	c.t.Helper()
+	data, err := os.ReadFile(filepath.Join(c.paths.Session(id), claude.SettingsFile))
+	if err != nil {
+		c.t.Fatalf("the settings of %s: %v", id, err)
+	}
+	var s struct {
+		Permissions struct {
+			Deny bool `json:"denyInsteadOfPrompting"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		c.t.Fatal(err)
+	}
+	for _, e := range c.events(id) {
+		if e.Kind == event.SpawnRequested && e.Data["unattended"] == true {
+			unattended = true
+		}
+	}
+	return s.Permissions.Deny, unattended
 }
 
 // startNoteOf is what a session was told as it started.

@@ -203,12 +203,14 @@ func (b *benchFile) runTask(i, n int) string {
 }
 
 // benchStart starts one session of bench b: here, or on peer p as a typed
-// task, named there as here.
+// task, named there as here. No one watches a run or the judge, so each
+// is unattended: a tool call that would wait on a permission prompt is
+// refused and its turn goes on, rather than wait out bench.timeout.
 func (c *Core) benchStart(p *peerState, b *benchFile, task, profile, name string) (ipc.Session, error) {
 	if p == nil {
-		return c.spawn(ipc.SpawnArgs{Task: task, Profile: profile, Repo: b.Repo, Name: name}, true)
+		return c.spawn(ipc.SpawnArgs{Task: task, Profile: profile, Repo: b.Repo, Name: name, Unattended: true}, true)
 	}
-	r, err := c.inputOn(p, ipc.InputArgs{Text: task, Profile: profile, Repo: b.Repo})
+	r, err := c.inputOn(p, ipc.InputArgs{Text: task, Profile: profile, Repo: b.Repo, Unattended: true})
 	if err != nil {
 		return ipc.Session{}, err
 	}

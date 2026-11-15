@@ -71,11 +71,13 @@ func Read(in InputArgs, v View) (Step, error) {
 	if a.Tutor == "" {
 		a.Tutor = in.Tutor
 	}
-	a.Model = in.Model
+	a.Model, a.Unattended = in.Model, in.Unattended
 	// A typed task is a jot: one that reads as more for the jot sent just
 	// before goes to that jot's agent instead (DESIGN §4.2). Apart starts
-	// one that went there on its own after all.
-	a.Jot, a.Apart = true, in.Apart
+	// one that went there on its own after all. An unattended task, such
+	// as a bench's run on a peer, is no one's jot: the bench's next run
+	// would read as more for the one before it.
+	a.Jot, a.Apart = !in.Unattended, in.Apart
 	// It starts in the space the client shows, beside the card selected.
 	a.Space, a.After = in.Space, in.Session
 	st := Step{Op: OpSpawn, Args: a}

@@ -269,6 +269,17 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		probe = p.Probe(profile, c.agentEnv(profile))
 	}
 	probe.Warnings = append(warnings, probe.Warnings...)
+	// A session no one watches refuses what would wait on a permission
+	// prompt, where its Claude Code can (DESIGN §6.6).
+	if a.Unattended {
+		if extra == nil {
+			extra = map[string]any{}
+		}
+		extra["unattended"] = true
+		if h.ID() == "claude-code" && !claude.AtLeast(probe.Version, claude.DenyPromptsVersion) {
+			probe.Warnings = append(probe.Warnings, fmt.Sprintf("no one watches this session, but a Claude Code before %s asks rather than refuses, so it may wait on a permission prompt", claude.DenyPromptsVersion))
+		}
+	}
 
 	// Spawns run one at a time, so a worktree's slug cannot race another
 	// spawn's name, and one that a promoted session delegates goes first.
@@ -323,7 +334,7 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 		class, _ := extra["class"].(string)
 		c.escalate(hash, class, profileName, time.Now())
 	}
-	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor, anon: comp})
+	x, err := c.launch(job{place: pl, profile: profileName, run: profile, h: h, probe: probe, task: a.Task, data: extra, tutor: tutor, anon: comp, unattended: a.Unattended})
 	if err == nil {
 		// Its space and group first: where it goes in the list follows
 		// them (groups.go).
@@ -374,6 +385,9 @@ type job struct {
 	tutor   string         // its tutor mode, explain or teach; "" when off (learn.tutor)
 	anon    *compartment   // the compartment it researches in, anonymously; nil when it doesn't (anon.go)
 	asked   bool           // its model was asked for by name, as a fork's --model: no fallback takes its place (fallback.go)
+	// unattended is a session no one watches, such as a bench's run: what
+	// would wait on a permission prompt is refused (DESIGN §6.6).
+	unattended bool
 }
 
 // launch writes the session's files, creates its window and records the
@@ -430,6 +444,7 @@ func (c *Core) launch(j job) (*session, error) {
 		StatusLine: c.cfg().Usage.StatusLine, Home: home(), Environ: c.agentEnv(profile),
 		Arch:  c.archFor(profile, h.ID()),
 		Tutor: x.tutor, Visual: x.tutor != "" && c.cfg().Learn.Visual,
+		Unattended: j.unattended,
 	}
 	// Irie's tips go under the agent's spinner, where its harness has one
 	// (docs/proposals/learning.md).

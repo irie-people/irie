@@ -1038,6 +1038,10 @@ type SpawnArgs struct {
 	// that an anonymous session hands on stays in its compartment.
 	Anon      string `json:"anon,omitempty"`
 	AnonRoute string `json:"anon_route,omitempty"`
+	// Unattended is a session that no one watches, such as a bench's run
+	// or its judge (DESIGN §6.6): a tool call that would wait on a
+	// permission prompt is refused instead, and its turn goes on.
+	Unattended bool `json:"unattended,omitempty"`
 }
 
 // AnonNew is SpawnArgs.Anon for a compartment of the task's own.

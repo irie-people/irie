@@ -187,3 +187,64 @@ func TestALocalModelTakesEditsAndRunsTheSafeCommands(t *testing.T) {
 		t.Errorf("Opus: --permission-mode %q, allowed %q", mode(argv), allow(files))
 	}
 }
+
+// A session no one watches, such as a bench's run on Dory, refuses what
+// would wait on a permission prompt: the first bench's runs each asked
+// for go version and waited out bench.timeout. A Claude Code too old for
+// the key gets a file without it, and a watched session asks as before.
+func TestAnUnattendedSessionRefusesWhatWouldWaitOnAPrompt(t *testing.T) {
+	local := config.Default().Profiles["big"]
+	local.Model = "dory-4b"
+	read := func(files map[string][]byte) (allow []string, deny bool) {
+		var s struct {
+			Permissions *struct {
+				Allow []string `json:"allow"`
+				Deny  *bool    `json:"denyInsteadOfPrompting"`
+			} `json:"permissions"`
+		}
+		if err := json.Unmarshal(files[SettingsFile], &s); err != nil {
+			t.Fatal(err)
+		}
+		if s.Permissions == nil {
+			return nil, false
+		}
+		return s.Permissions.Allow, s.Permissions.Deny != nil && *s.Permissions.Deny
+	}
+	for _, c := range []struct {
+		name       string
+		p          config.Profile
+		version    string
+		unattended bool
+		deny       bool
+	}{
+		{"a bench's run on Dory", local, DenyPromptsVersion, true, true},
+		{"its judge on Opus", defaultProfile(), "2.1.325 (Claude Code)", true, true},
+		{"a Claude Code before the key", local, "2.1.318", true, false},
+		{"a session someone watches", local, "2.1.325", false, false},
+	} {
+		s := spawnOf("fix the tests")
+		s.Probe.Version, s.Unattended = c.version, c.unattended
+		_, _, files := launchSpawn(t, c.p, s)
+		allow, deny := read(files)
+		if deny != c.deny {
+			t.Errorf("%s: denyInsteadOfPrompting = %v, want %v: %s", c.name, deny, c.deny, files[SettingsFile])
+		}
+		if c.p.Local != nil && !slices.Contains(allow, "Bash(go version *)") {
+			t.Errorf("%s: go version is not allowed: %q", c.name, allow)
+		}
+		// The key never goes in a file that has no other reason for it.
+		if !c.deny && c.p.Local == nil && allow != nil {
+			t.Errorf("%s: allowed %q", c.name, allow)
+		}
+	}
+	// A resumed session no one watches refuses as well.
+	s := spawnOf("")
+	s.Probe.Version, s.Unattended = "2.1.325", true
+	_, _, files, err := (Harness{}).Resume(local, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, deny := read(files); !deny {
+		t.Errorf("resumed: %s", files[SettingsFile])
+	}
+}

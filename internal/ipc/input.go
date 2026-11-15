@@ -53,6 +53,9 @@ type InputArgs struct {
 	// in the task bar: once the input goes through, the note is ticked
 	// off and says when it went, and to which session (DESIGN §4.20).
 	Note string `json:"note,omitempty"`
+	// Unattended starts the task as a session that no one watches
+	// (SpawnArgs.Unattended), as a bench on a peer starts its runs.
+	Unattended bool `json:"unattended,omitempty"`
 }
 
 // Paste is a long paste that a client shows as Label in what was typed.

@@ -144,6 +144,10 @@ func base(p config.Profile, s harness.Spawn) ([]string, map[string]string, map[s
 		}
 	}
 	x := Extra{Status: status, Teams: s.Teams, Style: Styles[s.Tutor], Doors: doors, Allow: allow, Deny: s.Deny}
+	// A session no one watches refuses what would wait on a prompt. An
+	// older Claude Code doesn't know the key, so its file leaves it out and
+	// the session asks as before (the core warns).
+	x.NoPrompts = s.Unattended && AtLeast(s.Probe.Version, DenyPromptsVersion)
 	// An anonymous session's shell runs in Claude Code's sandbox, or the
 	// session doesn't start (sandbox.go).
 	if s.Sandbox != nil {
@@ -349,26 +353,39 @@ type Extra struct {
 	Doors  []arch.Door // the doors of the session's arch agents (DESIGN §4.11)
 	Allow  []string    // what the agent runs without asking, as Claude Code's permission rules
 	Deny   []string    // what the agent is refused, as Claude Code's permission rules
-	Theme  string      // the session's colour theme, such as Irie's "custom:irie"; "" leaves the user's own
+	// NoPrompts refuses a tool call that would wait on a permission
+	// prompt, and the turn goes on: a session no one watches
+	// (permissions.denyInsteadOfPrompting, from DenyPromptsVersion).
+	NoPrompts bool
+	Theme     string // the session's colour theme, such as Irie's "custom:irie"; "" leaves the user's own
 	// Sandbox is an anonymous session's sandbox (sandbox.go); nil = none.
 	Sandbox *sandboxSettings
 }
 
 type permissions struct {
-	Allow []string `json:"allow,omitempty"`
-	Deny  []string `json:"deny,omitempty"`
+	Allow                  []string `json:"allow,omitempty"`
+	Deny                   []string `json:"deny,omitempty"`
+	DenyInsteadOfPrompting bool     `json:"denyInsteadOfPrompting,omitempty"`
 }
+
+// DenyPromptsVersion is the first Claude Code that refuses, rather than
+// asks, when its settings say no one will answer a permission prompt
+// (permissions.denyInsteadOfPrompting).
+const DenyPromptsVersion = "2.1.319"
 
 // LocalAllowed are the commands a local model's session runs without
 // asking (localPermissions): building, testing, vetting and formatting, in
-// Go, Python, JavaScript and Rust, setting up a Go module, and committing
-// its work where it runs, so that a bench's run (DESIGN §6.6) gets through
-// on its own. A test runs any code it likes, so go run adds no new risk;
-// nothing here pushes. Claude Code runs its read-only commands, such as ls,
-// cat and git diff, without asking in every mode.
+// Go, Python, JavaScript and Rust, setting up a Go module, reading Go's
+// version and docs, and committing its work where it runs, so that a
+// bench's run (DESIGN §6.6) gets through on its own. A test runs any code
+// it likes, so go run adds no new risk; nothing here pushes. Claude Code
+// runs its read-only commands, such as ls, cat and git diff, without
+// asking in every mode, but not go version: a bench's runs on Dory each
+// asked for it first, and waited for an answer no one gave.
 var LocalAllowed = []string{
 	"Bash(go build *)", "Bash(go test *)", "Bash(go vet *)", "Bash(go fmt *)", "Bash(gofmt *)",
-	"Bash(go mod *)", "Bash(go run *)", "Bash(git add *)", "Bash(git commit *)",
+	"Bash(go mod *)", "Bash(go run *)", "Bash(go version *)", "Bash(go doc *)", "Bash(go list *)",
+	"Bash(git add *)", "Bash(git commit *)",
 	"Bash(pytest *)", "Bash(python -m pytest *)", "Bash(python3 -m pytest *)",
 	"Bash(npm test *)", "Bash(npm run test *)", "Bash(npm run build *)", "Bash(npm run lint *)",
 	"Bash(cargo build *)", "Bash(cargo check *)", "Bash(cargo test *)", "Bash(cargo fmt *)",
@@ -427,8 +444,8 @@ func Settings(bin string, holdMax time.Duration, recent bool, x Extra) ([]byte, 
 		Theme        string                    `json:"theme,omitempty"`
 		Sandbox      *sandboxSettings          `json:"sandbox,omitempty"`
 	}{Hooks: map[string][]matcherGroup{}, StatusLine: x.Status, OutputStyle: x.Style, Theme: x.Theme, Sandbox: x.Sandbox}
-	if len(x.Allow) > 0 || len(x.Deny) > 0 {
-		file.Permissions = &permissions{Allow: x.Allow, Deny: x.Deny}
+	if len(x.Allow) > 0 || len(x.Deny) > 0 || x.NoPrompts {
+		file.Permissions = &permissions{Allow: x.Allow, Deny: x.Deny, DenyInsteadOfPrompting: x.NoPrompts}
 	}
 	if x.Teams {
 		file.TeammateMode = "tmux"

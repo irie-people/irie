@@ -119,6 +119,10 @@ type Spawn struct {
 	// Tips are Irie's tips, for a harness that can show them, as Claude
 	// Code does under its spinner (learn.agent_tips).
 	Tips []learn.Tip
+	// Unattended is a session no one watches, such as a bench's run
+	// (DESIGN §6.6): a harness that can refuses a tool call that would
+	// wait on a permission prompt, so the turn goes on without an answer.
+	Unattended bool
 }
 
 // Sandbox is the box an anonymous research session's shell runs in, as
