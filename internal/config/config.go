@@ -519,6 +519,11 @@ type Profile struct {
 	// skills and records live in that folder (DESIGN §4.2). It is a /…
 	// or ~/… path. "" = a scratch folder, as for any task.
 	Folder string `toml:"folder"`
+	// FallbackModel is the model a session of the profile switches to, in
+	// place, when its own model's usage limit stops a turn, such as a Fable
+	// limit, as /model would; while that limit holds, new sessions start on
+	// it (DESIGN §6.4). "" = none: the session waits for the limit to reset.
+	FallbackModel string `toml:"fallback_model"`
 	// SDK runs the session on the Agent SDK: Irie's own pane program drives
 	// `claude -p`, instead of Claude Code's terminal app (DESIGN §3.5). It is
 	// for an API key whose credits cover the Agent SDK but not Claude Code,
@@ -1335,6 +1340,19 @@ func (c Config) Validate() error {
 		}
 		if p.SDK && p.Harness != "claude-code" {
 			bad("profiles.%s.sdk: only the claude-code harness runs on the Agent SDK", name)
+		}
+		// The switch types /model into the agent's terminal (DESIGN §6.4).
+		if f := p.FallbackModel; f != "" {
+			switch {
+			case p.Harness != "claude-code" || p.Local != nil || p.SDK:
+				bad("profiles.%s.fallback_model: only a Claude Code profile on Anthropic's models, in its terminal, switches models at a usage limit", name)
+			case f != strings.TrimSpace(f) || strings.ContainsAny(f, " \t\r\n"):
+				bad("profiles.%s.fallback_model = %q: must be one model name, such as claude-opus-5-5", name, f)
+			case f == p.Model:
+				bad("profiles.%s.fallback_model = %q: is the profile's own model", name, f)
+			case slices.Contains(p.Args, "--disable-slash-commands"):
+				bad("profiles.%s.fallback_model: the switch types /model, which --disable-slash-commands in args turns off", name)
+			}
 		}
 		if p.Arch != "" {
 			if a, ok := arch.Get(p.Arch); !ok || !a.Call {

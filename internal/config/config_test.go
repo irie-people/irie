@@ -950,3 +950,30 @@ func TestSDKKeepsTheProfilesOtherDefaults(t *testing.T) {
 		t.Errorf("sdk on a generic profile: %v", err)
 	}
 }
+
+// TestFallbackModel is a profile that switches its sessions to another
+// model at their own model's usage limit (DESIGN §6.4), by typing /model.
+func TestFallbackModel(t *testing.T) {
+	c, err := Load(writeFile(t, "[profiles.fable]\nmodel = \"claude-fable-5-1\"\nfallback_model = \"claude-opus-5-5\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Profiles["fable"].FallbackModel; got != "claude-opus-5-5" {
+		t.Errorf("fallback_model = %q", got)
+	}
+	if c.Profiles["claude"].FallbackModel != "" {
+		t.Error("a profile the file did not name has a fallback")
+	}
+	for body, want := range map[string]string{
+		"[profiles.f]\nmodel = \"claude-fable-5-1\"\nfallback_model = \"claude-fable-5-1\"\n":                                  "is the profile's own model",
+		"[profiles.f]\nmodel = \"claude-fable-5-1\"\nfallback_model = \"claude opus\"\n":                                       "must be one model name",
+		"[profiles.f]\nmodel = \"claude-fable-5-1\"\nfallback_model = \"opus\"\nargs = [\"--disable-slash-commands\"]\n":       "--disable-slash-commands in args turns off",
+		"[profiles.f]\nharness = \"generic\"\ncommand = \"aider\"\nfallback_model = \"opus\"\n":                                "only a Claude Code profile",
+		"[profiles.f]\nmodel = \"claude-fable-5-1\"\nfallback_model = \"opus\"\nsdk = true\n":                                  "only a Claude Code profile",
+		"[profiles.f]\nmodel = \"dory-4b\"\nfallback_model = \"opus\"\nlocal = { runtime = \"ollama\", min_context = 8192 }\n": "only a Claude Code profile",
+	} {
+		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", body, err, want)
+		}
+	}
+}

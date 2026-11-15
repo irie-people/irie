@@ -20,6 +20,7 @@ enum Snapshot {
         LookBook.shared.useFixture()
         // Closed, whatever the app has saved; a fixture store saves nothing.
         store.side = SideState()
+        store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
             // Each palette in both modes at the default size, then the default
@@ -151,6 +152,42 @@ enum Snapshot {
                 print(name)
             }
             store.poppedOut = nil
+
+            // The panes beside the terminal (Rolodex.swift): a card of each
+            // kind with one in front, in both modes and a narrower window, a
+            // blank card, and two turns drawn still, forward and back.
+            let panes: [(String, PaneKind?, Bool, CGFloat)] = [
+                ("panes", .terminal, false, 1500), ("panes-dark", .terminal, true, 1500), ("panes-browser", .browser, false, 1500),
+                ("panes-narrow", .terminal, false, 1100), ("panes-blank", nil, false, 1500),
+            ]
+            for (base, front, dark, width) in panes {
+                store.rolodex.loadFixture(session: Fixture.selected, front: front)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: width, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            // A turn tilts the flap in 3D, which only SwiftUI's own renderer
+            // draws, so these are the wheel alone.
+            for (base, forward, at, dark) in [("panes-turn-forward", true, 0.45, false), ("panes-turn-back", false, 0.35, false), ("panes-turn-forward-dark", true, 0.3, true)] {
+                let size = CGSize(width: 560, height: 640)
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal)
+                store.rolodex.freezeFixtureTurn(session: Fixture.selected, forward: forward, at: at, size: size)
+                let view = RolodexView().environment(store).frame(width: size.width, height: size.height).padding(16)
+                    .background(Theme.ground).environment(\.colorScheme, dark ? .dark : .light)
+                var png: Data?
+                (NSAppearance(named: dark ? .darkAqua : .aqua) ?? NSAppearance.currentDrawing()).performAsCurrentDrawingAppearance {
+                    let r = ImageRenderer(content: view)
+                    r.scale = 2
+                    if let image = r.cgImage { png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) }
+                }
+                if let png {
+                    try png.write(to: URL(fileURLWithPath: dir).appendingPathComponent(base + ".png"))
+                    print(base + ".png")
+                }
+            }
+            store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
 
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)

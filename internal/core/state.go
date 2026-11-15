@@ -26,6 +26,7 @@ type track struct {
 	tools     map[string]event.Event // running tools' tool.started, by tool_use_id
 	subs      map[string]event.Event // running subagents' subagent.started, by agent
 	vendorID  string                 // the conversation the last SessionStart named, which /clear changes
+	model     string                 // the model the agent switched to while it ran (model.switched); "" = its launch's
 	resumed   bool                   // spawn.requested carried a conversation on, as a reopen or a move does
 	// away is the conversation its agent handed to Claude Code's
 	// background (←, /background, or an exit with work still running):
@@ -242,6 +243,8 @@ func (t *track) apply(e event.Event) {
 			t.apiFails = 0
 		}
 		t.busy(e)
+	case event.ModelSwitched:
+		t.model = e.Str("model")
 	case event.TurnFailed:
 		t.activity, t.viewed = done, false
 		t.stopTools(event.Main)

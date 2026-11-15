@@ -67,6 +67,11 @@ func parseStep(item string, inSub bool) (step, error) {
 			return bad()
 		}
 		return step{kind: name, arg: arg}, nil
+	case "limit":
+		if !hasArg || inSub || !fileName.MatchString(arg) {
+			return bad()
+		}
+		return step{kind: name, arg: arg}, nil
 	case "write":
 		if !fileName.MatchString(arg) || arg == "." || arg == ".." || inSub {
 			return bad()

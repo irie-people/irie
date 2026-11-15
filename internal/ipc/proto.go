@@ -1437,6 +1437,9 @@ type HookResult struct {
 	// Unfinished answers a Stop: what is left of the jot, which its agent
 	// goes on to finish (DESIGN §4.8).
 	Unfinished string `json:"unfinished,omitempty"`
+	// Allow answers a PreModelSwitch: the switch is Irie's own, at a usage
+	// limit, and needs no confirmation (DESIGN §6.4).
+	Allow bool `json:"allow,omitempty"`
 }
 
 // Frame types streamed after subscribe.
