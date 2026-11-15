@@ -23,14 +23,14 @@ func (c *Core) control(op string, raw json.RawMessage) (result any, ok bool, err
 			return nil, true, ipc.Errorf(ipc.CodeBadArgs, "%s needs a session, or all", op)
 		}
 		r, changed, err := c.freezeOp(a, op == ipc.OpFreeze)
-		// One session frozen or thawed, when that changed it, is a step of
-		// the history; all of them at once is not yet.
-		if err == nil && !a.All && len(changed) == 1 {
+		// What it froze or thawed, of what that changed, is a step of the
+		// history: them all at once is one step, which names them.
+		if err == nil && len(changed) > 0 {
 			kind := actThaw
 			if op == ipc.OpFreeze {
 				kind = actFreeze
 			}
-			c.recordAction(kind, a.Session, nil)
+			c.recordSteps(kind, changed, nil)
 		}
 		return r, true, err
 	case ipc.OpPriority:

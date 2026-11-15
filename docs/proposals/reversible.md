@@ -1,6 +1,6 @@
 # Reversible Irie: what the Toffoli gate teaches
 
-Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3), and step 2, the rebuild meter, on 2026-11-14 (DESIGN §6.3); steps 3 to 6 are proposals. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3), step 2, the rebuild meter, on 2026-11-14 (DESIGN §6.3), and step 3 on 2026-11-15 (DESIGN §4.5); steps 4 to 6 are proposals. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 **In short.** The Toffoli gate, or controlled-controlled-NOT, flips its target bit only when both control bits are 1. It keeps its inputs, so no information is lost, and run twice it undoes itself. Any computation can be built from such gates (Toffoli, 1980). Bennett (1973) showed such a computation need not pile up garbage either: compute, copy the answer, then run the steps backwards to clean the scratch.
 
@@ -30,7 +30,7 @@ Neither reversible chips nor quantum computers will make Irie faster before 2030
    - Count those rebuilds per session: the journal's `cache.rebuilt`, with what each cost and what woke the session, each row's count and cost today and this week, and `irie ctl rebuilds`.
    - Before Irie wakes a session idle past its cache's life, say what the rebuild costs, the way the spawn list says what a session costs (§6.3). Irie wakes sessions with a send, the jot dog's sending back (§4.8), a thaw, or a reopen. The trod bot leaves a cold session be when waking it costs more than `usage.wake_most`; the jot dog's nudge comes while the cache is warm.
    - Irie causes rebuilds of its own: a freeze of more than an hour (§4.10), close and reopen, and a mass thaw.
-3. **The rest of undo.** Pause, notes, and freezing or thawing them all as one step that names its sessions.
+3. **The rest of undo. Built** for what Irie has: freezing or thawing them all is one step whose label names its sessions, `freeze "a", "b" and "c"`, and the Mac app, whose buttons call them Pause and Resume, says Undo Pause “a”, “b” and “c”. Pausing at the next tool call (M5) and notes to agents (M7) are not built yet; each becomes a step with `registerAction` once it is.
 4. **Inside and outside.** Mark each op by whether its effect leaves Irie. Inside ops never ask, since undo is there. Outside ops are the ones to confirm or have Mikael weigh. A mass thaw is an inside action with outside effects: each agent signs in again.
 5. **Uncompute merged worktrees.** A closed session whose branch is in `live`, and whose worktree is clean, needs only its branch. Remove the checkout, and let reopen add it back. This changes "closing keeps the worktree" (§4.5), so the maintainer decides. It saves about 9 MB a session.
 6. **Quantum watch.** The key exchange is post-quantum. The certificates (ECDSA P-256) and SSH keys (Ed25519) are not, which matters only against an attacker who has a quantum computer at the time of connecting.

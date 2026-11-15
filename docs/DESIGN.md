@@ -810,20 +810,20 @@ Anything else starts a session, as before, and is the jot the next may add to: "
 | Reorder | Back to its place | The step keeps the three sessions that came after it, before the move and after; it goes back just before the first of them still in the order, or last |
 | Priority on / off | Off / on | Undoing a boost gives back the level and nothing else, as a boost moves no card; undoing "stop boosting" boosts it again. Cancels a note that has not been delivered. If it was delivered, sends `notes.priority_cleared` |
 | Pause / resume | Resume / pause | Releasing still sends the "held for" note |
-| Freeze / thaw | Thaw / freeze | One session at a time; freezing or thawing them all (`F`), and what the trod bot freezes, record no step |
+| Freeze / thaw | Thaw / freeze | One session, or them all at once (`F`) as one step whose label names the sessions it changed, `freeze "a", "b" and "c"`, past four the first three and how many more. What the trod bot freezes and thaws records no step |
 | Close | Reopen (`claude --resume <uuid>` in the same cwd) | Closing keeps the worktree. A session that never started is spawned again with its original task. Details below |
 | Spawn | Close | Redo reopens it |
 | Note | Cancel | Only while undelivered; delivered notes are shown as such |
 
 **Rules.**
 - The history is linear and 100 actions deep, kept in `state.json`.
-- Steps taken together, as one close of several sessions (§4.1), share a `batch`: undo and redo take the whole batch at once, under one label, `close 6 sessions`. A question about one of them stops there, and the same undo, once answered, goes on with the rest.
+- Steps taken together, as one close of several sessions (§4.1), share a `batch`: undo and redo take the whole batch at once, under one label, `close 6 sessions`, or for a kind that names them, as freezing them all, `freeze "a" and "b"`. A question about one of them stops there, and the same undo, once answered, goes on with the rest.
 - A new action clears the redo stack. Undo and redo record nothing and clear nothing; one runs at a time.
 - `u` undoes and `U` redoes. The header shows the labels of both.
 - Not undoable: the agents' own edits (use the agent's own rewind) and worktree contents.
 - Steps name sessions by id, never by row. A step that fails changes nothing, the history included. A step whose undo or redo finishes after a new action came in leaves the history, which stays linear.
 
-**Wired now.** Spawn (its label `start "name"`), close and reopen, the last two whether done with `x x`, `:close`, `:reopen` or the socket, park and unpark (`park "name"`), rename (`rename "a" to "b"`), reorder (`reorder "name"`), the freeze and thaw of one session (`freeze "name"`), and promote and stop promoting (`promote "name"`, `stop promoting "name"`), however they were done. An action that changed nothing, such as a second freeze or a drag back to the same place, records no step. The Mac app's Edit > Undo and Redo (⌘Z, ⇧⌘Z) take the same steps and ask the same questions, in an alert; it and the core's `Title` read each quoted name in a label with curly quotes. A subtask an agent delegates (§6.4) is the agent's doing and not recorded; nor are moves (§4.6), tool sessions, or the closes `spawn.close_when_done` makes, which `reopen` and the review dock bring back. Pause, note, and freezing or thawing them all are not recorded yet; they plug in as below.
+**Wired now.** Spawn (its label `start "name"`), close and reopen, the last two whether done with `x x`, `:close`, `:reopen` or the socket, park and unpark (`park "name"`), rename (`rename "a" to "b"`), reorder (`reorder "name"`), freezing and thawing, one session or them all at once (`freeze "name"`, `thaw "a", "b" and "c"`), and promote and stop promoting (`promote "name"`, `stop promoting "name"`), however they were done. An action that changed nothing, such as a second freeze or a drag back to the same place, records no step. The Mac app's Edit > Undo and Redo (⌘Z, ⇧⌘Z) take the same steps and ask the same questions, in an alert; it and the core's `Title` read each quoted name in a label with curly quotes, and the app, whose buttons call freezing Pause and thawing Resume, says Undo Pause “a” and “b”. A subtask an agent delegates (§6.4) is the agent's doing and not recorded; nor are moves (§4.6), tool sessions, or the closes `spawn.close_when_done` makes, which `reopen` and the review dock bring back. Pausing at the next tool call (M5) and notes to agents (M7) are not built yet, so nothing records them; each plugs in as below once it is.
 
 **An inverse puts back all the action changed.** A step keeps what its undo needs to leave the session exactly as it was, not only the field the action names: parking a pinned session also unpins it, so undoing the park pins it again too. What left Irie can't come back: undoing a thaw freezes the session again, but its agent keeps the "frozen for" note the thaw gave it.
 
@@ -2081,7 +2081,7 @@ Version 1 is M1 to M11 and M12, [skills](proposals/skills.md). A milestone is do
 | M3. Repos, worktrees, any task size, profiles | Done | Tab completes `:` commands (§4.2) |
 | M4. Manage the list | Nearly | `/` fuzzy jump and digits 1–9 in the terminal sidebar. A session whose pane vanished while the core was down is listed as closed |
 | M5. Pause at the next tool call | Not started | All of it. Irie.app's Pause and Resume are M6's freeze and thaw |
-| M6. Freeze | Done, with gaps | The long-freeze warning (`freeze.warn_after`). Undo steps for freezing and thawing all |
+| M6. Freeze | Done, with gaps | The long-freeze warning (`freeze.warn_after`) |
 | M7. Priority and notes | Priority done | Notes: the `note` op, `n` and `:note`, the `[notes]` templates and their delivery |
 | M8. Subagent panes | Nearly | Helper views that Irie draws replace the mirror windows (§4.4, [split-pane.md](proposals/split-pane.md)), and Irie.app has them. Left: retention, helpers in the terminal sidebar, transcript catch-up, and `p` and `n` on a helper |
 | M9. The Irie window in Ghostty, and Irie.app | Done, as Irie.app | Irie.app replaces the Ghostty window (§7, [MAC.md](MAC.md)). Left: an uninstall, a bundle test, bare `irie` opening the app, and M9's text |

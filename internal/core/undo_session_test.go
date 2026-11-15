@@ -262,10 +262,14 @@ func TestUndoAsksBeforeStoppingAFrozenAgent(t *testing.T) {
 	c := setup(t)
 	a := c.spawn("prompt")
 	c.waitState(a.ID, ipc.StateWorking)
-	// Freezing them all is no step, so the start is next.
+	// Freezing them all is a step of its own: leave it out, as another
+	// hand's freeze would be, so that the start is next. The session stays
+	// frozen through the restart that takes.
 	if err := c.call(ipc.OpFreeze, ipc.FreezeArgs{All: true}, nil); err != nil {
 		t.Fatal(err)
 	}
+	c.waitState(a.ID, ipc.StateFrozen)
+	c.dropLast(nil)
 	c.waitState(a.ID, ipc.StateFrozen)
 	ch := c.ask(dirUndo)
 	if ch.Question != `"Prompt" is frozen in the middle of its work.` || !slices.Equal(keysOf(ch), []string{ipc.ChoiceCancel, ipc.ChoiceApply, ipc.ChoiceSkip}) {

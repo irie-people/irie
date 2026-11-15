@@ -88,9 +88,10 @@ func (c *Core) freezeOp(a ipc.FreezeArgs, on bool) (r ipc.FreezeResult, changed 
 	return ipc.FreezeResult{Sessions: done}, changed, err
 }
 
-// Action kinds of freeze (undo.go): one session frozen or thawed by the
-// user. Freezing or thawing them all at once is no step yet, nor is what
-// the trod bot does.
+// Action kinds of freeze (undo.go): a session frozen or thawed by the
+// user. Freezing or thawing them all at once is one step, a batch of
+// these, whose label names its sessions, `freeze "a", "b" and "c"`. What
+// the trod bot freezes and thaws is its own doing and no step.
 const (
 	actFreeze = "freeze"
 	actThaw   = "thaw"
@@ -99,8 +100,13 @@ const (
 func init() {
 	freezeEff := effect{check: checkFreeze(true), do: doFreeze(true)}
 	thawEff := effect{check: checkFreeze(false), do: doFreeze(false)}
-	registerAction(actFreeze, actionKind{verb: "freeze", undo: thawEff, redo: freezeEff})
-	registerAction(actThaw, actionKind{verb: "thaw", undo: freezeEff, redo: thawEff})
+	registerAction(actFreeze, actionKind{verb: "freeze", batch: namesOf("freeze"), undo: thawEff, redo: freezeEff})
+	registerAction(actThaw, actionKind{verb: "thaw", batch: namesOf("thaw"), undo: freezeEff, redo: thawEff})
+}
+
+// namesOf labels a batch of verb's steps by the names of its sessions.
+func namesOf(verb string) func(names []string) string {
+	return func(names []string) string { return namesLabel(verb, names) }
 }
 
 // checkFreeze is what makes freezing a's session (on), or thawing it,

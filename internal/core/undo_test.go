@@ -82,6 +82,51 @@ func TestHistoryUndoesAndRedoesInOrder(t *testing.T) {
 	}
 }
 
+// Freezing or thawing them all is one step, a batch, whose label names its
+// sessions in the order they were taken, whether undo or redo takes it
+// next; past four it names three and counts the rest. A batch of a kind
+// that names none, as a close of several, counts them.
+func TestABatchNamesItsSessions(t *testing.T) {
+	for n, want := range map[int]string{
+		1: `freeze "s0"`,
+		2: `freeze "s0" and "s1"`,
+		3: `freeze "s0", "s1" and "s2"`,
+		4: `freeze "s0", "s1", "s2" and "s3"`,
+		7: `freeze "s0", "s1", "s2" and 4 more`,
+	} {
+		var h history
+		h.push(action{ID: "before", Kind: actFreeze, Session: "x", Name: "x", Label: label("freeze", "x")})
+		batch := ""
+		if n > 1 {
+			batch = "b1"
+		}
+		for i := range n {
+			name := fmt.Sprintf("s%d", i)
+			h.push(action{ID: name, Kind: actFreeze, Session: name, Name: name, Label: label("freeze", name), Batch: batch})
+		}
+		if got := h.label(dirUndo); got != want {
+			t.Errorf("%d sessions: undo says %q, want %q", n, got, want)
+		}
+		for range n {
+			a, _ := h.top(dirUndo)
+			h.finish(dirUndo, a.ID, a)
+		}
+		if got := h.label(dirRedo); got != want {
+			t.Errorf("%d sessions: redo says %q, want %q", n, got, want)
+		}
+		if got := h.label(dirUndo); got != `freeze "x"` {
+			t.Errorf("%d sessions: after the batch, undo says %q", n, got)
+		}
+	}
+	var h history
+	for _, id := range []string{"a", "b"} {
+		h.push(action{ID: id, Kind: actClose, Session: id, Name: id, Label: label("close", id), Batch: "b2"})
+	}
+	if got := h.label(dirUndo); got != "close 2 sessions" {
+		t.Errorf("a close of two says %q", got)
+	}
+}
+
 func TestHistoryKeepsTheLatestHundred(t *testing.T) {
 	var h history
 	for i := range maxHistory + 5 {
