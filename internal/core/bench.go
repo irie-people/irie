@@ -407,7 +407,48 @@ func (c *Core) stepJudge(b *benchFile, now time.Time) bool {
 		return true
 	}
 	c.applyVerdict(b, v, now)
+	c.closeBench(b)
 	return true
+}
+
+// closeBench closes a judged bench's runs and its judge, unless
+// bench.close is off: they go to the history, from which reopen brings one
+// back, and the bench keeps each run's score and what it missed. A bench
+// on a peer so leaves the peer's memory free for the next. A session you
+// pinned stays, as it does from close_when_done; a bench that failed keeps
+// its sessions, for you to rate.
+func (c *Core) closeBench(b *benchFile) {
+	if !c.cfg().Bench.Close {
+		return
+	}
+	ids := make([]string, 0, len(b.Runs)+1)
+	for _, r := range b.Runs {
+		ids = append(ids, r.Session)
+	}
+	for _, id := range append(ids, b.JudgeID) {
+		c.mu.Lock()
+		row, known := c.rowOf(id)
+		x := c.sessions[id]
+		var err error
+		if x != nil && !row.Pinned {
+			// Closed on its own, as close_when_done closes one.
+			err = c.closeLocked(id, true)
+		}
+		frames := c.changes()
+		c.mu.Unlock()
+		c.publish(frames)
+		switch {
+		case !known || row.Pinned:
+		case x == nil:
+			// A peer's: its own core closes it.
+			err = c.call(ipc.OpClose, ipc.CloseArgs{Session: id}, nil)
+		case err == nil:
+			c.publishClosed()
+		}
+		if err != nil {
+			c.log.Warn("bench close", "bench", b.ID, "session", id, "err", err)
+		}
+	}
 }
 
 // verdict is what a judge says of a bench.
