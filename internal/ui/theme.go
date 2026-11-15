@@ -14,7 +14,10 @@ import (
 // §5.5, ui.theme). Every text colour reads at 4.5:1 and the accent at 3:1 on
 // every surface (WCAG 2.2, 1.4.3 and 1.4.11), which TestPalettesMeetWCAG
 // checks. The sidebar paints its own ground, so this holds whatever the
-// terminal's theme is.
+// terminal's theme is. The state colours stay apart for colour-blind
+// viewers too, which TestStatesStayApartForColourBlindViewers checks: in
+// light mode needs is deeper than paused, as a deutan sees the two as one
+// olive at one lightness (DESIGN §5.3).
 type palette struct {
 	// Surfaces: the pane's ground; card fills (quiet, hovered, selected, and
 	// one that needs you); the details card and the command bar.
@@ -39,7 +42,7 @@ var themes = map[string]theme{
 			sidebar: hex("#FBF1EE"), ground: hex("#F3E3DE"), card: hex("#FFF9F7"), panel: hex("#FCEFEB"), field: hex("#FFFCFB"),
 			edge: hex("#EBD3CB"), hover: hex("#FFF3EF"), selection: hex("#F3DDEA"), needsTint: hex("#FEE4D8"),
 			ink: hex("#3D2236"), muted: hex("#75566A"), accent: hex("#C4577A"), accentInk: hex("#A23E62"), accentFill: hex("#E58FA8"), onAccent: hex("#3D2236"),
-			needs: hex("#B42A1E"), done: hex("#44694B"), paused: hex("#855700"), frozen: hex("#286873"), sun: hex("#F2B544"), waves: hex("#D9819C"),
+			needs: hex("#892319"), done: hex("#44694B"), paused: hex("#895A07"), frozen: hex("#286873"), sun: hex("#F2B544"), waves: hex("#D9819C"),
 		},
 		dark: palette{
 			sidebar: hex("#251B22"), ground: hex("#1D151B"), card: hex("#30242C"), panel: hex("#2C2129"), field: hex("#33262F"),
@@ -53,7 +56,7 @@ var themes = map[string]theme{
 			sidebar: hex("#F9F2EA"), ground: hex("#F0E4D6"), card: hex("#FFFBF6"), panel: hex("#FBF3EA"), field: hex("#FFFDF9"),
 			edge: hex("#E7D6C3"), hover: hex("#FFF6EC"), selection: hex("#F8E0CF"), needsTint: hex("#FBE2E4"),
 			ink: hex("#3A2629"), muted: hex("#735E58"), accent: hex("#C2603A"), accentInk: hex("#A24A26"), accentFill: hex("#E58A62"), onAccent: hex("#2B1A14"),
-			needs: hex("#B3203F"), done: hex("#46694A"), paused: hex("#845600"), frozen: hex("#286773"), sun: hex("#F2B544"), waves: hex("#7FA383"),
+			needs: hex("#891F32"), done: hex("#46694A"), paused: hex("#845600"), frozen: hex("#286773"), sun: hex("#F2B544"), waves: hex("#7FA383"),
 		},
 		dark: palette{
 			sidebar: hex("#231B17"), ground: hex("#1B1411"), card: hex("#2E241F"), panel: hex("#2A211C"), field: hex("#312722"),
@@ -67,7 +70,7 @@ var themes = map[string]theme{
 			sidebar: hex("#F7F2F7"), ground: hex("#EEE5EF"), card: hex("#FFFCFF"), panel: hex("#F9F3F9"), field: hex("#FFFDFF"),
 			edge: hex("#E2D5E4"), hover: hex("#FBF5FB"), selection: hex("#EBDDF1"), needsTint: hex("#FBE4E0"),
 			ink: hex("#33223F"), muted: hex("#6C5A75"), accent: hex("#9A5CB0"), accentInk: hex("#7F4495"), accentFill: hex("#C39AD3"), onAccent: hex("#2A1838"),
-			needs: hex("#B02E1C"), done: hex("#426A4F"), paused: hex("#845700"), frozen: hex("#276776"), sun: hex("#F2B544"), waves: hex("#B58BC9"),
+			needs: hex("#882416"), done: hex("#426A4F"), paused: hex("#875A07"), frozen: hex("#276776"), sun: hex("#F2B544"), waves: hex("#B58BC9"),
 		},
 		dark: palette{
 			sidebar: hex("#1F1A26"), ground: hex("#18141E"), card: hex("#2A2332"), panel: hex("#26202E"), field: hex("#2D2636"),
@@ -81,13 +84,13 @@ var themes = map[string]theme{
 			sidebar: hex("#F4F4EC"), ground: hex("#E9EBDF"), card: hex("#FBFBF6"), panel: hex("#F1F2E8"), field: hex("#FDFDF9"),
 			edge: hex("#D8DCC9"), hover: hex("#F6F7EF"), selection: hex("#DDE5D3"), needsTint: hex("#FBE5DC"),
 			ink: hex("#1E2B22"), muted: hex("#56635A"), accent: hex("#2F5D46"), accentInk: hex("#264D3A"), accentFill: hex("#9DB8A3"), onAccent: hex("#1E2B22"),
-			needs: hex("#B42A1E"), done: hex("#3F6A5F"), paused: hex("#855700"), frozen: hex("#286873"), sun: hex("#D9A93F"), waves: hex("#5E8A6E"),
+			needs: hex("#892319"), done: hex("#3F6A5F"), paused: hex("#885A07"), frozen: hex("#00566B"), sun: hex("#D9A93F"), waves: hex("#5E8A6E"),
 		},
 		dark: palette{
 			sidebar: hex("#141C17"), ground: hex("#0E1410"), card: hex("#1C2620"), panel: hex("#18221C"), field: hex("#202B24"),
 			edge: hex("#34443A"), hover: hex("#25322A"), selection: hex("#2A3D31"), needsTint: hex("#4A251C"),
 			ink: hex("#ECF0E6"), muted: hex("#B3BFB5"), accent: hex("#9CC5A1"), accentInk: hex("#B3D6B8"), accentFill: hex("#9CC5A1"), onAccent: hex("#12201A"),
-			needs: hex("#FF9585"), done: hex("#8FC3B2"), paused: hex("#EFC468"), frozen: hex("#7DC4CE"), sun: hex("#D9A93F"), waves: hex("#9CC5A1"),
+			needs: hex("#FF9585"), done: hex("#8FC3B2"), paused: hex("#EFC468"), frozen: hex("#86E0FD"), sun: hex("#D9A93F"), waves: hex("#9CC5A1"),
 		},
 	},
 }

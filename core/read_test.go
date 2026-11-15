@@ -163,7 +163,6 @@ func TestReadRefusesInWords(t *testing.T) {
 		{":move bg02", "", "", CodeBusy, "web can't move yet: it is busy."},
 		{":bogus", "", "", CodeBadArgs, "Irie has no :bogus. The commands are :rename NAME, :move [NAME]"},
 		{":pause", "s1", "", CodeBadArgs, ":undo, :redo"},
-		{"hows the weather", "", "", CodeNotFound, "No agent matches “weather”."},
 		{"+a +b fix it", "", "", CodeBadArgs, "Only one +profile per task."},
 		{"@web", "", "", CodeBadArgs, "Empty task: type what you want done after the @ or + words."},
 		{":bench +dory", "", "", CodeBadArgs, "Empty task"},
@@ -240,6 +239,15 @@ func TestReadStartsATaskWhereTheWordsSay(t *testing.T) {
 	st, err = Read(InputArgs{Text: "how's the login going?"}, view())
 	if err != nil || st.Op != "" || st.Session == nil || st.Session.ID != "s1" || st.Answer != "fix login: working" {
 		t.Errorf("hows: %+v, %v", st, err)
+	}
+	// One that names no agent is a task for a new one, where the menus say,
+	// rather than a refusal that sends nothing.
+	in := menus
+	in.Text = "hows the plugin pane"
+	st, err = Read(in, view())
+	want := SpawnArgs{Task: "hows the plugin pane", Repo: "/home/alice/scratch", InPlace: true, Profile: "haiku", Model: "sonnet", Tutor: "explain", Jot: true}
+	if a, ok := st.Args.(SpawnArgs); err != nil || st.Op != OpSpawn || !ok || !reflect.DeepEqual(a, want) {
+		t.Errorf("hows, no agent: %s %+v, %v; want spawn %+v", st.Op, st.Args, err, want)
 	}
 }
 

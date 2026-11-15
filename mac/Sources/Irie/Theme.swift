@@ -7,8 +7,9 @@ import SwiftUI
 /// the choice. In every palette and mode, each text colour keeps 4.5:1 and
 /// each mark 3:1 on every surface it sits on (WCAG 2.2), and Increase
 /// Contrast strengthens them further. The terminal sidebar has the same
-/// palettes (internal/ui), and its tests check both the ratios and that the
-/// two sets of values match.
+/// palettes (internal/ui), and its tests check the ratios, that the state
+/// colours stay apart for colour-blind viewers (in light mode needs is
+/// deeper than paused), and that the two sets of values match.
 struct Palette: Identifiable, Equatable {
     let id: String
     let name: String
@@ -65,7 +66,7 @@ extension Palette {
             edge: 0xEBD3CB, hover: 0xFFF3EF, selection: 0xF3DDEA, needsTint: 0xFEE4D8,
             ink: 0x3D2236, muted: 0x75566A,
             accent: 0xC4577A, accentInk: 0xA23E62, accentFill: 0xE58FA8, onAccent: 0x3D2236,
-            needs: 0xB42A1E, done: 0x44694B, paused: 0x855700, frozen: 0x286873,
+            needs: 0x892319, done: 0x44694B, paused: 0x895A07, frozen: 0x286873,
             sun: 0xF2B544, waves: 0xD9819C),
         dark: Swatches(
             sidebar: 0x251B22, ground: 0x1D151B, card: 0x30242C, panel: 0x2C2129, field: 0x33262F,
@@ -82,7 +83,7 @@ extension Palette {
             edge: 0xE7D6C3, hover: 0xFFF6EC, selection: 0xF8E0CF, needsTint: 0xFBE2E4,
             ink: 0x3A2629, muted: 0x735E58,
             accent: 0xC2603A, accentInk: 0xA24A26, accentFill: 0xE58A62, onAccent: 0x2B1A14,
-            needs: 0xB3203F, done: 0x46694A, paused: 0x845600, frozen: 0x286773,
+            needs: 0x891F32, done: 0x46694A, paused: 0x845600, frozen: 0x286773,
             sun: 0xF2B544, waves: 0x7FA383),
         dark: Swatches(
             sidebar: 0x231B17, ground: 0x1B1411, card: 0x2E241F, panel: 0x2A211C, field: 0x312722,
@@ -99,7 +100,7 @@ extension Palette {
             edge: 0xE2D5E4, hover: 0xFBF5FB, selection: 0xEBDDF1, needsTint: 0xFBE4E0,
             ink: 0x33223F, muted: 0x6C5A75,
             accent: 0x9A5CB0, accentInk: 0x7F4495, accentFill: 0xC39AD3, onAccent: 0x2A1838,
-            needs: 0xB02E1C, done: 0x426A4F, paused: 0x845700, frozen: 0x276776,
+            needs: 0x882416, done: 0x426A4F, paused: 0x875A07, frozen: 0x276776,
             sun: 0xF2B544, waves: 0xB58BC9),
         dark: Swatches(
             sidebar: 0x1F1A26, ground: 0x18141E, card: 0x2A2332, panel: 0x26202E, field: 0x2D2636,
@@ -116,14 +117,14 @@ extension Palette {
             edge: 0xD8DCC9, hover: 0xF6F7EF, selection: 0xDDE5D3, needsTint: 0xFBE5DC,
             ink: 0x1E2B22, muted: 0x56635A,
             accent: 0x2F5D46, accentInk: 0x264D3A, accentFill: 0x9DB8A3, onAccent: 0x1E2B22,
-            needs: 0xB42A1E, done: 0x3F6A5F, paused: 0x855700, frozen: 0x286873,
+            needs: 0x892319, done: 0x3F6A5F, paused: 0x885A07, frozen: 0x00566B,
             sun: 0xD9A93F, waves: 0x5E8A6E),
         dark: Swatches(
             sidebar: 0x141C17, ground: 0x0E1410, card: 0x1C2620, panel: 0x18221C, field: 0x202B24,
             edge: 0x34443A, hover: 0x25322A, selection: 0x2A3D31, needsTint: 0x4A251C,
             ink: 0xECF0E6, muted: 0xB3BFB5,
             accent: 0x9CC5A1, accentInk: 0xB3D6B8, accentFill: 0x9CC5A1, onAccent: 0x12201A,
-            needs: 0xFF9585, done: 0x8FC3B2, paused: 0xEFC468, frozen: 0x7DC4CE,
+            needs: 0xFF9585, done: 0x8FC3B2, paused: 0xEFC468, frozen: 0x86E0FD,
             sun: 0xD9A93F, waves: 0x9CC5A1))
 }
 
