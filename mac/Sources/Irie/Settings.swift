@@ -29,16 +29,20 @@ struct ConfigResult: Decodable {
 }
 
 /// The plugins op's arguments: with on, it first turns a plugin, or one
-/// part of it, on or off (DESIGN §4.17). The core knows which key each
-/// takes in config.toml.
+/// part of it, on or off (DESIGN §4.17), or with bundle, each plugin a
+/// bundle names (docs/proposals/plugin-panes.md). The core knows which key
+/// each takes in config.toml.
 struct PluginsArgs: Encodable {
     var plugin: String?
     var part: String?
+    var bundle: String?
     var on: Bool?
 }
 
 struct PluginsResult: Decodable {
     var plugins: [PluginInfo]
+    /// Your bundles; nil from a core from before them.
+    var bundles: [BundleInfo]?
 }
 
 /// One of Irie's plugins: features that go on and off together.
@@ -50,6 +54,11 @@ struct PluginInfo: Decodable, Equatable, Identifiable {
     /// The words that set up each part in turn, such as :setup privacy.
     var setup: String?
     var parts: [Part]
+    /// The manifest a plugin of your own comes from, in the plugins
+    /// folder; nil for one of Irie's.
+    var manifest: String?
+    /// Why its manifest doesn't read: it has no switch until it does.
+    var problem: String?
 
     var id: String { name }
 
@@ -68,13 +77,21 @@ struct PluginInfo: Decodable, Equatable, Identifiable {
         var detail: String
         /// The words that set it up, such as :setup anon.
         var setup: String?
+        /// The tab it brings to the right sidebar (PluginPanes.swift), which
+        /// shows while it is on.
+        var pane: PluginPaneInfo?
 
         var id: String { name }
+
+        /// It is on: ready, or needing something.
+        var isOn: Bool { state == "ready" || state == "needs" }
 
         /// Its state in words, for a menu and a screen reader.
         var stateWords: String {
             switch state {
             case "ready": return "ready"
+            // A pane that needs something has an app that doesn't answer.
+            case "needs" where pane?.isWeb == true: return "not running"
             case "needs": return "needs setting up"
             case "held": return "not in \(Brand.name) yet"
             case "plugin_off": return "off with its plugin"
@@ -334,6 +351,8 @@ final class SettingsModel: ObservableObject {
     /// Irie's plugins and how far each part is set up (DESIGN §4.17); nil
     /// from a core from before them.
     @Published private(set) var plugins: [PluginInfo]?
+    /// Your bundles (docs/proposals/plugin-panes.md).
+    @Published private(set) var bundles: [BundleInfo] = []
     /// Called once the core has taken a change: the agents' notes in the
     /// task bar's menu follow their profiles.
     var changed: @MainActor () -> Void = {}
@@ -358,18 +377,32 @@ final class SettingsModel: ObservableObject {
 
     /// Reads how the plugins stand. A core from before them leaves them nil.
     func loadPlugins() async {
-        if let r = try? await client.call("plugins", PluginsArgs(), timeout: 5, as: PluginsResult.self), r.plugins != plugins {
-            plugins = r.plugins
+        if let r = try? await client.call("plugins", PluginsArgs(), timeout: 5, as: PluginsResult.self) {
+            takePlugins(r)
         }
+    }
+
+    private func takePlugins(_ r: PluginsResult) {
+        if r.plugins != plugins { plugins = r.plugins }
+        if (r.bundles ?? []) != bundles { bundles = r.bundles ?? [] }
     }
 
     /// Turns a plugin, or one part of it, on or off, then reads the config
     /// again: its parts' switches show elsewhere too.
     func setPlugin(_ plugin: String, part: String? = nil, on: Bool) {
+        setPlugins(PluginsArgs(plugin: plugin, part: part, on: on))
+    }
+
+    /// Turns each plugin a bundle names on or off at once.
+    func setBundle(_ bundle: String, on: Bool) {
+        setPlugins(PluginsArgs(bundle: bundle, on: on))
+    }
+
+    private func setPlugins(_ args: PluginsArgs) {
         Task {
             do {
-                let r = try await client.call("plugins", PluginsArgs(plugin: plugin, part: part, on: on), timeout: 10, as: PluginsResult.self)
-                plugins = r.plugins
+                let r = try await client.call("plugins", args, timeout: 10, as: PluginsResult.self)
+                takePlugins(r)
                 error = nil
                 changed()
             } catch {
@@ -442,9 +475,10 @@ final class SettingsModel: ObservableObject {
     }
 
     /// Fills the model with a config no core sent, for `--snapshot`.
-    func loadFixture(_ r: ConfigResult, plugins: [PluginInfo]? = nil) {
+    func loadFixture(_ r: ConfigResult, plugins: [PluginInfo]? = nil, bundles: [BundleInfo] = []) {
         take(r)
         self.plugins = plugins
+        self.bundles = bundles
     }
 }
 
@@ -1796,13 +1830,26 @@ private struct PluginSettings: View {
     var body: some View {
         if let all = model.plugins {
             SettingsForm(model: model) {
+                // Your bundles first: one switch for several plugins.
+                ForEach(model.bundles) { b in
+                    BundleSection(bundle: b, plugins: all, model: model)
+                }
                 ForEach(all) { p in
                     Section {
-                        Toggle(isOn: Binding(get: { p.on }, set: { model.setPlugin(p.name, on: $0) })) {
+                        if let problem = p.problem {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(p.title).font(.headline)
-                                Text(p.summary).font(.callout).foregroundStyle(.secondary)
+                                Text(problem).font(.callout).foregroundStyle(Theme.needs)
                                     .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                            }
+                        } else {
+                            Toggle(isOn: Binding(get: { p.on }, set: { model.setPlugin(p.name, on: $0) })) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.title).font(.headline)
+                                    Text(p.summary).font(.callout).foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                         ForEach(p.parts) { x in
@@ -1811,10 +1858,14 @@ private struct PluginSettings: View {
                             }
                         }
                     } header: {
-                        Text("\(p.title) plugin")
+                        Text(p.manifest == nil ? "\(p.title) plugin" : "\(p.title) plugin, yours")
                     } footer: {
                         HStack(alignment: .firstTextBaseline) {
-                            footnote("Each part has a switch of its own too. With the plugin off, none of its parts runs, whatever its own switch says.")
+                            if let manifest = p.manifest {
+                                ManifestNote(path: manifest, what: "this plugin")
+                            } else {
+                                footnote("Each part has a switch of its own too. With the plugin off, none of its parts runs, whatever its own switch says.")
+                            }
                             if p.on, let setup = p.setup {
                                 Button("Set Up Each Part…") { Task { _ = await store.input(setup) } }
                                     .help("Starts \(setup): a terminal that asks before it installs or changes anything")
@@ -1829,6 +1880,99 @@ private struct PluginSettings: View {
                                    description: Text("Install a newer build to see them here."))
         } else {
             ProgressView()
+        }
+    }
+}
+
+/// A bundle (docs/proposals/plugin-panes.md): its one switch, which turns
+/// each of its plugins on or off, and a row for each, with how it stands.
+/// The switch shows on only while all of them are, and says how many are
+/// when some are.
+@MainActor
+private struct BundleSection: View {
+    let bundle: BundleInfo
+    let plugins: [PluginInfo]
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        Section {
+            if let problem = bundle.problem {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(bundle.title).font(.headline)
+                    Text(problem).font(.callout).foregroundStyle(Theme.needs)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+            } else {
+                Toggle(isOn: Binding(get: { bundle.state == "on" }, set: { model.setBundle(bundle.name, on: $0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(bundle.title).font(.headline)
+                        Text(bundle.summary.isEmpty ? "One switch for \(bundle.list)." : bundle.summary)
+                            .font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if bundle.state == "some" {
+                            Text("Now \(bundle.stateWords): the switch turns the rest on.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                ForEach(bundle.plugins) { m in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(PluginPartRow.glyph(m.state))
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(PluginPartRow.color(m.state))
+                            .frame(width: 14)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(m.title)
+                                .foregroundStyle(m.on ? .primary : .secondary)
+                            Text(m.detail)
+                                .font(.callout)
+                                .foregroundStyle(m.state == "needs" || m.state == "missing" ? Theme.needs : .secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                        Spacer(minLength: 8)
+                        Text(source(m))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(m.title), \(m.on ? "on" : "off"). \(m.detail)")
+                }
+            }
+        } header: {
+            Text("\(bundle.title) bundle")
+        } footer: {
+            ManifestNote(path: bundle.manifest, what: "this bundle", more: bundle.problem == nil
+                ? "The switch turns each of them on or off; each keeps its own switch below too. Add one to the bundle with a line in its plugins."
+                : nil)
+        }
+    }
+
+    /// Where a plugin or part comes from, as its plugin's name.
+    private func source(_ m: BundleInfo.Member) -> String {
+        guard m.part != nil, let p = plugins.first(where: { $0.name == m.plugin }) else { return "" }
+        return "\(p.title) plugin"
+    }
+}
+
+/// Where a plugin or bundle of your own comes from, with a button that opens
+/// its manifest.
+@MainActor
+private struct ManifestNote: View {
+    let path: String
+    let what: String
+    var more: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let more { footnote(more) }
+            HStack(alignment: .firstTextBaseline) {
+                footnote("From \((path as NSString).abbreviatingWithTildeInPath), a manifest of yours: \(Brand.name) reads it and runs nothing from it.")
+                Button("Open Manifest") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+                    .help("Opens \((path as NSString).lastPathComponent), which says what \(what) brings")
+            }
         }
     }
 }
@@ -1880,6 +2024,7 @@ private struct PluginPartRow: View {
         case "ready": return "●"
         case "needs": return "!"
         case "held": return "○"
+        case "missing": return "?"
         default: return "·"
         }
     }
@@ -1887,7 +2032,7 @@ private struct PluginPartRow: View {
     static func color(_ state: String) -> Color {
         switch state {
         case "ready": return Theme.done
-        case "needs": return Theme.needs
+        case "needs", "missing": return Theme.needs
         default: return Theme.muted
         }
     }

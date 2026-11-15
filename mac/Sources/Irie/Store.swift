@@ -120,6 +120,8 @@ final class Store {
         // The Variorum tab shows only while the Writing plugin can answer it.
         didSet { if Self.writing(plugins) != Self.writing(oldValue) { variorum.check() } }
     }
+    /// Your bundles (PluginPanes.swift); empty from a core from before them.
+    var bundles: [BundleInfo] = []
     /// Reads the plugins once a minute (keepPlugins).
     @ObservationIgnored var pluginsTimer: Task<Void, Never>?
     /// The arch agents, as the core last listed them.

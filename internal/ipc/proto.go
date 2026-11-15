@@ -1197,27 +1197,37 @@ const (
 
 // PluginsArgs ask the plugins op for Irie's plugins, after turning a
 // plugin, or one part of it, on or off when On is set. The core knows which
-// key in config.toml each takes, and the value.
+// key in config.toml each takes, and the value. Bundle, in place of Plugin,
+// turns each plugin a bundle names on or off at once.
 type PluginsArgs struct {
 	Plugin string `json:"plugin,omitempty"` // such as privacy
 	Part   string `json:"part,omitempty"`   // such as vpn; "" = the plugin itself
+	Bundle string `json:"bundle,omitempty"` // such as small-business
 	On     *bool  `json:"on,omitempty"`
 }
 
-// PluginsResult are Irie's plugins (DESIGN §4.17).
+// PluginsResult are Irie's plugins (DESIGN §4.17), then those of your own
+// from the manifests in the plugins folder, and the bundles there.
 type PluginsResult struct {
-	Plugins []Plugin `json:"plugins"`
-	Text    string   `json:"text"` // them in words, a line for each part, as :plugins answers
+	Plugins []Plugin       `json:"plugins"`
+	Bundles []PluginBundle `json:"bundles,omitempty"`
+	Text    string         `json:"text"` // them in words, a line for each part, as :plugins answers
 }
 
 // Plugin is one of Irie's plugins: features that go on and off together.
 type Plugin struct {
-	Name    string       `json:"name"`            // its key under [plugins], such as privacy
-	Title   string       `json:"title"`           // Privacy
-	Summary string       `json:"summary"`         // what it is for, in a sentence
-	On      bool         `json:"on"`              // plugins.<name>
-	Setup   string       `json:"setup,omitempty"` // the words that set up each of its parts in turn, such as :setup privacy
-	Parts   []PluginPart `json:"parts"`
+	Name    string `json:"name"`            // its key under [plugins], such as privacy
+	Title   string `json:"title"`           // Privacy
+	Summary string `json:"summary"`         // what it is for, in a sentence
+	On      bool   `json:"on"`              // plugins.<name>, or plugins.manifests.<name> for one of your own
+	Setup   string `json:"setup,omitempty"` // the words that set up each of its parts in turn, such as :setup privacy
+	// Manifest is the file a plugin of your own comes from, in the plugins
+	// folder; "" = one of Irie's.
+	Manifest string       `json:"manifest,omitempty"`
+	Parts    []PluginPart `json:"parts"`
+	// Problem says why its manifest doesn't read, when it doesn't: it has
+	// no switch and no parts until it does.
+	Problem string `json:"problem,omitempty"`
 }
 
 // PluginPart is one feature of a plugin, and how far it is set up here.
@@ -1231,7 +1241,76 @@ type PluginPart struct {
 	Detail  string   `json:"detail"`           // what it has and lacks, in a sentence
 	Setup   string   `json:"setup,omitempty"`  // the words that set it up, such as :setup anon
 	Brings  []string `json:"brings,omitempty"` // what it adds to Irie: commands, words, skills and agents' tools
+	// Pane is the tab it brings to a client's right sidebar, which shows
+	// while the part is on: ready, or needing something.
+	Pane *PluginPane `json:"pane,omitempty"`
 }
+
+// PluginPane is a tab a plugin's part brings to the Mac app's right
+// sidebar (docs/proposals/plugin-panes.md).
+type PluginPane struct {
+	ID    string `json:"id"`             // the plugin's name, a dot and the part's, such as invoices.invoices
+	Title string `json:"title"`          // the tab's name
+	Icon  string `json:"icon,omitempty"` // an SF Symbols name; "" = the client's own
+	// Kind is web, Address's page in a web view, or the name of a view of
+	// the client's own, such as variorum.
+	Kind string `json:"kind"`
+	// A web pane's page, and the one origin it may load from: Address's
+	// scheme, host and port.
+	Address string `json:"address,omitempty"`
+	Origin  string `json:"origin,omitempty"`
+	// Remote is set when Origin is off this computer, as the manifest's
+	// remote = true allows.
+	Remote bool `json:"remote,omitempty"`
+	// Start says what starts the app behind a web pane, for when nothing
+	// answers: words to show, never run.
+	Start string `json:"start,omitempty"`
+	// Store names the website data a web pane keeps, such as its logins:
+	// its plugin's, which no other plugin's panes share.
+	Store string `json:"store,omitempty"`
+}
+
+// PaneWeb is a pane that shows a web page.
+const PaneWeb = "web"
+
+// PluginBundle is a bundle: plugins, or parts of them, that go on and off
+// together under one switch, named one a line in a manifest of the
+// plugins folder.
+type PluginBundle struct {
+	Name     string `json:"name"`     // the manifest's name, such as small-business
+	Title    string `json:"title"`    // Small business
+	Summary  string `json:"summary"`  // what it is for, in a sentence
+	Manifest string `json:"manifest"` // its file
+	// State is on when each of its plugins is on, off when none is, and
+	// some in between.
+	State   string         `json:"state"`
+	Plugins []BundlePlugin `json:"plugins"`
+	// Problem says why the manifest doesn't read, when it doesn't.
+	Problem string `json:"problem,omitempty"`
+}
+
+// A bundle's states.
+const (
+	BundleOn   = "on"
+	BundleOff  = "off"
+	BundleSome = "some"
+)
+
+// BundlePlugin is a plugin or part a bundle names, and how it stands.
+type BundlePlugin struct {
+	Name   string `json:"name"`           // as the bundle names it: a plugin, such as invoices, or a part, such as writing.tab
+	Plugin string `json:"plugin"`         // the plugin's name
+	Part   string `json:"part,omitempty"` // the part's, for a part
+	Title  string `json:"title"`
+	On     bool   `json:"on"` // on, as far as the bundle's switch goes: its plugin, and the part's own switch
+	// State is a part's state, as PluginPart has it, or missing when
+	// there is no such plugin or part here.
+	State  string `json:"state"`
+	Detail string `json:"detail"` // how it stands, in a sentence
+}
+
+// PartMissing is a bundle's plugin or part that isn't here.
+const PartMissing = "missing"
 
 // A plugin part's states.
 const (

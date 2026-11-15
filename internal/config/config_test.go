@@ -951,6 +951,35 @@ func TestSDKKeepsTheProfilesOtherDefaults(t *testing.T) {
 	}
 }
 
+// TestPluginsOfYourOwnHaveSwitches: plugins.manifests holds the switches
+// of the plugins from manifests in the plugins folder, each on until set
+// off (docs/proposals/plugin-panes.md).
+func TestPluginsOfYourOwnHaveSwitches(t *testing.T) {
+	c, err := Parse([]byte("[plugins.manifests]\ninvoices = false\nledger = true\n"), "config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Plugins.ManifestOn("invoices") || !c.Plugins.ManifestOn("ledger") || !c.Plugins.ManifestOn("shop") || !c.Plugins.Privacy {
+		t.Errorf("plugins = %+v", c.Plugins)
+	}
+	if d := Default(); d.Plugins.Manifests == nil || len(d.Plugins.Manifests) != 0 {
+		t.Errorf("default = %+v", d.Plugins)
+	}
+	if v, err := ParseValue("plugins.manifests.invoices", []byte("true")); err != nil || v != true {
+		t.Errorf("ParseValue = %v, %v", v, err)
+	}
+	if _, err := Parse([]byte("[plugins.manifests]\n\"Bad Name\" = false\n"), "config.toml"); err == nil || !strings.Contains(err.Error(), "not a manifest's name") {
+		t.Errorf("a bad name: %v", err)
+	}
+	out, err := Apply([]byte("[plugins]\nprivacy = true\n"), []Edit{{Key: "plugins.manifests.invoices", Value: false}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, err := Parse(out, "config.toml"); err != nil || c.Plugins.ManifestOn("invoices") {
+		t.Errorf("after the edit: %v\n%s", err, out)
+	}
+}
+
 // TestFallbackModel is a profile that switches its sessions to another
 // model at their own model's usage limit (DESIGN §6.4), by typing /model.
 func TestFallbackModel(t *testing.T) {
