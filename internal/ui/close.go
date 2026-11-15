@@ -1,9 +1,9 @@
 package ui
 
-// Closing sessions (DESIGN §4.1, §4.5). x x closes the selected session: the
-// first x says what it closes, and any other key cancels it, as m m does for
-// a move. The core reads :close, which closes it at once, and :reopen, which
-// brings back the session closed last.
+// Closing sessions (DESIGN §4.1, §4.5). x closes the selected session at
+// once, as ⌘W does in the Mac app: a close stays inside Irie, and u brings
+// it back, so it never asks. The core reads :close, which does the same,
+// and :reopen, which brings back the session closed last.
 
 import (
 	tea "charm.land/bubbletea/v2"
@@ -17,23 +17,13 @@ type closedMsg struct {
 	err  error
 }
 
-// closeConfirm is how long a first x waits for the second.
-const closeConfirm = moveConfirm
-
-// closeSelected is x on a row: the first press asks, the second closes.
+// closeSelected is x on a row: it closes the session at once.
 func (m *Model) closeSelected() tea.Cmd {
 	s, ok := m.selSession()
 	if !ok {
-		m.closing = ""
-		m.setStatus("x x closes one of "+brand.Name+"'s sessions; select one first", false)
+		m.setStatus("x closes one of "+brand.Name+"'s sessions; select one first", false)
 		return nil
 	}
-	if m.closing != s.ID || m.now().Sub(m.closingAt) > closeConfirm {
-		m.closing, m.closingAt = s.ID, m.now()
-		m.setStatus("Press x again to close "+s.Name+". Its folder stays, and :reopen brings it back.", false)
-		return nil
-	}
-	m.closing = ""
 	return m.closeCmd(s)
 }
 
@@ -49,5 +39,5 @@ func (m *Model) closedDone(msg closedMsg) {
 		m.setStatus(msg.err.Error(), true)
 		return
 	}
-	m.setStatus("closed "+msg.name+"; :reopen brings it back", false)
+	m.setStatus("closed "+msg.name+"; u brings it back", false)
 }

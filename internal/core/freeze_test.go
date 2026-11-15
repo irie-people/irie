@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/ipc"
 	"github.com/irie-people/irie/internal/proc"
 	"github.com/irie-people/irie/internal/sysload"
@@ -263,16 +264,126 @@ func TestFreezeAllAndThawAll(t *testing.T) {
 			t.Errorf("%s is %s", s.Name, s.State)
 		}
 	}
-	if err := c.call(ipc.OpThaw, ipc.FreezeArgs{All: true}, &r); err != nil || len(r.Sessions) != 2 {
-		t.Fatalf("thaw all: %v, %v", r.Sessions, err)
+	// Two thaw in turn: the first at once, the other a gap later
+	// (TestAThawOfSeveralGoesInTurn).
+	if err := c.call(ipc.OpThaw, ipc.FreezeArgs{All: true}, &r); err != nil || len(r.Sessions) != 1 || len(r.Queued) != 1 {
+		t.Fatalf("thaw all: %+v, %v", r, err)
 	}
-	for _, s := range c.list() {
-		if s.State == ipc.StateFrozen {
-			t.Errorf("%s is still frozen", s.Name)
-		}
-	}
+	c.waitState(r.Sessions[0], ipc.StateWorking)
 	if err := c.call(ipc.OpFreeze, ipc.FreezeArgs{}, nil); err == nil {
 		t.Error("a freeze of nothing went through")
+	}
+}
+
+// A thaw of several goes in turn, one session every thawGap, so that each
+// agent frozen long finds the sign-in the one before renewed (DESIGN
+// §4.3): the first at once and the next a gap later, which its row says
+// while it waits, even across a restart of the core, since state.json
+// keeps the queue.
+func TestAThawOfSeveralGoesInTurn(t *testing.T) {
+	c := setup(t)
+	a := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "alpha"})
+	b := c.spawnArgs(ipc.SpawnArgs{Task: "prompt", Name: "beta"})
+	c.waitState(a.ID, ipc.StateWorking)
+	c.waitState(b.ID, ipc.StateWorking)
+	var r ipc.FreezeResult
+	if err := c.call(ipc.OpFreeze, ipc.FreezeArgs{All: true}, &r); err != nil {
+		t.Fatal(err)
+	}
+	c.waitState(a.ID, ipc.StateFrozen)
+	c.waitState(b.ID, ipc.StateFrozen)
+	if err := c.call(ipc.OpThaw, ipc.FreezeArgs{All: true}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(r.Sessions, []string{a.ID}) || !slices.Equal(r.Queued, []string{b.ID}) {
+		t.Fatalf("thaw all = %+v; want alpha now and beta in turn", r)
+	}
+	c.waitState(a.ID, ipc.StateWorking)
+	waits := func(when string) {
+		t.Helper()
+		if s, _ := c.row(b.ID); s.State != ipc.StateFrozen || !strings.Contains(s.Detail, thawsInTurn) {
+			t.Errorf("%s, beta is %s, %q; want frozen, waiting its turn", when, s.State, s.Detail)
+		}
+	}
+	waits("at first")
+	c.restartCore()
+	waits("after a restart")
+	testutil.Eventually(t, thawGap+20*time.Second, "beta never thawed", func() bool {
+		s, _ := c.row(b.ID)
+		return s.State == ipc.StateWorking
+	})
+	var at []time.Time
+	for _, s := range []ipc.Session{a, b} {
+		for _, e := range c.events(s.ID) {
+			if e.Kind == event.FreezeOff {
+				at = append(at, e.Time())
+			}
+		}
+	}
+	// The core looks once a second, and stamps a thaw once its processes
+	// go on, so allow a second.
+	if len(at) != 2 || at[1].Sub(at[0]) < thawGap-time.Second {
+		t.Errorf("thawed at %v; want two, %v apart", at, thawGap)
+	}
+}
+
+// A thaw in turn waits thawGap after the last thaw, and holds while an
+// agent's turn has failed for want of a sign-in since it began, which its
+// rows say; a session gone or thawed by another hand leaves the queue, and
+// one waiting its turn counts as thawed. Nothing here gets as far as a
+// thaw, so it needs no tmux.
+func TestAThawInTurnWaitsItsTurnAndForASignIn(t *testing.T) {
+	c := newPeerCore(t)
+	now := time.Now().UTC()
+	frozen := func(id string) *session {
+		x := &session{id: id, name: id}
+		x.track.frozen = &event.Event{TS: event.Stamp(now.Add(-time.Hour)), Kind: event.FreezeOn}
+		c.sessions[id] = x
+		return x
+	}
+	a, b := frozen("s1"), frozen("s2")
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.steps.thaws = thawQueue{IDs: []string{"s1", "s2", "s9"}, Since: now.Add(-time.Minute)}
+	c.lastThaw = now.Add(-10 * time.Second)
+	if got := c.thawNext(now); len(got) != 0 || !slices.Equal(c.steps.thaws.IDs, []string{"s1", "s2"}) {
+		t.Fatalf("too soon: thawed %v, queue %v; want none, and s9, which is gone, out", got, c.steps.thaws.IDs)
+	}
+	if w := c.thawWait(a); w != thawsInTurn {
+		t.Errorf("a row waiting its turn says %q", w)
+	}
+	if c.frozenNow(a) || !c.frozenNow(&session{id: "s7", track: track{frozen: a.track.frozen}}) {
+		t.Error("a session waiting its turn counts as frozen, or one frozen as not")
+	}
+
+	// Its turn has come, but an agent signed out since the thaw began.
+	login := &session{id: "s3", name: "login"}
+	login.track.needs = map[string]event.Event{event.Main: {TS: event.Stamp(now.Add(-30 * time.Second)), Kind: event.TurnFailed,
+		Data: map[string]any{"error": "authentication_failed"}}}
+	c.sessions[login.id] = login
+	if got := c.thawNext(now.Add(time.Hour)); len(got) != 0 || len(c.steps.thaws.IDs) != 2 {
+		t.Errorf("signed out: thawed %v, queue %v; want none, both waiting", got, c.steps.thaws.IDs)
+	}
+	if w := c.thawWait(b); w != thawsHeld {
+		t.Errorf("a row held for a sign-in says %q", w)
+	}
+	// A sign-in that failed before the thaw began holds nothing.
+	login.track.needs[event.Main] = event.Event{TS: event.Stamp(now.Add(-2 * time.Minute)), Kind: event.TurnFailed,
+		Data: map[string]any{"error": "authentication_failed"}}
+	if w := c.thawWait(b); w != thawsInTurn {
+		t.Errorf("after an older failure the row says %q", w)
+	}
+
+	// Thawed by another hand, it leaves the queue; frozen by hand, so does
+	// the other, and the queue is done.
+	b.track.frozen = nil
+	c.thawNext(now)
+	if !slices.Equal(c.steps.thaws.IDs, []string{"s1"}) || c.thawWait(b) != "" {
+		t.Errorf("queue %v after beta thawed by hand", c.steps.thaws.IDs)
+	}
+	c.unqueue("s1")
+	if len(c.steps.thaws.IDs) != 0 || !c.steps.thaws.Since.IsZero() || !c.frozenNow(a) {
+		t.Errorf("after a freeze by hand: %+v", c.steps.thaws)
 	}
 }
 

@@ -152,8 +152,10 @@ struct SecondaryButton: ButtonStyle {
         }
         if conn.can("close") {
             Divider()
+            // A close stays inside Irie and undo brings it back, so it goes
+            // at once, with Undo in its toast (DESIGN §4.5).
             Button(role: .destructive) {
-                app.closing = SessionPrompt(conn: conn, session: s)
+                Task { await app.close(conn, s) }
             } label: { Label("Close", systemImage: "xmark") }
         }
     }

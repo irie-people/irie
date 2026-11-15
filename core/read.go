@@ -620,6 +620,10 @@ func froze(st Step, r FreezeResult) string {
 	if st.Session != nil {
 		return verb + " " + st.Session.Name + "."
 	}
+	// A thaw of several goes in turn (DESIGN §4.3).
+	if len(r.Queued) > 0 {
+		return fmt.Sprintf("Thawing %d sessions in turn, one every 30 s, so that each agent finds the sign-in the one before renewed.", len(r.Sessions)+len(r.Queued))
+	}
 	switch n := len(r.Sessions); n {
 	case 0:
 		return "Nothing to " + st.Op + "."

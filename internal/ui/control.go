@@ -2,7 +2,8 @@ package ui
 
 // What the sidebar does to a session as a whole, and to its place in the
 // list (DESIGN §4.1, §4.3). f freezes or thaws the selected session and F
-// every session; ! boosts it, which moves no row, or puts it back; z parks it last
+// every session, a thaw of them all only at a second F, since each agent
+// signs in again; ! boosts it, which moves no row, or puts it back; z parks it last
 // in the Parked group at the end of the list, out of the way, or unparks
 // it, last among the rest, and Z folds Parked; a card or row dragged with
 // the mouse goes where it is dropped, among the others of its group. The
@@ -11,7 +12,9 @@ package ui
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -87,8 +90,15 @@ func live(s ipc.Session) bool {
 	return s.State != ipc.StateExited && s.State != ipc.StateFailed
 }
 
+// thawAllConfirm is how long a first F that would thaw them all waits for
+// the second.
+const thawAllConfirm = moveConfirm
+
 // freezeKey is f (all false) or F (all true): it thaws what is frozen, and
-// otherwise freezes; F freezes every session unless all are frozen.
+// otherwise freezes; F freezes every session unless all are frozen. A
+// freeze stays inside Irie and u takes it back, so it never asks; a thaw
+// of them all wakes every agent, and each signs in again, so it takes a
+// second F, and they thaw in turn, one every 30 s (DESIGN §4.5).
 func (m Model) freezeKey(all bool) (tea.Model, tea.Cmd) {
 	c, ok := m.controls()
 	if !ok {
@@ -96,12 +106,34 @@ func (m Model) freezeKey(all bool) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if all {
-		on := slices.ContainsFunc(m.sessions, func(s ipc.Session) bool { return live(s) && s.State != ipc.StateFrozen })
-		done := "froze every session"
-		if !on {
-			done = "thawed every session"
+		// This machine's sessions: a paired machine's are its own to freeze.
+		mine := func(s ipc.Session) bool { return s.Host == "" && live(s) }
+		if slices.ContainsFunc(m.sessions, func(s ipc.Session) bool { return mine(s) && s.State != ipc.StateFrozen }) {
+			m.thawingAll = time.Time{}
+			return m, func() tea.Msg {
+				return controlledMsg{done: "froze every session; u thaws them", err: c.Freeze("", true, true)}
+			}
 		}
-		return m, func() tea.Msg { return controlledMsg{done: done, err: c.Freeze("", on, true)} }
+		n, cold, usd := 0, 0, 0.0
+		for _, s := range m.sessions {
+			if mine(s) {
+				n++
+				if s.Cold != nil {
+					cold, usd = cold+1, usd+s.Cold.USD
+				}
+			}
+		}
+		if n < 2 {
+			return m, func() tea.Msg { return controlledMsg{done: "thawed every session", err: c.Freeze("", false, true)} }
+		}
+		if m.thawingAll.IsZero() || m.now().Sub(m.thawingAll) > thawAllConfirm {
+			m.thawingAll = m.now()
+			m.setStatus(thawAllAsk(n, cold, usd), false)
+			return m, nil
+		}
+		m.thawingAll = time.Time{}
+		done := fmt.Sprintf("thawing %d sessions in turn, one every 30 s", n)
+		return m, func() tea.Msg { return controlledMsg{done: done, err: c.Freeze("", false, true)} }
 	}
 	sel, ok := m.selSession()
 	if !ok {
@@ -411,4 +443,17 @@ func (b socketBackend) Park(id string, on bool, before string) error {
 		op = ipc.OpPark
 	}
 	return ipc.Call(b.socket, callTimeout, op, ipc.ParkArgs{Session: id, Before: before}, nil)
+}
+
+// thawAllAsk is what a first F that would thaw them all says: what the
+// second does, and what waking those whose cache ran out costs.
+func thawAllAsk(n, cold int, usd float64) string {
+	msg := fmt.Sprintf("Press F again to thaw %d sessions, one every 30 s: each agent signs in again", n)
+	switch {
+	case cold == 1:
+		msg += fmt.Sprintf(", and waking the one gone cold costs ~$%.2f", usd)
+	case cold > 1:
+		msg += fmt.Sprintf(", and waking the %d gone cold costs ~$%.2f", cold, usd)
+	}
+	return msg + "."
 }

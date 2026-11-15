@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/irie-people/irie/internal/ipc"
 )
@@ -23,42 +22,23 @@ func (f *fakeBackend) Reopen(id string) (ipc.Session, error) {
 	return ipc.Session{ID: "s000000000001", Name: "task-001", State: ipc.StateStarting, Created: now}, nil
 }
 
-func TestXXClosesTheSelectedSession(t *testing.T) {
+// x closes the selected session at once, as ⌘W does in the Mac app: a
+// close stays inside Irie and u brings it back, so it never asks (DESIGN
+// §4.5).
+func TestXClosesTheSelectedSessionAtOnce(t *testing.T) {
 	m, b := newModel(t, 34, 24, 3)
 	m = send(m, keyMsg("down"))
 	m = send(m, keyMsg("x"))
-	if len(b.closes) != 0 || !strings.Contains(m.status, "Press x again to close task-001") {
-		t.Fatalf("one x closed %v, status %q", b.closes, m.status)
-	}
-	m = send(m, keyMsg("x"))
 	if !slices.Equal(b.closes, []string{"s000000000001"}) {
-		t.Fatalf("x x closed %v", b.closes)
+		t.Fatalf("x closed %v", b.closes)
 	}
-	if !strings.Contains(m.status, "closed task-001") || m.statusErr {
+	if !strings.Contains(m.status, "closed task-001; u brings it back") || m.statusErr {
 		t.Errorf("status %q", m.status)
 	}
 	// The row goes when the core says so, and the selection moves on.
 	m = send(m, FrameMsg{Frame: ipc.Frame{T: ipc.FrameRemove, ID: "s000000000001"}})
 	if s, ok := m.selSession(); len(m.sessions) != 2 || !ok || s.ID != "s000000000002" {
 		t.Errorf("after the remove: sel %d of %+v", m.sel, m.sessions)
-	}
-}
-
-func TestAnotherKeyCancelsAClose(t *testing.T) {
-	m, b := newModel(t, 34, 24, 3)
-	m = send(m, keyMsg("x"))
-	m = send(m, keyMsg("j"))
-	m = send(m, keyMsg("x"))
-	if len(b.closes) != 0 {
-		t.Errorf("x j x closed %v", b.closes)
-	}
-	// So does waiting too long.
-	m, b = newModel(t, 34, 24, 3)
-	m = send(m, keyMsg("x"))
-	m.now = func() time.Time { return now.Add(closeConfirm + time.Second) }
-	m = send(m, keyMsg("x"))
-	if len(b.closes) != 0 || !strings.Contains(m.status, "Press x again") {
-		t.Errorf("a late second x closed %v, status %q", b.closes, m.status)
 	}
 }
 
@@ -94,8 +74,7 @@ func TestXOnAnOutsideRowClosesNothing(t *testing.T) {
 	m, b := withOutside(t, 34, 24, 1, 2)
 	m = send(m, keyMsg("end"))
 	m = send(m, keyMsg("x"))
-	m = send(m, keyMsg("x"))
-	if len(b.closes) != 0 || !strings.Contains(m.status, "x x closes one of Irie's sessions") {
+	if len(b.closes) != 0 || !strings.Contains(m.status, "x closes one of Irie's sessions") {
 		t.Errorf("closed %v, status %q", b.closes, m.status)
 	}
 }

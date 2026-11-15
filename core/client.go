@@ -51,6 +51,13 @@ func FindGroup(groups []Group, ref string) int { return ipc.FindGroup(groups, re
 // GroupWords are the names a path such as "Work / Irie" holds.
 func GroupWords(path string) []string { return ipc.GroupWords(path) }
 
+// ReachOf is where op's effect goes (DESIGN §4.5, "Inside and outside"):
+// a read, inside Irie, which undo takes back and so never asks, inside
+// with outside effects, or outside, which the person confirms and Mikael
+// weighs when an agent runs it. An op this version does not know is
+// outside.
+func ReachOf(op string) Reach { return ipc.ReachOf(op) }
+
 // RouteChoice is what the route op answers: where +auto would run a task,
 // and why, with every profile it weighed (DESIGN §6.4).
 type RouteChoice = route.Choice

@@ -2,6 +2,7 @@ package core
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/irie-people/irie/internal/ipc"
@@ -164,7 +165,8 @@ func TestUndoAndRedoOfAFreezeAndAThaw(t *testing.T) {
 // Freezing or thawing them all at once is one step, whose label names the
 // sessions it changed (DESIGN §4.5): one undo takes them all back, one
 // redo does it again, and a session that was that way already is not in
-// it.
+// it. A step that thaws several asks first, once, since each agent signs
+// in again, and they thaw in turn (DESIGN §4.3).
 func TestUndoAndRedoOfFreezingAndThawingThemAll(t *testing.T) {
 	c := setup(t)
 	var all []ipc.Session
@@ -187,11 +189,21 @@ func TestUndoAndRedoOfFreezingAndThawingThemAll(t *testing.T) {
 	if u, _ := h.labels(); u != `freeze "alpha" and "beta"` {
 		t.Errorf("the header says %q", u)
 	}
-	if r := c.step(dirUndo); r.Label != `freeze "alpha" and "beta"` {
-		t.Errorf("undo %+v", r)
+
+	// Undoing it thaws two, so it asks first, once for both.
+	ch := c.ask(dirUndo)
+	if ch.Question != `Thawing "alpha" and "beta" signs each agent in again, so they thaw one every 30 s.` ||
+		!slices.Equal(keysOf(ch), []string{ipc.ChoiceApply, ipc.ChoiceSkip, ipc.ChoiceCancel}) || ch.Options[0].Label != "Thaw these 2, one every 30 s" {
+		t.Errorf("question %+v", ch)
 	}
-	c.waitState(a.ID, ipc.StateWorking)
+	if r := c.answer(dirUndo, ch, ipc.ChoiceApply); r.Did != ipc.DidUndo || r.Label != `freeze "alpha" and "beta"` {
+		t.Fatalf("going ahead: %+v", r)
+	}
+	// Beta, taken first, thaws at once; alpha waits its turn, frozen.
 	c.waitState(b.ID, ipc.StateWorking)
+	if s, _ := c.row(a.ID); s.State != ipc.StateFrozen || !strings.Contains(s.Detail, thawsInTurn) {
+		t.Errorf("alpha is %s, %q; want frozen, waiting its turn", s.State, s.Detail)
+	}
 	if s, _ := c.row(g.ID); s.State != ipc.StateFrozen {
 		t.Errorf("gamma is %s after the undo, want frozen still", s.State)
 	}
@@ -199,17 +211,19 @@ func TestUndoAndRedoOfFreezingAndThawingThemAll(t *testing.T) {
 		u, rd := h.labels()
 		t.Errorf("after the undo the header says %q and %q", u, rd)
 	}
+	// Redoing it freezes beta again, and alpha waits for no thaw: freezing
+	// asks nothing.
 	c.step(dirRedo)
-	c.waitState(a.ID, ipc.StateFrozen)
 	c.waitState(b.ID, ipc.StateFrozen)
-
-	// Thawing them all is one step too, and undoing it freezes them all
-	// again.
-	if err := c.call(ipc.OpThaw, ipc.FreezeArgs{All: true}, &r); err != nil {
-		t.Fatalf("thaw all: %v", err)
+	if s, _ := c.row(a.ID); s.State != ipc.StateFrozen || strings.Contains(s.Detail, thawsInTurn) {
+		t.Errorf("after the redo alpha is %s, %q; want frozen, waiting for nothing", s.State, s.Detail)
 	}
-	for _, s := range all {
-		c.waitState(s.ID, ipc.StateWorking)
+
+	// Thawing them all is one step too, and they go in turn after beta's
+	// thaw. Undoing it freezes again those that thawed and keeps the rest
+	// frozen.
+	if err := c.call(ipc.OpThaw, ipc.FreezeArgs{All: true}, &r); err != nil || len(r.Sessions)+len(r.Queued) != 3 || len(r.Queued) < 2 {
+		t.Fatalf("thaw all: %+v, %v", r, err)
 	}
 	if h := c.history(); h.label(dirUndo) != `thaw "alpha", "beta" and "gamma"` {
 		t.Errorf("after thawing them all the header says %q", h.label(dirUndo))
@@ -217,6 +231,9 @@ func TestUndoAndRedoOfFreezingAndThawingThemAll(t *testing.T) {
 	c.step(dirUndo)
 	for _, s := range all {
 		c.waitState(s.ID, ipc.StateFrozen)
+		if row, _ := c.row(s.ID); strings.Contains(row.Detail, thawsInTurn) {
+			t.Errorf("%s still waits its turn: %q", s.Name, row.Detail)
+		}
 	}
 	if got, want := c.uiSteps(b.ID), []string{"ui.undo freeze open>open", "ui.redo freeze open>open", "ui.undo thaw open>open"}; !slices.Equal(got, want) {
 		t.Errorf("beta's journal %v, want %v", got, want)

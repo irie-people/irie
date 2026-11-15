@@ -137,8 +137,7 @@ type Model struct {
 	moving         bool
 	confirming     string    // the outside session a first m asked to move
 	confirmedAt    time.Time // when it asked
-	closing        string    // the session a first x asked to close (close.go)
-	closingAt      time.Time // when it asked
+	thawingAll     time.Time // when a first F asked to thaw them all (control.go)
 
 	undoLabel, redoLabel string      // what u and U would do next, from the history frame (undo.go)
 	menu                 *choiceMenu // a question about an undo or redo, while it waits for an answer
@@ -422,7 +421,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseLeft || m.menu != nil {
 			break
 		}
-		m.confirming, m.closing = "", ""
+		m.confirming, m.thawingAll = "", time.Time{}
 		if v, ok := tabAt(msg.X); ok && m.tabbed() && msg.Y == m.tabsTop() {
 			m.setView(v)
 			break
@@ -457,8 +456,8 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() != "m" {
 		m.confirming = "" // any other key cancels a move
 	}
-	if msg.String() != "x" {
-		m.closing = "" // and a close
+	if msg.String() != "F" {
+		m.thawingAll = time.Time{} // and a thaw of them all
 	}
 	switch msg.String() {
 	case "up", "k":
