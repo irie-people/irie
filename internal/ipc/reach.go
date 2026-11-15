@@ -60,6 +60,8 @@ var reaches = map[string]Reach{
 	OpKeys: ReachOutside, OpStopSub: ReachOutside, OpMove: ReachOutside, OpPair: ReachOutside,
 	OpVPN: ReachOutside, OpAnon: ReachOutside, OpMail: ReachOutside, OpVariorum: ReachOutside,
 	OpRaphael: ReachOutside, OpDock: ReachOutside, OpTrod: ReachOutside,
+	// A check asks OSV.dev about the versions the locks name.
+	OpLock: ReachOutside,
 }
 
 // ReachOf is where op's effect goes. An op this version does not know is
