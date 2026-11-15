@@ -215,6 +215,39 @@ func TestParseValueTakesTheKeysType(t *testing.T) {
 	}
 }
 
+// TestParseTextReadsWhatACommandLineTypes: strings and durations as they
+// are, the rest as JSON, as `irie config set` takes them.
+func TestParseTextReadsWhatACommandLineTypes(t *testing.T) {
+	for _, tc := range []struct {
+		key, text string
+		want      any
+	}{
+		{"profiles.helper.folder", "~/Helper", "~/Helper"},
+		{"profiles.helper.model", "claude-sonnet-5-5", "claude-sonnet-5-5"},
+		{"spawn.default_profile", "true", "true"},
+		{"spawn.close_delay", "45s", 45 * time.Second},
+		{"spawn.close_when_done", "true", true},
+		{"local.port", "11436", 11436},
+		{"repos.roots", `["~/code"]`, []string{"~/code"}},
+	} {
+		got, err := ParseText(tc.key, tc.text)
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("ParseText(%s, %s) = %#v, %v; want %#v", tc.key, tc.text, got, err, tc.want)
+		}
+	}
+	for _, tc := range []struct{ key, text, want string }{
+		{"spawn.nope", "1", `unknown key "spawn.nope"`},
+		{"spawn.close_when_done", "yes", "takes true or false"},
+		{"spawn.close_delay", "soon", "takes a duration"},
+		{"profiles.helper.folder", "", "needs a value"},
+		{"local.port", " ", "needs a value"},
+	} {
+		if _, err := ParseText(tc.key, tc.text); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("ParseText(%s, %q): %v, want %q", tc.key, tc.text, err, tc.want)
+		}
+	}
+}
+
 func TestTreeNamesKeysAsTheFileDoes(t *testing.T) {
 	tr := Tree(Default())
 	spawn := tr["spawn"].(map[string]any)

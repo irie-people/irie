@@ -110,6 +110,10 @@ func (c *Core) placeAuto(a ipc.SpawnArgs, now time.Time) (*peerState, string) {
 	if cfg.Place.Mode != config.PlaceAuto || len(c.peers) == 0 || a.Delegate || a.Parent != "" || a.InPlace || a.Continues != "" {
 		return nil, ""
 	}
+	// An agent of your own stays with its folder.
+	if p, ok := cfg.Profiles[a.Profile]; ok && p.Folder != "" {
+		return nil, ""
+	}
 	mem := c.memoryNow()
 	here, ok := roomOf(c.loadNow(), &mem)
 	if !ok {

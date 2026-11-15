@@ -351,6 +351,7 @@ curl -fsSL https://irie-people.github.io/irie/install.sh | sh
 | The server's PATH | A new server gets `~/.local/bin` at the end of its PATH when that folder exists and the PATH lacks it (`ready.PathEnv`). The installers of Irie and of Claude Code put their programs there, and a terminal finds them only once a startup file says so, which `irie setup` offers. A running server keeps its environment |
 | From the app | Opened with no Irie running, the app runs `irie up --login-env` (§7.2), once a launch and only before it has ever reached a core, so a core that restarts is left to the supervisor. It asks the core's `ready` op, the same check in the server's environment, which is the agents', every 4 s while something blocks. A fix runs as the `ready` tool: a session running `irie setup`, whose terminal the app shows ([MAC.md](MAC.md)) |
 | A first task | Both sidebars offer `+haiku Write a haiku about my city. Ask me which city first.` with no sessions. It makes the agent ask before it works, so a newcomer sees a session start, ask and finish in about a minute, on Claude's quickest model, in a scratch folder of its own. The Mac app follows it with a card of steps, the walkthrough of [learning.md](proposals/learning.md) §5.1 in brief |
+| Windows | Irie runs inside WSL 2, Windows' own Linux, as on any Linux ([WINDOWS.md](WINDOWS.md)). `site/install.ps1`, run as `powershell -ExecutionPolicy ByPass -c "irm https://irie-people.github.io/irie/install.ps1 \| iex"`, downloads `irie-windows-<arch>.zip`, checks it against `SHA256SUMS`, puts the wrapper `irie.exe` (`cmd/windows`, `internal/wsl`) in `%LOCALAPPDATA%\irie\bin` and on the user's PATH, and runs `irie setup`. On Windows that installs WSL (an administrator's OK, then a restart), Ubuntu, and Irie inside it by `install.sh`, whose own `irie setup` brings tmux, Claude Code and the sign-in; then it offers `.wslconfig`'s `instanceIdleTimeout=-1`, so agents keep working once the last window closes, a Start menu shortcut with a Windows Terminal profile, and a start at sign-in (`irie up`). Every other command runs the Linux `irie` in the distribution through a login shell, Windows paths among its arguments made WSL's. It finds WSL by its files rather than by asking `wsl.exe`, which on a Windows without WSL may offer to install it |
 | Not yet | A signed and notarized app, and so a direct download of it that opens without a warning; Ghostty in the Intel slice; a Homebrew tap; and a tmux of Irie's own for a Mac without Homebrew, which needs a terminfo of its own, as macOS's lacks `tmux-256color` |
 
 ---
@@ -647,7 +648,7 @@ The sidebar is a terminal program that reads like a web page, and like the Mac a
 | Plain text | A new task, kept verbatim, with no length cap; or, when it reads as more for the jot just sent, a message to that jot's agent ("More for the last jot", below) |
 | `@name`, `@path` | Run in a new worktree of that git repo (M3). A path that is not a git repo runs in place. M1 accepts only absolute or `~` paths and runs in place |
 | `@name!` | Run in the repo's main checkout, without a worktree (M3) |
-| `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10) |
+| `+profile` | Use that profile instead of `spawn.default_profile`, which is `auto` (M3; `+auto` and `+ollama:<model>` M10). A profile with a `folder` is an agent of your own: its task runs in that folder, in place, where the agent's CLAUDE.md, skills and records are, unless the task names a place with `@` |
 | `+explain`, `+teach` | Run this one task in that tutor mode, beside any `+profile` (`+sonnet +teach …`): Claude Code's Explanatory or Learning output style. The words are reserved: a profile cannot take either name ([learning.md](proposals/learning.md)) |
 | `+anon`, `+anon:name`, `+tor`, `+tor:name` | Run this one task as anonymous research, beside any `+profile`: in a compartment of its own, or the named one, which tasks share, leaving through a Mullvad exit of its own, or Tor (§4.16). The words are reserved as profile names too |
 | (the Mac app's sheet) | A model for this one task, `model` in `spawn`: an alias Claude Code's `--model` takes (`fable`, `opus`, `sonnet`) or a model's full name. Only a Claude Code profile takes it; a core that does lists `spawn-model` in `hello` |
@@ -659,7 +660,7 @@ The core reads the bar's text, not the client (`input`, [CORE.md](CORE.md) §3),
 
 **Spawn pipeline.** Reliable headless spawning means the task never travels through tmux and is never typed into a TUI:
 1. Parse the first line: `@…` and `+…` tokens are removed, and the rest is the task.
-2. Resolve the working directory: a worktree (rules below), the main checkout (`@name!`), a plain path, or with no token `spawn.default_cwd`. Empty means a new scratch dir under `$XDG_DATA_HOME/irie/scratch/`, so an untargeted task never runs in `$HOME`.
+2. Resolve the working directory: a worktree (rules below), the main checkout (`@name!`), a plain path, the profile's `folder` in place, or with no token `spawn.default_cwd`. Empty means a new scratch dir under `$XDG_DATA_HOME/irie/scratch/`, so an untargeted task never runs in `$HOME`.
 3. Write `sessions/<id>/task.md` and `spec.json` (argv, env, cwd).
 4. In one command list, run `new-window -d -t irie-agents: -n <id> -P -F '#{pane_id}' '<irie> host --spec <path>'`, set the pane options and the window size, and name the window after the session.
 5. The host calls `setpgid`, makes the agent the foreground process group of its terminal, execs it, then waits with `WUNTRACED` and writes `exit.json`.
@@ -1524,6 +1525,11 @@ effort = "high"
 permission_mode = "auto"
 skill = "chaos"               # the skill of Irie's its sessions start on, the task after /irie:chaos; any Claude Code profile may name one
 
+# [profiles.helper]           # example: an agent of your own (§4.2)
+# folder = "~/Helper"         # its sessions run here, in place, where its CLAUDE.md, skills and records are; a task's own @place wins
+# model = "claude-sonnet-5-5"
+# `irie config set profiles.helper.folder ~/Helper` makes one; set and unset change any key through the core
+
 # [profiles.aider]            # example: generic harness
 # harness = "generic"
 # command = "aider"
@@ -2018,7 +2024,7 @@ From M9, `irie` and Irie.app drive Ghostty through its macOS AppleScript diction
 
 ### 7.3 Linux and other terminals
 
-Plain `irie` attaches in the current terminal, and everything outside §7.1 and §7.2 works the same. The Ghostty-specific parts are optional.
+Plain `irie` attaches in the current terminal, and everything outside §7.1 and §7.2 works the same. The Ghostty-specific parts are optional. On Windows, Irie is the Linux one inside WSL 2, and `irie.exe` attaches it in the Windows terminal it is started from (§2.7, [WINDOWS.md](WINDOWS.md)).
 
 ### 7.4 Later: pop-out tabs
 

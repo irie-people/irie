@@ -514,6 +514,11 @@ type Profile struct {
 	Skills         *bool             `toml:"skills"` // false leaves Irie's skills out of this profile's sessions; unset = they go in
 	Arch           string            `toml:"arch"`   // the arch agent the session runs as, such as mikael (DESIGN §4.11); "" = none
 	Skill          string            `toml:"skill"`  // the skill of Irie's its sessions start on, such as chaos: the task goes to /irie:<skill> (DESIGN §4.19); "" = none
+	// Folder is where the profile's sessions run, in place, when a task
+	// names no place of its own: an agent of your own, whose CLAUDE.md,
+	// skills and records live in that folder (DESIGN §4.2). It is a /…
+	// or ~/… path. "" = a scratch folder, as for any task.
+	Folder string `toml:"folder"`
 	// FallbackModel is the model a session of the profile switches to, in
 	// place, when its own model's usage limit stops a turn, such as a Fable
 	// limit, as /model would; while that limit holds, new sessions start on
@@ -1329,6 +1334,9 @@ func (c Config) Validate() error {
 		}
 		if strings.ContainsAny(p.Cost, "\n\r") {
 			bad("profiles.%s.cost: must be one line", name)
+		}
+		if f := p.Folder; f != "" && (strings.ContainsAny(f, "\n\r") || !filepath.IsAbs(f) && f != "~" && !strings.HasPrefix(f, "~/")) {
+			bad("profiles.%s.folder = %q: must be a /… or ~/… path", name, f)
 		}
 		if p.SDK && p.Harness != "claude-code" {
 			bad("profiles.%s.sdk: only the claude-code harness runs on the Agent SDK", name)
