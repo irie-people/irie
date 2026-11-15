@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	irie "github.com/irie-people/irie/core"
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 	"github.com/irie-people/irie/internal/harness/claude"
 	"github.com/irie-people/irie/internal/ipc"
@@ -326,5 +328,22 @@ func TestAJudgedBenchClosesItsSessions(t *testing.T) {
 	}
 	if s, err := c.reopen(runs[0].Session); err != nil || s.ID != runs[0].Session {
 		t.Errorf("reopen run 1 = %+v, %v", s, err)
+	}
+}
+
+// A run on a peer is typed there, and the peer reads a typed task's first
+// line for @ and + words: that line is the run's number alone, so the
+// playbook, which names the +profile, reaches the run whole.
+func TestARunOnAPeerGetsItsPlaybookWhole(t *testing.T) {
+	b := &benchFile{Bench: ipc.Bench{Task: "fix the typo in README", Profile: "dory", Host: "Asahi"}, Playbook: []string{"Read a file before you edit it."}}
+	text := b.runTask(1, 3)
+	st, err := irie.Read(ipc.InputArgs{Text: text, Profile: "dory", Unattended: true}, irie.View{Home: "/home/alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Args.(ipc.SpawnArgs)
+	want := "[" + brand.Name + " bench] Run 2 of 3.\n" + playbookIntro("dory") + "\n- Read a file before you edit it.\n\nThe task:\n\nfix the typo in README"
+	if st.Op != ipc.OpSpawn || a.Task != want || a.Profile != "dory" || !a.Unattended {
+		t.Errorf("the peer reads %q as %s %+v, want the task %q", text, st.Op, a, want)
 	}
 }

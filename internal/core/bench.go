@@ -193,21 +193,20 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 
 // runTask is what run i of n is given. Here it is the task as typed, and
 // the profile's playbook comes with the start of its session (startNote).
-// On a peer it goes as typed text, so its first line holds no @ or + words
-// the peer would read, and the playbook goes in it.
+// On a peer it goes as typed text, whose first line the peer reads for @
+// and + words, so that line is the run's number alone, and the playbook,
+// which names the +profile, starts on the next.
 func (b *benchFile) runTask(i, n int) string {
 	if b.Host == "" {
 		return b.Task
 	}
 	var t strings.Builder
-	fmt.Fprintf(&t, "[%s bench] Run %d of %d.", brand.Name, i+1, n)
+	fmt.Fprintf(&t, "[%s bench] Run %d of %d.\n", brand.Name, i+1, n)
 	if len(b.Playbook) > 0 {
-		t.WriteString(" " + playbookIntro(b.Profile) + "\n")
+		t.WriteString(playbookIntro(b.Profile) + "\n")
 		for _, r := range b.Playbook {
 			t.WriteString("- " + r + "\n")
 		}
-	} else {
-		t.WriteString("\n")
 	}
 	t.WriteString("\nThe task:\n\n" + b.Task)
 	return t.String()
