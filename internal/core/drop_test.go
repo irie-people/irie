@@ -105,9 +105,16 @@ func TestClosingALandedSessionDropsItsWorktreeAndReopenAddsItBack(t *testing.T) 
 			t.Errorf("%s came back as %q, %v", f, got, err)
 		}
 	}
-	runs := c.runs(landed.ID)
-	if log := c.agentLog(landed.ID); len(runs) != 2 || !sameDir(lastStartCwd(log), landed.Worktree) {
-		t.Errorf("runs %+v, last start in %s", runs, lastStartCwd(log))
+	// The agent starts again in its own time after the reopen, later still
+	// on a busy machine.
+	deadline := time.Now().Add(20 * time.Second)
+	runs, last := c.runs(landed.ID), lastStartCwd(c.agentLog(landed.ID))
+	for (len(runs) != 2 || !sameDir(last, landed.Worktree)) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		runs, last = c.runs(landed.ID), lastStartCwd(c.agentLog(landed.ID))
+	}
+	if len(runs) != 2 || !sameDir(last, landed.Worktree) {
+		t.Errorf("runs %+v, last start in %s", runs, last)
 	}
 	if evs := c.treeEvents(landed.ID); len(evs) != 2 || evs[1].Kind != event.WorktreeRestored || evs[1].Str("path") != landed.Worktree || evs[1].Str("commit") != live {
 		t.Errorf("after the undo, the journal's records = %+v", evs)
