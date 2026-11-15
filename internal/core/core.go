@@ -373,6 +373,7 @@ func Run(o Options) error {
 	c.loadGroups()
 	c.loadHues()
 	c.loadClosed()
+	c.loadDrops()
 	c.loadMeter(time.Now())
 	c.loadLocks()
 	c.loadState()
@@ -804,6 +805,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.mailOp(peer, a)
+	case ipc.OpWorktrees:
+		var a ipc.WorktreesArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.worktreesOp(peer, a)
 	}
 	return c.Call(op, raw)
 }
@@ -838,6 +845,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 			ipc.OpLock,
+			ipc.OpWorktrees,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil

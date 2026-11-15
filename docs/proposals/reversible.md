@@ -1,6 +1,6 @@
 # Reversible Irie: what the Toffoli gate teaches
 
-Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3), step 2, the rebuild meter, on 2026-11-14 (DESIGN §6.3), and steps 3 and 4 on 2026-11-15 (DESIGN §4.5); steps 5 and 6 are proposals. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3), step 2, the rebuild meter, on 2026-11-14 (DESIGN §6.3), steps 3 and 4 on 2026-11-15 (DESIGN §4.5), and step 5, dropping merged worktrees, on 2026-11-15 at the maintainer's word (DESIGN §4.5); step 6 is a proposal. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 **In short.** The Toffoli gate, or controlled-controlled-NOT, flips its target bit only when both control bits are 1. It keeps its inputs, so no information is lost, and run twice it undoes itself. Any computation can be built from such gates (Toffoli, 1980). Bennett (1973) showed such a computation need not pile up garbage either: compute, copy the answer, then run the steps backwards to clean the scratch.
 
@@ -32,7 +32,11 @@ Neither reversible chips nor quantum computers will make Irie faster before 2030
    - Irie causes rebuilds of its own: a freeze of more than an hour (§4.10), close and reopen, and a mass thaw.
 3. **The rest of undo. Built** for what Irie has: freezing or thawing them all is one step whose label names its sessions, `freeze "a", "b" and "c"`, and the Mac app, whose buttons call them Pause and Resume, says Undo Pause “a”, “b” and “c”. Pausing at the next tool call (M5) and notes to agents (M7) are not built yet; each becomes a step with `registerAction` once it is.
 4. **Inside and outside. Built.** Each op is marked by whether its effect leaves Irie (`ipc.ReachOf`, DESIGN §4.5's table). Inside ops never ask, since undo is there: a close in the terminal sidebar is one `x`, and the phone apps close at once with Undo in the notice. Outside ops are the ones to confirm or have Mikael weigh: his door weighs `irie ctl spawn`, `delegate`, `fork`, `bench`, `input`, `send`, `continue` and `move`, and pairing. A mass thaw is an inside action with outside effects, as each agent signs in again: it asks first (`F F`, or a question in undo) and thaws one session every 30 s, as the trod bot's thaws do, holding the rest while an agent is signed out.
-5. **Uncompute merged worktrees.** A closed session whose branch is in `live`, and whose worktree is clean, needs only its branch. Remove the checkout, and let reopen add it back. This changes "closing keeps the worktree" (§4.5), so the maintainer decides. It saves about 9 MB a session.
+5. **Uncompute merged worktrees. Built** (DESIGN §4.5), approved on 2026-11-15. A closed session whose branch is in its repo's land branch (`live` for Irie's own), and whose worktree is clean, needs only its branch.
+   - Once its agent has ended, Irie removes the checkout with `git worktree remove` and keeps the branch, while nothing runs in the folder: no process works there, runs a program from it or has a file in it open.
+   - Reopen, from history or from undo, adds it back at the same path with `git worktree add`, which runs the repo's hooks.
+   - The journal's `worktree.dropped` keeps the path, branch and commit, to put it back by hand. `irie ctl worktrees` is a dry run of the sweep of the sessions closed before; `--drop` does it.
+   - It saves the checkout's room: about 9 MB a session, more with build output.
 6. **Quantum watch.** The key exchange is post-quantum. The certificates (ECDSA P-256) and SSH keys (Ed25519) are not, which matters only against an attacker who has a quantum computer at the time of connecting.
    - Move Irie's authority to ML-DSA once phones accept such certificates. Go 1.27's `crypto/mldsa` and `crypto/x509` can already make them.
    - Keep `go.mod`'s `go` line at 1.24 or later, since a lower line turns the hybrid off.

@@ -105,7 +105,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          --lost brings back every session the last
                                          restart lost, one at a time, pinned,
                                          parked or frozen as it was
-  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
+` + worktreesUsage + `  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
   ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets,
                                          mail or code) beside SESSION, the one this runs
                                          in by default, in the Mac app's panes;
@@ -195,6 +195,8 @@ func ctl(args []string) error {
 		return ctlClose(args[1:])
 	case "reopen":
 		return ctlReopen(args[1:])
+	case "worktrees":
+		return ctlWorktrees(args[1:])
 	case "dog":
 		return ctlDog(args[1:])
 	case "rebuilds":
