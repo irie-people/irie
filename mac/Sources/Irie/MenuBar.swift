@@ -56,6 +56,8 @@ final class MenuState {
         /// The terminal is popped out, or could be (PopOut.swift).
         var poppedOut = false
         var canPopOut = false
+        /// The panes beside the terminal show (Rolodex.swift).
+        var panesOpen = false
         var canPlugins = false
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
@@ -112,6 +114,7 @@ extension Store {
         f.sideTab = side.open ? side.tab : nil
         f.poppedOut = poppedOut != nil
         f.canPopOut = attach != nil
+        f.panesOpen = rolodex.open
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.canVPN = canVPN
@@ -241,6 +244,16 @@ struct IrieCommands: Commands {
                     .keyboardShortcut(t.key, modifiers: [.command, .option])
                 }
             }
+            // The panes beside the terminal, a rolodex of cards
+            // (Rolodex.swift); Go walks them.
+            Button(f.panesOpen ? "Hide Panes" : "Show Panes", action: run { store.togglePanes() })
+                .keyboardShortcut("p", modifiers: [.command, .option])
+            Menu("New Pane") {
+                ForEach(PaneKind.offered(f.plugins)) { k in
+                    Button(k.title, action: run { store.newPane(k) })
+                }
+            }
+            .disabled(f.name == nil)
             // The palettes, yours after Irie's, Make a Theme, and the
             // window's layouts (Looks.swift). A section ends with a line of
             // its own.
@@ -298,6 +311,12 @@ struct IrieCommands: Commands {
             // or the terminal while it shows.
             Button("Switch Focus", action: run { store.toggleFocus() })
                 .keyboardShortcut("]", modifiers: .control)
+            // KeyRouter catches ⌥Tab and ⌥⇧Tab first: from the terminal
+            // through the panes, left to right (Rolodex.swift).
+            Button("Next Pane", action: run { store.cyclePanes(1, in: NSApp.keyWindow) })
+                .keyboardShortcut(.tab, modifiers: .option)
+            Button("Previous Pane", action: run { store.cyclePanes(-1, in: NSApp.keyWindow) })
+                .keyboardShortcut(.tab, modifiers: [.option, .shift])
             Divider()
             // Step through the strip of the helper pane (HelperPane.swift).
             Button("Next Helper") { NotificationCenter.default.post(name: .irieHelperStep, object: 1) }

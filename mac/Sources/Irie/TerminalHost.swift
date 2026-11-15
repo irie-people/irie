@@ -331,6 +331,9 @@ struct SplitTerminal: NSViewRepresentable {
     let focusToken: Int
     let followsFocus: Bool
     let takesKeysOnStart: Bool
+    /// It shows: not under a zoomed pane, nor a pane card turned away. One
+    /// that doesn't lets go of the keyboard and never takes it.
+    var shows = true
 
     func makeCoordinator() -> Coordinator { Coordinator(tmux: tmux, socket: socket, target: target) }
 
@@ -342,6 +345,7 @@ struct SplitTerminal: NSViewRepresentable {
         view.nativeForegroundColor = Theme.terminalForeground
         view.selectedTextBackgroundColor = Theme.terminalSelection
         view.takesKeysOnStart = takesKeysOnStart
+        view.shows = shows
         context.coordinator.view = view
         context.coordinator.focusToken = focusToken
         context.coordinator.attach()
@@ -352,9 +356,10 @@ struct SplitTerminal: NSViewRepresentable {
         if view.font.pointSize != fontSize {
             view.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
+        view.shows = shows
         if context.coordinator.focusToken != focusToken {
             context.coordinator.focusToken = focusToken
-            if followsFocus { view.window?.makeFirstResponder(view) }
+            if followsFocus && shows { view.window?.makeFirstResponder(view) }
         }
     }
 

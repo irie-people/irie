@@ -336,7 +336,7 @@ struct SplitTerminalView: View {
     @ViewBuilder private var swiftTerm: some View {
         #if canImport(SwiftTerm)
         SplitTerminal(tmux: tmux, socket: socket, target: target, fontSize: fontSize, focusToken: focusToken,
-                      followsFocus: followsFocus, takesKeysOnStart: takesKeysOnStart)
+                      followsFocus: followsFocus, takesKeysOnStart: takesKeysOnStart, shows: shows)
         #else
         Color.clear
         #endif
