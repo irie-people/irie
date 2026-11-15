@@ -104,14 +104,16 @@ jobs:
           $t = $env:RUNNER_TEMP
           go build -o "$t\winpreview.exe" ./tools/winpreview
           if ($LASTEXITCODE -ne 0) { throw 'go build of winpreview failed' }
-          go build -ldflags "-H windowsgui" -o "$t\Irie.exe" ./cmd/windows-app
+          # A console build, so a panic as it starts shows here; the release's is -H windowsgui.
+          go build -o "$t\Irie.exe" ./cmd/windows-app
           if ($LASTEXITCODE -ne 0) { throw 'go build of the app failed' }
           $env:IRIE_APP_BRIDGE = "`"$t\winpreview.exe`" -bridge"
           $shots = Join-Path $t 'shots'
-          $p = Start-Process -FilePath "$t\Irie.exe" -ArgumentList '--snapshot', "`"$shots`"" -PassThru -Wait
+          & "$t\Irie.exe" --snapshot $shots
+          $code = $LASTEXITCODE
           $log = Join-Path $env:LOCALAPPDATA 'irie\app.log'
           if (Test-Path $log) { Get-Content $log }
-          if ($p.ExitCode -ne 0) { throw "Irie.exe --snapshot exited $($p.ExitCode)" }
+          if ($code -ne 0) { throw "Irie.exe --snapshot exited $code" }
           foreach ($f in 'window.png', 'settings.png', 'menu.png') {
             $png = Join-Path $shots $f
             if (-not (Test-Path $png) -or (Get-Item $png).Length -lt 20000) { throw "$f is missing or blank" }

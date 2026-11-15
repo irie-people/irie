@@ -128,11 +128,11 @@ const (
 	niifUser          = 0x4
 	niifLargeIcon     = 0x20
 	coinitApartment   = 0x2
-	dwmDarkMode       = 20 // DWMWA_USE_IMMERSIVE_DARK_MODE
-	dwmDarkModeOld    = 19 // its number before Windows 10 20H1
-	dwmBorderColor    = 34 // DWMWA_BORDER_COLOR, Windows 11
-	dwmCaptionColor   = 35 // DWMWA_CAPTION_COLOR
-	dwmTextColor      = 36 // DWMWA_TEXT_COLOR
+	dwmDarkMode       = 20          // DWMWA_USE_IMMERSIVE_DARK_MODE
+	dwmDarkModeOld    = 19          // its number before Windows 10 20H1
+	dwmBorderColor    = 34          // DWMWA_BORDER_COLOR, Windows 11
+	dwmCaptionColor   = 35          // DWMWA_CAPTION_COLOR
+	dwmTextColor      = 36          // DWMWA_TEXT_COLOR
 	dpiPerMonitorV2   = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, -4
 	notifyIconVersion = 4
 )

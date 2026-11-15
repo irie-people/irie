@@ -6,11 +6,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
 
-	"github.com/wailsapp/go-webview2/pkg/webview2"
 	"github.com/wailsapp/go-webview2/webviewloader"
 
 	"github.com/irie-people/irie/internal/winapp/web"
@@ -18,24 +18,15 @@ import (
 
 // webView is the window's WebView2: Microsoft's Edge drawing the page,
 // loaded from the app itself (package web) and never from the network,
-// whose messages go to the backend and back (docs/WINDOWS.md §5).
+// whose messages go to the backend and back (docs/WINDOWS.md §5). Every
+// call is on the window's thread.
 type webView struct {
 	a     *app
-	env   *webview2.ICoreWebView2Environment
-	ctl   *webview2.ICoreWebView2Controller
-	wv    *webview2.ICoreWebView2
+	env   com
+	ctl   com
+	wv    com
 	err   error
 	debug bool
-
-	// The handlers WebView2 holds, kept here so the collector leaves them.
-	controllerDone *webview2.ICoreWebView2CreateCoreWebView2ControllerCompletedHandler
-	messages       *webview2.ICoreWebView2WebMessageReceivedEventHandler
-	resources      *webview2.ICoreWebView2WebResourceRequestedEventHandler
-	navigations    *webview2.ICoreWebView2NavigationStartingEventHandler
-	windows        *webview2.ICoreWebView2NewWindowRequestedEventHandler
-	permissions    *webview2.ICoreWebView2PermissionRequestedEventHandler
-	failures       *webview2.ICoreWebView2ProcessFailedEventHandler
-	captures       []*capture
 }
 
 func webView2Present() bool {
@@ -55,7 +46,7 @@ func newWebView(a *app) (*webView, error) {
 		return nil, err
 	}
 	var m msg
-	for v.ctl == nil && v.err == nil {
+	for v.wv == 0 && v.err == nil {
 		r, _, _ := pGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
 		if int32(r) <= 0 {
 			return nil, fmt.Errorf("the window closed while WebView2 started")
@@ -75,170 +66,137 @@ func (e envDone) EnvironmentCompleted(code webviewloader.HRESULT, env *webviewlo
 		v.err = fmt.Errorf("WebView2's environment failed: %#x", uint32(code))
 		return 0
 	}
-	v.env = (*webview2.ICoreWebView2Environment)(unsafe.Pointer(env))
-	v.env.AddRef()
-	v.controllerDone = webview2.NewICoreWebView2CreateCoreWebView2ControllerCompletedHandler(v)
-	if err := v.env.CreateCoreWebView2Controller(webview2.HWND(v.a.hwnd), v.controllerDone); err != nil {
-		v.err = err
+	v.env = com(uintptr(unsafe.Pointer(env)))
+	// The loader lets its own reference go once this returns.
+	v.env.addRef()
+	done := newHandler(func(code, ctl uintptr) uintptr {
+		v.controllerDone(code, com(ctl))
+		return 0
+	})
+	if err := failed(v.env.call(envCreateController, uintptr(v.a.hwnd), done)); err != nil {
+		v.err = fmt.Errorf("WebView2's controller: %v", err)
 	}
 	return 0
 }
 
-// The handlers' IUnknown: WebView2 holds them for as long as the window
-// lives, and so does the app.
-func (v *webView) QueryInterface(refiid, object uintptr) uintptr { return 0x80004002 }
-func (v *webView) AddRef() uintptr                               { return 1 }
-func (v *webView) Release() uintptr                              { return 1 }
-
-func (v *webView) CreateCoreWebView2ControllerCompleted(code uintptr, ctl *webview2.ICoreWebView2Controller) uintptr {
-	if int32(code) < 0 || ctl == nil {
+func (v *webView) controllerDone(code uintptr, ctl com) {
+	if int32(code) < 0 || ctl == 0 {
 		v.err = fmt.Errorf("WebView2's controller failed: %#x", uint32(code))
-		return 0
+		return
 	}
-	ctl.AddRef()
-	wv, err := ctl.GetCoreWebView2()
-	if err != nil {
-		v.err = err
-		return 0
+	ctl.addRef()
+	wv := ctl.out(ctlGetCoreWebView2)
+	if wv == 0 {
+		v.err = fmt.Errorf("WebView2 gave no web view")
+		return
 	}
-	wv.AddRef()
-	v.wv = wv
-	v.settings()
-	// The ground the page draws on, so nothing flashes white as it loads.
-	if c2 := query[webview2.ICoreWebView2Controller2](unsafe.Pointer(ctl), iidController2); c2 != nil {
-		g := webview2.COREWEBVIEW2_COLOR{A: 255, R: 0xE9, G: 0xEB, B: 0xDF}
+	v.settings(wv)
+	// The ground the page draws on, so nothing flashes white as it loads:
+	// COREWEBVIEW2_COLOR's A, R, G and B in a word.
+	if c2 := ctl.query(iidController2); c2 != 0 {
+		g := uintptr(255) | 0xE9<<8 | 0xEB<<16 | 0xDF<<24
 		if windowsDark() {
-			g = webview2.COREWEBVIEW2_COLOR{A: 255, R: 0x0E, G: 0x14, B: 0x10}
+			g = uintptr(255) | 0x0E<<8 | 0x14<<16 | 0x10<<24
 		}
-		c2.PutDefaultBackgroundColor(g)
+		c2.call(ctl2PutBackground, g)
+		c2.release()
 	}
-	v.messages = webview2.NewICoreWebView2WebMessageReceivedEventHandler(v)
-	v.resources = webview2.NewICoreWebView2WebResourceRequestedEventHandler(v)
-	v.navigations = webview2.NewICoreWebView2NavigationStartingEventHandler(v)
-	v.windows = webview2.NewICoreWebView2NewWindowRequestedEventHandler(v)
-	v.permissions = webview2.NewICoreWebView2PermissionRequestedEventHandler(v)
-	v.failures = webview2.NewICoreWebView2ProcessFailedEventHandler(v)
-	wv.AddWebMessageReceived(v.messages)
-	wv.AddWebResourceRequestedFilter(web.Origin+"/*", webview2.COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)
-	wv.AddWebResourceRequested(v.resources)
-	wv.AddNavigationStarting(v.navigations)
-	wv.AddNewWindowRequested(v.windows)
-	wv.AddPermissionRequested(v.permissions)
-	wv.AddProcessFailed(v.failures)
+	wv.on(wvAddMessage, v.message)
+	wv.withString(wvAddResourceFilter, web.Origin+"/*", resourceContextAll)
+	wv.on(wvAddResource, v.resource)
+	wv.on(wvAddNavStarting, v.navigating)
+	wv.on(wvAddNewWindow, v.newWindow)
+	wv.on(wvAddPermission, v.permission)
+	wv.on(wvAddProcessFailed, v.processFailed)
 	v.ctl = ctl
 	v.resize()
-	ctl.PutIsVisible(true)
-	if err := wv.Navigate(web.Origin + "/index.html"); err != nil {
-		v.err = err
+	ctl.call(ctlPutIsVisible, 1)
+	if err := failed(wv.withString(wvNavigate, web.Origin+"/index.html")); err != nil {
+		v.err = fmt.Errorf("WebView2 did not load the page: %v", err)
+		return
 	}
+	v.wv = wv
 	v.focus()
-	return 0
 }
 
 // settings keep the page an app's: no browser keys, menus, zoom, status
 // bar, autofill or swipes, and no developer tools unless IRIE_APP_DEBUG=1.
-func (v *webView) settings() {
-	s, err := v.wv.GetSettings()
-	if err != nil {
-		log.Print("settings: ", err)
+func (v *webView) settings(wv com) {
+	s := wv.out(wvGetSettings)
+	if s == 0 {
+		log.Print("WebView2 gave no settings")
 		return
 	}
-	s.PutIsStatusBarEnabled(false)
-	s.PutAreDefaultContextMenusEnabled(v.debug)
-	s.PutAreDevToolsEnabled(v.debug)
-	s.PutIsZoomControlEnabled(false)
-	s.PutIsBuiltInErrorPageEnabled(true)
-	s.PutAreHostObjectsAllowed(false)
-	s.PutAreDefaultScriptDialogsEnabled(false)
-	if s3 := query[webview2.ICoreWebView2Settings3](unsafe.Pointer(s), iidSettings3); s3 != nil {
-		s3.PutAreBrowserAcceleratorKeysEnabled(v.debug)
+	defer s.release()
+	s.call(setPutStatusBar, 0)
+	s.call(setPutContextMenus, boolArg(v.debug))
+	s.call(setPutDevTools, boolArg(v.debug))
+	s.call(setPutZoomControl, 0)
+	s.call(setPutErrorPage, 1)
+	s.call(setPutHostObjects, 0)
+	s.call(setPutScriptDialogs, 0)
+	if s3 := s.query(iidSettings3); s3 != 0 {
+		s3.call(set3PutBrowserKeys, boolArg(v.debug))
+		s3.release()
 	}
-	if s4 := query[webview2.ICoreWebView2Settings4](unsafe.Pointer(s), iidSettings4); s4 != nil {
-		s4.PutIsPasswordAutosaveEnabled(false)
-		s4.PutIsGeneralAutofillEnabled(false)
+	if s4 := s.query(iidSettings4); s4 != 0 {
+		s4.call(set4PutPasswordSave, 0)
+		s4.call(set4PutAutofill, 0)
+		s4.release()
 	}
-	if s6 := query[webview2.ICoreWebView2Settings6](unsafe.Pointer(s), iidSettings6); s6 != nil {
-		s6.PutIsSwipeNavigationEnabled(false)
-	}
-}
-
-const (
-	iidController2 = "{c979903e-d4ca-4228-92eb-47ee3fa96eab}"
-	iidSettings3   = "{fdb5ab74-af33-4854-84f0-0a631deb5eba}"
-	iidSettings4   = "{cb56846c-4168-4d53-b04f-03b6d6796ff2}"
-	iidSettings6   = "{11cb3acd-9bc8-43b8-83bf-f40753714f87}"
-)
-
-// query asks a COM object for another of its interfaces; nil when it has
-// none, as on an older WebView2.
-func query[T any](obj unsafe.Pointer, iid string) *T {
-	var out *T
-	unk := (*webview2.IUnknown)(obj)
-	hr, _, _ := unk.Vtbl.QueryInterface.Call(uintptr(obj), uintptr(unsafe.Pointer(webview2.NewGUID(iid))), uintptr(unsafe.Pointer(&out)))
-	if hr != 0 {
-		return nil
-	}
-	return out
-}
-
-func release(obj unsafe.Pointer) {
-	if obj != nil {
-		unk := (*webview2.IUnknown)(obj)
-		unk.Vtbl.Release.Call(uintptr(obj))
+	if s6 := s.query(iidSettings6); s6 != 0 {
+		s6.call(set6PutSwipe, 0)
+		s6.release()
 	}
 }
 
 func (v *webView) resize() {
-	if v.ctl == nil {
-		return
+	if v.ctl != 0 {
+		putBounds(v.ctl, clientRect(v.a.hwnd))
 	}
-	r := clientRect(v.a.hwnd)
-	v.ctl.PutBounds(webview2.RECT{Left: r.Left, Top: r.Top, Right: r.Right, Bottom: r.Bottom})
 }
 
 func (v *webView) moved() {
-	if v.ctl != nil {
-		v.ctl.NotifyParentWindowPositionChanged()
+	if v.ctl != 0 {
+		v.ctl.call(ctlNotifyMoved)
 	}
 }
 
 func (v *webView) focus() {
-	if v.ctl != nil {
-		v.ctl.MoveFocus(webview2.COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
+	if v.ctl != 0 {
+		v.ctl.call(ctlMoveFocus, focusProgrammatic)
 	}
 }
 
 func (v *webView) post(s string) {
-	if v.wv != nil {
-		if err := v.wv.PostWebMessageAsString(s); err != nil {
+	if v.wv != 0 {
+		if err := failed(v.wv.withString(wvPostString, s)); err != nil {
 			log.Print("post: ", err)
 		}
 	}
 }
 
 func (v *webView) devTools() {
-	if v.debug && v.wv != nil {
-		v.wv.OpenDevToolsWindow()
+	if v.debug && v.wv != 0 {
+		v.wv.call(wvOpenDevTools)
 	}
 }
 
-// WebMessageReceived takes the page's message to the backend.
-func (v *webView) WebMessageReceived(_ *webview2.ICoreWebView2, args *webview2.ICoreWebView2WebMessageReceivedEventArgs) uintptr {
-	s, err := args.TryGetWebMessageAsString()
-	if err == nil && s != "" {
+// message takes the page's message to the backend.
+func (v *webView) message(_, args com) {
+	if s := args.str(webMessageTryAsString); s != "" {
 		v.a.backend.Receive([]byte(s))
 	}
-	return 0
 }
 
-// WebResourceRequested answers the page's own address with its files.
-func (v *webView) WebResourceRequested(_ *webview2.ICoreWebView2, args *webview2.ICoreWebView2WebResourceRequestedEventArgs) uintptr {
-	req, err := args.GetRequest()
-	if err != nil || req == nil {
-		return 0
+// resource answers the page's own address with its files.
+func (v *webView) resource(_, args com) {
+	req := args.out(resArgsGetRequest)
+	if req == 0 {
+		return
 	}
-	defer release(unsafe.Pointer(req))
-	uri, _ := req.GetUri()
+	uri := req.str(requestGetURI)
+	req.release()
 	status, reason, headers := 404, "Not Found", "Content-Type: text/plain"
 	var body []byte
 	if u, err := url.Parse(uri); err == nil && "https://"+u.Host == web.Origin {
@@ -248,115 +206,82 @@ func (v *webView) WebResourceRequested(_ *webview2.ICoreWebView2, args *webview2
 		}
 	}
 	stream := memStream(body)
-	resp, err := v.env.CreateWebResourceResponse(stream, status, reason, headers)
-	release(unsafe.Pointer(stream))
-	if err != nil || resp == nil {
-		log.Print("response: ", err)
-		return 0
+	defer stream.release()
+	reasonP, _ := syscall.UTF16PtrFromString(reason)
+	headersP, _ := syscall.UTF16PtrFromString(headers)
+	var resp com
+	hr := v.env.call(envCreateResponse, uintptr(stream), uintptr(status), uintptr(unsafe.Pointer(reasonP)), uintptr(unsafe.Pointer(headersP)), uintptr(unsafe.Pointer(&resp)))
+	if err := failed(hr); err != nil || resp == 0 {
+		log.Printf("response to %s: %v", uri, err)
+		return
 	}
-	args.PutResponse(resp)
-	release(unsafe.Pointer(resp))
-	return 0
+	args.call(resArgsPutResponse, uintptr(resp))
+	resp.release()
 }
 
-// NavigationStarting keeps the window on the page: an address elsewhere
-// opens in the browser instead.
-func (v *webView) NavigationStarting(_ *webview2.ICoreWebView2, args *webview2.ICoreWebView2NavigationStartingEventArgs) uintptr {
-	uri, _ := args.GetUri()
-	if len(uri) >= len(web.Origin) && uri[:len(web.Origin)] == web.Origin {
-		return 0
+// navigating keeps the window on the page: an address elsewhere opens in
+// the browser instead.
+func (v *webView) navigating(_, args com) {
+	uri := args.str(navArgsGetURI)
+	if strings.HasPrefix(uri, web.Origin+"/") {
+		return
 	}
-	args.PutCancel(true)
+	args.call(navArgsPutCancel, 1)
 	openURL(uri)
-	return 0
 }
 
-// NewWindowRequested opens what would be a new window in the browser.
-func (v *webView) NewWindowRequested(_ *webview2.ICoreWebView2, args *webview2.ICoreWebView2NewWindowRequestedEventArgs) uintptr {
-	uri, _ := args.GetUri()
-	args.PutHandled(true)
+// newWindow opens what would be a new window in the browser.
+func (v *webView) newWindow(_, args com) {
+	uri := args.str(newWinArgsGetURI)
+	args.call(newWinArgsPutHandled, 1)
 	openURL(uri)
-	return 0
 }
 
-// PermissionRequested lets the page read the clipboard, for Paste in the
+// permission lets the page read the clipboard, for Paste in the
 // terminal's menu, and nothing else: no camera, microphone or place.
-func (v *webView) PermissionRequested(_ *webview2.ICoreWebView2, args *webview2.ICoreWebView2PermissionRequestedEventArgs) uintptr {
-	kind, _ := args.GetPermissionKind()
-	if kind == webview2.COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ {
-		args.PutState(webview2.COREWEBVIEW2_PERMISSION_STATE_ALLOW)
-	} else {
-		args.PutState(webview2.COREWEBVIEW2_PERMISSION_STATE_DENY)
+func (v *webView) permission(_, args com) {
+	var kind int32
+	args.call(permArgsGetKind, uintptr(unsafe.Pointer(&kind)))
+	state := uintptr(permissionDeny)
+	if kind == permissionClipRead {
+		state = permissionAllow
 	}
-	return 0
+	args.call(permArgsPutState, state)
 }
 
-// ProcessFailed loads the page again after its renderer died; the agents
+// processFailed loads the page again after its renderer died; the agents
 // never noticed, since they run in Linux.
-func (v *webView) ProcessFailed(_ *webview2.ICoreWebView2, args *webview2.ICoreWebView2ProcessFailedEventArgs) uintptr {
-	kind, _ := args.GetProcessFailedKind()
+func (v *webView) processFailed(_, args com) {
+	var kind int32
+	args.call(failArgsGetKind, uintptr(unsafe.Pointer(&kind)))
 	log.Printf("WebView2 process failed: kind %d", kind)
 	switch kind {
-	case webview2.COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED:
-		messageBox(v.a.hwnd, "Irie", "WebView2 stopped. Open Irie again; your agents kept running.", mbIconWarning)
+	case failedBrowserExited:
+		v.a.problem("WebView2 stopped. Open Irie again; your agents kept running.")
 		pPostMessageW.Call(uintptr(v.a.hwnd), wmClose, 0, 0)
-	case webview2.COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED, webview2.COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE:
-		v.wv.Reload()
+	case failedRenderExited, failedUnresponsive:
+		v.wv.call(wvReload)
 	}
-	return 0
 }
 
 // memStream is an IStream over a copy of b.
-func memStream(b []byte) *webview2.IStream {
+func memStream(b []byte) com {
 	var p uintptr
 	if len(b) > 0 {
 		p = uintptr(unsafe.Pointer(&b[0]))
 	}
 	s, _, _ := pSHCreateMemStream.Call(p, uintptr(len(b)))
-	return ptr[webview2.IStream](s)
+	return com(s)
 }
 
-// ---- Snapshots -----------------------------------------------------------------
-
-// capture is one CapturePreview: the stream it fills and where its PNG
-// goes.
-type capture struct {
-	v       *webView
-	stream  *webview2.IStream
-	file    string
-	then    func()
-	handler *webview2.ICoreWebView2CapturePreviewCompletedHandler
-}
-
-func (c *capture) QueryInterface(refiid, object uintptr) uintptr { return 0x80004002 }
-func (c *capture) AddRef() uintptr                               { return 1 }
-func (c *capture) Release() uintptr                              { return 1 }
-
-func (c *capture) CapturePreviewCompleted(code uintptr) uintptr {
-	if int32(code) < 0 {
-		log.Printf("snapshot %s: %#x", c.file, code)
-		os.Exit(1)
-	}
-	b, err := streamBytes(c.stream)
-	release(unsafe.Pointer(c.stream))
-	if err == nil {
-		err = os.WriteFile(c.file, b, 0o644)
-	}
-	if err != nil {
-		log.Printf("snapshot %s: %v", c.file, err)
-		os.Exit(1)
-	}
-	log.Printf("snapshot: %s, %d bytes", c.file, len(b))
-	c.then()
-	return 0
-}
+// ---- Snapshots ---------------------------------------------------------------------
 
 // shots are what --snapshot draws: the window as it opens, then with
 // Settings open, then with a card's menu open.
 var shots = []struct{ file, script string }{
 	{"window.png", ""},
 	{"settings.png", `document.dispatchEvent(new KeyboardEvent('keydown', {key: ',', ctrlKey: true, bubbles: true}));`},
-	{"menu.png", `document.querySelector('.scrim') && document.querySelector('.scrim').remove(); const c = document.querySelector('.card.loud') || document.querySelector('.card'); if (c) c.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, clientX: 200, clientY: 260}));`},
+	{"menu.png", `document.querySelectorAll('.scrim').forEach((s) => s.remove()); const c = document.querySelector('.card.loud') || document.querySelector('.card'); if (c) c.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, clientX: 200, clientY: 260}));`},
 }
 
 // snapshots draws each shot into dir in turn, then quits.
@@ -369,7 +294,7 @@ func (v *webView) snapshots(dir string) {
 			return
 		}
 		if shots[i].script != "" {
-			v.wv.ExecuteScript(shots[i].script, nil)
+			v.wv.withString(wvExecuteScript, shots[i].script, 0)
 		}
 		// The page draws what the script did in a frame or two.
 		go func() {
@@ -381,36 +306,50 @@ func (v *webView) snapshots(dir string) {
 }
 
 func (v *webView) capture(file string, then func()) {
-	c := &capture{v: v, stream: memStream(nil), file: file, then: then}
-	c.handler = webview2.NewICoreWebView2CapturePreviewCompletedHandler(c)
-	v.captures = append(v.captures, c)
-	if err := v.wv.CapturePreview(webview2.COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, c.stream, c.handler); err != nil {
+	stream := memStream(nil)
+	done := newHandler(func(code, _ uintptr) uintptr {
+		defer stream.release()
+		if err := failed(code); err != nil {
+			log.Printf("snapshot %s: %v", file, err)
+			os.Exit(1)
+		}
+		b, err := streamBytes(stream)
+		if err == nil {
+			err = os.WriteFile(file, b, 0o644)
+		}
+		if err != nil {
+			log.Printf("snapshot %s: %v", file, err)
+			os.Exit(1)
+		}
+		log.Printf("snapshot: %s, %d bytes", file, len(b))
+		then()
+		return 0
+	})
+	if err := failed(v.wv.call(wvCapturePreview, captureFormatPNG, uintptr(stream), done)); err != nil {
 		log.Printf("snapshot %s: %v", file, err)
 		os.Exit(1)
 	}
 }
 
-// iStreamVtbl is IStream's whole table, which the binding's leaves short.
-type iStreamVtbl struct {
-	QueryInterface, AddRef, Release                                     uintptr
-	Read, Write, Seek, SetSize, CopyTo, Commit, Revert, Lock, Unlock, Stat, Clone uintptr
-}
+// IStream's methods, after IUnknown's: Read, Write, Seek, …
+const (
+	streamRead = 3
+	streamSeek = 5
+)
 
 // streamBytes reads a stream from its start to its end.
-func streamBytes(s *webview2.IStream) ([]byte, error) {
-	vt := *(**iStreamVtbl)(unsafe.Pointer(s))
-	this := uintptr(unsafe.Pointer(s))
-	// Seek(0, STREAM_SEEK_SET): a LARGE_INTEGER goes in one register on 64-bit Windows.
-	if hr, _, _ := syscall.SyscallN(vt.Seek, this, 0, 0, 0); hr != 0 {
-		return nil, fmt.Errorf("IStream.Seek: %#x", hr)
+func streamBytes(s com) ([]byte, error) {
+	// Seek(0, STREAM_SEEK_SET, NULL): a LARGE_INTEGER goes in one register on 64-bit Windows.
+	if err := failed(s.call(streamSeek, 0, 0, 0)); err != nil {
+		return nil, fmt.Errorf("IStream.Seek: %v", err)
 	}
 	var out []byte
 	buf := make([]byte, 64<<10)
 	for {
 		var n uint32
-		hr, _, _ := syscall.SyscallN(vt.Read, this, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), uintptr(unsafe.Pointer(&n)))
-		if int32(hr) < 0 {
-			return nil, fmt.Errorf("IStream.Read: %#x", hr)
+		hr := s.call(streamRead, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), uintptr(unsafe.Pointer(&n)))
+		if err := failed(hr); err != nil {
+			return nil, fmt.Errorf("IStream.Read: %v", err)
 		}
 		out = append(out, buf[:n]...)
 		if n == 0 || hr == 1 { // S_FALSE: the end

@@ -2,3 +2,8 @@
 # table, so two branches almost always meet there. A union merge keeps both
 # sides' rows; `tools/provenance.sh check` finds a row both sides added.
 PROVENANCE.md merge=union
+
+# xterm.js, as npm built it (PROVENANCE.md, third-party code): one long
+# minified line with an escape character in it, which a diff can't show,
+# and gh pr diff refuses to print.
+internal/winapp/web/vendor/xterm/*.js binary linguist-vendored
