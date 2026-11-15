@@ -163,15 +163,15 @@ struct TerminalArea: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             ToolbarItem(placement: .primaryAction) {
-                // The session's helpers, in the right sidebar's Helpers tab
-                // (RightSidebar.swift), with that tab's icon: the helpers
-                // no longer split the terminal.
+                // The session's helpers, in its Helpers card beside the
+                // terminal (Rolodex.swift), with that card's icon: the
+                // helpers never split the terminal.
                 Button {
                     store.toggleHelpers()
                 } label: {
-                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: SideTab.helpers.symbol)
+                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: PaneKind.helpers.symbol)
                 }
-                .help(store.helperShown ? "Close the helpers (⇧⌘H)" : "Show the session’s helpers in the right sidebar (⇧⌘H)")
+                .help(store.helperShown ? "Hide the panes (⇧⌘H)" : "Show the session’s helpers in the panes beside its terminal (⇧⌘H)")
                 .disabled(selected == nil)
             }
             ToolbarItem(placement: .primaryAction) {

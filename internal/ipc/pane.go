@@ -36,7 +36,7 @@ const CardFileMax = 8 << 20
 
 // CardKinds are the kinds of card a client can be asked to show: the
 // Mac app's PaneKind, by name.
-var CardKinds = []string{"terminal", "browser", "markets", "mail", "code"}
+var CardKinds = []string{"terminal", "browser", "markets", "mail", "code", "helpers", "dock"}
 
 // PaneArgs name the session and one of its panes, by an id the client
 // picks: one to twenty-four lower-case letters and digits. Start starts the

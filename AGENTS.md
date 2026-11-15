@@ -30,7 +30,7 @@ Read a doc by its sections: `tools/doc.sh DESIGN 4.8` prints §4.8 of DESIGN.md,
 
 ## Design
 
-Every client draws from the design library in `design/` ([design/README.md](design/README.md)): the palettes and numbers in `design/palettes/` and `design/tokens.json`, the rules in `design/principles.md` and the parts in `design/components.md`. Change a colour or a number there and run `tools/design.sh sync`, never in a client's copy. When a change teaches something lasting about how Irie should look or behave, add it to the library in the same change, with its source and, where one can be written, a check.
+Every client draws from Roots, Irie People's design library, a repository of its own: [irie-people/roots](https://github.com/irie-people/roots) (checked out beside Irie, at `../roots` from the main checkout). It holds the palettes and numbers (`palettes/`, `tokens.json`), the rules (`principles.md`) and the parts (`components.md`). Change a colour or a number there, never in a client's copy; then here `go get github.com/irie-people/roots@main` and `tools/design.sh sync` write it into Irie's copies (DESIGN §2.11). When a change teaches something lasting about how Irie should look or behave, add it to the library, with its source and, where one can be written, a check.
 
 ## Trying a change
 

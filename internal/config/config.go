@@ -25,10 +25,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/irie-people/irie/design"
 	"github.com/irie-people/irie/internal/arch"
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/route"
+	"github.com/irie-people/roots"
 )
 
 type Config struct {
@@ -86,6 +86,11 @@ type Plugins struct {
 	// accounts in one list, each in a colour of its own
 	// (docs/proposals/mail.md).
 	Mail bool `toml:"mail"`
+	// Bitwarden fills sign-in pages in the Mac app's plugin panes from the
+	// person's Bitwarden vault. The Mac app unlocks it with their master
+	// password and keeps the panes' logins in its own memory: the core
+	// never sees one.
+	Bitwarden bool `toml:"bitwarden"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -121,6 +126,10 @@ func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 // MailOn says whether the mail plugin runs: plugins.mail, with the plugin
 // built in.
 func (c Config) MailOn() bool { return MailBuilt && c.Plugins.Mail }
+
+// BitwardenOn says whether the Bitwarden plugin runs: plugins.bitwarden,
+// with the plugin built in.
+func (c Config) BitwardenOn() bool { return BitwardenBuilt && c.Plugins.Bitwarden }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -500,9 +509,9 @@ const MinFreezeDog = 3 * time.Second
 var HelperStyles = []string{"browser", "terminal"}
 
 // Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's, which the
-// design library keeps (design/tokens.json). Each has a light and a dark
+// design library keeps (github.com/irie-people/roots, tokens.json). Each has a light and a dark
 // set; the terminal's background picks one.
-var Themes = design.IDs()
+var Themes = roots.IDs()
 
 type Spawn struct {
 	DefaultProfile string        `toml:"default_profile"`
@@ -993,7 +1002,7 @@ func Default() Config {
 		Mail:     defaultMail(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1800,7 +1809,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1843,6 +1852,9 @@ func (c Config) Write(w io.Writer) error {
 	if !MailBuilt {
 		delete(m, "mail")
 		delete(plugins, "mail")
+	}
+	if !BitwardenBuilt {
+		delete(plugins, "bitwarden")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

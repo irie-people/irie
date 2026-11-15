@@ -77,6 +77,17 @@ struct PluginCommands: Commands {
                         // (DESIGN §4.18), while the core serves the vpn op,
                         // and off until vpn.on. Lockdown and the account's
                         // time only for a VPN that has them, as Mullvad does.
+                        // Bitwarden: the panes' key's Unlock and Lock
+                        // (Bitwarden.swift), while its part is ready.
+                        if p.name == "bitwarden", x.name == "autofill", x.state == "ready" {
+                            if acts || !lines.isEmpty { Divider() }
+                            if f.bitwarden == BitwardenVault.State.unlocked.rawValue {
+                                Button("Lock Bitwarden", action: run { BitwardenVault.shared.lock() })
+                            } else {
+                                Button("Unlock Bitwarden…", action: run { store.askBitwarden(on: NSApp.keyWindow) })
+                                    .disabled(f.bitwarden == BitwardenVault.State.unlocking.rawValue)
+                            }
+                        }
                         if x.name == "vpn", f.canVPN {
                             if acts || !lines.isEmpty { Divider() }
                             Group {
@@ -155,6 +166,8 @@ extension Store {
             return
         }
         Task {
+            // Your helpers too, for the Helpers tab's count (YourHelpers.swift).
+            await loadHelpers()
             guard let r = try? await client.call("plugins", PluginsArgs(), timeout: 5, as: PluginsResult.self) else { return }
             takePlugins(r)
         }
@@ -167,6 +180,8 @@ extension Store {
             do {
                 let r = try await client.call("plugins", PluginsArgs(plugin: plugin, part: part, on: on), timeout: 10, as: PluginsResult.self)
                 takePlugins(r)
+                // A helper of yours goes on and off with its plugin.
+                await loadHelpers()
                 // Settings › Plugins and the switches elsewhere in Settings
                 // show the change too.
                 await settings.load()
@@ -199,6 +214,7 @@ extension Store {
         plugins = all
         bundles = bs
         PluginPaneWebs.shared.keep(Set(panes.map(\.id)))
+        takeBitwarden()
     }
 
     /// Reads the plugins once a minute while the app runs, for a part set up

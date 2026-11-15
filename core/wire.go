@@ -155,6 +155,10 @@ type (
 	ToolArgs         = ipc.ToolArgs
 	PluginsArgs      = ipc.PluginsArgs
 	PluginsResult    = ipc.PluginsResult
+	HelpersArgs      = ipc.HelpersArgs
+	HelpersResult    = ipc.HelpersResult
+	HelperInfo       = ipc.HelperInfo
+	HelperItem       = ipc.HelperItem
 	Plugin           = ipc.Plugin
 	PluginPart       = ipc.PluginPart
 	PluginPane       = ipc.PluginPane
@@ -362,6 +366,7 @@ const (
 	OpVPN              = ipc.OpVPN
 	OpAnon             = ipc.OpAnon
 	OpPlugins          = ipc.OpPlugins
+	OpHelpers          = ipc.OpHelpers
 	OpMarkets          = ipc.OpMarkets
 	OpLearn            = ipc.OpLearn
 	OpVariorum         = ipc.OpVariorum
@@ -431,6 +436,7 @@ const (
 	ToolPrivacy        = ipc.ToolPrivacy
 	ToolVPN            = ipc.ToolVPN
 	ToolWrite          = ipc.ToolWrite
+	HelperItemsMax     = ipc.HelperItemsMax
 	PaneWeb            = ipc.PaneWeb
 	BundleOn           = ipc.BundleOn
 	BundleOff          = ipc.BundleOff

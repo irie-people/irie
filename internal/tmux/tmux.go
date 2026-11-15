@@ -44,6 +44,7 @@ const (
 	RoleLlama       = "llama"   // Irie's own llama-server (DESIGN §6.5), in its own window of irie-agents
 	RoleRemote      = "remote"  // the phone app's gateway (docs/PHONE.md), in its own window of irie-agents
 	RoleTunnel      = "tunnel"  // an ssh tunnel to a peer's llama-server (DESIGN §6.5), in its own window of irie-agents
+	RoleHelper      = "helper"  // a helper of yours from a plugin's manifest (DESIGN §4.17), in its own window of irie-agents
 	// RoleClosing is an agent pane of a closed session while its agent
 	// ends. It is out of the slot, alone in its window and in no row.
 	RoleClosing = "closing"

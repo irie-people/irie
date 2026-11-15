@@ -1,8 +1,11 @@
 import AppKit
 import SwiftUI
 
-// The right sidebar (docs/proposals/right-dock.md): tabs about the session
-// on show, opened and closed as a whole. It is a drawer at the window's
+// The right sidebar (docs/proposals/right-dock.md): tabs that are the same
+// whichever session shows, opened and closed as a whole: your helpers,
+// what is ready to review, the notices, mail and the plugins' panes. What
+// is a session's own, its controls (Dock) and its helpers, is a card in
+// the panes beside its terminal (Rolodex.swift). It is a drawer at the window's
 // right edge. Opening it slides it in over the edge of the terminal or the
 // conversation, and once it is in, the terminal makes room and sits beside
 // it; closing it gives the room back first, under the drawer, then slides
@@ -55,9 +58,12 @@ enum SideTab: String, CaseIterable, Identifiable {
 
     /// The tabs this build has, in their order, with Variorum while the
     /// core can answer it (Store.sideTabs). The others come with the core
-    /// features they need.
+    /// features they need. Dock is a session's own, so it is a card beside
+    /// the session's terminal (PaneKind.dock), and Helpers here is yours,
+    /// not a session's (YourHelpers.swift); the cases keep their places,
+    /// so each tab keeps its key.
     static func built(variorum: Bool) -> [SideTab] {
-        [.dock, .helpers, .review, .notices, .mail] + (variorum ? [.variorum] : [])
+        [.helpers, .review, .notices, .mail] + (variorum ? [.variorum] : [])
     }
 
     /// Its key with ⌥⌘, by its place among all the tabs, so a key keeps its
@@ -71,7 +77,7 @@ enum SideTab: String, CaseIterable, Identifiable {
 struct SideState: Equatable {
     var open = false
     var width = SideState.startWidth
-    var tab = SideTab.dock
+    var tab = SideTab.helpers
     /// The plugin's pane on show while tab is plugin, by its id.
     var pane: String?
 
@@ -400,9 +406,7 @@ struct RightSidebar: View {
     private func count(_ t: SideTab) -> (count: Int, needsYou: Bool) {
         switch t {
         case .helpers:
-            guard store.outsideSelection == nil, let s = store.sessions.first(where: { $0.id == store.selection }) else { return (0, false) }
-            let running = s.subagents ?? []
-            return (running.count, running.contains { $0.needsYou == true })
+            return store.helpersCount
         case .review:
             return (store.reviewRows(now: Date(), dropped: ReviewTab.dropped).count, false)
         case .notices:
@@ -418,7 +422,6 @@ struct RightSidebar: View {
 
     @ViewBuilder private var content: some View {
         switch store.side.tab {
-        case .dock: DockTab()
         case .review: ReviewTab()
         case .notices: NoticesTab()
         case .variorum: VariorumTab()
@@ -429,7 +432,7 @@ struct RightSidebar: View {
                 SideNote(title: "Mail is off", text: "The mail plugin is off, or this \(Brand.name) was built without it: Plugins › Mail turns it on.")
             }
         case .plugin: PluginPaneTab()
-        default: HelpersTab()
+        default: YourHelpersTab()
         }
     }
 }
@@ -501,9 +504,10 @@ struct SideNote: View {
     }
 }
 
-/// The Helpers tab: the shown session's helpers, the open one's work under a
-/// strip of them all (HelperPane.swift), in either view, so a helper shows
-/// beside the terminal as well as the conversation.
+/// A session's Helpers card, in the panes beside its terminal
+/// (Rolodex.swift): the shown session's helpers, the open one's work under
+/// a strip of them all (HelperPane.swift), in either view, so a helper
+/// shows beside the terminal as well as the conversation.
 @MainActor
 struct HelpersTab: View {
     @Environment(Store.self) private var store

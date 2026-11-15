@@ -45,6 +45,9 @@ type Plugin struct {
 	// remote says a pane of it shows a page off this computer, so it is
 	// off until its switch is set on.
 	remote bool
+	// runs says a helper of it runs a program of yours, so it is off until
+	// its switch is set on.
+	runs bool
 }
 
 // Part is one feature of a plugin.
@@ -71,6 +74,9 @@ type Part struct {
 	// while the part is on (docs/proposals/plugin-panes.md). Its ID, and a
 	// web pane's Store, are its plugin's when left empty.
 	Pane *ipc.PluginPane
+	// Helper is the helper of yours it is, from a manifest's
+	// [helpers.<id>] table (helpers.go); nil = it is none.
+	Helper *Helper
 
 	own   func(config.Config) bool       // its own switch, as the file has it
 	check func(Env, bool) (bool, string) // whether it has what it needs, and its state in a sentence, given whether it is on
@@ -103,12 +109,12 @@ type Live struct {
 
 // order is the order plugins show in; a plugin this build leaves out is
 // skipped.
-var order = []string{"vpn", "privacy", "writing", "markets", "mail"}
+var order = []string{"vpn", "privacy", "writing", "markets", "mail", "bitwarden"}
 
 // built are the plugins in this build, by name. Each plugin's file adds
 // itself, and a build tag leaves a plugin's file out with its parts' code:
-// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail builds Irie without
-// any of them (DESIGN §4.17).
+// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden builds
+// Irie without any of them (DESIGN §4.17).
 var built = map[string]func() Plugin{}
 
 // All are Irie's plugins in this build, in the order they show.
@@ -188,6 +194,9 @@ func (p Plugin) status(e Env) ipc.Plugin {
 	w.On = p.on(e.Config)
 	if p.remote && !w.On {
 		w.Summary += " It shows a page off this computer, so it is off until you turn it on."
+	}
+	if p.runs && !w.On {
+		w.Summary += " It runs a program of yours, so it is off until you turn it on."
 	}
 	for _, x := range p.Parts {
 		s := x.status(e, w.On)

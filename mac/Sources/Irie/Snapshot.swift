@@ -85,11 +85,12 @@ enum Snapshot {
             store.loadFixture(Fixture.sessions, selection: Fixture.selected)
 
             // The right sidebar (RightSidebar.swift), inline after the
-            // terminal: its Dock in both modes, Helpers and Review, then
+            // terminal: your helpers in both modes, Review, then
             // Variorum's note in both modes and half set up, last, since
             // its tab shows only once Variorum is there.
-            for (base, tab, dark) in [("side-dock", SideTab.dock, false), ("side-dock-dark", SideTab.dock, true),
-                                      ("side-helpers", SideTab.helpers, false), ("side-review", SideTab.review, false),
+            store.ownHelpers = Fixture.helpers
+            for (base, tab, dark) in [("side-helpers", SideTab.helpers, false), ("side-helpers-dark", SideTab.helpers, true),
+                                      ("side-review", SideTab.review, false),
                                       ("side-notices", SideTab.notices, false), ("side-notices-dark", SideTab.notices, true),
                                       ("side-narrow", SideTab.review, false),
                                       ("side-variorum", SideTab.variorum, false), ("side-variorum-dark", SideTab.variorum, true),
@@ -163,9 +164,13 @@ enum Snapshot {
             let withPanes = try Wire.decoder.decode(PluginsResult.self, from: Data(Fixture.plugins.utf8))
             store.plugins = withPanes.plugins
             store.bundles = withPanes.bundles ?? []
-            for (base, pane, down, dark) in [("side-pane", "invoices.invoices", false, false), ("side-pane-dark", "invoices.invoices", false, true),
-                                             ("side-pane-down", "bookings.bookings", true, false)] {
+            // With the Bitwarden plugin on, each web pane's header has its key,
+            // and a sign-in page has its banner while Bitwarden is locked.
+            for (base, pane, down, dark, signIn) in [("side-pane", "invoices.invoices", false, false, false), ("side-pane-dark", "invoices.invoices", false, true, false),
+                                                     ("side-pane-down", "bookings.bookings", true, false, false),
+                                                     ("side-pane-bitwarden", "invoices.invoices", false, false, true), ("side-pane-bitwarden-dark", "invoices.invoices", false, true, true)] {
                 PluginPaneFixture.down = down ? [pane] : []
+                PluginPaneFixture.signIn = signIn ? [pane] : []
                 store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: pane)
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
@@ -174,6 +179,7 @@ enum Snapshot {
                 print(name)
             }
             PluginPaneFixture.down = []
+            PluginPaneFixture.signIn = []
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -199,6 +205,9 @@ enum Snapshot {
                 ("panes-browser", .browser, false, 1500, false), ("panes-narrow", .terminal, false, 1100, false),
                 ("panes-blank", nil, false, 1500, false), ("panes-mail", .mail, false, 1500, false),
                 ("panes-folded", .browser, false, 1500, true), ("panes-folded-dark", .browser, true, 1500, true),
+                // A session's own helpers and controls, once tabs of the right
+                // sidebar.
+                ("panes-helpers", .helpers, false, 1500, false), ("panes-dock", .dock, false, 1500, false),
             ]
             for (base, front, dark, width, folded) in panes {
                 store.rolodex.loadFixture(session: Fixture.selected, front: front, folded: folded)
@@ -371,6 +380,24 @@ enum Snapshot {
 /// turn, which says Parked and is not counted to verify; one waits on its
 /// helper and teammates.
 enum Fixture {
+    /// Your helpers (YourHelpers.swift): one at work with three items, and
+    /// one whose plugin is off.
+    static var helpers: [HelperInfo] {
+        let since = ISO8601DateFormatter().string(from: Calendar.current.date(bySettingHour: 9, minute: 12, second: 0, of: Date()) ?? Date())
+        return [
+            HelperInfo(id: "inbox.listen", plugin: "inbox", title: "Texts to tasks", icon: "tray", on: true, runs: true, running: true,
+                       since: since, state: "working", line: "Watching what you text yourself: 2 at work, 5 done today",
+                       items: [
+                           HelperItemInfo(title: "Tabs that join their panel", detail: "With a session since 15:01", state: "working", session: selected),
+                           HelperItemInfo(title: "Upscaling video", detail: "Report ready: oversold, one tip worth keeping", state: "done",
+                                          open: "/Users/alice/Documents/Inbox/upscaling.md"),
+                           HelperItemInfo(title: "A reel from a private account", detail: "Couldn’t fetch it after 5 tries", state: "error"),
+                       ],
+                       open: "/Users/alice/Documents/Inbox"),
+            HelperInfo(id: "backups.watch", plugin: "backups", title: "Backups", icon: "externaldrive", on: false, runs: true, running: false),
+        ]
+    }
+
     static let selected = "s02docsguide"
     /// The code card's file, in the selected session's folder, and another
     /// it has open.
@@ -456,17 +483,23 @@ enum Fixture {
         {"name": "vpn", "title": "Mullvad VPN", "switch": "vpn.on", "on": true, "state": "ready", "setup": ":setup vpn", "detail": "VPN on: Malmö, Sweden (se-mma-wg-002), lockdown on, 41 days left.", "summary": "See the VPN in every client, and connect or disconnect it from a task bar or the menu, or move it where the VPN has places."}
       ]},
      {"name": "privacy", "title": "Privacy", "on": true, "setup": ":setup privacy",
-      "summary": "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family, with Bitwarden for agents to come.",
+      "summary": "Anonymous research over Mullvad and Tor, Mullvad Browser for agents and a dead man's switch for your family.",
       "parts": [
         {"name": "anon", "title": "Anonymous research", "switch": "anon.on", "on": true, "state": "ready", "setup": ":setup anon", "detail": "+anon tasks leave through Mullvad and +tor ones through Tor, and both search through \#(Brand.name)'s SearXNG.", "summary": "Tasks typed with +anon or +tor research in compartments."},
         {"name": "browser", "title": "Mullvad Browser for agents", "switch": "browser.connector", "on": false, "state": "off", "setup": ":setup browser", "detail": "Mullvad Browser is installed. :setup browser checks it on a page and turns this on.", "summary": "Agents browse in a real Mullvad Browser without a window."},
-        {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."},
         {"name": "switch", "title": "Dead man's switch", "on": true, "state": "ready", "setup": ":setup switch", "detail": "The guide is ready: :setup switch, or Plugins › Dead man's switch › Set Up… in the Mac app.", "summary": "A guided session sets up what your family needs if you stop checking in."}
       ]},
       {"name": "writing", "title": "Writing", "on": true,
        "summary": "Agents that help with your writing in Variorum, Lillian Duarte's writing app, with notes and other versions beside your words, never over them.",
        "parts": [
         {"name": "variorum", "title": "Writing in Variorum", "on": true, "state": "ready", "setup": ":write", "detail": "Ready: :write, or Plugins › Writing in Variorum › Start Writing in Variorum… in the Mac app, starts a writing session.", "summary": "`:write` starts a session that works in Variorum through its door for AI."}
+      ]},
+      {"name": "bitwarden", "title": "Bitwarden", "on": true,
+       "summary": "Your Bitwarden logins fill the sign-in pages of your panes in the right sidebar.",
+       "parts": [
+        {"name": "autofill", "title": "Fill sign-ins in panes", "on": true, "state": "ready", "summary": "A pane's sign-in page fills itself with the login your vault has for its address.",
+         "detail": "Ready: unlock Bitwarden with a pane's key, or in the Plugins menu, and each pane's sign-in fills itself."},
+        {"name": "vault", "title": "Bitwarden for agents", "on": false, "state": "held", "detail": "Not in \#(Brand.name) yet. A security review found ways an agent could get past your Touch ID and read secrets, so it stays out until they are fixed.", "summary": "An agent uses a login from your Bitwarden vault without ever seeing it."}
       ]},
       {"name": "bookings", "title": "Bookings", "on": true, "manifest": "/home/alice/.config/\#(Brand.slug)/plugins/bookings.toml",
        "summary": "The booking calendar, beside your sessions.",

@@ -36,7 +36,7 @@ icon = "doc.text"                     # an SF Symbols name; a globe when left ou
 start = "cd ~/code/invoices && make serve"   # shown when nothing answers; never run
 ```
 
-A manifest is data: Irie reads it and runs nothing from it. `[schedules.<id>]` tables are kept for the schedules another session is adding: until a build reads them, each shows as a part that is held, so a manifest written today keeps working. A manifest that doesn't read shows as its plugin with a part that says what is wrong.
+A manifest is data: Irie reads it and runs nothing from it, but a helper's program once you turn its plugin on: a `[helpers.<id>]` table names a program of yours that Irie keeps running in a window of its own, a status file it keeps and a file to open, and the right sidebar's Helpers tab shows it (DESIGN §4.17). `[schedules.<id>]` tables are kept for the schedules another session is adding: until a build reads them, each shows as a part that is held, so a manifest written today keeps working. A manifest that doesn't read shows as its plugin with a part that says what is wrong.
 
 ## 3. Bundles
 
@@ -58,6 +58,7 @@ Each line is a plugin's name or a part of one, `PLUGIN.PART`. The bundle's switc
 - **One origin.** A web pane loads only from its address's origin: a content rule list blocks every other load, and the navigation delegate refuses every other page. The origin is on this Mac (127.0.0.1, localhost or ::1) unless the manifest also says `remote = true`, and then it must be https.
 - **Links elsewhere** open in the browser, and only from a link the person clicked, as in the Markets window: never a page's script, even one that runs as they type. A script can open no window.
 - **Its own data.** Each plugin's panes keep their logins in a website data store of that plugin's own (`WKWebsiteDataStore(forIdentifier:)`, macOS 14), so a login lasts across launches and no other pane, Dock control or window sees it.
+- **Signing in from Bitwarden** (2026-11-15). With the Bitwarden plugin on, a pane's sign-in page fills itself from the login the person's vault has for the pane's host and port, once they unlock Bitwarden in the app (DESIGN §4.17). The fill runs in a script world of its own, in the main frame only, and only on the pane's own origin.
 - **No bridge.** The page has no way to talk to Irie.
 - **No WebRTC, camera or microphone.** WebRTC is outside what a content rule list governs, so a page could reach any host with it: every frame starts without its constructors, a blank frame the page makes too, and the page can't put them back. A pane denies the camera and the microphone, which the app tells macOS it never uses.
 - **No dialog flood.** A page that asks more than three times in ten seconds gets no more sheets until it loads again; the pane answers for it, as Cancel. A page whose web process stops twice in a minute waits for Reload.
