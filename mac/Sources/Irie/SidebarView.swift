@@ -8,8 +8,8 @@ import SwiftUI
 /// changes a card's mark and colours, never where it is (DESIGN §4.1). A
 /// click shows that agent's terminal and gives it the keyboard; the arrow
 /// keys walk the cards and keep the keyboard here, and z parks or unparks
-/// the selected card. The switch between the views, and the selected
-/// session's details, sit above the task bar, on one panel with it.
+/// the selected card. The switch between the views, the selected session's
+/// details and the notepad sit above the task bar, on one panel with it.
 ///
 /// It reads none of the rows itself, only whether there are any: a frame
 /// about a row redraws the list (SessionList) and the views that show that
@@ -52,6 +52,11 @@ struct SidebarView: View {
                 // their edge is dragged, and the cards have the rest.
                 if store.hasRows || !store.outside.isEmpty {
                     DetailsPanel()
+                }
+                // The notes for later, between the details and the task
+                // bar they go to (NotesPanel.swift).
+                if store.notes.shown {
+                    NotesPanel()
                 }
                 TaskBar()
             }

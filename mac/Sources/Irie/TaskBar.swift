@@ -18,7 +18,8 @@ struct TaskBar: View {
     @FocusState private var focused: Bool
     /// Tasks started from the bar, newest last, kept across launches. ↑ walks
     /// back through them and ↓ forward again, ending on what was being typed.
-    @State private var history = UserDefaults.standard.stringArray(forKey: "taskHistory") ?? []
+    /// A note sent as a jot goes in too (TaskHistory).
+    @State private var history = TaskHistory.load()
     @State private var recall: Int?
     @State private var draft = ""
 
@@ -62,6 +63,9 @@ struct TaskBar: View {
         )
         .padding(10)
         .onReceive(NotificationCenter.default.publisher(for: .irieQuickTask)) { _ in focused = true }
+        .onReceive(NotificationCenter.default.publisher(for: .irieTaskHistory)) { _ in
+            if recall == nil { history = TaskHistory.load() }
+        }
     }
 
     private var blank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -110,11 +114,8 @@ struct TaskBar: View {
     }
 
     private func remember(_ input: String) {
-        history.removeAll { $0 == input }
-        history.append(input)
-        history = Array(history.suffix(50))
-        UserDefaults.standard.set(history, forKey: "taskHistory")
         recall = nil
+        history = TaskHistory.remember(input)
     }
 
     private func submit() {
