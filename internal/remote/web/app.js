@@ -354,13 +354,10 @@ function sessionActions(conn, s, { inSession = false } = {}) {
   if (inSession && !ended && lk !== 'starting' && conn.can('keys')) {
     items.push({ label: 'Stop the turn', note: 'As Esc in its terminal', run: () => op(conn, 'keys', { session: s.id, keys: ['Escape'] }, { done: 'Sent Esc.' }) });
   }
+  // A close stays inside Irie and undo brings it back, so it goes at once,
+  // with Undo in its notice (DESIGN §4.5).
   if (conn.can('close')) {
-    items.push({
-      label: 'Close',
-      destructive: true,
-      confirm: { title: `Close “${s.name}”?`, message: 'Its agent stops and its card goes. Undo brings it back.', label: 'Close' },
-      run: () => closeSession(conn, s),
-    });
+    items.push({ label: 'Close', destructive: true, run: () => closeSession(conn, s) });
   }
   return items;
 }

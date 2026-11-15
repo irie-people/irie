@@ -68,12 +68,6 @@ struct IrieApp: App {
         } message: { p in
             Text(p.choice.options.compactMap { o in (o.detail ?? "").isEmpty ? nil : "\(o.label): \(o.detail!)" }.joined(separator: "\n"))
         }
-        .confirmationDialog("Close “\(app.closing?.session.name ?? "")”?", isPresented: Binding(get: { app.closing != nil }, set: { if !$0 { app.closing = nil } }),
-                            titleVisibility: .visible, presenting: app.closing) { p in
-            Button("Close", role: .destructive) { Task { await app.close(p.conn, p.session) } }
-        } message: { _ in
-            Text("Its agent stops and its card goes. Undo brings it back.")
-        }
         .alert("Rename", isPresented: Binding(get: { app.renaming != nil }, set: { if !$0 { app.renaming = nil } }), presenting: app.renaming) { p in
             TextField("Name", text: $app.renameText)
             Button("Rename") { Task { await app.rename(p, to: app.renameText) } }

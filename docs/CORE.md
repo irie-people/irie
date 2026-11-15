@@ -57,7 +57,7 @@ From a shell, `irie ctl input "hows the parser?"` does the same.
 | `:group [NAME]`, `:ungroup`, `:nest [NAME]` | `group` on the selected session: `:group` makes a new group of it, `:group NAME` puts it in the group of that name or path (`Work/Irie`), made when none has it, `:ungroup` takes it one group out, and `:nest NAME` puts its group inside the group of that name, or with none back at the top of the list (DESIGN §4.1). One undo takes it back | `ran`; `answered` when it is in that group already |
 | `:close others`, `:close below`, `:close finished` | One `close` of several, as the List view orders them: every session but the selected one, or those after it, leaving out the pinned, the parked and another machine's; or `finished` (DESIGN §4.1). One undo takes them all back | `ran`; `answered` when nothing has finished |
 | `:fork [@TURN] [TASK]` | `fork` of the selected session from a point of its context (a turn, `-N`, a tag, a commit or an entry's uuid after `@`; its newest turn without), with TASK, which may run on over more lines, as the fork's next prompt (DESIGN §4.13) | `spawned`, its `session` the fork |
-| `:freeze all`, `:thaw all` | Every session | `ran` |
+| `:freeze all`, `:thaw all` | Every session; a thaw of several goes in turn, one every 30 s (DESIGN §4.3) | `ran` |
 | `:reopen`, `:undo`, `:redo` | The session closed last; the history's next step. Nothing to undo is an answer, not an error | `ran`, or `asked` |
 | `:move [NAME]` | Brings in the session outside Irie by its id or name, else the selected one (`outside`) | `ran`, with `session` |
 | `:route TASK` | Says where `+auto` would run the task, and why | `answered` |

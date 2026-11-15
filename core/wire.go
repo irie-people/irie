@@ -170,6 +170,7 @@ type (
 	HookArgs         = ipc.HookArgs
 	HookResult       = ipc.HookResult
 	Frame            = ipc.Frame
+	Reach            = ipc.Reach
 	ScreenArgs       = ipc.ScreenArgs
 	ScreenResult     = ipc.ScreenResult
 	ScreenOption     = ipc.ScreenOption
@@ -430,6 +431,10 @@ const (
 	FrameHistory       = ipc.FrameHistory
 	FramePing          = ipc.FramePing
 	FrameCard          = ipc.FrameCard
+	ReachRead          = ipc.ReachRead
+	ReachInside        = ipc.ReachInside
+	ReachInsideOut     = ipc.ReachInsideOut
+	ReachOutside       = ipc.ReachOutside
 	OpScreen           = ipc.OpScreen
 	OpKeys             = ipc.OpKeys
 	FeatureScreenLive  = ipc.FeatureScreenLive

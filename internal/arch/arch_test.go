@@ -52,7 +52,17 @@ func TestMikaelKeepsTheDoor(t *testing.T) {
 			t.Errorf("the door does not weigh %s", want)
 		}
 	}
-	for _, never := range []string{"Bash", "Read", "Edit", "Bash(go test *)", "Bash(git commit *)", "Bash(ls *)"} {
+	// So are Irie's own ops whose effect leaves Irie, as an agent runs them
+	// through its program; those that stay inside, which undo takes back,
+	// are not (DESIGN §4.5).
+	for _, want := range []string{"Bash(* ctl spawn*)", "Bash(* ctl delegate*)", "Bash(* ctl fork*)", "Bash(* ctl bench*)",
+		"Bash(* ctl input*)", "Bash(* ctl send*)", "Bash(* ctl continue*)", "Bash(* ctl move*)", "Bash(* remote pair*)", "Bash(* peer add*)"} {
+		if !slices.Contains(d.Rules, want) {
+			t.Errorf("the door does not weigh %s", want)
+		}
+	}
+	for _, never := range []string{"Bash", "Read", "Edit", "Bash(go test *)", "Bash(git commit *)", "Bash(ls *)",
+		"Bash(* ctl close *)", "Bash(* ctl park *)", "Bash(* ctl freeze *)", "Bash(* ctl rename *)", "Bash(* ctl list *)"} {
 		if slices.Contains(d.Rules, never) {
 			t.Errorf("the door weighs %s, which is ordinary work", never)
 		}

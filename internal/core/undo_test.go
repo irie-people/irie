@@ -127,6 +127,28 @@ func TestABatchNamesItsSessions(t *testing.T) {
 	}
 }
 
+// A thaw in turn under way is kept in state.json, so that a restarted core
+// goes on with it at the same pace; with none under way the file says
+// nothing of it.
+func TestStateFileKeepsAThawInTurn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	at := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+	want := thawQueue{IDs: []string{"s1", "s2"}, Since: at, Last: at.Add(30 * time.Second)}
+	if err := writeState(path, stateFile{thaws: want}); err != nil {
+		t.Fatal(err)
+	}
+	back, err := readState(path)
+	if got := back.thaws; err != nil || !reflect.DeepEqual(got.IDs, want.IDs) || !got.Since.Equal(want.Since) || !got.Last.Equal(want.Last) || len(back.extra) != 0 {
+		t.Errorf("read back %+v, %v; wrote %+v", back, err, want)
+	}
+	if err := writeState(path, stateFile{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); strings.Contains(string(b), stateThawing) {
+		t.Errorf("with no thaw under way the file has one:\n%s", b)
+	}
+}
+
 func TestHistoryKeepsTheLatestHundred(t *testing.T) {
 	var h history
 	for i := range maxHistory + 5 {

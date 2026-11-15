@@ -295,6 +295,9 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 			InputResult{Did: InputRan, Op: OpFreeze, Session: login, Text: "Froze fix login."}},
 		{"thaw all", Step{Op: OpThaw}, FreezeResult{Sessions: []string{"s2", "s3"}}, nil,
 			InputResult{Did: InputRan, Op: OpThaw, Text: "Thawed 2 sessions."}},
+		// A thaw of several goes in turn.
+		{"thaw all in turn", Step{Op: OpThaw}, FreezeResult{Sessions: []string{"s1"}, Queued: []string{"s2", "s3"}}, nil,
+			InputResult{Did: InputRan, Op: OpThaw, Text: "Thawing 3 sessions in turn, one every 30 s, so that each agent finds the sign-in the one before renewed."}},
 		{"freeze none", Step{Op: OpFreeze}, FreezeResult{}, nil,
 			InputResult{Did: InputRan, Op: OpFreeze, Text: "Nothing to freeze."}},
 		{"promote", Step{Op: OpPriority, Args: PriorityArgs{Level: 1}, Session: parser}, nil, nil,

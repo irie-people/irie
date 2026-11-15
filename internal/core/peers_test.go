@@ -184,6 +184,25 @@ func TestAPeersSessionsJoinTheListAndItsCallsGoThere(t *testing.T) {
 	}
 }
 
+// Freezing or thawing them all is this machine's to do: a paired
+// machine's rows in the list are its own core's, and are passed over.
+func TestFreezingThemAllPassesOverAPeersRows(t *testing.T) {
+	g := peertest.Start(t)
+	g.Core.Start([]ipc.Session{{ID: "s1", Name: "far", State: ipc.StateWorking}}, &ipc.Header{Machine: &ipc.Machine{Name: "Asahi"}})
+	c := newPeerCore(t)
+	pairWith(t, c, g, "Asahi")
+	testutil.Eventually(t, 10*time.Second, "the peer's row never joined the list", func() bool {
+		return slices.Equal(c.ids(), []string{"Asahi/s1"})
+	})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, on := range []bool{true, false} {
+		if ids := c.allTargets(on); len(ids) != 0 {
+			t.Errorf("freezing (%v) them all takes %v", on, ids)
+		}
+	}
+}
+
 func TestACaretWordNamesAMachine(t *testing.T) {
 	c := newPeerCore(t)
 	c.peers = map[string]*peerState{"Asahi": {name: "Asahi", stop: func() {}}, "Atlas": {name: "Atlas", stop: func() {}}}

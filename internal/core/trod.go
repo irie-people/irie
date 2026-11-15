@@ -51,12 +51,9 @@ import (
 const trodEvery = 10
 
 // trodThawGap is how long the trod bot waits between two thaws, so that
-// the sessions it froze for the week's allotment come back one at a time.
-// An agent frozen for a day or more renews its sign-in with its first
-// request, and many renewing at once can sign them all out: twenty-one
-// thawed in the same second all came back "Not logged in". One at a time
-// spreads the load on the Mac too.
-const trodThawGap = 30 * time.Second
+// the sessions it froze for the week's allotment come back one at a time:
+// thawGap, as any thaw of several (freeze.go), and after any thaw.
+const trodThawGap = thawGap
 
 // trodTypedFor is how soon a message the shift typed must come in as a
 // prompt for that prompt to be the shift's rather than the user's.
@@ -659,12 +656,10 @@ func (c *Core) trodSweep() bool {
 		// One at a time, trodThawGap apart, and none while an agent is
 		// signed out: they would only wake into the same failure, while
 		// frozen they carry on where they were later.
-		if len(thaws) > 0 && !hold && now.Sub(c.trodThawed) >= trodThawGap {
+		if len(thaws) > 0 && !hold && now.Sub(c.lastThaw) >= trodThawGap {
 			x := slices.MinFunc(thaws, func(a, b *session) int { return c.wakeOrder(a, b, now) })
 			if err := c.thawLocked(x, "the week's plan use is back under the most it may use"); err != nil {
 				c.log.Warn("trod bot: thaw", "session", x.id, "err", err)
-			} else {
-				c.trodThawed = now
 			}
 		}
 		// While fewer than max_working work, the sessions whose cache is
