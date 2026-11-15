@@ -1110,7 +1110,7 @@ func (c *Core) renameInHistory(id, name string) {
 				a.Label = k.labelOf(*a)
 			}
 			if a.str("batch_group") == id {
-				a.Data["batch_label"] = fmt.Sprintf("%s %q", a.str("batch_verb"), name)
+				a.Data["batch_label"] = fmt.Sprintf("%s %q%s", a.str("batch_verb"), name, a.str("batch_tail"))
 				changed = true
 			}
 		}

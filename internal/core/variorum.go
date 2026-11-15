@@ -34,12 +34,12 @@ const variorumServer = "variorum"
 const maxNoteID = 200
 
 // variorumMCP is the MCP server, by name, that a session started in dir
-// gets for Variorum: `irie variorum door` for a writing session, while the
-// writing plugin is on and Irie keeps Claude Code's setup; else none. The
-// server names no key: the door reads it from Irie's own file as it
-// starts.
+// gets for Variorum: `irie variorum door` for a writing session, while
+// writing in Variorum is on, whatever the tab's switch says, and Irie
+// keeps Claude Code's setup; else none. The server names no key: the door
+// reads it from Irie's own file as it starts.
 func (c *Core) variorumMCP(dir string) map[string]harness.MCPServer {
-	if !c.writing(dir) || plugins.Why(*c.cfg(), plugins.VariorumTab) != "" {
+	if !c.writing(dir) || plugins.Why(*c.cfg(), plugins.Variorum) != "" {
 		return nil
 	}
 	if st, err := variorum.Load(c.paths.Data); err != nil || st.Sessions == nil {
@@ -69,10 +69,11 @@ func (c *Core) noteVariorum(x *session, tool string, input json.RawMessage) {
 // variorumOp answers the variorum op (docs/proposals/writers.md): where
 // Irie's part of Variorum stands, Variorum's setups kept or forgotten, and
 // the notes shared with Irie read or shown through the door with the
-// tab's setup. A call to the door runs outside c.mu, one at a time, and
-// only when asked: Variorum keeps a line of its log for each. Only status
-// is open to a process inside an agent: the tab's door reads what the
-// writer shares with Irie, for the writer.
+// tab's setup. It is the tab's, so it is off while the tab is. A call to
+// the door runs outside c.mu, one at a time, and only when asked:
+// Variorum keeps a line of its log for each. Only status is open to a
+// process inside an agent: the tab's door reads what the writer shares
+// with Irie, for the writer.
 func (c *Core) variorumOp(peer int, a ipc.VariorumArgs) (ipc.VariorumResult, error) {
 	data := c.paths.Data
 	if why := plugins.Why(*c.cfg(), plugins.VariorumTab); why != "" {

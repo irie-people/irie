@@ -44,9 +44,13 @@ type SpacesResult struct {
 	Space  string  `json:"space,omitempty"`
 }
 
-// SpaceArgs put Sessions in Space ("" for the first).
+// SpaceArgs put Sessions in Space ("" for the first), and every session of
+// Groups, by id, name or path (FindGroup), those of the groups inside them
+// too, so that each group goes whole: the core takes what a group holds as
+// it has it then, pinned and parked sessions included.
 type SpaceArgs struct {
 	Sessions []string `json:"sessions"`
+	Groups   []string `json:"groups,omitempty"`
 	Space    string   `json:"space"`
 }
 

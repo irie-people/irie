@@ -184,15 +184,26 @@ final class Store {
     /// typed so far.
     var renaming: String?
     var renameText = ""
-    /// The card a drag holds, and where it would land (Controls.swift).
+    /// The card a drag holds, with every card picked with it, or the group
+    /// of yours it holds by its header, and where the hold would land
+    /// (Drops.swift).
     var dragging: String?
-    var dropMark: DropMark?
-    /// The group of yours a drag holds by its header, and where on a
-    /// header a held card or group would land (Groups.swift).
     var draggingGroup: String?
-    var headerMark: HeaderMark?
-    /// Bumped when the terminal should take keyboard focus.
-    var focusTerminal = 0
+    var heldCards: Set<String> = []
+    var drop: DropModel.Landing?
+    /// Where the pointer was as the drag began, on the screen; the rows'
+    /// frames in the list; the spring that opens a folded group under the
+    /// pointer; and which drag this is, so an old drag's end lets go of
+    /// nothing newer.
+    @ObservationIgnored var dragStart: NSPoint?
+    @ObservationIgnored var dropFrames: [String: CGRect] = [:]
+    @ObservationIgnored var spring: Task<Void, Never>?
+    @ObservationIgnored var dragGen = 0
+    /// Bumped when the terminal should take keyboard focus, which brings it
+    /// over the panes where they overlap (Rolodex.swift).
+    var focusTerminal = 0 {
+        didSet { rolodex.setRaised(false) }
+    }
     /// Bumped to move the keyboard to the session list or the find field.
     var focusSidebar = 0
     var focusFind = 0
@@ -235,8 +246,11 @@ final class Store {
     /// The session the core shows beside its teammates, as last asked
     /// (TeamSplit.swift); nil while the slot shows the picked session.
     private(set) var splitShown: String?
-    /// Bumped when the conversation's message box should take the keyboard.
-    var focusMessage = 0
+    /// Bumped when the conversation's message box should take the keyboard,
+    /// which brings the conversation over the panes where they overlap.
+    var focusMessage = 0 {
+        didSet { rolodex.setRaised(false) }
+    }
     /// Whether the message box has the keyboard.
     @ObservationIgnored var messageHasKeys = false
     /// The message box's own field while it has the keyboard. The window

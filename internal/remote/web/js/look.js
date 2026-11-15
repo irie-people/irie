@@ -5,13 +5,14 @@
 // and the short forms of ages, durations and token counts. The palette is
 // Evergreen; app.css holds the same swatches as CSS variables.
 
+// design: evergreen
 export const PALETTE = {
   light: {
     sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, field: 0xFDFDF9,
     edge: 0xD8DCC9, hover: 0xF6F7EF, selection: 0xDDE5D3, needsTint: 0xFBE5DC,
     ink: 0x1E2B22, muted: 0x56635A,
     accent: 0x2F5D46, accentInk: 0x264D3A, accentFill: 0x9DB8A3, onAccent: 0x1E2B22,
-    needs: 0x892319, done: 0x3F6A5F, paused: 0x885A07, frozen: 0x00566B,
+    needs: 0x892319, done: 0x2C7043, paused: 0x8C5500, frozen: 0x00566B,
     sun: 0xD9A93F, waves: 0x5E8A6E,
   },
   dark: {
@@ -19,10 +20,11 @@ export const PALETTE = {
     edge: 0x34443A, hover: 0x25322A, selection: 0x2A3D31, needsTint: 0x4A251C,
     ink: 0xECF0E6, muted: 0xB3BFB5,
     accent: 0x9CC5A1, accentInk: 0xB3D6B8, accentFill: 0x9CC5A1, onAccent: 0x12201A,
-    needs: 0xFF9585, done: 0x8FC3B2, paused: 0xEFC468, frozen: 0x86E0FD,
+    needs: 0xFF9585, done: 0xB0F2B1, paused: 0xEFC468, frozen: 0x86E0FD,
     sun: 0xD9A93F, waves: 0x9CC5A1,
   },
 };
+// design: end
 
 // ---- The palette the Mac app draws in --------------------------------------
 // A core whose Mac app has said its palette sends it in the header (the

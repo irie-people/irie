@@ -148,6 +148,16 @@ final class KeyRouter {
             if irie, MainActor.assumeIsolated({ (event.window?.firstResponder as? CodeTextView)?.command(event) == true }) {
                 return nil
             }
+            // Each modifier with Tab walks one level: ⌃Tab the sessions,
+            // ⌥Tab the terminal and the panes, Fn+Tab the spaces.
+            // Fn+Tab shows the next space and Fn+Shift+Tab the one before
+            // (Spaces.swift), rather than typing a Tab. Only the fn flag
+            // tells them from Tab, and only here: AppKit keeps fn out of an
+            // app's own menu keys. With ⌃ or ⌥ as well, fn changes nothing.
+            if event.keyCode == 48, mods.isEmpty || mods == .shift, irie, event.modifierFlags.contains(.function) {
+                MainActor.assumeIsolated { store.stepSpace(mods.contains(.shift) ? -1 : 1) }
+                return nil
+            }
             if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil

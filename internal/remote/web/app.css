@@ -5,17 +5,21 @@
 
 :root {
   color-scheme: light dark;
+  /* design: evergreen light */
   --sidebar: #F4F4EC; --ground: #E9EBDF; --card: #FBFBF6; --panel: #F1F2E8; --field: #FDFDF9;
   --edge: #D8DCC9; --hover: #F6F7EF; --selection: #DDE5D3; --needs-tint: #FBE5DC;
   --ink: #1E2B22; --muted: #56635A;
   --accent: #2F5D46; --accent-ink: #264D3A; --accent-fill: #9DB8A3; --on-accent: #1E2B22;
-  --needs: #892319; --done: #3F6A5F; --paused: #885A07; --frozen: #00566B;
+  --needs: #892319; --done: #2C7043; --paused: #8C5500; --frozen: #00566B;
   --sun: #D9A93F; --waves: #5E8A6E;
+  /* design: end */
   --bar: #183F30; --bar-edge: transparent;
   --on-needs: #FFFFFF; --on-mark: var(--card);
   --shadow: 0 1px 2px rgba(30, 43, 34, .07), 0 0 0 .5px rgba(30, 43, 34, .05);
   --lift: 0 10px 30px rgba(30, 43, 34, .16), 0 1px 3px rgba(30, 43, 34, .08);
+  /* design: terminal term-bg=ground term-fg=ink */
   --term-bg: #14110D; --term-fg: #EEE5D5;
+  /* design: end */
   /* The terminal's 16 colours, calm on its ground in both modes. */
   --t0: #2B2620; --t1: #E07A6B; --t2: #9CC48A; --t3: #DDB867; --t4: #79A8DA; --t5: #C891C4; --t6: #72C2BF; --t7: #D9D1C3;
   --t8: #776D60; --t9: #F09486; --t10: #B3D8A3; --t11: #EDCB82; --t12: #97BEEA; --t13: #DDA9D9; --t14: #94D6D3; --t15: #F6F0E5;
@@ -32,12 +36,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* design: evergreen dark */
     --sidebar: #141C17; --ground: #0E1410; --card: #1C2620; --panel: #18221C; --field: #202B24;
     --edge: #34443A; --hover: #25322A; --selection: #2A3D31; --needs-tint: #4A251C;
     --ink: #ECF0E6; --muted: #B3BFB5;
     --accent: #9CC5A1; --accent-ink: #B3D6B8; --accent-fill: #9CC5A1; --on-accent: #12201A;
-    --needs: #FF9585; --done: #8FC3B2; --paused: #EFC468; --frozen: #86E0FD;
+    --needs: #FF9585; --done: #B0F2B1; --paused: #EFC468; --frozen: #86E0FD;
     --sun: #D9A93F; --waves: #9CC5A1;
+    /* design: end */
     --bar: #0F1712; --bar-edge: #26332B;
     --on-needs: #2A0E09;
     --shadow: 0 0 0 .5px rgba(236, 240, 230, .06);
@@ -47,12 +53,14 @@
 
 /* The dark set, for what sits on the bars in either mode. */
 .on-dark {
+  /* design: evergreen dark */
   --sidebar: #141C17; --card: #1C2620; --panel: #18221C; --field: #202B24;
   --edge: #34443A; --selection: #2A3D31; --needs-tint: #4A251C;
   --ink: #ECF0E6; --muted: #B3BFB5;
   --accent: #9CC5A1; --accent-ink: #B3D6B8; --accent-fill: #9CC5A1; --on-accent: #12201A;
-  --needs: #FF9585; --done: #8FC3B2; --paused: #EFC468; --frozen: #86E0FD;
+  --needs: #FF9585; --done: #B0F2B1; --paused: #EFC468; --frozen: #86E0FD;
   --waves: #9CC5A1;
+  /* design: end */
   color: var(--ink);
 }
 

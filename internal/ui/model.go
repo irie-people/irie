@@ -412,7 +412,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Button == tea.MouseLeft && m.drag != nil {
 			m.hover = ""
 			m.dragTo(msg.Y)
-			break
+			// Held on the list's edge, it scrolls the list (control.go).
+			return m, m.holdAt(msg.Y)
 		}
 		m.hover = m.hoverAt(msg.X, msg.Y)
 	case tea.BlurMsg:
@@ -430,6 +431,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The press takes hold of what it is on. The release opens it,
 			// as a click does, or drops a card a drag carried (control.go).
 			m.press(i)
+			m.drag.down, m.drag.row = msg.Y, msg.Y
 			return m, nil
 		}
 		if msg.Y >= m.barTop()-b2i(m.tabbed()) {
@@ -439,6 +441,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.release(msg.Y)
 	case controlledMsg:
 		m.controlled(msg)
+	case dragScrollMsg:
+		return m, m.dragScroll(msg.d)
 	case tea.KeyPressMsg:
 		if m.menu != nil {
 			return m.menuKey(msg)

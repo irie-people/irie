@@ -86,4 +86,4 @@ Each line is a plugin's name or a part of one, `PLUGIN.PART`. The bundle's switc
 - A pane's own window, or a zoom over the terminal, for an app that wants more room than the sidebar has.
 - Forget a pane's logins from Settings (`WKWebsiteDataStore.remove(forIdentifier:)`).
 - Plugins from a repository of their own, pinned to a commit (DESIGN §4.17, Later).
-- The terminal sidebar and the phone list plugins and bundles but draw no panes.
+- The terminal sidebar and the phone list plugins and bundles but draw no panes. The phone reaches the web panes that `remote.panes` names instead, each at an address of its own, in Safari or on its Home Screen ([PHONE.md](../PHONE.md) §2.2), not inside Irie's app.

@@ -14,9 +14,12 @@
 <style>
 :root {
   color-scheme: light dark;
+  /* design: evergreen light page=sidebar */
   --page: #F4F4EC; --card: #FBFBF6; --panel: #F1F2E8; --edge: #D8DCC9;
-  --ink: #1E2B22; --muted: #56635A; --accent: #2F5D46; --accent-ink: #264D3A; --on-accent: #FBFBF6;
-  --needs: #892319; --needs-tint: #FBE5DC; --done: #3F6A5F; --bar: #183F30;
+  --ink: #1E2B22; --muted: #56635A; --accent: #2F5D46; --accent-ink: #264D3A;
+  --needs: #892319; --needs-tint: #FBE5DC; --done: #2C7043;
+  /* design: end */
+  --on-accent: #FBFBF6; --bar: #183F30;
   --shadow: 0 1px 2px rgba(30, 43, 34, .07), 0 0 0 .5px rgba(30, 43, 34, .05);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -24,9 +27,12 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
+    /* design: evergreen dark page=sidebar */
     --page: #141C17; --card: #1C2620; --panel: #18221C; --edge: #34443A;
-    --ink: #ECF0E6; --muted: #B3BFB5; --accent: #9CC5A1; --accent-ink: #B3D6B8; --on-accent: #12201A;
-    --needs: #FF9585; --needs-tint: #4A251C; --done: #8FC3B2; --bar: #0F1712;
+    --ink: #ECF0E6; --muted: #B3BFB5; --accent: #9CC5A1; --accent-ink: #B3D6B8;
+    --needs: #FF9585; --needs-tint: #4A251C; --done: #B0F2B1;
+    /* design: end */
+    --on-accent: #12201A; --bar: #0F1712;
     --shadow: 0 0 0 .5px rgba(236, 240, 230, .07);
   }
 }

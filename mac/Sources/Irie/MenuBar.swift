@@ -33,6 +33,8 @@ final class MenuState {
         /// in, by its place among them (Spaces.swift).
         var spaces: [String] = []
         var space: Int?
+        /// There is another space to step to (Go > Next Space).
+        var canStepSpaces = false
         /// The session ⇧⌘T brings back.
         var reopen: String?
         var trodHand = false
@@ -62,6 +64,8 @@ final class MenuState {
         /// folded down to a strip.
         var panesOpen = false
         var panesFolded = false
+        /// Wider than fits beside the terminal, they go over it.
+        var panesOver = false
         var canPlugins = false
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
@@ -105,6 +109,7 @@ extension Store {
                 f.space = spaces.indices.first { spaceKey(at: $0) == c.spaceKey }
             }
         }
+        f.canStepSpaces = spaces.count > 1
         f.picked = picked.count
         f.canGroup = canGroup && (picked.count > 1 || closable?.peerName == nil && closable != nil)
         f.rows = drawnOrder.prefix(9).map(\.name)
@@ -128,6 +133,7 @@ extension Store {
         f.canPopOut = attach != nil
         f.panesOpen = rolodex.open
         f.panesFolded = rolodex.open && rolodex.folded
+        f.panesOver = rolodex.over
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.bundles = bundles
@@ -282,6 +288,12 @@ struct IrieCommands: Commands {
             // Down to a strip of their tabs at the window's edge, or back.
             Button(f.panesFolded ? "Unfold Panes" : "Fold Panes", action: run { store.toggleFold() })
                 .keyboardShortcut("p", modifiers: [.command, .option, .shift])
+            // Over the terminal like a window, the one with the keyboard on
+            // top: what a drag of their edge past the terminal's narrowest
+            // does, for a click or a key.
+            Toggle("Panes Over the Terminal", isOn: Binding(get: { f.panesOver }, set: { _ in
+                MainActor.assumeIsolated { store.togglePanesOver() }
+            }))
             // The selected session's helpers, its Helpers card; KeyRouter
             // catches ⇧⌘H first, as it does ⌥Tab.
             Button(f.helperShown ? "Hide Session Helpers" : "Show Session Helpers", action: run { store.toggleHelpers() })
@@ -335,6 +347,16 @@ struct IrieCommands: Commands {
                 .keyboardShortcut(.tab, modifiers: .control)
             Button("Previous Session", action: run { store.step(-1) })
                 .keyboardShortcut(.tab, modifiers: [.control, .shift])
+            // Fn+Tab and Fn+Shift+Tab, which only KeyRouter catches: AppKit
+            // takes fn out of an app's own menu keys, which would leave a
+            // bare Tab, so the item names its key in its help instead
+            // (Spaces.swift).
+            Button("Next Space", action: run { store.stepSpace(1) })
+                .help("Fn+Tab")
+                .disabled(!f.canStepSpaces)
+            Button("Previous Space", action: run { store.stepSpace(-1) })
+                .help("Fn+Shift+Tab")
+                .disabled(!f.canStepSpaces)
             // The first nine cards, by name, in the sidebar's order.
             Menu("Sessions") {
                 ForEach(Array(f.rows.enumerated()), id: \.offset) { i, name in

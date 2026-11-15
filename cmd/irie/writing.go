@@ -94,9 +94,10 @@ func variorumCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 }
 
 // variorumAction is the variorum op's status, connect or forget, as the
-// core answers it.
+// core answers it, but for the setups' switch: they serve both of the
+// writing plugin's parts, so they are here while either is on.
 func variorumAction(cfg config.Config, p paths.Paths, action string, stdin io.Reader) (ipc.VariorumResult, error) {
-	if why := plugins.Why(cfg, plugins.VariorumTab); why != "" {
+	if why := setupsWhy(cfg); why != "" {
 		r := variorum.Status(p.Data)
 		r.State, r.Text = ipc.VariorumOff, why
 		if action != ipc.VariorumStatus {
@@ -121,6 +122,16 @@ func variorumAction(cfg config.Config, p paths.Paths, action string, stdin io.Re
 	return variorum.Status(p.Data), nil
 }
 
+// setupsWhy is why Irie keeps none of Variorum's setups now, or "" while
+// they serve :write sessions or the Variorum tab: they go only when both
+// parts are off, and the tab's switch is the one to name then.
+func setupsWhy(cfg config.Config) string {
+	if plugins.Why(cfg, plugins.Variorum) == "" {
+		return ""
+	}
+	return plugins.Why(cfg, plugins.VariorumTab)
+}
+
 // variorumDoor is `irie variorum door`, which a writing session runs as
 // its own MCP server: it becomes Variorum's door, and writes nothing to
 // stdout before, which is the session's channel to it. When it can't, it
@@ -139,8 +150,9 @@ func variorumDoor(args []string, stdin io.Reader, stdout io.Writer) int {
 		}
 		variorum.Refuse(stdin, stdout, why+".")
 		return 0
-	case plugins.Why(cfg, plugins.VariorumTab) != "":
-		variorum.Refuse(stdin, stdout, plugins.Why(cfg, plugins.VariorumTab))
+	case plugins.Why(cfg, plugins.Variorum) != "":
+		// The door is a writing session's, whatever the tab's switch says.
+		variorum.Refuse(stdin, stdout, plugins.Why(cfg, plugins.Variorum))
 		return 0
 	}
 	return variorum.Door(p.Data, stdin, stdout)

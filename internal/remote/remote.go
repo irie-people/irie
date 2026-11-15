@@ -17,6 +17,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -62,6 +63,9 @@ type Options struct {
 	Name    string // what the phone calls this machine
 	Version string
 	Log     *slog.Logger
+	// Panes are the web panes phones reach (remote.panes, §2.2 of
+	// docs/PHONE.md): a pane's id, such as invoices.invoices, and its port.
+	Panes map[string]int
 }
 
 // Server is the gateway.
@@ -74,6 +78,7 @@ type Server struct {
 	web    fs.FS
 	log    *slog.Logger
 	pusher *pusher
+	panes  *paneBook
 }
 
 // New prepares a gateway: its authority, made on first use, and its
@@ -98,6 +103,11 @@ func New(opt Options) (*Server, error) {
 		opt: opt, id: id, store: &Store{Dir: opt.Dir}, ca: ca,
 		leaves: &Leaves{CA: ca, Names: LocalNames, Addrs: Addrs},
 		web:    Web(), log: log, pusher: newPusher(),
+		panes: &paneBook{ask: func() (ipc.PluginsResult, error) {
+			var res ipc.PluginsResult
+			err := ipc.Call(opt.Socket, 3*time.Second, ipc.OpPlugins, ipc.PluginsArgs{}, &res)
+			return res, err
+		}},
 	}, nil
 }
 
@@ -112,8 +122,10 @@ func AppTLS(leaves *Leaves) *tls.Config {
 	return &tls.Config{GetCertificate: leaves.GetCertificate, MinVersion: tls.VersionTLS12}
 }
 
-// Run serves until ctx ends: the app over HTTPS on the port, and the setup
-// page over HTTP on the port below.
+// Run serves until ctx ends: the app over HTTPS on the port, the setup
+// page over HTTP on the port below, and each of remote.panes over HTTPS on
+// its own. A pane's port that can't be had is left out, with a warning in
+// the log: the app goes on without it.
 func (s *Server) Run(ctx context.Context) error {
 	tlsLn, err := net.Listen("tcp", net.JoinHostPort(s.opt.Listen, strconv.Itoa(s.opt.Port)))
 	if err != nil {
@@ -137,6 +149,28 @@ func (s *Server) Run(ctx context.Context) error {
 	go func() { errs <- setup.Serve(setupLn) }()
 	go s.notify(ctx)
 	s.log.Info("serving", "app", tlsLn.Addr().String(), "setup", setupLn.Addr().String(), "name", s.opt.Name)
+	var panes []*http.Server
+	for _, id := range slices.Sorted(maps.Keys(s.opt.Panes)) {
+		ln, err := net.Listen("tcp", net.JoinHostPort(s.opt.Listen, strconv.Itoa(s.opt.Panes[id])))
+		if err != nil {
+			s.log.Warn("pane: listen", "pane", id, "err", err)
+			continue
+		}
+		srv := &http.Server{
+			Handler:           s.Pane(id),
+			TLSConfig:         AppTLS(s.leaves),
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       2 * time.Minute,
+			ErrorLog:          slog.NewLogLogger(s.log.Handler(), slog.LevelDebug),
+		}
+		panes = append(panes, srv)
+		go func() {
+			if err := srv.ServeTLS(ln, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				s.log.Warn("pane: serve", "pane", id, "err", err)
+			}
+		}()
+		s.log.Info("serving pane", "pane", id, "at", ln.Addr().String())
+	}
 	select {
 	case <-ctx.Done():
 		err = nil
@@ -146,6 +180,9 @@ func (s *Server) Run(ctx context.Context) error {
 	defer cancel()
 	app.Shutdown(shut)
 	setup.Shutdown(shut)
+	for _, p := range panes {
+		p.Shutdown(shut)
+	}
 	return err
 }
 

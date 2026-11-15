@@ -28,6 +28,10 @@ Go. The client runs every agent in tmux and draws its UI with Bubble Tea. Check 
 
 Read a doc by its sections: `tools/doc.sh DESIGN 4.8` prints §4.8 of DESIGN.md, and `tools/doc.sh DESIGN` its outline, so you read only the part you need.
 
+## Design
+
+Every client draws from the design library in `design/` ([design/README.md](design/README.md)): the palettes and numbers in `design/palettes/` and `design/tokens.json`, the rules in `design/principles.md` and the parts in `design/components.md`. Change a colour or a number there and run `tools/design.sh sync`, never in a client's copy. When a change teaches something lasting about how Irie should look or behave, add it to the library in the same change, with its source and, where one can be written, a check.
+
 ## Trying a change
 
 If you run Irie, put a finished change into it at once: commit, then run `tools/live.sh`, in the background if you like, since it waits its turn. It runs `tools/check.sh`, builds `irie`, and also `Irie.app` when `mac/` changed and the app is installed or running (alongside the tests), then swaps the build into the running Irie. The tests and builds run before it takes the install lock, two installs at a time (`IRIE_LIVE_TEST_SLOTS`), so installs test side by side and queue only for the swap, which waits its turn rather than fail; a change to docs alone (docs/, site/, top-level Markdown) installs without the tests. While the owner uses Irie.app, the new app waits beside it and swaps in once they look away, so an install never takes their focus. When the Go code changed, the core and the sidebar restart. Restarting any part of Irie must never disturb an agent or anything it started (a hard requirement, DESIGN §2.1 principle 6); the script checks every agent's process afterwards and fails loudly if one changed. Start Irie from that build, `~/.local/share/irie/bin/irie`, and never build over it by hand.

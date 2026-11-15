@@ -212,6 +212,23 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // Wider than fits beside the terminal, the panes go over it: on
+            // top while a card has the keyboard, under the terminal while it
+            // has it, and the band a drag over it shows.
+            let overs: [(String, PaneKind, Bool, Bool, Bool)] = [
+                ("panes-over", .browser, false, true, false), ("panes-over-dark", .terminal, true, true, false),
+                ("panes-over-behind", .browser, false, false, false), ("panes-over-behind-dark", .terminal, true, false, false),
+                ("panes-over-drag", .terminal, false, false, true), ("panes-over-drag-dark", .browser, true, true, true),
+            ]
+            for (base, front, dark, raised, drag) in overs {
+                store.rolodex.loadFixture(session: Fixture.selected, front: front, over: true, share: 0.8, raised: raised,
+                                          guide: drag ? RolodexAim(width: 860, place: .over) : nil)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             // A code card (CodePane.swift): a file with the lines its agent
             // changed marked, in the app's own code colours in both modes,
             // and in GitHub's.

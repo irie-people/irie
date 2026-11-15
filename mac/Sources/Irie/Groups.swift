@@ -11,11 +11,11 @@ import SwiftUI
 // header's menu renames the group, folds it, puts it in a new group, moves
 // it into another group or out of the one around it, ungroups it, which
 // leaves what it held where it is, in the group around it, or closes its
-// cards. A group's header drags: dropped on another group's header it goes
-// inside that group, on a header's top edge just before it, on a card in
-// that card's place, and on the strip under the list at the top of the
-// list. A card dropped on a card of a group, or on its header, joins the
-// group, and one dropped among the cards of no group leaves it. The List
+// cards. A group's header drags its group, and a card drags with every card
+// picked with it: the list shows where the drop would land, between two
+// rows, as far in as the group it would join, or inside a group by its
+// header, and a card dropped among the cards of no group leaves its own
+// (Drops.swift, DropModel.swift). The List
 // view draws each group where the first of its cards is in the core's one
 // order, its groups' cards too; the Repo view groups the cards by repo
 // instead. Groups are the core's (internal/core, groups.go), so the
@@ -90,13 +90,6 @@ enum GroupItem: Equatable, Identifiable {
         case let .group(g): SessionGroup.userID(g.id)
         }
     }
-}
-
-/// Where on a group's header a held card or group would land: just before
-/// the group, beside it, or inside it, last.
-struct HeaderMark: Equatable {
-    var group: String
-    var before: Bool
 }
 
 /// A group in a menu of groups: the group, and how far in it is.
@@ -354,12 +347,14 @@ extension Store {
 
     /// Puts group id, with what it holds, in group into, nil for the top of
     /// the list: just before what holds card before, or after what holds
-    /// after, else last in it.
-    func moveGroup(_ id: String, into: String?, before: String? = nil, after: String? = nil) {
+    /// after, else last in it. A notice says where it went, with Undo; a
+    /// drop that lands in sight does without (Drops.swift).
+    func moveGroup(_ id: String, into: String?, before: String? = nil, after: String? = nil, notice: Bool = true) {
         guard canGroup else { return }
         let name = groupName(id)
         let to = into.map(groupTitle) ?? "the top of the list"
         groupCall(GroupArgs(action: "move", groups: [id], into: into ?? "", before: before, after: after), failed: "move \(name)") { r in
+            guard notice else { return }
             if (r.steps ?? 0) == 0 {
                 self.say("\(name) is there already.", error: false)
                 return
@@ -415,90 +410,6 @@ extension Store {
 
     // MARK: Drags
 
-    /// Whether what a drag holds can land on group g's header: just before
-    /// it (before), or inside it. A group never goes inside itself.
-    func canDropOnHeader(_ g: SessionGroup, before: Bool) -> Bool {
-        guard canGroup, mode == .list, let id = g.userGroup else { return false }
-        if let held = draggingGroup {
-            // Inside the group it is in already, it would stay as it is.
-            return held != id && !isWithin(before ? parentGroup(id) : id, held) && (before || parentGroup(held) != id)
-        }
-        guard let held = dragging, let s = sessions.first(where: { $0.id == held }) else { return false }
-        return s.peerName == nil
-    }
-
-    /// What a drag holds dropped on group g's header: a card, or every card
-    /// picked with it, or a group, goes just before the group, beside it
-    /// (before), or last inside it.
-    func dropOnHeader(_ g: SessionGroup, before: Bool) -> Bool {
-        guard canDropOnHeader(g, before: before), let id = g.userGroup else { return false }
-        let first = g.sessions.first?.id
-        if let held = draggingGroup {
-            if before { moveGroup(held, into: parentGroup(id), before: first) } else { moveGroup(held, into: id) }
-            return true
-        }
-        guard let held = dragging, let s = sessions.first(where: { $0.id == held }) else { return false }
-        if before {
-            moveCards(targets(for: s), into: parentGroup(id), before: first, notice: false)
-        } else {
-            addToGroup(targets(for: s), id)
-        }
-        return true
-    }
-
-    /// Whether the held group can land on target, a card of the List view
-    /// outside it: there it goes in target's place, in target's group.
-    func canDropGroup(onto target: Session) -> Bool {
-        guard canGroup, mode == .list, let held = draggingGroup else { return false }
-        return target.peerName == nil && !target.isPinned && !target.isParked && !isWithin(target.groupKey, held)
-    }
-
-    /// Where the held group lands on target: below it when it comes from
-    /// above, and above it when it comes from below.
-    func markGroup(onto target: Session) -> DropMark? {
-        guard canDropGroup(onto: target), let held = draggingGroup else { return nil }
-        return DropMark(target: target.id, below: comesFromAbove(held, target))
-    }
-
-    /// The held group dropped on target: it goes in target's group, in
-    /// target's place.
-    func dropGroup(onto target: Session) -> Bool {
-        defer { endDrag() }
-        guard canDropGroup(onto: target), let held = draggingGroup else { return false }
-        let above = comesFromAbove(held, target)
-        moveGroup(held, into: target.groupKey, before: above ? nil : target.id, after: above ? target.id : nil)
-        return true
-    }
-
-    /// Whether group id's cards are drawn above target.
-    private func comesFromAbove(_ id: String, _ target: Session) -> Bool {
-        let order = drawnGroups.flatMap(\.sessions)
-        guard let t = order.firstIndex(where: { $0.id == target.id }),
-              let g = order.firstIndex(where: { isWithin($0.groupKey, id) }) else { return false }
-        return g < t
-    }
-
-    /// Whether what a drag holds can go to the top of the list, last.
-    var canDropAtTop: Bool {
-        guard canGroup, mode == .list else { return false }
-        if draggingGroup != nil { return true }
-        guard let held = dragging, let s = sessions.first(where: { $0.id == held }) else { return false }
-        return s.peerName == nil
-    }
-
-    /// What a drag holds dropped on the strip under the List view's cards:
-    /// it goes last at the top of the list, out of any group.
-    func dropAtTop() -> Bool {
-        guard canDropAtTop else { return false }
-        if let held = draggingGroup {
-            moveGroup(held, into: nil)
-            return true
-        }
-        guard let held = dragging, let s = sessions.first(where: { $0.id == held }) else { return false }
-        moveCards(targets(for: s), into: nil)
-        return true
-    }
-
     /// What a drop carries for what the drag holds: a card's id, or
     /// "group:" and a group's id; nil when it holds nothing.
     var heldText: String? { draggingGroup.map { "group:" + $0 } ?? dragging }
@@ -521,40 +432,43 @@ extension Store {
         return true
     }
 
-    /// Lets go of what a drag held.
-    func endDrag() {
-        dragging = nil
-        draggingGroup = nil
-        dropMark = nil
-        headerMark = nil
-    }
-
-    /// Asks the core, takes its groups at once, and draws the cards it
-    /// moved in their new group ahead of its frames, which then confirm it.
+    /// Asks the core and takes its groups. A move or a join shows at once,
+    /// where the drop put it, ahead of the core's frames, which then
+    /// confirm it (previewPlace, Drops.swift), and goes back should the
+    /// core refuse; the cards a new group takes show in it as the core
+    /// answers.
     private func groupCall(_ a: GroupArgs, failed what: String, done: @escaping (GroupResult) -> Void) {
+        let was = sessions, wasGroups = groups
+        let placed = a.action == "move" || a.action == "add"
+        if placed { previewPlace(a) }
         Task {
             do {
                 let r = try await client.call("group", a, as: GroupResult.self)
                 groups = r.groups
                 let moved = Set(r.sessions ?? [])
-                let to: String? = switch a.action {
-                case "new", "add": r.group
-                case "move": a.into.flatMap { $0.isEmpty ? nil : $0 }
-                default: nil
-                }
-                if !moved.isEmpty, a.action != "remove" {
+                if a.action == "new", !moved.isEmpty {
                     preview { rows in
                         for i in rows.indices where moved.contains(rows[i].id) {
-                            rows[i].group = to
-                            if to != nil {
-                                rows[i].pinned = false
-                                rows[i].parked = false
-                            }
+                            rows[i].group = r.group
+                            rows[i].pinned = false
+                            rows[i].parked = false
                         }
                     }
                 }
                 done(r)
             } catch {
+                if placed {
+                    groups = wasGroups
+                    preview { rows in
+                        for i in rows.indices {
+                            guard let old = was.first(where: { $0.id == rows[i].id }) else { continue }
+                            rows[i].order = old.order
+                            rows[i].group = old.group
+                            rows[i].pinned = old.pinned
+                            rows[i].parked = old.parked
+                        }
+                    }
+                }
                 say("Couldn’t \(what): \(error.localizedDescription)", error: true)
             }
         }
@@ -637,7 +551,8 @@ struct GroupMenu: View {
 }
 
 /// A group header's own items, for one of your groups: put it in a new
-/// group, move it into another or out of the one around it.
+/// group, move it into another or out of the one around it, or to another
+/// space or a new one, whole (Spaces.swift).
 @MainActor
 struct GroupPlaceMenu: View {
     @Environment(Store.self) private var store
@@ -662,6 +577,9 @@ struct GroupPlaceMenu: View {
         }
         if let parent {
             Button("Move Out of “\(store.groupName(parent))”") { store.moveOut(id) }
+        }
+        if store.canSpaces {
+            Menu("Move “\(name)” to Space") { GroupSpaceItems(id: id) }
         }
     }
 }
