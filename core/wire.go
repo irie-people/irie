@@ -140,6 +140,9 @@ type (
 	PluginsResult    = ipc.PluginsResult
 	Plugin           = ipc.Plugin
 	PluginPart       = ipc.PluginPart
+	PluginPane       = ipc.PluginPane
+	PluginBundle     = ipc.PluginBundle
+	BundlePlugin     = ipc.BundlePlugin
 	MarketsArgs      = ipc.MarketsArgs
 	MarketsResult    = ipc.MarketsResult
 	AnonArgs         = ipc.AnonArgs
@@ -376,6 +379,11 @@ const (
 	ToolPrivacy        = ipc.ToolPrivacy
 	ToolVPN            = ipc.ToolVPN
 	ToolWrite          = ipc.ToolWrite
+	PaneWeb            = ipc.PaneWeb
+	BundleOn           = ipc.BundleOn
+	BundleOff          = ipc.BundleOff
+	BundleSome         = ipc.BundleSome
+	PartMissing        = ipc.PartMissing
 	PartReady          = ipc.PartReady
 	PartOff            = ipc.PartOff
 	PartNeeds          = ipc.PartNeeds

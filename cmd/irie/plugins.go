@@ -21,17 +21,21 @@ import (
 )
 
 // irie plugins is Irie's plugins (DESIGN §4.17): sets of features that go on
-// and off together, such as privacy.
-const pluginsUsage = `usage: ` + brand.Slug + ` plugins [on|off PLUGIN [PART]]
+// and off together, such as privacy, then your own from the manifests in the
+// plugins folder, and your bundles (docs/proposals/plugin-panes.md).
+const pluginsUsage = `usage: ` + brand.Slug + ` plugins [on|off NAME [PART]]
 
 ` + brand.Name + `'s plugins: sets of features that go on and off together. Each part
 also has a switch of its own, and the plugin's switch turns them all off.
+Your own plugins and bundles are manifests in the plugins folder of ` + brand.Name + `'s
+config folder: NAME.toml for each.
 
-  ` + brand.Slug + ` plugins                  each plugin, and how far each part is set up here
+  ` + brand.Slug + ` plugins                  each bundle and plugin, and how far each part is set up here
   ` + brand.Slug + ` plugins on PLUGIN        turn a plugin on, such as privacy
   ` + brand.Slug + ` plugins off PLUGIN       turn it off: all its parts go off with it
   ` + brand.Slug + ` plugins on PLUGIN PART   turn one part on, such as ` + brand.Slug + ` plugins on privacy vpn
   ` + brand.Slug + ` plugins off PLUGIN PART  turn one part off
+  ` + brand.Slug + ` plugins on BUNDLE        turn each plugin a bundle names on; off turns each off
 
   ` + brand.Slug + ` setup privacy [--yes]    set up each part of the privacy plugin in turn
 `
@@ -46,17 +50,25 @@ func pluginsCmd(args []string, stdout io.Writer) error {
 		return err
 	}
 	if len(args) == 0 {
-		fmt.Fprint(stdout, plugins.Text(pluginStatus(cfg, p)))
+		r := pluginsHere(cfg, p)
+		fmt.Fprint(stdout, plugins.AllText(r.Plugins, r.Bundles))
 		return nil
 	}
 	if (args[0] != "on" && args[0] != "off") || len(args) < 2 || len(args) > 3 {
 		return errors.New(pluginsUsage)
 	}
-	part := ""
+	name, part, on := args[1], "", args[0] == "on"
 	if len(args) == 3 {
 		part = args[2]
 	}
-	edits, err := plugins.Edits(args[1], part, args[0] == "on")
+	_, bundle := plugins.FindBundle(p.Plugins(), name)
+	bundle = bundle && part == ""
+	var edits []config.Edit
+	if bundle {
+		edits, err = plugins.BundleEdits(p.Plugins(), name, on)
+	} else {
+		edits, err = plugins.EditsHere(p.Plugins(), name, part, on)
+	}
 	if err != nil {
 		return err
 	}
@@ -66,8 +78,17 @@ func pluginsCmd(args []string, stdout io.Writer) error {
 	if cfg, _, err = load(); err != nil {
 		return err
 	}
-	for _, pl := range pluginStatus(cfg, p) {
-		if pl.Name != args[1] {
+	r := pluginsHere(cfg, p)
+	if bundle {
+		for _, b := range r.Bundles {
+			if b.Name == name {
+				fmt.Fprint(stdout, plugins.BundleText([]ipc.PluginBundle{b}))
+			}
+		}
+		return nil
+	}
+	for _, pl := range r.Plugins {
+		if pl.Name != name {
 			continue
 		}
 		if part == "" {
@@ -89,11 +110,18 @@ func pluginsCmd(args []string, stdout io.Writer) error {
 // pluginStatus is how the plugins stand: the core's answer, which knows the
 // VPN now, else what the files say.
 func pluginStatus(cfg config.Config, p paths.Paths) []ipc.Plugin {
+	return pluginsHere(cfg, p).Plugins
+}
+
+// pluginsHere is how the plugins and bundles stand: the core's answer, else
+// what the files say.
+func pluginsHere(cfg config.Config, p paths.Paths) ipc.PluginsResult {
 	var r ipc.PluginsResult
 	if err := ipc.Call(p.Socket(), 5*time.Second, ipc.OpPlugins, ipc.PluginsArgs{}, &r); err == nil && len(r.Plugins) > 0 {
-		return r.Plugins
+		return r
 	}
-	return plugins.Status(plugins.Env{Config: cfg, Paths: p})
+	all, bundles := plugins.Here(plugins.Env{Config: cfg, Paths: p})
+	return ipc.PluginsResult{Plugins: all, Bundles: bundles}
 }
 
 // setConfig makes edits to config.toml: through the core when it runs,

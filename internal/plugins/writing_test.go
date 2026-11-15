@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
@@ -68,5 +69,26 @@ func TestWritingNeedsVariorumUntilItIsInstalled(t *testing.T) {
 	}
 	if _, err := Edits("writing", Variorum, true); err == nil || !strings.Contains(err.Error(), "no switch of its own") {
 		t.Errorf("Edits = %v", err)
+	}
+}
+
+// TestABundlesPartWithNoSwitchStaysWithItsPlugin: a part with no switch of
+// its own goes on with its plugin, and a bundle can't take it off alone.
+func TestABundlesPartWithNoSwitchStaysWithItsPlugin(t *testing.T) {
+	e := env(t)
+	e.Config.Plugins.Writing = false
+	manifest(t, e, "words.toml", "plugins = [\"writing.variorum\"]\n")
+	dir := e.Paths.Plugins()
+	on, err := BundleEdits(dir, "words", true)
+	if err != nil || len(on) != 1 || on[0] != (config.Edit{Key: "plugins.writing", Value: true}) {
+		t.Fatalf("on = %v, %v", on, err)
+	}
+	if _, err := BundleEdits(dir, "words", false); err == nil || !strings.Contains(err.Error(), "nothing here to turn off") {
+		t.Errorf("off = %v", err)
+	}
+	e.Config.Plugins.Writing = true
+	b := bundle(t, e, "words")
+	if b.State != ipc.BundleOn || !strings.Contains(b.Plugins[0].Detail, "no switch of its own: it is on while the Writing plugin is") {
+		t.Errorf("bundle = %+v", b)
 	}
 }
