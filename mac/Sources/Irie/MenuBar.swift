@@ -33,6 +33,8 @@ final class MenuState {
         /// in, by its place among them (Spaces.swift).
         var spaces: [String] = []
         var space: Int?
+        /// There is another space to step to (Go > Next Space).
+        var canStepSpaces = false
         /// The session ⇧⌘T brings back.
         var reopen: String?
         var trodHand = false
@@ -105,6 +107,7 @@ extension Store {
                 f.space = spaces.indices.first { spaceKey(at: $0) == c.spaceKey }
             }
         }
+        f.canStepSpaces = spaces.count > 1
         f.picked = picked.count
         f.canGroup = canGroup && (picked.count > 1 || closable?.peerName == nil && closable != nil)
         f.rows = drawnOrder.prefix(9).map(\.name)
@@ -329,6 +332,16 @@ struct IrieCommands: Commands {
                 .keyboardShortcut(.tab, modifiers: .control)
             Button("Previous Session", action: run { store.step(-1) })
                 .keyboardShortcut(.tab, modifiers: [.control, .shift])
+            // Fn+Tab and Fn+Shift+Tab, which only KeyRouter catches: AppKit
+            // takes fn out of an app's own menu keys, which would leave a
+            // bare Tab, so the item names its key in its help instead
+            // (Spaces.swift).
+            Button("Next Space", action: run { store.stepSpace(1) })
+                .help("Fn+Tab")
+                .disabled(!f.canStepSpaces)
+            Button("Previous Space", action: run { store.stepSpace(-1) })
+                .help("Fn+Shift+Tab")
+                .disabled(!f.canStepSpaces)
             // The first nine cards, by name, in the sidebar's order.
             Menu("Sessions") {
                 ForEach(Array(f.rows.enumerated()), id: \.offset) { i, name in
