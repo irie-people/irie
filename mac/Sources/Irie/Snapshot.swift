@@ -518,7 +518,12 @@ enum Fixture {
                     created: ago(26), cwd: irie + "-docs-guide", repo: irie, branch: "\(Brand.slug)/docs-guide", profile: "claude",
                     subagents: [Subagent(agent: "sub:a1", type: "Explore", started: ago(3), detail: "Reading DESIGN.md", command: "Read · docs/DESIGN.md"),
                                 Subagent(agent: "sub:a2", type: "Plan", started: ago(2))],
-                    tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800), hue: 5),
+                    tokens: Tokens(input: 900, output: 2100, cacheRead: 21000, cacheWrite: 1800), hue: 5,
+                    // Its Claude Code has a known advisory, which its card
+                    // and its details say (DESIGN §4.21).
+                    lock: LockRow(packages: [LockPackage(ecosystem: "npm", name: "@anthropic-ai/claude-code", version: "2.1.250", part: "Claude Code",
+                                                         checked: true, advisories: 1, fixed: "2.1.251")],
+                                  advisories: 1, words: "Claude Code 2.1.250: 1 advisory, fixed in 2.1.251")),
             Session(id: "s03convoview", name: "conversation-view", state: "working", detail: "Editing ChatView.swift", command: "Edit · mac/Sources/Irie/ChatView.swift",
                     created: ago(20), cwd: irie + "-conversation-view", repo: irie, branch: "\(Brand.slug)/conversation-view", profile: "claude",
                     group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),

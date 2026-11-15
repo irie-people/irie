@@ -357,6 +357,9 @@ func TestTitleQuotesEachName(t *testing.T) {
 		`start "half`:                `Start "half`,
 		"freeze":                     "Freeze",
 		`rename "☀ sun" to "moon ☾"`: "Rename “☀ sun” to “moon ☾”",
+		// Freezing or thawing them all names its sessions.
+		`freeze "a", "b" and "c"`:       "Freeze “a”, “b” and “c”",
+		`thaw "a", "b", "c" and 2 more`: "Thaw “a”, “b”, “c” and 2 more",
 	} {
 		if got := Title(label); got != want {
 			t.Errorf("Title(%s) = %s, want %s", label, got, want)

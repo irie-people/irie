@@ -266,8 +266,8 @@ struct ContentView: View {
                     }
                 }
         }
-        // The lines from the selected card to the terminal, over both columns.
-        .overlayPreferenceValue(TabLinkKey.self) { TabLink(ends: $0) }
+        // The lines from the selected card to the terminal draw over both
+        // columns, from views in the card and the frame (TabLink.swift).
         .tint(Theme.accent)
         .sheet(isPresented: Bindable(store).newTaskSheet) {
             NewTaskSheet().environment(store)

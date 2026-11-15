@@ -146,11 +146,16 @@ private struct SessionList: View {
                         .padding(.bottom, 8)
                     }
                 }
-                // The lines from the selected card show while the stretch
-                // of its edge they open is in sight here (TabLink.swift).
-                .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { $0.list = $1 }
                 .onChange(of: store.selection) {
-                    if let id = store.selection { proxy.scrollTo(id) }
+                    guard let id = store.selection else { return }
+                    proxy.scrollTo(id)
+                    // Cards far down the list are made as they come into
+                    // sight, so the first scroll can stop short of one, as
+                    // when the terminal moves to it by another hand. Once
+                    // they are made, again: nothing, when it's in sight.
+                    DispatchQueue.main.async {
+                        if store.selection == id { proxy.scrollTo(id) }
+                    }
                 }
                 .onChange(of: store.outsideSelection) {
                     if let k = store.outsideSelection { proxy.scrollTo("outside:" + k) }
@@ -423,6 +428,18 @@ private struct SessionCard: View, Equatable {
                         .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // A known advisory for its harness or a package its lock
+                // names, and the version that fixes it (DESIGN §4.21), in
+                // the meter's quiet words. Three lines, so a narrow card
+                // keeps the version to update to.
+                if let words = session.lock?.words {
+                    Text(words)
+                        .font(Theme.font(11))
+                        .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             ZStack(alignment: .topTrailing) {
@@ -448,9 +465,12 @@ private struct SessionCard: View, Equatable {
         .padding(.horizontal, Theme.inset)
         .background(ground.shadow(color: selected ? Theme.shadow : .clear, radius: 3, y: 1.5))
         .overlay(shape.strokeBorder(edge, lineWidth: edgeWidth))
-        .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
+        // Where the lines to the terminal start (TabLink.swift).
+        .background {
             if selected {
-                ends.card = .init(bounds: bounds, color: edge, width: edgeWidth, ground: trailingGround)
+                TabLinkCard(session: session.id, color: edge, width: edgeWidth, ground: trailingGround)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(shape)
@@ -1260,6 +1280,9 @@ struct DetailsPanel: View {
             // cache has run out (DESIGN §6.3).
             line(s.rebuilds?.summary, color: meta)
             line(s.cold.map { "Its cache has run out: \($0.words)" }, color: meta)
+            // The versions its agent lock names, and what the last check
+            // found (DESIGN §4.21).
+            line(s.lock?.words ?? s.lock?.summary, color: meta)
             ForEach((s.subagents ?? []).prefix(3)) { h in
                 line("↳ " + [h.type ?? "Helper", h.detail].compactMap { $0 }.joined(separator: " · "),
                      color: h.needsYou == true ? Theme.needs : meta)

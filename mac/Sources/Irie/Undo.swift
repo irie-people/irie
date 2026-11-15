@@ -3,8 +3,9 @@ import Foundation
 
 // Undo and redo (DESIGN §4.5). Edit > Undo and Redo, ⌘Z and ⇧⌘Z, step
 // through the core's one history, which the terminal sidebar's u and U share:
-// a park or an unpark, a close, a reopen, a start. The menu names the step
-// each would take. When a step is uncertain, such as a session that is busy
+// a park or an unpark, a close, a reopen, a start, a pause or a resume, of
+// one session or all of them at once. The menu names the step each would
+// take, and the sessions it takes. When a step is uncertain, such as a session that is busy
 // or gone, the core changes nothing and asks; the app asks the same in an
 // alert and sends the answer back. While a text field has the keyboard and
 // has typing to take back, ⌘Z undoes the typing, as anywhere else.
@@ -43,11 +44,20 @@ struct UndoOption: Decodable {
 }
 
 enum UndoText {
+    /// The app's words for the core's verbs: it calls freezing Pause and
+    /// thawing Resume (Controls.swift), so its menu does too.
+    private static let verbs = [("freeze", "pause"), ("thaw", "resume")]
+
     /// A step's label as a menu says it: the core's `park "api-fix"` reads
-    /// Park “api-fix”, and `rename "a" to "b"` reads Rename “a” to “b”.
+    /// Park “api-fix”, `rename "a" to "b"` reads Rename “a” to “b”, and
+    /// `freeze "a" and "b"`, freezing them all, reads Pause “a” and “b”.
     /// Each name is quoted as Go's %q quotes it; `core.Title` reads labels
     /// the same way.
     static func title(_ label: String) -> String {
+        var label = label
+        for (core, app) in verbs where label == core || label.hasPrefix(core + " ") {
+            label = app + label.dropFirst(core.count)
+        }
         var out = ""
         var rest = Substring(label)
         while let open = rest.firstIndex(of: "\"") {
