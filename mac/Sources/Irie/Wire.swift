@@ -268,8 +268,12 @@ struct Frame: Decodable {
     /// A notepad frame: the notes for later (Notes.swift).
     var notepad: Notepad?
     /// A card frame: show a card of this kind beside the session id
-    /// (Rolodex.swift, `irie ctl card`).
+    /// (Rolodex.swift, `irie ctl card`); for a code card, the file to open
+    /// on it and the line and column to go to (`irie ctl open`).
     var kind: String?
+    var path: String?
+    var line: Int?
+    var col: Int?
 }
 
 /// What a snapshot says besides its rows.

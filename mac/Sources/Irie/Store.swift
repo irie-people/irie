@@ -485,9 +485,10 @@ final class Store {
     private func apply(_ frames: [Frame]) {
         var rows = sessions
         var touched = false
-        // Cards asked for (`irie ctl card`) show once the rows are in.
-        var cards: [(PaneKind, String)] = []
-        defer { for (kind, id) in cards { showCard(kind, in: id) } }
+        // Cards asked for (`irie ctl card`, `irie ctl open`) show once the
+        // rows are in.
+        var cards: [(PaneKind, String, CardFile?)] = []
+        defer { for (kind, id, file) in cards { showCard(kind, in: id, file: file) } }
         // The session the slot moved to by another hand, if it did: the
         // selection goes to it once the rows are in.
         var follow: String?
@@ -528,7 +529,9 @@ final class Store {
                 let c = f.closed ?? []
                 if c != closed { closed = c }
             case "card":
-                if let id = f.id, let kind = f.kind.flatMap(PaneKind.init(rawValue:)) { cards.append((kind, id)) }
+                if let id = f.id, let kind = f.kind.flatMap(PaneKind.init(rawValue:)) {
+                    cards.append((kind, id, f.path.map { CardFile(path: $0, line: f.line, column: f.col) }))
+                }
             case "history":
                 let undo = f.undo.flatMap { $0.isEmpty ? nil : $0 }
                 let redo = f.redo.flatMap { $0.isEmpty ? nil : $0 }

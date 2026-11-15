@@ -55,21 +55,7 @@ struct FileDrop: ViewModifier {
         return true
     }
 
-    /// Types the text into the terminal as a paste; false when there is no
-    /// terminal, as in a build without one or while it is popped out. Either
-    /// engine's terminal takes it (GhosttyTerminal.swift).
-    @MainActor private func paste(_ text: String) -> Bool {
-        #if canImport(GhosttyKit)
-        if let view = store.terminalView as? GhosttyTerminalView { return view.pasteText(text) }
-        #endif
-        #if canImport(SwiftTerm)
-        guard let view = store.terminalView as? IrieTerminalView else { return false }
-        view.pasteText(text)
-        return true
-        #else
-        return false
-        #endif
-    }
+    @MainActor private func paste(_ text: String) -> Bool { store.pasteToTerminal(text) }
 
     /// A path as one word for a shell: a backslash goes before each ASCII
     /// character the shell would act on. Everything else stays as it is, as
@@ -100,3 +86,21 @@ extension IrieTerminalView {
     }
 }
 #endif
+
+extension Store {
+    /// Types the text into the terminal as a paste; false when there is no
+    /// terminal, as in a build without one or while it is popped out. Either
+    /// engine's terminal takes it (GhosttyTerminal.swift).
+    func pasteToTerminal(_ text: String) -> Bool {
+        #if canImport(GhosttyKit)
+        if let view = terminalView as? GhosttyTerminalView { return view.pasteText(text) }
+        #endif
+        #if canImport(SwiftTerm)
+        guard let view = terminalView as? IrieTerminalView else { return false }
+        view.pasteText(text)
+        return true
+        #else
+        return false
+        #endif
+    }
+}

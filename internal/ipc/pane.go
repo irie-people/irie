@@ -11,21 +11,32 @@ const (
 	OpPane = "pane"
 	// OpCard asks the Mac app to show a card of a kind beside a session,
 	// adding one when the session has none of that kind: what `irie ctl
-	// card` sends, as for an agent its person asked to open their mail
-	// beside it. The app alone reads what the card shows. It answers with
-	// nothing, or an error when no Mac app is open.
+	// card` and `irie ctl open` send, as for an agent its person asked to
+	// open their mail beside it, or to pull up a file. The app alone reads
+	// what the card shows. It answers with nothing, or an error when no Mac
+	// app is open.
 	OpCard = "card"
 )
 
-// CardArgs name the session and the kind of card to show beside it.
+// CardArgs name the session and the kind of card to show beside it. A code
+// card may name a file to open in it, and where in it to put the cursor.
 type CardArgs struct {
 	Session string `json:"session"`
 	Kind    string `json:"kind"`
+	// Path is a file a code card opens: absolute and clean, a regular file
+	// of at most CardFileMax bytes. Only a code card takes one.
+	Path string `json:"path,omitempty"`
+	// Line and Col are where in Path the cursor goes, from 1; 0 for none.
+	Line int `json:"line,omitempty"`
+	Col  int `json:"col,omitempty"`
 }
+
+// CardFileMax is the largest file a code card opens: 8 MiB.
+const CardFileMax = 8 << 20
 
 // CardKinds are the kinds of card a client can be asked to show: the
 // Mac app's PaneKind, by name.
-var CardKinds = []string{"terminal", "browser", "markets", "mail"}
+var CardKinds = []string{"terminal", "browser", "markets", "mail", "code"}
 
 // PaneArgs name the session and one of its panes, by an id the client
 // picks: one to twenty-four lower-case letters and digits. Start starts the

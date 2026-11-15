@@ -825,6 +825,8 @@ private struct AppearanceSettings: View {
     @AppStorage(AppearanceChoice.defaultsKey) private var appearance = AppearanceChoice.system.rawValue
     @AppStorage(TerminalEngine.defaultsKey) private var engine = ""
     @AppStorage(TerminalSelection.copyKey) private var copyOnSelect = true
+    @AppStorage(CodeThemes.defaultsKey) private var codeTheme = CodeThemes.standard
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         SettingsForm(model: model) {
@@ -890,6 +892,17 @@ private struct AppearanceSettings: View {
                     ? "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
                     : "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
                     + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
+            }
+            Section {
+                Picker("Code colours", selection: $codeTheme) {
+                    ForEach(CodeThemes.families) { f in Text(f.name).tag(f.id) }
+                }
+                CodeSample(theme: CodeThemes.theme(codeTheme, dark: scheme == .dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } header: {
+                Text("Code")
+            } footer: {
+                footnote("How code cards in the panes colour code. A theme with a light and a dark set follows the window’s appearance; \(Brand.name)’s own takes the terminal’s colours. A card’s ⋯ menu changes it too.")
             }
             Section {
                 switch (store.link, model.config) {
