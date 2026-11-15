@@ -495,7 +495,7 @@ func TestHistoryFrames(t *testing.T) {
 	c := historyCore(t)
 	next := frames(t, c)
 	var got []string
-	for range 4 {
+	for range 5 {
 		f, ok := next(time.Second)
 		if !ok {
 			t.Fatal("no frame")
@@ -505,7 +505,7 @@ func TestHistoryFrames(t *testing.T) {
 			t.Errorf("first history frame %+v", f)
 		}
 	}
-	if want := []string{ipc.FrameSnapshot, ipc.FrameOutside, ipc.FrameClosed, ipc.FrameHistory}; !reflect.DeepEqual(got, want) {
+	if want := []string{ipc.FrameSnapshot, ipc.FrameOutside, ipc.FrameClosed, ipc.FrameHistory, ipc.FrameNotepad}; !reflect.DeepEqual(got, want) {
 		t.Errorf("first frames %v, want %v", got, want)
 	}
 	c.recordAction("test", "s1", nil)

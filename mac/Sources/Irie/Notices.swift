@@ -65,6 +65,16 @@ struct NoticeToast: View {
                     .foregroundStyle(Theme.accentInk)
                     .help("Take it back (⌘Z)")
                 }
+                if let ids = n.restore {
+                    Button("Undo") {
+                        store.dismissNotice()
+                        store.notes.restore(ids)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.accentInk)
+                    .help("Bring it back from Recently Deleted")
+                }
                 if let apart = n.apart {
                     Button("New task") { store.startApart(apart) }
                         .buttonStyle(.borderless)

@@ -65,6 +65,8 @@ final class MenuState {
         /// The core serves the vpn op: its build has the VPN plugin, whose
         /// items show only then.
         var canVPN = false
+        /// The notepad shows (NotesPanel.swift).
+        var notes = false
     }
 
     private(set) var facts = Facts()
@@ -118,6 +120,7 @@ extension Store {
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.canVPN = canVPN
+        f.notes = notes.shown
         return f
     }
 
@@ -189,6 +192,10 @@ struct IrieCommands: Commands {
                 .keyboardShortcut("n")
             Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                 .keyboardShortcut("n", modifiers: [.command, .option])
+            // A note for later, in the notepad above the task bar.
+            Button("New Note") { NotificationCenter.default.post(name: .irieNewNote, object: nil) }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(!f.notes)
         }
         // Sessions close like tabs (Closing.swift), and Close names the one
         // ⌘W closes. These take the place of the window's own Close, which
