@@ -1,6 +1,6 @@
 # Proposal: agent locks
 
-Date: 2026-11-14. Status: proposed, nothing built. There is no issue tracker yet, so this file stands in for the issue that AGENTS.md asks for before a sizeable change.
+Date: 2026-11-14. Status: built 2026-11-15, as DESIGN §4.21 describes; the owner approved all four steps that day. There is no issue tracker yet, so this file stood in for the issue that AGENTS.md asks for before a sizeable change.
 
 ## Goal
 

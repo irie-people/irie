@@ -47,10 +47,13 @@ struct Session: Decodable, Identifiable, Equatable {
     /// Its prompt-cache rebuilds today, in the core's words for the card
     /// once they matter (DESIGN §6.3).
     var rebuilds: Rebuilds?
+    /// A known advisory for its harness or a package its agent lock names,
+    /// in the core's words for the card (DESIGN §4.21).
+    var lock: LockRow?
 
     enum CodingKeys: String, CodingKey {
         case id, name, state, reason, detail, command, warnings, created, cwd, repo, worktree, branch, profile, subagents, tokens
-        case model, context, memory, routed, rated, order, parked, priority, frozen, freezing, loose, hue, rebuilds
+        case model, context, memory, routed, rated, order, parked, priority, frozen, freezing, loose, hue, rebuilds, lock
         case exitCode = "exit_code"
         case costUSD = "cost_usd"
         case taskClass = "class"
@@ -65,6 +68,13 @@ struct Session: Decodable, Identifiable, Equatable {
 /// sends the card's words, "$4.10 today: woke cold 3 times", only once
 /// that matters.
 struct Rebuilds: Decodable, Equatable {
+    var words: String?
+}
+
+/// What a session's agent lock says on its card: the core sends the
+/// words, "Claude Code 2.1.250: 1 advisory, fixed in 2.1.251", only while a
+/// known advisory affects its harness or one of its packages.
+struct LockRow: Decodable, Equatable {
     var words: String?
 }
 

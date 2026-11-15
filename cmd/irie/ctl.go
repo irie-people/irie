@@ -298,6 +298,11 @@ func printList(w io.Writer, r ipc.ListResult) error {
 			if r := s.Rebuilds; r != nil && r.Words != "" {
 				detail = strings.TrimPrefix(detail+" · "+r.Words, " · ")
 			}
+			// What its card says of an advisory for its harness or a
+			// package its lock names (DESIGN §4.21).
+			if l := s.Lock; l != nil && l.Words != "" {
+				detail = strings.TrimPrefix(detail+" · "+l.Words, " · ")
+			}
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, detail)
 		}
 	}

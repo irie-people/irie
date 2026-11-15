@@ -300,6 +300,11 @@ func (c *Core) peerRows(from int) []ipc.Session {
 			}
 			s.Pane = ""
 			s.Shown = drawn && c.selected == s.ID
+			// Its lock's versions, marked by what this core's checks
+			// found too (locks.go).
+			if s.Lock != nil {
+				s.Lock = c.lockRow(s.Lock.Packages)
+			}
 			s.Order = from + len(out)
 			out = append(out, s)
 		}

@@ -44,6 +44,7 @@ type Config struct {
 	Context  Context            `toml:"context"`
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
+	Lock     Lock               `toml:"lock"`
 	Skills   Skills             `toml:"skills"`
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
@@ -612,6 +613,27 @@ type Usage struct {
 	WakeMost float64 `toml:"wake_most"`
 }
 
+// Lock is the agent locks (DESIGN §4.21): the core writes each session's
+// setup as its agent starts, and a check asks OSV.dev about the harness
+// and package versions the locks name, only when asked.
+type Lock struct {
+	// Check is whether the core asks OSV.dev itself: LockCheckOff, only
+	// when you ask (irie lock --check), or LockCheckDaily, once a day.
+	Check string `toml:"check"`
+	// OSV is the address of the OSV API a check asks, such as a mirror of
+	// your own.
+	OSV string `toml:"osv"`
+}
+
+// The values lock.check takes.
+const (
+	LockCheckOff   = "off"
+	LockCheckDaily = "daily"
+)
+
+// LockChecks are the values lock.check takes.
+var LockChecks = []string{LockCheckOff, LockCheckDaily}
+
 // Dog is the jot dog (DESIGN §4.8): it sees each task you jot down through
 // until its work has landed. When a jot's turn ends with work left in its
 // own worktree, uncommitted or not yet in its repo's land branch, it sends
@@ -918,6 +940,7 @@ func Default() Config {
 		Context: Context{KeepDays: 30},
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4},
+		Lock:    Lock{Check: LockCheckOff, OSV: "https://api.osv.dev"},
 		Skills:  Skills{Enabled: true, Disabled: []string{}},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
 		Env:     Env{Capture: "login-shell"},
@@ -1040,6 +1063,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Context  *Context                  `toml:"context"`
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
+		Lock     *Lock                     `toml:"lock"`
 		Skills   *Skills                   `toml:"skills"`
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
@@ -1056,7 +1080,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Markets  *Markets                  `toml:"markets"`
 		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1518,6 +1542,12 @@ func (c Config) Validate() error {
 	}
 	if c.Usage.WakeMost < 0 {
 		bad("usage.wake_most = %v: must be 0, for no limit, or more", c.Usage.WakeMost)
+	}
+	if !slices.Contains(LockChecks, c.Lock.Check) {
+		bad("lock.check = %q: must be off or daily", c.Lock.Check)
+	}
+	if u, err := url.Parse(c.Lock.OSV); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		bad("lock.osv = %q: must be an address such as https://api.osv.dev", c.Lock.OSV)
 	}
 	for _, n := range c.Skills.Disabled {
 		if !skillName.MatchString(n) || len(n) > 64 {
