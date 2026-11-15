@@ -155,6 +155,7 @@ type Core struct {
 	trodThawed time.Time             // when the trod bot last thawed a session it froze (trod.go)
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
 	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
+	locks      lockState             // what the agent locks' checks found (locks.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 	variorum   variorumState         // Variorum's door: the note each session named last (variorum.go)
@@ -221,6 +222,9 @@ type session struct {
 	// keptOut says its agent and Irie's helpers came out of the background
 	// once since this core found the session (keepup.go).
 	keptOut bool
+	// lockPkgs are what its agent lock names that a check asks OSV.dev
+	// about: its harness's package and its servers' (locks.go).
+	lockPkgs []ipc.LockPackage
 }
 
 func (x *session) wire() ipc.Session {
@@ -370,6 +374,7 @@ func Run(o Options) error {
 	c.loadHues()
 	c.loadClosed()
 	c.loadMeter(time.Now())
+	c.loadLocks()
 	c.loadState()
 	c.loadTrodHand()
 	c.loadRaphael()
@@ -413,6 +418,7 @@ func Run(o Options) error {
 	go c.checkMachine()
 	go c.ctxSweep()
 	go c.leftoverSweep()
+	go c.lockSweep()
 
 	os.Remove(o.Paths.Socket()) // stale: core.lock is ours
 	l, err := ipc.Listen(o.Paths.Socket())
@@ -461,6 +467,9 @@ func Run(o Options) error {
 			}
 			if n%leftoverEvery == 0 {
 				go c.leftoverSweep()
+			}
+			if n%lockEvery == 0 {
+				go c.lockSweep()
 			}
 		case s := <-stop:
 			c.log.Info("core stopping", "signal", s.String())
@@ -602,6 +611,7 @@ func (c *Core) adopt(p tmux.Pane) *session {
 		x.model, x.local, x.tutor, x.anon = spec.Model, spec.Local, spec.Tutor, spec.Anon
 	}
 	c.loadStatus(x)
+	x.lockPkgs = c.readLockPackages(x.id)
 	if x.harness == "" {
 		x.harness = c.cfg().Profiles[x.profile].Harness
 	}
@@ -707,6 +717,7 @@ func (c *Core) row(x *session, from time.Time) ipc.Session {
 	now := time.Now()
 	s.Rebuilds = c.rebuildsRow(x.id, now)
 	s.Cold = c.coldRow(x, s.State, now)
+	s.Lock = c.lockRow(x.lockPkgs)
 	return s
 }
 
@@ -821,6 +832,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
+			ipc.OpLock,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -897,6 +909,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return c.dogList()
 	case ipc.OpRebuilds:
 		return c.rebuildsOp(), nil
+	case ipc.OpLock:
+		var a ipc.LockArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.lockOp(a)
 	case ipc.OpReady:
 		return c.ready(), nil
 	case ipc.OpTrod:

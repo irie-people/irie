@@ -356,6 +356,12 @@ extension View {
                 if let words = s.rebuilds?.words {
                     Text(words).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(1)
                 }
+                // Wrapped, so a narrow card keeps the version that fixes it
+                // (DESIGN §4.21).
+                if let words = s.lock?.words {
+                    Text(words).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if !helpers.isEmpty {
                     VStack(alignment: .leading, spacing: 1) {
                         ForEach(helpers) { a in

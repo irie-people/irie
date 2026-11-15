@@ -109,6 +109,10 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4}); c.Usage != want {
 		t.Errorf("usage = %+v, want %+v", c.Usage, want)
 	}
+	// The agent locks ask OSV.dev only when asked (DESIGN §4.21).
+	if want := (Lock{Check: "off", OSV: "https://api.osv.dev"}); c.Lock != want {
+		t.Errorf("lock = %+v, want %+v", c.Lock, want)
+	}
 	if want := (Repos{Roots: []string{}, Aliases: map[string]string{}}); !reflect.DeepEqual(c.Repos, want) {
 		t.Errorf("repos = %+v, want %+v", c.Repos, want)
 	}
@@ -612,6 +616,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[profiles.explain]\nmodel = \"opus\"\n", "profiles.explain"},
 		{"[learn]\nlinks = { wiki = \"ftp://example.com\" }\n", "learn.links"},
 		{"[learn]\nlinks = { \" \" = \"https://example.com\" }\n", "learn.links"},
+		{"[lock]\ncheck = \"hourly\"\n", `lock.check = "hourly": must be off or daily`},
+		{"[lock]\nosv = \"api.osv.dev\"\n", "lock.osv"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {

@@ -587,6 +587,8 @@ func (c *Core) launch(j job) (*session, error) {
 	}
 	x.pane = strings.TrimSpace(out)
 	c.sessions[id] = x
+	// Its agent lock: its setup as its agent starts (locks.go).
+	c.lockLater(x, j, s, argv, files)
 	// Its created time too, which the pane keeps, for a session lost with
 	// the server (lost.go).
 	data := map[string]any{"cwd": x.cwd, "profile": j.profile, "created": x.created.Format(time.RFC3339Nano)}

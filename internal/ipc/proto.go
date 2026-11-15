@@ -265,6 +265,11 @@ type Session struct {
 	// its next turn writes its whole context into the cache again; nil
 	// while the cache is warm, while it works, or when Irie cannot tell.
 	Cold *Cold `json:"cold,omitempty"`
+
+	// Lock is what its agent lock names that a check asks OSV.dev about,
+	// with what the last check found and, while an advisory affects one,
+	// the card's words (DESIGN §4.21); nil when its lock names none.
+	Lock *LockRow `json:"lock,omitempty"`
 }
 
 // Rebuilds is the prompt-cache meter's count for one session (DESIGN §6.3):

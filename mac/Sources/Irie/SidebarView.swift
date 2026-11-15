@@ -423,6 +423,18 @@ private struct SessionCard: View, Equatable {
                         .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // A known advisory for its harness or a package its lock
+                // names, and the version that fixes it (DESIGN §4.21), in
+                // the meter's quiet words. Three lines, so a narrow card
+                // keeps the version to update to.
+                if let words = session.lock?.words {
+                    Text(words)
+                        .font(Theme.font(11))
+                        .foregroundStyle(deep == nil ? Theme.muted : Theme.ink)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             ZStack(alignment: .topTrailing) {
@@ -1260,6 +1272,9 @@ struct DetailsPanel: View {
             // cache has run out (DESIGN §6.3).
             line(s.rebuilds?.summary, color: meta)
             line(s.cold.map { "Its cache has run out: \($0.words)" }, color: meta)
+            // The versions its agent lock names, and what the last check
+            // found (DESIGN §4.21).
+            line(s.lock?.words ?? s.lock?.summary, color: meta)
             ForEach((s.subagents ?? []).prefix(3)) { h in
                 line("↳ " + [h.type ?? "Helper", h.detail].compactMap { $0 }.joined(separator: " · "),
                      color: h.needsYou == true ? Theme.needs : meta)
