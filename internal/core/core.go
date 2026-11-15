@@ -804,6 +804,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.mailOp(peer, a)
+	case ipc.OpConfig:
+		var a ipc.ConfigArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.settingsFrom(peer, a)
 	}
 	return c.Call(op, raw)
 }

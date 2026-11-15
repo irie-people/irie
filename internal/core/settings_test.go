@@ -235,3 +235,74 @@ func TestSettingsSayWhenTheFileDoesNotLoad(t *testing.T) {
 		t.Error("a file that does not parse was edited")
 	}
 }
+
+// TestAnAgentCannotLowerTheArchAgentsGuards: from inside an agent's pane,
+// the config op raises Mikael's and Gabriel's guards but never lowers them,
+// nor rewords the good Mikael hears, and refuses a change that would, whole;
+// every other setting stays an agent's to change, and the person may lower
+// a guard.
+func TestAnAgentCannotLowerTheArchAgentsGuards(t *testing.T) {
+	c := settingsCore(t, mine)
+	// This test's own parent stands for an agent's host.
+	c.snap = tmux.Snapshot{Panes: []tmux.Pane{{ID: "%1", Role: tmux.RoleAgent, PID: os.Getppid()}}}
+	agent, person := os.Getpid(), 0
+	from := func(peer int, kv ...string) error {
+		var a ipc.ConfigArgs
+		for i := 0; i+1 < len(kv); i += 2 {
+			a.Set = append(a.Set, ipc.ConfigSet{Key: kv[i], Value: json.RawMessage(kv[i+1])})
+		}
+		raw, err := json.Marshal(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = c.CallFrom(peer, ipc.OpConfig, raw)
+		return err
+	}
+	before, err := os.ReadFile(c.paths.ConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kv := range [][]string{
+		{"arch.mikael.on", "false"},
+		{"arch.mikael.door", "false"},
+		{"arch.mikael.good", `["anything goes"]`},
+		{"arch.gabriel.guard", "false"},
+		{"arch.gabriel.on", "false"},
+		// One lowered guard refuses the whole change.
+		{"spawn.close_when_done", "true", "arch.mikael.door", "false"},
+	} {
+		if err := from(agent, kv...); err == nil || !strings.Contains(err.Error(), "An agent can't turn off or reword an arch agent's guard") {
+			t.Errorf("%v from an agent: err = %v", kv, err)
+		}
+	}
+	if after, _ := os.ReadFile(c.paths.ConfigFile()); string(after) != string(before) {
+		t.Errorf("a refused change was written:\n%s", after)
+	}
+	if a := c.cfg().Arch; !a.Mikael.On || !a.Mikael.Door || len(a.Mikael.Good) != 0 || !a.Gabriel.On || !a.Gabriel.Guard || c.cfg().Spawn.CloseWhenDone {
+		t.Errorf("a refused change took: %+v", a)
+	}
+
+	// Any other setting is an agent's to change.
+	if err := from(agent, "spawn.close_when_done", "true"); err != nil || !c.cfg().Spawn.CloseWhenDone {
+		t.Errorf("close_when_done from an agent: %v", err)
+	}
+	// The person lowers a guard, and an agent may raise it again.
+	if err := from(person, "arch.mikael.door", "false"); err != nil || c.cfg().Arch.Mikael.Door {
+		t.Fatalf("the door from the person: %v", err)
+	}
+	if err := from(agent, "arch.mikael.door", "true"); err != nil || !c.cfg().Arch.Mikael.Door {
+		t.Errorf("raising the door from an agent: %v", err)
+	}
+	// With the window guard down, Gabriel himself guards nothing an agent
+	// could lower.
+	if err := from(person, "arch.gabriel.guard", "false"); err != nil {
+		t.Fatal(err)
+	}
+	if err := from(agent, "arch.gabriel.on", "false"); err != nil || c.cfg().Arch.Gabriel.On {
+		t.Errorf("Gabriel off from an agent, with his guard down: %v", err)
+	}
+	// The core's own calls, without a caller, are the person's.
+	if _, err := configure(c, "arch.mikael.on", "false"); err != nil || c.cfg().Arch.Mikael.On {
+		t.Errorf("Mikael off through Call: %v", err)
+	}
+}
