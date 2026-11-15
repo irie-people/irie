@@ -421,6 +421,9 @@ type Bench struct {
 	Pass    int           `toml:"pass"`    // a run scored this or more, of 100, is rated good
 	Timeout time.Duration `toml:"timeout"` // a run still at work after this is stopped and judged as it stands
 	Rules   int           `toml:"rules"`   // the most rules a playbook keeps
+	// Close closes a bench's runs and judge once its verdict is in: they
+	// go to the history, and the bench keeps their scores.
+	Close bool `toml:"close"`
 }
 
 // MaxBenchRuns is the most sessions one bench runs.
@@ -900,7 +903,7 @@ func Default() Config {
 		},
 		Local: Local{Port: 11435, Context: DefaultMinContext, KVCache: "q8_0", Env: map[string]string{}, LlamaPort: 11436, LlamaArgs: []string{}, LlamaSlots: 1},
 		Route: DefaultRoute(),
-		Bench: Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30},
+		Bench: Bench{Runs: 3, Judge: "claude", Pass: 70, Timeout: time.Hour, Rules: 30, Close: true},
 		Repos: Repos{Roots: []string{}, Aliases: map[string]string{}},
 		Worktree: Worktree{
 			Base:         "",
