@@ -57,9 +57,12 @@ type drag struct {
 	scrolling bool
 }
 
-// dragScrollEvery is how often a drag held on the list's edge scrolls it an
-// entry further.
-const dragScrollEvery = 100 * time.Millisecond
+// How often a drag held on the list's edge scrolls it an entry further: on
+// the line next to the edge, and on the edge's own line or past it.
+const (
+	dragScrollSlow = 180 * time.Millisecond
+	dragScrollFast = 90 * time.Millisecond
+)
 
 // dragScrollMsg is drag d's next scroll, while it holds on an edge.
 type dragScrollMsg struct{ d *drag }
@@ -339,10 +342,10 @@ func (m *Model) dragTo(y int) {
 }
 
 // holdAt notes that the held session's pointer is on screen row y. Held on
-// the list's first line or above it, or on its last line or below it, it
-// scrolls the list that way an entry at a time (dragScroll), but only once
-// the pointer has left the row it went down on, so a press on an edge
-// doesn't set the list off.
+// the list's first two lines or above them, or on its last two or below
+// them, it scrolls the list that way an entry at a time (dragScroll), but
+// only once the pointer has left the row it went down on, so a press on an
+// edge doesn't set the list off.
 func (m *Model) holdAt(y int) tea.Cmd {
 	d := m.drag
 	if d == nil || d.id == "" {
@@ -350,32 +353,44 @@ func (m *Model) holdAt(y int) tea.Cmd {
 	}
 	d.row = y
 	d.left = d.left || y != d.down
-	if d.scrolling || !d.left || m.edge(y) == 0 {
+	dir, every := m.edge(y)
+	if d.scrolling || !d.left || dir == 0 {
 		return nil
 	}
 	d.scrolling = true
-	return d.next()
+	return d.next(every)
 }
 
-// next is drag d's next scroll.
-func (d *drag) next() tea.Cmd {
-	return tea.Tick(dragScrollEvery, func(time.Time) tea.Msg { return dragScrollMsg{d} })
+// next is drag d's next scroll, after every.
+func (d *drag) next(every time.Duration) tea.Cmd {
+	return tea.Tick(every, func(time.Time) tea.Msg { return dragScrollMsg{d} })
 }
 
-// edge is which way a drag held on screen row y scrolls the list: up (-1)
-// on its first line or above it, down (1) on its last line or below it,
-// else not at all.
-func (m Model) edge(y int) int {
+// edge is which way a drag held on screen row y scrolls the list, and how
+// often: up (-1) on its first two lines or above them, down (1) on its last
+// two or below them, the faster on the edge's own line or past it; else not
+// at all. A list under eight lines keeps one line at each edge.
+func (m Model) edge(y int) (int, time.Duration) {
 	top, h := m.listTop(), m.listHeight()
+	band := 2
+	if h < 8 {
+		band = 1
+	}
+	pace := func(in int) time.Duration {
+		if in > 0 {
+			return dragScrollSlow
+		}
+		return dragScrollFast
+	}
 	switch {
 	case h < 2:
-		return 0
-	case y <= top:
-		return -1
-	case y >= top+h-1:
-		return 1
+		return 0, 0
+	case y < top+band:
+		return -1, pace(y - top)
+	case y >= top+h-band:
+		return 1, pace(top + h - 1 - y)
 	}
-	return 0
+	return 0, 0
 }
 
 // dragScroll scrolls the list an entry toward the edge drag d holds on, and
@@ -387,7 +402,7 @@ func (m *Model) dragScroll(d *drag) tea.Cmd {
 		return nil // a drag let go of
 	}
 	d.scrolling = false
-	n := m.edge(d.row)
+	n, every := m.edge(d.row)
 	if n == 0 {
 		return nil
 	}
@@ -398,7 +413,7 @@ func (m *Model) dragScroll(d *drag) tea.Cmd {
 	}
 	m.dragTo(min(max(d.row, m.listTop()), m.listTop()+m.listHeight()-1))
 	d.scrolling = true
-	return d.next()
+	return d.next(every)
 }
 
 // putBack sends a dragged session back where it was, parked as it was.

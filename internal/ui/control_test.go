@@ -518,6 +518,47 @@ func TestDraggingOnTheListsEdgeScrollsIt(t *testing.T) {
 	}
 }
 
+// Once the list has eight lines, its edge is two lines deep: the line next
+// to the edge scrolls it too, at half the pace of the edge's own line and
+// the rows past it.
+func TestTheListsEdgeIsTwoLinesDeep(t *testing.T) {
+	m, b := ctlAt(t, sessions(30), 34, 30) // cards
+	m = send(m, keyMsg("esc"))
+	top, h := m.listTop(), m.listHeight()
+	if h < 8 || m.compact() {
+		t.Fatalf("a list of %d lines, compact %v", h, m.compact())
+	}
+	for _, c := range []struct {
+		y, dir int
+		every  time.Duration
+	}{
+		{top - 1, -1, dragScrollFast}, {top, -1, dragScrollFast}, {top + 1, -1, dragScrollSlow}, {top + 2, 0, 0},
+		{top + h - 3, 0, 0}, {top + h - 2, 1, dragScrollSlow}, {top + h - 1, 1, dragScrollFast}, {top + h, 1, dragScrollFast},
+	} {
+		if dir, every := m.edge(c.y); dir != c.dir || every != c.every {
+			t.Errorf("row %d (list %d to %d): %d every %v, want %d every %v", c.y, top, top+h-1, dir, every, c.dir, c.every)
+		}
+	}
+	short, _ := ctlAt(t, sessions(12), 34, 12)
+	if dir, _ := short.edge(short.listTop() + 1); short.listHeight() >= 8 || dir != 0 {
+		t.Errorf("a list of %d lines scrolls from its second line: %d", short.listHeight(), dir)
+	}
+	// Held on the line next to the top edge, a card goes up past the three
+	// cards scrolled out of sight, to the top of its group.
+	m.scroll(3)
+	from := lineOf(t, m, "task-004")
+	m = send(m, tea.MouseClickMsg{X: 5, Y: from, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: from - 1, Button: tea.MouseLeft})
+	m = send(m, tea.MouseMotionMsg{X: 5, Y: top + 1, Button: tea.MouseLeft})
+	if m.offset != 0 || order(m)[0] != "s000000000004" {
+		t.Errorf("held next to the edge: offset %d, order %v", m.offset, order(m)[:4])
+	}
+	m = send(m, tea.MouseReleaseMsg{X: 5, Y: top + 1, Button: tea.MouseLeft})
+	if want := []string{`reorder s000000000004 before "s000000000000"`}; !slices.Equal(b.calls, want) {
+		t.Errorf("calls = %v, want %v", b.calls, want)
+	}
+}
+
 // A press on the list's edge that never leaves its row scrolls nothing, and
 // a scroll still on its way when the drag is let go of moves nothing.
 func TestAnEdgeWaitsForTheDragToMove(t *testing.T) {
