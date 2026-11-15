@@ -319,8 +319,13 @@ struct TerminalArea: View {
                     .overlay(frame.strokeBorder(edge, lineWidth: TabLink.width))
                     .onTapGesture { store.focusTerminal += 1 }
             }
-            .transformAnchorPreference(key: TabLinkKey.self, value: .bounds) { ends, bounds in
-                if shows { ends.frame = .init(bounds: bounds, ground: ground) }
+            // Where the lines from the selected card end (TabLink.swift).
+            .background {
+                if shows {
+                    TabLinkFrame(session: selected?.id, ground: Theme.terminalBackground)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
             .padding([.horizontal, .bottom], 12)
             .padding(.top, 12)

@@ -77,6 +77,24 @@ func TestTasksTakeTheClassOfTheNearestLabelledTask(t *testing.T) {
 	if ch := c.routeDry("fix the typo in README"); ch.Class != route.Small || !strings.Contains(ch.Why, "typo") {
 		t.Errorf("an unlike task: %s (%s)", ch.Class, ch.Why)
 	}
+	// Hard work by its words stays hard, though the nearest task was small:
+	// calling hard work easier is the costly mistake.
+	r = c.label(labelled(route.Small, "investigate sidebar freeze", 12)...)
+	if r.Added != 12 || r.Labels != 48 {
+		t.Errorf("12 more labels = %+v", r)
+	}
+	testutil.Eventually(t, 15*time.Second, "the new labelled tasks were never embedded", func() bool {
+		ch := c.routeDry("rename sidebar freeze")
+		return ch.Class == route.Small && strings.Contains(ch.Why, "like “investigate sidebar freeze item")
+	})
+	if ch := c.routeDry("investigate sidebar freeze again"); ch.Class != route.Hard || !strings.Contains(ch.Why, "investigate") {
+		t.Errorf("hard by its words: %s (%s)", ch.Class, ch.Why)
+	}
+	// A task given twice in one call counts once, with its last class.
+	r = c.label(ipc.Label{Text: "brand new task", Class: route.Small}, ipc.Label{Text: "Brand  new task", Class: route.Medium})
+	if r.Added != 1 || r.Labels != 49 {
+		t.Errorf("a task given twice in one call = %+v", r)
+	}
 	// Spawns take the class too.
 	if s := c.spawnArgs(ipc.SpawnArgs{Task: "prompt,stop\n" + task, Profile: "auto"}); s.Class != route.Hard || s.Profile != "fake" {
 		t.Errorf("spawned %+v", s)
