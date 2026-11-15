@@ -42,6 +42,9 @@ type Plugin struct {
 	// problem says why its manifest doesn't read: it has no switch, and no
 	// parts, until it does.
 	problem string
+	// remote says a pane of it shows a page off this computer, so it is
+	// off until its switch is set on.
+	remote bool
 }
 
 // Part is one feature of a plugin.
@@ -177,11 +180,15 @@ func Here(e Env) ([]ipc.Plugin, []ipc.PluginBundle) {
 }
 
 func (p Plugin) status(e Env) ipc.Plugin {
-	w := ipc.Plugin{Name: p.Name, Title: p.Title, Summary: p.Summary, Setup: p.Setup, Manifest: p.Manifest, Problem: p.problem}
+	// Parts is a list, even an empty one: clients decode it as one.
+	w := ipc.Plugin{Name: p.Name, Title: p.Title, Summary: p.Summary, Setup: p.Setup, Manifest: p.Manifest, Problem: p.problem, Parts: []ipc.PluginPart{}}
 	if p.problem != "" {
 		return w
 	}
 	w.On = p.on(e.Config)
+	if p.remote && !w.On {
+		w.Summary += " It shows a page off this computer, so it is off until you turn it on."
+	}
 	for _, x := range p.Parts {
 		s := x.status(e, w.On)
 		if x.Pane != nil && x.Held == "" {

@@ -1,11 +1,14 @@
 package plugins
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
@@ -158,6 +161,11 @@ func TestAPaneStaysOnThisComputer(t *testing.T) {
 	if x := mine(t, e, "plain").Parts[0]; x.State != ipc.PartNeeds || x.Pane != nil || !strings.Contains(x.Detail, "must use https") {
 		t.Errorf("plain = %+v", x)
 	}
+	// A page off this computer waits for the owner's own switch.
+	if p := mine(t, e, "far"); p.On || p.Parts[0].State != ipc.PartPluginOff || !strings.Contains(p.Summary, "off until you turn it on") {
+		t.Errorf("far, unset = %+v", p)
+	}
+	e.Config.Plugins.Manifests["far"] = true
 	x := mine(t, e, "far").Parts[0]
 	if x.State != ipc.PartReady || x.Pane == nil || !x.Pane.Remote || x.Pane.Origin != "https://example.com" || !strings.Contains(x.Detail, "off this computer") {
 		t.Errorf("far = %+v", x)
@@ -181,6 +189,9 @@ func TestWebAddresses(t *testing.T) {
 		{raw: "http://[::1]:9000/", page: "http://[::1]:9000/", origin: "http://[::1]:9000", dial: "[::1]:9000"},
 		{raw: "http://127.8.0.1:5000", page: "http://127.8.0.1:5000/", origin: "http://127.8.0.1:5000", dial: "127.8.0.1:5000"},
 		{raw: "HTTPS://Example.com:8443/x", remote: true, page: "https://example.com:8443/x", origin: "https://example.com:8443"},
+		{raw: "http://[::ffff:127.0.0.1]:8080/", page: "http://127.0.0.1:8080/", origin: "http://127.0.0.1:8080", dial: "127.0.0.1:8080"},
+		{raw: "https://[2001:db8::1]/", remote: true, page: "https://[2001:db8::1]/", origin: "https://[2001:db8::1]"},
+		{raw: "http://[fe80::1%25lo0]:8080/", bad: "names a network interface"},
 		{raw: "", bad: "has no address"},
 		{raw: "127.0.0.1:8080", bad: "isn't a web page's address"},
 		{raw: "ftp://127.0.0.1/", bad: "isn't a web page's address"},
@@ -256,6 +267,37 @@ func TestAManifestThatDoesntReadSaysWhy(t *testing.T) {
 	}
 	if text := Text([]ipc.Plugin{mine(t, e, "broken")}); !strings.HasPrefix(text, "broken.toml: its manifest doesn't read.") {
 		t.Errorf("text = %q", text)
+	}
+	// Clients decode parts as a list, so it is one even with none in it.
+	if b, err := json.Marshal(mine(t, e, "broken")); err != nil || !strings.Contains(string(b), `"parts":[]`) {
+		t.Errorf("json = %s, %v", b, err)
+	}
+}
+
+// TestAManifestIsAPlainFile: a pipe or a device in the folder, as a
+// manifest or through a link, is refused without being read, so the
+// plugins op neither hangs nor fills its memory.
+func TestAManifestIsAPlainFile(t *testing.T) {
+	e := env(t)
+	manifest(t, e, "fine.toml", "title = \"Fine\"\n")
+	dir := e.Paths.Plugins()
+	if err := syscall.Mkfifo(filepath.Join(dir, "pipe.toml"), 0o600); err != nil {
+		t.Skip("no named pipes here:", err)
+	}
+	if err := os.Symlink("/dev/zero", filepath.Join(dir, "zero.toml")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan []ipc.Plugin, 1)
+	go func() { done <- Status(e) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the plugins' status hung on a pipe or a device")
+	}
+	for _, name := range []string{"pipe", "zero"} {
+		if p := mine(t, e, name); !strings.Contains(p.Problem, "isn't a file") {
+			t.Errorf("%s = %+v", name, p)
+		}
 	}
 }
 

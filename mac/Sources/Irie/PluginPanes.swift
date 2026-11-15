@@ -422,6 +422,14 @@ final class PluginPaneHolder: NSObject, ObservableObject {
     /// The names downloads are saved under, by download, for the notice
     /// when each is done.
     private var downloads: [ObjectIdentifier: String] = [:]
+    /// The page's origin as text, without a slash at its end.
+    private let originText: String
+    /// When the page last asked something in a dialog, and whether the
+    /// pane now answers its dialogs itself, until the page loads again.
+    private var dialogs: [Date] = []
+    private var hushed = false
+    /// When the page's web process last stopped.
+    private var lastCrash: Date?
 
     init?(pane: PluginPaneInfo, say: @escaping (String, Bool) -> Void) {
         guard let a = pane.address.flatMap(URL.init(string:)), let o = pane.origin.flatMap(URL.init(string:)), o.host != nil else { return nil }
@@ -430,7 +438,11 @@ final class PluginPaneHolder: NSObject, ObservableObject {
         origin = o
         self.say = say
         place = Self.place(a)
+        originText = o.absoluteString.hasSuffix("/") ? String(o.absoluteString.dropLast()) : o.absoluteString
         let config = WKWebViewConfiguration()
+        // WebRTC is outside what a content rule list governs, so a page
+        // could reach any host with it: each frame starts without it.
+        config.userContentController.addUserScript(WKUserScript(source: Self.noWebRTC, injectionTime: .atDocumentStart, forMainFrameOnly: false))
         // Its plugin's own data, kept across launches: its logins, and
         // no one else's.
         config.websiteDataStore = WKWebsiteDataStore(forIdentifier: PluginPaneStores.id(pane.store ?? pane.id))
@@ -488,6 +500,13 @@ final class PluginPaneHolder: NSObject, ObservableObject {
         web.removeFromSuperview()
     }
 
+    /// Takes WebRTC's constructors out of a frame before its own scripts
+    /// run, for good.
+    private static let noWebRTC = """
+    (() => { for (const k of ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCIceCandidate", "RTCSessionDescription", "RTCRtpSender", "RTCRtpReceiver", "RTCRtpTransceiver"]) {
+      try { Object.defineProperty(window, k, { value: undefined, writable: false, configurable: false }); } catch (e) {} } })();
+    """
+
     // MARK: Origin
 
     func sameOrigin(_ u: URL) -> Bool {
@@ -543,12 +562,19 @@ extension PluginPaneHolder: WKNavigationDelegate {
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let target = action.request.url else { return decisionHandler(.cancel) }
-        if action.shouldPerformDownload, sameOrigin(target) { return decisionHandler(.download) }
         let scheme = target.scheme?.lowercased() ?? ""
-        if sameOrigin(target) || scheme == "about" || scheme == "data" || (scheme == "blob" && target.absoluteString.hasPrefix("blob:" + origin.absoluteString.trimmingCharacters(in: ["/"]))) {
+        // A blob the page made itself, as an in-page export does.
+        let ownBlob = scheme == "blob" && target.absoluteString.hasPrefix("blob:" + originText + "/")
+        if action.shouldPerformDownload, sameOrigin(target) || ownBlob || scheme == "data" {
+            return decisionHandler(.download)
+        }
+        if sameOrigin(target) || ownBlob || scheme == "about" || scheme == "data" {
             return decisionHandler(.allow)
         }
-        if ["http", "https", "mailto"].contains(scheme), web.justPressed, action.targetFrame?.isMainFrame != false {
+        // Only a link the person clicked, never a page's script, even one
+        // that runs as they type.
+        if ["http", "https", "mailto"].contains(scheme), action.navigationType == .linkActivated, web.justPressed,
+           action.targetFrame?.isMainFrame != false {
             NSWorkspace.shared.open(target)
         }
         decisionHandler(.cancel)
@@ -557,7 +583,9 @@ extension PluginPaneHolder: WKNavigationDelegate {
     /// What the pane can't show, such as an export, it saves to Downloads.
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        decisionHandler(response.canShowMIMEType ? .allow : .download)
+        let disposition = (response.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+        let attachment = disposition.lowercased().hasPrefix("attachment")
+        decisionHandler(response.canShowMIMEType && !attachment ? .allow : .download)
     }
 
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
@@ -570,6 +598,8 @@ extension PluginPaneHolder: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         state = .shown
+        dialogs = []
+        hushed = false
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -584,7 +614,15 @@ extension PluginPaneHolder: WKNavigationDelegate {
         failed(error)
     }
 
+    /// The page's web process stopped: it loads again once, and a second
+    /// stop within a minute waits for Reload.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        let now = Date()
+        if let last = lastCrash, now.timeIntervalSince(last) < 60 {
+            state = .failed("The page stopped twice in a minute, so the pane waits: Reload tries again.")
+            return
+        }
+        lastCrash = now
         retry()
     }
 
@@ -650,9 +688,27 @@ extension PluginPaneHolder: WKUIDelegate {
         }
     }
 
+    /// No camera or microphone: the app has no use for them in a pane, and
+    /// says so to macOS nowhere.
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo,
+                 type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(.deny)
+    }
+
     /// A page's alert, confirm or prompt, as a sheet on the window that
-    /// names the pane, so it is plain who asks.
+    /// names the pane, so it is plain who asks. A page that keeps asking,
+    /// more than three times in ten seconds, gets no more sheets until it
+    /// loads again: the pane answers them itself, as Cancel.
     private func ask(_ message: String, buttons: [String], accessory: NSView? = nil, done: @escaping (NSApplication.ModalResponse) -> Void) {
+        let now = Date()
+        dialogs = dialogs.filter { now.timeIntervalSince($0) < 10 } + [now]
+        if hushed || dialogs.count > 3 {
+            if !hushed {
+                hushed = true
+                say("\(pane.title) kept opening dialogs, so its pane answers them itself until the page loads again.", true)
+            }
+            return done(.alertSecondButtonReturn)
+        }
         guard let window = web.window else { return done(.alertSecondButtonReturn) }
         let alert = NSAlert()
         alert.messageText = pane.title

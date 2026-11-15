@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/url"
@@ -121,12 +122,9 @@ func readManifest(path string) (Plugin, *Bundle) {
 		name = file
 		return broken(file + " has the name of one of " + brand.Name + "'s own plugins: give the file another.")
 	}
-	if st, err := os.Stat(path); err == nil && st.Size() > maxManifestSize {
-		return broken(fmt.Sprintf("It is too big to be a manifest: %d KB, where a manifest has at most %d.", st.Size()>>10, maxManifestSize>>10))
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return broken("It doesn't read: " + err.Error())
+	data, why := readSmall(path)
+	if why != "" {
+		return broken(why)
 	}
 	var mf manifestFile
 	md, err := toml.Decode(string(data), &mf)
@@ -168,7 +166,15 @@ func readManifest(path string) (Plugin, *Bundle) {
 		p.Summary = "A plugin of your own, from " + file + " in the plugins folder."
 	}
 	for _, id := range slices.Sorted(maps.Keys(mf.Panes)) {
-		p.Parts = append(p.Parts, panePart(p, id, mf.Panes[id]))
+		x := panePart(p, id, mf.Panes[id])
+		if x.Pane != nil && x.Pane.Remote {
+			// A page off this computer shows only once the owner has said
+			// so, with the plugin's switch: a manifest dropped in the
+			// folder, by an agent say, can't bring one by itself.
+			p.on = func(c config.Config) bool { on, set := c.Plugins.Manifests[name]; return set && on }
+			p.remote = true
+		}
+		p.Parts = append(p.Parts, x)
 	}
 	for _, id := range slices.Sorted(maps.Keys(mf.Schedules)) {
 		var s struct {
@@ -196,6 +202,33 @@ func readManifest(path string) (Plugin, *Bundle) {
 		}}
 	}
 	return p, nil
+}
+
+// readSmall reads a manifest's file: a regular file, as a link may name,
+// and no more of it than a manifest may hold, so a pipe or a device in the
+// folder can neither hang the plugins op nor fill its memory. What is wrong
+// is in a sentence, or "".
+func readSmall(path string) ([]byte, string) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, "It doesn't read: " + err.Error()
+	}
+	if !st.Mode().IsRegular() {
+		return nil, "It isn't a file " + brand.Name + " reads: a manifest is a plain text file."
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, "It doesn't read: " + err.Error()
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxManifestSize+1))
+	if err != nil {
+		return nil, "It doesn't read: " + err.Error()
+	}
+	if len(data) > maxManifestSize {
+		return nil, fmt.Sprintf("It is too big to be a manifest, which holds at most %d KB.", maxManifestSize>>10)
+	}
+	return data, ""
 }
 
 // undecoded are the manifest's keys that no field took, but for those in
@@ -270,12 +303,20 @@ func webAddress(raw string, remote bool) (web, string) {
 		return web{}, "address = " + strconv.Quote(raw) + " has a name or a password in it: leave them out and sign in in the pane, which keeps the login."
 	}
 	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, "%") {
+		return web{}, "address = " + strconv.Quote(raw) + " names a network interface (%): leave it out, as 127.0.0.1 or ::1 needs none."
+	}
 	def := map[string]string{"http": "80", "https": "443"}[u.Scheme]
 	port := u.Port()
 	if port == "" {
 		port = def
 	}
 	ip := net.ParseIP(host)
+	if ip != nil && ip.To4() != nil {
+		// An IPv4 address, even one written as IPv6 (::ffff:127.0.0.1),
+		// in the form a browser keeps it in.
+		host = ip.To4().String()
+	}
 	local := host == "localhost" || ip != nil && ip.IsLoopback()
 	switch {
 	case !local && !remote:
@@ -284,7 +325,7 @@ func webAddress(raw string, remote bool) (web, string) {
 		return web{}, "A pane off this computer must use https: " + raw + " would send what you type in it over the network unencrypted."
 	}
 	hostport := host
-	if ip != nil && ip.To4() == nil {
+	if strings.Contains(host, ":") {
 		hostport = "[" + host + "]"
 	}
 	if port != def {
@@ -309,7 +350,7 @@ func checkWebPane(w web, start string, on bool) (bool, string) {
 	case !on:
 		return true, ""
 	case w.remote:
-		return true, "Ready: its tab in the right sidebar shows " + w.page + ", off this computer, as remote = true in its manifest allows."
+		return true, "Ready: its tab in the right sidebar shows " + w.page + ", off this computer, as remote = true in its manifest and your switch allow."
 	case knock(w.dial):
 		return true, "Ready: its tab in the right sidebar shows " + w.page + "."
 	case start != "":

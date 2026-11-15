@@ -56,9 +56,11 @@ Each line is a plugin's name or a part of one, `PLUGIN.PART`. The bundle's switc
 ## 4. Security
 
 - **One origin.** A web pane loads only from its address's origin: a content rule list blocks every other load, and the navigation delegate refuses every other page. The origin is on this Mac (127.0.0.1, localhost or ::1) unless the manifest also says `remote = true`, and then it must be https.
-- **Links elsewhere** open in the browser, and only at the person's click, as in the Markets window. A script can open no window.
+- **Links elsewhere** open in the browser, and only from a link the person clicked, as in the Markets window: never a page's script, even one that runs as they type. A script can open no window.
 - **Its own data.** Each plugin's panes keep their logins in a website data store of that plugin's own (`WKWebsiteDataStore(forIdentifier:)`, macOS 14), so a login lasts across launches and no other pane, Dock control or window sees it.
 - **No bridge.** The page has no way to talk to Irie.
+- **No WebRTC, camera or microphone.** WebRTC is outside what a content rule list governs, so a page could reach any host with it: every frame starts without its constructors, a blank frame the page makes too, and the page can't put them back. A pane denies the camera and the microphone, which the app tells macOS it never uses.
+- **No dialog flood.** A page that asks more than three times in ten seconds gets no more sheets until it loads again; the pane answers for it, as Cancel. A page whose web process stops twice in a minute waits for Reload.
 - **When the app isn't running**, the pane says so and shows what starts it, and tries again every few seconds while it shows. The core knocks once on a pane's address when that is on this Mac, a TCP connect that goes no further than the Mac, so Settings and the Plugins menu say so too. It never knocks on a remote address.
 
 ## 5. Where it shows
@@ -73,7 +75,7 @@ Each line is a plugin's name or a part of one, `PLUGIN.PART`. The bundle's switc
 
 1. **A bundle sets switches and holds none.** Each plugin in it keeps its own switch, and the bundle's state comes from theirs, so it never says on while one of them is off. A bundle that held a switch of its own, gating its plugins as a plugin gates its parts, was the other choice. It would have needed every one of Irie's own switches (`VPNOn` and the rest, in `config.Config`) to know about bundles, and gives no clear answer for a plugin in two bundles.
 2. **A part in a bundle needs a switch of its own** to go off without its plugin. A part with none goes on with its plugin and stays on while the plugin is, and the bundle says so.
-3. **A plugin of your own is on until you turn it off,** as the Dock runs the controls in your own `dock.json` without asking: the folder is yours. Its switch is `plugins.manifests.NAME` in config.toml, never in the manifest, so a manifest can be shared, or later come from a repository, without its state.
+3. **A plugin of your own is on until you turn it off,** as the Dock runs the controls in your own `dock.json` without asking: the folder is yours. A plugin with a pane off this computer is the exception: it is off until you turn it on, so a manifest written into the folder, by an agent say, can't bring a remote page by itself. Its switch is `plugins.manifests.NAME` in config.toml, never in the manifest, so a manifest can be shared, or later come from a repository, without its state.
 4. **Web panes come from manifests; Irie's own panes are its own views.** No page of Irie's own is a web page.
 5. **One data store per plugin, not per pane,** so a plugin's panes share their logins.
 6. **Markets stays a window.** Its map wants room (the window is at least 720 by 480 points; the sidebar is 260 to 520 wide), reads a folder rather than a server, and landed today (PR #19). With panes in place it could also show as one, of kind `markets`, if the owner wants it beside the sessions.

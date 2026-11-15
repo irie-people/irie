@@ -58,7 +58,12 @@ func member(ref string, all []ipc.Plugin) ipc.BundlePlugin {
 		return m
 	}
 	if part == "" {
+		// As the bundle's switch turns it on: a plugin of one part with a
+		// switch, such as the VPN, comes on whole (edits).
 		m.On = p.On
+		if x, ok := onlySwitch(p); ok {
+			m.On = p.On && x.On
+		}
 		m.State, m.Detail = pluginState(p)
 		return m
 	}
@@ -79,7 +84,7 @@ func member(ref string, all []ipc.Plugin) ipc.BundlePlugin {
 }
 
 // pluginState is a whole plugin's state, as a part's would be: off, a part
-// that needs something, or ready.
+// that needs something, ready, or on with none of its parts on.
 func pluginState(p ipc.Plugin) (string, string) {
 	if !p.On {
 		return ipc.PartOff, "Off: its own switch, or the bundle's, turns it on."
@@ -90,11 +95,23 @@ func pluginState(p ipc.Plugin) (string, string) {
 		}
 	}
 	for _, x := range p.Parts {
-		if x.State == ipc.PartReady && x.Detail != "" {
+		if x.State == ipc.PartReady {
+			if x.Detail == "" {
+				return ipc.PartReady, "On."
+			}
 			return ipc.PartReady, x.Detail
 		}
 	}
-	return ipc.PartReady, "On."
+	return ipc.PartOff, "On, but none of its parts is: each has a switch of its own, in Settings › Plugins."
+}
+
+// onlySwitch is a plugin's one part with a switch of its own, when it has
+// one part and no other.
+func onlySwitch(p ipc.Plugin) (ipc.PluginPart, bool) {
+	if len(p.Parts) == 1 && p.Parts[0].Switch != "" && p.Parts[0].State != ipc.PartHeld {
+		return p.Parts[0], true
+	}
+	return ipc.PluginPart{}, false
 }
 
 // FindBundle is the bundle named name in dir, the plugins folder.
@@ -139,7 +156,14 @@ func BundleEdits(dir, name string, on bool) ([]config.Edit, error) {
 		}
 		p := all[j]
 		if part == "" {
-			add(p.key, on)
+			// The plugin goes on or off as irie plugins on PLUGIN turns it.
+			es, err := edits(all, "", p.Name, "", on)
+			if err != nil {
+				continue
+			}
+			for _, e := range es {
+				add(e.Key, e.Value)
+			}
 			continue
 		}
 		x, ok := p.Part(part)

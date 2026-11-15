@@ -105,9 +105,16 @@ extension Store {
     /// (Mail.swift). The toolbar's button names them too.
     var sideTabs: [SideTab] { SideTab.built.filter { $0 != .mail || mailShown } }
 
-    /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button.
+    /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button: it opens
+    /// on the tab it closed on, a plugin's pane too while that is on.
     func toggleSide() {
-        if side.open { closeSide() } else { openSide(side.tab) }
+        if side.open {
+            closeSide()
+        } else if side.tab == .plugin, let id = side.pane, panes.contains(where: { $0.id == id }) {
+            openPane(id)
+        } else {
+            openSide(side.tab)
+        }
     }
 
     /// A tab's own key (⌥⌘1 to ⌥⌘6): shows the sidebar on that tab, or
