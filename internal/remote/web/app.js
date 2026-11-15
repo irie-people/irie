@@ -782,7 +782,9 @@ function fillCard(row, c, s, now) {
   const age = L.age(s.created, now);
   // How often it woke cold today, once that matters (DESIGN §6.3).
   const rebuilt = s.rebuilds && s.rebuilds.words ? s.rebuilds.words : '';
-  const sig = JSON.stringify([s.name, lk, detail, meta, age, s.parked, s.priority, !!s.loose, helpers, more, c.redOnDone, rebuilt]);
+  // A known advisory for its harness or a package its lock names (DESIGN §4.21).
+  const advised = s.lock && s.lock.words ? s.lock.words : '';
+  const sig = JSON.stringify([s.name, lk, detail, meta, age, s.parked, s.priority, !!s.loose, helpers, more, c.redOnDone, rebuilt, advised]);
   if (row._sig === sig) return;
   row._sig = sig;
   const card = row._card;
@@ -794,6 +796,7 @@ function fillCard(row, c, s, now) {
     `<div class="c-detail">${esc(detail)}</div>` +
     (meta ? `<div class="c-meta">${esc(meta)}</div>` : '') +
     (rebuilt ? `<div class="c-meta">${esc(rebuilt)}</div>` : '') +
+    (advised ? `<div class="c-meta c-wrap">${esc(advised)}</div>` : '') +
     (helpers.length ? '<div class="c-helpers">' + helpers.map((a) =>
       `<div class="c-helper${a.needs_you ? ' loud' : ''}"><span class="arrow">↳</span><b>${esc(a.type || 'Helper')}</b> ${esc(a.detail || '')}</div>`).join('') +
       (more > 0 ? `<div class="c-helper">and ${more} more helper${more === 1 ? '' : 's'}</div>` : '') + '</div>' : '') +
