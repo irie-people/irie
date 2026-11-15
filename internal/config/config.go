@@ -25,6 +25,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/irie-people/irie/design"
 	"github.com/irie-people/irie/internal/arch"
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/route"
@@ -485,9 +486,10 @@ const MinFreezeDog = 3 * time.Second
 // HelperStyles are the ways ui.helper_style draws a helper.
 var HelperStyles = []string{"browser", "terminal"}
 
-// Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's. Each has a
-// light and a dark set; the terminal's background picks one.
-var Themes = []string{"rosewater", "terracotta", "lilac", "evergreen"}
+// Themes are the sidebar's palettes (DESIGN §5.5), the Mac app's, which the
+// design library keeps (design/tokens.json). Each has a light and a dark
+// set; the terminal's background picks one.
+var Themes = design.IDs()
 
 type Spawn struct {
 	DefaultProfile string        `toml:"default_profile"`

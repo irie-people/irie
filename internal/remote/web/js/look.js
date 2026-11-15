@@ -5,6 +5,7 @@
 // and the short forms of ages, durations and token counts. The palette is
 // Evergreen; app.css holds the same swatches as CSS variables.
 
+// design: evergreen
 export const PALETTE = {
   light: {
     sidebar: 0xF4F4EC, ground: 0xE9EBDF, card: 0xFBFBF6, panel: 0xF1F2E8, field: 0xFDFDF9,
@@ -23,6 +24,7 @@ export const PALETTE = {
     sun: 0xD9A93F, waves: 0x9CC5A1,
   },
 };
+// design: end
 
 // ---- The palette the Mac app draws in --------------------------------------
 // A core whose Mac app has said its palette sends it in the header (the
