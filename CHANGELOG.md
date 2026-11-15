@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.3.0](https://github.com/irie-people/irie/compare/v1.2.0...v1.3.0) (2026-11-15)
+
+
+### Features
+
+* **browser:** return a script's table as TOON to save the agent tokens ([e04152f](https://github.com/irie-people/irie/commit/e04152fcbad022bcdd601636c5d1668dd4af4b7b))
+* **core:** keep held-back agents at full speed, and boost one after two API errors ([b5ff4bc](https://github.com/irie-people/irie/commit/b5ff4bc7eb54d6504d8baa228f12f38d4a7e0be6))
+* **core:** meter prompt-cache rebuilds and weigh a cold wake's price ([8cbb64c](https://github.com/irie-people/irie/commit/8cbb64c49190e4e6ea4ff8f4b9ef133e01cdb4cc))
+* **core:** run a shell of your own beside each session ([886626e](https://github.com/irie-people/irie/commit/886626ed67a6fd56c9c9eed748d15c316f7e50be))
+* **core:** switch a session to its profile's fallback model at its model's own usage limit ([3ba71e5](https://github.com/irie-people/irie/commit/3ba71e550c0b0fbe696bd73922f6b103ddb48b24))
+* let a boost change only the priority, never a card's place ([28b9620](https://github.com/irie-people/irie/commit/28b9620fb95bef7078c4c0fe5439f3862e24a672))
+* **lid:** put the display to sleep when the lid closes during a hold ([0291d42](https://github.com/irie-people/irie/commit/0291d42d76b325402b88a9c9d447ebf12c3ec193))
+* **mac:** offer lockdown and account time only for a VPN that has them ([8c14600](https://github.com/irie-people/irie/commit/8c1460039451612a2192e857ee64f9523930a475))
+* **mac:** show Mail in the right sidebar and a window of its own ([67c31d1](https://github.com/irie-people/irie/commit/67c31d1d682ef9e3a2ccf4e5b2fec1ba0ceefa60))
+* **mac:** show the note a writing session works on in a Variorum tab ([6f4934f](https://github.com/irie-people/irie/commit/6f4934f8cb81ace4de72d1dc9edba6986523b181))
+* **mac:** show your own panes beside the terminal as a rolodex ([22827f7](https://github.com/irie-people/irie/commit/22827f793f21b20c8fb0702f26f08703443848f0))
+* **plugins:** give :write sessions Variorum's door and add the variorum op ([b1d4db5](https://github.com/irie-people/irie/commit/b1d4db57ce2e71c60a9fa0149fcdda8064b3da40))
+* **skills:** add the chaos monkey, /irie:chaos and +chaos ([3e47b40](https://github.com/irie-people/irie/commit/3e47b4016748d9c0f1fb852f943c4c407c9bf1ae))
+* **vpn:** follow any VPN, and pin a company's copy to the one it approves ([bcf1573](https://github.com/irie-people/irie/commit/bcf15736141bde08ee8530cb92f4100d0869f707))
+
+
+### Bug Fixes
+
+* **core:** guard the boost's carry-on and the hook events a restart missed ([e583931](https://github.com/irie-people/irie/commit/e583931b7341924cea1107adc85134473a0a4d6a))
+* **core:** leave a session without the model-switch hooks to wait for the reset ([c510fc7](https://github.com/irie-people/irie/commit/c510fc7c38e2aa44f5d4d3fa3499102616d3293d))
+* **core:** name the dog's unproven claim in the generated wire ([90b6936](https://github.com/irie-people/irie/commit/90b6936d8e53a90c28726461f0d5e0837527112c))
+* **core:** name the product through brand in the meter's cause words ([c13e1bc](https://github.com/irie-people/irie/commit/c13e1bc44eb568835b47733464218d2e04a95b05))
+* **core:** price the conversation a session runs now, and tell long tool calls apart ([8ad4cba](https://github.com/irie-people/irie/commit/8ad4cbadd7ff8c97838fdfa05c26a52f9a80ffc8))
+* **core:** start a pane's shell once and never leave it unowned ([34c0820](https://github.com/irie-people/irie/commit/34c08207b3d722cb3b81f3768ccd0985b4089098))
+* **local:** cap the prompt cache and checkpoints of local model runners ([c46bbfa](https://github.com/irie-people/irie/commit/c46bbfa0d28d604ed235eae712b9a2a1ecf9f595))
+* **local:** refuse a model on Ollama's MLX engine, whose memory Irie cannot cap ([d3ea809](https://github.com/irie-people/irie/commit/d3ea80961a2fe8fd2e926d6cbf697bd24c0ea54c))
+* **mac:** bring the selected card into sight when the list is drawn afresh ([36cb99c](https://github.com/irie-people/irie/commit/36cb99c479b8b61fabcb875ff293932fd3ecd31f))
+* **mac:** call the Mail parts' menu item Show Mail ([c999897](https://github.com/irie-people/irie/commit/c99989714e9274d1d09034996db9265afb104504))
+* **mac:** keep the keyboard where you send it as the panes turn ([4b772c0](https://github.com/irie-people/irie/commit/4b772c0017c72fc0e9d088696426a8c76a7dd32b))
+* **mac:** leave the live pane's marker out of drawn turns ([2af64b2](https://github.com/irie-people/irie/commit/2af64b25271f26dee79b282578078b5157ca7c1d))
+* **mac:** name the right sidebar's tabs in its button's tooltip ([e7dd078](https://github.com/irie-people/irie/commit/e7dd078a0fe4573679484685cdefcbe8106fcb75))
+* **mac:** remember the app's desktop when its window comes before launch ends ([01d2481](https://github.com/irie-people/irie/commit/01d2481a964ad14e20027093e3d178cc446a4cab))
+* **mail:** sort by arrival and list folders on any server ([089a4e6](https://github.com/irie-people/irie/commit/089a4e69216eeb0251cd2b4f08bfc1b9e79ffff2))
+* **provenance:** drop a row the union merge listed twice ([7a705b4](https://github.com/irie-people/irie/commit/7a705b4ed8e5d634acb856c7e16e5eff03ebee58))
+* **skills:** match the variorum skill to Variorum's door ([2ff1ee4](https://github.com/irie-people/irie/commit/2ff1ee46ae3eb3dda7ea0e6034f88de634391ff4))
+* **vpn:** keep addresses and prompts out of errors, and order reads ([d05525c](https://github.com/irie-people/irie/commit/d05525cf80dd598c506368cff504bff842967d5f))
+* **vpn:** put --json before listen, so Mullvad's state comes through ([a0bc868](https://github.com/irie-people/irie/commit/a0bc8680da463406e1ad3073b48287843e2146b9))
+* **vpn:** send the person to Cisco's app rather than open it ([b39927c](https://github.com/irie-people/irie/commit/b39927c1f138d762c725c35e56ef1a638c1de963))
+
 ## [1.2.0](https://github.com/irie-people/irie/compare/v1.1.0...v1.2.0) (2026-11-14)
 
 
