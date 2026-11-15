@@ -1055,9 +1055,11 @@ type SpawnArgs struct {
 	// With ui.new_tabs = "next" the new session goes just after it in the
 	// list, as a browser opens a tab beside the one it came from.
 	After string `json:"after,omitempty"`
-	// Space is the space the new session goes in; "" takes the space of
-	// the session that started it (After, Parent or Continues), else the
-	// first.
+	// Space is the space the new session goes in: a space's id, or a name
+	// in any case, which makes a space of that name, last, when none has
+	// it. An id never makes one: a space that is gone takes the first.
+	// "" takes the space of the session that started it (After, Parent or
+	// Continues), else the first.
 	Space string `json:"space,omitempty"`
 	// Group is the group the new session goes in: a group's id, or a name,
 	// which makes a group of that name when none has it. "" puts it in the
