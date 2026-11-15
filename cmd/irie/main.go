@@ -70,6 +70,9 @@ const usage = `usage: ` + brand.Slug + ` [command]
 
 Used by ` + brand.Name + ` itself:
   ` + brand.Slug + ` core [--supervise]   the core
+  ` + brand.Slug + ` bridge               the Windows app's way into ` + brand.Name + ` in WSL: the
+                            core's socket and the slot's terminal, over its
+                            input and output
   ` + brand.Slug + ` ui [--supervise]     the sidebar
   ` + brand.Slug + ` host --spec <file>   the first process of an agent pane
   ` + brand.Slug + ` hook                 the shim an agent runs for each hook event
@@ -135,6 +138,8 @@ func run(args []string) int {
 		err = ctl(args)
 	case "remote":
 		err = remoteCmd(args)
+	case "bridge":
+		err = bridgeCmd(args)
 	case "plugins", "plugin":
 		err = pluginsCmd(args, os.Stdout)
 	case "peer":
