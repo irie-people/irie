@@ -1787,10 +1787,13 @@ func TestTheBarSendsWhatWasTypedToTheCore(t *testing.T) {
 	if m.status != "task-002: working" || m.statusErr || m.focus != focusBar || m.bar.Value() != "" {
 		t.Errorf("hows: status %q, focus %v, bar %q", m.status, m.focus, m.bar.Value())
 	}
+	// One that names no agent starts as a task, so it goes rather than
+	// stay in the bar.
+	n := len(b.spawns)
 	m = typeText(m, "hows the weather")
 	m = send(m, keyMsg("enter"))
-	if !m.statusErr || m.status != "No agent matches “weather”." || m.bar.Value() != "hows the weather" {
-		t.Errorf("no match: status %q, bar %q", m.status, m.bar.Value())
+	if m.statusErr || m.bar.Value() != "" || len(b.spawns) != n+1 || b.spawns[n].Task != "hows the weather" {
+		t.Errorf("no match: status %q, bar %q, spawns %+v", m.status, m.bar.Value(), b.spawns)
 	}
 }
 
