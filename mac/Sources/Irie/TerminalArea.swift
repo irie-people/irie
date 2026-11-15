@@ -54,7 +54,7 @@ struct TerminalArea: View {
                 // keyboard lies on top, and nothing changes size as they swap.
                 let fit = RolodexModel.width(share: r.share, in: room, keep: keep)
                 let deck = r.over ? RolodexModel.overWidth(share: r.share, in: room, fit: fit) : fit
-                let overlap = r.noteOverlap(deck - fit)
+                let overlap = r.noteOverlap(deck - fit, room: room, keep: keep)
                 let overlaps = overlap > 0 && !r.folded
                 // A fold or an unfold slides over the terminal's edge, as
                 // before; the one with the keyboard comes up as it ends.

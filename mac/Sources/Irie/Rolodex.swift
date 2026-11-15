@@ -250,8 +250,11 @@ final class RolodexModel {
     /// list.
     private(set) var raised = false
     /// How far the wheel, unfolded, goes over the terminal, as last laid out:
-    /// 0 beside it.
+    /// 0 beside it; and the room it was laid out in, and what the terminal
+    /// keeps beside it there.
     @ObservationIgnored var overlap: CGFloat = 0
+    @ObservationIgnored private(set) var lastRoom: CGFloat = 0
+    @ObservationIgnored private(set) var lastKeep: CGFloat = 0
     /// Sliding in or out, over the terminal's edge: the terminal keeps no
     /// room for it meanwhile, so its width changes once.
     var sliding = false
@@ -328,10 +331,14 @@ final class RolodexModel {
     var overlaps: Bool { open && !folded && overlap > 0 }
 
     /// Notes how far the wheel, unfolded, goes over the terminal as it is
-    /// laid out, for clicks to tell which side they land on: none beside it.
-    func noteOverlap(_ amount: CGFloat) -> CGFloat {
+    /// laid out, for clicks to tell which side they land on: none beside it;
+    /// and the room and what the terminal keeps, for View › Panes Over the
+    /// Terminal.
+    func noteOverlap(_ amount: CGFloat, room: CGFloat, keep: CGFloat) -> CGFloat {
         let o = amount > 0.5 ? amount : 0
         if overlap != o { overlap = o }
+        lastRoom = room
+        lastKeep = keep
         return o
     }
 
@@ -970,6 +977,28 @@ extension Store {
         let id = r.deck(s.id).frontPane?.id ?? RolodexModel.blank
         r.keys = id
         r.bump(id)
+    }
+
+    /// View › Panes Over the Terminal, the drag's way by a click or a key:
+    /// the panes go over the terminal, on top with the keyboard, halfway from
+    /// their widest beside it to a peek of it unless they are wider already,
+    /// sliding in or unfolding first; or back beside it, where the terminal
+    /// keeps the room it had, so nothing but the panes resizes.
+    func togglePanesOver() {
+        let r = rolodex
+        guard !r.over else {
+            r.over = false
+            return
+        }
+        let room = r.lastRoom, keep = r.lastKeep
+        let widest = RolodexModel.widest(in: room, keep: keep)
+        let most = room - RolodexModel.peek
+        if room > 0, most > widest + RolodexModel.detent, room * CGFloat(r.share) <= widest + RolodexModel.detent {
+            r.setShare(Double(((widest + most) / 2).rounded() / room))
+        }
+        r.over = true
+        raisePanes()
+        r.reveal()
     }
 
     /// Lets go of the divider where a drag aimed: the panes fold, stand

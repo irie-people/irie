@@ -62,6 +62,8 @@ final class MenuState {
         /// folded down to a strip.
         var panesOpen = false
         var panesFolded = false
+        /// Wider than fits beside the terminal, they go over it.
+        var panesOver = false
         var canPlugins = false
         /// The core's plugins, which the Plugins menu lists: a build
         /// without one has none of its items (DESIGN §4.17).
@@ -128,6 +130,7 @@ extension Store {
         f.canPopOut = attach != nil
         f.panesOpen = rolodex.open
         f.panesFolded = rolodex.open && rolodex.folded
+        f.panesOver = rolodex.over
         f.canPlugins = canPlugins
         f.plugins = plugins
         f.bundles = bundles
@@ -281,6 +284,12 @@ struct IrieCommands: Commands {
             // Down to a strip of their tabs at the window's edge, or back.
             Button(f.panesFolded ? "Unfold Panes" : "Fold Panes", action: run { store.toggleFold() })
                 .keyboardShortcut("p", modifiers: [.command, .option, .shift])
+            // Over the terminal like a window, the one with the keyboard on
+            // top: what a drag of their edge past the terminal's narrowest
+            // does, for a click or a key.
+            Toggle("Panes Over the Terminal", isOn: Binding(get: { f.panesOver }, set: { _ in
+                MainActor.assumeIsolated { store.togglePanesOver() }
+            }))
             Menu("New Pane") {
                 ForEach(PaneKind.offered(f.plugins)) { k in
                     Button(k.title, action: run { store.newPane(k) })

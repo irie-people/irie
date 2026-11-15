@@ -174,7 +174,7 @@ A step happens when asked, and Undo takes it back, even across a restart. Irie a
 
 ### 4.3 Every drag has a click or a key
 
-Whatever a drag does, a pointer's single click or a key can do too: move keys for the order, a menu to move a card to a group.
+Whatever a drag does, a pointer's single click or a key can do too: move keys for the order, a menu to move a card to a group, View › Panes Over the Terminal for a drag of the panes' edge past the terminal's narrowest.
 
 - **Why:** not everyone can drag.
 - **From:** [WCAG 2.2](https://www.w3.org/TR/WCAG22/) 2.5.7.
@@ -216,10 +216,10 @@ Motion shows where a thing came from or went: a drawer slides in from its edge, 
 
 ### 5.2 Drawers, not covers
 
-Side panels are drawers that slide in (0.28 s on the Mac) beside the terminal, never sheets over it. The terminal resizes once when a drawer opens, closes or its edge is let go.
+Side panels are drawers that slide in (0.28 s on the Mac) beside the terminal, never sheets over it. The terminal resizes once when a drawer opens, closes or its edge is let go. One exception is the person's own: the panes dragged past the terminal's narrowest, about 60 columns, or View › Panes Over the Terminal, lie over the terminal like one window over another. The terminal keeps its narrowest, the one with the keyboard lies on top, a click on what shows of the other brings that one up, and nothing resizes as they swap.
 
-- **Why:** each resize redraws every agent's terminal, and a cover hides the work.
-- **From:** asked for on 2026-11-02 and 2026-11-08.
+- **Why:** each resize redraws every agent's terminal, and a cover hides the work; a cover the person chose, that steps back whenever the terminal takes the keyboard, hides nothing they are using.
+- **From:** asked for on 2026-11-02 and 2026-11-08; the exception on 2026-11-15.
 - **Check:** unchecked.
 
 ### 5.3 Reduce Motion is honoured

@@ -138,6 +138,7 @@ What a card holds that its two lines cannot: the exact command, the repo and bra
 A panel that slides in beside the work, never over it: the right sidebar's tabs (helpers, review, notices, mail, plugins). The terminal resizes once as it opens, closes or its edge is let go.
 
 - **Mac:** `RightSidebar` (RightSidebar.swift): 340 pt wide by default, 260 to 520, its tab names turning to icons when narrow; `.smooth(0.28)`, one step under Reduce Motion.
+- **Mac, the panes:** the rolodex of cards between the terminal and the right sidebar (Rolodex.swift) is a drawer too, until it is let go past the terminal's narrowest (principle 5.2): then it lies over the terminal, on a ground of its own (`PanesGround`) with a shadow while on top, its tabs starting where the terminal ends so they show either way, and the divider at whichever edge shows between them.
 
 ### 3.12 Conversation
 
