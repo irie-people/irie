@@ -681,7 +681,7 @@ struct ThemeMaker: View {
             })) {
                 HStack {
                     Picker("Tab", selection: Binding(get: { store.side.tab }, set: { store.openSide($0) })) {
-                        ForEach(SideTab.built) { t in Text(t.title).tag(t) }
+                        ForEach(store.sideTabs) { t in Text(t.title).tag(t) }
                     }
                     .labelsHidden()
                     .frame(width: 130)

@@ -75,6 +75,7 @@ type Core struct {
 	fdog        *freezeDog   // the freeze dog, Raphael's watch of Irie's own windows (freezedog.go); it has a lock of its own
 	raph        raphState    // what Raphael knows of the computer and does for it (raphael.go); it has a lock of its own
 	ctxs        contexts     // the context store and the sessions waiting to be synced into it (ctx.go); locks of its own
+	pad         notepad      // the person's notes for later (notepad.go); it has a lock of its own, never held with mu
 
 	trodSweeping atomic.Bool // the trod bot looks at the stopped sessions (trod.go)
 	awakeMu      sync.Mutex  // guards awake; taken after mu
@@ -155,6 +156,7 @@ type Core struct {
 	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
+	variorum   variorumState         // Variorum's door: the note each session named last (variorum.go)
 	mail       mailState             // the mail plugin's accounts and connections (mail.go)
 }
 
@@ -370,6 +372,7 @@ func Run(o Options) error {
 	c.loadState()
 	c.loadTrodHand()
 	c.loadRaphael()
+	c.loadNotepad()
 
 	// The freeze dog, Irie's one watchdog, runs first: the first tick
 	// waits for tmux, and a stopped server would hold it until the dog
@@ -772,6 +775,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.raphaelOp(peer, a)
+	case ipc.OpVariorum:
+		var a ipc.VariorumArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.variorumOp(peer, a)
 	case ipc.OpMail:
 		var a ipc.MailArgs
 		if err := decode(raw, &a); err != nil {
@@ -809,8 +818,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -839,6 +848,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.spacesOp(a)
+	case ipc.OpNotepad:
+		var a ipc.NotepadArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.notepadOp(a)
 	case ipc.OpSpace:
 		var a ipc.SpaceArgs
 		if err := decode(raw, &a); err != nil {
@@ -1001,6 +1016,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.pluginsOp(a)
+	case ipc.OpVariorum:
+		var a ipc.VariorumArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.variorumOp(0, a)
 	case ipc.OpMarkets:
 		var a ipc.MarketsArgs
 		if err := decode(raw, &a); err != nil {

@@ -273,6 +273,19 @@ func TestListReadFlagMove(t *testing.T) {
 	}
 }
 
+// TestTheListGoesByArrival: a message dated ahead by its sender sorts by
+// when it reached the server, so it can't hold the top of the list.
+func TestTheListGoesByArrival(t *testing.T) {
+	f := newFixture(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	f.srv.add(t, "INBOX", strings.Replace(plainMsg, "Mon, 09 Nov 2026 10:00:00 +0000", "Fri, 01 Jan 2100 00:00:00 +0000", 1), now.Add(-2*time.Hour))
+	f.srv.add(t, "INBOX", htmlMsg, now.Add(-time.Hour))
+	r := f.sv.List(ctx(t), f.all, ListArgs{Limit: 10, Fresh: time.Minute})
+	if len(r.Messages) != 2 || r.Messages[0].Subject != "This week" || !r.Messages[1].Date.Equal(now.Add(-2*time.Hour)) {
+		t.Errorf("messages = %+v; want the newsletter first, and the other at its arrival", r.Messages)
+	}
+}
+
 func TestListStaysFreshThenRefreshes(t *testing.T) {
 	f := newFixture(t)
 	f.srv.add(t, "INBOX", plainMsg, time.Now())

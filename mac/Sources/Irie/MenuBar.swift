@@ -53,6 +53,8 @@ final class MenuState {
         var showTerminal = false
         /// The right sidebar's tab on show; nil while it is closed.
         var sideTab: SideTab?
+        /// The right sidebar's tabs, each with its key (Store.sideTabs).
+        var sideTabs = SideTab.built(variorum: false)
         /// The terminal is popped out, or could be (PopOut.swift).
         var poppedOut = false
         var canPopOut = false
@@ -71,6 +73,8 @@ final class MenuState {
         /// The core serves the vpn op: its build has the VPN plugin, whose
         /// items show only then.
         var canVPN = false
+        /// The notepad shows (NotesPanel.swift).
+        var notes = false
     }
 
     private(set) var facts = Facts()
@@ -127,6 +131,8 @@ extension Store {
         f.panes = panes
         f.sidePane = side.open && side.tab == .plugin ? side.pane : nil
         f.canVPN = canVPN
+        f.notes = notes.shown
+        f.sideTabs = sideTabs
         return f
     }
 
@@ -198,6 +204,10 @@ struct IrieCommands: Commands {
                 .keyboardShortcut("n")
             Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
                 .keyboardShortcut("n", modifiers: [.command, .option])
+            // A note for later, in the notepad above the task bar.
+            Button("New Note") { NotificationCenter.default.post(name: .irieNewNote, object: nil) }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(!f.notes)
         }
         // Sessions close like tabs (Closing.swift), and Close names the one
         // ⌘W closes. These take the place of the window's own Close, which
@@ -245,8 +255,9 @@ struct IrieCommands: Commands {
             Section("Right Sidebar") {
                 Button(f.sideTab == nil ? "Show Right Sidebar" : "Hide Right Sidebar", action: run { store.toggleSide() })
                     .keyboardShortcut("b", modifiers: [.command, .option])
-                // Mail's tab, while the mail plugin is on (Mail.swift).
-                ForEach(SideTab.built.filter { $0 != .mail || f.plugins.contains { $0.name == "mail" && $0.on } }) { t in
+                // Mail's tab while the mail plugin is on (Mail.swift), and
+                // Variorum's while it is there or set up (VariorumTab.swift).
+                ForEach(f.sideTabs) { t in
                     Toggle(t.title, isOn: Binding(get: { f.sideTab == t }, set: { _ in
                         MainActor.assumeIsolated { t == .helpers ? store.toggleHelpers() : store.toggleSideTab(t) }
                     }))

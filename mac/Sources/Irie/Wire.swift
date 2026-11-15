@@ -231,6 +231,8 @@ struct Frame: Decodable {
     /// nothing (Undo.swift).
     var undo: String?
     var redo: String?
+    /// A notepad frame: the notes for later (Notes.swift).
+    var notepad: Notepad?
 }
 
 /// What a snapshot says besides its rows.
@@ -541,10 +543,79 @@ struct InputArgs: Encodable, Equatable {
     var tutor: String?
     /// The space on show, where a task starts (Spaces.swift).
     var space: String?
+    /// The note of the notepad the text came from: the core ticks it off
+    /// once the input goes through (Notes.swift).
+    var note: String?
 
     enum CodingKeys: String, CodingKey {
-        case text, session, outside, repo, profile, model, apart, tutor, space
+        case text, session, outside, repo, profile, model, apart, tutor, space, note
         case inPlace = "in_place"
+    }
+}
+
+/// One note of the notepad (DESIGN §4.20): a line of a checklist, kept for
+/// later (Notes.swift).
+struct Note: Codable, Identifiable, Equatable {
+    var id: String
+    var text: String
+    var done: Bool?
+    var created: Date?
+    var changed: Date?
+    /// When it last went to the task bar, and the session it started or
+    /// went to.
+    var sent: Date?
+    var session: String?
+    /// When a note in Recently Deleted was deleted.
+    var deleted: Date?
+
+    var isDone: Bool { done ?? false }
+}
+
+/// The notes in their order, and Recently Deleted, the last deleted first.
+/// problem says what went wrong with the file and what the core did; while
+/// readOnly the core only shows them. rev counts the file's changes, so the
+/// app keeps the newest of a reply and a frame.
+struct Notepad: Codable, Equatable {
+    var notes: [Note] = []
+    var deleted: [Note] = []
+    var problem: String?
+    var readOnly: Bool?
+    var path: String?
+    var rev: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case notes, deleted, problem, path, rev
+        case readOnly = "read_only"
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        notes = try c.decodeIfPresent([Note].self, forKey: .notes) ?? []
+        deleted = try c.decodeIfPresent([Note].self, forKey: .deleted) ?? []
+        problem = try c.decodeIfPresent(String.self, forKey: .problem)
+        readOnly = try c.decodeIfPresent(Bool.self, forKey: .readOnly)
+        path = try c.decodeIfPresent(String.self, forKey: .path)
+        rev = try c.decodeIfPresent(UInt64.self, forKey: .rev)
+    }
+}
+
+/// A change to the notepad. Each is the same however often it is sent, so
+/// the app sends again what it is not sure went through: add, edit, check,
+/// move, delete or restore; none lists.
+struct NotepadArgs: Codable, Equatable {
+    var action: String
+    var id: String?
+    var ids: [String]?
+    var text: String?
+    var done: Bool?
+    var after: String?
+    var before: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, ids, text, done, after, before
+        case action = "do"
     }
 }
 
@@ -627,6 +698,112 @@ struct RenameArgs: Encodable {
 /// session has it.
 struct RenameResult: Decodable {
     var session: Session
+}
+
+/// The variorum op (internal/core/variorum.go), which only a core whose
+/// hello lists variorum serves: the Writing plugin's tab asks where things
+/// stand, keeps one of Variorum's setups, lists the notes shared with
+/// Irie, reads one, or shows one in Variorum (VariorumTab.swift). The core
+/// calls Variorum's door; the app never does.
+struct VariorumArgs: Codable, Equatable {
+    /// status (the default), connect, forget, notes, read or show.
+    var action: String?
+    /// read: whose note, when note is empty.
+    var session: String?
+    var note: String?
+    /// show: the paragraph whose takes to show.
+    var block: String?
+    /// show: note (the default) or takes.
+    var target: String?
+    /// connect: the setup as copied in Variorum, which the app never shows
+    /// or keeps.
+    var setup: String?
+}
+
+struct VariorumResult: Codable, Equatable {
+    /// ready; setup, while a setup is missing; needs, while Variorum is
+    /// missing or a kept setup is broken; or off.
+    var state: String
+    /// Where things stand, in words.
+    var text: String
+    /// Claude Code's setup is kept, for the writing sessions.
+    var sessions: Bool?
+    /// Any MCP client's setup is kept, which the tab reads with.
+    var tab: Bool?
+    /// Variorum.app is in an Applications folder.
+    var installed: Bool?
+    /// The action failed: a sentence to show as it is.
+    var error: String?
+    var notes: [VariorumNoteRef]?
+    var note: VariorumNote?
+    /// show: shown, or offered while Variorum offers it to the writer.
+    var shown: String?
+}
+
+/// A note shared with Irie, for the tab's menu of notes.
+struct VariorumNoteRef: Codable, Equatable, Identifiable {
+    var id: String
+    var title: String
+    /// When it was last changed, in RFC 3339, kept as text so that a time
+    /// that doesn't parse costs only itself.
+    var edited: String?
+}
+
+/// A note as Variorum holds it, as far as the core read it.
+struct VariorumNote: Codable, Equatable, Identifiable {
+    var id: String
+    var title: String
+    var blocks: [VariorumBlock]
+    /// It goes on past the blocks read.
+    var more: Bool?
+    /// When the core read it.
+    var read: Date
+}
+
+/// A paragraph, with its takes and its comments.
+struct VariorumBlock: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String?
+    /// The take the note shows.
+    var shown: String?
+    var takes: [VariorumTake]
+    var comments: [VariorumComment]?
+}
+
+struct VariorumTake: Codable, Equatable, Identifiable {
+    var id: String
+    var label: String?
+    var text: String
+    var chosen: Bool?
+}
+
+struct VariorumComment: Codable, Equatable, Identifiable {
+    var id: String
+    var text: String
+}
+
+// Go writes an empty list as null; a note without paragraphs, or a
+// paragraph without takes, still reads.
+extension VariorumNote {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        blocks = try c.decodeIfPresent([VariorumBlock].self, forKey: .blocks) ?? []
+        more = try c.decodeIfPresent(Bool.self, forKey: .more)
+        read = try c.decode(Date.self, forKey: .read)
+    }
+}
+
+extension VariorumBlock {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        shown = try c.decodeIfPresent(String.self, forKey: .shown)
+        takes = try c.decodeIfPresent([VariorumTake].self, forKey: .takes) ?? []
+        comments = try c.decodeIfPresent([VariorumComment].self, forKey: .comments)
+    }
 }
 
 struct Empty: Codable {}

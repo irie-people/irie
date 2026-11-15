@@ -105,6 +105,11 @@ const (
 	// OpLearn gives what the Help menu shows: the learning resources, the
 	// user's own links and the glossary (docs/proposals/learning.md).
 	OpLearn = "learn"
+	// OpVariorum is the writing plugin's Variorum tab
+	// (docs/proposals/writers.md): where Irie's part of Variorum stands,
+	// Variorum's two setups kept or forgotten, and the notes shared with
+	// Irie read through Variorum's door. It answers a VariorumResult.
+	OpVariorum = "variorum"
 	// OpRebuilds is the prompt-cache meter's report (DESIGN §6.3): the
 	// sessions and the causes that rebuilt their caches most today and in
 	// the last seven days, and what that cost. It answers a RebuildsResult.
@@ -1563,11 +1568,13 @@ type Frame struct {
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 	Screen       *Screen       `json:"screen,omitempty"`       // screen
+	Notepad      *Notepad      `json:"notepad,omitempty"`      // notepad
 }
 
 // MarshalJSON writes only the fields of the frame's type, and always lists
 // the sessions of a snapshot, an outside frame and a closed frame, even when
-// there are none, and both labels of a history frame.
+// there are none, both labels of a history frame, and both lists of a
+// notepad frame.
 func (f Frame) MarshalJSON() ([]byte, error) {
 	switch f.T {
 	case FrameSnapshot:
@@ -1618,6 +1625,21 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T      string          `json:"t"`
 			Closed []ClosedSession `json:"closed"`
 		}{f.T, c})
+	case FrameNotepad:
+		n := Notepad{}
+		if f.Notepad != nil {
+			n = *f.Notepad
+		}
+		if n.Notes == nil {
+			n.Notes = []Note{}
+		}
+		if n.Deleted == nil {
+			n.Deleted = []Note{}
+		}
+		return json.Marshal(struct {
+			T       string   `json:"t"`
+			Notepad *Notepad `json:"notepad"`
+		}{f.T, &n})
 	case FrameHistory:
 		return json.Marshal(struct {
 			T    string `json:"t"`

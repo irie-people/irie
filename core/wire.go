@@ -53,6 +53,10 @@ type (
 	MailMessage      = ipc.MailMessage
 	MailBody         = ipc.MailBody
 	MailAttachment   = ipc.MailAttachment
+	Note             = ipc.Note
+	NotepadArgs      = ipc.NotepadArgs
+	Notepad          = ipc.Notepad
+	NotepadResult    = ipc.NotepadResult
 	OutsideSession   = ipc.OutsideSession
 	MoveArgs         = ipc.MoveArgs
 	MoveResult       = ipc.MoveResult
@@ -179,6 +183,13 @@ type (
 	SpacesResult     = ipc.SpacesResult
 	SpaceArgs        = ipc.SpaceArgs
 	SpaceResult      = ipc.SpaceResult
+	VariorumArgs     = ipc.VariorumArgs
+	VariorumResult   = ipc.VariorumResult
+	VariorumNoteRef  = ipc.VariorumNoteRef
+	VariorumNote     = ipc.VariorumNote
+	VariorumBlock    = ipc.VariorumBlock
+	VariorumTake     = ipc.VariorumTake
+	VariorumComment  = ipc.VariorumComment
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -269,6 +280,17 @@ const (
 	MailChecking       = ipc.MailChecking
 	MailNeeds          = ipc.MailNeeds
 	MailError          = ipc.MailError
+	OpNotepad          = ipc.OpNotepad
+	FrameNotepad       = ipc.FrameNotepad
+	NotepadList        = ipc.NotepadList
+	NotepadAdd         = ipc.NotepadAdd
+	NotepadEdit        = ipc.NotepadEdit
+	NotepadCheck       = ipc.NotepadCheck
+	NotepadMove        = ipc.NotepadMove
+	NotepadDelete      = ipc.NotepadDelete
+	NotepadRestore     = ipc.NotepadRestore
+	MaxNoteText        = ipc.MaxNoteText
+	MaxNotes           = ipc.MaxNotes
 	KindInteractive    = ipc.KindInteractive
 	KindBackground     = ipc.KindBackground
 	StatusBusy         = ipc.StatusBusy
@@ -313,6 +335,7 @@ const (
 	OpPlugins          = ipc.OpPlugins
 	OpMarkets          = ipc.OpMarkets
 	OpLearn            = ipc.OpLearn
+	OpVariorum         = ipc.OpVariorum
 	OpRebuilds         = ipc.OpRebuilds
 	FeatureTutor       = ipc.FeatureTutor
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
@@ -416,4 +439,14 @@ const (
 	SpacesRename       = ipc.SpacesRename
 	SpacesMove         = ipc.SpacesMove
 	SpacesRemove       = ipc.SpacesRemove
+	VariorumStatus     = ipc.VariorumStatus
+	VariorumConnect    = ipc.VariorumConnect
+	VariorumForget     = ipc.VariorumForget
+	VariorumNotes      = ipc.VariorumNotes
+	VariorumRead       = ipc.VariorumRead
+	VariorumShow       = ipc.VariorumShow
+	VariorumReady      = ipc.VariorumReady
+	VariorumSetup      = ipc.VariorumSetup
+	VariorumNeeds      = ipc.VariorumNeeds
+	VariorumOff        = ipc.VariorumOff
 )

@@ -104,12 +104,22 @@ final class Store {
     /// The core serves the vpn op: its build has the privacy plugin
     /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
     private(set) var canVPN = false
+    /// The core serves the variorum op: its build has the Writing plugin,
+    /// whose Variorum tab shows only then (VariorumTab.swift).
+    private(set) var canVariorum = false
+    /// The core's hello is in, so the features above are its own.
+    private(set) var knowsFeatures = false
+    /// The Variorum tab's state, kept while the app runs.
+    let variorum = VariorumModel()
     /// The core serves the mail op: its build has the mail plugin
     /// (docs/proposals/mail.md), whose Mail tab and window show only then.
     private(set) var canMail = false
     /// Irie's plugins as the core says they stand, for the Plugins menu
     /// (Plugins.swift); empty from a core from before them.
-    var plugins: [PluginInfo] = []
+    var plugins: [PluginInfo] = [] {
+        // The Variorum tab shows only while the Writing plugin can answer it.
+        didSet { if Self.writing(plugins) != Self.writing(oldValue) { variorum.check() } }
+    }
     /// Your bundles (PluginPanes.swift); empty from a core from before them.
     var bundles: [BundleInfo] = []
     /// Reads the plugins once a minute (keepPlugins).
@@ -264,6 +274,9 @@ final class Store {
         var isError: Bool
         /// It offers Undo, which takes back the step it reports.
         var undo = false
+        /// It reports notes deleted, and offers Undo, which brings these
+        /// back from Recently Deleted (Notes.swift).
+        var restore: [String]?
         /// It reports a task added to the one before, and offers New task:
         /// this input, which takes it back and starts it apart.
         var apart: InputArgs?
@@ -278,16 +291,20 @@ final class Store {
     /// The mail plugin's accounts and list, which the Mail tab and window
     /// share (Mail.swift).
     let mail: MailModel
+    /// The notepad, the person's notes for later (Notes.swift).
+    let notes = NotesModel()
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
         mail = MailModel(client: client)
+        notes.store = self
         settings.changed = { [weak self] in
             self?.loadChoices()
             self?.loadPluginsSoon()
         }
+        variorum.store = self
         watchMenu()
     }
 
@@ -353,6 +370,11 @@ final class Store {
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
+                notes.connected(serves: hello.features.contains("notepad"))
+                canVariorum = hello.features.contains("variorum")
+                knowsFeatures = true
+                keepSideTab()
+                variorum.check()
                 canMail = hello.features.contains("mail")
                 loadPluginsSoon()
                 keepPlugins()
@@ -388,6 +410,13 @@ final class Store {
         let p = Palette.named(id)
         let args = ThemeArgs(theme: p.id, light: p.isCustom ? p.light.hexes : nil, dark: p.isCustom ? p.dark.hexes : nil)
         Task { _ = try? await client.call("theme", args, timeout: 2, as: Empty.self) }
+    }
+
+    /// The Writing plugin as the Variorum tab cares for it: whether it and
+    /// each part is on, and how far each is set up.
+    private static func writing(_ all: [PluginInfo]) -> [String] {
+        guard let p = all.first(where: { $0.name == "writing" }) else { return [] }
+        return ["\(p.on)"] + p.parts.map { "\($0.name) \($0.on) \($0.state)" }
     }
 
     private static func describe(_ error: Error) -> String {
@@ -481,6 +510,8 @@ final class Store {
                 let redo = f.redo.flatMap { $0.isEmpty ? nil : $0 }
                 if undo != undoLabel { undoLabel = undo }
                 if redo != redoLabel { redoLabel = redo }
+            case "notepad":
+                if let n = f.notepad { notes.take(frame: n) }
             default:
                 continue
             }
@@ -636,6 +667,8 @@ final class Store {
         canBoost = true
         canBoostAlways = true
         canArch = true
+        canVariorum = true
+        knowsFeatures = true
         canMail = true
         mail.loadFixture()
         archAgents = [
@@ -979,10 +1012,28 @@ final class Store {
         await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil)
     }
 
+    /// Shows the session a note was sent to, or says it is closed.
+    func showNoteSession(_ id: String) {
+        if sessions.contains(where: { $0.id == id }) {
+            show(id, focus: true)
+        } else {
+            say("That note’s session is closed. Reopen it from History.", error: false)
+        }
+    }
+
+    /// Sends a note's text as the task bar would, typed and sent, naming the
+    /// note so the core ticks it off once it goes (Notes.swift). The bar's
+    /// history takes it too, as if typed there.
+    func sendNote(_ text: String, note: String) async -> Bool {
+        TaskHistory.remember(text)
+        return await input(text, repo: taskRepo, worktree: true, agent: nil, model: nil, tutor: nil, note: note)
+    }
+
     /// Sends text from the bar or the new-task sheet. The @repo, +agent and
     /// tutor words in it win over the menus' repo, agent and tutor mode.
-    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?) async -> Bool {
+    func input(_ text: String, repo: String?, worktree: Bool, agent: String?, model: String?, tutor: String?, note: String? = nil) async -> Bool {
         var args = InputArgs(text: text)
+        args.note = note
         // A : command acts on the selected card, or :move on the selected
         // row outside Irie.
         if let o = selectedOutside {
@@ -1226,8 +1277,8 @@ final class Store {
     /// pointer rests on it. Its × closes it at once, and an error goes as
     /// the user edits or submits too. The tab keeps each one, so nothing is
     /// lost as it goes (WCAG 2.2.1).
-    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false, apart: InputArgs? = nil) {
-        let n = Notice(text: text, isError: error, undo: undo && canUndo, apart: apart)
+    func say(_ text: String, error: Bool, seconds: UInt64 = 3, undo: Bool = false, apart: InputArgs? = nil, restore: [String]? = nil) {
+        let n = Notice(text: text, isError: error, undo: undo && canUndo, restore: restore, apart: apart)
         notice = n
         noticeHeld = false
         log(n)
