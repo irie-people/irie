@@ -368,6 +368,11 @@ type Remote struct {
 	Port   int    `toml:"port"`   // its HTTPS port; the setup page is on the port below, over plain HTTP
 	Name   string `toml:"name"`   // what the phone calls this machine; "" = its host name
 	Listen string `toml:"listen"` // the address to listen on, such as 192.168.1.20; "" = every address of this machine
+	// Panes are the web panes of the plugins folder that phones reach,
+	// each over HTTPS at a port of its own (docs/PHONE.md §2.2): a pane's
+	// id, its plugin's name, a dot and the pane's, and the port, as
+	// "invoices.invoices" = 7390.
+	Panes map[string]int `toml:"panes"`
 }
 
 // DefaultRemotePort is the phone app's HTTPS port; the setup page is on the
@@ -1216,6 +1221,9 @@ var (
 	repoName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	branchChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 	skillName   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`) // the Agent Skills spec's names
+	// paneID is a plugin pane's id: a manifest's name, a dot and its
+	// [panes.<id>] table's (internal/plugins).
+	paneID = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*\.[a-z0-9]+(-[a-z0-9]+)*$`)
 )
 
 // hasPrior reports whether a route profile has an accuracy for every class
@@ -1695,6 +1703,21 @@ func (c Config) Validate() error {
 	}
 	if strings.ContainsFunc(rm.Name, unicode.IsControl) || utf8.RuneCountInString(rm.Name) > 60 {
 		bad("remote.name = %q: must be one line of at most 60 characters", rm.Name)
+	}
+	paneAt := map[int]string{}
+	for _, id := range slices.Sorted(maps.Keys(rm.Panes)) {
+		port := rm.Panes[id]
+		switch {
+		case !paneID.MatchString(id):
+			bad("remote.panes: %q isn't a pane's id: its plugin's name, a dot and the pane's, as \"invoices.invoices\" = 7390", id)
+		case port < 1024 || port > 65535:
+			bad("remote.panes.%q = %d: must be a port from 1024 to 65535", id, port)
+		case port == rm.Port || port == rm.Port-1:
+			bad("remote.panes.%q = %d: the phone app has that port (remote.port and the one below it)", id, port)
+		case paneAt[port] != "":
+			bad("remote.panes.%q = %d: %s has that port too", id, port, paneAt[port])
+		}
+		paneAt[port] = id
 	}
 	v := c.VPN
 	if offered := VPNOffered(); !slices.Contains(offered, v.Provider) {
