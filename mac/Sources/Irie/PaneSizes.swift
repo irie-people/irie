@@ -75,7 +75,10 @@ extension Store {
     func sizesNow() -> SizesArgs? {
         #if canImport(GhosttyKit)
         let r = rolodex
-        guard poppedOut == nil, attach != nil, let t = terminalView as? GhosttyTerminalView else { return SizesArgs.off }
+        guard poppedOut == nil, attach != nil else { return SizesArgs.off }
+        // Not made yet, as the app starts: again once it is.
+        guard let view = terminalView else { return nil }
+        guard let t = view as? GhosttyTerminalView else { return SizesArgs.off }
         guard ResizeHold.shared.held == nil, !r.sliding, !r.folding, !sideSliding,
               let main = r.mainProbe, main.window != nil, t.window != nil, let now = t.grid else { return nil }
         // What the terminal frame takes of the room beside the panes, as it

@@ -217,7 +217,10 @@ final class Store {
     var filter = ""
     private(set) var fontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
-    @ObservationIgnored weak var terminalView: NSView?
+    @ObservationIgnored weak var terminalView: NSView? {
+        // The sizes wait for it (PaneSizes.swift).
+        didSet { if terminalView !== oldValue { sizesSoon() } }
+    }
     /// The split's lead pane, the picked session's own terminal while it
     /// shows beside its teammates (TeamSplit.swift).
     @ObservationIgnored weak var leadView: NSView?
