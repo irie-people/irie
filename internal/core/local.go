@@ -407,6 +407,11 @@ func (c *Core) localModels(ctx context.Context, o localmodel.Ollama, own bool) (
 			lm.Why = "cannot call tools"
 		case info.Context > 0 && info.Context < config.DefaultMinContext:
 			lm.Why = "takes at most " + localmodel.Tokens(info.Context) + " tokens of context"
+		case info.Runner == localmodel.RunnerMLX:
+			// Ollama's MLX engine keeps none of Irie's caps (runnerCaps):
+			// on an 18 GiB Mac a Qwen3.5 4B there grew to 16 GB in two
+			// Claude Code tasks (DESIGN §6.3).
+			lm.Why = "runs on Ollama's MLX engine, whose memory " + brand.Name + " cannot cap; use a GGUF build of it"
 		}
 		out = append(out, lm)
 	}

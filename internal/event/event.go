@@ -82,6 +82,14 @@ const (
 	OutcomeRated     = "outcome.rated"
 	OutcomeEscalated = "outcome.escalated"
 	RouteFailover    = "route.failover"
+	// RouteFallback records that Irie switched a session to its profile's
+	// fallback model, in place, after its own model's usage limit stopped
+	// a turn (DESIGN §6.4).
+	RouteFallback = "route.fallback"
+	// ModelSwitched records that a session's model changed while it ran:
+	// by /model, at a fallback, or as a resume restored it. Its model is
+	// the one it runs from then on.
+	ModelSwitched = "model.switched"
 	// DogNudged records that the jot dog sent a finished turn back to work,
 	// because the jot's work had not landed (DESIGN §4.8). It stands in for
 	// the turn.ended of that stop.
@@ -98,6 +106,11 @@ const (
 	// an API error records, or the end of the boost's time.
 	BoostOn  = "boost.on"
 	BoostOff = "boost.off"
+	// CacheRebuilt records a request that wrote most of its conversation's
+	// context into the prompt cache again instead of reading it, from the
+	// session's transcript (DESIGN §6.3): what it wrote again, what that
+	// cost and, when Irie knows, what woke the session.
+	CacheRebuilt = "cache.rebuilt"
 )
 
 var kinds = map[string]bool{}
@@ -108,7 +121,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover, DogNudged, TrodSent, BoostOn, BoostOff,
+		OutcomeRated, OutcomeEscalated, RouteFailover, RouteFallback, ModelSwitched, DogNudged, TrodSent, BoostOn, BoostOff, CacheRebuilt,
 	} {
 		kinds[k] = true
 	}

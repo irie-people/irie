@@ -9,6 +9,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/emersion/go-message v0.18.2
+	github.com/toon-format/toon-go v1.0.1
 	golang.org/x/sys v0.47.0
 	rsc.io/qr v0.2.0
 )

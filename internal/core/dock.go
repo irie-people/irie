@@ -241,16 +241,11 @@ func (c *Core) dockStart(e *dockEntry, session, repoKey string) error {
 	if st, err := os.Stat(e.cwd); err != nil || !st.IsDir() {
 		return ipc.Errorf(ipc.CodeBadArgs, "%s: %s is not a folder", e.control.Title, e.cwd)
 	}
-	conf := c.paths.DockConf()
-	if old, _ := os.ReadFile(conf); string(old) != tmux.DockConf() {
-		if err := filetx.WriteFile(conf, []byte(tmux.DockConf()), 0o600); err != nil {
-			return err
-		}
+	conf, err := c.dockConf()
+	if err != nil {
+		return err
 	}
-	shell := os.Getenv("SHELL")
-	if shell == "" || !filepath.IsAbs(shell) {
-		shell = "/bin/sh"
-	}
+	shell := loginShell()
 	args := []string{"new-session", "-d", "-s", e.name, "-x", "100", "-y", "30", "-c", e.cwd}
 	keys := make([]string, 0, len(e.control.Env))
 	for k := range e.control.Env {
@@ -273,8 +268,29 @@ func (c *Core) dockStart(e *dockEntry, session, repoKey string) error {
 	case dock.ScopeGlobal:
 		return nil
 	}
-	_, err := c.dock.Run("set-option", "-t", "="+e.name+":", owner, who)
+	_, err = c.dock.Run("set-option", "-t", "="+e.name+":", owner, who)
 	return err
+}
+
+// dockConf writes the dock server's config when it is not there or not as
+// this build writes it, and says where it is.
+func (c *Core) dockConf() (string, error) {
+	conf := c.paths.DockConf()
+	if old, _ := os.ReadFile(conf); string(old) != tmux.DockConf() {
+		if err := filetx.WriteFile(conf, []byte(tmux.DockConf()), 0o600); err != nil {
+			return "", err
+		}
+	}
+	return conf, nil
+}
+
+// loginShell is the user's shell, or sh when $SHELL names none.
+func loginShell() string {
+	shell := os.Getenv("SHELL")
+	if shell == "" || !filepath.IsAbs(shell) {
+		shell = "/bin/sh"
+	}
+	return shell
 }
 
 // dockCopies lists the copies on the dock server, by tmux session; none

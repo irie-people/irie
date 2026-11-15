@@ -212,6 +212,19 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 		}
 		profile.Model = a.Model
 	}
+	// A profile that starts on one of Irie's skills, such as +chaos, hands
+	// the task to the skill (DESIGN §4.19), or says why it can't; the
+	// person's words name the session, as a guide's do. It probes the CLI,
+	// as the spawn does below, before taking the lock.
+	if profile.Skill != "" {
+		if err := c.skillCheck("+"+profileName, profile, profile.Skill); err != nil {
+			return ipc.Session{}, err
+		}
+		if a.Name == "" {
+			a.Name, named = title(a.Task), false
+		}
+		a.Task = onSkill(profile, a.Task)
+	}
 	// A local profile's model is checked, and may be loaded, before
 	// anything else; like probing, it happens before taking the lock.
 	var warnings []string
@@ -355,6 +368,7 @@ type job struct {
 	reopen  *closedRecord  // the closed session that comes back, with its id and place in the list
 	tutor   string         // its tutor mode, explain or teach; "" when off (learn.tutor)
 	anon    *compartment   // the compartment it researches in, anonymously; nil when it doesn't (anon.go)
+	asked   bool           // its model was asked for by name, as a fork's --model: no fallback takes its place (fallback.go)
 }
 
 // launch writes the session's files, creates its window and records the
@@ -376,11 +390,20 @@ func (c *Core) launch(j job) (*session, error) {
 		vendorID = harness.NewUUID()
 	}
 	pl, h, profile := j.place, j.h, j.run
+	warnings := append(slices.Clone(pl.warnings), j.probe.Warnings...)
+	// While its model's own usage limit holds, the profile's own model
+	// gives way to its fallback (fallback.go); a model asked for by name
+	// stays.
+	if p, ok := c.profile(j.profile); ok && profile.Model == p.Model && !j.asked {
+		if m, why := c.startsOn(profile, time.Now()); m != profile.Model {
+			profile.Model, warnings = m, append(warnings, why)
+		}
+	}
 	x := &session{
 		id: id, name: pl.name, named: pl.named, agent: "main", created: created,
 		cwd: pl.cwd, repo: pl.repo, worktree: pl.worktree, branch: pl.branch, copied: pl.copied,
 		profile: j.profile, harness: h.ID(), observed: h.Levels().Has(harness.Observed), paste: profile.Task == config.TaskPaste,
-		vendorID: vendorID, warnings: append(slices.Clone(pl.warnings), j.probe.Warnings...),
+		vendorID: vendorID, warnings: warnings,
 		model: profile.Model, local: profile.Local != nil, tutor: j.tutor, out: c.outcome(id),
 	}
 

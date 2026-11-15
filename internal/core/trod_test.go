@@ -666,7 +666,7 @@ func TestTheTrodBotsChoices(t *testing.T) {
 	c := trodCore(t, trodSection("retry = \"10m\"\nnudges = 3\nwithin = \"24h\"\n"))
 	s := c.shiftAt(now)
 	due := func(x *session) (string, bool) {
-		d, work := c.trodNext(x, now, s, time.Time{})
+		d, work, _ := c.trodNext(x, now, s, time.Time{})
 		if d == nil {
 			return "", work
 		}
@@ -813,7 +813,7 @@ func TestTheTrodBotsChoices(t *testing.T) {
 
 	// Questions off: a question waits for the user.
 	off := trodCore(t, trodSection("questions = false\n"))
-	if d, _ := off.trodNext(stopped("o", now, asks), now, off.shiftAt(now), time.Time{}); d != nil {
+	if d, _, _ := off.trodNext(stopped("o", now, asks), now, off.shiftAt(now), time.Time{}); d != nil {
 		t.Errorf("questions off: %+v", d)
 	}
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseScript(t *testing.T) {
-	got, err := parseScript("prompt, tool:Bash,ask,permission,sub:a1b2c3:tool:Read+ask+sleep:10ms,stopfail:rate_limit,sleep:1s,stop,write:notes.md,commit,stop:bg,stop:ask,test:pass,test:fail,stop:passes,box,box:away,exit:3")
+	got, err := parseScript("prompt, tool:Bash,ask,permission,sub:a1b2c3:tool:Read+ask+sleep:10ms,stopfail:rate_limit,limit:fable,sleep:1s,stop,write:notes.md,commit,stop:bg,stop:ask,test:pass,test:fail,stop:passes,box,box:away,exit:3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,6 +18,7 @@ func TestParseScript(t *testing.T) {
 		{kind: "permission"},
 		{kind: "sub", arg: "a1b2c3", sub: []step{{kind: "tool", arg: "Read"}, {kind: "tool", arg: "AskUserQuestion"}, {kind: "sleep", d: 10 * time.Millisecond}}},
 		{kind: "stopfail", arg: "rate_limit"},
+		{kind: "limit", arg: "fable"},
 		{kind: "sleep", d: time.Second},
 		{kind: "stop"},
 		{kind: "write", arg: "notes.md"},
@@ -40,7 +41,7 @@ func TestParseScriptRefusesWhatIsNotAScript(t *testing.T) {
 	for _, s := range []string{
 		"", "describe this repo in one paragraph", "say hello", "keep running", "prompt,", "tool:", "tool:a b",
 		"sleep:soon", "exit:x", "exit:300", "stopfail:", "sub:a1", "sub:a1:prompt", "sub:a1:sub:a2:tool:Bash",
-		"sub:a1:stop", "sub:a1:exit:1", "prompt:now", "stop:now", "write:", "write:../x", "write:a/b", "commit:all", "sub:a1:write:x", "test", "test:maybe", "box:on", "box:", "sub:a1:box",
+		"sub:a1:stop", "sub:a1:exit:1", "prompt:now", "stop:now", "write:", "write:../x", "write:a/b", "commit:all", "sub:a1:write:x", "test", "test:maybe", "box:on", "box:", "sub:a1:box", "limit", "limit:", "limit:a b", "sub:a1:limit:fable",
 	} {
 		if steps, err := parseScript(s); err == nil {
 			t.Errorf("%q parsed as %+v", s, steps)

@@ -136,6 +136,14 @@ func TestNormalize(t *testing.T) {
 		want{event.SubagentFinished, "sub:a1b2c3", map[string]any{"agent_type": "Explore", "transcript": subTranscript}})
 	check(t, "SessionEnd", payload("SessionEnd", `"reason":"prompt_input_exit"`),
 		want{event.SessionEnded, "main", map[string]any{"reason": "prompt_input_exit"}})
+	// A model switch: the model it switched to, and who asked (DESIGN §6.4).
+	check(t, "PostModelSwitch", payload("PostModelSwitch", `"from_model":"claude-fable-5-1"`, `"to_model":"claude-opus-5-5"`,
+		`"requested_model":"claude-opus-5-5"`, `"source":"command"`, `"context_tokens":52624`, `"prompt_cache_warm":true`),
+		want{event.ModelSwitched, "main", map[string]any{"model": "claude-opus-5-5", "from": "claude-fable-5-1", "requested": "claude-opus-5-5", "source": "command"}})
+	check(t, "PostModelSwitch at a fallback", payload("PostModelSwitch", `"from_model":"claude-fable-5-1"`, `"to_model":"claude-opus-5-5"`,
+		`"requested_model":null`, `"source":"auto"`),
+		want{event.ModelSwitched, "main", map[string]any{"model": "claude-opus-5-5", "from": "claude-fable-5-1", "source": "auto"}})
+	check(t, "a switch before it is made", payload("PreModelSwitch", `"to_model":"claude-opus-5-5"`))
 	check(t, "an event Irie does not use", payload("PostToolBatch"))
 }
 
@@ -226,6 +234,11 @@ func TestRespond(t *testing.T) {
 		{"Stop", harness.HookReply{Unfinished: "[Irie] The jot dog: 2 commits are not in live yet."},
 			`{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"[Irie] The jot dog: 2 commits are not in live yet."}}`},
 		{"SubagentStop", harness.HookReply{Unfinished: "x"}, ``},
+		// Allow is for a model switch alone, never a tool call.
+		{"PreToolUse", harness.HookReply{Allow: true}, ``},
+		{"PermissionRequest", harness.HookReply{Allow: true}, ``},
+		{"PostModelSwitch", harness.HookReply{Allow: true}, ``},
+		{"PreModelSwitch", note, ``},
 		{"Notification", note, ``},
 		{"PermissionRequest", note, ``},
 		{"SessionEnd", note, ``},
@@ -445,5 +458,18 @@ func TestProbeOfAMissingCommandIsEmpty(t *testing.T) {
 	p := Harness{}.Probe(config.Profile{Command: "/home/alice/no/such/claude"}, os.Environ())
 	if p.Version != "" || len(p.Warnings) != 0 {
 		t.Errorf("probe = %+v; the spawn fails on its own with the shell's message", p)
+	}
+}
+
+// Irie's own model switch at a usage limit goes ahead without the
+// confirmation Claude Code asks while the prompt cache is warm (DESIGN
+// §6.4); with no allow, Claude Code decides as it would.
+func TestRespondAllowsIriesModelSwitch(t *testing.T) {
+	got := strings.TrimSpace(string(Harness{}.Respond(ev("PreModelSwitch"), harness.HookReply{Allow: true})))
+	if want := `{"hookSpecificOutput":{"hookEventName":"PreModelSwitch","permissionDecision":"allow"}}`; got != want {
+		t.Errorf("got %s\nwant %s", got, want)
+	}
+	if got := (Harness{}).Respond(ev("PreModelSwitch"), harness.HookReply{}); got != nil {
+		t.Errorf("with no allow: %s", got)
 	}
 }

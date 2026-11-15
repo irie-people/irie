@@ -93,6 +93,10 @@ struct SideState: Equatable {
 }
 
 extension Store {
+    /// The tabs the right sidebar shows: Mail only while its plugin is on
+    /// (Mail.swift). The toolbar's button names them too.
+    var sideTabs: [SideTab] { SideTab.built.filter { $0 != .mail || mailShown } }
+
     /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button.
     func toggleSide() {
         if side.open { closeSide() } else { openSide(side.tab) }
@@ -259,7 +263,7 @@ struct RightSidebar: View {
 
     private func tabs(tight: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(SideTab.built.filter { $0 != .mail || store.mailShown }) { t in tabButton(t, tight: tight) }
+            ForEach(store.sideTabs) { t in tabButton(t, tight: tight) }
         }
     }
 
@@ -360,13 +364,27 @@ private struct SideEdge: View {
     @Binding var guide: Double?
     let drawn: Double
     let most: Double
+    /// The resize pointer is pushed. It is popped once, and also when the
+    /// drawer closes under the pointer, which ends no hover: the pointer
+    /// would stay a resize one over the terminal.
+    @State private var pushed = false
 
     var body: some View {
         Color.clear
             .frame(width: 10)
             .contentShape(Rectangle())
             .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                if inside, !pushed {
+                    NSCursor.resizeLeftRight.push()
+                    pushed = true
+                } else if !inside, pushed {
+                    NSCursor.pop()
+                    pushed = false
+                }
+            }
+            .onDisappear {
+                if pushed { NSCursor.pop() }
+                pushed = false
             }
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { g in guide = min(SideState.clamp(drawn - Double(g.translation.width)), max(most, SideState.minWidth)) }

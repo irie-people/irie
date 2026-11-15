@@ -209,6 +209,9 @@ type HookReply struct {
 	// Unfinished is what is left of the task when its turn ends: the
 	// agent goes on to finish it, as the jot dog asks (DESIGN §4.8).
 	Unfinished string
+	// Allow lets a model switch that Irie asked for go ahead without the
+	// user's confirmation (DESIGN §6.4).
+	Allow bool
 }
 
 // Harness is one agent CLI.

@@ -132,6 +132,10 @@ func (c *Core) loadOutcomes() {
 		switch e.Kind {
 		case event.SpawnRequested, event.TurnEnded, event.TurnFailed, event.OutcomeRated, event.OutcomeEscalated, event.RouteFailover:
 			c.outcome(e.Session).apply(e)
+		case event.RouteFallback:
+			// A model's own usage limit still holds for new sessions
+			// after a restart (fallback.go).
+			c.noteLimit(family(e.Str("from")), e.Time())
 		}
 	}
 	for id, o := range c.outcomes {

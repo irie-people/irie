@@ -203,11 +203,17 @@ final class Store {
     var side = SideState.saved() {
         didSet { if side != oldValue, !isFixture { side.save() } }
     }
+    /// The Ghostty window the terminal is popped out into, while it is out,
+    /// and a pop out on its way (PopOut.swift).
+    var poppedOut = PopOut.saved()
+    @ObservationIgnored var popping = false
     /// The right sidebar is sliding in or out, over the terminal's edge,
     /// and the terminal keeps no room for it meanwhile (RightSidebar.swift).
     var sideSliding = false
     /// Counts its slides, so that only the last one's end counts.
     @ObservationIgnored var sideSlides = 0
+    /// The panes beside the terminal, a rolodex of cards (Rolodex.swift).
+    let rolodex = RolodexModel()
     /// The session the core shows beside its teammates, as last asked
     /// (TeamSplit.swift); nil while the slot shows the picked session.
     private(set) var splitShown: String?
@@ -304,6 +310,7 @@ final class Store {
             MainActor.assumeIsolated { self?.loadPluginsSoon() }
         }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: false) }
+        watchPopOut()
         Task { await run() }
     }
 
@@ -331,6 +338,7 @@ final class Store {
                 canTutor = hello.features.contains("spawn-tutor")
                 canLearn = hello.features.contains("learn")
                 canDock = hello.features.contains("dock")
+                rolodex.canShell = hello.features.contains("pane")
                 canConfigure = hello.features.contains("config")
                 canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
@@ -530,9 +538,10 @@ final class Store {
     }
 
     /// The picked session while it shows beside its teammates: the terminal
-    /// shows, and it has teammates the app can reach.
+    /// shows, here rather than popped out, and it has teammates the app can
+    /// reach.
     var splitSession: Session? {
-        guard showTerminal, outsideSelection == nil, attach?.teams != nil || isFixture,
+        guard showTerminal, poppedOut == nil, outsideSelection == nil, attach?.teams != nil || isFixture,
               let s = selectedRow, !(s.team ?? []).isEmpty else { return nil }
         return s
     }
@@ -549,7 +558,7 @@ final class Store {
 
     /// Asks the core again for the picked session when it starts or stops
     /// showing beside its teammates.
-    private func keepSplit() {
+    func keepSplit() {
         guard !isFixture else { return }
         let want = splitSession?.id
         guard want != splitShown else { return }
@@ -606,6 +615,8 @@ final class Store {
     /// Fills the store with sessions no core sent, for `--snapshot`.
     func loadFixture(_ rows: [Session], selection: String?) {
         isFixture = true
+        // Whatever the app popped out, the fixture's terminal is in.
+        poppedOut = nil
         sessions = rows.sorted(by: Self.before)
         self.selection = selection
         link = .online(version: "snapshot")
@@ -1270,24 +1281,6 @@ final class Store {
 
     func reveal(_ path: String) {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-    }
-
-    /// Opens the slot in a Ghostty window: the terminal for builds without
-    /// SwiftTerm, and a second view for builds with it.
-    func openInGhostty() {
-        guard let a = attach else { return }
-        guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.mitchellh.ghostty") != nil else {
-            say("Ghostty isn’t installed. In any terminal, run: \(a.tmux) -S \(a.socket) attach-session -t \(a.target)", error: true)
-            return
-        }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = ["-na", "Ghostty", "--args", "--title=\(Brand.name)", "-e", a.tmux, "-S", a.socket, "attach-session", "-t", a.target]
-        do {
-            try p.run()
-        } catch {
-            say("Couldn’t open Ghostty: \(error.localizedDescription)", error: true)
-        }
     }
 }
 

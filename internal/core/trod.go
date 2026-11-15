@@ -26,6 +26,7 @@ package core
 // does, as Claude Code itself does then.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -446,36 +447,41 @@ type trodDue struct {
 // teammates still at work or for a usage limit to reset, or the shift will
 // send it on once trod.retry has passed. A session the shift sent on
 // trod.nudges times this night is sent on no more, but the Mac stays awake
-// while it works. reset is when the plan's usage limit last reset, as far
-// as Irie knows. The caller holds c.mu.
-func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d *trodDue, work bool) {
+// while it works. Nor is one whose prompt cache has run out, when waking
+// it would cost more than a nudge is worth (usage.wake_most): cold says
+// so, and it has no work left for the bot. reset is when the plan's usage
+// limit last reset, as far as Irie knows. The caller holds c.mu.
+func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d *trodDue, work bool, cold string) {
 	t := &x.track
 	if !c.trodWatches(x) {
-		return nil, false
+		return nil, false, ""
 	}
 	state := t.state(x.dead)
 	switch {
 	case state == ipc.StateWorking || state == ipc.StateStarting:
-		return nil, true
+		return nil, true, ""
 	case t.waiting > 0:
 		// Work of its own in the background, or a wakeup, will wake it.
-		return nil, true
+		return nil, true, ""
 	case x.waitsOnSubs():
 		// So will its helpers or teammates, which still work (DESIGN §5.3).
-		return nil, true
+		return nil, true, ""
 	case s.n.Within > 0 && now.Sub(t.stopped) > s.n.Within:
-		return nil, false
+		return nil, false, ""
 	}
 	capped := sentSince(t.trod, s.from) >= s.n.Nudges
 	waits := now.Sub(later(t.stopped, lastSent(t.trod))) < s.n.Retry
-	due := func(reason string, data map[string]any) (*trodDue, bool) {
-		switch {
-		case capped:
-			return nil, false
-		case waits:
-			return nil, true
+	due := func(reason string, data map[string]any) (*trodDue, bool, string) {
+		if capped {
+			return nil, false, ""
 		}
-		return &trodDue{id: x.id, reason: reason, data: data}, true
+		if why, dear := c.tooDear(x, now); dear {
+			return nil, false, why
+		}
+		if waits {
+			return nil, true, ""
+		}
+		return &trodDue{id: x.id, reason: reason, data: data}, true, ""
 	}
 	switch state {
 	case ipc.StateNeedsYou:
@@ -483,39 +489,44 @@ func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d 
 		// as a permission prompt.
 		e, ok := t.needs[event.Main]
 		if !ok || len(t.needs) != 1 || e.Kind != event.TurnFailed {
-			return nil, false
+			return nil, false, ""
 		}
 		switch err := e.Str("error"); {
 		case passing[err]:
 			return due(trodError, map[string]any{"error": err})
 		case err == "rate_limit":
+			// A session switching to its fallback model is sent on by
+			// that switch (fallback.go).
+			if x.switching != nil {
+				return nil, true, ""
+			}
 			// While the plan is at its limit the session waits for the
 			// reset, at which Claude Code carries the task on itself; the
 			// shift steps in only when it stays stopped after that.
 			r, limited := planLimit(c.plan, now)
 			if limited {
-				return nil, true
+				return nil, true, ""
 			}
 			if c.autoContinueOff(x) {
 				// Claude Code then asks the user what to do in its
 				// terminal, which a typed message would answer.
-				return nil, false
+				return nil, false, ""
 			}
 			if now.Sub(later(reset, r)) < s.n.Retry {
 				waits = true
 			}
 			return due(trodLimit, nil)
 		}
-		return nil, false
+		return nil, false, ""
 	case ipc.StateDone, ipc.StateIdle:
 	default:
-		return nil, false
+		return nil, false, ""
 	}
 	switch {
 	case t.asked:
 		if !s.n.Questions || t.trodAnswered || capped {
 			// Asked again after the shift's answer: it waits for the user.
-			return nil, false
+			return nil, false, ""
 		}
 		// A question waits on nobody but the user: it is answered at once.
 		waits = false
@@ -523,7 +534,7 @@ func (c *Core) trodNext(x *session, now time.Time, s shift, reset time.Time) (d 
 	case len(x.dog.loose) > 0:
 		return due(trodLoose, nil)
 	}
-	return nil, false
+	return nil, false, ""
 }
 
 // spendsAlone reports whether session x would spend the plan's use with
@@ -613,23 +624,25 @@ func (c *Core) trodSweep() bool {
 			c.log.Info("trod bot: an agent is signed out, so it thaws nothing more this shift until you sign in again")
 		}
 		c.trodHeld = hold
+		// What it froze comes back one at a time, the sessions whose cache
+		// is still warm first, then the cheapest to wake.
+		var thaws []*session
+		var due []trodCandidate
 		for _, r := range rows {
 			x := c.sessions[r.ID]
 			if f := x.track.frozen; f != nil && f.Str("by") == trodBy && !overWeek {
-				// One at a time, trodThawGap apart, and none while an agent
-				// is signed out: they would only wake into the same failure,
-				// while frozen they carry on where they were later.
-				if hold || now.Sub(c.trodThawed) < trodThawGap {
-					continue
-				}
-				if err := c.thawLocked(x, "the week's plan use is back under the most it may use"); err != nil {
-					c.log.Warn("trod bot: thaw", "session", x.id, "err", err)
-				} else {
-					c.trodThawed = now
+				// Thawed in the middle of its work, it writes its whole
+				// context into its cache again once the cache has run out:
+				// when that costs more than a nudge is worth, it waits for
+				// you.
+				x.trodCold, _ = c.tooDear(x, now)
+				if x.trodCold == "" {
+					thaws = append(thaws, x)
 				}
 				continue
 			}
-			d, w := c.trodNext(x, now, s, c.trodReset)
+			d, w, cold := c.trodNext(x, now, s, c.trodReset)
+			x.trodCold = cold
 			if overWeek && s.away && c.spendsAlone(x, now) {
 				if err := c.freezeLocked(x, pastMost(s.n, weekUsed, most)); err != nil {
 					c.log.Warn("trod bot: freeze", "session", x.id, "err", err)
@@ -637,11 +650,33 @@ func (c *Core) trodSweep() bool {
 				continue
 			}
 			work = work || w
-			if d == nil || over || !s.away || s.n.MaxWorking > 0 && working >= s.n.MaxWorking {
+			if d == nil || over || !s.away {
 				continue
 			}
-			d.text = trodNote(s, d.reason, trodTyped, c.trodDetail(x, d), true)
-			dues = append(dues, *d)
+			_, isCold := c.wakePrice(x, now)
+			due = append(due, trodCandidate{x: x, d: d, cold: isCold})
+		}
+		// One at a time, trodThawGap apart, and none while an agent is
+		// signed out: they would only wake into the same failure, while
+		// frozen they carry on where they were later.
+		if len(thaws) > 0 && !hold && now.Sub(c.trodThawed) >= trodThawGap {
+			x := slices.MinFunc(thaws, func(a, b *session) int { return c.wakeOrder(a, b, now) })
+			if err := c.thawLocked(x, "the week's plan use is back under the most it may use"); err != nil {
+				c.log.Warn("trod bot: thaw", "session", x.id, "err", err)
+			} else {
+				c.trodThawed = now
+			}
+		}
+		// While fewer than max_working work, the sessions whose cache is
+		// still warm go first: one that waited for a turn would go cold,
+		// and a cold one costs the same later.
+		slices.SortStableFunc(due, func(a, b trodCandidate) int { return cmp.Compare(btoi(a.cold), btoi(b.cold)) })
+		for _, cd := range due {
+			if s.n.MaxWorking > 0 && working >= s.n.MaxWorking {
+				break
+			}
+			cd.d.text = trodNote(s, cd.d.reason, trodTyped, c.trodDetail(cd.x, cd.d), true)
+			dues = append(dues, *cd.d)
 			working++
 		}
 	}
@@ -675,6 +710,30 @@ func (c *Core) trodSweep() bool {
 		}
 	}
 	return true
+}
+
+// trodCandidate is a session the trod bot would send on in this sweep,
+// and whether its prompt cache has run out.
+type trodCandidate struct {
+	x    *session
+	d    *trodDue
+	cold bool
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// wakeOrder puts a session whose prompt cache is still warm before one
+// whose cache has run out, and of those the cheaper to wake first. The
+// caller holds c.mu.
+func (c *Core) wakeOrder(a, b *session, now time.Time) int {
+	wa, ca := c.wakePrice(a, now)
+	wb, cb := c.wakePrice(b, now)
+	return cmp.Or(cmp.Compare(btoi(ca), btoi(cb)), cmp.Compare(wa.USD, wb.USD))
 }
 
 // trodNow is the trod bot as its last sweep found it, for the
@@ -946,10 +1005,16 @@ func (c *Core) trodReport() ipc.TrodResult {
 func (c *Core) trodLeft(x *session, row ipc.Session, s shift) string {
 	t := &x.track
 	if f := t.frozen; f != nil && f.Str("by") == trodBy {
+		if x.trodCold != "" {
+			return "frozen by the trod bot: " + f.Str("reason") + "; " + x.trodCold
+		}
 		return "frozen by the trod bot: " + f.Str("reason")
 	}
 	if !c.trodWatches(x) || rowAtWork(row) {
 		return ""
+	}
+	if x.trodCold != "" {
+		return x.trodCold
 	}
 	if e, ok := t.needs[event.Main]; ok && len(t.needs) == 1 && e.Kind == event.TurnFailed {
 		if err := e.Str("error"); !passing[err] && err != "rate_limit" {

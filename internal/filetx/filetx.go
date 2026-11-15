@@ -76,6 +76,14 @@ func WriteFile(path string, data []byte, perm fs.FileMode) error {
 	return replace(target(path), data, perm)
 }
 
+// Replace is WriteFile without the write lock: for a file whose own program
+// takes no lock of Irie's, such as Claude Code's settings, so that no lock
+// file is left beside it. The file is still replaced at once, and a link
+// to it stays.
+func Replace(path string, data []byte, perm fs.FileMode) error {
+	return replace(target(path), data, perm)
+}
+
 // Update reads the file at path, nil when there is none, and puts what
 // change makes of it in its place, holding the file's write lock all the
 // while. When change fails, its error comes back as it is and the file is

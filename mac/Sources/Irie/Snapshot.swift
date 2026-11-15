@@ -20,6 +20,7 @@ enum Snapshot {
         LookBook.shared.useFixture()
         // Closed, whatever the app has saved; a fixture store saves nothing.
         store.side = SideState()
+        store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
             // Each palette in both modes at the default size, then the default
@@ -139,6 +140,54 @@ enum Snapshot {
             }
             store.side = SideState()
             store.notice = nil
+
+            // The terminal popped out into Ghostty (PopOut.swift): the note
+            // in its frame, in both modes. Set directly, so nothing is saved.
+            store.poppedOut = PoppedOut(pid: 0, launched: .distantPast)
+            for (base, dark) in [("popped-out", false), ("popped-out-dark", true)] {
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1100, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            store.poppedOut = nil
+
+            // The panes beside the terminal (Rolodex.swift): a card of each
+            // kind with one in front, in both modes and a narrower window, a
+            // blank card, and two turns drawn still, forward and back.
+            let panes: [(String, PaneKind?, Bool, CGFloat)] = [
+                ("panes", .terminal, false, 1500), ("panes-dark", .terminal, true, 1500), ("panes-browser", .browser, false, 1500),
+                ("panes-narrow", .terminal, false, 1100), ("panes-blank", nil, false, 1500),
+            ]
+            for (base, front, dark, width) in panes {
+                store.rolodex.loadFixture(session: Fixture.selected, front: front)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: width, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            // A turn tilts the flap in 3D, which only SwiftUI's own renderer
+            // draws, so these are the wheel alone.
+            for (base, forward, at, dark) in [("panes-turn-forward", true, 0.45, false), ("panes-turn-back", false, 0.35, false), ("panes-turn-forward-dark", true, 0.3, true)] {
+                let size = CGSize(width: 560, height: 640)
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal)
+                store.rolodex.freezeFixtureTurn(session: Fixture.selected, forward: forward, at: at, size: size)
+                let view = RolodexView().environment(store).frame(width: size.width, height: size.height).padding(16)
+                    .background(Theme.ground).environment(\.colorScheme, dark ? .dark : .light)
+                var png: Data?
+                (NSAppearance(named: dark ? .darkAqua : .aqua) ?? NSAppearance.currentDrawing()).performAsCurrentDrawingAppearance {
+                    let r = ImageRenderer(content: view)
+                    r.scale = 2
+                    if let image = r.cgImage { png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) }
+                }
+                if let png {
+                    try png.write(to: URL(fileURLWithPath: dir).appendingPathComponent(base + ".png"))
+                    print(base + ".png")
+                }
+            }
+            store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
 
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
@@ -330,7 +379,11 @@ enum Fixture {
                     group: "gmacapp00000", trod: TrodRow(sent: 2, last: ago(0.5), reason: "error"), hue: 2),
             Session(id: "s04warmlook0", name: "warm-look", state: "done", created: ago(14), cwd: irie + "-warm-look",
                     repo: irie, branch: "\(Brand.slug)/warm-look", profile: "claude", group: "glooks000000",
-                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6),
+                    trod: TrodRow(sent: 1, last: ago(9), reason: "question"), hue: 6,
+                    // It woke cold three times today, which the card says
+                    // (DESIGN §6.3).
+                    rebuilds: Rebuilds(today: 3, todayUSD: 4.10, week: 5, weekUSD: 7.30, cause: "you", words: "$4.10 today: woke cold 3 times"),
+                    cold: Cold(tokens: 310_000, usd: 2.48, words: "~$2.48 to wake")),
             // A finished turn whose helper and teammates still work: it waits
             // on them, as its Stop said.
             Session(id: "s10patents00", name: "patent-research", state: "idle",

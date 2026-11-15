@@ -39,9 +39,34 @@ struct TerminalArea: View {
             // its narrowest, so the terminal keeps some room.
             GeometryReader { geo in
                 let width = min(CGFloat(store.side.width), max(CGFloat(SideState.minWidth), geo.size.width - minTerminal))
+                // The panes, a rolodex of cards between the terminal and the
+                // right sidebar (Rolodex.swift), slide in the same way: the
+                // terminal makes room once they are in.
+                let side = store.sideDocked ? width : 0
+                let room = geo.size.width - side
+                let deck = RolodexModel.width(share: store.rolodex.share, in: room, keep: keepBesidePanes)
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
-                        .padding(.trailing, store.sideDocked ? width : 0)
+                        .padding(.trailing, side + (store.rolodex.docked ? deck : 0))
+                    if store.rolodex.open {
+                        RolodexView()
+                            .padding(.leading, 4)
+                            .padding(.trailing, 12)
+                            .padding(.vertical, 12)
+                            .frame(width: deck)
+                            .overlay(alignment: .leading) { RolodexEdge(room: room, drawn: deck, keep: keepBesidePanes).offset(x: -4) }
+                            .padding(.trailing, side)
+                            .transition(.move(edge: .trailing))
+                    }
+                    if let g = store.rolodex.guide {
+                        Rectangle()
+                            .fill(Theme.accent)
+                            .frame(width: 2)
+                            .padding(.vertical, 12)
+                            .padding(.trailing, side + CGFloat(g) - 1)
+                            .allowsHitTesting(false)
+                            .zIndex(2)
+                    }
                     if store.side.open {
                         RightSidebar(guide: $sideGuide, drawn: Double(width),
                                      most: Double(max(CGFloat(SideState.minWidth), geo.size.width - minTerminal)))
@@ -85,23 +110,37 @@ struct TerminalArea: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             ToolbarItem(placement: .primaryAction) {
-                // The session's helpers, in the right sidebar (RightSidebar.swift).
+                // The session's helpers, in the right sidebar's Helpers tab
+                // (RightSidebar.swift), with that tab's icon: the helpers
+                // no longer split the terminal.
                 Button {
                     store.toggleHelpers()
                 } label: {
-                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: "rectangle.split.2x1")
+                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: SideTab.helpers.symbol)
                 }
                 .help(store.helperShown ? "Close the helpers (⇧⌘H)" : "Show the session’s helpers in the right sidebar (⇧⌘H)")
                 .disabled(selected == nil)
             }
             ToolbarItem(placement: .primaryAction) {
+                // The terminal out in a Ghostty window of its own, and back
+                // (PopOut.swift).
+                let out = store.poppedOut != nil
                 Button {
-                    store.openInGhostty()
+                    store.togglePopOut()
                 } label: {
-                    Label("Open in Ghostty", systemImage: "macwindow.on.rectangle")
+                    Label(out ? "Pop Back In" : "Pop Out", systemImage: out ? "pip.exit" : "macwindow.on.rectangle")
                 }
-                .help("Open the terminal in a Ghostty window too")
+                .help(out ? "Bring the terminal back into this window (⌥⌘O)" : "Pop the terminal out into a Ghostty window of its own (⌥⌘O)")
                 .disabled(store.attach == nil)
+            }
+            // The panes beside the terminal, a rolodex of cards (Rolodex.swift).
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.togglePanes()
+                } label: {
+                    Label(store.rolodex.open ? "Hide Panes" : "Show Panes", systemImage: "rectangle.stack")
+                }
+                .help(store.rolodex.open ? "Hide the panes (⌥⌘P)" : "Show your panes beside the terminal: a shell, a browser, a plugin’s page (⌥⌘P; ⌥Tab walks them)")
             }
             // At the toolbar's trailing end, where the HIG puts a button that
             // opens an inspector.
@@ -111,7 +150,8 @@ struct TerminalArea: View {
                 } label: {
                     Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: "sidebar.right")
                 }
-                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)" : "Show the right sidebar: helpers, what is ready to review, and notices (⌥⌘B)")
+                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)"
+                      : "Show the right sidebar: \(ListFormatter.localizedString(byJoining: store.sideTabs.map(\.title))) (⌥⌘B)")
             }
         }
     }
@@ -120,23 +160,35 @@ struct TerminalArea: View {
     /// width: about 80 columns and the frame round them.
     private var minTerminal: CGFloat { 80 * store.fontSize * 0.6 + 60 }
 
+    /// What it keeps beside the panes, which give up width first: about 60
+    /// columns, since every agent takes the slot's size.
+    private var keepBesidePanes: CGFloat { 60 * store.fontSize * 0.6 + 60 }
+
     private var main: some View {
         ZStack(alignment: .top) {
             // Once attached, the terminal stays: tmux outlives a core
-            // restart, so a flap gets a banner, not a reattach.
+            // restart, so a flap gets a banner, not a reattach. Only a pop
+            // out ends it: the Ghostty window is then the one client that
+            // sizes the slot, and a note stands in the frame (PopOut.swift).
             if let a = store.attach {
-                // The terminal stays attached under the conversation, so
-                // ⌥⌘T flips between them at once, and under the split.
-                let shows = store.showTerminal && split == nil
-                terminal(a, active: shows)
-                    .opacity(shows ? 1 : 0)
-                    .allowsHitTesting(shows)
-                    .accessibilityHidden(!shows)
-                if let s = split { framed(TeamSplit(session: s, team: s.team ?? []), padded: false) }
+                if store.poppedOut != nil {
+                    if store.showTerminal { framed(PoppedOutNote()) }
+                } else {
+                    // The terminal stays attached under the conversation, so
+                    // ⌥⌘T flips between them at once, and under the split.
+                    let shows = store.showTerminal && split == nil
+                    terminal(a, active: shows)
+                        .opacity(shows ? 1 : 0)
+                        .allowsHitTesting(shows)
+                        .accessibilityHidden(!shows)
+                    if let s = split { framed(TeamSplit(session: s, team: s.team ?? []), padded: false) }
+                }
             } else if store.isFixture, store.showTerminal {
                 // `--snapshot` attaches no terminal: the frame round an empty
-                // one, or the split's panes.
-                if let s = split {
+                // one, the split's panes, or the note of a pop out.
+                if store.poppedOut != nil {
+                    framed(PoppedOutNote())
+                } else if let s = split {
                     framed(TeamSplit(session: s, team: s.team ?? []), padded: false)
                 } else {
                     framed(Color.clear)
@@ -228,7 +280,7 @@ struct TerminalArea: View {
         Placeholder(
             title: "The terminal opens in Ghostty for now",
             text: "This build has no terminal of its own yet. Pick a session on the left and the Ghostty window follows it.",
-            action: ("Open the terminal", store.openInGhostty)
+            action: ("Open the terminal", store.popOut)
         )
         #endif
     }

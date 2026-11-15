@@ -65,6 +65,7 @@ type Core struct {
 
 	spawnMu     turns        // one spawn at a time, a promoted session's first; taken before mu
 	sendMu      turns        // one message typed to an agent at a time, likewise
+	switchMu    sync.Mutex   // one model switch at a usage limit at a time, taken before sendMu and mu (fallback.go)
 	localMu     sync.Mutex   // one start of the local server at a time, taken before mu
 	undoMu      sync.Mutex   // one undo or redo at a time, taken before spawnMu and mu
 	http        *http.Client // for local servers
@@ -128,6 +129,7 @@ type Core struct {
 	plan       ipc.Plan                 // the plan's use: each window's newest figure (status.go)
 
 	outcomes   map[string]*outcome   // every session's route and outcome, those gone included
+	limits     map[string]time.Time  // when each model family's own usage limit last stopped a turn, such as fable's (fallback.go)
 	order      []string              // the list's order from the top, which the user sets (order.go)
 	spaces     []ipc.Space           // the spaces, the first first (spaces.go)
 	groups     []ipc.Group           // your groups, in the order they were made (groups.go)
@@ -150,6 +152,7 @@ type Core struct {
 	trodHand   trodHand              // the run of the trod bot you started by hand last (trod.go)
 	trodThawed time.Time             // when the trod bot last thawed a session it froze (trod.go)
 	trodHeld   bool                  // whether its last sweep held its thaws for a signed-out agent
+	meter      meter                 // the prompt-cache meter's record of the last week's rebuilds (rebuilds.go)
 	last       *lastJot              // the jot sent last from a task bar, which the next may add to (follow.go)
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 	mail       mailState             // the mail plugin's accounts and connections (mail.go)
@@ -185,7 +188,8 @@ type session struct {
 	tally     tokenTally // read from the transcripts track names
 	statusN   uint64     // its status line updates, counted for perf
 	tokens    *ipc.Tokens
-	model     string                 // the model the agent runs, as its profile said
+	model     string                 // the model the agent runs, as its profile said; track.model once it switched
+	switching *modelSwitch           // Irie's switch of its model at a usage limit, under way (fallback.go)
 	local     bool                   // a model of a local runtime
 	tutor     string                 // its tutor mode, explain or teach; "" when off (learn.tutor)
 	anon      string                 // the compartment it researches in, anonymously; "" when it doesn't (anon.go)
@@ -203,6 +207,7 @@ type session struct {
 	screen    *screenFeed            // its terminal, read while clients watch it live (screenfeed.go)
 	helpers   map[string]*helperFeed // its helpers' conversations that clients follow, by agent (helpers.go)
 	dog       dogState               // what the jot dog found its jot left (dog.go)
+	trodCold  string                 // why the trod bot's last sweep left it be for the price of waking it (trod.go); "" when it did not
 	team      []team.Teammate        // its teammates on the team server, last listed (team.go)
 	stopped   map[string]bool        // its helpers you stopped, whose tool calls are turned away until they end (sub.go)
 	hue       int                    // which of the agents' colours it takes, from 1 (hue.go); 0 until it has one
@@ -222,6 +227,9 @@ func (x *session) wire() ipc.Session {
 		Profile: x.profile, VendorID: x.vendorID, Pane: x.pane, Shown: x.shown, Tokens: x.tokens,
 		Model: x.model, Local: x.local, Context: x.usage.Context, Memory: shownMemory(x.memory), Team: wireTeam(x.team), Hue: x.hue,
 		Tutor: x.tutor, Anon: x.anon,
+	}
+	if m := x.track.model; m != "" {
+		s.Model = m
 	}
 	if s.Model == "" {
 		s.Model = x.usage.Model
@@ -288,10 +296,12 @@ func (x *session) waitsOnSubs() bool {
 // countTokens catches each session's tally up with its transcripts. The
 // caller holds c.mu.
 func (c *Core) countTokens() {
+	now := time.Now()
 	for _, x := range c.sessions {
 		if t, ok := x.tally.update(x.track.transcripts); ok {
 			x.tokens = &t
 		}
+		c.noteRebuilds(x, now)
 	}
 }
 
@@ -301,7 +311,7 @@ func newCore(o Options, r *tmux.Runner) *Core {
 		team:     &tmux.Runner{Bin: r.Bin, Socket: tmux.TeamSocket(r.Socket), Env: teamServerEnv(os.Environ())},
 		dock:     &tmux.Runner{Bin: r.Bin, Socket: tmux.DockSocket(r.Socket)},
 		sessions: map[string]*session{}, published: map[string]ipc.Session{}, subs: map[*subscriber]bool{},
-		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, hues: map[string]int{},
+		history: map[string][]event.Event{}, outcomes: map[string]*outcome{}, limits: map[string]time.Time{}, hues: map[string]int{},
 		fdog: newFreezeDog(), started: time.Now(),
 	}
 	c.useConfig(o.Config)
@@ -356,6 +366,7 @@ func Run(o Options) error {
 	c.loadGroups()
 	c.loadHues()
 	c.loadClosed()
+	c.loadMeter(time.Now())
 	c.loadState()
 	c.loadTrodHand()
 	c.loadRaphael()
@@ -500,6 +511,7 @@ func (c *Core) tick() {
 	frames := c.changes()
 	c.mu.Unlock()
 	c.publish(frames)
+	c.closedGoesCold(time.Now())
 }
 
 // refresh takes a snapshot, repairs the layout until it is sound and
@@ -688,6 +700,9 @@ func (c *Core) row(x *session, from time.Time) ipc.Session {
 	if !from.IsZero() {
 		s.Trod = trodRow(&x.track, from)
 	}
+	now := time.Now()
+	s.Rebuilds = c.rebuildsRow(x.id, now)
+	s.Cold = c.coldRow(x, s.State, now)
 	return s
 }
 
@@ -794,8 +809,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail,
-			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail,
+			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil
@@ -864,6 +879,8 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return ipc.CloseResult{Sessions: ids}, err
 	case ipc.OpDog:
 		return c.dogList()
+	case ipc.OpRebuilds:
+		return c.rebuildsOp(), nil
 	case ipc.OpReady:
 		return c.ready(), nil
 	case ipc.OpTrod:
@@ -1051,6 +1068,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.dockOp(a)
+	case ipc.OpPane:
+		var a ipc.PaneArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.paneOp(a)
 	case ipc.OpScreen:
 		var a ipc.ScreenArgs
 		if err := decode(raw, &a); err != nil {
