@@ -46,7 +46,6 @@ All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<titl
 
 | Picture | Page | Shows |
 |---|---|---|
-| The Irie window | Home | The sidebar as `internal/ui/view.go` draws it at its default 34 columns: header and counts, rows with glyphs and ages, the selected row's deep-green bar, the status strip and the command bar. Beside it, the slot with an agent at work. On a phone it crops to the sidebar |
 | Everything on your computer | What Irie is | Irie, its tmux with three agents, its files and Ollama on 127.0.0.1, all inside your computer; the one arrow out runs from the agents to their AI companies |
 | How it works | How it works | You, Irie, tmux, three agents and their worktrees, with hooks running back up to Irie |
 | What the colours mean | How it works | Every state of DESIGN §5.3 with its glyph and colour; paused and frozen marked planned |
@@ -58,14 +57,15 @@ All pictures are inline SVG drawn for this site. Each has `role="img"`, a `<titl
 | A theme's sidebar | Themes | For each theme, in light and dark: the Mac app's sidebar as planned, with cards in every kind of state, then every state's mark in order. Each picture keeps its own colours in both of the site's themes |
 | The preview picture | Every page's link preview | Irie's mark beside the hero line, over a deep-green band with one wave: `preview.png`, 1200 × 630, drawn from `docs/preview.html` by Chrome's headless shell |
 
-Recordings come later. Each one has an empty box now, sized 16:10, whose caption doubles as its alt text and names the recording to come.
+Recordings are films of the Mac app from the docs/demo sandbox ([docs/demo/README.md](../demo/README.md), "Mac app recordings"), kept in `site/media` as WebM and MP4 with a poster. Each plays only when asked, and its caption doubles as its alt text.
 
-| Box | Page | Recording to come |
+| Recording | Page | Shows |
 |---|---|---|
-| `first-look` | Home | Opening Irie, typing a task and watching its row |
-| `swap-in` | How it works | Pressing Enter on a row; the agent's screen moves into the slot |
-| `first-task` | Get started | Typing a first task and watching it start |
-| `needs-you` | Get started | A row turns red, and answering the agent |
+| `intro` | Home, at the top | Irie in a minute, with sound, in place of the terminal drawing the home page opened with until 2026-11-15. It is 16:9, an AV1 WebM and an H.264 MP4, with captions in `intro.vtt` and its words to read under it. The voice is Kokoro's af_heart, made on a Mac, and the AI disclosure sits under the film. A narration kit outside the repository made it, from the same sandbox |
+| `first-look` | Home | A fourth task typed in beside three agents at work |
+| `close-the-window` | How it works | The window closes while three agents work, and they carry on |
+| `local` | Get started | A small task for a local model beside a hard one on `+claude` |
+| `needs-you` | Get started | A card turns red, and the agent is answered in its own screen |
 
 ## Look
 
@@ -110,6 +110,7 @@ Open every page from disk in a browser at desktop width (1280 px), phone width (
 - **What Irie is stays complete.** A change that adds or removes a part, a file Irie keeps, a connection, a program it runs, or a word it says to an agent updates `what-irie-is.html` in the same pull request. The page quotes every `[Irie]` note word for word, so `grep -rn '\[Irie\]' internal` finds what to compare.
 - **When the themes are built.** The marks with `data-m="themes"` go, Themes' stone on the docs page fills, and the other pictures move to the default theme, Rosewater.
 - **When the first release ships.** Install gains the download, and the "no download yet" lines on Home, Get started, the FAQ and the README go.
+- **The intro.** Its words, its voice and its disclosure are the maintainer's, approved on 2026-11-15. A new cut, new words or a new voice waits for the maintainer's yes, as the roadmap does.
 - **Link previews.** Each page's head repeats its title and description in Open Graph and X card tags, beside its absolute address and the preview picture's. A new title or description changes there too, and a domain (open decision 1) changes every address: `grep -rn 'irie-people.github.io/irie' site/` finds them. When the hero line changes, `docs/preview.html` draws the picture again.
 - **Links out.** The site links to `github.com/irie-people/irie`, `irie-people/stake` and `irie-people/steak`. None of them was public on 2026-10-26, so those links fail until they are.
 

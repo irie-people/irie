@@ -385,6 +385,15 @@ video.demo-box {
   font-size: 0.95rem;
 }
 
+/* The intro at the top of Home: 16:9 and as wide as the page, with sound.
+   Its disclosure sits under it, and its words open on request. */
+.demo-box.wide { aspect-ratio: 16 / 9; max-width: none; }
+.intro { margin-top: 1.75rem; }
+.intro .disclosure { display: block; margin-top: 0.35rem; font-size: 0.85rem; }
+.script { margin-top: 0.75rem; max-width: 42rem; }
+.script summary { cursor: pointer; color: var(--link); font-weight: 650; }
+.script p { color: var(--ink-soft); }
+
 /* Steps (Get started) */
 
 .steps { counter-reset: step; list-style: none; padding: 0; margin-top: 1.25rem; }

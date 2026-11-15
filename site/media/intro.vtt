@@ -1,0 +1,90 @@
+WEBVTT
+
+1
+00:00:00.800 --> 00:00:04.119
+One coding agent is
+easy to keep an eye on.
+
+2
+00:00:04.169 --> 00:00:08.013
+Run four at once, and you lose
+track of which one needs you.
+
+3
+00:00:08.513 --> 00:00:13.436
+Irie runs your AI coding agents
+side by side, in one calm view.
+
+4
+00:00:13.486 --> 00:00:19.198
+Type a task, and it gets its own card,
+its own terminal and its own git worktree.
+
+5
+00:00:19.898 --> 00:00:23.135
+When an agent needs you,
+its card turns red.
+
+6
+00:00:23.185 --> 00:00:26.755
+Answer it in its terminal,
+and it goes back to work.
+
+7
+00:00:26.855 --> 00:00:28.504
+The rest stay calm.
+
+8
+00:00:29.204 --> 00:00:32.446
+Your agents run in tmux,
+not in the window.
+
+9
+00:00:32.496 --> 00:00:35.146
+Close the window, and they keep working.
+
+10
+00:00:35.246 --> 00:00:37.906
+Open it again, and nothing has stopped.
+
+11
+00:00:38.606 --> 00:00:41.861
+Send small jobs to a
+model on your own machine.
+
+12
+00:00:41.911 --> 00:00:44.012
+It costs nothing per token.
+
+13
+00:00:44.062 --> 00:00:46.888
+Keep the strongest
+model for the hard ones.
+
+14
+00:00:46.938 --> 00:00:50.347
+Irie works with any agent
+that runs in a terminal,
+
+15
+00:00:50.387 --> 00:00:53.157
+with the deepest support for Claude Code.
+
+16
+00:00:54.057 --> 00:00:57.745
+Irie has no server,
+no account and no telemetry.
+
+17
+00:00:57.845 --> 00:01:01.669
+It's free and open source,
+with no company behind it.
+
+18
+00:01:01.769 --> 00:01:05.236
+One line installs it,
+on a Mac or on Linux.
+
+19
+00:01:05.536 --> 00:01:07.027
+Everything irie.
