@@ -598,6 +598,10 @@ fn run(o: &Opts) -> Result<i32, String> {
                     None => {
                         failed_tests += 1;
                         p.failed.push(t.clone());
+                        // What it printed holds why, such as a timeout's
+                        // panic, which names the tests still running.
+                        p.reports
+                            .extend(out.parsed.report(t).into_iter().map(str::to_string));
                         p.reports.push(format!(
                             "--- FAIL: {t} (no result: its process ended before it did)"
                         ));
