@@ -42,13 +42,6 @@ struct ParkArgs: Encodable {
     var before: String?
 }
 
-/// Where a dragged card would land: just above or just below the card under
-/// the pointer.
-struct DropMark: Equatable {
-    var target: String
-    var below: Bool
-}
-
 extension Session {
     var isFrozen: Bool { state == "frozen" }
     var isPromoted: Bool { (priority ?? 0) > 0 }
@@ -127,7 +120,7 @@ extension Store {
     /// Asks the core to park or unpark s, last in the group it joins or just
     /// before the session a drag dropped it on, and says where it went.
     /// Should the core refuse, the cards go back as they were.
-    private func park(_ s: Session, _ on: Bool, before: String? = nil, was: [Session]) async {
+    func park(_ s: Session, _ on: Bool, before: String? = nil, was: [Session]) async {
         do {
             _ = try await client.call(on ? "park" : "unpark", ParkArgs(session: s.id, before: before), as: Empty.self)
             let place = before != nil ? "where you dropped it" : on ? "out of the way at the end of the list" : "last in the list"
@@ -182,35 +175,13 @@ extension Store {
         drawnGroups.first { g in g.sessions.contains { $0.id == id } }
     }
 
-    /// Whether the held card can land on target: another card of its group,
-    /// or one across the Parked group's edge. There it is parked, or comes
-    /// back into its own group unparked, so in the Repo view only among its
-    /// repo's cards.
-    func canDrop(onto target: Session) -> Bool {
-        guard let id = dragging, id != target.id, var held = sessions.first(where: { $0.id == id }) else { return false }
-        guard held.isParked == target.isParked || canPark else { return false }
-        // Across Pinned's edge it is pinned or unpinned there (Tabs.swift);
-        // another machine's card never pins.
-        guard held.isPinned == target.isPinned || canPin && held.peerName == nil else { return false }
-        held.parked = target.isParked
-        held.pinned = target.isPinned
-        return groupID(of: held) == groupID(of: target)
-    }
-
-    /// Where the held card lands on target: in target's place, so below it
-    /// when it comes from above and above it when it comes from below.
-    func mark(onto target: Session) -> DropMark? {
-        guard canDrop(onto: target), let id = dragging,
-              let from = sessions.firstIndex(where: { $0.id == id }),
-              let to = sessions.firstIndex(where: { $0.id == target.id }) else { return nil }
-        return DropMark(target: target.id, below: from < to)
-    }
-
-    /// Puts session id in target's place, at once, and tells the core.
-    /// Across the Parked group's edge it is parked or unparked there, as one
-    /// park that says where it went, so the core moves it once and one undo
-    /// takes it back; among the cards of another group of yours, or of
-    /// none, it joins that group or leaves its own there (Groups.swift).
+    /// Puts session id in target's place, at once, and tells the core: Move
+    /// Up and Move Down, and the Move keys (Tabs.swift). Across the Parked
+    /// group's edge it is parked or unparked there, as one park that says
+    /// where it went, so the core moves it once and one undo takes it back;
+    /// among the cards of another group of yours, or of none, it joins that
+    /// group or leaves its own there (Groups.swift). A drag lands by
+    /// Drops.swift instead.
     func reorder(_ id: String, onto target: Session) {
         guard let from = sessions.firstIndex(where: { $0.id == id }),
               let to = sessions.firstIndex(where: { $0.id == target.id }), from != to else { return }
@@ -453,62 +424,20 @@ struct ControlLines: View {
     }
 }
 
-/// Lets a card be dragged to another place in its group, or across the
-/// Parked group's edge, with a line where it would land.
+/// Lets this Mac's card be dragged, with every card picked with it, to
+/// another place in the list (Drops.swift). It fades while it is held.
 @MainActor
 struct Reorderable: ViewModifier {
     @Environment(Store.self) private var store
     let session: Session
 
     func body(content: Content) -> some View {
-        content
-            .onDrag {
-                store.dragging = session.id
-                store.draggingGroup = nil
-                // Held near the list's edge, it scrolls the list (DragScroll.swift).
-                NotificationCenter.default.post(name: .irieDragBegan, object: nil)
-                return NSItemProvider(object: session.id as NSString)
-            }
-            .onDrop(of: [.text], delegate: CardDrop(store: store, target: session))
-            .overlay(alignment: store.dropMark?.below == true ? .bottom : .top) {
-                if store.dropMark?.target == session.id {
-                    Capsule().fill(Theme.accent).frame(height: 3).padding(.horizontal, 6)
-                        .offset(y: store.dropMark?.below == true ? 5 : -5)
-                        .allowsHitTesting(false)
-                }
-            }
-    }
-}
-
-@MainActor
-private struct CardDrop: DropDelegate {
-    let store: Store
-    let target: Session
-
-    /// A group held by its header lands in the card's place, in its
-    /// group (Groups.swift); a card as before.
-    private var holdsGroup: Bool { store.draggingGroup != nil }
-
-    func validateDrop(info: DropInfo) -> Bool { holdsGroup ? store.canDropGroup(onto: target) : store.canDrop(onto: target) }
-
-    func dropEntered(info: DropInfo) { store.dropMark = holdsGroup ? store.markGroup(onto: target) : store.mark(onto: target) }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: validateDrop(info: info) ? .move : .forbidden)
-    }
-
-    func dropExited(info: DropInfo) {
-        if store.dropMark?.target == target.id { store.dropMark = nil }
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        if holdsGroup { return store.dropGroup(onto: target) }
-        defer {
-            store.dragging = nil
-            store.dropMark = nil
+        if session.peerName == nil {
+            content
+                .onDrag { store.beginDrag(card: session) }
+                .opacity(store.heldCards.contains(session.id) ? 0.45 : 1)
+        } else {
+            content
         }
-        guard let id = store.dragging, store.canDrop(onto: target) else { return false }
-        store.reorder(id, onto: target)
-        return true
     }
 }
