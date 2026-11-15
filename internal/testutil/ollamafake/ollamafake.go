@@ -1,14 +1,17 @@
 // Package ollamafake is a stand-in for an Ollama server in Irie's tests: the
 // parts of Ollama's API Irie uses (version, tags, show, ps, the Anthropic
-// messages endpoint and pull), as Ollama's API reference describes them, for
-// a few synthetic models. A model it loads gets the server's context, cut to
-// the model's own.
+// messages endpoint, embed and pull), as Ollama's API reference describes
+// them, for a few synthetic models. A model it loads gets the server's
+// context, cut to the model's own.
 package ollamafake
 
 import (
 	"encoding/json"
+	"hash/fnv"
 	"net/http"
+	"strings"
 	"sync"
+	"unicode"
 )
 
 // Model is one model of the server.
@@ -18,6 +21,7 @@ type Model struct {
 	Tools   bool   `json:"tools"`   // it can call tools
 	Context int    `json:"context"` // the longest context it takes; 0 = 262144
 	Runner  string `json:"runner"`  // the engine /api/show names; "" = llamacpp
+	Embeds  bool   `json:"embeds"`  // an embedding model, which /api/embed serves
 }
 
 // Server answers Ollama's API.
@@ -28,6 +32,23 @@ type Server struct {
 	models []Model
 	loaded map[string]bool
 	Loads  int // POST /v1/messages calls
+	Embeds int // texts embedded by POST /api/embed
+}
+
+// embedDims is the length of the fake's embeddings.
+const embedDims = 64
+
+// Embedding is the fake's embedding of a text: each of its words, lower
+// case, hashed into one of embedDims counts, so texts that share words
+// are near.
+func Embedding(text string) []float64 {
+	v := make([]float64, embedDims)
+	for _, w := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		h := fnv.New32a()
+		h.Write([]byte(w))
+		v[h.Sum32()%embedDims]++
+	}
+	return v
 }
 
 // New returns a server with models.
@@ -123,6 +144,37 @@ func (s *Server) Handler() http.Handler {
 		s.loaded = map[string]bool{req.Model: true}
 		reply(w, map[string]any{"id": "msg_fake", "type": "message", "role": "assistant", "model": req.Model,
 			"content": []map[string]string{{"type": "text", "text": "OK"}}, "stop_reason": "max_tokens"})
+	})
+	mux.HandleFunc("POST /api/embed", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model string `json:"model"`
+			Input any    `json:"input"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		m := s.find(req.Model)
+		if m == nil || !m.Embeds {
+			w.WriteHeader(http.StatusNotFound)
+			reply(w, map[string]string{"error": "model '" + req.Model + "' not found"})
+			return
+		}
+		var in []string
+		switch v := req.Input.(type) {
+		case string:
+			in = []string{v}
+		case []any:
+			for _, x := range v {
+				text, _ := x.(string)
+				in = append(in, text)
+			}
+		}
+		out := make([][]float64, len(in))
+		for i, t := range in {
+			out[i] = Embedding(t)
+		}
+		s.Embeds += len(in)
+		reply(w, map[string]any{"model": req.Model, "embeddings": out})
 	})
 	mux.HandleFunc("GET /api/ps", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
