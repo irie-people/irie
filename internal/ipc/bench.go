@@ -26,9 +26,12 @@ type BenchArgs struct {
 }
 
 // BenchResult is the bench started, or every bench, the newest first.
+// Shown says Bench is one asked after by its id, which a task of nothing
+// but a bench's id does, rather than one that started.
 type BenchResult struct {
 	Bench   *Bench  `json:"bench,omitempty"`
 	Benches []Bench `json:"benches,omitempty"`
+	Shown   bool    `json:"shown,omitempty"`
 }
 
 // A bench's states.

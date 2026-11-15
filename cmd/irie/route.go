@@ -245,7 +245,19 @@ func ctlBench(args []string) error {
 	if err := ipc.Call(sock, 10*time.Minute, ipc.OpBench, a, &r); err != nil {
 		return err
 	}
-	if !*wait {
+	// A bench's id shows that bench, and with --wait waits for its verdict.
+	if r.Shown && r.Bench != nil {
+		if b := *r.Bench; !*wait || b.State == ipc.BenchDone || b.State == ipc.BenchFailed {
+			if *asJSON {
+				return json.NewEncoder(os.Stdout).Encode(b)
+			}
+			printBench(os.Stdout, b)
+			if *wait && b.State == ipc.BenchFailed {
+				return errors.New(b.Problem)
+			}
+			return nil
+		}
+	} else if !*wait {
 		if *asJSON {
 			return json.NewEncoder(os.Stdout).Encode(r.Bench)
 		}

@@ -86,4 +86,4 @@ func firstLine(task string) string {
 }
 
 // BenchUsage is how `irie ctl bench` is used.
-const BenchUsage = "usage: " + brand.Slug + " ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK...\n       " + brand.Slug + " ctl bench [--json]   lists the benches"
+const BenchUsage = "usage: " + brand.Slug + " ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK...\n       " + brand.Slug + " ctl bench [--json]   lists the benches\n       " + brand.Slug + " ctl bench [--wait] [--json] ID   shows one, or waits for its verdict"

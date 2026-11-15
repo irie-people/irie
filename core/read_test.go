@@ -286,6 +286,11 @@ func TestSaidWordsWhatHappened(t *testing.T) {
 			InputResult{Did: InputAnswered, Op: OpUndo, Text: "Nothing to undo."}},
 		{"route", Step{Op: OpRoute}, RouteChoice{Reason: "small: local is the cheapest per success"}, nil,
 			InputResult{Did: InputAnswered, Op: OpRoute, Text: "small: local is the cheapest per success"}},
+		{"bench", Step{Op: OpBench}, BenchResult{Bench: &Bench{ID: "b1", Task: "fix it", Profile: "dory", Judge: "claude", Runs: []BenchRun{{}, {}}}}, nil,
+			InputResult{Did: InputRan, Op: OpBench, Text: "Started bench b1: 2 runs of +dory on “fix it”. Once they are through, +claude judges them, makes the one result and rewrites +dory's playbook."}},
+		// A bench's id shows that bench rather than start one.
+		{"bench by its id", Step{Op: OpBench}, BenchResult{Bench: &Bench{ID: "b1", Task: "fix it", Profile: "dory", Class: "small", State: BenchRunning, Runs: []BenchRun{{}, {}}}, Shown: true}, nil,
+			InputResult{Did: InputAnswered, Op: OpBench, Text: "b1  running  +dory  small  -/-  fix it"}},
 		{"freeze one", Step{Op: OpFreeze, Session: login}, FreezeResult{Sessions: []string{"s1"}}, nil,
 			InputResult{Did: InputRan, Op: OpFreeze, Session: login, Text: "Froze fix login."}},
 		{"thaw all", Step{Op: OpThaw}, FreezeResult{Sessions: []string{"s2", "s3"}}, nil,
