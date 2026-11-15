@@ -465,6 +465,8 @@ struct Reorderable: ViewModifier {
             .onDrag {
                 store.dragging = session.id
                 store.draggingGroup = nil
+                // Held near the list's edge, it scrolls the list (DragScroll.swift).
+                NotificationCenter.default.post(name: .irieDragBegan, object: nil)
                 return NSItemProvider(object: session.id as NSString)
             }
             .onDrop(of: [.text], delegate: CardDrop(store: store, target: session))
