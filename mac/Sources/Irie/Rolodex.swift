@@ -29,7 +29,9 @@ import SwiftUI
 
 /// What a pane shows.
 enum PaneKind: String, Codable, CaseIterable, Identifiable {
-    case terminal, browser, code, markets, mail
+    // Helpers and Dock are a session's own, so they are cards here, not
+    // tabs of the right sidebar, which is the same for every session.
+    case terminal, browser, code, markets, mail, helpers, dock
 
     var id: String { rawValue }
 
@@ -40,6 +42,8 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .code: return "Code"
         case .markets: return "Markets"
         case .mail: return "Mail"
+        case .helpers: return "Helpers"
+        case .dock: return "Dock"
         }
     }
 
@@ -50,6 +54,8 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .code: return "chevron.left.forwardslash.chevron.right"
         case .markets: return "chart.bar.doc.horizontal"
         case .mail: return "envelope"
+        case .helpers: return "person.2"
+        case .dock: return "square.grid.2x2"
         }
     }
 
@@ -61,6 +67,8 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .code: return "c"
         case .markets: return "m"
         case .mail: return "e"
+        case .helpers: return "h"
+        case .dock: return "d"
         }
     }
 
@@ -72,6 +80,8 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         case .code: return "This session’s files, saved as you type"
         case .markets: return "Your market map"
         case .mail: return "Your Gmail and Proton Mail, in one list"
+        case .helpers: return "This session’s helpers: what each was asked, does and found"
+        case .dock: return "Controls you keep an eye on, in this session’s folder"
         }
     }
 
@@ -718,6 +728,8 @@ final class RolodexModel {
             DeckPane(id: "fixturecode", kind: .code, slot: 0, files: [Fixture.codeFile, Fixture.codeOther], file: Fixture.codeFile),
             DeckPane(id: "fixturemap", kind: .markets, slot: 2),
         ] + (front == .mail ? [DeckPane(id: "fixturemail", kind: .mail, slot: 5)] : [])
+            + (front == .helpers ? [DeckPane(id: "fixturehelpers", kind: .helpers, slot: 3)] : [])
+            + (front == .dock ? [DeckPane(id: "fixturedock", kind: .dock, slot: 6)] : [])
         decks = [session: Deck(panes: panes, front: panes.first { $0.kind == front }?.id)]
         keys = panes.first { $0.kind == front }?.id
     }
@@ -1850,6 +1862,11 @@ private struct PaneContent: View {
         // Every account's mail beside the session, as the right sidebar's
         // Mail tab shows it (MailViews.swift).
         case .mail: MailTab()
+        // The session's own helpers and controls, which were tabs of the
+        // right sidebar (RightSidebar.swift, Dock.swift): the wheel shows
+        // beside the session on show, whose they are.
+        case .helpers: HelpersTab()
+        case .dock: DockTab()
         }
     }
 }

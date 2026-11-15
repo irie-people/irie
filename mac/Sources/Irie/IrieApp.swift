@@ -175,8 +175,8 @@ final class KeyRouter {
                 MainActor.assumeIsolated { store.showRow(n) }
                 return nil
             }
-            // ⇧⌘H shows the selected session's helpers, as View › Helpers
-            // (⌥⌘3) does.
+            // ⇧⌘H shows the selected session's helpers, in its Helpers card
+            // beside the terminal, as View › Session Helpers does.
             if irie, mods == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "h" {
                 MainActor.assumeIsolated { store.toggleHelpers() }
                 return nil

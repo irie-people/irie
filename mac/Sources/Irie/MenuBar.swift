@@ -253,8 +253,9 @@ struct IrieCommands: Commands {
                 .disabled(!f.canPopOut)
             // The right sidebar (RightSidebar.swift), with the key cmux and
             // VS Code give a right side bar, and its tabs, the one on show
-            // ticked. Helpers opens on the selected session's helper, as
-            // ⇧⌘H does (KeyRouter).
+            // ticked. They are the same for every session: Helpers is
+            // yours (YourHelpers.swift); a session's own are its Helpers
+            // card, Show Session Helpers below.
             Section("Right Sidebar") {
                 Button(f.sideTab == nil ? "Show Right Sidebar" : "Hide Right Sidebar", action: run { store.toggleSide() })
                     .keyboardShortcut("b", modifiers: [.command, .option])
@@ -262,7 +263,7 @@ struct IrieCommands: Commands {
                 // Variorum's while it is there or set up (VariorumTab.swift).
                 ForEach(f.sideTabs) { t in
                     Toggle(t.title, isOn: Binding(get: { f.sideTab == t }, set: { _ in
-                        MainActor.assumeIsolated { t == .helpers ? store.toggleHelpers() : store.toggleSideTab(t) }
+                        MainActor.assumeIsolated { store.toggleSideTab(t) }
                     }))
                     .keyboardShortcut(t.key, modifiers: [.command, .option])
                 }
@@ -281,6 +282,11 @@ struct IrieCommands: Commands {
             // Down to a strip of their tabs at the window's edge, or back.
             Button(f.panesFolded ? "Unfold Panes" : "Fold Panes", action: run { store.toggleFold() })
                 .keyboardShortcut("p", modifiers: [.command, .option, .shift])
+            // The selected session's helpers, its Helpers card; KeyRouter
+            // catches ⇧⌘H first, as it does ⌥Tab.
+            Button(f.helperShown ? "Hide Session Helpers" : "Show Session Helpers", action: run { store.toggleHelpers() })
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+                .disabled(f.name == nil)
             Menu("New Pane") {
                 ForEach(PaneKind.offered(f.plugins)) { k in
                     Button(k.title, action: run { store.newPane(k) })
