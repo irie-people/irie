@@ -19,6 +19,33 @@ type Want struct {
 	// "". Its window is linked into the view session, where it follows
 	// the size of the app's client, and the slot shows something else.
 	Split string
+	// Size is the size the Mac app shows a session's terminal at, and
+	// Sizes a session's own where it differs, by session: its panes beside
+	// one session take room they don't beside another (docs/MAC.md). Every
+	// agent window keeps its session's size, so a swap resizes no agent. A
+	// zero Size keeps every agent window at the slot's size.
+	Size  Size
+	Sizes map[string]Size
+	// Hold keeps irie:0 at the size a swap gave it (SwapIn) for a moment,
+	// until the app's terminal has taken that size too. Otherwise irie:0
+	// follows its latest client.
+	Hold bool
+}
+
+// Size is a window's size in cells.
+type Size struct{ W, H int }
+
+// fit is the size pane's window keeps: an agent's, its session's as the app
+// shows it; the placeholder's, the slot's, since the shown agent goes home
+// to that window.
+func (w Want) fit(p Pane, slot Pane) Size {
+	if isAgentPane(p) && w.Size.W > 0 && w.Size.H > 0 {
+		if z, ok := w.Sizes[p.IrieSession]; ok && z.W > 0 && z.H > 0 {
+			return z
+		}
+		return w.Size
+	}
+	return Size{slot.Width, slot.Height}
 }
 
 func (w Want) ui() []string          { return []string{w.Bin, "ui", "--supervise"} }
@@ -42,7 +69,9 @@ func isAgentPane(p Pane) bool { return p.Role == RoleAgent || p.Role == RoleMirr
 //   - with a Split, the view session holds its window and no other agent's,
 //     and that window follows the view's size; with none, there is no view
 //     session;
-//   - every agent window but the Split's has the slot's size.
+//   - irie:0 follows its latest client, unless held;
+//   - every agent window but the Split's has its session's size, or the
+//     slot's, and the shown agent's way home the slot's.
 //
 // Plan never kills an agent pane.
 func Plan(s Snapshot, w Want) [][]string {
@@ -164,6 +193,13 @@ func Plan(s Snapshot, w Want) [][]string {
 		return [][]string{{"resize-pane", "-Z", "-t", Slot}}
 	}
 
+	// A swap gives irie:0 the size of the session it shows (SwapIn), which
+	// stops it following its client; once that client has caught up, it
+	// follows it again, as tmux.conf has every window do.
+	if !w.Hold && ui.WindowSize != "" && ui.WindowSize != "latest" {
+		return [][]string{{"set-option", "-w", "-t", MainSession + ":0", "window-size", "latest"}}
+	}
+
 	split, cmds := planView(s, w, slot)
 	if cmds != nil {
 		return cmds
@@ -183,8 +219,8 @@ func Plan(s Snapshot, w Want) [][]string {
 			continue
 		}
 		seen[p.WindowID] = true
-		if p.WindowWidth != slot.Width || p.WindowHeight != slot.Height {
-			cmds = append(cmds, []string{"resize-window", "-t", p.WindowID, "-x", strconv.Itoa(slot.Width), "-y", strconv.Itoa(slot.Height)})
+		if z := w.fit(p, slot); p.WindowWidth != z.W || p.WindowHeight != z.H {
+			cmds = append(cmds, []string{"resize-window", "-t", p.WindowID, "-x", strconv.Itoa(z.W), "-y", strconv.Itoa(z.H)})
 		}
 	}
 	return cmds
@@ -248,7 +284,11 @@ func planView(s Snapshot, w Want, slot Pane) (string, [][]string) {
 // SwapIn returns the commands that show pane in the slot. While an agent is
 // shown its own window holds the placeholder, so it first goes home, then
 // pane moves in (DESIGN §2.3). Run them as one command list. A zoomed slot
-// stays zoomed.
+// stays zoomed. While zoomed, for the Mac app, irie:0 first takes the size
+// of pane's window, as the placeholder fills the slot, when the app shows
+// pane's session at another size than the one on show (Want.Size): so pane
+// comes in at its own size, and the app's terminal then takes that size
+// too. Hold irie:0 there until it has (Want.Hold).
 func SwapIn(s Snapshot, pane string, focus bool) ([][]string, error) {
 	target := s.Pane(pane)
 	if target == nil {
@@ -267,6 +307,10 @@ func SwapIn(s Snapshot, pane string, focus bool) ([][]string, error) {
 				return nil, err
 			}
 			cmds = append(cmds, home)
+		}
+		if slot.Zoomed && target.Session == AgentsSession && target.WindowPanes == 1 && target.WindowWidth > 0 && target.WindowHeight > 0 &&
+			(target.WindowWidth != slot.Width || target.WindowHeight != slot.Height) {
+			cmds = append(cmds, []string{"resize-window", "-t", MainSession + ":0", "-x", strconv.Itoa(target.WindowWidth), "-y", strconv.Itoa(target.WindowHeight)})
 		}
 		cmds = append(cmds, keep("swap-pane", "-d", "-s", target.ID, "-t", Slot))
 	}

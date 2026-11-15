@@ -46,6 +46,11 @@ final class ResizeHold {
     }
 
     private func hold() {
+        // One a swap held keeps holding, now for the drag.
+        if swapHeld {
+            swapHeld = false
+            return
+        }
         guard held == nil, room.width > 0, room.height > 0 else { return }
         held = room
     }
@@ -70,6 +75,29 @@ final class ResizeHold {
 
     private func letGo() {
         if held != nil { held = nil }
+    }
+
+    /// Holds the terminal at its size while a show is on its way to the
+    /// core, which swaps the session in at its own size (PaneSizes.swift):
+    /// let go of once the core has answered, or after a second.
+    @ObservationIgnored private var swaps = 0
+    @ObservationIgnored private var swapHeld = false
+
+    func holdForSwap() {
+        guard held == nil || swapHeld, poll == nil, room.width > 0, room.height > 0 else { return }
+        swaps += 1
+        let n = swaps
+        swapHeld = true
+        if held == nil { held = room }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            MainActor.assumeIsolated { if self?.swaps == n { self?.letGoOfSwap() } }
+        }
+    }
+
+    func letGoOfSwap() {
+        guard swapHeld else { return }
+        swapHeld = false
+        letGo()
     }
 }
 

@@ -192,7 +192,8 @@ On every tick the core checks these invariants and repairs any it finds broken:
 - The slot is zoomed exactly while the Mac app is open ([MAC.md](MAC.md)), and swaps keep the zoom.
 - The sidebar is `ui.sidebar_width` wide, except while the slot is zoomed.
 - While the Mac app splits a session, its pane is out of the slot, and `irie-view` holds its window and no other agent's, current and at `window-size latest`. With no split there is no `irie-view`.
-- Every agent window but the split one has the slot's size, so a swap never resizes an agent: no SIGWINCH and no redraw jump.
+- Every agent window but the split one has the slot's size, so a swap never resizes an agent: no SIGWINCH and no redraw jump. While the Mac app is open it says the size it shows each session's terminal at (the `sizes` op), narrower beside the session's own panes, and each agent window has its own session's size instead; the shown agent's way home keeps the slot's.
+- `irie:0` follows its latest client (`window-size latest`), except for a moment after a swap: while the app is open, a swap first gives `irie:0` the size of the window coming in, as the placeholder fills the slot, so that agent comes in at its own size, and `irie:0` holds that size (`window-size manual`) for 1.5 s, until the app's terminal has taken it too.
 
 The core never kills a pane while it is in the slot; it swaps the pane home first.
 
