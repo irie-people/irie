@@ -84,9 +84,13 @@ type dogStop struct {
 	unproven string    // what its last message says that its record contradicts (ipc.UnprovenTests), or ""
 }
 
-// jotTree is a worktree that holds a jot's own work, and its repo.
+// jotTree is a worktree that holds a jot's own work, and its repo. A
+// worktree Irie dropped once its work had landed (drop.go) is read from
+// its branch.
 type jotTree struct {
 	path, repo string
+	branch     string
+	dropped    bool
 }
 
 // looseIn is what one worktree of a jot holds that has not landed.
@@ -100,6 +104,8 @@ type looseIn struct {
 // git runs without c.mu.
 type jotLook struct {
 	id, cwd, repo, worktree string
+	branch                  string // its worktree's branch
+	dropped                 bool   // Irie dropped its worktree (drop.go)
 	created                 time.Time
 	copied                  []string
 	vendors                 []string  // the conversations its agent ran as
@@ -119,7 +125,7 @@ func (c *Core) isJot(x *session) bool {
 
 // lookAt is what a look at jot x needs. The caller holds c.mu.
 func (c *Core) lookAt(x *session, fresh bool) jotLook {
-	l := jotLook{id: x.id, cwd: x.cwd, repo: x.repo, worktree: x.worktree, created: x.created, copied: x.copied, places: x.dog.places}
+	l := jotLook{id: x.id, cwd: x.cwd, repo: x.repo, worktree: x.worktree, branch: x.branch, created: x.created, copied: x.copied, places: x.dog.places}
 	for _, v := range []string{x.vendorID, x.track.vendorID} {
 		if v != "" && !slices.Contains(l.vendors, v) {
 			l.vendors = append(l.vendors, v)
@@ -161,7 +167,7 @@ func (c *Core) knownRepos() []string {
 func (c *Core) placesOf(l jotLook, repos []string, timeout time.Duration) []jotTree {
 	switch {
 	case l.worktree != "":
-		return []jotTree{{path: l.worktree, repo: l.repo}}
+		return []jotTree{{path: l.worktree, repo: l.repo, branch: l.branch, dropped: l.dropped}}
 	case l.repo != "":
 		return nil
 	case !l.fresh:
@@ -218,6 +224,11 @@ func (c *Core) readJot(l jotLook, repos []string, timeout time.Duration) ([]jotT
 	for _, p := range places {
 		land := c.landOf(p.repo)
 		got, err := worktree.ReadLoose(p.path, land, l.created, l.copied, timeout)
+		if err != nil && p.dropped && !exists(p.path) {
+			// What has not landed since, as when the land branch moved
+			// back, is on its branch.
+			got, err = worktree.ReadBranch(p.repo, p.branch, land, l.created, timeout)
+		}
 		switch {
 		case err != nil && !exists(p.path):
 			// The agent removed it once its work was done.
@@ -536,7 +547,7 @@ func (c *Core) closedJot(r closedRecord) (jotLook, bool) {
 	if _, err := os.Stat(c.paths.TaskFile(r.ID)); err != nil {
 		return jotLook{}, false
 	}
-	l := jotLook{id: r.ID, cwd: spec.Cwd, repo: spec.Repo, worktree: spec.Worktree, created: r.Created, copied: spec.Copied, fresh: true}
+	l := jotLook{id: r.ID, cwd: spec.Cwd, repo: spec.Repo, worktree: spec.Worktree, branch: spec.Branch, dropped: c.wasDropped(spec.Worktree), created: r.Created, copied: spec.Copied, fresh: true}
 	if r.VendorID != "" {
 		l.vendors = []string{r.VendorID}
 	}

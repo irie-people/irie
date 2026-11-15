@@ -368,6 +368,7 @@ func Run(o Options) error {
 	c.loadGroups()
 	c.loadHues()
 	c.loadClosed()
+	c.loadDrops()
 	c.loadMeter(time.Now())
 	c.loadState()
 	c.loadTrodHand()
@@ -787,6 +788,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.mailOp(peer, a)
+	case ipc.OpWorktrees:
+		var a ipc.WorktreesArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.worktreesOp(peer, a)
 	}
 	return c.Call(op, raw)
 }
@@ -820,6 +827,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
+			ipc.OpWorktrees,
 		})}, nil
 	case ipc.OpPerf:
 		return c.perfResult(), nil

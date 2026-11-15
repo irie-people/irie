@@ -4,15 +4,17 @@ package core
 // pane out of the slot and marks it closing, so its row goes at once, then
 // ends the agent gently: SIGCONT to all it runs, in case it is frozen, then
 // SIGTERM through its host, and SIGKILL after closeWait. A conversation its
-// agent handed to Claude Code's background ends too. The worktree and the
-// session's files stay. A session you close is done: nothing brings it back
-// but you, and the jot dog lets it be. Reopen, close's undo, brings the
-// session back in the same row: it carries the conversation on, or starts
-// the task again when the agent never got that far. Which sessions are
-// closed, and which closed on their own, is derived from the journal's
-// ui.closed and ui.reopened events, so it survives a restart. A session
-// lost with Irie's tmux server is recorded as closed on its own when the
-// core next starts (lost.go).
+// agent handed to Claude Code's background ends too. The session's files
+// stay, and so does its worktree, unless its work has landed: then the
+// checkout goes once the agent has ended, and its branch stays (drop.go). A
+// session you close is done: nothing brings it back but you, and the jot
+// dog lets it be. Reopen, close's undo, brings the session back in the same
+// row, its worktree added back if it went: it carries the conversation on,
+// or starts the task again when the agent never got that far. Which
+// sessions are closed, and which closed on their own, is derived from the
+// journal's ui.closed and ui.reopened events, so it survives a restart. A
+// session lost with Irie's tmux server is recorded as closed on its own
+// when the core next starts (lost.go).
 
 import (
 	"errors"
@@ -49,6 +51,9 @@ type closes struct {
 	list   []closedRecord     // newest first
 	done   map[string]bool    // every session closed now, past maxClosed too, by id
 	ending map[string]*ending // closing panes whose agents are still ending, by pane id
+	// dropped are the worktrees Irie dropped that no reopen has added back,
+	// by path (drop.go).
+	dropped map[string]droppedTree
 	// cold is when the next closed session's prompt cache runs out, after
 	// which the closed list says what reopening it costs (rebuilds.go).
 	cold time.Time
@@ -516,6 +521,8 @@ func (c *Core) end(p tmux.Pane) {
 			c.log.Warn("close: kill-window", "pane", p.ID, "err", err)
 		}
 		delete(c.closes.ending, p.ID)
+		// Nothing of its agent runs now, so its worktree may go (drop.go).
+		c.dropOnEnd(e.session)
 	}()
 }
 
@@ -610,6 +617,10 @@ func (c *Core) reopen(a ipc.ReopenArgs) (ipc.Session, error) {
 	}
 
 	j, err := c.reopenJob(r)
+	if err == nil {
+		// Its worktree comes back first, if Irie dropped it (drop.go).
+		err = c.restoreWorktree(r, &j)
+	}
 	if err == nil && j.resume != "" {
 		err = c.freeConversation(r, j)
 	}
@@ -704,7 +715,8 @@ func (c *Core) reopenJob(r closedRecord) (job, error) {
 	if err != nil {
 		return job{}, fmt.Errorf("cannot reopen %s: %v", r.Name, err)
 	}
-	if fi, err := os.Stat(spec.Cwd); err != nil || !fi.IsDir() {
+	// A worktree Irie dropped comes back as the session reopens.
+	if fi, err := os.Stat(spec.Cwd); (err != nil || !fi.IsDir()) && !restorable(spec) {
 		return job{}, ipc.Errorf(ipc.CodeBadArgs, "%s ran in %s, which is gone", r.Name, spec.Cwd)
 	}
 	profile, ok := c.profile(spec.Profile)

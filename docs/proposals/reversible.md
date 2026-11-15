@@ -1,6 +1,6 @@
 # Reversible Irie: what the Toffoli gate teaches
 
-Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3), and step 2, the rebuild meter, on 2026-11-14 (DESIGN §6.3); steps 3 to 6 are proposals. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
+Date: 2026-11-07. Status: step 1 built (d03b8d1, 9231cf3); step 2, the rebuild meter, on 2026-11-14 (DESIGN §6.3); step 5, dropping merged worktrees, on 2026-11-15, at the maintainer's word (DESIGN §4.5); steps 3, 4 and 6 are proposals. An agent (Claude Code) wrote it after researching the Toffoli gate, reversible computing and quantum computers for the maintainer. Every source is listed in [PROVENANCE.md](../../PROVENANCE.md).
 
 **In short.** The Toffoli gate, or controlled-controlled-NOT, flips its target bit only when both control bits are 1. It keeps its inputs, so no information is lost, and run twice it undoes itself. Any computation can be built from such gates (Toffoli, 1980). Bennett (1973) showed such a computation need not pile up garbage either: compute, copy the answer, then run the steps backwards to clean the scratch.
 
@@ -32,7 +32,11 @@ Neither reversible chips nor quantum computers will make Irie faster before 2030
    - Irie causes rebuilds of its own: a freeze of more than an hour (§4.10), close and reopen, and a mass thaw.
 3. **The rest of undo.** Pause, notes, and freezing or thawing them all as one step that names its sessions.
 4. **Inside and outside.** Mark each op by whether its effect leaves Irie. Inside ops never ask, since undo is there. Outside ops are the ones to confirm or have Mikael weigh. A mass thaw is an inside action with outside effects: each agent signs in again.
-5. **Uncompute merged worktrees.** A closed session whose branch is in `live`, and whose worktree is clean, needs only its branch. Remove the checkout, and let reopen add it back. This changes "closing keeps the worktree" (§4.5), so the maintainer decides. It saves about 9 MB a session.
+5. **Uncompute merged worktrees. Built** (DESIGN §4.5), approved on 2026-11-15. A closed session whose branch is in its repo's land branch (`live` for Irie's own), and whose worktree is clean, needs only its branch.
+   - Once its agent has ended, Irie removes the checkout with `git worktree remove` and keeps the branch, while nothing runs in the folder: no process works there, runs a program from it or has a file in it open.
+   - Reopen, from history or from undo, adds it back at the same path with `git worktree add`, which runs the repo's hooks.
+   - The journal's `worktree.dropped` keeps the path, branch and commit, to put it back by hand. `irie ctl worktrees` is a dry run of the sweep of the sessions closed before; `--drop` does it.
+   - It saves the checkout's room: about 9 MB a session, more with build output.
 6. **Quantum watch.** The key exchange is post-quantum. The certificates (ECDSA P-256) and SSH keys (Ed25519) are not, which matters only against an attacker who has a quantum computer at the time of connecting.
    - Move Irie's authority to ML-DSA once phones accept such certificates. Go 1.27's `crypto/mldsa` and `crypto/x509` can already make them.
    - Keep `go.mod`'s `go` line at 1.24 or later, since a lower line turns the hybrid off.

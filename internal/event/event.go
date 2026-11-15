@@ -111,6 +111,12 @@ const (
 	// session's transcript (DESIGN §6.3): what it wrote again, what that
 	// cost and, when Irie knows, what woke the session.
 	CacheRebuilt = "cache.rebuilt"
+	// WorktreeDropped records that Irie removed a closed session's worktree
+	// once its branch was in its repo's land branch, keeping the branch, so
+	// it can be put back by hand; WorktreeRestored, that reopen added it
+	// back from the branch (DESIGN §4.5).
+	WorktreeDropped  = "worktree.dropped"
+	WorktreeRestored = "worktree.restored"
 )
 
 var kinds = map[string]bool{}
@@ -122,6 +128,7 @@ func init() {
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
 		OutcomeRated, OutcomeEscalated, RouteFailover, RouteFallback, ModelSwitched, DogNudged, TrodSent, BoostOn, BoostOff, CacheRebuilt,
+		WorktreeDropped, WorktreeRestored,
 	} {
 		kinds[k] = true
 	}

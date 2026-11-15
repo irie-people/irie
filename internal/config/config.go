@@ -780,6 +780,10 @@ type Worktree struct {
 	BranchPrefix string   `toml:"branch_prefix"`
 	Copy         []string `toml:"copy"` // untracked files copied in, besides those of the repo's .worktreeinclude
 	Submodules   bool     `toml:"submodules"`
+	// Drop removes a closed session's worktree once its branch is in its
+	// repo's land branch (dog.land) and nothing else is in it or runs in
+	// it, keeping the branch; reopen adds the worktree back (DESIGN §4.5).
+	Drop bool `toml:"drop"`
 }
 
 type Tmux struct {
@@ -907,6 +911,7 @@ func Default() Config {
 			BranchPrefix: brand.Slug + "/",
 			Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
 			Submodules:   true,
+			Drop:         true,
 		},
 		Tmux:    Tmux{Socket: brand.Slug},
 		Journal: Journal{KeepDays: 30, ToolInput: "summary"},

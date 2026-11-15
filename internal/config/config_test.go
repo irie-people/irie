@@ -118,6 +118,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 		BranchPrefix: "irie/",
 		Copy:         []string{".claude/settings.local.json", "CLAUDE.local.md"},
 		Submodules:   true,
+		Drop:         true,
 	}
 	if !reflect.DeepEqual(c.Worktree, wantTree) {
 		t.Errorf("worktree = %+v, want %+v", c.Worktree, wantTree)
@@ -238,6 +239,7 @@ base = "origin/main"
 branch_prefix = "agent/"
 copy = [".env.local"]
 submodules = false
+drop = false
 
 [tmux]
 path = "/opt/homebrew/bin/tmux"
