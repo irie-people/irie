@@ -567,6 +567,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[route]\nmin_accuracy = 1.5\n", "route.min_accuracy"},
 		{"[route]\nlocal_min_accuracy = 0\n", "route.local_min_accuracy"},
 		{"[route]\nlocal_min_accuracy = 1.2\n", "route.local_min_accuracy"},
+		{"[route.embed]\nurl = \"127.0.0.1:11434\"\n", "route.embed.url"},
+		{"[route.embed]\nnear = 1\n", "route.embed.near"},
 		{"[profiles.x]\nlocal = { runtime = \"ollama\", peer = \"Asahi\" }\n", "only a llama-server profile runs on a peer's server"},
 		{"[profiles.x]\nlocal = { runtime = \"llama-server\", peer = \"a b\" }\n", "must be a peer's name"},
 		{"[bench]\nruns = 0\n", "bench.runs"},

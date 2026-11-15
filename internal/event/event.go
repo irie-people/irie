@@ -82,6 +82,11 @@ const (
 	OutcomeRated     = "outcome.rated"
 	OutcomeEscalated = "outcome.escalated"
 	RouteFailover    = "route.failover"
+	// DelegateTimedOut records that a delegated session was still at work
+	// when its caller's wait ran out (wait_ms), so Irie stopped it and handed
+	// the subtask on (to_profile): the router counts it as an answer that took at
+	// least the wait (DESIGN §6.4).
+	DelegateTimedOut = "delegate.timed_out"
 	// RouteFallback records that Irie switched a session to its profile's
 	// fallback model, in place, after its own model's usage limit stopped
 	// a turn (DESIGN §6.4).
@@ -121,7 +126,7 @@ func init() {
 		InputNeeded, TurnEnded, TurnFailed, SubagentStarted, SubagentFinished, SessionEnded, PaneExited,
 		GateSet, GateHeld, GateReleased, FreezeOn, FreezeOff, PrioritySet, NoteQueued, NoteDelivered,
 		UIRenamed, UIParked, UIUnparked, UIPinned, UIUnpinned, UISubStopped, UISpaced, UIGrouped, UIClosed, UIReopened, UIUndo, UIRedo, UIShown, UIReordered,
-		OutcomeRated, OutcomeEscalated, RouteFailover, RouteFallback, ModelSwitched, DogNudged, TrodSent, BoostOn, BoostOff, CacheRebuilt,
+		OutcomeRated, OutcomeEscalated, RouteFailover, DelegateTimedOut, RouteFallback, ModelSwitched, DogNudged, TrodSent, BoostOn, BoostOff, CacheRebuilt,
 	} {
 		kinds[k] = true
 	}

@@ -19,6 +19,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -161,9 +162,11 @@ type Counts struct {
 	costed    int
 }
 
-// Stats are the user's outcomes, by profile and class.
+// Stats are the user's outcomes, by profile and class, and how long each
+// profile took to answer.
 type Stats struct {
-	by map[[2]string]*Counts
+	by    map[[2]string]*Counts
+	times map[[2]string][]timed
 }
 
 // Add notes one outcome. cost is what the session cost in dollars, at list
@@ -231,6 +234,10 @@ type Candidate struct {
 	PerSuccess float64 `json:"per_success"`     // Cost over Accuracy
 	Usable     bool    `json:"usable"`          // it can run the task now
 	Note       string  `json:"note,omitempty"`
+	// Time is how long it takes to answer such a task, from Timed of its
+	// sessions' answers; 0 when none says.
+	Time  time.Duration `json:"time,omitempty"`
+	Timed int           `json:"timed,omitempty"`
 }
 
 // need is the accuracy c needs to be chosen: its own floor, else floor.
