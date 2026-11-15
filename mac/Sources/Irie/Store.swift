@@ -107,6 +107,12 @@ final class Store {
     /// Your helpers as the core last said they stand; empty from a core
     /// from before them.
     var ownHelpers: [HelperInfo] = []
+    /// The core serves the sizes op: it keeps each agent's window at the
+    /// size its session's terminal shows at (PaneSizes.swift); what it last
+    /// heard, and the send on its way.
+    @ObservationIgnored var canSizes = false
+    @ObservationIgnored var sizesSent: SizesArgs?
+    @ObservationIgnored var sizing: Task<Void, Never>?
     /// The core serves the vpn op: its build has the privacy plugin
     /// (DESIGN §4.17), whose VPN items in the Plugins menu show only then.
     private(set) var canVPN = false
@@ -260,7 +266,9 @@ final class Store {
     /// The Claude Code sessions outside Irie, the one selected, the one a
     /// move asks about, and the one moving (OutsideSection.swift).
     var outside: [OutsideSession] = []
-    var outsideSelection: String?
+    var outsideSelection: String? {
+        didSet { if outsideSelection != oldValue { rolodex.follow(paneSession?.id) } }
+    }
     var confirmingMove: OutsideSession?
     var moving: String?
     /// The closed sessions reopen can bring back, the last closed first
@@ -400,6 +408,10 @@ final class Store {
                 canUndo = hello.features.contains("undo")
                 canPlugins = hello.features.contains("plugins")
                 canHelpers = hello.features.contains("helpers")
+                // A core that restarted, or a new one, hears them again.
+                canSizes = hello.features.contains("sizes")
+                sizesSent = nil
+                sizesSoon()
                 notes.connected(serves: hello.features.contains("notepad"))
                 canVariorum = hello.features.contains("variorum")
                 knowsFeatures = true
@@ -670,6 +682,8 @@ final class Store {
     private func derive() {
         let row = selection.flatMap { id in sessions.first { $0.id == id } }
         if row != selectedRow { selectedRow = row }
+        // The panes beside it show as it last had them (Rolodex.swift).
+        rolodex.follow(paneSession?.id)
         let c = RowCounts(sessions)
         if c != counts { counts = c }
         if hasRows == sessions.isEmpty { hasRows = !sessions.isEmpty }
@@ -1063,6 +1077,9 @@ final class Store {
         if renaming != nil && renaming != id { endRename(commit: true) }
         // A card in another space takes the sidebar there (Spaces.swift).
         if let s = sessions.first(where: { $0.id == id }), s.peerName == nil, s.spaceKey != space { setSpace(s.spaceKey, showing: false) }
+        // Its panes show otherwise: the terminal keeps its size until the
+        // core has swapped it in (PaneSizes.swift).
+        if holdsForSwap(to: id) { ResizeHold.shared.holdForSwap() }
         // Each set is news to every view that read it, even to the same
         // value, so only what changes is set.
         if selection != id { selection = id }
@@ -1104,6 +1121,8 @@ final class Store {
                 }
             }
             showing = false
+            // The session is in: the terminal takes its size.
+            ResizeHold.shared.letGoOfSwap()
         }
     }
 
