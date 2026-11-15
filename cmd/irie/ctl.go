@@ -134,16 +134,27 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
   ` + brand.Slug + ` ctl preflight [--model MODEL] [--force] [PROFILE]
                                          check a local profile's model (default
                                          +local) as a spawn would, loading it
-  ` + brand.Slug + ` ctl route [--json] TASK...        where +auto would run a task, and why:
+  ` + brand.Slug + ` ctl route [--json] [--wait D] TASK...
+                                         where +auto would run a task, and why:
                                          each profile's accuracy for the task's
-                                         class, its cost and its cost per success
+                                         class, its cost, its cost per success and
+                                         how long it takes to answer; --wait as a
+                                         subtask its caller waits D for
+  ` + brand.Slug + ` ctl route --label small|medium|hard TASK... | --import FILE
+                                         give tasks their classes: a task takes
+                                         the class of the nearest of them, by
+                                         route.embed's model. FILE has JSON lines,
+                                         each with text and class
   ` + brand.Slug + ` ctl delegate [--to PROFILE] [--mode MODE] [--timeout D] TASK...
                                          from an agent: run a subtask in this
                                          directory on the cheapest profile accurate
-                                         enough for it, wait, and print its result.
+                                         enough for it that answers within D, wait,
+                                         and print its result. One still at work
+                                         at D is stopped and handed on to the next.
                                          Exits 3 when it needs a stronger model
                                          than the caller's cheaper ones, 4 when it
-                                         is still running at the timeout
+                                         is still running at the timeout and no
+                                         other profile can take it over
   ` + brand.Slug + ` ctl rate SESSION good|bad         rate a session's work; the router learns
                                          each profile's accuracy from it
   ` + brand.Slug + ` ctl bench [--runs N] [--judge PROFILE] [--wait] [^HOST] [+PROFILE] [@REPO] TASK...
@@ -295,6 +306,11 @@ func printList(w io.Writer, r ipc.ListResult) error {
 			// What its card says of its prompt-cache rebuilds today.
 			if r := s.Rebuilds; r != nil && r.Words != "" {
 				detail = strings.TrimPrefix(detail+" · "+r.Words, " · ")
+			}
+			// What its card says of an advisory for its harness or a
+			// package its lock names (DESIGN §4.21).
+			if l := s.Lock; l != nil && l.Words != "" {
+				detail = strings.TrimPrefix(detail+" · "+l.Words, " · ")
 			}
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.ID, s.State, s.Name, detail)
 		}
