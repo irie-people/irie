@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/irie-people/irie/internal/brand"
@@ -12,11 +14,16 @@ import (
 const remoteWindow = brand.Slug + "-remote"
 
 // remoteSpec is what the gateway runs with: the version and the settings
-// it reads only as it starts. Its pane keeps it in @irie_version, so a
-// gateway of another version or settings is started again.
+// it reads only as it starts, remote.panes among them. Its pane keeps it
+// in @irie_version, so a gateway of another version or settings is
+// started again.
 func (c *Core) remoteSpec() string {
 	r := c.cfg().Remote
-	return strings.Join([]string{c.version, fmt.Sprint(r.Port), r.Listen, r.Name}, " ")
+	panes := make([]string, 0, len(r.Panes))
+	for _, id := range slices.Sorted(maps.Keys(r.Panes)) {
+		panes = append(panes, fmt.Sprintf("%s=%d", id, r.Panes[id]))
+	}
+	return strings.Join([]string{c.version, fmt.Sprint(r.Port), r.Listen, r.Name, strings.Join(panes, ",")}, " ")
 }
 
 // keepRemote keeps the phone app's gateway, `irie remote serve`, running
