@@ -336,7 +336,7 @@ func (c *Core) dropOne(id string, prior *lookedTree) (ipc.ClosedTree, bool) {
 	case got.Keep != "":
 		t.Keep = got.Keep
 	case got.Commit != t.Commit:
-		t.Keep = "its branch moved while Irie looked"
+		t.Keep = "its branch moved while " + brand.Name + " looked"
 	}
 	if t.Keep != "" {
 		return t.ClosedTree, true
