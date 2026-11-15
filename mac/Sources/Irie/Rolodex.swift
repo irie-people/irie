@@ -464,11 +464,14 @@ final class RolodexModel {
         guard var d = decks[session], let i = d.panes.firstIndex(where: { $0.id == pane }) else { return }
         var files = d.panes[i].files ?? []
         if !files.contains(path) { files.append(path) }
-        while files.count > Self.mostFiles, let old = files.first(where: { $0 != path }) { files.removeAll { $0 == old } }
+        // A file with typing unsaved or in conflict never goes.
+        while files.count > Self.mostFiles, let old = files.first(where: { $0 != path && !CodeDocs.shared.holds($0) }) {
+            files.removeAll { $0 == old }
+        }
         d.panes[i].files = files
         d.panes[i].file = path
         decks[session] = d
-        if let line, line > 0 { go(to: line, column: column ?? 1, on: pane) }
+        if let line, line > 0 { go(to: line, column: column ?? 1, in: path, on: pane) }
         saveSoon()
     }
 
@@ -492,9 +495,15 @@ final class RolodexModel {
         saveSoon()
     }
 
-    func go(to line: Int, column: Int = 1, on pane: String) {
+    /// Asks a code card's editor to go to a line of a file, once.
+    func go(to line: Int, column: Int = 1, in path: String, on pane: String) {
         goes += 1
-        goTo[pane] = CodeGoTo(line: line, column: column, serial: goes)
+        goTo[pane] = CodeGoTo(path: path, line: line, column: column, serial: goes)
+    }
+
+    /// The editor went there: the ask is done.
+    func went(_ g: CodeGoTo, on pane: String) {
+        if goTo[pane] == g { goTo[pane] = nil }
     }
 
     /// Every file a code card has open, in every session.
@@ -600,7 +609,8 @@ final class RolodexModel {
         if blankHasKeys { return Self.blank }
         guard let window, let r = window.firstResponder as? NSView else { return keys }
         guard open, !folded, let probe = frontProbe, probe.window === window else { return nil }
-        let a = r.convert(r.bounds, to: nil), b = probe.convert(probe.bounds, to: nil)
+        // What shows of it: a text view's bounds are its whole text.
+        let a = r.convert(r.visibleRect, to: nil), b = probe.convert(probe.bounds, to: nil)
         if b.insetBy(dx: -4, dy: -40).contains(CGPoint(x: a.midX, y: a.midY)), a.width <= b.width + 8, a.height <= b.height + 60 {
             return deck.frontPane?.id ?? Self.blank
         }
@@ -1845,8 +1855,9 @@ private struct PaneContent: View {
 }
 
 /// A card's own shell, in the session's folder: a tmux client of its session
-/// on the dock server. When the shell exits its last screen stays, with New
-/// Shell and Close.
+/// on the dock server; beside a session on another machine, ssh to it and a
+/// shell there (internal/core/pane.go). When the shell exits its last
+/// screen stays, with New Shell and Close.
 @MainActor
 private struct ShellPane: View {
     @Environment(Store.self) private var store
@@ -1865,8 +1876,6 @@ private struct ShellPane: View {
                                       "", "❯ git log --oneline -3", "a1b2c3d Wait for the session write", "9f8e7d6 Add a helper that reads it back"])
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
-            } else if let peer = owner.peer {
-                note("A shell beside a session on \(peer) runs there; that comes later.")
             } else if !store.rolodex.canShell {
                 note("This \(Brand.name)’s core can’t run a pane’s shell yet. The next install brings it.")
             } else if let s = shell, s.state != "stopped", let target = s.target, let tmux = s.tmux, let socket = s.socket {
@@ -1921,7 +1930,7 @@ private struct ShellPane: View {
     /// it has gone, as after a start that failed; one that ended keeps its
     /// last screen until New Shell.
     private func follow() async {
-        guard !store.isFixture, owner.peer == nil, store.rolodex.canShell else { return }
+        guard !store.isFixture, store.rolodex.canShell else { return }
         await load(PaneArgs(session: owner.id, pane: pane.id, start: true))
         while shows, !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 4_000_000_000)

@@ -634,6 +634,13 @@ func (c *Core) forkPlace(src *session, turns []ctxgit.Turn, name string, here, t
 	if here || src.repo == "" {
 		p := place{cwd: src.cwd, repo: src.repo, worktree: src.worktree, branch: src.branch}
 		p.warnings = append(p.warnings, "works in "+src.name+"'s own folder, sharing its files")
+		// A source that closed meanwhile may have had its worktree dropped,
+		// or have it going now (drop.go): it comes back for the fork.
+		_, warnings, _, err := c.restoreFolder(src.id, src.name, src.harness, src.cwd, src.worktree)
+		if err != nil {
+			return place{}, err
+		}
+		p.warnings = append(p.warnings, warnings...)
 		return p, nil
 	}
 	base := ""
@@ -655,7 +662,7 @@ func (c *Core) forkPlace(src *session, turns []ctxgit.Turn, name string, here, t
 	}
 	opts := c.worktreeOptions()
 	opts.Base = base
-	res, err := worktree.Create(worktree.Request{Repo: src.repo, Name: filepath.Base(src.repo), Slug: slug(name)}, opts)
+	res, err := worktree.Create(worktree.Request{Repo: src.repo, Name: filepath.Base(src.repo), Slug: slug(name), Taken: c.dropTaken(opts.Root, filepath.Base(src.repo))}, opts)
 	if err != nil {
 		return place{}, err
 	}

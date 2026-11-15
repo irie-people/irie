@@ -194,8 +194,9 @@ final class KeyRouter {
                 MainActor.assumeIsolated {
                     if !irie || mods.contains(.shift) {
                         window.performClose(nil)
-                    } else {
-                        // The cards picked, or the selected one (Tabs.swift).
+                    } else if !store.closeInCodeCard(window: window) {
+                        // The cards picked, or the selected one (Tabs.swift);
+                        // a code card with the keyboard closes its file.
                         store.closeKey()
                     }
                 }

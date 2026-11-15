@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -105,7 +104,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          --lost brings back every session the last
                                          restart lost, one at a time, pinned,
                                          parked or frozen as it was
-  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
+` + worktreesUsage + `  ` + brand.Slug + ` ctl show [--focus] SESSION        show a session in the slot
   ` + brand.Slug + ` ctl card KIND [SESSION]           show a card of KIND (terminal, browser, markets,
                                          mail or code) beside SESSION, the one this runs
                                          in by default, in the Mac app's panes;
@@ -195,6 +194,8 @@ func ctl(args []string) error {
 		return ctlClose(args[1:])
 	case "reopen":
 		return ctlReopen(args[1:])
+	case "worktrees":
+		return ctlWorktrees(args[1:])
 	case "dog":
 		return ctlDog(args[1:])
 	case "rebuilds":
@@ -1075,7 +1076,7 @@ func ctlOpen(args []string) error {
 		}
 		name = filepath.Join(wd, name)
 	}
-	file, line, col := splitFilePos(name, func(p string) bool { _, err := os.Stat(p); return err == nil })
+	file, line, col := irie.SplitFilePos(name, func(p string) bool { _, err := os.Stat(p); return err == nil })
 	sock, err := socket()
 	if err != nil {
 		return err
@@ -1089,28 +1090,4 @@ func ctlOpen(args []string) error {
 		return err
 	}
 	return ipc.Call(sock, 10*time.Second, ipc.OpCard, ipc.CardArgs{Session: id, Kind: "code", Path: filepath.Clean(file), Line: line, Col: col}, nil)
-}
-
-// splitFilePos splits a trailing :LINE or :LINE:COL (numbers from 1) off a
-// file name, unless the name as given exists, as a file may have a colon
-// in its name.
-func splitFilePos(name string, exists func(string) bool) (file string, line, col int) {
-	if exists(name) {
-		return name, 0, 0
-	}
-	num := func(s string) (int, bool) {
-		n, err := strconv.Atoi(s)
-		return n, err == nil && n >= 1 && s[0] != '+'
-	}
-	if i := strings.LastIndex(name, ":"); i >= 0 {
-		if n, ok := num(name[i+1:]); ok {
-			if j := strings.LastIndex(name[:i], ":"); j >= 0 {
-				if m, ok := num(name[j+1 : i]); ok {
-					return name[:j], m, n
-				}
-			}
-			return name[:i], n, 0
-		}
-	}
-	return name, 0, 0
 }

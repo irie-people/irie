@@ -22,6 +22,9 @@ struct TaskBar: View {
     @State private var history = TaskHistory.load()
     @State private var recall: Int?
     @State private var draft = ""
+    /// The text of a task that did not go, put back to fix: its coming back
+    /// must not clear the notice that says why, as typing does.
+    @State private var returned: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
@@ -38,6 +41,8 @@ struct TaskBar: View {
                 .onKeyPress(.upArrow) { step(-1) }
                 .onKeyPress(.downArrow) { step(1) }
                 .onChange(of: text) {
+                    if text == returned { return }
+                    returned = nil
                     if store.notice?.isError == true { store.dismissNotice() }
                 }
                 .onChange(of: store.focusTaskBar) { focused = true }
@@ -135,7 +140,9 @@ struct TaskBar: View {
                 // store gives the new agent's terminal the keyboard.
                 if store.selection != shown, blank { focused = false }
             } else if blank {
-                // It did not go: its text comes back, to fix.
+                // It did not go: its text comes back, to fix, under the
+                // notice that says why.
+                returned = input
                 text = input
             }
         }

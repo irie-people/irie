@@ -211,14 +211,16 @@ enum Snapshot {
             // A code card (CodePane.swift): a file with the lines its agent
             // changed marked, in the app's own code colours in both modes,
             // and in GitHub's.
-            for (base, dark, colours) in [("panes-code", false, CodeThemes.standard), ("panes-code-dark", true, CodeThemes.standard),
-                                          ("panes-code-github", false, "github")] {
+            CodeFiles.shared.fixture(Fixture.codeFolder, files: Fixture.codeFiles)
+            for (base, dark, colours, tree) in [("panes-code", false, CodeThemes.standard, false), ("panes-code-dark", true, CodeThemes.standard, false),
+                                                ("panes-code-github", false, "github", false), ("panes-code-tree", false, CodeThemes.standard, true)] {
                 store.rolodex.loadFixture(session: Fixture.selected, front: .code)
                 let doc = CodeDocs.shared.fixture(Fixture.codeFile, text: Fixture.code, theme: CodeThemes.theme(colours, dark: dark),
                                                   font: .monospacedSystemFont(ofSize: 12, weight: .regular))
                 doc.markFixture(28...29)
                 UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
-                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: colours], forName: UserDefaults.argumentDomain)
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: colours, "codeTree": tree],
+                                                        forName: UserDefaults.argumentDomain)
                 let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
@@ -355,8 +357,13 @@ enum Fixture {
     static let selected = "s02docsguide"
     /// The code card's file, in the selected session's folder, and another
     /// it has open.
-    static var codeFile: String { "/home/alice/code/\(Brand.slug)-docs-guide/internal/session/store.go" }
-    static var codeOther: String { "/home/alice/code/\(Brand.slug)-docs-guide/README.md" }
+    static var codeFolder: String { "/home/alice/code/\(Brand.slug)-docs-guide" }
+    static var codeFile: String { codeFolder + "/internal/session/store.go" }
+    static var codeOther: String { codeFolder + "/README.md" }
+    /// The files of its folder, for the tree.
+    static let codeFiles = ["README.md", "go.mod", "main.go", "internal/session/store.go", "internal/session/store_test.go",
+                            "internal/session/cookie.go", "internal/login/login.go", "internal/login/login_test.go",
+                            "web/index.html", "web/app.js", "web/style.css", "docs/setup.md"]
     static let code = """
     package session
 

@@ -204,6 +204,9 @@ type (
 	VariorumBlock    = ipc.VariorumBlock
 	VariorumTake     = ipc.VariorumTake
 	VariorumComment  = ipc.VariorumComment
+	WorktreesArgs    = ipc.WorktreesArgs
+	WorktreesResult  = ipc.WorktreesResult
+	ClosedTree       = ipc.ClosedTree
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -480,4 +483,5 @@ const (
 	VariorumSetup      = ipc.VariorumSetup
 	VariorumNeeds      = ipc.VariorumNeeds
 	VariorumOff        = ipc.VariorumOff
+	OpWorktrees        = ipc.OpWorktrees
 )

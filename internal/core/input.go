@@ -45,7 +45,7 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 	if p != nil {
 		why = c.hooksDiffer(p)
 	}
-	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home}
+	v := irie.View{Sessions: c.list(), Outside: c.outsideList(), Home: home, Exists: fileExists}
 	c.mu.Unlock()
 	if p != nil {
 		if why != "" {
@@ -80,4 +80,10 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 	}
 	res, err := c.Call(st.Op, raw)
 	return irie.Said(st, res, err)
+}
+
+// fileExists says whether there is anything at a path, as :open asks.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

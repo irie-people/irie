@@ -912,7 +912,7 @@ func checkReopen(c *Core, a action) []problem {
 	if err != nil {
 		return cannot("no-spec", brand.Name+" lost how it ran")
 	}
-	if fi, err := os.Stat(spec.Cwd); err != nil || !fi.IsDir() {
+	if fi, err := os.Stat(spec.Cwd); (err != nil || !fi.IsDir()) && !c.restorable(spec) {
 		return cannot("no-folder", fmt.Sprintf("its folder %s is gone", spec.Cwd))
 	}
 	profile, ok := c.profile(spec.Profile)

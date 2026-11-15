@@ -16,8 +16,9 @@ final class CodeCaret {
     var selected = 0
 }
 
-/// A line to go to, and a serial bumped to go to it again.
+/// A line of a file to go to, and a serial bumped to go to it again.
 struct CodeGoTo: Equatable {
+    var path: String
     var line: Int
     var column = 1
     var serial = 0
@@ -30,6 +31,8 @@ struct CodeActions {
     var quickOpen: () -> Void = {}
     var goToLine: () -> Void = {}
     var closeFile: () -> Void = {}
+    /// The editor went where a CodeGoTo asked.
+    var went: (CodeGoTo) -> Void = { _ in }
     /// Ask the session's agent about these lines, 1-based.
     var ask: ((ClosedRange<Int>) -> Void)?
     var copyReference: (ClosedRange<Int>) -> Void = { _ in }
@@ -437,6 +440,9 @@ struct CodeEditorView: NSViewRepresentable {
         if takesKeysOnStart, shows {
             DispatchQueue.main.async { tv.window?.makeFirstResponder(tv) }
         }
+        goIfAsked(c)
+        // The card's foot says where this file's caret is, not the last one's.
+        DispatchQueue.main.async { c.noteCaret() }
         return scroll
     }
 
@@ -452,9 +458,18 @@ struct CodeEditorView: NSViewRepresentable {
         if !shows, tv.window?.firstResponder === tv {
             tv.window?.makeFirstResponder(nil)
         }
-        if let g = goTo, g != c.wentTo {
-            c.wentTo = g
-            DispatchQueue.main.async { c.go(to: g) }
+        goIfAsked(c)
+    }
+
+    /// Goes to the line asked of this file, once; an ask for another file
+    /// waits for its own editor.
+    private func goIfAsked(_ c: Coordinator) {
+        guard let g = goTo, g.path == doc.path, g != c.wentTo else { return }
+        c.wentTo = g
+        let done = actions.went
+        DispatchQueue.main.async {
+            c.go(to: g)
+            done(g)
         }
     }
 
@@ -519,7 +534,7 @@ struct CodeEditorView: NSViewRepresentable {
             ruler?.needsDisplay = true
         }
 
-        private func noteCaret() {
+        func noteCaret() {
             guard let tv = text, let doc, let caret else { return }
             let sel = tv.selectedRange()
             let line = doc.lineIndex(sel.location) ?? 0
@@ -553,12 +568,13 @@ struct CodeEditorView: NSViewRepresentable {
             observers = []
         }
 
-        /// Puts the caret on a line, scrolls it into the middle and flashes it.
+        /// Puts the caret on a line, scrolls it into the middle and flashes
+        /// it; while you type in it, only scrolls and flashes.
         func go(to g: CodeGoTo) {
             guard let tv = text, let doc else { return }
             let range = doc.lineRange(max(0, g.line - 1))
             let at = range.location + min(max(0, g.column - 1), range.length)
-            tv.setSelectedRange(NSRange(location: at, length: 0))
+            if tv.window?.firstResponder !== tv { tv.setSelectedRange(NSRange(location: at, length: 0)) }
             tv.scrollRangeToVisible(range)
             if let lm = tv.layoutManager, let tc = tv.textContainer, let clip = tv.enclosingScrollView?.contentView {
                 let rect = lm.boundingRect(forGlyphRange: lm.glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: tc)

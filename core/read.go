@@ -17,7 +17,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :open FILE[:LINE]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, and the folder that ~ means.
@@ -25,6 +25,9 @@ type View struct {
 	Sessions []Session
 	Outside  []OutsideSession
 	Home     string
+	// Exists says whether a file is there, so that :open takes a name with
+	// a colon in it as it is; nil reads every name as not there.
+	Exists func(path string) bool
 }
 
 // A Step is what an input comes to: one op to run with its args, or, for a
@@ -50,12 +53,14 @@ func Read(in InputArgs, v View) (Step, error) {
 		name, arg, _ := strings.Cut(strings.TrimPrefix(line, ":"), " ")
 		return command(name, strings.TrimSpace(arg), in, v)
 	}
+	// A status question about a session is answered from the rows and
+	// starts nothing. One that names no session is a task, typed for an
+	// agent to look into, as "hows the plugin pane" is: refused, it never
+	// went anywhere (DESIGN §4.2).
 	if q, ok := ParseHows(in.Text); ok {
-		s := FindSession(v.Sessions, q)
-		if s == nil {
-			return Step{}, Errorf(CodeNotFound, "No agent matches “%s”.", q)
+		if s := FindSession(v.Sessions, q); s != nil {
+			return Step{Answer: Hows(*s), Session: s}, nil
 		}
-		return Step{Answer: Hows(*s), Session: s}, nil
 	}
 	a, err := ParseTask(in.Text, v.Home)
 	if err != nil {
@@ -151,6 +156,23 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpTool, ToolArgs{Name: arg}, nil)
 	case name == "plugins" && arg == "":
 		return step(OpPlugins, PluginsArgs{}, nil)
+	case name == "open" && arg != "":
+		// :open FILE[:LINE[:COL]] shows a file in a code card beside the
+		// selected session (docs/MAC.md, Code cards), as `irie ctl open`
+		// does for its agent: a relative FILE is the session's folder's.
+		s, err := selected()
+		if err != nil {
+			return Step{}, err
+		}
+		if s.Host != "" {
+			return Step{}, Errorf(CodeBadArgs, ":open shows the files of this machine's sessions, and %s runs on %s.", s.Name, s.Host)
+		}
+		exists := v.Exists
+		if exists == nil {
+			exists = func(string) bool { return false }
+		}
+		file, line, col := SplitFilePos(OpenPath(arg, cmp.Or(s.Worktree, s.Cwd), v.Home), exists)
+		return step(OpCard, CardArgs{Session: s.ID, Kind: "code", Path: file, Line: line, Col: col}, s)
 	case name == "mail" && arg == "":
 		// :mail says how the mail accounts stand; the Mac app also opens
 		// its Mail (docs/proposals/mail.md).
@@ -514,6 +536,12 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text = "Parked " + name + "."
 	case OpUnpark:
 		r.Text = "Unparked " + name + "."
+	case OpCard:
+		a := as[CardArgs](st.Args)
+		r.Text = "Opened " + filepath.Base(a.Path) + " beside " + name + "."
+		if a.Line > 0 {
+			r.Text = fmt.Sprintf("Opened %s at line %d beside %s.", filepath.Base(a.Path), a.Line, name)
+		}
 	case OpPin:
 		r.Text = "Pinned " + name + ": no close but yours of it reaches it."
 	case OpUnpin:
@@ -679,4 +707,44 @@ func printable(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// OpenPath is the file a name means beside a session: ~/ is the home
+// folder, and a relative name the session's folder's, or the home folder's
+// when it has none.
+func OpenPath(name, folder, home string) string {
+	switch {
+	case name == "~" || strings.HasPrefix(name, "~/"):
+		return filepath.Join(home, strings.TrimPrefix(name, "~"))
+	case filepath.IsAbs(name):
+		return filepath.Clean(name)
+	case folder != "":
+		return filepath.Join(folder, name)
+	default:
+		return filepath.Join(home, name)
+	}
+}
+
+// SplitFilePos splits a trailing :LINE or :LINE:COL (numbers from 1) off a
+// file name, unless the name as given exists, as a file may have a colon
+// in its name.
+func SplitFilePos(name string, exists func(string) bool) (file string, line, col int) {
+	if exists(name) {
+		return name, 0, 0
+	}
+	num := func(s string) (int, bool) {
+		n, err := strconv.Atoi(s)
+		return n, err == nil && n >= 1 && s[0] != '+'
+	}
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		if n, ok := num(name[i+1:]); ok {
+			if j := strings.LastIndex(name[:i], ":"); j >= 0 {
+				if m, ok := num(name[j+1 : i]); ok {
+					return name[:j], m, n
+				}
+			}
+			return name[:i], n, 0
+		}
+	}
+	return name, 0, 0
 }

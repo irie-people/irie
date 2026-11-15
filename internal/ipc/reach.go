@@ -62,6 +62,10 @@ var reaches = map[string]Reach{
 	OpRaphael: ReachOutside, OpDock: ReachOutside, OpTrod: ReachOutside,
 	// A check asks OSV.dev about the versions the locks name.
 	OpLock: ReachOutside,
+	// A sweep with drop removes closed sessions' worktrees: reopen adds
+	// each back, but not the build output that went with it, nor its
+	// HEAD reflog.
+	OpWorktrees: ReachOutside,
 }
 
 // ReachOf is where op's effect goes. An op this version does not know is

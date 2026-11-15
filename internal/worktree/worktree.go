@@ -3,7 +3,9 @@
 // the repo's tracked files at worktree.base (else the branch its work lands
 // on, else HEAD) and the untracked local files
 // that the repo's .worktreeinclude and worktree.copy name. Uncommitted
-// changes stay in the main checkout. Irie never removes a worktree.
+// changes stay in the main checkout. Irie removes a worktree only once a
+// closed session's work in it has landed, and adds it back as it reopens
+// (drop.go).
 package worktree
 
 import (
@@ -275,12 +277,26 @@ func Create(r Request, o Options) (Result, error) {
 		return Result{}, err
 	}
 
-	files, err := localFiles(r.Repo, o.Copy)
+	fill(r.Repo, &res, o)
+	if n := uncommitted(r.Repo, res.Copied); n > 0 {
+		was := "changes in the main checkout were"
+		if n == 1 {
+			was = "change in the main checkout was"
+		}
+		res.Warnings = append(res.Warnings, fmt.Sprintf("%d uncommitted %s not carried over", n, was))
+	}
+	return res, nil
+}
+
+// fill gives the new worktree res.Dir what a checkout of its branch lacks:
+// the repo's local files that the worktree gets, and its submodules.
+func fill(repo string, res *Result, o Options) {
+	files, err := localFiles(repo, o.Copy)
 	if err != nil {
 		res.Warnings = append(res.Warnings, "no local files copied: "+err.Error())
 	}
 	for _, f := range files {
-		switch err := copyFile(r.Repo, res.Dir, f); {
+		switch err := copyFile(repo, res.Dir, f); {
 		case err == nil:
 			res.Copied = append(res.Copied, f)
 		case !errors.Is(err, fs.ErrExist):
@@ -292,14 +308,6 @@ func Create(r Request, o Options) (Result, error) {
 			res.Warnings = append(res.Warnings, "submodules not checked out: "+err.Error())
 		}
 	}
-	if n := uncommitted(r.Repo, res.Copied); n > 0 {
-		was := "changes in the main checkout were"
-		if n == 1 {
-			was = "change in the main checkout was"
-		}
-		res.Warnings = append(res.Warnings, fmt.Sprintf("%d uncommitted %s not carried over", n, was))
-	}
-	return res, nil
 }
 
 func exists(p string) bool {

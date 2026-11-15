@@ -17,12 +17,30 @@ const named = 5
 // Tree is one worktree of a repo, as git lists it.
 type Tree struct {
 	Path   string
+	Head   string // HEAD's commit
 	Branch string // HEAD's branch; "" when it is detached
+	Locked bool   // git worktree lock holds it
 }
 
 // Trees lists the repo's worktrees whose directories are there, the main
 // checkout first.
 func Trees(repo string, timeout time.Duration) ([]Tree, error) {
+	all, err := list(repo, timeout)
+	if err != nil {
+		return nil, err
+	}
+	var trees []Tree
+	for _, t := range all {
+		if exists(t.Path) {
+			trees = append(trees, t)
+		}
+	}
+	return trees, nil
+}
+
+// list lists every worktree git records for the repo, the main checkout
+// first, those whose directories have gone included.
+func list(repo string, timeout time.Duration) ([]Tree, error) {
 	out, err := git(timeout, repo, nil, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
@@ -33,11 +51,15 @@ func Trees(repo string, timeout time.Duration) ([]Tree, error) {
 		for _, line := range strings.Split(block, "\n") {
 			if p, ok := strings.CutPrefix(line, "worktree "); ok {
 				t.Path = p
+			} else if h, ok := strings.CutPrefix(line, "HEAD "); ok {
+				t.Head = h
 			} else if b, ok := strings.CutPrefix(line, "branch "); ok {
 				t.Branch = strings.TrimPrefix(b, "refs/heads/")
+			} else if line == "locked" || strings.HasPrefix(line, "locked ") {
+				t.Locked = true
 			}
 		}
-		if t.Path != "" && exists(t.Path) {
+		if t.Path != "" {
 			trees = append(trees, t)
 		}
 	}
@@ -96,19 +118,36 @@ func ReadLoose(dir, land string, since time.Time, skip []string, timeout time.Du
 			l.Files = append(l.Files, path)
 		}
 	}
+	return l, ahead(&l, dir, land, "HEAD", since, timeout)
+}
+
+// ReadBranch reads what a branch whose worktree Irie dropped (drop.go)
+// holds that has not landed: as ReadLoose does, from the branch alone,
+// since a worktree is dropped only with nothing uncommitted in it.
+func ReadBranch(repo, branch, land string, since time.Time, timeout time.Duration) (Loose, error) {
+	l := Loose{Branch: branch}
+	if _, err := git(timeout, repo, nil, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}"); err != nil {
+		return l, err
+	}
+	return l, ahead(&l, repo, land, "refs/heads/"+branch, since, timeout)
+}
+
+// ahead counts the commits of rev that land lacks into l, those committed
+// since since, run in dir. With no land it counts none.
+func ahead(l *Loose, dir, land, rev string, since time.Time, timeout time.Duration) error {
 	if land == "" {
-		return l, nil
+		return nil
 	}
 	if _, err := git(timeout, dir, nil, "rev-parse", "--verify", "--quiet", land+"^{commit}"); err != nil {
 		if exitCode(err) == 1 {
 			l.NoLand = true
-			return l, nil
+			return nil
 		}
-		return l, err
+		return err
 	}
-	out, err = git(timeout, dir, nil, "log", "--format=%h%x09%ct%x09%s", land+"..HEAD")
+	out, err := git(timeout, dir, nil, "log", "--format=%h%x09%ct%x09%s", land+".."+rev)
 	if err != nil {
-		return l, err
+		return err
 	}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		hash, rest, ok := strings.Cut(line, "\t")
@@ -122,7 +161,7 @@ func ReadLoose(dir, land string, since time.Time, skip []string, timeout time.Du
 			l.Commits = append(l.Commits, hash+" "+subject)
 		}
 	}
-	return l, nil
+	return nil
 }
 
 // nth is what follows the first n space-separated fields of an entry of

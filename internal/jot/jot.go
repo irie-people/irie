@@ -37,6 +37,15 @@ var openers = []string{
 	"in that", "in this", "with that", "with this", "about that", "about this", "re",
 }
 
+// negations open a jot that tells the agent what not to do ("don't merge
+// it"), unless a verb of the writer's own mind comes next: "dont think the
+// download worked" is "I don't think" with its "I" left out, the writer's
+// view, which says nothing of the jot before. The words after it decide.
+// "never mind" is an opener of its own, so "mind" is not among them.
+var negations = []string{"don't", "dont", "do not", "never"}
+
+var minds = []string{"think", "thought", "know", "knew", "believe", "remember", "recall", "understand", "suppose", "reckon", "guess", "feel", "see"}
+
 // labels are words that are a jot's own ask unless a colon follows them:
 // "update the README" asks for work, "update: it is the web repo" adds.
 var labels = []string{"update", "edit", "context", "note", "addendum", "clarification"}
@@ -89,9 +98,14 @@ func Follows(text string) (why string, ok bool) {
 		}
 	}
 	for _, o := range openers {
-		if ow := strings.Fields(o); len(ow) <= len(plain) && equal(plain[:len(ow)], ow) {
-			return "it starts with “" + o + "”", true
+		ow := strings.Fields(o)
+		if len(ow) > len(plain) || !equal(plain[:len(ow)], ow) {
+			continue
 		}
+		if n := len(ow); n < len(plain) && contains(negations, o) && contains(minds, plain[n]) {
+			return Follows(strings.Join(words[n+1:], " "))
+		}
+		return "it starts with “" + o + "”", true
 	}
 	for _, w := range plain[:min(alsoWithin, len(plain))] {
 		if w == "also" {
