@@ -109,6 +109,10 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if want := (Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4}); c.Usage != want {
 		t.Errorf("usage = %+v, want %+v", c.Usage, want)
 	}
+	// The agent locks ask OSV.dev only when asked (DESIGN §4.21).
+	if want := (Lock{Check: "off", OSV: "https://api.osv.dev"}); c.Lock != want {
+		t.Errorf("lock = %+v, want %+v", c.Lock, want)
+	}
 	if want := (Repos{Roots: []string{}, Aliases: map[string]string{}}); !reflect.DeepEqual(c.Repos, want) {
 		t.Errorf("repos = %+v, want %+v", c.Repos, want)
 	}
@@ -567,6 +571,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[route]\nmin_accuracy = 1.5\n", "route.min_accuracy"},
 		{"[route]\nlocal_min_accuracy = 0\n", "route.local_min_accuracy"},
 		{"[route]\nlocal_min_accuracy = 1.2\n", "route.local_min_accuracy"},
+		{"[route.embed]\nurl = \"127.0.0.1:11434\"\n", "route.embed.url"},
+		{"[route.embed]\nnear = 1\n", "route.embed.near"},
 		{"[profiles.x]\nlocal = { runtime = \"ollama\", peer = \"Asahi\" }\n", "only a llama-server profile runs on a peer's server"},
 		{"[profiles.x]\nlocal = { runtime = \"llama-server\", peer = \"a b\" }\n", "must be a peer's name"},
 		{"[bench]\nruns = 0\n", "bench.runs"},
@@ -610,6 +616,8 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 		{"[profiles.explain]\nmodel = \"opus\"\n", "profiles.explain"},
 		{"[learn]\nlinks = { wiki = \"ftp://example.com\" }\n", "learn.links"},
 		{"[learn]\nlinks = { \" \" = \"https://example.com\" }\n", "learn.links"},
+		{"[lock]\ncheck = \"hourly\"\n", `lock.check = "hourly": must be off or daily`},
+		{"[lock]\nosv = \"api.osv.dev\"\n", "lock.osv"},
 	} {
 		_, err := Load(writeFile(t, c.body))
 		if err == nil {

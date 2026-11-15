@@ -265,6 +265,15 @@ final class Store {
     /// The session the core is to show next, and whether a request is out.
     @ObservationIgnored private var wanted: (id: String, focus: Bool)?
     @ObservationIgnored private var showing = false
+    /// The session the core's rows last said the slot shows, frame by frame,
+    /// and the one this app asked for that they have not shown yet, with
+    /// how long its ask still holds once the core has answered. The
+    /// selection follows the slot when another hand moves it (followShown),
+    /// so the selected card, the frame round the terminal and the lines
+    /// between them always name the session the terminal shows (TabLink.swift).
+    @ObservationIgnored private var coreShown: String?
+    @ObservationIgnored private var awaiting: String?
+    @ObservationIgnored private var awaitingUntil: Date?
 
     static let defaultFontSize: CGFloat = 13
 
@@ -476,15 +485,20 @@ final class Store {
     private func apply(_ frames: [Frame]) {
         var rows = sessions
         var touched = false
-        // Cards asked for (`irie ctl card`) show once the rows are in.
-        var cards: [(PaneKind, String)] = []
-        defer { for (kind, id) in cards { showCard(kind, in: id) } }
+        // Cards asked for (`irie ctl card`, `irie ctl open`) show once the
+        // rows are in.
+        var cards: [(PaneKind, String, CardFile?)] = []
+        defer { for (kind, id, file) in cards { showCard(kind, in: id, file: file) } }
+        // The session the slot moved to by another hand, if it did: the
+        // selection goes to it once the rows are in.
+        var follow: String?
         for f in frames {
             if let h = f.header { applyHeader(h) }
             switch f.t {
             case "snapshot":
                 rows = (f.sessions ?? []).sorted(by: Self.before)
                 touched = true
+                noteShown(rows.first { $0.shown == true }?.id, follow: &follow)
             case "upsert":
                 guard let s = f.session else { continue }
                 if let i = rows.firstIndex(where: { $0.id == s.id }) {
@@ -498,18 +512,26 @@ final class Store {
                 }
                 noteCoach(s)
                 touched = true
+                if s.shown == true {
+                    noteShown(s.id, follow: &follow)
+                } else if s.id == coreShown {
+                    noteShown(nil, follow: &follow)
+                }
             case "remove":
                 guard let id = f.id else { continue }
                 rows.removeAll { $0.id == id }
                 if coach?.session == id { coach = nil }
                 touched = true
+                if id == coreShown { noteShown(nil, follow: &follow) }
             case "outside":
                 applyOutside(f)
             case "closed":
                 let c = f.closed ?? []
                 if c != closed { closed = c }
             case "card":
-                if let id = f.id, let kind = f.kind.flatMap(PaneKind.init(rawValue:)) { cards.append((kind, id)) }
+                if let id = f.id, let kind = f.kind.flatMap(PaneKind.init(rawValue:)) {
+                    cards.append((kind, id, f.path.map { CardFile(path: $0, line: f.line, column: f.col) }))
+                }
             case "history":
                 let undo = f.undo.flatMap { $0.isEmpty ? nil : $0 }
                 let redo = f.redo.flatMap { $0.isEmpty ? nil : $0 }
@@ -523,13 +545,51 @@ final class Store {
         }
         guard touched else { return }
         if rows != sessions { sessions = rows }
-        if selection == nil, let shown = sessions.first(where: { $0.shown == true }) {
-            selection = shown.id
-        }
         if let sel = selection, !sessions.contains(where: { $0.id == sel }) {
             selection = nil
         }
+        // With none selected, as at launch or once the selected session
+        // closed, the session the slot shows is the selected one too.
+        if follow == nil, selection == nil, awaiting == nil, wanted == nil {
+            follow = coreShown
+        }
+        if let id = follow { followShown(id) }
         keepSplit()
+    }
+
+    /// Takes in what a frame says the slot shows. A move this app asked
+    /// for, and any on the way to it while the keys outran the core, change
+    /// nothing; one by another hand, such as `irie ctl show`, the terminal
+    /// sidebar or a core that started again, is to be followed. Frames are
+    /// read in the order the core sent them, so a move the core made after
+    /// this app's last one is the last word.
+    private func noteShown(_ id: String?, follow: inout String?) {
+        guard id != coreShown else { return }
+        coreShown = id
+        guard let id else { return }
+        // A move the core said it made, but whose rows never came, holds
+        // the slot's news back no longer than this.
+        if let until = awaitingUntil, Date() > until {
+            awaiting = nil
+            awaitingUntil = nil
+        }
+        if id == awaiting {
+            awaiting = nil
+            awaitingUntil = nil
+            return
+        }
+        guard awaiting == nil, wanted == nil else { return }
+        follow = id
+    }
+
+    /// Selects the session the slot shows, in its space, without asking
+    /// the core for anything: it shows it already. The list brings its card
+    /// into sight (SessionList).
+    private func followShown(_ id: String) {
+        guard id != selection, let s = sessions.first(where: { $0.id == id }) else { return }
+        if renaming != nil && renaming != id { endRename(commit: true) }
+        if s.peerName == nil, s.spaceKey != space { setSpace(s.spaceKey, showing: false) }
+        selection = id
     }
 
     /// Takes a header, a snapshot's or a header frame's: each is the whole
@@ -992,18 +1052,35 @@ final class Store {
         Task {
             while let next = wanted {
                 wanted = nil
+                // Until its rows say the slot shows it, the slot's news is
+                // older than this ask (noteShown). A session the slot shows
+                // already brings none, unless an ask before it is still on
+                // its way, which moves the slot first.
+                awaiting = next.id == coreShown && awaiting == nil ? nil : next.id
+                awaitingUntil = nil
                 do {
                     let split = splitSession?.id == next.id
                     let shown = split ? next.id : nil
                     if splitShown != shown { splitShown = shown }
                     _ = try await client.call("show", ShowArgs(session: next.id, focus: next.focus, split: split), as: Empty.self)
+                    // The core sent its rows before it answered, on the
+                    // stream, which a busy Mac may read a little later.
+                    if awaiting == next.id { awaitingUntil = Date().addingTimeInterval(2) }
                     // The conversation's message box, or the terminal when it
                     // shows; a name open to edit, after a double click's first
                     // click, keeps the keyboard.
                     if next.focus, wanted == nil, renaming != next.id { if showTerminal { focusTerminal += 1 } else { focusMessage += 1 } }
                 } catch where wanted == nil {
+                    if awaiting == next.id { awaiting = nil }
+                    // The slot stayed where it was, as a core that is
+                    // restarting leaves it: so does the selection, or the
+                    // card, its lines and the frame would name a session the
+                    // terminal doesn't show.
+                    if let id = coreShown { followShown(id) }
                     say("Couldn’t show it: \(error.localizedDescription)", error: true)
-                } catch {}
+                } catch {
+                    if awaiting == next.id { awaiting = nil }
+                }
             }
             showing = false
         }
@@ -1134,8 +1211,9 @@ final class Store {
             endRename(commit: true)
             renameText = s.name
         }
-        selection = id
-        outsideSelection = nil
+        // Selected as a click selects it: the terminal shows it too, so the
+        // frame and the lines never name a session it doesn't show.
+        if selection != id || outsideSelection != nil { show(id) }
         renaming = id
     }
 

@@ -44,6 +44,7 @@ type Config struct {
 	Context  Context            `toml:"context"`
 	Hold     Hold               `toml:"hold"`
 	Usage    Usage              `toml:"usage"`
+	Lock     Lock               `toml:"lock"`
 	Skills   Skills             `toml:"skills"`
 	Dog      Dog                `toml:"dog"`
 	Trod     Trod               `toml:"trod"`
@@ -385,6 +386,18 @@ type Route struct {
 	Accuracy         map[string]map[string]float64 `toml:"accuracy"`      // starting guesses: first-time success, by profile and class
 	Cost             map[string]float64            `toml:"cost"`          // starting guesses: a task's cost relative to one on +claude
 	Words            route.Words                   `toml:"words"`         // what makes a task small, medium or hard
+	Embed            RouteEmbed                    `toml:"embed"`         // a class from the tasks given one before
+}
+
+// RouteEmbed is how a task takes its class from the tasks given one before
+// (DESIGN §6.4): the nearest of them by an embedding model, which an
+// Ollama server runs.
+type RouteEmbed struct {
+	Model string `toml:"model"` // the embedding model; "" = route.words alone give classes
+	URL   string `toml:"url"`   // the Ollama server that runs it
+	// Near is the least cosine at which the nearest task decides; below it
+	// the task is unlike any, and route.words give its class.
+	Near float64 `toml:"near"`
 }
 
 // Prior returns where a profile starts, for the router.
@@ -614,6 +627,27 @@ type Usage struct {
 	// frozen; 0 = no limit.
 	WakeMost float64 `toml:"wake_most"`
 }
+
+// Lock is the agent locks (DESIGN §4.21): the core writes each session's
+// setup as its agent starts, and a check asks OSV.dev about the harness
+// and package versions the locks name, only when asked.
+type Lock struct {
+	// Check is whether the core asks OSV.dev itself: LockCheckOff, only
+	// when you ask (irie lock --check), or LockCheckDaily, once a day.
+	Check string `toml:"check"`
+	// OSV is the address of the OSV API a check asks, such as a mirror of
+	// your own.
+	OSV string `toml:"osv"`
+}
+
+// The values lock.check takes.
+const (
+	LockCheckOff   = "off"
+	LockCheckDaily = "daily"
+)
+
+// LockChecks are the values lock.check takes.
+var LockChecks = []string{LockCheckOff, LockCheckDaily}
 
 // Dog is the jot dog (DESIGN §4.8): it sees each task you jot down through
 // until its work has landed. When a jot's turn ends with work left in its
@@ -916,6 +950,7 @@ func Default() Config {
 		Context: Context{KeepDays: 30},
 		Hold:    Hold{Max: 24 * time.Hour},
 		Usage:   Usage{StatusLine: true, Rebuilds: true, RebuildCard: 1, WakeMost: 4},
+		Lock:    Lock{Check: LockCheckOff, OSV: "https://api.osv.dev"},
 		Skills:  Skills{Enabled: true, Disabled: []string{}},
 		Dog:     Dog{Watch: true, Nudges: 2, Land: map[string]string{}},
 		Env:     Env{Capture: "login-shell"},
@@ -970,6 +1005,11 @@ func DefaultRoute() Route {
 			Medium: slices.Clone(route.DefaultWords.Medium),
 			Hard:   slices.Clone(route.DefaultWords.Hard),
 		},
+		// The user's own Ollama, at its usual address: Irie's own server
+		// holds one model, which an embedding would push out. Its cosines
+		// run from about 0.7 up, so 0.75 hands only tasks unlike every
+		// labelled one to the words.
+		Embed: RouteEmbed{Model: "embeddinggemma-2:270m", URL: "http://127.0.0.1:11434", Near: 0.75},
 	}
 }
 
@@ -1038,6 +1078,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Context  *Context                  `toml:"context"`
 		Hold     *Hold                     `toml:"hold"`
 		Usage    *Usage                    `toml:"usage"`
+		Lock     *Lock                     `toml:"lock"`
 		Skills   *Skills                   `toml:"skills"`
 		Dog      *Dog                      `toml:"dog"`
 		Trod     *Trod                     `toml:"trod"`
@@ -1054,7 +1095,7 @@ func Parse(data []byte, path string) (Config, error) {
 		Markets  *Markets                  `toml:"markets"`
 		Mail     *Mail                     `toml:"mail"`
 		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1283,6 +1324,14 @@ func (c Config) Validate() error {
 	}
 	if r.LocalMinAccuracy <= 0 || r.LocalMinAccuracy > 1 {
 		bad("route.local_min_accuracy = %v: must be above 0 and at most 1", r.LocalMinAccuracy)
+	}
+	if e := r.Embed; e.Model != "" {
+		if u, err := url.Parse(e.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			bad("route.embed.url = %q: must be an http or https address, such as http://127.0.0.1:11434", e.URL)
+		}
+		if e.Near < 0 || e.Near >= 1 {
+			bad("route.embed.near = %v: must be from 0 to below 1", e.Near)
+		}
 	}
 	b := c.Bench
 	if b.Runs < 1 || b.Runs > MaxBenchRuns {
@@ -1516,6 +1565,12 @@ func (c Config) Validate() error {
 	}
 	if c.Usage.WakeMost < 0 {
 		bad("usage.wake_most = %v: must be 0, for no limit, or more", c.Usage.WakeMost)
+	}
+	if !slices.Contains(LockChecks, c.Lock.Check) {
+		bad("lock.check = %q: must be off or daily", c.Lock.Check)
+	}
+	if u, err := url.Parse(c.Lock.OSV); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		bad("lock.osv = %q: must be an address such as https://api.osv.dev", c.Lock.OSV)
 	}
 	for _, n := range c.Skills.Disabled {
 		if !skillName.MatchString(n) || len(n) > 64 {

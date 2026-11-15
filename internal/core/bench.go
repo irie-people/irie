@@ -34,7 +34,6 @@ import (
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/filetx"
 	"github.com/irie-people/irie/internal/ipc"
-	"github.com/irie-people/irie/internal/route"
 )
 
 const (
@@ -160,7 +159,7 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 		return ipc.BenchResult{}, err
 	}
 	task := strings.TrimSpace(a.Task)
-	class, _ := route.Classify(task, c.cfg().Route.Words)
+	class, _ := c.classify(task)
 	now := time.Now()
 	b := &benchFile{Bench: ipc.Bench{
 		ID: newBenchID(now), Task: task, Profile: profile, Class: class, Repo: a.Repo,

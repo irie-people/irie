@@ -344,6 +344,26 @@ func (o Ollama) Load(ctx context.Context, model string) error {
 	}, nil)
 }
 
+// Embed is POST /api/embed: an embedding of each input, in order, by an
+// embedding model. keep is how long the server keeps the model loaded
+// afterwards (keep_alive, such as "30m"); "" is the server's default.
+func (o Ollama) Embed(ctx context.Context, model string, inputs []string, keep string) ([][]float64, error) {
+	body := map[string]any{"model": model, "input": inputs}
+	if keep != "" {
+		body["keep_alive"] = keep
+	}
+	var v struct {
+		Embeddings [][]float64 `json:"embeddings"`
+	}
+	if err := o.call(ctx, http.MethodPost, "/api/embed", body, &v); err != nil {
+		return nil, err
+	}
+	if len(v.Embeddings) != len(inputs) {
+		return nil, fmt.Errorf("ollama: %d embeddings for %d inputs", len(v.Embeddings), len(inputs))
+	}
+	return v.Embeddings, nil
+}
+
 // Unload lets a loaded model go at once, freeing the memory it holds
 // (POST /api/generate with keep_alive 0, as Ollama's API documents).
 func (o Ollama) Unload(ctx context.Context, model string) error {

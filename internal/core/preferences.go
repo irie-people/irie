@@ -21,13 +21,23 @@ func preferencesNote(prefs []string) string {
 	return b.String()
 }
 
+// codeNote is what a Claude Code session is told about showing its person
+// a file: a session whose shell can reach ctl, which an anonymous
+// session's sandboxed shell can't.
+func codeNote(x *session) string {
+	if x.harness != "claude-code" || x.anon != "" {
+		return ""
+	}
+	return `[` + brand.Name + `] To show the user a file beside your terminal, run ` + "`" + `"$` + brand.EnvPrefix + `_BIN" ctl open FILE[:LINE]` + "`" + `: it opens in their code pane, where they can read and edit it, and their edits save to the file as they type.`
+}
+
 // startNote is what a session is told each time it starts, after a /clear
-// or a compaction too: whether it can delegate, its profile's playbook,
-// then the user's preferences, so that they hold all along. The caller
-// holds c.mu.
+// or a compaction too: whether it can delegate, how to show a file, its
+// profile's playbook, then the user's preferences, so that they hold all
+// along. The caller holds c.mu.
 func (c *Core) startNote(x *session) string {
 	var notes []string
-	for _, n := range []string{c.delegateHint(x), anonNote(x), c.playbookNote(x), preferencesNote(c.cfg().Spawn.Preferences)} {
+	for _, n := range []string{c.delegateHint(x), codeNote(x), anonNote(x), c.playbookNote(x), preferencesNote(c.cfg().Spawn.Preferences)} {
 		if n != "" {
 			notes = append(notes, n)
 		}

@@ -260,7 +260,7 @@ private struct BrowserLive: View {
                 if page.address == nil { start }
                 if let f = page.failed { failure(f) }
             }
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9, style: .continuous))
+            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: RolodexLayout.radius - 1, bottomTrailingRadius: RolodexLayout.radius - 1, style: .continuous))
         }
         .onAppear {
             page.changed = { [weak store] url, title in
@@ -482,7 +482,7 @@ private struct BrowserSketch: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.white)
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9, style: .continuous))
+            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: RolodexLayout.radius - 1, bottomTrailingRadius: RolodexLayout.radius - 1, style: .continuous))
         }
     }
 }

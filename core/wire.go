@@ -45,6 +45,15 @@ type (
 	PeerCaller       = ipc.PeerCaller
 	Hearer           = ipc.Hearer
 	Client           = ipc.Client
+	Lock             = ipc.Lock
+	LockPart         = ipc.LockPart
+	LockPackage      = ipc.LockPackage
+	LockRow          = ipc.LockRow
+	LockArgs         = ipc.LockArgs
+	LockResult       = ipc.LockResult
+	LockSession      = ipc.LockSession
+	LockFound        = ipc.LockFound
+	LockAdvisory     = ipc.LockAdvisory
 	MailArgs         = ipc.MailArgs
 	MailNew          = ipc.MailNew
 	MailDraft        = ipc.MailDraft
@@ -138,6 +147,9 @@ type (
 	LocalModel       = ipc.LocalModel
 	RateArgs         = ipc.RateArgs
 	RouteArgs        = ipc.RouteArgs
+	LabelArgs        = ipc.LabelArgs
+	Label            = ipc.Label
+	LabelResult      = ipc.LabelResult
 	ResultArgs       = ipc.ResultArgs
 	ResultResult     = ipc.ResultResult
 	ToolArgs         = ipc.ToolArgs
@@ -256,6 +268,15 @@ const (
 	InputRan           = ipc.InputRan
 	InputAsked         = ipc.InputAsked
 	MaxMessage         = ipc.MaxMessage
+	OpLock             = ipc.OpLock
+	LockSpawn          = ipc.LockSpawn
+	LockResume         = ipc.LockResume
+	LockFork           = ipc.LockFork
+	LockReopen         = ipc.LockReopen
+	LockFromIrie       = ipc.LockFromIrie
+	LockFromUser       = ipc.LockFromUser
+	LockFromLocal      = ipc.LockFromLocal
+	LockFromProject    = ipc.LockFromProject
 	OpMail             = ipc.OpMail
 	MailList           = ipc.MailList
 	MailRead           = ipc.MailRead
@@ -299,6 +320,7 @@ const (
 	StatusIdle         = ipc.StatusIdle
 	OpPane             = ipc.OpPane
 	OpCard             = ipc.OpCard
+	CardFileMax        = ipc.CardFileMax
 	OpPeers            = ipc.OpPeers
 	CodePeerDown       = ipc.CodePeerDown
 	OpPerf             = ipc.OpPerf
@@ -320,6 +342,7 @@ const (
 	OpRoute            = ipc.OpRoute
 	OpResult           = ipc.OpResult
 	OpTool             = ipc.OpTool
+	OpLabel            = ipc.OpLabel
 	OpClose            = ipc.OpClose
 	OpReopen           = ipc.OpReopen
 	OpUndo             = ipc.OpUndo

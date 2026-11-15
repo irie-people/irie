@@ -173,8 +173,24 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 		profileName = c.cfg().Spawn.DefaultProfile
 	}
 	// A task's class teaches the router whichever profile runs it; a task
-	// carried on keeps the class of the one it continues.
-	class, why := route.Classify(a.Task, c.cfg().Route.Words)
+	// carried on keeps the class of the one it continues, and a subtask
+	// taken over that of the session it takes over from.
+	var class, why string
+	var over takeOver
+	if a.Instead != "" {
+		var err error
+		if over, err = c.checkHandOn(a); err != nil {
+			return ipc.Session{}, err
+		}
+		class, why = over.class, over.why
+		// It goes on under the name of the subtask it takes over, which
+		// was the user's only when it was theirs, as a failover's does.
+		if a.Name == "" {
+			a.Name, named = over.name, over.named
+		}
+	} else {
+		class, why = c.classify(a.Task)
+	}
 	if a.Continues != "" {
 		c.mu.Lock()
 		if o := c.outcomes[a.Continues]; o != nil && o.class != "" {
@@ -191,7 +207,7 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 		}
 		profileName, extra["routed"], extra["route"] = ch.Profile, true, ch.Reason
 	}
-	for k, v := range map[string]string{"parent": a.Parent, "continues": a.Continues} {
+	for k, v := range map[string]string{"parent": a.Parent, "continues": a.Continues, "instead": a.Instead} {
 		if v != "" {
 			extra[k] = v
 		}
@@ -239,6 +255,12 @@ func (c *Core) spawn(a ipc.SpawnArgs, named bool) (ipc.Session, error) {
 			c.log.Warn("spawn refused", "profile", profileName, "err", err)
 			return ipc.Session{}, err
 		}
+	}
+	// The session a subtask is taken over from stops only now, once
+	// nothing but the spawn itself can fail.
+	if a.Instead != "" {
+		c.handOn(a, profileName)
+		a.Task = handOnNote(over.profile, a.Wait) + a.Task
 	}
 	return c.spawnProfile(a, named, profileName, profile, warnings, extra)
 }
@@ -330,7 +352,9 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	}
 	c.mu.Lock()
 	pl.name, pl.named = unique(name, c.names(nil)), named
-	if hash, _ := extra["task_hash"].(string); hash != "" {
+	// A subtask taken over is the same task on purpose: the session before
+	// it was slow, not wrong.
+	if hash, _ := extra["task_hash"].(string); hash != "" && a.Instead == "" {
 		class, _ := extra["class"].(string)
 		c.escalate(hash, class, profileName, time.Now())
 	}
@@ -570,6 +594,8 @@ func (c *Core) launch(j job) (*session, error) {
 	}
 	x.pane = strings.TrimSpace(out)
 	c.sessions[id] = x
+	// Its agent lock: its setup as its agent starts (locks.go).
+	c.lockLater(x, j, s, argv, files)
 	// Its created time too, which the pane keeps, for a session lost with
 	// the server (lost.go).
 	data := map[string]any{"cwd": x.cwd, "profile": j.profile, "created": x.created.Format(time.RFC3339Nano)}

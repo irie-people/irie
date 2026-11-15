@@ -267,6 +267,7 @@ The socket is a unix stream socket at `<runtime>/irie/core.sock`, mode 0600, in 
 | `move` | `vendor_id`, `profile?` | `session`. Refuses with `busy` unless the session is listed outside Irie and idle. A local profile is checked as for a spawn (§6.1) before the outside copy ends | Sessions outside Irie (§4.6) |
 | `dog` | none | `jots[]`: the jots that are not through, each with its `loose` (below), looked at afresh: the open ones in the list's order, then those that closed on their own (`spawn.close_when_done`) in the last day as `closed`; a jot you closed is done and never listed | The jot dog (§4.8) |
 | `rebuilds` | none | `on` (`usage.rebuilds`), then `today` and `week`, the last seven days: each `from`, `count`, `tokens`, `usd`, and `sessions[]` and `causes[]` ranked by what their rebuilds cost, each `name`, `words`, `count`, `tokens` and `usd`, a session also `id` and `open` | The prompt-cache meter (§6.3) |
+| `lock` | `session?`, `check?` | `sessions[]`, the open ones then the peers' rows, or the one named (an open session's id or name, or a closed one's id), each `id`, `name`, `host?`, `open`, `lock?` (the whole lock), `packages[]` and `none?` (why it has no lock); `packages[]`, each version the locks name with `checked`, `advisories[]` (`id`, `summary`, `fixed`, `modified`) and `sessions[]`; `checked`, `osv`, `asked`, `daily`. With `check` it first asks OSV.dev, and says why it could not with `internal` | Agent locks (§4.21) |
 | `learn` | `session?` | `resources[]`: the user's own links (`learn.links`), then with a session the tutorials of the languages its project is written in, read from the files at its top (`go.mod`, `Package.swift`, …), then the free resources Irie links to, each with its group, title, link, what it teaches and a note; `glossary[]`: the words Irie and its agents use, in plain words. Both come from `internal/learn/learn.toml` | The Help menu ([learning.md](proposals/learning.md)) |
 | `config` | `set[]?`, each a `key`, dotted as in the file (`spawn.default_profile`), and a `value` of the type the key takes: a duration as a string such as `"30s"`, and null to take the key out, so its default applies | `path`, `config`: every key in effect, defaults too, by the file's names, and `problem?`: why the file would not load as it stands. With `set` it first edits the file in place and runs on the result (§5.5); what would not load is refused with `bad_args` and changes nothing | The Mac app's Settings window ([MAC.md](MAC.md)) |
 | `flip` | none | `terminal`: flips the slot between the picked session's conversation and its raw terminal, and focuses the slot (§4.7) | Conversation view (§4.7) |
@@ -810,20 +811,20 @@ Anything else starts a session, as before, and is the jot the next may add to: "
 | Reorder | Back to its place | The step keeps the three sessions that came after it, before the move and after; it goes back just before the first of them still in the order, or last |
 | Priority on / off | Off / on | Undoing a boost gives back the level and nothing else, as a boost moves no card; undoing "stop boosting" boosts it again. Cancels a note that has not been delivered. If it was delivered, sends `notes.priority_cleared` |
 | Pause / resume | Resume / pause | Releasing still sends the "held for" note |
-| Freeze / thaw | Thaw / freeze | One session at a time; freezing or thawing them all (`F`), and what the trod bot freezes, record no step |
+| Freeze / thaw | Thaw / freeze | One session, or them all at once (`F`) as one step whose label names the sessions it changed, `freeze "a", "b" and "c"`, past four the first three and how many more. What the trod bot freezes and thaws records no step |
 | Close | Reopen (`claude --resume <uuid>` in the same cwd) | Closing keeps the worktree. A session that never started is spawned again with its original task. Details below |
 | Spawn | Close | Redo reopens it |
 | Note | Cancel | Only while undelivered; delivered notes are shown as such |
 
 **Rules.**
 - The history is linear and 100 actions deep, kept in `state.json`.
-- Steps taken together, as one close of several sessions (§4.1), share a `batch`: undo and redo take the whole batch at once, under one label, `close 6 sessions`. A question about one of them stops there, and the same undo, once answered, goes on with the rest.
+- Steps taken together, as one close of several sessions (§4.1), share a `batch`: undo and redo take the whole batch at once, under one label, `close 6 sessions`, or for a kind that names them, as freezing them all, `freeze "a" and "b"`. A question about one of them stops there, and the same undo, once answered, goes on with the rest.
 - A new action clears the redo stack. Undo and redo record nothing and clear nothing; one runs at a time.
 - `u` undoes and `U` redoes. The header shows the labels of both.
 - Not undoable: the agents' own edits (use the agent's own rewind) and worktree contents.
 - Steps name sessions by id, never by row. A step that fails changes nothing, the history included. A step whose undo or redo finishes after a new action came in leaves the history, which stays linear.
 
-**Wired now.** Spawn (its label `start "name"`), close and reopen, the last two whether done with `x x`, `:close`, `:reopen` or the socket, park and unpark (`park "name"`), rename (`rename "a" to "b"`), reorder (`reorder "name"`), the freeze and thaw of one session (`freeze "name"`), and promote and stop promoting (`promote "name"`, `stop promoting "name"`), however they were done. An action that changed nothing, such as a second freeze or a drag back to the same place, records no step. The Mac app's Edit > Undo and Redo (⌘Z, ⇧⌘Z) take the same steps and ask the same questions, in an alert; it and the core's `Title` read each quoted name in a label with curly quotes. A subtask an agent delegates (§6.4) is the agent's doing and not recorded; nor are moves (§4.6), tool sessions, or the closes `spawn.close_when_done` makes, which `reopen` and the review dock bring back. Pause, note, and freezing or thawing them all are not recorded yet; they plug in as below.
+**Wired now.** Spawn (its label `start "name"`), close and reopen, the last two whether done with `x x`, `:close`, `:reopen` or the socket, park and unpark (`park "name"`), rename (`rename "a" to "b"`), reorder (`reorder "name"`), freezing and thawing, one session or them all at once (`freeze "name"`, `thaw "a", "b" and "c"`), and promote and stop promoting (`promote "name"`, `stop promoting "name"`), however they were done. An action that changed nothing, such as a second freeze or a drag back to the same place, records no step. The Mac app's Edit > Undo and Redo (⌘Z, ⇧⌘Z) take the same steps and ask the same questions, in an alert; it and the core's `Title` read each quoted name in a label with curly quotes, and the app, whose buttons call freezing Pause and thawing Resume, says Undo Pause “a” and “b”. A subtask an agent delegates (§6.4) is the agent's doing and not recorded; nor are moves (§4.6), tool sessions, or the closes `spawn.close_when_done` makes, which `reopen` and the review dock bring back. Pausing at the next tool call (M5) and notes to agents (M7) are not built yet, so nothing records them; each plugs in as below once it is.
 
 **An inverse puts back all the action changed.** A step keeps what its undo needs to leave the session exactly as it was, not only the field the action names: parking a pinned session also unpins it, so undoing the park pins it again too. What left Irie can't come back: undoing a thaw freezes the session again, but its agent keeps the "frozen for" note the thaw gave it.
 
@@ -1322,6 +1323,30 @@ Notes a person keeps for later and doesn't want to lose, though they don't mean 
 
 **Tests:** `internal/core/notepad_test.go`: notes kept across a restart, in their order, with the file 0600 under the data folder; changes sent twice changing once and writing nothing the second time; deleted notes, alone or together, going back where they were; an edit keeping what was typed against a delete and a lost add; a file cut short coming back from the day's copy and kept aside; a newer version's file shown and never written; 30 copies and 30 days of Recently Deleted; frames after the snapshot and each change; and a note sent through `input` starting its task, ticked off with that session, kept through a core restart.
 
+### 4.21 Agent locks
+
+Irie can say when an agent it runs is set up in a way known to be vulnerable, and what to update ([agent-locks](proposals/agent-locks.md)). The idea comes from a talk-to-camera video by lizthedeveloper (2026-09-19): CVEs cover packages, but nothing records an agent's whole setup to check, so Irie records each one as a lock file records exact versions, and checks it.
+
+**A lock per session.** As each session's agent starts, at a spawn, a resume, a fork or a reopen, the core writes its lock to `sessions/<id>/lock.json` (`internal/lock`), and a reopened session gets a fresh one. It is written beside the launch, never holding it up, from what the launch knew and what the agent reads as it starts:
+- `irie`: Irie's version and the SHA-256 of the irie binary, read once for each size and time of change it has.
+- `harness`: the adapter's id, its version as the probe read it (`claude --version`, cached per binary, §3.3), its binary with any link followed (a native install's versioned file), and for Claude Code the npm package `@anthropic-ai/claude-code` at that version, whose versions the native builds share.
+- `profile`, `model`, and `permission_mode` as the command line gave it (`bypassPermissions` for `--dangerously-skip-permissions`; empty for the CLI's own default).
+- `mcp`: Irie's own servers for the session (§4.15, §4.16), which carry Irie's version, then the user's own from Claude Code's config, each name once as Claude Code ranks the scopes: the folder's own (`local`, in `~/.claude.json` under the folder's path), the project's `.mcp.json`, then those for every folder (`user`, in `~/.claude.json`; with `CLAUDE_CONFIG_DIR`, `.claude.json` in that folder). An anonymous session loads Irie's alone. Each server's package comes from its command: `npx -y @scope/pkg@1.2.3` and `npm exec` are npm's, `uvx pkg==1.2`, `uvx pkg@1.2` and `uvx --from pkg==1.2 cmd` PyPI's; a package with no exact version, as `npx pkg` or `pkg@latest`, runs whatever is newest and has none. A server's environment and headers are never read. Of another's command than Irie's own only the program and the package are kept, with the SHA-256 of the whole command, and of an address only its scheme and host: the rest may hold a secret.
+- `plugins`: Irie's plugins that are on (§4.17), which are code in the irie binary and carry its version and hash, and your own, with the hash of their manifest.
+- `skills`: Irie's skills the session gets, from its plugin folder, each as `/irie:<name>` with the hash of its files.
+- `hooks`: Irie's own, the events of its settings file with the hash of its table, then each of the user's own (`~/.claude/settings.json`) and the project's (`.claude/settings.json`): its event and matcher, its program, and the hash of its whole command.
+- `notes`: what it could not read, and why.
+
+**`irie lock [SESSION] [--json]`** (op `lock`) prints the locks of the open sessions, or of one by its id or name, or a closed one by its id, a line a part, each package with what the last check found for it; a peer's session has its lock on its own machine, so only the packages its row names. A session started before Irie wrote locks has none until it is reopened, resumed or forked.
+
+**`irie lock --check`** asks OSV.dev's batch API (`POST /v1/querybatch`) about every harness and package version the open sessions' locks name, and the peers' rows, then reads each advisory it lists once (`GET /v1/vulns/{id}`), and prints each that affects one: its id, its summary and the first version that fixes it, with the sessions that run it. A query sends a package's ecosystem, name and version, and the reads an advisory's id: nothing of the sessions, the machine or the user. An advisory known from the last check whose modified time OSV gives again is not read again. It runs only when asked: `lock.check = "daily"` lets the core run it once a day, and the default is off, since OSV.dev is a Google service; `lock.osv` names the API, such as a mirror of your own. What a check found is kept in `lock-check.json` in the state folder, each version for 30 days after a check last asked about it, so the marks outlast a restart.
+
+**The mark.** A row carries its lock's packages (`lock`), each with what the last check found: whether it was checked, how many advisories affect it, how many no version fixes yet, and the version that fixes the rest. While any does, its `words` say so in the meter's calm style, the part and its version first: "Claude Code 2.1.250: 1 advisory, fixed in 2.1.251", "MCP server github 0.6.2: 2 advisories, no fix yet". The Mac app's card and the phone apps show them under the detail, in muted ink with no colour of their own; `irie ctl list` after the detail, and `irie ctl ps` counts them in its ADV column. A peer's rows come with their own core's marks (§2.8), and this core marks the versions its own check knows too, so an unattended machine's sessions are checked from here.
+
+**Not yet.** The skills in the user's own skills folders and the project's, the local settings file's hooks, the user's installed Claude Code plugins and what they bring, managed settings, and a profile's own `--mcp-config` files are not in the lock. A shared registry of vulnerable setups, the other half of the idea, needs many people's locks, which Irie could feed one day only by an explicit export; a model's own known weaknesses have no public feed to check.
+
+**Tests:** `internal/lock`: a lock for a fake harness and fake MCP servers in each scope, with none of their secrets in the file; the packages of npx's and uvx's command lines; versions ordered as npm and PyPI order them; a check against an `httptest` stand-in for OSV that has an advisory for one version and none for the next, sending names and versions alone, reading no advisory twice, and saying so when OSV doesn't answer; the card's words; results kept a month. `internal/core`: a spawn of the fake agent writing its lock, with a fake MCP server of its config, and a check marking the row of the version with the advisory and not the next; marks after a restart and on a peer's rows; the daily check once a day and never while off. No test reaches the network.
+
 ---
 
 ## 5. Data and config
@@ -1378,6 +1403,7 @@ One JSON object per journal line and per `event` frame:
 | `outcome.rated` | `verdict`: `good` or `bad` | user (M10, §6.4) | none |
 | `outcome.escalated` | `profile`: the more accurate one the task ran on next | irie (M10, §6.4) | none |
 | `route.failover` | `to` and `profile` of the session that carries the task on, or `reason` it waits | irie (M10, §6.4) | none |
+| `delegate.timed_out` | `wait_ms`, the wait its caller gave up at, and `to_profile`, where the subtask went on | irie (§6.4) | none |
 | `route.fallback` | `from` and `to`, the models of a switch at a model's own usage limit, `limit`, what the failed turn said, and `reason` when the session waits for the reset instead | irie (§6.4) | none |
 | `model.switched` | `model`, the one it runs from then on; `from`, `requested` and `source` (`command`, `picker`, `sdk`, `auto`, `resume`) | PostModelSwitch | none |
 | `dog.nudged` | `dirty`, `ahead`, `land`, `unproven`, `message`: what the jot left, what its record contradicts, and what its agent had said. It stands in for that stop's `turn.ended`, since the turn goes on | irie (§4.8) | none |
@@ -1428,6 +1454,7 @@ Irie uses the XDG defaults on macOS too (`~/.config`, `~/.local/state`, `~/.loca
 | `$XDG_STATE_HOME/irie/journal/YYYY-MM-DD.ndjson` | Event envelopes, kept `journal.keep_days` days | core |
 | `$XDG_STATE_HOME/irie/sessions/<id>/` | `spec.json`, `task.md`, `claude-settings.json`, `gate.json`, `exit.json`, `host.json` (the host's pid, its agent's, and that it knows freeze), `freeze.json` (while the session is frozen), `note-<n>.md`, `status.json` (the last status line update, §6.3), `result.md` (the last turn's last message, whole, §6.4) | core, host |
 | `$XDG_STATE_HOME/irie/sessions/<id>/mcp.json`, `sessions/<id>/browser/` | The session's own MCP servers (§3.3); its browser's profile while the browser runs, with `irie-browser.pid`, removed when it closes (§4.15) | core; `irie browser` |
+| `$XDG_STATE_HOME/irie/sessions/<id>/lock.json`, `lock-check.json` | The session's agent lock, written as its agent starts; what the checks found for each harness and package version, each kept 30 days after a check last asked (§4.21) | core |
 | `$XDG_STATE_HOME/irie/local.json` | The model `irie setup local` chose for `+local`, and what models took in memory once loaded (§6.3) | core |
 | `$XDG_DATA_HOME/irie/notepad.json`, `backups/notepad/<day>.json`, `notepad.json.bad-<time>` | The notepad (§4.20): `version`, `rev`, the notes in their order and Recently Deleted; a copy as it stood before each day's first change, the newest 30; a file that did not read, moved aside and never written over. In the data folder, since they are the person's own words | core |
 | `$XDG_STATE_HOME/irie/context.git/` | The context store, a bare git repository: a branch per session, a commit per turn (§4.13) | core |
@@ -1586,6 +1613,11 @@ claude = 1.0
 # medium = ["implement", "fix", "test", …]
 # hard = ["design", "refactor", "debug", "review", "orchestrat", …]
 
+[route.embed]                 # a task takes the class of the nearest task given one (irie ctl route --label)
+model = "embeddinggemma-2:270m" # an Ollama embedding model; "" = route.words alone
+url = "http://127.0.0.1:11434"  # the Ollama that runs it: your own, as Irie's holds one model
+near = 0.75                   # below this cosine the nearest is unlike the task, and route.words decide
+
 [bench]                       # several runs of one task, then a judge (§6.6)
 runs = 3                      # how many sessions do the task
 judge = "claude"              # the profile that scores them, makes the result and rewrites the playbook
@@ -1637,6 +1669,10 @@ status_line = true            # be Claude Code's status line, to read cost and p
 rebuilds = true               # the prompt-cache meter: count each session's cache rebuilds, what woke it and what they cost (§6.3)
 rebuild_card = 1.0            # dollars: a card says how often its session woke cold today once that cost this much; 0 = from the first
 wake_most = 4.0               # dollars: what a nudge is worth; the trod bot and the jot dog leave a session whose cache ran out be past it; 0 = no limit
+
+[lock]                        # agent locks: each session's setup as its agent started (§4.21)
+check = "off"                 # off | daily: daily lets the core ask OSV.dev once a day about the locks' harness and package versions; irie lock --check asks at once
+osv = "https://api.osv.dev"   # the OSV API a check asks, such as a mirror of your own
 
 [skills]                      # the skills that come with Irie, as a plugin for each Claude Code session only (§3.3)
 enabled = true                # false = hand agents no skills
@@ -1880,7 +1916,7 @@ The status strip shows a session's cost (`$1.23 ctx 41% 640 MB`, or `local` for 
 A cheap model that gets a task wrong costs a retry and the user's attention, so the router does not pick the cheapest profile. It picks the cheapest **per successful task**, and only among profiles accurate enough for the task. Hard work, orchestration included, stays on the strongest model, where Opus orchestrators give the best results; mechanical work goes where it costs least.
 
 **The rule.** `spawn.default_profile` is `auto`, so a task with no `+profile` is routed; `+auto` routes explicitly, and any other `+profile` overrides.
-1. **Class.** The task gets a class, `small`, `medium` or `hard`, from its words (`route.words`) and its size. Hard words count three, medium words one, and small words minus two; a long task or one with a list of steps counts more. Hard words include `design`, `refactor`, `debug`, `review`, `orchestrat`, `milestone` and `why`; small ones include `typo`, `rename`, `docstring`, `summarize` and `README`.
+1. **Class.** The task gets a class, `small`, `medium` or `hard`, from its words (`route.words`) and its size. Hard words count three, medium words one, and small words minus two; a long task or one with a list of steps counts more. Hard words include `design`, `refactor`, `debug`, `review`, `orchestrat`, `milestone` and `why`; small ones include `typo`, `rename`, `docstring`, `summarize` and `README`. Once the user has given 30 or more tasks their classes, every class among them, the class of the one nearest the task decides instead, unless the words call it hard (below).
 2. **Accuracy.** For each profile in `route.profiles`, its accuracy on that class is the mean of a beta distribution: the starting guess (`route.accuracy`), counted as `route.prior_weight` outcomes, plus the user's own outcomes on that profile and class.
 3. **Cost.** Cost per attempt is relative to the strongest profile: the starting guess (`route.cost`), replaced by what its sessions of that class cost, from their status lines, once three or more say.
    - A local model costs no tokens, only a hundredth of an Opus task in memory weight when its model takes the whole budget. It can be chosen only when Irie's Ollama server has a model for it and the machine can hold that model now (§6.3).
@@ -1915,6 +1951,18 @@ So measured, a 4B-class model belongs at 60–80% for small work in `route.accur
 
 As judges they gained little. On 72 pairs of the user's jots, the follow-up rule (§4.2) was right on 90%. The best local model scored 92%, Haiku 81%, and any one of them allowed only to overrule the rule's "yes" lifted it to 94%. On the class of 153 of the user's tasks, the rule was right on 50%, Bonsai 2 9B on 61% and Haiku on 68%.
 
+**Classes from labelled tasks (measured 2026-11-15).** A small embedding model gets the class right more often than every local chat model measured. Each of the same 153 tasks took the class of the one nearest it among the other 152, by the cosine of their embeddings:
+- **embeddinggemma-2 270M** (378 MB, 0.35 GB loaded, about 0.1 s a task) was right on 71%, as often as Haiku within the set's ±7 points. With every neighbour at a cosine of 0.9 or more left out, for jots sent twice, it was right on 72%. It called 3 of the 67 hard tasks small.
+- **qwen3-embedding 0.6B** was right on 59%.
+- **Neighbours voting.** The three to nine nearest voting were right on 64–67%, so the one nearest decides.
+- **The words' hard stands.** Calling hard work easier is the costly mistake, since it puts the work on a weaker model. The nearest alone did that on 20 of the 153 tasks, the words alone on 44. Letting the words' "hard" stand, and the nearest decide the rest, was right on 72.5% and did it on 11. Taking the harder of the two did it on 8, but was right on only 66%.
+- **Follow-ups.** The cosine of two jots says nothing about whether the second is more for the first: the rule with it as a veto stayed at 90%.
+
+So `route.embed` sorts tasks this way:
+- **The labels.** `irie ctl route --label small|medium|hard TASK` gives one task its class, and `--import FILE` many: JSON lines, each with `text` and `class` (or a bench's eval set, with `fields.text` and `label`). They are kept in `route-labels.jsonl` in the state folder, never in a repository; a task given again takes its new class.
+- **The model.** It runs on the user's own Ollama at `route.embed.url`, since Irie's own server holds one model, which an embedding would push out. The core embeds the labelled tasks in the background and keeps the embeddings in `route-vectors.json`, so a restarted core embeds only the task.
+- **A task.** A task its words call hard is hard, with no embedding. For any other, a spawn waits at most 3 s for its task's embedding. The class of the nearest labelled task decides when its cosine is at least `route.embed.near` (0.75); this model's cosines run from about 0.7 up, so only a task unlike every labelled one is left to `route.words`, as is every task while fewer than 30 are embedded or a class has none. A server that fails is left alone for a minute, and the words decide meanwhile. `irie ctl route` says which decided: `like “…”, 0.82`, or the words.
+
 **Learning.** Outcomes are folded from the journal, like every row's state, over its 30 days:
 
 | Outcome | Counts as |
@@ -1928,9 +1976,11 @@ With a weight of 10, a profile's own record outweighs the guess after about ten 
 
 **Delegation.** A Claude Code session on a profile with cheaper ones in `route.profiles`, which was not itself delegated, is told at session start (SessionStart `additionalContext`) that it can delegate.
 - **The call.** `"$IRIE_BIN" ctl delegate "<subtask>"` routes the subtask among the profiles cheaper than the caller's. A profile with no starting cost counts as the dearest.
+- **In time.** The caller waits `--timeout` (10 minutes) for the answer, so a profile that takes longer than that to answer such a task is passed over (`answers in about 25m, past the 10m wait`). How long a profile takes is the median of its latest nine delegated subtasks of the class, from spawn to the end of the first turn, or of every class when the class has none, since a model's speed is mostly its own; a subtask its caller gave up on counts as taking at least the wait. Only delegations count: a session the user started may work for hours on a task of the same class. With no one waiting, as for a task spawned on `auto`, time does not count. `irie ctl route` shows each profile's time, as `≥2m` when the median is a wait its sessions ran past (`takes 2m or more`), and `--wait D` weighs a task as a subtask waited D for.
 - **Where it runs.** In the caller's directory, with `route.delegate_mode` (`acceptEdits`), so it can edit without asking; a command still needs the user.
 - **The result.** The call waits until the session's turn ends and prints the agent's last message: Stop's `last_assistant_message`, which the shim passes whole and the core keeps in `result.md`.
-- **Exit codes.** 3 when no cheaper profile is accurate enough ("do it yourself"); 4 when the session is still at work at `--timeout` (10 minutes), where it goes on as a row marked `↳ delegated`.
+- **Handed on.** A routed session still at work at `--timeout` is stopped (`delegate.timed_out`; Irie closes it, so reopen brings it back), and the subtask goes to the next profile accurate enough, in the same directory and under the same name, with a note that its work so far is there to check. The call waits for that one as long, once. Running the same task again this way says nothing against the first session's accuracy: it was slow, not wrong.
+- **Exit codes.** 3 when no cheaper profile is accurate enough ("do it yourself"); 4 when the session is still at work at `--timeout` and no other profile can take it over, or the one that did is still at work too, where it goes on as a row marked `↳ delegated`.
 - **Choosing what to hand on.** The note asks for self-contained, mechanical subtasks on files the caller is not editing, and keeps planning, design and review with the caller. It names the local profiles among those it may hand work to, which cost no tokens, and asks it to prefer them for every subtask that fits, such as reading and summarising files, searches, renames, docstrings and simple tests, and to check what comes back.
 
 **Fallback models.** Beside the plan's session and weekly limits, which every model shares, a model family can have a usage limit of its own, as Fable has. Claude Code stops the turn with `rate_limit` and says whose limit it was ("You've reached your Fable limit. Run /usage-credits to continue or switch models with /model."), and a model outside that family keeps working. A profile with `fallback_model` makes that switch on its own, in the same session:
@@ -2083,7 +2133,7 @@ Version 1 is M1 to M11 and M12, [skills](proposals/skills.md). A milestone is do
 | M3. Repos, worktrees, any task size, profiles | Done | Tab completes `:` commands (§4.2) |
 | M4. Manage the list | Nearly | `/` fuzzy jump and digits 1–9 in the terminal sidebar. A session whose pane vanished while the core was down is listed as closed |
 | M5. Pause at the next tool call | Not started | All of it. Irie.app's Pause and Resume are M6's freeze and thaw |
-| M6. Freeze | Done, with gaps | The long-freeze warning (`freeze.warn_after`). Undo steps for freezing and thawing all |
+| M6. Freeze | Done, with gaps | The long-freeze warning (`freeze.warn_after`) |
 | M7. Priority and notes | Priority done | Notes: the `note` op, `n` and `:note`, the `[notes]` templates and their delivery |
 | M8. Subagent panes | Nearly | Helper views that Irie draws replace the mirror windows (§4.4, [split-pane.md](proposals/split-pane.md)), and Irie.app has them. Left: retention, helpers in the terminal sidebar, transcript catch-up, and `p` and `n` on a helper |
 | M9. The Irie window in Ghostty, and Irie.app | Done, as Irie.app | Irie.app replaces the Ghostty window (§7, [MAC.md](MAC.md)). Left: an uninstall, a bundle test, bare `irie` opening the app, and M9's text |

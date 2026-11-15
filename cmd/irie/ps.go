@@ -23,8 +23,10 @@ const psUsage = `  ` + brand.Slug + ` ctl ps [--json] [--watch]         every ag
                                          starting, Z exited, X failed), priority,
                                          model, how full its context is, tokens,
                                          cost, its prompt-cache rebuilds today
-                                         and what they cost, memory, age and
-                                         name. --watch draws it again each second
+                                         and what they cost, the known
+                                         advisories for its harness and packages
+                                         (` + brand.Slug + ` lock), memory, age and name.
+                                         --watch draws it again each second
 `
 
 // proc is one agent as ps shows it.
@@ -43,10 +45,13 @@ type proc struct {
 	// out (DESIGN §6.3).
 	Rebuilds *ipc.Rebuilds `json:"rebuilds,omitempty"`
 	Cold     *ipc.Cold     `json:"cold,omitempty"`
-	Memory   int64         `json:"memory,omitempty"`
-	Age      float64       `json:"age_s"`
-	Name     string        `json:"name"`
-	Host     string        `json:"host,omitempty"`
+	// Lock is what its agent lock names that a check asks about, with the
+	// known advisories that affect them (DESIGN §4.21).
+	Lock   *ipc.LockRow `json:"lock,omitempty"`
+	Memory int64        `json:"memory,omitempty"`
+	Age    float64      `json:"age_s"`
+	Name   string       `json:"name"`
+	Host   string       `json:"host,omitempty"`
 }
 
 func ctlPs(args []string) error {
@@ -93,7 +98,7 @@ func procsOf(rows []ipc.Session, now time.Time) []proc {
 		p := proc{
 			ID: s.ID, State: stateLetter(s), Status: strings.ReplaceAll(s.State, "_", " "), Priority: s.Priority,
 			Model: strings.TrimPrefix(or(s.Model, "+"+s.Profile), "claude-"), Context: s.Context, CostUSD: s.CostUSD,
-			Rebuilds: s.Rebuilds, Cold: s.Cold, Memory: s.Memory, Age: now.Sub(s.Created).Seconds(), Name: s.Name, Host: s.Host,
+			Rebuilds: s.Rebuilds, Cold: s.Cold, Lock: s.Lock, Memory: s.Memory, Age: now.Sub(s.Created).Seconds(), Name: s.Name, Host: s.Host,
 		}
 		if s.Frozen != nil {
 			p.Status = "frozen"
@@ -132,7 +137,7 @@ func stateLetter(s ipc.Session) string {
 
 // printProcs writes the table, with a line that sums it up first.
 func printProcs(w io.Writer, procs []proc) {
-	var working, waiting, rebuilds int
+	var working, waiting, rebuilds, advised int
 	var cost, rebuildUSD float64
 	var mem int64
 	for _, p := range procs {
@@ -149,17 +154,23 @@ func printProcs(w io.Writer, procs []proc) {
 			rebuilds += r.Today
 			rebuildUSD += r.TodayUSD
 		}
+		if p.Lock != nil && p.Lock.Advisories > 0 {
+			advised++
+		}
 		mem += p.Memory
 	}
 	sum := fmt.Sprintf("%d agents · %d working · %d wait on you · $%.2f", len(procs), working, waiting, cost)
 	if rebuilds > 0 {
 		sum += fmt.Sprintf(" · caches rebuilt %d× today, $%.2f", rebuilds, rebuildUSD)
 	}
+	if advised > 0 {
+		sum += fmt.Sprintf(" · %d run a version with known advisories (%s lock)", advised, brand.Slug)
+	}
 	fmt.Fprintf(w, "%s · %s\n", sum, bytesOf(mem))
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tS\tPRI\tMODEL\tCTX\tTOKENS\tCOST\tREBUILT\tMEM\tAGE\tNAME")
+	fmt.Fprintln(tw, "ID\tS\tPRI\tMODEL\tCTX\tTOKENS\tCOST\tREBUILT\tADV\tMEM\tAGE\tNAME")
 	for _, p := range procs {
-		ctx, cost, rebuilt := "-", "-", "-"
+		ctx, cost, rebuilt, adv := "-", "-", "-", "-"
 		if p.Context != nil {
 			ctx = fmt.Sprintf("%.0f%%", *p.Context)
 		}
@@ -169,14 +180,17 @@ func printProcs(w io.Writer, procs []proc) {
 		if r := p.Rebuilds; r != nil && r.Today > 0 {
 			rebuilt = fmt.Sprintf("%d $%.2f", r.Today, r.TodayUSD)
 		}
+		if p.Lock != nil && p.Lock.Advisories > 0 {
+			adv = fmt.Sprint(p.Lock.Advisories)
+		}
 		pri := "0"
 		if p.Priority > 0 {
 			pri = fmt.Sprintf("+%d", p.Priority)
 		} else if p.Priority < 0 {
 			pri = fmt.Sprint(p.Priority)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.ID, p.State, pri, oneLine(p.Model, 18), ctx, count(p.Tokens), cost,
-			rebuilt, bytesOf(p.Memory), age(time.Duration(p.Age*float64(time.Second))), oneLine(p.Name, 48))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.ID, p.State, pri, oneLine(p.Model, 18), ctx, count(p.Tokens), cost,
+			rebuilt, adv, bytesOf(p.Memory), age(time.Duration(p.Age*float64(time.Second))), oneLine(p.Name, 48))
 	}
 	tw.Flush()
 }

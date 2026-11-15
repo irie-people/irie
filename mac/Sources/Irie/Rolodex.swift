@@ -10,13 +10,14 @@ import SwiftUI
 // the next, left to right, turning the wheel to each, and back to the
 // terminal after the last; ⌥⇧Tab goes the other way. The wheel turns the
 // short way round, so after the last card the first comes up next, as on a
-// real card wheel. The cards' index tabs stand left to right, the front
-// card's in front of the others, and the cards behind stand higher the
-// further back they are. A turn flips the front card over the rail toward
-// you and the next one comes up behind it; a turn back brings the card
-// before up over the rail. A scroll over the tabs or the rail turns the
-// wheel a card a notch, with a tick on the trackpad, and the knob at the
-// rail's end turns with it, and turns the wheel when dragged or clicked.
+// real card wheel. The cards' index tabs stand in one row along the top,
+// level with the terminal's top: the front card's joined to its card, the
+// others a little lower, and the cards behind show as thin edges above the
+// front card's. The front card's foot is level with the terminal's, and its
+// pane fills it to the edge. A turn flips the front card over its foot
+// toward you and the next one comes up behind it; a turn back brings the
+// card before up over it. A scroll over the tabs turns the wheel a card a
+// notch, with a tick on the trackpad.
 //
 // Each session has its own cards, kept across launches. Whether they show,
 // and how wide, is one choice for every session, so moving between sessions
@@ -28,7 +29,7 @@ import SwiftUI
 
 /// What a pane shows.
 enum PaneKind: String, Codable, CaseIterable, Identifiable {
-    case terminal, browser, markets, mail
+    case terminal, browser, code, markets, mail
 
     var id: String { rawValue }
 
@@ -36,6 +37,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .terminal: return "Terminal"
         case .browser: return "Browser"
+        case .code: return "Code"
         case .markets: return "Markets"
         case .mail: return "Mail"
         }
@@ -45,6 +47,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .terminal: return "terminal"
         case .browser: return "globe"
+        case .code: return "chevron.left.forwardslash.chevron.right"
         case .markets: return "chart.bar.doc.horizontal"
         case .mail: return "envelope"
         }
@@ -55,6 +58,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .terminal: return "t"
         case .browser: return "b"
+        case .code: return "c"
         case .markets: return "m"
         case .mail: return "e"
         }
@@ -65,6 +69,7 @@ enum PaneKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .terminal: return "Your own shell in this session’s folder"
         case .browser: return "A page: your app, docs, anything"
+        case .code: return "This session’s files, saved as you type"
         case .markets: return "Your market map"
         case .mail: return "Your Gmail and Proton Mail, in one list"
         }
@@ -97,9 +102,14 @@ struct DeckPane: Codable, Equatable, Identifiable {
     /// A browser's page, and its title.
     var url: String?
     var title: String?
+    /// A code card's open files, left to right, and the one on show
+    /// (CodePane.swift).
+    var files: [String]?
+    var file: String?
 
     /// What its index tab says.
     var label: String {
+        if kind == .code { return file.map { ($0 as NSString).lastPathComponent } ?? kind.title }
         if let t = title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
         if kind == .browser, let host = url.flatMap(URL.init(string:))?.host { return host }
         return kind.title
@@ -150,7 +160,7 @@ struct Flip: Equatable, Identifiable {
     /// rising card lands.
     var swap: Double { forward ? 0.14 : 0.8 }
 
-    /// The flap's tilt, in degrees about the rail, 0 standing up: a card
+    /// The flap’s tilt, in degrees about its foot, 0 standing up: a card
     /// turned forward falls toward you, a card turned back rises from you.
     func tilt(_ p: Double) -> Double {
         if forward {
@@ -183,7 +193,7 @@ final class RolodexModel {
     static let flipTime = 0.4
     /// How it slides in from the window's edge, and out.
     static let slide = Animation.spring(response: 0.42, dampingFraction: 0.82)
-    /// How the cards behind settle after a turn, and the knob with them.
+    /// How the cards behind settle after a turn.
     static let settle = Animation.spring(response: 0.34, dampingFraction: 0.7)
     static let startShare = 0.42
 
@@ -228,8 +238,6 @@ final class RolodexModel {
     private(set) var flips: [Flip] = []
     private(set) var swapped: String?
     @ObservationIgnored private var flipCount = 0
-    /// The knob's turn, in degrees.
-    var knob = 0.0
     /// Bumped to give a card the keyboard, by card.
     private(set) var focus: [String: Int] = [:]
     /// The core runs panes' shells (op pane).
@@ -244,10 +252,10 @@ final class RolodexModel {
     var still: Double?
     /// The blank card has the keyboard.
     @ObservationIgnored var blankHasKeys = false
-    /// The live pane's place in the window, and the bands a scroll turns the
-    /// wheel over: the tabs and the rail.
+    /// The live pane's place in the window, and the band a scroll turns the
+    /// wheel over: the row of tabs.
     @ObservationIgnored weak var frontProbe: NSView?
-    @ObservationIgnored let railProbes = NSHashTable<NSView>.weakObjects()
+    @ObservationIgnored let rowProbes = NSHashTable<NSView>.weakObjects()
     @ObservationIgnored private var spin: Task<Void, Never>?
     @ObservationIgnored private var saving: Task<Void, Never>?
     @ObservationIgnored private var monitors: [Any] = []
@@ -441,6 +449,57 @@ final class RolodexModel {
         if !fixture { UserDefaults.standard.set(recent, forKey: Self.recentKey) }
     }
 
+    // MARK: Code cards
+
+    /// A code card's line to go to, by card, as `irie ctl open FILE:LINE`
+    /// or Go to Line asks: asked for, not kept.
+    private(set) var goTo: [String: CodeGoTo] = [:]
+    @ObservationIgnored private var goes = 0
+    /// How many files a code card keeps open; the oldest not on show goes.
+    static let mostFiles = 12
+
+    /// Opens a file on a code card and shows it there, at a line when one
+    /// is given.
+    func open(_ path: String, on pane: String, in session: String, line: Int? = nil, column: Int? = nil) {
+        guard var d = decks[session], let i = d.panes.firstIndex(where: { $0.id == pane }) else { return }
+        var files = d.panes[i].files ?? []
+        if !files.contains(path) { files.append(path) }
+        while files.count > Self.mostFiles, let old = files.first(where: { $0 != path }) { files.removeAll { $0 == old } }
+        d.panes[i].files = files
+        d.panes[i].file = path
+        decks[session] = d
+        if let line, line > 0 { go(to: line, column: column ?? 1, on: pane) }
+        saveSoon()
+    }
+
+    /// Shows a file the card has open.
+    func show(file path: String, on pane: String, in session: String) {
+        guard var d = decks[session], let i = d.panes.firstIndex(where: { $0.id == pane }), d.panes[i].file != path else { return }
+        d.panes[i].file = path
+        decks[session] = d
+        saveSoon()
+    }
+
+    /// Closes a file on a code card: the one before it shows, or the next.
+    func close(file path: String, on pane: String, in session: String) {
+        guard var d = decks[session], let i = d.panes.firstIndex(where: { $0.id == pane }) else { return }
+        var files = d.panes[i].files ?? []
+        guard let at = files.firstIndex(of: path) else { return }
+        files.remove(at: at)
+        d.panes[i].files = files
+        if d.panes[i].file == path { d.panes[i].file = files.isEmpty ? nil : files[max(0, at - 1)] }
+        decks[session] = d
+        saveSoon()
+    }
+
+    func go(to line: Int, column: Int = 1, on pane: String) {
+        goes += 1
+        goTo[pane] = CodeGoTo(line: line, column: column, serial: goes)
+    }
+
+    /// Every file a code card has open, in every session.
+    var openFiles: Set<String> { Set(decks.values.flatMap { $0.panes.flatMap { $0.files ?? [] } }) }
+
     /// Drops the wheels of sessions that are gone, once there are many.
     func prune(keeping live: Set<String>) {
         guard decks.count > 120 else { return }
@@ -489,10 +548,7 @@ final class RolodexModel {
         let from = d.panes[f], to = d.panes[ti]
         d.front = to.id
         let calm = fixture || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        withAnimation(calm ? nil : Self.settle) {
-            decks[session] = d
-            knob += (forward ? 1 : -1) * 360 / Double(max(n, 8))
-        }
+        withAnimation(calm ? nil : Self.settle) { decks[session] = d }
         saveSoon()
         play(Flip(id: 0, session: session, from: from, to: to, forward: forward, start: Date(), duration: duration,
                   fromTab: layout(f), toTab: layout(ti)), calm: calm, keys: target)
@@ -551,8 +607,8 @@ final class RolodexModel {
         return nil
     }
 
-    /// Watches clicks, which move the keyboard, and scrolls over the tabs
-    /// and the rail, which turn the wheel.
+    /// Watches clicks, which move the keyboard, and scrolls over the tabs,
+    /// which turn the wheel.
     func install(_ store: Store) {
         guard monitors.isEmpty else { return }
         if let m = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self, weak store] event in
@@ -575,10 +631,10 @@ final class RolodexModel {
         }) { monitors.append(m) }
     }
 
-    /// A scroll over the tabs or the rail turns the wheel a notch per step,
-    /// with a tick on the trackpad while fingers are on it.
+    /// A scroll over the tabs turns the wheel a notch per step, with a tick
+    /// on the trackpad while fingers are on it.
     private func scroll(_ event: NSEvent, store: Store) -> Bool {
-        guard open, !folded, overRail(event), let s = store.paneSession else { return false }
+        guard open, !folded, overTabs(event), let s = store.paneSession else { return false }
         let d = deck(s.id)
         guard d.panes.count > 1 else { return true }
         if event.phase == .began || event.phase == .mayBegin { scrolled = 0 }
@@ -598,8 +654,8 @@ final class RolodexModel {
         return true
     }
 
-    private func overRail(_ event: NSEvent) -> Bool {
-        railProbes.allObjects.contains { v in
+    private func overTabs(_ event: NSEvent) -> Bool {
+        rowProbes.allObjects.contains { v in
             guard let w = v.window, w === event.window else { return false }
             return v.bounds.contains(v.convert(event.locationInWindow, from: nil))
         }
@@ -649,6 +705,7 @@ final class RolodexModel {
         let panes = [
             DeckPane(id: "fixtureterm", kind: .terminal, slot: 1),
             DeckPane(id: "fixtureweb", kind: .browser, slot: 4, url: "http://localhost:5173/", title: "Acme · Sign in"),
+            DeckPane(id: "fixturecode", kind: .code, slot: 0, files: [Fixture.codeFile, Fixture.codeOther], file: Fixture.codeFile),
             DeckPane(id: "fixturemap", kind: .markets, slot: 2),
         ] + (front == .mail ? [DeckPane(id: "fixturemail", kind: .mail, slot: 5)] : [])
         decks = [session: Deck(panes: panes, front: panes.first { $0.kind == front }?.id)]
@@ -667,7 +724,7 @@ final class RolodexModel {
         after.front = d.panes[t].id
         decks[session] = after
         flips = [Flip(id: 1, session: session, from: d.panes[f], to: d.panes[t], forward: forward, start: .distantPast, duration: 1,
-                      fromTab: lay.tabX(f), toTab: lay.tabX(t))]
+                      fromTab: lay.frontTabX(f), toTab: lay.frontTabX(t))]
         let flip = flips[0]
         swapped = progress < flip.swap ? d.panes[f].id : d.panes[t].id
         still = progress
@@ -675,6 +732,13 @@ final class RolodexModel {
 }
 
 // MARK: Store
+
+/// A file a card frame asks a code card to open, and where in it.
+struct CardFile: Equatable {
+    var path: String
+    var line: Int?
+    var column: Int?
+}
 
 /// The pane op's arguments and answer (internal/ipc/pane.go).
 struct PaneArgs: Encodable {
@@ -706,7 +770,7 @@ extension Store {
     func tabPlace(for session: String) -> (Int) -> CGFloat {
         let n = rolodex.deck(session).panes.count
         let w = RolodexLayout.lastSize
-        return { i in RolodexLayout(size: w, count: n).tabX(i) }
+        return { i in RolodexLayout(size: w, count: n).frontTabX(i) }
     }
 
     /// View › Show Panes (⌥⌘P), and the toolbar's button. Closing hands the
@@ -781,14 +845,24 @@ extension Store {
 
     /// Shows a card of a kind beside a session, as `irie ctl card` asks
     /// through the core (a card frame): the session's card of that kind, or
-    /// a new one. Beside the session on show the cards slide in and turn to
-    /// it; beside another it waits in front of that session's cards. The
-    /// keyboard stays where it is.
-    func showCard(_ kind: PaneKind, in session: String) {
+    /// a new one; for `irie ctl open`, a code card with the file open on it
+    /// at its line, the front card when that is a code card. Beside the
+    /// session on show the cards slide in and turn to it; beside another it
+    /// waits in front of that session's cards. The keyboard stays where it
+    /// is.
+    func showCard(_ kind: PaneKind, in session: String, file: CardFile? = nil) {
         guard paneKinds.contains(kind), let row = sessions.first(where: { $0.id == session }) else { return }
         let r = rolodex
         let own = row.hue.map { ($0 - 1) % Theme.agentSlots }
-        let had = r.deck(session).panes.first { $0.kind == kind }
+        let deck = r.deck(session)
+        let had = deck.frontPane?.kind == kind ? deck.frontPane : deck.panes.first { $0.kind == kind }
+        if let file, kind == .code {
+            let card = had ?? r.add(kind, to: session, avoiding: own)
+            r.open(file.path, on: card.id, in: session, line: file.line ?? 1, column: file.column)
+            if paneSession?.id == session { r.reveal() }
+            r.turn(to: card.id, in: session, keys: false, layout: tabPlace(for: session))
+            return
+        }
         if paneSession?.id == session {
             r.reveal()
             if let had {
@@ -847,9 +921,13 @@ extension Store {
             Task { _ = try? await client.call("pane", PaneArgs(session: s.id, pane: id, end: true), timeout: 10, as: PaneShell.self) }
         }
         if p.kind == .browser { WebPool.shared.drop(id) }
+        if p.kind == .code {
+            for f in p.files ?? [] { CodeDocs.shared.existing(f)?.saveNow() }
+        }
         let place = tabPlace(for: s.id)
         let wasFront = d.frontPane?.id == id
         r.remove(id, from: s.id)
+        if p.kind == .code { CodeDocs.shared.keep(only: r.openFiles) }
         guard wasFront else { return }
         let after = r.deck(s.id)
         let next = after.frontPane
@@ -857,7 +935,7 @@ extension Store {
         let calm = r.fixture || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         // The closed card falls from where it stood, already over the live pane.
         let nextTab = next.flatMap { n in after.panes.firstIndex { $0.id == n.id } }
-            .map { RolodexLayout(size: RolodexLayout.lastSize, count: after.panes.count).tabX($0) } ?? place(0)
+            .map { RolodexLayout(size: RolodexLayout.lastSize, count: after.panes.count).frontTabX($0) } ?? place(0)
         let flip = Flip(id: 0, session: s.id, from: p, to: next, forward: true, start: Date().addingTimeInterval(-0.06),
                         duration: RolodexModel.flipTime, fromTab: place(i), toTab: nextTab)
         r.play(flip, calm: calm, keys: hadKeys ? next?.id : nil)
@@ -873,83 +951,96 @@ extension Store {
 
 // MARK: Layout
 
-/// Where the parts of the wheel go in its frame.
+/// Where the parts of the wheel go in its frame: a row of index tabs along
+/// the top, which the wheel's frame puts level with the terminal's top, the
+/// + and the fold at the row's end, and under the row the front card's body
+/// down to the frame's foot, level with the terminal's. The cards behind
+/// show as thin edges above the front card's top edge, between the tabs.
 struct RolodexLayout {
     let size: CGSize
     /// How many cards; 0 draws a blank one.
     let count: Int
 
-    static let tabHeight: CGFloat = 25
-    /// How much higher each card behind stands than the one before it.
-    static let step: CGFloat = 6
-    /// The depths drawn apart; deeper cards stand with the last.
+    /// The row of tabs.
+    static let tabHeight: CGFloat = 28
+    /// How much lower the tabs behind stand than the front one.
+    static let lift: CGFloat = 3
+    /// How far above the front card's top edge each card behind shows.
+    static let step: CGFloat = 3
+    /// The cards behind drawn apart; deeper ones stand with the last.
     static let deepest = 2
     /// How much narrower each card behind is, a side.
-    static let inset: CGFloat = 7
-    /// The rail's band at the foot.
-    static let rail: CGFloat = 22
-    /// Room right of the cards, for the knob and the + button.
-    static let knobRoom: CGFloat = 38
-    static let radius: CGFloat = 13
+    static let inset: CGFloat = 10
+    /// The row's room at its right end, for the + and the fold.
+    static let buttons: CGFloat = 60
+    /// The cards' corners, as round as the terminal's frame.
+    static let radius: CGFloat = Theme.frameRadius
     static let slope: CGFloat = 8
 
     /// The size the wheel was last drawn at, for the tabs' places as a key
     /// turns it.
     @MainActor static var lastSize = CGSize(width: 480, height: 600)
 
-    var left: CGFloat { 14 }
-    var cardsWidth: CGFloat { max(100, size.width - left - Self.knobRoom) }
-    var railY: CGFloat { size.height - Self.rail / 2 }
+    /// The front card, its tab included: the whole frame.
+    var front: CGRect { CGRect(x: 0, y: 0, width: max(120, size.width), height: max(120, size.height)) }
 
-    /// The front card, its tab included.
-    var front: CGRect {
-        let top = Self.step * CGFloat(Self.deepest)
-        return CGRect(x: left, y: top, width: cardsWidth, height: max(120, railY + 5 - top))
-    }
-
-    /// The front card's body, under its tab.
+    /// The front card's body, under the row of tabs.
     var body: CGRect {
-        CGRect(x: front.minX, y: front.minY + Self.tabHeight, width: front.width, height: front.height - Self.tabHeight)
+        CGRect(x: 0, y: Self.tabHeight, width: front.width, height: front.height - Self.tabHeight)
     }
 
-    /// Where the live pane goes, inside the body, clear of the rail's notch.
-    var content: CGRect {
-        CGRect(x: body.minX + 8, y: body.minY + 8, width: body.width - 16, height: max(60, body.height - 8 - 16))
-    }
+    /// Where the live pane goes: the whole body, inside its edge.
+    var content: CGRect { body.insetBy(dx: 1, dy: 1) }
 
-    /// A card at a depth behind the front one.
+    /// A card at a depth behind the front one: its top edge shows above the
+    /// front card's, and it is narrower, so its corners show too.
     func card(depth d: Int) -> CGRect {
         let k = CGFloat(min(d, Self.deepest))
-        return CGRect(x: front.minX + k * Self.inset, y: front.minY - k * Self.step, width: front.width - 2 * k * Self.inset, height: front.height)
+        return CGRect(x: k * Self.inset, y: body.minY - k * Self.step, width: front.width - 2 * k * Self.inset,
+                      height: body.height + k * Self.step)
     }
 
-    /// The tabs' width: as many fit side by side as there are cards, at most
-    /// 156 points and at least 74.
-    var tabWidth: CGFloat {
-        let room = cardsWidth - 2 * (Self.radius + 4)
-        return min(156, max(74, room / CGFloat(max(count, 3)) + 12))
+    /// The room the tabs stand in: from the body's rounded corner to the
+    /// buttons.
+    private var room: CGFloat { max(80, front.width - (Self.radius + 2) - Self.buttons) }
+
+    /// The tabs' widths, the front one's and each of the others': all alike
+    /// while there is room, at most 168 points; when the cards are many, the
+    /// front tab keeps room for its name and the others narrow.
+    var widths: (front: CGFloat, back: CGFloat) {
+        let even = min(168, max(64, room / CGFloat(max(count, 3)) + 6))
+        guard count > 1, even < 132 else { return (even, even) }
+        let front = min(156, max(even, room * 0.42))
+        return (front, max(40, min(even, (room - front) / CGFloat(count - 1) + 6)))
     }
 
-    /// Where the ith card's tab starts, from the wheel's left, left to right
-    /// by place, overlapping when the cards are many.
-    func tabX(_ i: Int) -> CGFloat {
-        let start = left + Self.radius + 4
-        guard count > 1 else { return start }
-        let room = cardsWidth - 2 * (Self.radius + 4) - tabWidth
-        let step = min(tabWidth - 4, room / CGFloat(count - 1))
-        return start + CGFloat(i) * max(step, 0)
+    func tabWidth(_ i: Int, front f: Int) -> CGFloat { i == f ? widths.front : widths.back }
+
+    /// Where the ith card's tab starts, from the wheel's left, while the card
+    /// at front is in front: left to right by place, their slopes
+    /// overlapping, and all squeezed alike when they don't fit.
+    func tabX(_ i: Int, front f: Int) -> CGFloat {
+        let start = Self.radius + 2
+        guard count > 1, i > 0 else { return start }
+        let w = widths
+        let steps = (0..<(count - 1)).map { j in (j == f ? w.front : w.back) - 6 }
+        let last = count - 1 == f ? w.front : w.back
+        let squeeze = min(1, max(0, room - last) / max(steps.reduce(0, +), 1))
+        return start + steps.prefix(i).reduce(0, +) * squeeze
     }
+
+    /// Where a card's tab stands while it is the front one, as a turn draws
+    /// it.
+    func frontTabX(_ i: Int) -> CGFloat { tabX(i, front: i) }
 }
 
 // MARK: Shapes
 
-/// An index card: a body with rounded corners and a tab on its top edge,
-/// and the notch in its foot that the rail runs through.
+/// An index card: a body with rounded corners and a tab on its top edge.
 struct IndexCard: Shape {
     /// The tab's left and width, from the card's left.
     var tabX: CGFloat
     var tabWidth: CGFloat
-    var notch = true
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(tabX, tabWidth) }
@@ -971,17 +1062,27 @@ struct IndexCard: Shape {
         p.addArc(tangent1End: CGPoint(x: x2, y: y0), tangent2End: CGPoint(x: rect.maxX, y: y0), radius: 5)
         p.addArc(tangent1End: CGPoint(x: rect.maxX, y: y0), tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: r)
         p.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: rect.maxY), radius: r)
-        if notch {
-            // The slot the rail runs through, in the middle of the foot.
-            let cx = rect.midX, w: CGFloat = 17, d: CGFloat = 10
-            p.addLine(to: CGPoint(x: cx + w + 4, y: rect.maxY))
-            p.addArc(tangent1End: CGPoint(x: cx + w, y: rect.maxY), tangent2End: CGPoint(x: cx + w, y: rect.maxY - d), radius: 3)
-            p.addArc(tangent1End: CGPoint(x: cx + w, y: rect.maxY - d), tangent2End: CGPoint(x: cx - w, y: rect.maxY - d), radius: 6)
-            p.addArc(tangent1End: CGPoint(x: cx - w, y: rect.maxY - d), tangent2End: CGPoint(x: cx - w, y: rect.maxY), radius: 6)
-            p.addArc(tangent1End: CGPoint(x: cx - w, y: rect.maxY), tangent2End: CGPoint(x: cx - w - 4, y: rect.maxY), radius: 3)
-        }
         p.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: y0), radius: r)
         p.closeSubpath()
+        return p
+    }
+}
+
+/// The tab of a card behind, alone: its slopes and top, standing on its
+/// foot, which the front card's top edge covers. Open, it is the line to
+/// stroke, with no line along the foot.
+struct CardTab: Shape {
+    var open = false
+
+    func path(in rect: CGRect) -> Path {
+        let s = RolodexLayout.slope
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX - 4, y: rect.maxY))
+        p.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX + s, y: rect.minY), radius: 5)
+        p.addArc(tangent1End: CGPoint(x: rect.minX + s, y: rect.minY), tangent2End: CGPoint(x: rect.maxX - s, y: rect.minY), radius: 7)
+        p.addArc(tangent1End: CGPoint(x: rect.maxX - s, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: 7)
+        p.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY), tangent2End: CGPoint(x: rect.maxX + 4, y: rect.maxY), radius: 5)
+        if !open { p.closeSubpath() }
         return p
     }
 }
@@ -1020,13 +1121,13 @@ struct PaneOwner: Equatable {
     let id: String
     /// The other machine it runs on, if any.
     let peer: String?
-    /// Its colour, for the knob's dot.
-    let ink: Color
+    /// Its folder, where a shell starts and code cards find files.
+    let folder: String?
 
     init(_ s: Session) {
         id = s.id
         peer = s.peerName
-        ink = Look.edge(s)
+        folder = s.worktree ?? s.cwd
     }
 }
 
@@ -1048,15 +1149,16 @@ struct RolodexView: View {
     }
 }
 
-/// The wheel: the cards behind, the front card with its live pane, the
-/// flaps of turns on show, the rail and its knob, and the + that adds a card.
+/// The wheel: the edges and tabs of the cards behind, the front card with
+/// its live pane, the flaps of turns on show, and at the row's end the +
+/// that adds a card and the fold.
 @MainActor
 private struct RolodexWheel: View {
     let owner: PaneOwner?
     @Environment(Store.self) private var store
+    @Environment(\.colorScheme) private var scheme
+    @AppStorage(CodeThemes.defaultsKey) private var codeTheme = CodeThemes.standard
     @State private var hoveredTab: String?
-    @State private var knobDrag: CGFloat?
-    @State private var knobTurned = false
 
     var body: some View {
         let r = store.rolodex
@@ -1064,25 +1166,20 @@ private struct RolodexWheel: View {
         GeometryReader { geo in
             let lay = RolodexLayout(size: geo.size, count: deck.panes.count)
             ZStack(alignment: .topLeading) {
-                rail(lay)
-                // The cards behind, the furthest first, each with its tab.
+                edges(deck, lay: lay)
+                // The tabs of the cards behind, the furthest lowest.
                 ForEach(Array(deck.panes.enumerated()).filter { deck.depth(of: $0.offset) > 0 }, id: \.element.id) { i, p in
-                    backCard(p, place: i, depth: deck.depth(of: i), lay: lay)
+                    backTab(p, place: i, depth: deck.depth(of: i), front: deck.frontIndex ?? 0, lay: lay)
                 }
                 frontCard(deck, lay: lay)
                 live(deck, lay: lay)
                 flaps(lay)
-                plus(lay)
-                fold(lay)
-                // The bands a scroll turns the wheel over; a turn drawn still
+                buttons(lay)
+                // The band a scroll turns the wheel over; a turn drawn still
                 // has no window to scroll in.
                 if r.still == nil {
-                    Probe { r.railProbes.add($0) }
-                        .frame(width: lay.size.width, height: lay.body.minY + 2)
-                        .allowsHitTesting(false)
-                    Probe { r.railProbes.add($0) }
-                        .frame(width: lay.size.width, height: RolodexLayout.rail + 6)
-                        .offset(y: lay.size.height - RolodexLayout.rail - 6)
+                    Probe { r.rowProbes.add($0) }
+                        .frame(width: lay.size.width, height: RolodexLayout.tabHeight + 2)
                         .allowsHitTesting(false)
                 }
             }
@@ -1095,23 +1192,42 @@ private struct RolodexWheel: View {
 
     // MARK: Cards
 
-    private func backCard(_ p: DeckPane, place i: Int, depth d: Int, lay: RolodexLayout) -> some View {
-        let rect = lay.card(depth: d)
-        let tabX = lay.tabX(i) - rect.minX
-        let shape = IndexCard(tabX: tabX, tabWidth: lay.tabWidth, notch: false)
-        let fade = d > RolodexLayout.deepest ? 0.75 : 1.0
-        return ZStack(alignment: .topLeading) {
-            shape.fill(Theme.agentWash(slot: p.slot))
-                .overlay(shape.fill(Theme.panel.opacity(0.35)))
-                .overlay(shape.stroke(Theme.edge, lineWidth: 1))
-                .shadow(color: .black.opacity(0.08), radius: 3, y: -1)
-                .allowsHitTesting(false)
-            tabLabel(p, front: false, width: lay.tabWidth)
-                .offset(x: tabX)
+    /// The cards behind the front one, as thin edges above its top edge,
+    /// each narrower than the one before it, the next card's nearest and
+    /// tinted with its colour.
+    @ViewBuilder
+    private func edges(_ deck: Deck, lay: RolodexLayout) -> some View {
+        let n = deck.panes.count
+        if n > 1, let f = deck.frontIndex {
+            ForEach(1...min(RolodexLayout.deepest, n - 1), id: \.self) { k in
+                let p = deck.panes[(f + k) % n]
+                let rect = lay.card(depth: k)
+                let shape = RoundedRectangle(cornerRadius: RolodexLayout.radius, style: .continuous)
+                shape.fill(Theme.panel)
+                    .overlay(shape.fill(Theme.agentWash(slot: p.slot).opacity(k == 1 ? 0.8 : 0.5)))
+                    .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1))
+                    .frame(width: rect.width, height: rect.height)
+                    .offset(x: rect.minX, y: rect.minY)
+                    .zIndex(Double(-100 - k))
+                    .allowsHitTesting(false)
+            }
         }
-        .frame(width: rect.width, height: rect.height)
-        .offset(x: rect.minX, y: rect.minY)
-        .opacity(fade)
+    }
+
+    /// A card behind's tab, a little lower than the front one's, on its foot
+    /// under the front card's top edge.
+    private func backTab(_ p: DeckPane, place i: Int, depth d: Int, front: Int, lay: RolodexLayout) -> some View {
+        let height = RolodexLayout.tabHeight - RolodexLayout.lift + 2
+        let fill = CardTab(), line = CardTab(open: true)
+        return ZStack(alignment: .topLeading) {
+            fill.fill(Theme.panel)
+                .overlay(fill.fill(Theme.agentWash(slot: p.slot).opacity(0.75)))
+                .overlay(line.stroke(Theme.edge, lineWidth: 1))
+                .allowsHitTesting(false)
+            tabLabel(p, front: false, width: lay.tabWidth(i, front: front), height: height - 2)
+        }
+        .frame(width: lay.tabWidth(i, front: front), height: height)
+        .offset(x: lay.tabX(i, front: front), y: RolodexLayout.lift)
         .zIndex(Double(-d))
     }
 
@@ -1120,13 +1236,14 @@ private struct RolodexWheel: View {
         let r = store.rolodex
         let p = deck.frontPane
         let i = deck.frontIndex ?? 0
-        let tabX = lay.tabX(i) - lay.front.minX
-        let shape = IndexCard(tabX: tabX, tabWidth: lay.tabWidth)
+        let tabX = lay.frontTabX(i)
+        let shape = IndexCard(tabX: tabX, tabWidth: lay.widths.front)
         let keys = r.keys != nil && r.keys == (p?.id ?? RolodexModel.blank)
         let ink = p.map { Theme.agent(slot: $0.slot) } ?? Theme.muted
         ZStack(alignment: .topLeading) {
-            shape.fill(Theme.panel)
-                .shadow(color: keys ? ink.opacity(0.35) : .black.opacity(0.16), radius: keys ? 12 : 8, y: 2)
+            // The body takes its pane's ground, so the pane runs to its edge.
+            shape.fill(p.map { PaneGround.of($0.kind, dark: scheme == .dark, code: codeTheme) } ?? Theme.panel)
+                .shadow(color: keys ? ink.opacity(0.3) : .black.opacity(0.14), radius: keys ? 10 : 6, y: 2)
                 .allowsHitTesting(false)
             // The tab, in the card's colour.
             Rectangle()
@@ -1138,27 +1255,17 @@ private struct RolodexWheel: View {
             shape.stroke(keys ? ink : Theme.edge, lineWidth: keys ? 1.6 : 1)
                 .allowsHitTesting(false)
             if let p {
-                tabLabel(p, front: true, width: lay.tabWidth)
+                tabLabel(p, front: true, width: lay.widths.front)
                     .offset(x: tabX)
             } else {
-                blankTab(width: lay.tabWidth)
+                blankTab(width: lay.widths.front)
                     .offset(x: tabX)
-            }
-            // The live pane's ground, while it shows, and what a blank card says.
-            if let p {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(p.kind == .terminal ? Color(nsColor: Theme.terminalBackground) : Theme.card)
-                    .frame(width: lay.content.width, height: lay.content.height)
-                    .offset(x: lay.content.minX - lay.front.minX, y: lay.content.minY - lay.front.minY)
-                    .allowsHitTesting(false)
-            } else {
                 BlankCard(hasSession: owner != nil, lay: lay)
                     .frame(width: lay.body.width, height: lay.body.height)
                     .offset(y: RolodexLayout.tabHeight)
             }
         }
         .frame(width: lay.front.width, height: lay.front.height)
-        .offset(x: lay.front.minX, y: lay.front.minY)
         .zIndex(1)
     }
 
@@ -1181,6 +1288,8 @@ private struct RolodexWheel: View {
                 }
             }
             .frame(width: c.width, height: c.height)
+            // Inside the body's rounded corners.
+            .clipShape(RoundedRectangle(cornerRadius: RolodexLayout.radius - 1, style: .continuous))
             // Where the live pane is in the window; a turn drawn still has
             // no window, and its renderer would paint the probe in.
             .background {
@@ -1214,7 +1323,7 @@ private struct RolodexWheel: View {
         }
     }
 
-    private func tabLabel(_ p: DeckPane, front: Bool, width: CGFloat) -> some View {
+    private func tabLabel(_ p: DeckPane, front: Bool, width: CGFloat, height: CGFloat = RolodexLayout.tabHeight) -> some View {
         let hovered = hoveredTab == p.id
         return HStack(spacing: 5) {
             Image(systemName: p.kind.symbol)
@@ -1239,9 +1348,9 @@ private struct RolodexWheel: View {
         .foregroundStyle(front ? Theme.agentInk(slot: p.slot) : Theme.muted)
         .padding(.leading, RolodexLayout.slope + 4)
         .padding(.trailing, RolodexLayout.slope)
-        .frame(width: width, height: RolodexLayout.tabHeight)
+        .frame(width: width, height: height)
         .contentShape(Rectangle())
-        .offset(y: hovered && !front ? -2 : 0)
+        .offset(y: hovered && !front ? -1.5 : 0)
         .animation(.easeOut(duration: 0.12), value: hovered)
         .onHover { inside in hoveredTab = inside ? p.id : (hoveredTab == p.id ? nil : hoveredTab) }
         .onTapGesture { store.showPane(p.id) }
@@ -1285,79 +1394,23 @@ private struct RolodexWheel: View {
         .frame(width: width, height: RolodexLayout.tabHeight)
     }
 
-    // MARK: Rail
+    // MARK: Buttons
 
-    /// The rail along the foot, which runs through the cards' notch, with a
-    /// cap at its left end and the knob at its right.
-    private func rail(_ lay: RolodexLayout) -> some View {
-        let y = lay.railY
-        let ink = owner?.ink ?? Theme.accent
-        return ZStack(alignment: .topLeading) {
-            // The rod: lit along its top, shaded under, as round metal is.
-            Capsule()
-                .fill(LinearGradient(colors: [Theme.muted.opacity(0.3), Theme.muted.opacity(0.7), Theme.muted.opacity(0.95)],
-                                     startPoint: .top, endPoint: .bottom))
-                .overlay(Capsule().fill(Theme.panel.opacity(0.55)).frame(height: 1).padding(.horizontal, 3).offset(y: -1.5))
-                .shadow(color: .black.opacity(0.15), radius: 1.5, y: 1)
-                .frame(width: lay.size.width - 20, height: 6)
-                .offset(x: 6, y: y - 3)
-            // The stop at its left end.
-            Circle()
-                .fill(Theme.panel)
-                .overlay(Circle().strokeBorder(Theme.muted.opacity(0.6), lineWidth: 1.5))
-                .overlay(Circle().fill(Theme.muted.opacity(0.6)).frame(width: 3, height: 3))
-                .frame(width: 13, height: 13)
-                .offset(x: 2, y: y - 6.5)
-            Knob(angle: store.rolodex.knob, ink: ink)
-                .frame(width: 26, height: 26)
-                .contentShape(Circle())
-                .gesture(knobGesture())
-                .help("Turn the wheel: click, drag, or scroll over the tabs or the rail")
-                .offset(x: lay.size.width - 28, y: y - 13)
-                .accessibilityLabel("Turn to the next pane")
-                .accessibilityAddTraits(.isButton)
+    /// The + and the fold, side by side at the row's right end.
+    private func buttons(_ lay: RolodexLayout) -> some View {
+        HStack(spacing: 6) {
+            plus
+            fold
         }
-        .zIndex(-10)
+        .offset(x: lay.size.width - 2 * RoundButton.size - 6 - 2, y: (RolodexLayout.tabHeight - RoundButton.size) / 2 - 1)
+        .zIndex(6)
     }
 
-    /// A drag of the knob turns the wheel a notch per 18 points; a click
-    /// turns it one notch forward.
-    private func knobGesture() -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { g in
-                guard let s = owner?.id else { return }
-                let moved = g.translation.height - g.translation.width
-                let base = knobDrag ?? 0
-                if knobDrag == nil { knobDrag = 0 }
-                if abs(moved - base) >= 18 {
-                    knobDrag = moved
-                    knobTurned = true
-                    turnOne(s, forward: moved > base)
-                }
-            }
-            .onEnded { _ in
-                if !knobTurned, let s = owner?.id { turnOne(s, forward: true) }
-                knobDrag = nil
-                knobTurned = false
-            }
-    }
-
-    private func turnOne(_ s: String, forward: Bool) {
-        let r = store.rolodex
-        let d = r.deck(s)
-        guard d.panes.count > 1, let f = d.frontIndex else { return }
-        let next = d.panes[(f + (forward ? 1 : d.panes.count - 1)) % d.panes.count].id
-        let follow = r.keys != nil && r.keys != RolodexModel.blank
-        r.stopSpin()
-        if follow { r.keys = next }
-        r.notch(in: s, forward: forward, duration: 0.3, keys: follow ? next : nil, layout: store.tabPlace(for: s))
-    }
-
-    /// The + above the knob: a new card of any kind on offer.
+    /// A new card of any kind on offer.
     @ViewBuilder
-    private func plus(_ lay: RolodexLayout) -> some View {
+    private var plus: some View {
         let mark = Image(systemName: "plus")
-            .font(.system(size: 11, weight: .bold))
+            .font(.system(size: 10, weight: .bold))
             .foregroundStyle(Theme.muted)
         Group {
             if store.rolodex.still != nil {
@@ -1376,38 +1429,35 @@ private struct RolodexWheel: View {
                 .fixedSize()
             }
         }
-        .frame(width: 24, height: 24)
+        .frame(width: RoundButton.size, height: RoundButton.size)
         .background(Circle().fill(Theme.panel).overlay(Circle().strokeBorder(Theme.edge, lineWidth: 1)))
-        .help("Add a pane: a terminal, a browser or a plugin’s page")
+        .help("Add a pane: a terminal, a browser, code or a plugin’s page")
         .disabled(owner == nil)
-        .offset(x: lay.size.width - 27, y: lay.front.minY + 1)
-        .zIndex(6)
     }
 
-    /// The fold under the +: the wheel folds down to a strip of its tabs at
-    /// the window's edge, and the terminal takes the room.
-    private func fold(_ lay: RolodexLayout) -> some View {
+    /// The fold: the wheel folds down to a strip of its tabs at the window's
+    /// edge, and the terminal takes the room.
+    private var fold: some View {
         Button { store.toggleFold() } label: {
             RoundButton(symbol: "chevron.right")
         }
         .buttonStyle(.plain)
         .help("Fold the panes down to a strip (⇧⌥⌘P)")
         .accessibilityLabel("Fold the panes")
-        .offset(x: lay.size.width - 27, y: lay.front.minY + 31)
-        .zIndex(6)
     }
 }
 
 /// A small round button's face, as the wheel's + wears: a mark on the
 /// panel's colour, ringed.
 private struct RoundButton: View {
+    static let size: CGFloat = 22
     let symbol: String
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(size: 9.5, weight: .bold))
             .foregroundStyle(Theme.muted)
-            .frame(width: 24, height: 24)
+            .frame(width: Self.size, height: Self.size)
             .background(Circle().fill(Theme.panel).overlay(Circle().strokeBorder(Theme.edge, lineWidth: 1)))
             .contentShape(Circle())
     }
@@ -1433,8 +1483,8 @@ struct RolodexStrip: View {
 /// the wheel's +, then a tab a card, as tall as fit up to a most, whose
 /// words stand on their side while there is room for some.
 struct StripLayout {
-    static let top: CGFloat = RolodexLayout.step * CGFloat(RolodexLayout.deepest) + 1
-    static let button: CGFloat = 24
+    static let top: CGFloat = (RolodexLayout.tabHeight - RoundButton.size) / 2 - 1
+    static let button: CGFloat = RoundButton.size
     static let gap: CGFloat = 6
     static let tabWidth: CGFloat = 24
     /// The cards' edges, which the tabs stand out from.
@@ -1542,35 +1592,7 @@ private struct FoldedTabs: View {
     }
 }
 
-/// The knob at the rail's end: ridges round its rim, and a dot in the
-/// session's colour, which turns a notch for every card.
-private struct Knob: View {
-    let angle: Double
-    let ink: Color
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(Theme.panel)
-                .overlay(Circle().strokeBorder(Theme.edge, lineWidth: 1))
-                .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
-            ForEach(0..<12, id: \.self) { i in
-                Capsule()
-                    .fill(Theme.muted.opacity(0.45))
-                    .frame(width: 1.5, height: 4)
-                    .offset(y: -8.5)
-                    .rotationEffect(.degrees(Double(i) * 30))
-            }
-            Circle()
-                .fill(ink)
-                .frame(width: 5, height: 5)
-                .offset(y: -4.5)
-        }
-        .rotationEffect(.degrees(angle))
-    }
-}
-
-/// A flap: the face of a card turning over the rail, the card leaving the
+/// A flap: the face of a card turning over its foot, the card leaving the
 /// front in a turn forward, the card coming to it in a turn back.
 private struct FlapView: View {
     let flip: Flip
@@ -1583,7 +1605,7 @@ private struct FlapView: View {
         let tilt = flip.tilt(progress)
         let shade = min(0.45, abs(sin(tilt * .pi / 180)) * 0.5)
         CardFace(pane: pane, tabX: tab - lay.front.minX, lay: lay)
-            .overlay(IndexCard(tabX: tab - lay.front.minX, tabWidth: lay.tabWidth).fill(Color.black.opacity(shade)))
+            .overlay(IndexCard(tabX: tab - lay.front.minX, tabWidth: lay.widths.front).fill(Color.black.opacity(shade)))
             .frame(width: lay.front.width, height: lay.front.height)
             .rotation3DEffect(.degrees(tilt), axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.42)
             .opacity(flip.cover(progress))
@@ -1599,7 +1621,7 @@ private struct CardFace: View {
     let lay: RolodexLayout
 
     var body: some View {
-        let shape = IndexCard(tabX: tabX, tabWidth: lay.tabWidth)
+        let shape = IndexCard(tabX: tabX, tabWidth: lay.widths.front)
         let ink = pane.map { Theme.agentInk(slot: $0.slot) } ?? Theme.muted
         ZStack(alignment: .topLeading) {
             shape.fill(Theme.panel)
@@ -1622,7 +1644,7 @@ private struct CardFace: View {
             }
             .foregroundStyle(ink)
             .padding(.leading, RolodexLayout.slope + 4)
-            .frame(width: lay.tabWidth, height: RolodexLayout.tabHeight)
+            .frame(width: lay.widths.front, height: RolodexLayout.tabHeight)
             .offset(x: tabX)
             VStack(spacing: 10) {
                 Image(systemName: pane?.kind.symbol ?? "rectangle.stack")
@@ -1786,6 +1808,19 @@ private struct Probe: NSViewRepresentable {
 
 // MARK: Panes
 
+/// What a card's body is filled with under its live pane, so the pane runs
+/// to the card's edge: a shell's the terminal's ground, code its code
+/// colours' ground, and a page's or a plugin's the card colour.
+enum PaneGround {
+    @MainActor static func of(_ kind: PaneKind, dark: Bool, code: String) -> Color {
+        switch kind {
+        case .terminal: return Color(nsColor: Theme.terminalBackground)
+        case .code: return Color(nsColor: CodeThemes.theme(code, dark: dark).background)
+        default: return Theme.card
+        }
+    }
+}
+
 /// One card's live pane, by its kind.
 @MainActor
 private struct PaneContent: View {
@@ -1800,6 +1835,7 @@ private struct PaneContent: View {
         switch pane.kind {
         case .terminal: ShellPane(owner: owner, pane: pane, shows: shows, keys: keys, token: token)
         case .browser: BrowserPane(session: owner.id, pane: pane, shows: shows, keys: keys, token: token)
+        case .code: CodePane(owner: owner, pane: pane, shows: shows, keys: keys, token: token)
         case .markets: MarketsPane(shows: shows, keys: keys, token: token)
         // Every account's mail beside the session, as the right sidebar's
         // Mail tab shows it (MailViews.swift).
@@ -1827,7 +1863,8 @@ private struct ShellPane: View {
             if store.isFixture {
                 FixtureScreen(lines: ["~/src/website  (fix-login-test)", "❯ npm run dev", "", "  VITE ready in 312 ms", "  ➜  Local:   http://localhost:5173/",
                                       "", "❯ git log --oneline -3", "a1b2c3d Wait for the session write", "9f8e7d6 Add a helper that reads it back"])
-                    .padding(8)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
             } else if let peer = owner.peer {
                 note("A shell beside a session on \(peer) runs there; that comes later.")
             } else if !store.rolodex.canShell {
@@ -1835,9 +1872,11 @@ private struct ShellPane: View {
             } else if let s = shell, s.state != "stopped", let target = s.target, let tmux = s.tmux, let socket = s.socket {
                 // A card the keyboard was sent to before its shell was up
                 // takes the keyboard as its terminal starts.
+                // Clear of the card's rounded corners, on the same ground.
                 SplitTerminalView(tmux: tmux, socket: socket, target: "=" + target, fontSize: max(9, store.fontSize - 1),
                                   focusToken: token, followsFocus: true, takesKeysOnStart: shows && keys, shows: shows)
-                    .padding(6)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
                 if s.state == "exited" { ended(s) }
             } else if let problem {
                 note(problem)

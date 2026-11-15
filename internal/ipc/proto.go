@@ -48,6 +48,9 @@ const (
 	OpRoute  = "route"
 	OpResult = "result"
 	OpTool   = "tool"
+	// OpLabel gives tasks their classes, which the router sorts new tasks
+	// by (DESIGN §6.4).
+	OpLabel = "label"
 	// OpClose ends a session's agent and removes its row; OpReopen, its
 	// undo, carries the session on again (DESIGN §2.4, §4.5).
 	OpClose  = "close"
@@ -262,6 +265,11 @@ type Session struct {
 	// its next turn writes its whole context into the cache again; nil
 	// while the cache is warm, while it works, or when Irie cannot tell.
 	Cold *Cold `json:"cold,omitempty"`
+
+	// Lock is what its agent lock names that a check asks OSV.dev about,
+	// with what the last check found and, while an advisory affects one,
+	// the card's words (DESIGN §4.21); nil when its lock names none.
+	Lock *LockRow `json:"lock,omitempty"`
 }
 
 // Rebuilds is the prompt-cache meter's count for one session (DESIGN §6.3):
@@ -1042,6 +1050,14 @@ type SpawnArgs struct {
 	// or its judge (DESIGN §6.6): a tool call that would wait on a
 	// permission prompt is refused instead, and its turn goes on.
 	Unattended bool `json:"unattended,omitempty"`
+	// Wait is how long the caller waits for a delegated subtask's answer
+	// (irie ctl delegate --timeout): auto passes over a profile that takes
+	// longer than that to answer such a task (DESIGN §6.4).
+	Wait time.Duration `json:"wait,omitempty"`
+	// Instead is a routed delegated session of Parent's still at work after
+	// Wait, which this spawn takes the subtask over from: Irie stops it,
+	// and auto passes over its profile.
+	Instead string `json:"instead,omitempty"`
 }
 
 // AnonNew is SpawnArgs.Anon for a compartment of the task's own.
@@ -1159,8 +1175,32 @@ const (
 
 // RouteArgs ask the router where a task would run, without running it.
 type RouteArgs struct {
-	Task   string `json:"task"`
-	Parent string `json:"parent,omitempty"` // as a subtask of this session
+	Task   string        `json:"task"`
+	Parent string        `json:"parent,omitempty"` // as a subtask of this session
+	Wait   time.Duration `json:"wait,omitempty"`   // as a subtask its caller waits this long for
+}
+
+// LabelArgs give tasks their classes, which the router sorts new tasks by
+// (DESIGN §6.4): a task takes the class of the nearest of them.
+type LabelArgs struct {
+	Labels []Label `json:"labels"`
+}
+
+// Label is one task and its class: small, medium or hard.
+type Label struct {
+	Text  string `json:"text"`
+	Class string `json:"class"`
+}
+
+// LabelResult says how many tasks have a class now, how many of them the
+// embedding model has read, and whether the router sorts by them.
+type LabelResult struct {
+	Added    int    `json:"added"`
+	Labels   int    `json:"labels"`
+	Embedded int    `json:"embedded"`
+	Sorting  bool   `json:"sorting"`
+	Model    string `json:"model,omitempty"`
+	Note     string `json:"note,omitempty"` // why it does not sort by them yet
 }
 
 // ResultArgs ask for what a session's agent said at the end of its last
@@ -1554,7 +1594,8 @@ const (
 	// Pong.
 	FramePing = "ping"
 	// FrameCard asks the Mac app to show a card of Kind beside the session
-	// ID (OpCard). Only the app's subscriptions get it.
+	// ID (OpCard), a code card with the file Path open at Line and Col when
+	// it has them. Only the app's subscriptions get it.
 	FrameCard = "card"
 )
 
@@ -1573,6 +1614,9 @@ type Frame struct {
 	Redo     string           `json:"redo,omitempty"`     // history
 	Ping     uint64           `json:"ping,omitempty"`     // ping
 	Kind     string           `json:"kind,omitempty"`     // card
+	Path     string           `json:"path,omitempty"`     // card: a code card's file
+	Line     int              `json:"line,omitempty"`     // card: a code card's cursor line, from 1
+	Col      int              `json:"col,omitempty"`      // card: a code card's cursor column, from 1
 
 	Conversation *Conversation `json:"conversation,omitempty"` // conversation
 	Screen       *Screen       `json:"screen,omitempty"`       // screen
@@ -1701,7 +1745,10 @@ func (f Frame) MarshalJSON() ([]byte, error) {
 			T    string `json:"t"`
 			ID   string `json:"id"`
 			Kind string `json:"kind"`
-		}{f.T, f.ID, f.Kind})
+			Path string `json:"path,omitempty"`
+			Line int    `json:"line,omitempty"`
+			Col  int    `json:"col,omitempty"`
+		}{f.T, f.ID, f.Kind, f.Path, f.Line, f.Col})
 	}
 	return nil, fmt.Errorf("ipc: unknown frame type %q", f.T)
 }

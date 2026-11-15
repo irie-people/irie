@@ -31,18 +31,36 @@ func taskArg(words []string) (string, error) {
 	return task, nil
 }
 
+const routeUsage = "usage: " + brand.Slug + " ctl route [--json] [--wait D] TASK... | --label small|medium|hard TASK... | --import FILE"
+
 func ctlRoute(args []string) error {
 	fs := flag.NewFlagSet("ctl route", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the choice as JSON")
+	wait := fs.Duration("wait", 0, "as a subtask its caller waits this long for, as "+brand.Slug+" ctl delegate does")
+	label := fs.String("label", "", "give the task this class, which the router sorts tasks by: small, medium or hard")
+	from := fs.String("import", "", "give tasks their classes from a file of JSON lines, each with text and class")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *from != "" {
+		if len(fs.Args()) > 0 || *label != "" {
+			return errors.New(routeUsage)
+		}
+		ls, err := readLabels(*from)
+		if err != nil {
+			return err
+		}
+		return sendLabels(ls)
 	}
 	task, err := taskArg(fs.Args())
 	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(task) == "" {
-		return errors.New("usage: " + brand.Slug + " ctl route [--json] TASK...")
+		return errors.New(routeUsage)
+	}
+	if *label != "" {
+		return sendLabels([]ipc.Label{{Text: task, Class: *label}})
 	}
 	if err := up(nil); err != nil {
 		return err
@@ -52,7 +70,7 @@ func ctlRoute(args []string) error {
 		return err
 	}
 	var ch route.Choice
-	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpRoute, ipc.RouteArgs{Task: task}, &ch); err != nil {
+	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpRoute, ipc.RouteArgs{Task: task, Wait: *wait}, &ch); err != nil {
 		return err
 	}
 	if *asJSON {
@@ -62,13 +80,94 @@ func ctlRoute(args []string) error {
 	return nil
 }
 
+// labelsPerCall is how many labelled tasks one call sends.
+const labelsPerCall = 500
+
+// readLabels reads labelled tasks from a file of JSON lines. A line gives
+// its task as text, or as fields.text, and its class as class or label, so
+// a bench's eval set reads as it is.
+func readLabels(path string) ([]ipc.Label, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out []ipc.Label
+	for i, line := range strings.Split(string(b), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var r struct {
+			Text   string `json:"text"`
+			Class  string `json:"class"`
+			Label  string `json:"label"`
+			Fields struct {
+				Text string `json:"text"`
+			} `json:"fields"`
+		}
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			return nil, fmt.Errorf("%s:%d: %v", path, i+1, err)
+		}
+		lb := ipc.Label{Text: r.Text, Class: r.Class}
+		if lb.Text == "" {
+			lb.Text = r.Fields.Text
+		}
+		if lb.Class == "" {
+			lb.Class = r.Label
+		}
+		if strings.TrimSpace(lb.Text) == "" || lb.Class == "" {
+			return nil, fmt.Errorf("%s:%d: a line needs text and class", path, i+1)
+		}
+		out = append(out, lb)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s has no labelled tasks", path)
+	}
+	return out, nil
+}
+
+// sendLabels gives the core labelled tasks and says where that leaves the
+// router.
+func sendLabels(ls []ipc.Label) error {
+	if err := up(nil); err != nil {
+		return err
+	}
+	_, p, err := load()
+	if err != nil {
+		return err
+	}
+	var r ipc.LabelResult
+	for len(ls) > 0 {
+		n := min(len(ls), labelsPerCall)
+		var part ipc.LabelResult
+		if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpLabel, ipc.LabelArgs{Labels: ls[:n]}, &part); err != nil {
+			return err
+		}
+		added := r.Added + part.Added
+		r, r.Added = part, added
+		ls = ls[n:]
+	}
+	fmt.Printf("%d added; %d labelled tasks", r.Added, r.Labels)
+	if r.Model != "" {
+		fmt.Printf(", %d embedded by %s", r.Embedded, r.Model)
+	}
+	switch {
+	case r.Sorting:
+		fmt.Println("; the router gives a task the class of the nearest")
+	case r.Note != "":
+		fmt.Printf("; %s\n", r.Note)
+	default:
+		fmt.Println()
+	}
+	return nil
+}
+
 // printChoice prints the router's choice and every profile it weighed,
 // the cheapest per success first.
 func printChoice(w io.Writer, ch route.Choice) {
 	fmt.Fprintf(w, "class    %s (%s)\n", ch.Class, ch.Why)
 	fmt.Fprintf(w, "choice   %s\n\n", ch.Reason)
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "PROFILE\tACCURACY\tFLOOR\tOUTCOMES\tCOST\tPER SUCCESS\tNOTE")
+	fmt.Fprintln(tw, "PROFILE\tACCURACY\tFLOOR\tOUTCOMES\tCOST\tPER SUCCESS\tTIME\tNOTE")
 	for _, c := range ch.Candidates {
 		note := c.Note
 		if !c.Usable && note == "" {
@@ -82,7 +181,14 @@ func printChoice(w io.Writer, ch route.Choice) {
 		if c.Floor > 0 {
 			floor = route.Percent(c.Floor)
 		}
-		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%d\t%s\t%s\t%s\n", mark, c.Profile, route.Percent(c.Accuracy), floor, c.Outcomes, route.Relative(c.Cost), route.Relative(c.PerSuccess), note)
+		took := "-"
+		if c.Timed > 0 {
+			took = route.Took(c.Time)
+			if c.TimeAtLeast {
+				took = "≥" + took
+			}
+		}
+		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", mark, c.Profile, route.Percent(c.Accuracy), floor, c.Outcomes, route.Relative(c.Cost), route.Relative(c.PerSuccess), took, note)
 	}
 	tw.Flush()
 }
@@ -123,7 +229,7 @@ func ctlDelegate(args []string) error {
 	if profile == "" {
 		profile = config.Auto
 	}
-	a := ipc.SpawnArgs{Task: task, Cwd: cwd, Profile: profile, Delegate: true, Parent: os.Getenv(brand.Env("SESSION")), PermissionMode: *mode}
+	a := ipc.SpawnArgs{Task: task, Cwd: cwd, Profile: profile, Delegate: true, Parent: os.Getenv(brand.Env("SESSION")), PermissionMode: *mode, Wait: *timeout}
 	var r ipc.SpawnResult
 	if err := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &r); err != nil {
 		var ie *ipc.Error
@@ -134,7 +240,25 @@ func ctlDelegate(args []string) error {
 	}
 	s := r.Session
 	fmt.Fprintf(os.Stderr, brand.Slug+": delegated to +%s as %s (%s)\n", s.Profile, s.Name, s.ID)
-	return waitDone(os.Stdout, p.Socket(), s.ID, *timeout)
+	err = waitDone(os.Stdout, p.Socket(), s.ID, *timeout)
+	var ec exitCode
+	if profile != config.Auto || !errors.As(err, &ec) || ec.code != exitStillRunning {
+		return err
+	}
+	// Still at work after the wait: the router stops it and hands the
+	// subtask to the next profile accurate enough, which answers in time.
+	a.Instead = s.ID
+	var h ipc.SpawnResult
+	if herr := ipc.Call(p.Socket(), spawnTimeout, ipc.OpSpawn, a, &h); herr != nil {
+		// It may have answered meanwhile.
+		if waitDone(os.Stdout, p.Socket(), s.ID, time.Second) == nil {
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, brand.Slug+": it could not be handed on (%v)\n", herr)
+		return err
+	}
+	fmt.Fprintf(os.Stderr, brand.Slug+": +%s was still at work after %s, so it handed the subtask on to +%s as %s (%s)\n", s.Profile, route.Took(*timeout), h.Session.Profile, h.Session.Name, h.Session.ID)
+	return waitDone(os.Stdout, p.Socket(), h.Session.ID, *timeout)
 }
 
 // waitDone waits until a session's turn ends, with no helper of its still

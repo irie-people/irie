@@ -72,10 +72,13 @@ struct Session: Codable, Identifiable, Equatable {
     /// What waking it costs now that its prompt cache has run out, which
     /// Resume says (DESIGN §6.3); nil while its cache is warm.
     var cold: Cold?
+    /// What its agent lock names that a check asks OSV.dev about, and the
+    /// card's words while a known advisory affects one (DESIGN §4.21).
+    var lock: LockRow?
 
     enum CodingKeys: String, CodingKey {
         case id, name, agent, state, reason, detail, command, tail, warnings, created, cwd, repo, worktree, branch, copied, profile, pane, shown, subagents, team, subs, tokens
-        case order, parked, pinned, space, group, frozen, freezing, priority, loose, trod, hue, tutor, host, rebuilds, cold
+        case order, parked, pinned, space, group, frozen, freezing, priority, loose, trod, hue, tutor, host, rebuilds, cold, lock
         case exitCode = "exit_code"
         case vendorId = "vendor_id"
     }
@@ -115,6 +118,37 @@ struct Cold: Codable, Equatable {
     var tokens: Int64
     var usd: Double
     var words: String
+}
+
+/// What a row says of its session's agent lock (DESIGN §4.21): the
+/// harness and package versions it names, each with what the last check
+/// found, and the card's words while a known advisory affects one: "Claude
+/// Code 2.1.250: 1 advisory, fixed in 2.1.251".
+struct LockRow: Codable, Equatable {
+    var packages: [LockPackage]?
+    var advisories: Int?
+    var words: String?
+
+    /// The versions it names, for the details panel: "Locked: Claude Code
+    /// 2.1.250, MCP server github 0.6.2", and whether OSV.dev was asked.
+    var summary: String? {
+        guard let packages, !packages.isEmpty else { return nil }
+        let names = packages.map { "\($0.part ?? $0.name) \($0.version)" }.joined(separator: ", ")
+        let asked = packages.allSatisfy { $0.checked == true } ? "" : " · not checked yet"
+        return "Locked: " + names + asked
+    }
+}
+
+/// A package at one version, as OSV.dev names it, with what the last check
+/// found for it.
+struct LockPackage: Codable, Equatable {
+    var ecosystem: String
+    var name: String
+    var version: String
+    var part: String?
+    var checked: Bool?
+    var advisories: Int?
+    var fixed: String?
 }
 
 /// How often the trod bot sent a session on in one shift, when it last
@@ -234,8 +268,12 @@ struct Frame: Decodable {
     /// A notepad frame: the notes for later (Notes.swift).
     var notepad: Notepad?
     /// A card frame: show a card of this kind beside the session id
-    /// (Rolodex.swift, `irie ctl card`).
+    /// (Rolodex.swift, `irie ctl card`); for a code card, the file to open
+    /// on it and the line and column to go to (`irie ctl open`).
     var kind: String?
+    var path: String?
+    var line: Int?
+    var col: Int?
 }
 
 /// What a snapshot says besides its rows.
