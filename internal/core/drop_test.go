@@ -105,6 +105,8 @@ func TestClosingALandedSessionDropsItsWorktreeAndReopenAddsItBack(t *testing.T) 
 			t.Errorf("%s came back as %q, %v", f, got, err)
 		}
 	}
+	// Its agent starts again as the reopen settles.
+	testutil.Eventually(t, 20*time.Second, "its agent did not start again", func() bool { return len(c.runs(landed.ID)) == 2 })
 	runs := c.runs(landed.ID)
 	if log := c.agentLog(landed.ID); len(runs) != 2 || !sameDir(lastStartCwd(log), landed.Worktree) {
 		t.Errorf("runs %+v, last start in %s", runs, lastStartCwd(log))
