@@ -164,7 +164,7 @@ struct TerminalArea: View {
                     Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: "sidebar.right")
                 }
                 .help(store.side.open ? "Hide the right sidebar (⌥⌘B)"
-                      : "Show the right sidebar: \(ListFormatter.localizedString(byJoining: store.sideTabs.map(\.title))) (⌥⌘B)")
+                      : "Show the right sidebar: \(ListFormatter.localizedString(byJoining: store.sideTabs.map(\.title) + store.panes.map(\.title))) (⌥⌘B)")
             }
         }
     }

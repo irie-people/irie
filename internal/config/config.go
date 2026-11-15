@@ -83,6 +83,17 @@ type Plugins struct {
 	// accounts in one list, each in a colour of its own
 	// (docs/proposals/mail.md).
 	Mail bool `toml:"mail"`
+	// Manifests are the switches of your own plugins, those from the
+	// manifests in the plugins folder, by the manifest's name
+	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
+	Manifests map[string]bool `toml:"manifests,omitempty"`
+}
+
+// ManifestOn says whether the plugin of your own from the manifest named
+// name is on: plugins.manifests.<name>, on when unset.
+func (p Plugins) ManifestOn(name string) bool {
+	on, set := p.Manifests[name]
+	return on || !set
 }
 
 // Markets is the markets plugin's map (DESIGN §4.17).
@@ -923,7 +934,7 @@ func Default() Config {
 		Anon:    Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Mail:    defaultMail(),
 		VPN:     VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins: Plugins{VPN: true, Privacy: true, Writing: true, Mail: true},
+		Plugins: Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1116,6 +1127,9 @@ func Parse(data []byte, path string) (Config, error) {
 	}
 	if c.Arch.Gabriel.Spare == nil {
 		c.Arch.Gabriel.Spare = []string{}
+	}
+	if c.Plugins.Manifests == nil {
+		c.Plugins.Manifests = map[string]bool{}
 	}
 	if c.Spawn.Preferences == nil {
 		c.Spawn.Preferences = []string{}
@@ -1503,6 +1517,12 @@ func (c Config) Validate() error {
 	for _, n := range c.Skills.Disabled {
 		if !skillName.MatchString(n) || len(n) > 64 {
 			bad("skills.disabled: %q is not a skill's name: lowercase letters, digits and single hyphens, at most 64", n)
+		}
+	}
+	for _, n := range slices.Sorted(maps.Keys(c.Plugins.Manifests)) {
+		// A manifest's name is its file's: plugins/<name>.toml.
+		if !skillName.MatchString(n) || len(n) > 64 {
+			bad("plugins.manifests: %q is not a manifest's name: lowercase letters, digits and single hyphens, at most 64, as its file plugins/%s.toml has", n, n)
 		}
 	}
 	if c.Dog.Nudges < 0 {

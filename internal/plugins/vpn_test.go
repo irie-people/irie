@@ -200,3 +200,25 @@ func TestVPNSettings(t *testing.T) {
 		t.Errorf("settings = %+v", s)
 	}
 }
+
+// TestABundleTurnsTheVPNOnWhole: a bundle that names the VPN plugin turns
+// it on as irie plugins on vpn does, part and all, and reads it on only
+// while its part is (docs/proposals/plugin-panes.md).
+func TestABundleTurnsTheVPNOnWhole(t *testing.T) {
+	e := vpnEnv(t)
+	manifest(t, e, "travel.toml", "plugins = [\"vpn\"]\n")
+	on, err := BundleEdits(e.Paths.Plugins(), "travel", true)
+	if err != nil || len(on) != 2 || on[0] != (config.Edit{Key: "plugins.vpn", Value: true}) || on[1] != (config.Edit{Key: "vpn.on", Value: true}) {
+		t.Fatalf("on = %v, %v", on, err)
+	}
+	// The plugin on with its part off: nothing of it runs, so neither the
+	// bundle nor its row says on.
+	b := bundle(t, e, "travel")
+	if b.State != ipc.BundleOff || b.Plugins[0].On || b.Plugins[0].State != ipc.PartOff {
+		t.Errorf("part off = %+v", b)
+	}
+	e.Config.VPN.On = true
+	if b := bundle(t, e, "travel"); b.State != ipc.BundleOn || !b.Plugins[0].On {
+		t.Errorf("part on = %+v", b)
+	}
+}

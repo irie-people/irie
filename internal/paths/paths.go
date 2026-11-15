@@ -118,6 +118,15 @@ func (p Paths) ScratchDir(slug string) string { return filepath.Join(p.Scratch()
 // is back (DESIGN §3.3).
 func (p Paths) MissedFile(id string) string { return filepath.Join(p.Session(id), "missed.ndjson") }
 
+// Plugins is the plugins folder: the manifests of your own plugins and
+// bundles (docs/proposals/plugin-panes.md); "" without a config folder.
+func (p Paths) Plugins() string {
+	if p.Config == "" {
+		return ""
+	}
+	return filepath.Join(p.Config, "plugins")
+}
+
 // EnsureState creates the state and data directories with mode 0700.
 func (p Paths) EnsureState() error {
 	for _, d := range []string{p.State, p.Sessions(), p.Data} {

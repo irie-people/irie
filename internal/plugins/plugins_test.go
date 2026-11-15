@@ -234,3 +234,29 @@ func TestConfigReadsThePluginsSection(t *testing.T) {
 		t.Errorf("the tree's plugins = %v", tree["plugins"])
 	}
 }
+
+// TestABundlesPartGoesOnWithItsPlugin: a part a bundle names goes on with
+// its plugin, and off by its own switch alone, so the plugin's other parts
+// stay (docs/proposals/plugin-panes.md).
+func TestABundlesPartGoesOnWithItsPlugin(t *testing.T) {
+	e := env(t)
+	e.Config.Plugins.Privacy = false
+	manifest(t, e, "travel.toml", "plugins = [\"privacy.anon\"]\n")
+	b := bundle(t, e, "travel")
+	if b.State != ipc.BundleOff || len(b.Plugins) != 1 || b.Plugins[0].Title != "Anonymous research" || b.Plugins[0].On || b.Plugins[0].State != ipc.PartPluginOff {
+		t.Fatalf("bundle = %+v", b)
+	}
+	dir := e.Paths.Plugins()
+	on, err := BundleEdits(dir, "travel", true)
+	if err != nil || len(on) != 2 || on[0] != (config.Edit{Key: "plugins.privacy", Value: true}) || on[1] != (config.Edit{Key: "anon.on", Value: true}) {
+		t.Fatalf("on = %v, %v", on, err)
+	}
+	off, err := BundleEdits(dir, "travel", false)
+	if err != nil || len(off) != 1 || off[0] != (config.Edit{Key: "anon.on", Value: false}) {
+		t.Fatalf("off = %v, %v", off, err)
+	}
+	e.Config.Plugins.Privacy, e.Config.Anon.On = true, true
+	if b := bundle(t, e, "travel"); b.State != ipc.BundleOn || !b.Plugins[0].On {
+		t.Errorf("on = %+v", b)
+	}
+}

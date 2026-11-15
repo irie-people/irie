@@ -17,9 +17,10 @@ import SwiftUI
 /// A tab of the right sidebar, in the order the proposal gives them, then
 /// Notices, then Mail, the mail plugin's (Mail.swift), and Variorum, the
 /// Writing plugin's (VariorumTab.swift), which also gives each its key:
-/// ⌥⌘1 to ⌥⌘8.
+/// ⌥⌘1 to ⌥⌘8. Plugin, last and with no key, is any plugin's pane
+/// (PluginPanes.swift): SideState.pane says which.
 enum SideTab: String, CaseIterable, Identifiable {
-    case dock, changes, helpers, plan, review, notices, mail, variorum
+    case dock, changes, helpers, plan, review, notices, mail, variorum, plugin
 
     var id: String { rawValue }
 
@@ -33,6 +34,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .notices: return "Notices"
         case .mail: return "Mail"
         case .variorum: return "Variorum"
+        case .plugin: return "Plugin"
         }
     }
 
@@ -47,6 +49,7 @@ enum SideTab: String, CaseIterable, Identifiable {
         case .notices: return "bell"
         case .mail: return "envelope"
         case .variorum: return "text.book.closed"
+        case .plugin: return "puzzlepiece.extension"
         }
     }
 
@@ -69,6 +72,8 @@ struct SideState: Equatable {
     var open = false
     var width = SideState.startWidth
     var tab = SideTab.dock
+    /// The plugin's pane on show while tab is plugin, by its id.
+    var pane: String?
 
     static let startWidth = 340.0
     static let minWidth = 260.0
@@ -79,6 +84,7 @@ struct SideState: Equatable {
     private static let openKey = "rightSidebarOpen"
     private static let widthKey = "rightSidebarWidth"
     private static let tabKey = "rightSidebarTab"
+    private static let paneKey = "rightSidebarPane"
 
     static func saved() -> SideState {
         let d = UserDefaults.standard
@@ -86,8 +92,9 @@ struct SideState: Equatable {
         s.open = d.bool(forKey: openKey)
         let w = d.double(forKey: widthKey)
         if w > 0 { s.width = clamp(w) }
+        s.pane = d.string(forKey: paneKey)
         // Variorum's too: until the core's hello is in, it stays.
-        if let t = d.string(forKey: tabKey).flatMap(SideTab.init(rawValue:)), SideTab.built(variorum: true).contains(t) { s.tab = t }
+        if let t = d.string(forKey: tabKey).flatMap(SideTab.init(rawValue:)), SideTab.built(variorum: true).contains(t) || t == .plugin && s.pane != nil { s.tab = t }
         return s
     }
 
@@ -96,13 +103,21 @@ struct SideState: Equatable {
         d.set(open, forKey: Self.openKey)
         d.set(width, forKey: Self.widthKey)
         d.set(tab.rawValue, forKey: Self.tabKey)
+        d.set(pane, forKey: Self.paneKey)
     }
 }
 
 extension Store {
-    /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button.
+    /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button: it opens
+    /// on the tab it closed on, a plugin's pane too while that is on.
     func toggleSide() {
-        if side.open { closeSide() } else { openSide(side.tab) }
+        if side.open {
+            closeSide()
+        } else if side.tab == .plugin, let id = side.pane, panes.contains(where: { $0.id == id }) {
+            openPane(id)
+        } else {
+            openSide(side.tab)
+        }
     }
 
     /// A tab's own key (⌥⌘1 to ⌥⌘8): shows the sidebar on that tab, or
@@ -129,9 +144,11 @@ extension Store {
     }
 
     /// Moves the right sidebar off a tab the core no longer serves, to the
-    /// first. It doesn't move back: only the user switches its tab.
+    /// first. It doesn't move back: only the user switches its tab. A
+    /// plugin's pane stays: its tab says when its plugin is gone
+    /// (PluginPanes.swift), and the plugins may not have come in yet.
     func keepSideTab() {
-        guard !sideTabs.contains(side.tab) else { return }
+        guard side.tab != .plugin, !sideTabs.contains(side.tab) else { return }
         var s = side
         s.tab = SideTab.built(variorum: false)[0]
         change(s)
@@ -142,6 +159,16 @@ extension Store {
         var s = side
         s.open = true
         s.tab = sideTabs.contains(tab) ? tab : SideTab.built(variorum: false)[0]
+        if side.open { change(s) } else { slide(to: s) }
+    }
+
+    /// Opens the right sidebar on a plugin's pane (PluginPanes.swift): a closed
+    /// one slides in.
+    func openPane(_ id: String) {
+        var s = side
+        s.open = true
+        s.tab = .plugin
+        s.pane = id
         if side.open { change(s) } else { slide(to: s) }
     }
 
@@ -265,7 +292,7 @@ struct RightSidebar: View {
             if store.showTerminal { store.focusTerminal += 1 } else { store.focusMessage += 1 }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Right sidebar, \(store.side.tab.title)")
+        .accessibilityLabel("Right sidebar, \(store.side.tab == .plugin ? store.shownPane?.title ?? "a pane" : store.side.tab.title)")
     }
 
     private var header: some View {
@@ -286,7 +313,37 @@ struct RightSidebar: View {
     private func tabs(tight: Bool) -> some View {
         HStack(spacing: 2) {
             ForEach(store.sideTabs) { t in tabButton(t, tight: tight) }
+            // Each plugin's pane that is on, after Irie's own tabs.
+            ForEach(store.panes) { p in paneButton(p, tight: tight) }
         }
+    }
+
+    /// A plugin's pane's tab: its name, or its icon when the sidebar is
+    /// narrow.
+    private func paneButton(_ p: PluginPaneInfo, tight: Bool) -> some View {
+        let on = store.side.tab == .plugin && store.side.pane == p.id
+        return Button { store.openPane(p.id) } label: {
+            HStack(spacing: 4) {
+                if tight {
+                    Text(Image(systemName: p.symbol))
+                        .font(.system(size: 12, weight: on ? .bold : .medium))
+                } else {
+                    Text(p.title)
+                        .font(Theme.font(12, on ? .bold : .medium))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            .foregroundStyle(on ? Theme.ink : Theme.muted)
+            .padding(.horizontal, tight ? 5 : 7)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.selection : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("\(p.title), a plugin's pane")
+        .accessibilityLabel(p.title)
+        .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
     private func tabButton(_ t: SideTab, tight: Bool) -> some View {
@@ -371,6 +428,7 @@ struct RightSidebar: View {
             } else {
                 SideNote(title: "Mail is off", text: "The mail plugin is off, or this \(Brand.name) was built without it: Plugins › Mail turns it on.")
             }
+        case .plugin: PluginPaneTab()
         default: HelpersTab()
         }
     }
