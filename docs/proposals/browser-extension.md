@@ -9,6 +9,7 @@ The owner asked on 2026-11-15 for a way to take in a company's terms of service:
 3. The panel shows the terms in short: how long they are and who they're written for, a count of points against you, to watch, good to know and for you, then each point in plain words. Each opens to the clause it comes from, its heading, and a link that opens the page at those words.
 4. Under them, a chat: suggested questions ("What's the catch?", "Can I get a refund?"), and any question in the person's own words. Each answer quotes the passages it rests on. A box words answers with a local model on this computer, when there is one.
 5. In a terminal, `irie terms example.com` prints the same, `irie terms ask example.com "can I get a refund?"` answers, and `irie terms chat` takes questions a line at a time.
+6. Inside Irie, where no extension runs: `irie terms serve` serves the same panel as a page on this computer, and a browser card of the Mac app's panes shows it when its port, 7393, is typed in its address bar. A site is read by the address typed there.
 
 ## 2. Code first, a model only when asked
 

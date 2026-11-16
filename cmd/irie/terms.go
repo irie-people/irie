@@ -10,14 +10,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/extension"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/terms"
 )
@@ -40,6 +43,11 @@ const termsHelp = `usage:
                        from the passages ` + brand.Name + `'s code finds
   ` + brand.Slug + ` terms chat [--model] ADDRESS|FILE|-
                        ask one question a line, until an empty line
+  ` + brand.Slug + ` terms serve [--port N]
+                       the browser extension's panel as a page on this
+                       computer, at http://127.0.0.1:N/ (N is 7393 unless
+                       you say), for a browser card of the Mac app's panes:
+                       type N in its address bar
 ` + brand.Name + `'s own code reads the terms on this computer: no tokens, nothing sent
 anywhere but the fetch of the page. Not legal advice.
 `
@@ -57,7 +65,7 @@ func termsCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 		return errors.New(why)
 	}
 	sub := ""
-	if len(args) > 0 && (args[0] == "ask" || args[0] == "chat" || args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
+	if len(args) > 0 && (args[0] == "ask" || args[0] == "chat" || args[0] == "serve" || args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		sub, args = args[0], args[1:]
 	}
 	fs := flag.NewFlagSet("terms", flag.ContinueOnError)
@@ -66,6 +74,7 @@ func termsCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 	privacy := fs.Bool("privacy", false, "read the site's privacy policy rather than its terms")
 	local := fs.Bool("allow-local", false, "fetch from this computer or its local network")
 	useModel := fs.Bool("model", false, "word answers with a local model")
+	port := fs.Int("port", 7393, "the port the panel's page is served on")
 	if sub == "help" || sub == "-h" || sub == "--help" {
 		fmt.Fprint(stdout, termsHelp)
 		return nil
@@ -74,11 +83,14 @@ func termsCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 		return fmt.Errorf("%v\n\n%s", err, termsHelp)
 	}
 	rest := fs.Args()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if sub == "serve" {
+		return termsServe(ctx, *port, stdout)
+	}
 	if len(rest) == 0 || (sub == "ask" && len(rest) < 2) {
 		return errors.New(strings.TrimSpace(termsHelp))
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
 	want := ""
 	if *privacy {
 		want = terms.KindPrivacy
@@ -218,6 +230,29 @@ func printQuotes(stdout io.Writer, qs []terms.Quote, numbered bool) {
 		}
 		fmt.Fprintln(stdout, s)
 	}
+}
+
+// termsServe serves the panel as a page on this computer (irie terms
+// serve), until it is stopped.
+func termsServe(ctx context.Context, port int, stdout io.Writer) error {
+	_, p, err := load()
+	if err != nil {
+		return err
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		return fmt.Errorf("serving on port %d: %w; --port picks another", port, err)
+	}
+	fmt.Fprintf(stdout, "Terms in short is at http://127.0.0.1:%d/ on this computer: in the Mac app, open a browser card in the panes and type %d. Ctrl-C stops it.\n", port, port)
+	return extension.ServeWeb(ctx, ln, extension.Options{
+		Paths: p,
+		Load: func() (config.Config, error) {
+			cfg, _, err := load()
+			return cfg, err
+		},
+		Why:     func(cfg config.Config, part string) string { return plugins.Why(cfg, part) },
+		Servers: modelServers,
+	})
 }
 
 // modelServers are the Ollama servers a model may word answers on, the
