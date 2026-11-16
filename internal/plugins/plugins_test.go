@@ -35,7 +35,6 @@ func TestPrivacyIsOnByDefaultWithItsPartsOff(t *testing.T) {
 	want := map[string]string{
 		Anon:    ipc.PartOff,
 		Browser: ipc.PartOff,
-		Vault:   ipc.PartHeld,
 		Switch:  ipc.PartReady, // the guide's skill is on, and does nothing until asked
 	}
 	if len(p.Parts) != len(want) {
@@ -114,12 +113,8 @@ func TestPrivacyOffTurnsEveryPartOff(t *testing.T) {
 		t.Error("privacy is on")
 	}
 	for _, x := range p.Parts {
-		want := ipc.PartPluginOff
-		if x.Name == Vault {
-			want = ipc.PartHeld
-		}
-		if x.State != want {
-			t.Errorf("%s = %q, want %q", x.Name, x.State, want)
+		if x.State != ipc.PartPluginOff {
+			t.Errorf("%s = %q, want %q", x.Name, x.State, ipc.PartPluginOff)
 		}
 	}
 	// Each part's own switch still shows as the file has it.
@@ -150,9 +145,6 @@ func TestWhySaysWhatTurnsAPartOn(t *testing.T) {
 	cfg := config.Default()
 	if why := Why(cfg, Anon); !strings.Contains(why, "irie setup anon") {
 		t.Errorf("Why(anon) = %q", why)
-	}
-	if why := Why(cfg, Vault); !strings.Contains(why, "isn't in Irie yet") {
-		t.Errorf("Why(vault) = %q", why)
 	}
 	cfg.Anon.On = true
 	if why := Why(cfg, Anon); why != "" {
@@ -189,9 +181,8 @@ func TestEdits(t *testing.T) {
 	}
 	for _, c := range []struct{ plugin, part, want string }{
 		{"nothing", "", "Irie's plugins are "},
-		{"privacy", "nothing", "its parts are anon, browser, vault, switch"},
+		{"privacy", "nothing", "its parts are anon, browser, switch"},
 		{"privacy", "switch", "no switch of its own"},
-		{"privacy", "vault", "isn't in Irie yet"},
 	} {
 		if _, err := Edits(c.plugin, c.part, true); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("Edits(%q, %q) = %v, want %q", c.plugin, c.part, err, c.want)
@@ -203,7 +194,7 @@ func TestTextAndShort(t *testing.T) {
 	e := env(t)
 	e.Config.Anon.On = true
 	text := Text(Status(e))
-	for _, want := range []string{"Privacy plugin: on.", "  ! Anonymous research: ", "  ○ Bitwarden for agents: ", "  ● Dead man's switch: "} {
+	for _, want := range []string{"Privacy plugin: on.", "  ! Anonymous research: ", "  ● Dead man's switch: "} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Text lacks %q:\n%s", want, text)
 		}

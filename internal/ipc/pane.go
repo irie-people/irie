@@ -67,3 +67,30 @@ type PaneResult struct {
 	// the folder it runs in.
 	Cwd string `json:"cwd,omitempty"`
 }
+
+// OpSizes tells the core the size, in cells, the Mac app shows each
+// session's terminal at. Whether a session's panes show is its own (the
+// app's rolodex), so its terminal is narrower beside them than another's
+// without. The core keeps each agent's window at its own session's size,
+// so showing a session resizes no other agent, and the one shown comes in
+// at its own size (DESIGN §2.3). It applies them only while a Mac app's
+// view is open, and forgets them as the last one closes. Served when
+// hello's features name it.
+const OpSizes = "sizes"
+
+// SizesArgs are every session's size, Size, and the sessions whose size
+// differs from it, Sessions, by id. A zero Size sends every agent window
+// back to the slot's size, as when the app can't tell its terminal's cells.
+type SizesArgs struct {
+	Size     Size            `json:"size"`
+	Sessions map[string]Size `json:"sessions,omitempty"`
+}
+
+// Size is a terminal's size in cells: W columns, H rows.
+type Size struct {
+	W int `json:"w"`
+	H int `json:"h"`
+}
+
+// SizeMax is the most columns or rows a size may have, as tmux's windows.
+const SizeMax = 10000

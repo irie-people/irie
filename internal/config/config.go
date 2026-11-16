@@ -87,6 +87,11 @@ type Plugins struct {
 	// accounts in one list, each in a colour of its own
 	// (docs/proposals/mail.md).
 	Mail bool `toml:"mail"`
+	// Bitwarden fills sign-in pages in the Mac app's plugin panes from the
+	// person's Bitwarden vault. The Mac app unlocks it with their master
+	// password and keeps the panes' logins in its own memory: the core
+	// never sees one.
+	Bitwarden bool `toml:"bitwarden"`
 	// Extension is Irie in your own browser: a browser extension with
 	// tools that run on this computer, the first of them Terms in short
 	// (docs/proposals/browser-extension.md).
@@ -126,6 +131,10 @@ func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 // MailOn says whether the mail plugin runs: plugins.mail, with the plugin
 // built in.
 func (c Config) MailOn() bool { return MailBuilt && c.Plugins.Mail }
+
+// BitwardenOn says whether the Bitwarden plugin runs: plugins.bitwarden,
+// with the plugin built in.
+func (c Config) BitwardenOn() bool { return BitwardenBuilt && c.Plugins.Bitwarden }
 
 // ExtensionOn says whether the browser extension plugin runs:
 // plugins.extension, with the plugin built in.
@@ -1002,7 +1011,7 @@ func Default() Config {
 		Mail:     defaultMail(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Extension: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Extension: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1811,7 +1820,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && ExtensionBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && ExtensionBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1854,6 +1863,9 @@ func (c Config) Write(w io.Writer) error {
 	if !MailBuilt {
 		delete(m, "mail")
 		delete(plugins, "mail")
+	}
+	if !BitwardenBuilt {
+		delete(plugins, "bitwarden")
 	}
 	if !ExtensionBuilt {
 		delete(m, "extension")

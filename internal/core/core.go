@@ -115,6 +115,7 @@ type Core struct {
 	history    map[string][]event.Event // journal events of sessions not adopted yet
 	recent     []string                 // repos used recently, newest first
 	appViews   int                      // open subscriptions of the Mac app; while any, the slot is zoomed
+	sizes      slotSizes                // the sizes the app shows each session's terminal at (sizes.go)
 	appTheme   string                   // the Mac app's palette, which the status line's agent colours follow; ui.theme until it says
 	appPalette *ui.Palette              // the app's palette, which appTheme names, by its colours
 	appColors  *ipc.Theme               // the same, as the header sends it to the other clients
@@ -496,6 +497,12 @@ func (c *Core) want() tmux.Want {
 	if x := c.sessions[c.split]; x != nil && c.appViews > 0 {
 		w.Split = x.pane
 	}
+	if c.appViews > 0 {
+		// Each agent window at the size the app shows its session at
+		// (sizes.go).
+		w.Size, w.Sizes = c.sizes.all, c.sizes.by
+		w.Hold = time.Since(c.sizes.swapped) < sizeHold
+	}
 	return w
 }
 
@@ -850,7 +857,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 			ipc.OpLock,
 			ipc.OpWorktrees,
@@ -1080,6 +1087,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return nil, c.cardOp(a)
+	case ipc.OpSizes:
+		var a ipc.SizesArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return nil, c.sizesOp(a)
 	case ipc.OpMail:
 		// A call with no process to it, such as one from within the core.
 		var a ipc.MailArgs
@@ -1298,6 +1311,7 @@ func (c *Core) swapIn(id string, focus bool) error {
 		return err
 	}
 	if len(cmds) > 0 {
+		c.noteSwap()
 		if _, err := c.tmux.RunList(cmds); err != nil {
 			return err
 		}

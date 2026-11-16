@@ -1,4 +1,4 @@
-//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !noextension
+//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !nobitwarden && !noextension
 
 package plugins
 
@@ -11,9 +11,9 @@ import (
 )
 
 // TestABuildWithoutPlugins: go build -tags novpn,noprivacy,nowriting,
-// nomarkets,nomail,noextension builds every package, and its irie links none
-// of the plugins' code (DESIGN §4.17); and a company's copy, which keeps the
-// VPN plugin to drive the VPN it approves (§4.18) and leaves the rest out,
+// nomarkets,nomail,nobitwarden,noextension builds every package, and its irie
+// links none of the plugins' code (DESIGN §4.17); and a company's copy, which
+// keeps the VPN plugin to drive the VPN it approves (§4.18) and leaves the rest out,
 // builds and links the VPN's code and none of the others'.
 func TestABuildWithoutPlugins(t *testing.T) {
 	if testing.Short() {
@@ -25,7 +25,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if err != nil {
 		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
 	}
-	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,noextension"
+	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noextension"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()

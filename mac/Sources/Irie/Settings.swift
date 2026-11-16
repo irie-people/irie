@@ -2020,6 +2020,10 @@ private struct PluginPartRow: View {
                 Button("Set Up…") { run(setup) }
                     .help("Starts \(setup)")
             }
+            // Bitwarden unlocks here too, as in a pane's key.
+            if plugin.name == "bitwarden", part.name == "autofill", plugin.on, part.state == "ready" {
+                BitwardenLockButton()
+            }
             if part.switch != nil {
                 Toggle(part.title, isOn: Binding(get: { part.on }, set: { model.setPlugin(plugin.name, part: part.name, on: $0) }))
                     .labelsHidden()

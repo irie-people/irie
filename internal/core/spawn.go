@@ -570,6 +570,11 @@ func (c *Core) launch(j job) (*session, error) {
 	if slot := c.snap.SlotPane(); slot != nil {
 		w, ht = slot.Width, slot.Height
 	}
+	// Or the size the Mac app shows a session with no panes at: a new one
+	// has none yet (sizes.go).
+	if z := c.sizes.all; c.appViews > 0 && z.W > 0 && z.H > 0 {
+		w, ht = z.W, z.H
+	}
 	size := []string{"-x", strconv.Itoa(w), "-y", strconv.Itoa(ht)}
 	target := tmux.AgentsSession + ":=" + id
 	opt := func(k, v string) []string { return []string{"set-option", "-p", "-t", target, k, v} }

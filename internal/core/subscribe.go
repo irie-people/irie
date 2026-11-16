@@ -137,6 +137,10 @@ func (c *Core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 			delete(c.subs, sub)
 			if app {
 				c.appViews--
+				if c.appViews == 0 {
+					// The terminal sidebar's slot sizes every agent again.
+					c.sizes = slotSizes{}
+				}
 			}
 			if x := c.sessions[sub.session]; x != nil && sub.conversation {
 				if isHelper(sub.agent) {
