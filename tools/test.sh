@@ -12,7 +12,8 @@
 #   tools/test.sh               every package
 #   tools/test.sh PKG...        these packages
 #   tools/test.sh -count=1      every test, whatever passed before
-#   tools/test.sh -p 6          six test processes at once (default: CPUs)
+#   tools/test.sh -p 6          six test processes at once (default: one per
+#                               CPU, half as many under 8 CPUs)
 #   tools/test.sh --plan        the plan and its predicted time, running nothing
 #
 # The times and the kept results live in the repository's git folder, in
