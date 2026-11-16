@@ -874,6 +874,35 @@ private struct AppearanceSettings: View {
             } footer: {
                 footnote("A layout keeps how the window is arranged: what the right side shows, the sidebar, the details panel, the right sidebar and the text size. View › Layout puts one back, and ⌃⌘1 to ⌃⌘9 your first nine.")
             }
+            // Zen's own layout, apart from the window's (Zen.swift).
+            Section {
+                ZenPicker(selection: Bindable(store.zen).layout)
+                    .padding(.vertical, 4)
+                // Centred's alone, but always there, so nothing below it
+                // moves as the layout changes.
+                Picker("Centred column", selection: Bindable(store.zen).columns) {
+                    ForEach(ZenModel.widths, id: \.self) { n in Text("\(n) columns").tag(n) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(store.zen.layout != .centred)
+                LabeledContent("Text size") {
+                    HStack(spacing: 10) {
+                        Stepper(value: Binding(get: { Int(store.zen.textSize ?? Double(store.windowFontSize)) },
+                                               set: { store.setZenText(Double($0)) }), in: 9...28) {
+                            Text(store.zen.textSize.map { "\(Int($0)) pt" } ?? "\(Int(store.windowFontSize)) pt, as the window")
+                                .monospacedDigit()
+                        }
+                        // Always there, so the stepper never moves.
+                        Button("Same as the Window") { store.setZenText(nil) }
+                            .disabled(store.zen.textSize == nil)
+                    }
+                }
+                Toggle("Fill the screen", isOn: Binding(get: { store.zen.fullScreen }, set: { store.setZenFullScreen($0) }))
+            } header: {
+                Text("Zen")
+            } footer: {
+                footnote("Fn+Z, or View › Enter Zen Mode, shows the session on show alone: no sidebar, toolbar or panes, full screen unless you turn that off. Fn+Z again gives the window back as it was. Zen keeps this layout and its own text size, apart from the window’s: ⌘+ and ⌘- in zen change zen’s. ⌃Tab and ⌘1 to ⌘9 still go to another session; asking for a part zen hides, such as the right sidebar, ends zen.")
+            }
             Section {
                 Picker("On the right", selection: Bindable(store).showTerminal) {
                     Text("Conversation").tag(false)
@@ -881,8 +910,8 @@ private struct AppearanceSettings: View {
                 }
                 .pickerStyle(.segmented)
                 LabeledContent("Terminal text") {
-                    Stepper(value: Binding(get: { Int(store.fontSize) }, set: { store.setFontSize(CGFloat($0)) }), in: 9...28) {
-                        Text("\(Int(store.fontSize)) pt").monospacedDigit()
+                    Stepper(value: Binding(get: { Int(store.windowFontSize) }, set: { store.setWindowFontSize(CGFloat($0)) }), in: 9...28) {
+                        Text("\(Int(store.windowFontSize)) pt").monospacedDigit()
                     }
                 }
                 if TerminalEngine.built.count > 1 {

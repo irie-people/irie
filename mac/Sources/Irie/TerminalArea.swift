@@ -28,6 +28,11 @@ struct TerminalArea: View {
         // A theme of yours that changed, or one being made, draws the
         // ground and the frame again too (Looks.swift).
         let _ = LookBook.shared.revision
+        // In zen the session shows alone, in zen's layout, with no panes,
+        // right sidebar or strip under it (Zen.swift). The same views stay
+        // in place throughout, only their sizes change, so the terminal is
+        // never made again.
+        let zen = self.zen
         VStack(spacing: 0) {
             // The right sidebar (RightSidebar.swift), a drawer that slides
             // in from the window's edge, over the terminal's or the
@@ -43,7 +48,7 @@ struct TerminalArea: View {
                 // right sidebar (Rolodex.swift), slide in the same way: the
                 // terminal makes room once they are in. Folded, they are a
                 // strip of their tabs, and fold and unfold the same way.
-                let side = store.sideDocked ? width : 0
+                let side = store.sideDocked && zen == nil ? width : 0
                 let room = geo.size.width - side
                 let r = store.rolodex
                 let keep = keepBesidePanes
@@ -63,11 +68,11 @@ struct TerminalArea: View {
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
                         .background { PlaceProbe { r.mainProbe = $0 } }
-                        .padding(.trailing, side + r.kept(fit, behind: behind))
+                        .padding(.trailing, zen == nil ? side + r.kept(fit, behind: behind) : 0)
                         // Over the wheel while it has the keyboard, under the
                         // right sidebar still.
                         .zIndex(behind ? 0.5 : 0)
-                    if r.open {
+                    if r.open, zen == nil {
                         if r.folded {
                             RolodexStrip()
                                 .padding(.leading, 4)
@@ -100,7 +105,7 @@ struct TerminalArea: View {
                             .zIndex(1.5)
                             .transition(.opacity)
                     }
-                    if let g = r.guide {
+                    if let g = r.guide, zen == nil {
                         // Over the terminal, the part of it the panes will
                         // cover, from the guide to the terminal frame's edge
                         // at its narrowest.
@@ -120,7 +125,7 @@ struct TerminalArea: View {
                             .allowsHitTesting(false)
                             .zIndex(2)
                     }
-                    if store.side.open {
+                    if store.side.open, zen == nil {
                         RightSidebar(guide: $sideGuide, drawn: Double(width),
                                      most: Double(max(CGFloat(SideState.minWidth), geo.size.width - minTerminal)))
                             .frame(width: width)
@@ -128,7 +133,7 @@ struct TerminalArea: View {
                             .transition(.move(edge: .trailing))
                             .zIndex(1)
                     }
-                    if let g = sideGuide {
+                    if let g = sideGuide, zen == nil {
                         Rectangle()
                             .fill(Theme.accent)
                             .frame(width: 2)
@@ -145,10 +150,14 @@ struct TerminalArea: View {
                 }
                 .onChange(of: r.shows) { store.sizesSoon() }
                 .onChange(of: store.poppedOut == nil) { store.sizesSoon() }
+                // Zen, its layout and Centred's width change the terminal's
+                // size, whatever the room.
+                .onChange(of: zenShape) { store.sizesSoon() }
             }
-            PhraseBar()
+            if zen == nil { PhraseBar() }
         }
-        .background(Theme.ground.ignoresSafeArea())
+        // Edge to Edge is the terminal's ground from edge to edge.
+        .background((zen == .edge && store.showTerminal ? Color(nsColor: Theme.terminalBackground) : Theme.ground).ignoresSafeArea())
         .toolbarBackground(Theme.ground, for: .windowToolbar)
         // The window's own title. The bar hides it (IrieApp.showsTitle),
         // or the name would show twice.
@@ -162,7 +171,7 @@ struct TerminalArea: View {
                         .font(.system(size: 13, weight: .semibold))
                     // Its state and the rest, in its agent's colour while it
                     // works, as its card and the terminal's frame.
-                    Text(selected.map { subtitle($0) } ?? "No session")
+                    Text(selected.map { Self.subtitle($0) } ?? "No session")
                         .font(.system(size: 11))
                         .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                 }
@@ -254,9 +263,12 @@ struct TerminalArea: View {
                     framed(Color.clear)
                 }
             }
-            // The conversation needs only the core, not the terminal.
+            // The conversation needs only the core, not the terminal. In
+            // zen it keeps clear of the title and the rail.
             if !store.showTerminal && (store.attach != nil || online) {
                 ConversationView()
+                    .padding(.top, zen == .centred || zen == .watch ? ZenModel.titleRoom - 12 : 0)
+                    .padding(.leading, zen == .watch ? ZenModel.railWidth + 12 : 0)
             } else if store.attach == nil, !store.isFixture {
                 if store.starting {
                     ProgressView("Starting \(Brand.name)…").frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -301,6 +313,42 @@ struct TerminalArea: View {
                 .padding(.leading, 48)
         }
         .animation(.easeOut(duration: 0.15), value: store.notice)
+        // Zen (Zen.swift): Keep Watch's rail where the sidebar was, the
+        // session's name over Centred's column and Keep Watch's frame, and
+        // for a moment as zen starts, how to leave it.
+        .overlay(alignment: .leading) {
+            if zen == .watch {
+                ZenRail()
+                    .padding(.vertical, 12)
+                    .padding(.leading, 12)
+            }
+        }
+        .overlay(alignment: zen == .watch ? .topLeading : .top) {
+            if zen == .centred || zen == .watch {
+                ZenTitle(session: selected)
+                    .padding(.top, 13)
+                    .padding(.leading, zen == .watch ? 12 + ZenModel.railWidth + 16 : 24)
+                    .padding(.trailing, 24)
+            }
+        }
+        .overlay(alignment: .top) {
+            if let note = zenNote, zen != nil {
+                ZenHint(text: note)
+                    .padding(.top, zen == .edge ? 14 : ZenModel.titleRoom + 14)
+                    .transition(.opacity)
+                    .id(note)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: zenNote)
+        .onChange(of: store.zen.started) {
+            sayInZen(ZenHint.leave, for: 3)
+            AccessibilityNotification.Announcement("Zen. \(ZenHint.leave).").post()
+        }
+        // Edge to Edge has no title: a session shown there says its name
+        // for a moment.
+        .onChange(of: selected?.id) {
+            if zen == .edge, let s = selected { sayInZen(s.name, for: 1.5) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .irieTerminalCopied)) { note in
             guard let text = note.userInfo?["note"] as? String else { return }
             let c = CopiedNote(text: text)
@@ -319,6 +367,41 @@ struct TerminalArea: View {
     private struct CopiedNote: Equatable {
         let id = UUID()
         let text: String
+    }
+
+    /// Zen's layout while zen is on; nil outside zen (Zen.swift).
+    private var zen: ZenLayout? { store.zen.on ? store.zen.layout : nil }
+
+    /// What of zen sizes the terminal, which every agent's window takes.
+    private var zenShape: String { zen.map { "\($0.rawValue) \(store.zen.columns)" } ?? "" }
+
+    /// Centred's column: zen's columns of text at the text size in use, and
+    /// the frame's padding round them.
+    private var zenColumn: CGFloat { CGFloat(store.zen.columns) * store.fontSize * store.cellRatio + 36 + 1 }
+
+    /// Round the terminal's frame: 12 points, or zen's room for its title
+    /// and rail; none at all edge to edge.
+    private func frameInsets(_ zen: ZenLayout?) -> EdgeInsets {
+        switch zen {
+        case nil: return EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12)
+        case .centred?: return EdgeInsets(top: ZenModel.titleRoom, leading: 24, bottom: 24, trailing: 24)
+        case .edge?: return EdgeInsets()
+        case .watch?: return EdgeInsets(top: ZenModel.titleRoom, leading: 12 + ZenModel.railWidth + 10, bottom: 12, trailing: 12)
+        }
+    }
+
+    /// What zen says for a moment: how to leave it, as it starts, or in
+    /// Edge to Edge the name of a session as it shows.
+    @State private var zenNote: String?
+    @State private var zenNotes = 0
+
+    private func sayInZen(_ text: String, for seconds: Double) {
+        zenNotes += 1
+        let n = zenNotes
+        zenNote = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            if zenNotes == n { zenNote = nil }
+        }
     }
 
     /// The picked session while it shows beside its teammates.
@@ -350,9 +433,14 @@ struct TerminalArea: View {
     /// The split lays out its own panes inside the frame, so it is not
     /// padded; anchors is false for the terminal the split stands in for.
     private func framed(_ terminal: some View, padded: Bool = true, anchors: Bool = true) -> some View {
-        let frame = RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
+        // Edge to Edge has no frame to draw: the terminal's ground runs to
+        // the screen's edges (Zen.swift).
+        let zen = self.zen
+        let bare = zen == .edge
+        let frame = RoundedRectangle(cornerRadius: bare ? 0 : Theme.frameRadius, style: .continuous)
         let ground = Color(nsColor: Theme.terminalBackground)
-        let shows = store.showTerminal && anchors
+        // In zen no card shows, so no lines end here.
+        let shows = store.showTerminal && anchors && zen == nil
         // While the sidebar's edge or the window's is dragged, the terminal
         // keeps its size, and takes the new one as the drag ends.
         return terminal
@@ -362,8 +450,8 @@ struct TerminalArea: View {
             .background {
                 // A click on the frame types to the terminal too.
                 frame.fill(ground)
-                    .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
-                    .overlay(frame.strokeBorder(edge, lineWidth: TabLink.width))
+                    .shadow(color: .black.opacity(bare ? 0 : 0.25), radius: 10, y: 3)
+                    .overlay(frame.strokeBorder(bare ? Color.clear : edge, lineWidth: TabLink.width))
                     .onTapGesture { store.focusTerminal += 1 }
             }
             // Where the lines from the selected card end (TabLink.swift).
@@ -374,8 +462,10 @@ struct TerminalArea: View {
                         .accessibilityHidden(true)
                 }
             }
-            .padding([.horizontal, .bottom], 12)
-            .padding(.top, 12)
+            // Centred's column, in the middle of the room.
+            .frame(maxWidth: zen == .centred ? zenColumn : .infinity)
+            .padding(frameInsets(zen))
+            .frame(maxWidth: .infinity)
     }
 
     /// The frame's colour: the shown session's edge, as round its card
@@ -391,8 +481,9 @@ struct TerminalArea: View {
         }
     }
 
-    /// Its state, or what it needs from you or waits on, then the rest.
-    private func subtitle(_ s: Session) -> String {
+    /// Its state, or what it needs from you or waits on, then the rest: the
+    /// title bar's, and zen's title (Zen.swift).
+    static func subtitle(_ s: Session) -> String {
         let look = Look(s)
         var parts = [look.loud || look == .waiting ? s.detail ?? look.label : Look.label(s)]
         if let p = s.profile, !p.isEmpty { parts.append(p) }

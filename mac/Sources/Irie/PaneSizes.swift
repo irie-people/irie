@@ -62,7 +62,8 @@ extension Store {
     /// comes in at its own size and the one going home leaves at its own
     /// (ResizeHold.holdForSwap).
     func holdsForSwap(to id: String) -> Bool {
-        guard sizesKept, !id.contains("/"), id != selection, outsideSelection == nil else { return false }
+        // In zen every session shows at one size, its panes hidden.
+        guard !zen.on, sizesKept, !id.contains("/"), id != selection, outsideSelection == nil else { return false }
         let r = rolodex
         return (r.shows[id] ?? PaneShow()) != PaneShow(open: r.open, folded: r.open && r.folded)
     }
@@ -79,6 +80,12 @@ extension Store {
         // Not made yet, as the app starts: again once it is.
         guard let view = terminalView else { return nil }
         guard let t = view as? GhosttyTerminalView else { return SizesArgs.off }
+        // In zen every session shows alone, with no panes, at the size the
+        // terminal has now (Zen.swift).
+        if zen.on {
+            guard ResizeHold.shared.held == nil, t.window != nil, let now = t.grid else { return nil }
+            return SizesArgs(size: CellSize(w: now.columns, h: now.rows))
+        }
         guard ResizeHold.shared.held == nil, !r.sliding, !r.folding, !sideSliding,
               let main = r.mainProbe, main.window != nil, t.window != nil, let now = t.grid else { return nil }
         // What the terminal frame takes of the room beside the panes, as it

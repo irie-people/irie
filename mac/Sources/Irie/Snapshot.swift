@@ -304,6 +304,8 @@ enum Snapshot {
             }
             store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
 
+            try zenShots(store, into: dir)
+
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
             for dark in [false, true] {
@@ -356,12 +358,41 @@ enum Snapshot {
         exit(0)
     }
 
+    /// Zen (Zen.swift): each layout at a laptop screen's size, as Fn+Z
+    /// shows it, the sidebar folded away and the toolbar gone, and Keep
+    /// Watch's rail with a card that needs you.
+    private static func zenShots(_ store: Store, into dir: String) throws {
+        store.side = SideState()
+        store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+        // The rail draws the cards the sidebar would: by repo, every group
+        // open, Parked too.
+        store.mode = .repo
+        store.folded = []
+        store.parkedOpen = true
+        let zens: [(String, ZenLayout, Bool)] = [
+            ("zen-centred", .centred, false), ("zen-centred-dark", .centred, true), ("zen-edge", .edge, false),
+            ("zen-edge-dark", .edge, true), ("zen-watch", .watch, false), ("zen-watch-dark", .watch, true),
+        ]
+        for (base, layout, dark) in zens {
+            store.zen.showFixture(layout)
+            UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+            Theme.use(Palette.standard.id)
+            let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1512, height: 945, zen: true)
+            let name = base + ".png"
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+            print("\(name): \(layout.title)")
+        }
+        // Off, and the first layout again for Settings' pictures.
+        store.zen.showFixture(nil)
+        store.zen.layout = .centred
+    }
+
     /// The window as the app draws it, at 2x, and its title bar's height in
     /// points. It has to be ordered in for SwiftUI to lay it out, and macOS
     /// brings any titled window ordered in onto a screen, however far off
     /// it was placed, so it is see-through, takes no clicks and goes to a
     /// desktop the user cannot see first (Desktops.swift): it never shows.
-    private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat) -> (NSBitmapImageRep, CGFloat) {
+    private static func window(_ root: some View, dark: Bool, width: CGFloat, height: CGFloat, zen: Bool = false) -> (NSBitmapImageRep, CGFloat) {
         let w = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: width, height: height),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
@@ -373,7 +404,22 @@ enum Snapshot {
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentView = host
         w.orderFrontRegardless()
+        if zen {
+            // As zen's full screen shows it: no window buttons, no toolbar,
+            // and the sidebar folded away, once the window's first layout
+            // has made them, which a busy machine takes a while over.
+            for b in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { w.standardWindowButton(b)?.isHidden = true }
+            let until = Date().addingTimeInterval(5)
+            while (WindowPanes.window !== w || WindowPanes.sidebar == nil || w.toolbar == nil) && Date() < until {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            }
+            w.toolbar?.isVisible = false
+            WindowPanes.setSidebar(shown: false, width: nil)
+        }
         RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+        if zen {
+            print("  zen: sidebar \(WindowPanes.sidebar.map { $0.shown ? "shown" : "folded" } ?? "not found"), toolbar \(w.toolbar?.isVisible == true ? "shown" : "hidden")")
+        }
         let frame = host.superview ?? host
         let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds)!
         frame.cacheDisplay(in: frame.bounds, to: rep)

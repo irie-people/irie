@@ -222,7 +222,11 @@ final class Store {
     var focusFind = 0
     /// The sidebar's filter, which the keys that walk the sidebar follow.
     var filter = ""
+    /// The terminal's text size on show: the window's, or zen's own while
+    /// zen is on (Zen.swift).
     private(set) var fontSize: CGFloat = Store.savedFontSize()
+    /// The window's own text size, kept while zen shows its own.
+    private(set) var windowFontSize: CGFloat = Store.savedFontSize()
     /// The terminal view, to tell whether it has the keyboard.
     @ObservationIgnored weak var terminalView: NSView? {
         // The sizes wait for it (PaneSizes.swift).
@@ -340,6 +344,8 @@ final class Store {
     let mail: MailModel
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
+    /// Zen: the session on show alone, full screen (Zen.swift).
+    let zen = ZenModel()
     @ObservationIgnored private var started = false
 
     init(socketPath: String = CorePaths.socket()) {
@@ -768,6 +774,8 @@ final class Store {
     /// Fills the store with sessions no core sent, for `--snapshot`.
     func loadFixture(_ rows: [Session], selection: String?) {
         isFixture = true
+        // Zen draws only as the snapshot asks, and saves nothing.
+        zen.fixture = true
         // Whatever the app popped out, the fixture's terminal is in.
         poppedOut = nil
         sessions = rows.sorted(by: Self.before)
@@ -1006,8 +1014,13 @@ final class Store {
         }
     }
 
-    /// Moves the keyboard between the session list and the terminal.
+    /// Moves the keyboard between the session list and the terminal. In zen,
+    /// which hides the list, zen ends and the list takes it (Zen.swift).
     func toggleFocus() {
+        if zen.on {
+            afterZen { [weak self] in self?.focusSidebar += 1 }
+            return
+        }
         if !showTerminal {
             if messageHasKeys { focusSidebar += 1 } else { focusMessage += 1 }
         } else if let t = terminalView, t.window?.firstResponder === t {
@@ -1017,9 +1030,33 @@ final class Store {
         }
     }
 
+    /// ⌘+, ⌘- and ⌘0: the text size on show, the window's, or zen's own
+    /// while zen is on, which zen keeps apart (Zen.swift).
     func setFontSize(_ size: CGFloat) {
         fontSize = min(max(size, 9), 28)
-        UserDefaults.standard.set(Double(fontSize), forKey: "terminalFontSize")
+        if zen.on {
+            zen.textSize = Double(fontSize)
+        } else {
+            keepWindowFontSize(fontSize)
+        }
+    }
+
+    /// Settings › Appearance › Window: the window's text size, which zen
+    /// follows while it has none of its own.
+    func setWindowFontSize(_ size: CGFloat) {
+        keepWindowFontSize(min(max(size, 9), 28))
+        if !zen.on || zen.textSize == nil { fontSize = windowFontSize }
+    }
+
+    private func keepWindowFontSize(_ size: CGFloat) {
+        if windowFontSize != size { windowFontSize = size }
+        UserDefaults.standard.set(Double(size), forKey: "terminalFontSize")
+    }
+
+    /// Puts on zen's own text size as zen starts, or the window's as it ends.
+    func useZenText(_ on: Bool) {
+        let size = on ? zen.textSize.map { CGFloat($0) } ?? windowFontSize : windowFontSize
+        if fontSize != size { fontSize = size }
     }
 
     private static func savedFontSize() -> CGFloat {
@@ -1035,6 +1072,8 @@ final class Store {
     /// every session. The terminal never splits for a helper, which has no
     /// terminal of its own.
     func openHelper(_ agent: String, in session: String) {
+        // Zen hides the panes: it gives way (Zen.swift).
+        zenGivesWay()
         if selection != session || outsideSelection != nil { show(session) }
         openHelpers[session] = agent
         showCard(.helpers, in: session)
@@ -1075,6 +1114,9 @@ final class Store {
     /// panes when that card is in front.
     func toggleHelpers() {
         guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else { return }
+        // Zen hides the panes: it gives way, and the helpers show, if they
+        // were in front already (Zen.swift).
+        if zenGivesWay(), helperShown { return }
         if helperShown {
             togglePanes()
             return
@@ -1266,6 +1308,11 @@ final class Store {
 
     /// Opens the session's name to edit, in its card.
     func beginRename(_ id: String) {
+        // The name is edited in its card, which zen hides (Zen.swift).
+        if zen.on {
+            afterZen { [weak self] in self?.beginRename(id) }
+            return
+        }
         guard let s = sessions.first(where: { $0.id == id }) else { return }
         if renaming != id {
             endRename(commit: true)

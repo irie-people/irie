@@ -158,6 +158,15 @@ final class KeyRouter {
                 MainActor.assumeIsolated { store.stepSpace(mods.contains(.shift) ? -1 : 1) }
                 return nil
             }
+            // Fn+Z starts zen, the session on show alone, full screen, and
+            // ends it (Zen.swift), from anywhere in the window, the terminal
+            // too, which never gets the z. As with Fn+Tab, only the fn flag
+            // tells it from z, and only here. The letter, not the key's
+            // place, so it is Z on every keyboard layout.
+            if irie, mods.isEmpty, event.modifierFlags.contains(.function), event.charactersIgnoringModifiers?.lowercased() == "z" {
+                MainActor.assumeIsolated { store.toggleZen() }
+                return nil
+            }
             if event.keyCode == 48, mods == .control || mods == [.control, .shift], irie { // Tab
                 MainActor.assumeIsolated { store.step(mods.contains(.shift) ? -1 : 1) }
                 return nil
@@ -233,6 +242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !WindowPlace.background && !WindowPlace.away {
             NSApp.activate(ignoringOtherApps: true)
         }
+        // Zen as it was when the app last ran (Zen.swift).
+        ZenResume.launch()
         FreezeDog.start(socketPath: CorePaths.socket())
     }
 
@@ -293,6 +304,10 @@ struct ContentView: View {
             WindowPlace.shared.adopt(window)
             // A preview takes over the window of the build before (Preview.swift).
             PreviewState.shared.adopt(window, store: store)
+            // Zen follows the window into full screen and out, and comes
+            // back after a relaunch as it was (Zen.swift).
+            store.watchZen(window)
+            ZenResume.once { [weak window] in if let window { store.resumeZen(in: window) } }
         })
         .onAppear {
             keys.install(store)
