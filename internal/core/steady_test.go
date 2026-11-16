@@ -58,13 +58,25 @@ func (c *coreEnv) ownProcs() map[string]int {
 		}
 		return n
 	}
+	// The core answers before the sidebar's supervisor has always started
+	// the sidebar, so wait for each supervised process, and never hand back
+	// a pid of 0: a signal to it reaches the test's own process group, the
+	// whole run, which a SIGSTOP then stopped for good.
+	supervised := func(target string) int {
+		var n int
+		testutil.Eventually(c.t, 20*time.Second, "no process under the supervisor in "+target, func() bool {
+			n = c.supervised(target)
+			return n > 1
+		})
+		return n
+	}
 	core := tmux.AgentsSession + ":core"
 	return map[string]int{
 		"server":             pid(c.Tmux(c.t, "display-message", "-p", "#{pid}")),
 		"core's supervisor":  pid(c.Tmux(c.t, "display-message", "-p", "-t", core, "#{pane_pid}")),
-		"core":               c.supervised(core),
+		"core":               supervised(core),
 		"sidebar supervisor": pid(c.Tmux(c.t, "display-message", "-p", "-t", tmux.Sidebar, "#{pane_pid}")),
-		"sidebar":            c.supervised(tmux.Sidebar),
+		"sidebar":            supervised(tmux.Sidebar),
 	}
 }
 
