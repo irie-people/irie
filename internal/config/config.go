@@ -32,37 +32,38 @@ import (
 )
 
 type Config struct {
-	UI       UI                 `toml:"ui"`
-	Spawn    Spawn              `toml:"spawn"`
-	Profiles map[string]Profile `toml:"profiles"`
-	Local    Local              `toml:"local"`
-	Route    Route              `toml:"route"`
-	Bench    Bench              `toml:"bench"`
-	Repos    Repos              `toml:"repos"`
-	Worktree Worktree           `toml:"worktree"`
-	Tmux     Tmux               `toml:"tmux"`
-	Journal  Journal            `toml:"journal"`
-	Context  Context            `toml:"context"`
-	Hold     Hold               `toml:"hold"`
-	Usage    Usage              `toml:"usage"`
-	Lock     Lock               `toml:"lock"`
-	Skills   Skills             `toml:"skills"`
-	Dog      Dog                `toml:"dog"`
-	Trod     Trod               `toml:"trod"`
-	Lid      Lid                `toml:"lid"`
-	Arch     Arch               `toml:"arch"`
-	Remote   Remote             `toml:"remote"`
-	Place    Place              `toml:"place"`
-	Peers    map[string]Peer    `toml:"peers"`
-	Env      Env                `toml:"env"`
-	Learn    Learn              `toml:"learn"`
-	VPN      VPN                `toml:"vpn"`
-	Browser  Browser            `toml:"browser"`
-	Anon     Anon               `toml:"anon"`
-	Markets  Markets            `toml:"markets"`
-	Variorum Variorum           `toml:"variorum"`
-	Mail     Mail               `toml:"mail"`
-	Plugins  Plugins            `toml:"plugins"`
+	UI        UI                 `toml:"ui"`
+	Spawn     Spawn              `toml:"spawn"`
+	Profiles  map[string]Profile `toml:"profiles"`
+	Local     Local              `toml:"local"`
+	Route     Route              `toml:"route"`
+	Bench     Bench              `toml:"bench"`
+	Repos     Repos              `toml:"repos"`
+	Worktree  Worktree           `toml:"worktree"`
+	Tmux      Tmux               `toml:"tmux"`
+	Journal   Journal            `toml:"journal"`
+	Context   Context            `toml:"context"`
+	Hold      Hold               `toml:"hold"`
+	Usage     Usage              `toml:"usage"`
+	Lock      Lock               `toml:"lock"`
+	Skills    Skills             `toml:"skills"`
+	Dog       Dog                `toml:"dog"`
+	Trod      Trod               `toml:"trod"`
+	Lid       Lid                `toml:"lid"`
+	Arch      Arch               `toml:"arch"`
+	Remote    Remote             `toml:"remote"`
+	Place     Place              `toml:"place"`
+	Peers     map[string]Peer    `toml:"peers"`
+	Env       Env                `toml:"env"`
+	Learn     Learn              `toml:"learn"`
+	VPN       VPN                `toml:"vpn"`
+	Browser   Browser            `toml:"browser"`
+	Anon      Anon               `toml:"anon"`
+	Markets   Markets            `toml:"markets"`
+	Variorum  Variorum           `toml:"variorum"`
+	Mail      Mail               `toml:"mail"`
+	Extension Extension          `toml:"extension"`
+	Plugins   Plugins            `toml:"plugins"`
 }
 
 // Plugins are Irie's plugins (DESIGN §4.17, internal/plugins): sets of
@@ -86,6 +87,10 @@ type Plugins struct {
 	// accounts in one list, each in a colour of its own
 	// (docs/proposals/mail.md).
 	Mail bool `toml:"mail"`
+	// Extension is Irie in your own browser: a browser extension with
+	// tools that run on this computer, the first of them Terms in short
+	// (docs/proposals/browser-extension.md).
+	Extension bool `toml:"extension"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -121,6 +126,10 @@ func (c Config) MarketsOn() bool { return MarketsBuilt && c.Plugins.Markets }
 // MailOn says whether the mail plugin runs: plugins.mail, with the plugin
 // built in.
 func (c Config) MailOn() bool { return MailBuilt && c.Plugins.Mail }
+
+// ExtensionOn says whether the browser extension plugin runs:
+// plugins.extension, with the plugin built in.
+func (c Config) ExtensionOn() bool { return ExtensionBuilt && c.Plugins.Extension }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -993,7 +1002,7 @@ func Default() Config {
 		Mail:     defaultMail(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Extension: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1086,38 +1095,39 @@ func Parse(data []byte, path string) (Config, error) {
 	// Sections decode over the defaults. Profiles decode one by one, so a file
 	// that sets only profiles.claude.model keeps that profile's other defaults.
 	file := struct {
-		UI       *UI                       `toml:"ui"`
-		Spawn    *Spawn                    `toml:"spawn"`
-		Profiles map[string]toml.Primitive `toml:"profiles"`
-		Local    *Local                    `toml:"local"`
-		Route    *Route                    `toml:"route"`
-		Bench    *Bench                    `toml:"bench"`
-		Repos    *Repos                    `toml:"repos"`
-		Worktree *Worktree                 `toml:"worktree"`
-		Tmux     *Tmux                     `toml:"tmux"`
-		Journal  *Journal                  `toml:"journal"`
-		Context  *Context                  `toml:"context"`
-		Hold     *Hold                     `toml:"hold"`
-		Usage    *Usage                    `toml:"usage"`
-		Lock     *Lock                     `toml:"lock"`
-		Skills   *Skills                   `toml:"skills"`
-		Dog      *Dog                      `toml:"dog"`
-		Trod     *Trod                     `toml:"trod"`
-		Lid      *Lid                      `toml:"lid"`
-		Arch     *Arch                     `toml:"arch"`
-		Remote   *Remote                   `toml:"remote"`
-		Place    *Place                    `toml:"place"`
-		Peers    map[string]Peer           `toml:"peers"`
-		Env      *Env                      `toml:"env"`
-		Learn    *Learn                    `toml:"learn"`
-		VPN      *VPN                      `toml:"vpn"`
-		Browser  *Browser                  `toml:"browser"`
-		Anon     *Anon                     `toml:"anon"`
-		Markets  *Markets                  `toml:"markets"`
-		Variorum *Variorum                 `toml:"variorum"`
-		Mail     *Mail                     `toml:"mail"`
-		Plugins  *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+		UI        *UI                       `toml:"ui"`
+		Spawn     *Spawn                    `toml:"spawn"`
+		Profiles  map[string]toml.Primitive `toml:"profiles"`
+		Local     *Local                    `toml:"local"`
+		Route     *Route                    `toml:"route"`
+		Bench     *Bench                    `toml:"bench"`
+		Repos     *Repos                    `toml:"repos"`
+		Worktree  *Worktree                 `toml:"worktree"`
+		Tmux      *Tmux                     `toml:"tmux"`
+		Journal   *Journal                  `toml:"journal"`
+		Context   *Context                  `toml:"context"`
+		Hold      *Hold                     `toml:"hold"`
+		Usage     *Usage                    `toml:"usage"`
+		Lock      *Lock                     `toml:"lock"`
+		Skills    *Skills                   `toml:"skills"`
+		Dog       *Dog                      `toml:"dog"`
+		Trod      *Trod                     `toml:"trod"`
+		Lid       *Lid                      `toml:"lid"`
+		Arch      *Arch                     `toml:"arch"`
+		Remote    *Remote                   `toml:"remote"`
+		Place     *Place                    `toml:"place"`
+		Peers     map[string]Peer           `toml:"peers"`
+		Env       *Env                      `toml:"env"`
+		Learn     *Learn                    `toml:"learn"`
+		VPN       *VPN                      `toml:"vpn"`
+		Browser   *Browser                  `toml:"browser"`
+		Anon      *Anon                     `toml:"anon"`
+		Markets   *Markets                  `toml:"markets"`
+		Variorum  *Variorum                 `toml:"variorum"`
+		Mail      *Mail                     `toml:"mail"`
+		Extension *Extension                `toml:"extension"`
+		Plugins   *Plugins                  `toml:"plugins"`
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1794,13 +1804,14 @@ func (c Config) Validate() error {
 		bad("anon.tor = %q: must be an absolute or ~ path, or empty for the usual places", an.Tor)
 	}
 	checkMail(c.Mail, bad)
+	checkExtension(c.Extension, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && ExtensionBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1843,6 +1854,10 @@ func (c Config) Write(w io.Writer) error {
 	if !MailBuilt {
 		delete(m, "mail")
 		delete(plugins, "mail")
+	}
+	if !ExtensionBuilt {
+		delete(m, "extension")
+		delete(plugins, "extension")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

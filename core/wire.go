@@ -436,6 +436,7 @@ const (
 	ToolPrivacy        = ipc.ToolPrivacy
 	ToolVPN            = ipc.ToolVPN
 	ToolWrite          = ipc.ToolWrite
+	ToolExtension      = ipc.ToolExtension
 	HelperItemsMax     = ipc.HelperItemsMax
 	PaneWeb            = ipc.PaneWeb
 	BundleOn           = ipc.BundleOn

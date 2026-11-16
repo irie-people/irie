@@ -81,6 +81,11 @@ var Copies = []roots.Copy{
 		Why:    "The phone's setup page stands alone: it loads before the app and its scripts.",
 		Blocks: []string{"evergreen light", "evergreen dark"},
 	},
+	{
+		Path:   "internal/extension/web/panel.css",
+		Why:    "The browser extension's side panel loads nothing from elsewhere: its pages may run only their own files.",
+		Blocks: []string{"evergreen light", "evergreen dark"},
+	},
 }
 
 // Check reads every copy under root, Irie's checkout, and the site's

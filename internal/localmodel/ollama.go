@@ -364,6 +364,77 @@ func (o Ollama) Embed(ctx context.Context, model string, inputs []string, keep s
 	return v.Embeddings, nil
 }
 
+// ChatMessage is one message of a chat: its role, system, user or
+// assistant, and its words.
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatOptions tune a chat.
+type ChatOptions struct {
+	// Think, when set, turns a thinking model's thinking on or off; nil
+	// leaves the model's own way, and a model that doesn't think must
+	// get nil.
+	Think       *bool
+	Temperature float64
+	Context     int    // its context in tokens (num_ctx); 0 = the server's
+	Keep        string // how long the server keeps the model loaded afterwards (keep_alive); "" = its default
+}
+
+// Chat is POST /api/chat, streamed: part, when set, gets each piece of the
+// reply as it comes, and Chat returns the whole of it.
+func (o Ollama) Chat(ctx context.Context, model string, msgs []ChatMessage, opt ChatOptions, part func(string)) (string, error) {
+	body := map[string]any{"model": model, "messages": msgs, "stream": true}
+	options := map[string]any{"temperature": opt.Temperature}
+	if opt.Context > 0 {
+		options["num_ctx"] = opt.Context
+	}
+	body["options"] = options
+	if opt.Think != nil {
+		body["think"] = *opt.Think
+	}
+	if opt.Keep != "" {
+		body["keep_alive"] = opt.Keep
+	}
+	resp, err := o.do(ctx, http.MethodPost, "/api/chat", body)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var out strings.Builder
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 64<<10), 4<<20)
+	for sc.Scan() {
+		var v struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+			Done  bool   `json:"done"`
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(sc.Bytes(), &v); err != nil {
+			continue
+		}
+		if v.Error != "" {
+			return out.String(), &APIError{Status: http.StatusOK, Msg: v.Error}
+		}
+		if v.Message.Content != "" {
+			out.WriteString(v.Message.Content)
+			if part != nil {
+				part(v.Message.Content)
+			}
+		}
+		if v.Done {
+			return out.String(), nil
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return out.String(), err
+	}
+	return out.String(), ctx.Err()
+}
+
 // Unload lets a loaded model go at once, freeing the memory it holds
 // (POST /api/generate with keep_alive 0, as Ollama's API documents).
 func (o Ollama) Unload(ctx context.Context, model string) error {
