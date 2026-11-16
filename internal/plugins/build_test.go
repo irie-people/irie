@@ -1,4 +1,4 @@
-//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !nobitwarden && !noextension
+//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !nobitwarden && !noterms && !noextension
 
 package plugins
 
@@ -11,7 +11,7 @@ import (
 )
 
 // TestABuildWithoutPlugins: go build -tags novpn,noprivacy,nowriting,
-// nomarkets,nomail,nobitwarden,noextension builds every package, and its irie
+// nomarkets,nomail,nobitwarden,noterms,noextension builds every package, and its irie
 // links none of the plugins' code (DESIGN §4.17); and a company's copy, which
 // keeps the VPN plugin to drive the VPN it approves (§4.18) and leaves the rest out,
 // builds and links the VPN's code and none of the others'.
@@ -25,7 +25,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if err != nil {
 		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
 	}
-	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noextension"
+	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
@@ -55,7 +55,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	// A company's copy keeps only the VPN plugin: Mail reads a person's own
 	// accounts, and the browser extension is for a person's own browser, so
 	// they go with the other personal plugins.
-	company := "-tags=noprivacy,nowriting,nomarkets,nomail,noextension"
+	company := "-tags=noprivacy,nowriting,nomarkets,nomail,noterms,noextension"
 	build = exec.Command(goBin, "build", "-o", filepath.Join(t.TempDir(), "irie"), company, "./cmd/irie")
 	build.Dir = list.Dir
 	if out, err := build.CombinedOutput(); err != nil {

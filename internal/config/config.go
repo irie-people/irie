@@ -92,9 +92,12 @@ type Plugins struct {
 	// password and keeps the panes' logins in its own memory: the core
 	// never sees one.
 	Bitwarden bool `toml:"bitwarden"`
-	// Extension is Irie in your own browser: a browser extension with
-	// tools that run on this computer, the first of them Terms in short
-	// (docs/proposals/browser-extension.md).
+	// Terms is Terms in short: what a site's terms of service mean for
+	// you, read by Irie's own code, in the Mac app's Terms tab, irie terms
+	// and the browser extension (docs/proposals/browser-extension.md).
+	Terms bool `toml:"terms"`
+	// Extension is Irie in your own browser: a browser extension with the
+	// tools of Irie's plugins, the first of them Terms in short.
 	Extension bool `toml:"extension"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
@@ -139,6 +142,10 @@ func (c Config) BitwardenOn() bool { return BitwardenBuilt && c.Plugins.Bitwarde
 // ExtensionOn says whether the browser extension plugin runs:
 // plugins.extension, with the plugin built in.
 func (c Config) ExtensionOn() bool { return ExtensionBuilt && c.Plugins.Extension }
+
+// TermsOn says whether Terms in short runs: plugins.terms, with the
+// plugin built in.
+func (c Config) TermsOn() bool { return TermsBuilt && c.Plugins.Terms }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -1021,7 +1028,7 @@ func Default() Config {
 		Mail:     defaultMail(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Extension: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1833,7 +1840,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && ExtensionBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1879,6 +1886,9 @@ func (c Config) Write(w io.Writer) error {
 	}
 	if !BitwardenBuilt {
 		delete(plugins, "bitwarden")
+	}
+	if !TermsBuilt {
+		delete(plugins, "terms")
 	}
 	if !ExtensionBuilt {
 		delete(m, "extension")

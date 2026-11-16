@@ -1,4 +1,4 @@
-//go:build !noextension
+//go:build !noterms
 
 package main
 
@@ -11,12 +11,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
@@ -25,9 +27,16 @@ import (
 	"github.com/irie-people/irie/internal/terms"
 )
 
-// irie terms: Terms in short, the browser extension plugin's first tool
-// (docs/proposals/browser-extension.md), in a terminal. go build -tags
-// noextension leaves this file out.
+// irie terms: Terms in short (docs/proposals/browser-extension.md), in a
+// terminal. go build -tags noterms leaves this file out, and terms_off.go
+// stands in.
+
+// termsUsage is Terms in short's lines in the usage.
+const termsUsage = `  ` + brand.Slug + ` terms [ask|chat|serve] ADDRESS|FILE [QUESTION]
+                          a site's terms of service in plain words, and answers
+                          to questions about them, by ` + brand.Name + `'s own code
+                          (` + brand.Slug + ` terms help)
+`
 
 const termsHelp = `usage:
   ` + brand.Slug + ` terms [--json] [--privacy] [--allow-local] ADDRESS|FILE|-
@@ -44,10 +53,9 @@ const termsHelp = `usage:
   ` + brand.Slug + ` terms chat [--model] ADDRESS|FILE|-
                        ask one question a line, until an empty line
   ` + brand.Slug + ` terms serve [--port N]
-                       the browser extension's panel as a page on this
-                       computer, at http://127.0.0.1:N/ (N is 7393 unless
-                       you say), for a browser card of the Mac app's panes:
-                       type N in its address bar
+                       the Terms tab's page on this computer, at
+                       http://127.0.0.1:N/ (7393 unless you say), which the
+                       core serves itself while the plugin is on
 ` + brand.Name + `'s own code reads the terms on this computer: no tokens, nothing sent
 anywhere but the fetch of the page. Not legal advice.
 `
@@ -74,7 +82,7 @@ func termsCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 	privacy := fs.Bool("privacy", false, "read the site's privacy policy rather than its terms")
 	local := fs.Bool("allow-local", false, "fetch from this computer or its local network")
 	useModel := fs.Bool("model", false, "word answers with a local model")
-	port := fs.Int("port", 7393, "the port the panel's page is served on")
+	port := fs.Int("port", terms.PagePort, "the port the page is served on")
 	if sub == "help" || sub == "-h" || sub == "--help" {
 		fmt.Fprint(stdout, termsHelp)
 		return nil
@@ -101,7 +109,7 @@ func termsCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	var m *terms.Model
 	if *useModel {
-		got, err := terms.FindModel(ctx, modelServers(cfg), cfg.Extension.Model)
+		got, err := terms.FindModel(ctx, terms.Servers(cfg), cfg.Extension.Model)
 		if err != nil {
 			return err
 		}
@@ -241,9 +249,13 @@ func termsServe(ctx context.Context, port int, stdout io.Writer) error {
 	}
 	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
+		if port == terms.PagePort && servedHere(port) {
+			fmt.Fprintf(stdout, "%s's core serves it already, at http://127.0.0.1:%d/: the Terms tab in the Mac app's right sidebar shows it.\n", brand.Name, port)
+			return nil
+		}
 		return fmt.Errorf("serving on port %d: %w; --port picks another", port, err)
 	}
-	fmt.Fprintf(stdout, "Terms in short is at http://127.0.0.1:%d/ on this computer: in the Mac app, open a browser card in the panes and type %d. Ctrl-C stops it.\n", port, port)
+	fmt.Fprintf(stdout, "Terms in short is at http://127.0.0.1:%d/ on this computer. Ctrl-C stops it.\n", port)
 	return extension.ServeWeb(ctx, ln, extension.Options{
 		Paths: p,
 		Load: func() (config.Config, error) {
@@ -251,16 +263,18 @@ func termsServe(ctx context.Context, port int, stdout io.Writer) error {
 			return cfg, err
 		},
 		Why:     func(cfg config.Config, part string) string { return plugins.Why(cfg, part) },
-		Servers: modelServers,
+		Servers: terms.Servers,
 	})
 }
 
-// modelServers are the Ollama servers a model may word answers on, the
-// first that answers taking it: local.url, else Irie's own, then Ollama's
-// usual port.
-func modelServers(cfg config.Config) []string {
-	if cfg.Local.URL != "" {
-		return []string{cfg.Local.URL}
+// servedHere says whether Irie's page answers at port on this computer.
+func servedHere(port int) bool {
+	c := http.Client{Timeout: 2 * time.Second}
+	resp, err := c.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/brand.js")
+	if err != nil {
+		return false
 	}
-	return []string{"http://127.0.0.1:" + strconv.Itoa(cfg.Local.Port), "http://127.0.0.1:11434"}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return resp.StatusCode == http.StatusOK && strings.Contains(string(b), "IRIE_BRAND")
 }

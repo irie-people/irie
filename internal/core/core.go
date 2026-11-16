@@ -6,6 +6,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -431,6 +432,8 @@ func Run(o Options) error {
 	defer l.Close()
 	go ipc.Serve(l, c)
 	go c.watchOutside()
+	// Terms in short's page, for the Mac app's Terms tab (terms.go).
+	go c.serveTerms(context.Background())
 	// Raphael's look at the core's own loop (watchCore) counts from here.
 	c.beat()
 
