@@ -366,6 +366,31 @@ private struct EndStrip: View {
     }
 }
 
+/// Zen's card (Zen.swift): the shown session's own card, as the list draws
+/// it, and its helpers under it, beside its terminal while the list is out of
+/// sight. It is the selected card, so the lines join it to the terminal's
+/// frame (TabLink.swift): the folded list's own copy makes no join.
+@MainActor
+struct ZenCard: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        if let s = store.selectedRow, store.outsideSelection == nil {
+            TimelineView(.periodic(from: .now, by: 30)) { ctx in
+                VStack(alignment: .leading, spacing: 4) {
+                    SessionCard(session: s, selected: true, picked: false, listFocused: false, now: ctx.date,
+                                first: true, last: true, inZen: true)
+                        .equatable()
+                    if HelperRows.has(s) {
+                        HelperRows(session: s)
+                            .equatable()
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// One session, always two lines: its name, then what it needs from you (in
 /// red), what it is doing, or how it ended, in plain words. The trailing
 /// slot has a fixed width, so the name never re-wraps when the age ticks or
@@ -399,6 +424,10 @@ private struct SessionCard: View, Equatable {
     /// First or last in its group: it can't move up, or down.
     let first: Bool
     let last: Bool
+    /// Zen's copy of the card beside the terminal (ZenCard), which neither
+    /// drags nor opens its name on a double click: its list is out of
+    /// sight, and Rename in its menu brings the list back first.
+    var inZen = false
     @State private var hovering = false
     /// The × on the card under the pointer (Settings › Tabs).
     @AppStorage(CloseFromPointer.defaultsKey) private var closeFromPointer = true
@@ -533,8 +562,8 @@ private struct SessionCard: View, Equatable {
             }
         }
         // A double click opens the name to edit; its first click showed it.
-        .simultaneousGesture(TapGesture(count: 2).onEnded { store.beginRename(session.id) })
-        .modifier(Reorderable(session: session))
+        .simultaneousGesture(TapGesture(count: 2).onEnded { if !inZen { store.beginRename(session.id) } })
+        .modifier(Reorderable(session: session, movable: !inZen))
         .contextMenu { Actions(session: session, first: first, last: last) }
         .help([session.name, session.detail, session.command].compactMap { $0 }.joined(separator: "\n"))
         // While the name is open to edit, VoiceOver reaches the field.

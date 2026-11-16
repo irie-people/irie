@@ -109,6 +109,8 @@ extension Store {
     /// A pane's own item: shows it, or closes the sidebar when it already
     /// shows.
     func togglePane(_ id: String) {
+        // Zen hides it: it gives way, and the pane shows (Zen.swift).
+        if zenGivesWay() { return openPane(id) }
         if side.open && side.tab == .plugin && side.pane == id { closeSide() } else { openPane(id) }
     }
 

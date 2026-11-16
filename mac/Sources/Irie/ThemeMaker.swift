@@ -691,8 +691,8 @@ struct ThemeMaker: View {
             HStack {
                 Text("Terminal text")
                 Spacer()
-                Stepper(value: Binding(get: { Int(store.fontSize) }, set: { store.setFontSize(CGFloat($0)) }), in: 9...28) {
-                    Text("\(Int(store.fontSize)) pt").monospacedDigit()
+                Stepper(value: Binding(get: { Int(store.windowFontSize) }, set: { store.setWindowFontSize(CGFloat($0)) }), in: 9...28) {
+                    Text("\(Int(store.windowFontSize)) pt").monospacedDigit()
                 }
             }
         }

@@ -28,6 +28,11 @@ struct TerminalArea: View {
         // A theme of yours that changed, or one being made, draws the
         // ground and the frame again too (Looks.swift).
         let _ = LookBook.shared.revision
+        // In zen the session shows with its own card and panes alone, in
+        // zen's layout, with no right sidebar or strip under it (Zen.swift).
+        // The same views stay in place throughout, only their sizes change,
+        // so the terminal is never made again.
+        let zen = self.zen
         VStack(spacing: 0) {
             // The right sidebar (RightSidebar.swift), a drawer that slides
             // in from the window's edge, over the terminal's or the
@@ -43,7 +48,7 @@ struct TerminalArea: View {
                 // right sidebar (Rolodex.swift), slide in the same way: the
                 // terminal makes room once they are in. Folded, they are a
                 // strip of their tabs, and fold and unfold the same way.
-                let side = store.sideDocked ? width : 0
+                let side = store.sideDocked && zen == nil ? width : 0
                 let room = geo.size.width - side
                 let r = store.rolodex
                 let keep = keepBesidePanes
@@ -120,7 +125,7 @@ struct TerminalArea: View {
                             .allowsHitTesting(false)
                             .zIndex(2)
                     }
-                    if store.side.open {
+                    if store.side.open, zen == nil {
                         RightSidebar(guide: $sideGuide, drawn: Double(width),
                                      most: Double(max(CGFloat(SideState.minWidth), geo.size.width - minTerminal)))
                             .frame(width: width)
@@ -128,7 +133,7 @@ struct TerminalArea: View {
                             .transition(.move(edge: .trailing))
                             .zIndex(1)
                     }
-                    if let g = sideGuide {
+                    if let g = sideGuide, zen == nil {
                         Rectangle()
                             .fill(Theme.accent)
                             .frame(width: 2)
@@ -145,8 +150,11 @@ struct TerminalArea: View {
                 }
                 .onChange(of: r.shows) { store.sizesSoon() }
                 .onChange(of: store.poppedOut == nil) { store.sizesSoon() }
+                // Zen, its layout and Centred's width change the terminal's
+                // size, whatever the room.
+                .onChange(of: zenShape) { store.sizesSoon() }
             }
-            PhraseBar()
+            if zen == nil { PhraseBar() }
         }
         .background(Theme.ground.ignoresSafeArea())
         .toolbarBackground(Theme.ground, for: .windowToolbar)
@@ -162,7 +170,7 @@ struct TerminalArea: View {
                         .font(.system(size: 13, weight: .semibold))
                     // Its state and the rest, in its agent's colour while it
                     // works, as its card and the terminal's frame.
-                    Text(selected.map { subtitle($0) } ?? "No session")
+                    Text(selected.map { Self.subtitle($0) } ?? "No session")
                         .font(.system(size: 11))
                         .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                 }
@@ -254,9 +262,10 @@ struct TerminalArea: View {
                     framed(Color.clear)
                 }
             }
-            // The conversation needs only the core, not the terminal.
+            // The conversation needs only the core, not the terminal. In
+            // zen the card's column stands beside it, as beside the terminal.
             if !store.showTerminal && (store.attach != nil || online) {
-                ConversationView()
+                zenGroup(ConversationView(), margins: EdgeInsets())
             } else if store.attach == nil, !store.isFixture {
                 if store.starting {
                     ProgressView("Starting \(Brand.name)…").frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -301,6 +310,22 @@ struct TerminalArea: View {
                 .padding(.leading, 48)
         }
         .animation(.easeOut(duration: 0.15), value: store.notice)
+        // For a moment as zen starts, how to leave it (Zen.swift), over the
+        // terminal's top.
+        .overlay(alignment: .top) {
+            if let note = zenNote, zen != nil {
+                ZenHint(text: note)
+                    .padding(.top, 36)
+                    .padding(.leading, store.zen.cardColumn)
+                    .transition(.opacity)
+                    .id(note)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: zenNote)
+        .onChange(of: store.zen.started) {
+            sayInZen(ZenHint.leave, for: 3)
+            AccessibilityNotification.Announcement("Zen. \(ZenHint.leave).").post()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .irieTerminalCopied)) { note in
             guard let text = note.userInfo?["note"] as? String else { return }
             let c = CopiedNote(text: text)
@@ -319,6 +344,53 @@ struct TerminalArea: View {
     private struct CopiedNote: Equatable {
         let id = UUID()
         let text: String
+    }
+
+    /// Zen's layout while zen is on; nil outside zen (Zen.swift).
+    private var zen: ZenLayout? { store.zen.on ? store.zen.layout : nil }
+
+    /// What of zen sizes the terminal, which every agent's window takes.
+    private var zenShape: String { zen.map { "\($0.rawValue) \(store.zen.columns) \(store.zen.cardColumn)" } ?? "" }
+
+    /// Centred's column: zen's columns of text at the text size in use, and
+    /// the frame's padding round them.
+    private var zenColumn: CGFloat { CGFloat(store.zen.columns) * store.fontSize * store.cellRatio + 36 + 1 }
+
+    /// The session's part, the terminal's frame or the conversation, with
+    /// zen's card column beside it: its room at the leading edge, the column
+    /// drawn there, and in Centred the two kept together, at most the card,
+    /// the frame's margins and the reading column wide, in the middle of the
+    /// room. Outside zen it is only the margins round the frame, as ever:
+    /// no room, no column, no limit.
+    private func zenGroup(_ part: some View, margins: EdgeInsets) -> some View {
+        let zen = self.zen
+        let column = zen == nil ? 0 : store.zen.cardColumn
+        return part
+            .padding(margins)
+            .padding(.leading, column)
+            .overlay(alignment: .leading) {
+                if let zen {
+                    ZenCardColumn(layout: zen)
+                        .frame(width: column)
+                }
+            }
+            .frame(maxWidth: zen == .centred ? column + margins.leading + margins.trailing + zenColumn : .infinity)
+            .padding(.vertical, zen == .centred ? 12 : 0)
+            .frame(maxWidth: .infinity)
+    }
+
+    /// What zen says for a moment, in a capsule: how to leave it, as it
+    /// starts.
+    @State private var zenNote: String?
+    @State private var zenNotes = 0
+
+    private func sayInZen(_ text: String, for seconds: Double) {
+        zenNotes += 1
+        let n = zenNotes
+        zenNote = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            if zenNotes == n { zenNote = nil }
+        }
     }
 
     /// The picked session while it shows beside its teammates.
@@ -355,7 +427,7 @@ struct TerminalArea: View {
         let shows = store.showTerminal && anchors
         // While the sidebar's edge or the window's is dragged, the terminal
         // keeps its size, and takes the new one as the drag ends.
-        return terminal
+        let inFrame = terminal
             .modifier(HeldSize())
             .padding(.vertical, padded ? 10 : 4)
             .padding(.horizontal, padded ? 18 : 6)
@@ -366,7 +438,8 @@ struct TerminalArea: View {
                     .overlay(frame.strokeBorder(edge, lineWidth: TabLink.width))
                     .onTapGesture { store.focusTerminal += 1 }
             }
-            // Where the lines from the selected card end (TabLink.swift).
+            // Where the lines from the selected card end (TabLink.swift),
+            // zen's card's too.
             .background {
                 if shows {
                     TabLinkFrame(session: selected?.id, ground: Theme.terminalBackground)
@@ -374,8 +447,11 @@ struct TerminalArea: View {
                         .accessibilityHidden(true)
                 }
             }
-            .padding([.horizontal, .bottom], 12)
-            .padding(.top, 12)
+        // 12 points round it, Edge to Edge's narrower, and zen's card column
+        // beside it (zenGroup).
+        let margins = zen == .edge ? EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 6)
+                                   : EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12)
+        return zenGroup(inFrame, margins: margins)
     }
 
     /// The frame's colour: the shown session's edge, as round its card
@@ -391,8 +467,9 @@ struct TerminalArea: View {
         }
     }
 
-    /// Its state, or what it needs from you or waits on, then the rest.
-    private func subtitle(_ s: Session) -> String {
+    /// Its state, or what it needs from you or waits on, then the rest: the
+    /// title bar's, and zen's title (Zen.swift).
+    static func subtitle(_ s: Session) -> String {
         let look = Look(s)
         var parts = [look.loud || look == .waiting ? s.detail ?? look.label : Look.label(s)]
         if let p = s.profile, !p.isEmpty { parts.append(p) }

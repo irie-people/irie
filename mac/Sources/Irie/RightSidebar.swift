@@ -117,6 +117,8 @@ extension Store {
     /// View > Show Right Sidebar (⌥⌘B), and the toolbar's button: it opens
     /// on the tab it closed on, a plugin's pane too while that is on.
     func toggleSide() {
+        // Zen hides it: it gives way, and the sidebar shows (Zen.swift).
+        if zenGivesWay(), side.open { return }
         if side.open {
             closeSide()
         } else if side.tab == .plugin, let id = side.pane, panes.contains(where: { $0.id == id }) {
@@ -129,6 +131,7 @@ extension Store {
     /// A tab's own key (⌥⌘1 to ⌥⌘8): shows the sidebar on that tab, or
     /// closes it when that tab already shows.
     func toggleSideTab(_ tab: SideTab) {
+        if zenGivesWay() { return openSide(tab) }
         if side.open && side.tab == tab { closeSide() } else { openSide(tab) }
     }
 
@@ -162,6 +165,7 @@ extension Store {
 
     /// Opens the right sidebar on a tab: a closed one slides in.
     func openSide(_ tab: SideTab) {
+        zenGivesWay()
         var s = side
         s.open = true
         s.tab = sideTabs.contains(tab) ? tab : SideTab.built(variorum: false)[0]
@@ -171,6 +175,7 @@ extension Store {
     /// Opens the right sidebar on a plugin's pane (PluginPanes.swift): a closed
     /// one slides in.
     func openPane(_ id: String) {
+        zenGivesWay()
         var s = side
         s.open = true
         s.tab = .plugin

@@ -82,18 +82,26 @@ extension Store {
         guard ResizeHold.shared.held == nil, !r.sliding, !r.folding, !sideSliding,
               let main = r.mainProbe, main.window != nil, t.window != nil, let now = t.grid else { return nil }
         // What the terminal frame takes of the room beside the panes, as it
-        // is laid out now; the terminal has the rest.
+        // is laid out now (zen's card column too); the terminal has the
+        // rest. Zen's Centred holds the terminal to its reading column, so
+        // there it has the rest only up to that, beside the card's column,
+        // the frame's margins (12 a side) and its padding (18 a side), as
+        // TerminalArea's zenGroup and framed lay them out (Zen.swift).
         let inset = main.bounds.width - t.bounds.width
+        let centred = zen.on && zen.layout == .centred
+        let reading = CGFloat(zen.columns) * fontSize * cellRatio + 1
+        let beside = zen.cardColumn + 24 + 36
         func size(_ kept: CGFloat) -> CellSize? {
-            t.grid(width: r.lastRoom - kept - inset).map { CellSize(w: $0.columns, h: $0.rows) }
+            let width = centred ? min(reading, r.lastRoom - kept - beside) : r.lastRoom - kept - inset
+            return t.grid(width: width).map { CellSize(w: $0.columns, h: $0.rows) }
         }
         // The layout shows the session on show as it has its panes, and the
         // cells counted here are Ghostty's.
         guard let shown = size(r.room(open: r.open, folded: r.folded)), shown == CellSize(w: now.columns, h: now.rows),
-              let hidden = size(0), let strip = size(RolodexModel.stripWidth), let beside = size(r.lastFit) else { return nil }
+              let hidden = size(0), let strip = size(RolodexModel.stripWidth), let besidePanes = size(r.lastFit) else { return nil }
         var by: [String: CellSize] = [:]
         for (id, s) in r.shows where s.open && !id.contains("/") {
-            let z = s.folded ? strip : beside
+            let z = s.folded ? strip : besidePanes
             if z != hidden { by[id] = z }
         }
         return SizesArgs(size: hidden, sessions: by.isEmpty ? nil : by)

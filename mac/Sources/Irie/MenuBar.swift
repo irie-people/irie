@@ -81,6 +81,9 @@ final class MenuState {
         var canVPN = false
         /// The notepad shows (NotesPanel.swift).
         var notes = false
+        /// Zen is on, and its layout (Zen.swift).
+        var zen = false
+        var zenLayout = ZenLayout.centred
         /// Bitwarden is locked, unlocking or unlocked (Bitwarden.swift).
         var bitwarden = BitwardenVault.State.locked.rawValue
     }
@@ -145,6 +148,8 @@ extension Store {
         f.canVPN = canVPN
         f.notes = notes.shown
         f.sideTabs = sideTabs
+        f.zen = zen.on
+        f.zenLayout = zen.layout
         return f
     }
 
@@ -214,10 +219,12 @@ struct IrieCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Task…", action: run { store.newTaskSheet = true })
                 .keyboardShortcut("n")
-            Button("Type a Task") { NotificationCenter.default.post(name: .irieQuickTask, object: nil) }
+            // The task bar and the notepad are in the sidebar, which zen
+            // gives back first (Zen.swift).
+            Button("Type a Task", action: run { store.afterZen { NotificationCenter.default.post(name: .irieQuickTask, object: nil) } })
                 .keyboardShortcut("n", modifiers: [.command, .option])
             // A note for later, in the notepad above the task bar.
-            Button("New Note") { NotificationCenter.default.post(name: .irieNewNote, object: nil) }
+            Button("New Note", action: run { store.afterZen { NotificationCenter.default.post(name: .irieNewNote, object: nil) } })
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(!f.notes)
         }
@@ -319,6 +326,10 @@ struct IrieCommands: Commands {
                 .keyboardShortcut("-")
             Button("Actual Size", action: run { store.setFontSize(Store.defaultFontSize) })
                 .keyboardShortcut("0")
+            Divider()
+            // The session on show alone, full screen, in a layout of zen's
+            // own; next to the system's Enter Full Screen (Zen.swift).
+            ZenMenus(store: store, f: f)
         }
         // Lines between groups are Dividers: a Section draws a line before
         // and after itself, so one at a menu's top or bottom, or two side by
@@ -368,7 +379,7 @@ struct IrieCommands: Commands {
                 }
             }
             .disabled(f.rows.isEmpty)
-            Button("Find a Session", action: run { store.focusFind += 1 })
+            Button("Find a Session", action: run { store.afterZen { store.focusFind += 1 } })
                 .keyboardShortcut("f")
             Divider()
             // The keyboard, between the session list and the message box,

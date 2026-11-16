@@ -189,7 +189,7 @@ struct PaneLayout: Codable, Equatable, Identifiable {
         let height = d.object(forKey: DetailsPanel.heightKey) as? Double ?? DetailsPanel.compact
         l.details = .init(minimized: d.bool(forKey: DetailsPanel.minimizedKey), height: height.rounded())
         l.drawer = .init(open: store.side.open, tab: store.side.tab.rawValue, width: store.side.width.rounded())
-        l.textSize = Double(store.fontSize)
+        l.textSize = Double(store.windowFontSize)
         l.theme = theme
         return l
     }
@@ -210,7 +210,7 @@ struct PaneLayout: Codable, Equatable, Identifiable {
             let tab = r.tab.flatMap(SideTab.init(rawValue:)).flatMap { store.sideTabs.contains($0) ? $0 : nil } ?? store.side.tab
             if r.open { store.openSide(tab) } else { store.closeSide() }
         }
-        if let t = textSize { store.setFontSize(CGFloat(t)) }
+        if let t = textSize { store.setWindowFontSize(CGFloat(t)) }
     }
 
     /// What it sets, in a few words, for its row in Make a Theme.
@@ -606,6 +606,9 @@ final class LookBook {
     /// key such as ⌃⌘2 does it unseen.
     func apply(_ l: PaneLayout) {
         guard let store else { return }
+        // A layout is the window's, not zen's: zen ends first, and the
+        // sidebar is the layout's to set when it sets one (Zen.swift).
+        store.leaveZen(sidebar: l.sidebar == nil)
         l.apply(store)
         store.say("The “\(l.name)” layout.", error: false, seconds: 2)
     }

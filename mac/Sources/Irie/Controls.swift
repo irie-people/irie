@@ -457,9 +457,11 @@ struct ControlLines: View {
 struct Reorderable: ViewModifier {
     @Environment(Store.self) private var store
     let session: Session
+    /// Zen's card stays put: there is no list to drop it in (Zen.swift).
+    var movable = true
 
     func body(content: Content) -> some View {
-        if session.peerName == nil {
+        if session.peerName == nil, movable {
             content
                 .onDrag { store.beginDrag(card: session) }
                 .opacity(store.heldCards.contains(session.id) ? 0.45 : 1)
