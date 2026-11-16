@@ -62,8 +62,7 @@ extension Store {
     /// comes in at its own size and the one going home leaves at its own
     /// (ResizeHold.holdForSwap).
     func holdsForSwap(to id: String) -> Bool {
-        // In zen every session shows at one size, its panes hidden.
-        guard !zen.on, sizesKept, !id.contains("/"), id != selection, outsideSelection == nil else { return false }
+        guard sizesKept, !id.contains("/"), id != selection, outsideSelection == nil else { return false }
         let r = rolodex
         return (r.shows[id] ?? PaneShow()) != PaneShow(open: r.open, folded: r.open && r.folded)
     }
@@ -80,27 +79,29 @@ extension Store {
         // Not made yet, as the app starts: again once it is.
         guard let view = terminalView else { return nil }
         guard let t = view as? GhosttyTerminalView else { return SizesArgs.off }
-        // In zen every session shows alone, with no panes, at the size the
-        // terminal has now (Zen.swift).
-        if zen.on {
-            guard ResizeHold.shared.held == nil, t.window != nil, let now = t.grid else { return nil }
-            return SizesArgs(size: CellSize(w: now.columns, h: now.rows))
-        }
         guard ResizeHold.shared.held == nil, !r.sliding, !r.folding, !sideSliding,
               let main = r.mainProbe, main.window != nil, t.window != nil, let now = t.grid else { return nil }
         // What the terminal frame takes of the room beside the panes, as it
-        // is laid out now; the terminal has the rest.
+        // is laid out now (Keep Watch's list too); the terminal has the
+        // rest. Zen's Centred holds the terminal to its reading column, so
+        // there it has the rest only up to that, beside the frame's margins
+        // (12 a side) and its padding (18 a side), as TerminalArea's
+        // zenGroup and framed lay them out (Zen.swift).
         let inset = main.bounds.width - t.bounds.width
+        let centred = zen.on && zen.layout == .centred
+        let reading = CGFloat(zen.columns) * fontSize * cellRatio + 1
+        let beside: CGFloat = 24 + 36
         func size(_ kept: CGFloat) -> CellSize? {
-            t.grid(width: r.lastRoom - kept - inset).map { CellSize(w: $0.columns, h: $0.rows) }
+            let width = centred ? min(reading, r.lastRoom - kept - beside) : r.lastRoom - kept - inset
+            return t.grid(width: width).map { CellSize(w: $0.columns, h: $0.rows) }
         }
         // The layout shows the session on show as it has its panes, and the
         // cells counted here are Ghostty's.
         guard let shown = size(r.room(open: r.open, folded: r.folded)), shown == CellSize(w: now.columns, h: now.rows),
-              let hidden = size(0), let strip = size(RolodexModel.stripWidth), let beside = size(r.lastFit) else { return nil }
+              let hidden = size(0), let strip = size(RolodexModel.stripWidth), let besidePanes = size(r.lastFit) else { return nil }
         var by: [String: CellSize] = [:]
         for (id, s) in r.shows where s.open && !id.contains("/") {
-            let z = s.folded ? strip : beside
+            let z = s.folded ? strip : besidePanes
             if z != hidden { by[id] = z }
         }
         return SizesArgs(size: hidden, sessions: by.isEmpty ? nil : by)

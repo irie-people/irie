@@ -901,7 +901,7 @@ private struct AppearanceSettings: View {
             } header: {
                 Text("Zen")
             } footer: {
-                footnote("Fn+Z, or View › Enter Zen Mode, shows the session on show alone: no sidebar, toolbar or panes, full screen unless you turn that off. Fn+Z again gives the window back as it was. Zen keeps this layout and its own text size, apart from the window’s: ⌘+ and ⌘- in zen change zen’s. ⌃Tab and ⌘1 to ⌘9 still go to another session; asking for a part zen hides, such as the right sidebar, ends zen.")
+                footnote("Fn+Z, or View › Enter Zen Mode, shows the session on show with only its own panes, its card a bubble over the terminal: no other sessions, toolbar or right sidebar, full screen unless you turn that off. Fn+Z again gives the window back as it was. Zen keeps this layout and its own text size, apart from the window’s: ⌘+ and ⌘- in zen change zen’s. ⌃Tab and ⌘1 to ⌘9 still go to another session; asking for something zen hides, such as the right sidebar or the session list, ends zen.")
             }
             Section {
                 Picker("On the right", selection: Bindable(store).showTerminal) {
