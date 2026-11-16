@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/irie-people/irie/compare/v1.8.0...v1.9.0) (2026-11-16)
+
+
+### Features
+
+* **mac:** set the sidebar's sections apart with space and hairlines, and join what belongs together ([8722606](https://github.com/irie-people/irie/commit/872260666d7abdc7ad8905de888f8e37eedaccdc))
+* **mac:** zen keeps the session's own card and panes ([14f08bd](https://github.com/irie-people/irie/commit/14f08bd726030fdc9ec1fa8c3d1a86b8aa9ac516))
+* **mac:** zen mode on Fn+Z, the session alone in a layout of its own ([a323437](https://github.com/irie-people/irie/commit/a323437d9ec5f3c72a9532475de0364905cba19b))
+* **mac:** zen's card becomes a header bubble over the terminal ([61daaa3](https://github.com/irie-people/irie/commit/61daaa37bb805088b657477d4d57e703557dd098))
+* **terms:** Terms in short, a plugin of its own with a Terms tab in Irie ([9a11932](https://github.com/irie-people/irie/commit/9a11932bfca14a38f522584f60a51a52154e6247))
+* **undo:** ask before ⌘Z or ⇧⌘Z takes a step, naming it ([4b7db63](https://github.com/irie-people/irie/commit/4b7db63b8d2a5bc6d102ea6b645688df80756305))
+
 ## [1.8.0](https://github.com/irie-people/irie/compare/v1.7.0...v1.8.0) (2026-11-16)
 
 
