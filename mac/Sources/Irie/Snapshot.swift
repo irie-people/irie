@@ -217,6 +217,21 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // A link clicked in the terminal (TerminalLinks.swift): a new
+            // page comes up on a browser card at the wheel's right end; a
+            // link to the page a card shows already brings that card forward
+            // and adds none.
+            for (base, link, dark) in [("panes-link", "https://example.com/docs", false), ("panes-link-dark", "https://example.com/docs", true),
+                                       ("panes-link-again", "http://localhost:5173", false)] {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal)
+                store.showLink(link, in: Fixture.selected)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                let deck = store.rolodex.deck(Fixture.selected)
+                print("\(name): \(deck.panes.count) cards, \(deck.frontPane?.label ?? "none") in front, keyboard on \(store.rolodex.keys ?? "the terminal")")
+            }
             // Wider than fits beside the terminal, the panes go over it: on
             // top while a card has the keyboard, under the terminal while it
             // has it, and the band a drag over it shows.
@@ -251,6 +266,22 @@ enum Snapshot {
                 let name = base + ".png"
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
+            }
+            // A file's link clicked in the terminal: the code card comes to
+            // the front with the file open at its line, and the keyboard.
+            do {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .browser)
+                let doc = CodeDocs.shared.fixture(Fixture.codeFile, text: Fixture.code, theme: CodeThemes.theme(CodeThemes.standard, dark: false),
+                                                  font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                doc.markFixture(28...29)
+                store.open(LinkReply(in: "card", kind: "code", path: Fixture.codeFile, line: 28), from: Fixture.selected)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "codeTree": false],
+                                                        forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: false, width: 1500, height: 720)
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("panes-link-file.png"))
+                let deck = store.rolodex.deck(Fixture.selected)
+                print("panes-link-file.png: \(deck.panes.count) cards, \(deck.frontPane?.label ?? "none") in front, keyboard on \(store.rolodex.keys ?? "the terminal")")
             }
             // A turn tilts the flap in 3D, which only SwiftUI's own renderer
             // draws, so these are the wheel alone.
@@ -292,6 +323,14 @@ enum Snapshot {
                     try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                     print(name)
                 }
+            }
+            // Appearance as tall as the screen lets the window be, for the
+            // sections under the fold, such as Links in the Terminal.
+            do {
+                let page = SettingsView.page(.appearance, model: store.settings).environment(store).tint(Theme.accent)
+                let (rep, _) = window(page, dark: false, width: SettingsView.size.width, height: 2300)
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("settings-appearance-tall.png"))
+                print("settings-appearance-tall.png")
             }
             // Make a Theme's two pages (ThemeMaker.swift): a new theme from
             // the default palette, and the fixture's layouts.
@@ -546,7 +585,7 @@ enum Fixture {
         "route": {"accuracy": {"claude": {"hard": 0.9, "medium": 0.94, "small": 0.98}, "haiku": {"hard": 0.3, "medium": 0.7, "small": 0.92}, "local": {"hard": 0.05, "medium": 0.4, "small": 0.85}, "sonnet": {"hard": 0.65, "medium": 0.88, "small": 0.96}}, "cost": {"claude": 1, "haiku": 0.02, "local": 0, "sonnet": 0.25}, "delegate": true, "delegate_mode": "acceptEdits", "failover": true, "local_min_accuracy": 0.6, "min_accuracy": 0.85, "pressure": 80, "prior_weight": 10, "profiles": ["local", "haiku", "sonnet", "claude"]},
         "spawn": {"close_delay": "30s", "close_when_done": true, "default_cwd": "", "default_profile": "claude", "follow_up_delay": "8s", "follow_up_window": "2m", "hide_tmux": true, "ready_timeout": "30s", "teammates": "panes",
             "preferences": ["Keep any text or notification you send the user short enough to take in at a glance on a phone: the point or the ask first, in one plain sentence, then no more than three short lines, with steps numbered, one action each. Leave out background and asides; put anything longer on a page they can open on the phone, and send its link.", "Ask before you push."]},
-        "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "new_tabs": "last", "freeze_dog": "10s", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
+        "ui": {"flip_key": "C-\\", "focus_key": "C-]", "ghostty": "auto", "max_sub_rows": 6, "red_on_done": false, "helper_style": "browser", "new_tabs": "last", "terminal_links": "rolodex", "freeze_dog": "10s", "sidebar_width": 34, "theme": "rosewater", "view": "conversation"},
         "usage": {"status_line": true},
         "context": {"keep_days": 30},
         "worktree": {"base": "", "branch_prefix": "\#(Brand.slug)/", "copy": [".claude/settings.local.json", "CLAUDE.local.md"], "root": "", "submodules": true}

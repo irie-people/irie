@@ -192,13 +192,15 @@ struct OutsideSection: View {
         let rows = store.drawnOutside
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
+                // A section's head, as a group's (Theme.headSize), then a
+                // rule: the sessions under it are not Irie's own.
                 HStack(spacing: 6) {
-                    Text("Outside \(Brand.name)").font(.system(size: 11, weight: .semibold))
-                    Text("\(rows.count)").font(.system(size: 11, weight: .bold, design: .rounded)).monospacedDigit()
+                    Text("Outside \(Brand.name)").font(Theme.font(Theme.headSize, .heavy)).tracking(Theme.headTracking)
+                    Text("\(rows.count)").font(Theme.font(Theme.headSize, .bold)).monospacedDigit()
                     Rectangle().fill(Theme.edge).frame(height: 1)
                 }
                 .foregroundStyle(Theme.muted)
-                .padding(.top, 10)
+                .padding(.top, Theme.headGap + 2)
                 .padding(.horizontal, 4)
                 .help("Claude Code sessions that run in other terminals. Select one to move it into \(Brand.name).")
                 .accessibilityElement(children: .ignore)
@@ -347,7 +349,8 @@ struct OutsideDetails: View {
                 if let v = outside.vendorId {
                     Button("Copy Session ID") { store.copy(v, what: "session ID") }
                 }
-                DetailsFold()
+                // Quiet, as in a session's details.
+                DetailsFold().buttonStyle(IconButtonStyle())
             }
             .controlSize(.small)
             line(outside.label, color: Theme.ink)

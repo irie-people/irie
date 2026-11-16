@@ -49,6 +49,7 @@ func TestTheCoreKeepsTheGatewayWhileRemoteIsOn(t *testing.T) {
 		t.Fatalf("%d gateways with remote.on unset", n)
 	}
 
+	// It listens on 127.0.0.1 alone: setup's remote.listen (agentConfig).
 	port := freePorts(t)
 	on := ipc.ConfigArgs{Set: []ipc.ConfigSet{
 		{Key: "remote.port", Value: json.RawMessage(strconv.Itoa(port))},

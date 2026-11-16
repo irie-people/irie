@@ -60,8 +60,7 @@ struct TaskBar: View {
         .padding(.trailing, 6)
         .padding(.vertical, 6)
         .fixedSize(horizontal: false, vertical: true)
-        .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field)
-            .shadow(color: Theme.shadow, radius: 3, y: 1.5))
+        .background(RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous).fill(Theme.field))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.frameRadius, style: .continuous)
                 .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)

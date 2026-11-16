@@ -305,6 +305,33 @@ struct ParkButton: View {
     }
 }
 
+/// Roots' icon button (components §3.6): an icon in muted that turns ink on
+/// a hover fill, with no bezel, so a panel's own actions stay quieter than
+/// what the panel says.
+struct IconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        IconButtonLook(configuration: configuration)
+    }
+}
+
+private struct IconButtonLook: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+
+    var body: some View {
+        let lit = enabled && (hovering || configuration.isPressed)
+        configuration.label
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(lit ? Theme.ink : Theme.muted)
+            .frame(minWidth: 20, minHeight: 20)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(lit ? Theme.hover : .clear))
+            .opacity(enabled ? 1 : 0.45)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+    }
+}
+
 /// The right-click menu's items for these, in the hover buttons' order,
 /// one word each, then Move: in its group, or to another space.
 @MainActor

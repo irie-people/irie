@@ -145,6 +145,7 @@ main { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 18px; outlin
   color: var(--muted); font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
 }
 .group-head .n { font-variant-numeric: tabular-nums; }
+.group-head.flush { margin-top: 0; }
 
 .point {
   display: grid; grid-template-columns: auto 1fr; gap: 2px 8px;

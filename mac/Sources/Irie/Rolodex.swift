@@ -1158,9 +1158,12 @@ extension Store {
     /// at its line, the front card when that is a code card. Beside the
     /// session on show the cards slide in and turn to it; beside another it
     /// waits in front of that session's cards, which show when it does. The
-    /// keyboard stays where it
-    /// is.
-    func showCard(_ kind: PaneKind, in session: String, file: CardFile? = nil) {
+    /// keyboard stays where it is.
+    ///
+    /// With keys, as for a file's link clicked in the terminal, the card
+    /// takes the keyboard too, beside the session on show, as a window you
+    /// open does.
+    func showCard(_ kind: PaneKind, in session: String, file: CardFile? = nil, keys: Bool = false) {
         guard paneKinds.contains(kind), let row = sessions.first(where: { $0.id == session }) else { return }
         let r = rolodex
         let own = row.hue.map { ($0 - 1) % Theme.agentSlots }
@@ -1170,7 +1173,7 @@ extension Store {
             let card = had ?? r.add(kind, to: session, avoiding: own)
             r.open(file.path, on: card.id, in: session, line: file.line ?? 1, column: file.column)
             if paneSession?.id == session { r.reveal() } else { r.showLater(session) }
-            r.turn(to: card.id, in: session, keys: false, layout: tabPlace(for: session))
+            r.turn(to: card.id, in: session, keys: keys && paneSession?.id == session, layout: tabPlace(for: session))
             return
         }
         if paneSession?.id == session {
@@ -1187,6 +1190,84 @@ extension Store {
         let p = had ?? r.add(kind, to: session, avoiding: own)
         r.showLater(session)
         r.turn(to: p.id, in: session, keys: false, layout: tabPlace(for: session))
+    }
+
+    /// A link clicked in a terminal (TerminalLinks.swift): the core says
+    /// where it opens, by ui.terminal_links and the session's folder (op
+    /// link), and it opens there: on a card of the panes of the session on
+    /// show, which comes to the front with the keyboard, or in the Mac's
+    /// own app for it. What the core turns down, such as a file that isn't
+    /// there, it says why; with no core to ask, the link opens in the Mac's
+    /// own app, as before.
+    func openTerminalLink(_ link: String, other: Bool) {
+        guard canLink, !isFixture else {
+            TerminalLinks.openHere(link)
+            return
+        }
+        let session = paneSession?.id
+        Task {
+            do {
+                let r = try await client.call("link", LinkArgs(session: session, link: link, other: other ? true : nil),
+                                              timeout: 3, as: LinkReply.self)
+                open(r, from: session)
+            } catch let e as WireError {
+                say(e.msg, error: true)
+            } catch {
+                TerminalLinks.openHere(link)
+            }
+        }
+    }
+
+    /// Opens a link where the link op said: a card of the session's
+    /// panes; in Finder, picked out, for an app or anything that would run
+    /// if opened; or the Mac's own app for it, as for a card the app can't
+    /// show here.
+    func open(_ r: LinkReply, from session: String?) {
+        if r.in == "reveal", let path = r.path {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            return
+        }
+        if r.in == "card", let s = session {
+            switch r.kind {
+            case "browser"?:
+                if let url = r.url, showLink(url, in: s) { return }
+            case "code"?:
+                if let path = r.path, paneKinds.contains(.code), sessions.contains(where: { $0.id == s }) {
+                    showCard(.code, in: s, file: CardFile(path: path, line: r.line, column: r.col), keys: true)
+                    return
+                }
+            default:
+                break
+            }
+        }
+        if let u = r.url.flatMap(URL.init(string:)) ?? r.path.map({ URL(fileURLWithPath: $0) }) {
+            TerminalLinks.open(u)
+        }
+    }
+
+    /// Shows a page on a browser card of a session's panes, as a link
+    /// clicked in its terminal asks: the card that shows it already, the
+    /// front one first, or else a new card at the wheel's right end. It
+    /// comes to the front, with the keyboard beside the session on show.
+    @discardableResult
+    func showLink(_ url: String, in session: String) -> Bool {
+        guard paneKinds.contains(.browser), let row = sessions.first(where: { $0.id == session }) else { return false }
+        let r = rolodex
+        let deck = r.deck(session)
+        let showing = deck.panes.filter { p in
+            p.kind == .browser && TerminalLinks.samePage(url, shown: p.url, asked: WebPool.shared.asked(p.id))
+        }
+        let card: DeckPane
+        if let had = showing.first(where: { $0.id == deck.frontPane?.id }) ?? showing.first {
+            card = had
+        } else {
+            r.prune(keeping: Set(sessions.map(\.id) + closed.map(\.id)))
+            card = r.add(.browser, to: session, avoiding: row.hue.map { ($0 - 1) % Theme.agentSlots }, url: url)
+        }
+        let here = paneSession?.id == session
+        if here { r.reveal() } else { r.showLater(session) }
+        r.turn(to: card.id, in: session, keys: here, layout: tabPlace(for: session))
+        return true
     }
 
     /// A click on a card's tab: the wheel turns to it, and it takes the
@@ -1567,8 +1648,11 @@ private struct RolodexWheel: View {
         let ink = p.map { Theme.agent(slot: $0.slot) } ?? Theme.muted
         ZStack(alignment: .topLeading) {
             // The body takes its pane's ground, so the pane runs to its edge.
+            // Its shadow stays neutral (Roots' principles §1.10, no coloured
+            // shadows), a little deeper while it has the keyboard, which its
+            // edge in its colour shows.
             shape.fill(p.map { PaneGround.of($0.kind, dark: scheme == .dark, code: codeTheme) } ?? Theme.panel)
-                .shadow(color: keys ? ink.opacity(0.3) : .black.opacity(0.14), radius: keys ? 10 : 6, y: 2)
+                .shadow(color: .black.opacity(keys ? 0.22 : 0.14), radius: keys ? 10 : 6, y: 2)
                 .allowsHitTesting(false)
             // The tab, in the card's colour.
             Rectangle()

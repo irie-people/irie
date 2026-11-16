@@ -46,8 +46,8 @@ struct PhraseBar: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
             .padding(.horizontal, 16)
-            .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
-                .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            // As the sidebar's footer: a hairline along its top, no shadow.
+            .band(Theme.card, facing: .top)
             .overlay(alignment: .trailing) {
                 // The core's version, muted, in the bottom right corner;
                 // a preview names its checkout there instead.

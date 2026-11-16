@@ -331,19 +331,15 @@ struct RightSidebar: View {
         return Button { store.openPane(p.id) } label: {
             HStack(spacing: 4) {
                 if tight {
-                    Text(Image(systemName: p.symbol))
-                        .font(.system(size: 12, weight: on ? .bold : .medium))
+                    Self.steady(Text(Image(systemName: p.symbol)), on: on) { $0.font(.system(size: 12, weight: $1 ? .bold : .medium)) }
                 } else {
-                    Text(p.title)
-                        .font(Theme.font(12, on ? .bold : .medium))
-                        .lineLimit(1)
-                        .fixedSize()
+                    Self.steady(Text(p.title), on: on) { $0.font(Theme.font(12, $1 ? .bold : .medium)) }
                 }
             }
             .foregroundStyle(on ? Theme.ink : Theme.muted)
             .padding(.horizontal, tight ? 5 : 7)
             .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.selection : Color.clear))
+            .background(Self.thumb(on))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -358,14 +354,9 @@ struct RightSidebar: View {
         return Button { store.openSide(t) } label: {
             HStack(spacing: 4) {
                 if tight {
-                    Text(Image(systemName: t.symbol))
-                        .font(.system(size: 12, weight: on ? .bold : .medium))
-                        .foregroundStyle(on ? Theme.ink : Theme.muted)
+                    Self.steady(Text(Image(systemName: t.symbol)), on: on) { $0.font(.system(size: 12, weight: $1 ? .bold : .medium)) }
                 } else {
-                    Text(t.title)
-                        .font(Theme.font(12, on ? .bold : .medium))
-                        .lineLimit(1)
-                        .fixedSize()
+                    Self.steady(Text(t.title), on: on) { $0.font(Theme.font(12, $1 ? .bold : .medium)) }
                 }
                 if n.count > 0 {
                     Text("\(n.count)")
@@ -373,19 +364,40 @@ struct RightSidebar: View {
                         .monospacedDigit()
                         .foregroundStyle(n.needsYou ? Theme.onAccent : (on ? Theme.ink : Theme.muted))
                         .padding(.horizontal, 5)
-                        .background(Capsule().fill(n.needsYou ? Theme.needs : (on ? Theme.card : Theme.edge)))
+                        .background(Capsule().fill(n.needsYou ? Theme.needs : Theme.edge))
                 }
             }
             .foregroundStyle(on ? Theme.ink : Theme.muted)
             .padding(.horizontal, tight ? 5 : 7)
             .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.selection : Color.clear))
+            .background(Self.thumb(on))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("\(t.title) (⌥⌘\(String(t.key.character)))")
         .accessibilityLabel(t.title + (n.count > 0 ? ", \(n.count)" : "") + (n.needsYou ? ", needs you" : ""))
         .accessibilityAddTraits(on ? [.isSelected] : [])
+    }
+
+    /// The picked tab's thumb, as the List and Repo switch's: the card's
+    /// ground on a soft shadow (Roots' components §3.7, §3.13). Not the
+    /// selection's colour, which marks the session on show: these tabs are
+    /// the same whichever session shows.
+    private static func thumb(_ on: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(on ? Theme.card : Color.clear)
+            .shadow(color: on ? Theme.shadow : Color.clear, radius: 1.5, y: 0.5)
+    }
+
+    /// A tab's label as wide as its bold self, picked or not, so a pick
+    /// moves no tab after it (Roots' principles §2.3).
+    private static func steady(_ text: Text, on: Bool, _ style: @escaping (Text, Bool) -> Text) -> some View {
+        ZStack {
+            style(text, true).hidden()
+            style(text, on)
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 
     private func iconButton(_ symbol: String, help: String, label: String, action: @escaping () -> Void) -> some View {

@@ -37,9 +37,9 @@ vets=$!
 if [ "$*" = ./... ]; then
 	# A company's copy keeps the VPN and leaves the rest out; a build may
 	# leave out every plugin (DESIGN §4.17, §4.18).
-	go vet -tags noprivacy,nowriting,nomarkets,nomail,noextension ./... >"$vetdir/2" 2>&1 &
+	go vet -tags noprivacy,nowriting,nomarkets,nomail,noterms,noextension ./... >"$vetdir/2" 2>&1 &
 	vets="$vets $!"
-	go vet -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noextension ./... >"$vetdir/3" 2>&1 &
+	go vet -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension ./... >"$vetdir/3" 2>&1 &
 	vets="$vets $!"
 fi
 # The tests, in the least wall time (tools/test.sh; go test without cargo).
