@@ -35,6 +35,16 @@ func linkFixture(t *testing.T, cfg config.Config) (c *Core, id, folder, home str
 	write("pic.png", []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"))
 	write("latin1.txt", []byte("caf\xe9\n"))
 	write("big.txt", []byte(strings.Repeat("a", ipc.CardFileMax+1)))
+	write("Tool.app/Contents/Info.plist", []byte("<plist/>\n"))
+	write("setup.pkg", []byte("xar!\x00\x1c"))
+	write("go.command", []byte("#!/bin/sh\necho hi\n"))
+	write("build/tool", []byte("\xcf\xfa\xed\xfe\x00\x00"))
+	write("tools/run.sh", []byte("#!/bin/sh\necho hi\n"))
+	for _, x := range []string{"build/tool", "tools/run.sh"} {
+		if err := os.Chmod(filepath.Join(folder, x), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(home, "todo.txt"), []byte("milk\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +72,9 @@ func TestALinkOpensInTheSessionsPanes(t *testing.T) {
 		return ipc.LinkResult{In: ipc.LinkInCard, Kind: "code", Path: p, Line: line, Col: col}
 	}
 	system := func(u string) ipc.LinkResult { return ipc.LinkResult{In: ipc.LinkInSystem, URL: u} }
+	reveal := func(p string) ipc.LinkResult {
+		return ipc.LinkResult{In: ipc.LinkInReveal, Path: filepath.Join(folder, p)}
+	}
 	for link, want := range map[string]ipc.LinkResult{
 		"https://example.com/docs?q=1#top": page("https://example.com/docs?q=1#top"),
 		"http://localhost:5173/":           page("http://localhost:5173/"),
@@ -89,6 +102,12 @@ func TestALinkOpensInTheSessionsPanes(t *testing.T) {
 		"mailto:alice@example.com":         system("mailto:alice@example.com"),
 		"ssh://alice@example.com":          system("ssh://alice@example.com"),
 		"file://example.com/share/a.txt":   system("file://example.com/share/a.txt"),
+		"example.com:8080/x":               page("https://example.com:8080/x"),
+		"Tool.app":                         reveal("Tool.app"),
+		"setup.pkg":                        reveal("setup.pkg"),
+		"build/tool":                       reveal("build/tool"),
+		"go.command":                       file(filepath.Join(folder, "go.command"), 0, 0),
+		"tools/run.sh:2":                   file(filepath.Join(folder, "tools/run.sh"), 2, 0),
 	} {
 		got, err := c.linkOp(ipc.LinkArgs{Session: id, Link: link})
 		if err != nil || got != want {
@@ -99,6 +118,7 @@ func TestALinkOpensInTheSessionsPanes(t *testing.T) {
 		"internal/nope.go:3": "No file at internal/nope.go.",
 		"~/nope.txt":         "No file at ~/nope.txt.",
 		"notes.md":           "No file at notes.md.",
+		"pane.go:12":         "No file at pane.go.",
 	} {
 		if _, err := c.linkOp(ipc.LinkArgs{Session: id, Link: link}); code(err) != ipc.CodeNotFound || err.Error() != msg {
 			t.Errorf("%q: %v, want %q", link, err, msg)
@@ -154,6 +174,10 @@ func TestALinkOpensWhereTheSettingSays(t *testing.T) {
 		{ipc.LinkArgs{Session: id, Link: "internal/core/pane.go:12"}, ipc.LinkResult{In: ipc.LinkInSystem, URL: "file://" + pane}},
 		{ipc.LinkArgs{Session: id, Link: "https://example.com/", Other: true}, ipc.LinkResult{In: ipc.LinkInCard, Kind: "browser", URL: "https://example.com/"}},
 		{ipc.LinkArgs{Session: id, Link: "internal/core/pane.go:12", Other: true}, ipc.LinkResult{In: ipc.LinkInCard, Kind: "code", Path: pane, Line: 12}},
+		// A script opened in its own app would run: it is picked out.
+		{ipc.LinkArgs{Session: id, Link: "go.command"}, ipc.LinkResult{In: ipc.LinkInReveal, Path: filepath.Join(folder, "go.command")}},
+		{ipc.LinkArgs{Session: id, Link: "tools/run.sh"}, ipc.LinkResult{In: ipc.LinkInReveal, Path: filepath.Join(folder, "tools/run.sh")}},
+		{ipc.LinkArgs{Session: id, Link: "docs"}, ipc.LinkResult{In: ipc.LinkInSystem, URL: "file://" + filepath.Join(folder, "docs")}},
 	} {
 		if got, err := c.linkOp(tc.a); err != nil || got != tc.want {
 			t.Errorf("browser: %+v = %+v, %v; want %+v", tc.a, got, err, tc.want)

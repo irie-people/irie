@@ -39,18 +39,23 @@ const (
 	// for a page, the app that takes its scheme (mail for mailto:), and a
 	// file's own app, or the file manager for a folder.
 	LinkInSystem = "system"
+	// LinkInReveal is the file manager with Path picked out, never opened:
+	// an app, an installer, or a file that would run something if opened,
+	// which a link's text may not show.
+	LinkInReveal = "reveal"
 )
 
 // LinkResult is where a link opens, and as what.
 type LinkResult struct {
-	In   string `json:"in"`             // LinkInCard or LinkInSystem
+	In   string `json:"in"`             // LinkInCard, LinkInSystem or LinkInReveal
 	Kind string `json:"kind,omitempty"` // a card's: browser or code
 	// URL is the page a browser card shows, or what the computer's own
 	// app opens: a file's as a file:// URL.
 	URL string `json:"url,omitempty"`
 	// Path is the file a code card opens, absolute and clean, a regular
-	// file of text of at most CardFileMax bytes; Line and Col are where its
-	// cursor goes, from 1, or 0 for none.
+	// file of text of at most CardFileMax bytes, or the one to pick out in
+	// the file manager; Line and Col are where a code card's cursor goes,
+	// from 1, or 0 for none.
 	Path string `json:"path,omitempty"`
 	Line int    `json:"line,omitempty"`
 	Col  int    `json:"col,omitempty"`

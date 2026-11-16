@@ -284,6 +284,7 @@ const (
 	LinkMax            = ipc.LinkMax
 	LinkInCard         = ipc.LinkInCard
 	LinkInSystem       = ipc.LinkInSystem
+	LinkInReveal       = ipc.LinkInReveal
 	OpLock             = ipc.OpLock
 	LockSpawn          = ipc.LockSpawn
 	LockResume         = ipc.LockResume

@@ -110,15 +110,22 @@ func resolveLink(link string, at linkPlace) (ipc.LinkResult, error) {
 			return system, nil
 		}
 	}
-	if at.peer != "" {
-		// Its addresses open here; its files are on the peer.
+	// An address written without its scheme, or a scheme of another app's.
+	other := func() (ipc.LinkResult, bool) {
 		switch {
 		case linkLocal.MatchString(link):
-			return page("http://" + link), nil
-		case linkScheme.MatchString(link):
-			return system, nil
+			return page("http://" + link), true
 		case linkHost.MatchString(link):
-			return page("https://" + link), nil
+			return page("https://" + link), true
+		case isScheme(link):
+			return system, true
+		}
+		return ipc.LinkResult{}, false
+	}
+	if at.peer != "" {
+		// Its addresses open here; its files are on the peer.
+		if res, ok := other(); ok {
+			return res, nil
 		}
 		return ipc.LinkResult{}, onPeer(at)
 	}
@@ -128,15 +135,42 @@ func resolveLink(link string, at linkPlace) (ipc.LinkResult, error) {
 	if err == nil || !errNotFound(err) {
 		return res, err
 	}
-	switch {
-	case linkLocal.MatchString(link):
-		return page("http://" + link), nil
-	case linkScheme.MatchString(link):
-		return system, nil
-	case linkHost.MatchString(link):
-		return page("https://" + link), nil
+	if res, ok := other(); ok {
+		return res, nil
 	}
 	return ipc.LinkResult{}, err
+}
+
+// isScheme says whether a link starts with a scheme of an app's, as
+// mailto: or ssh: do; one with a dot in it, as pane.go: has, is a file's
+// name.
+func isScheme(link string) bool {
+	m := linkScheme.FindString(link)
+	return m != "" && !strings.Contains(m, ".")
+}
+
+// launchers are the kinds of file that run, install or open something
+// else when opened, by their extension: shown in the file manager, not
+// opened.
+var launchers = map[string]bool{
+	".app": true, ".command": true, ".tool": true, ".terminal": true, ".pkg": true, ".mpkg": true, ".dmg": true,
+	".jar": true, ".scpt": true, ".scptd": true, ".applescript": true, ".workflow": true, ".action": true,
+	".fileloc": true, ".webloc": true, ".inetloc": true, ".shortcut": true, ".mobileconfig": true,
+	".prefpane": true, ".saver": true, ".kext": true, ".plugin": true, ".bundle": true, ".appex": true,
+}
+
+// launches says whether opening a file would run or install something:
+// an app or another of the Mac's bundles (a folder with Contents/
+// Info.plist), a file anyone may run, or one of the launchers.
+func launches(path string, fi os.FileInfo) bool {
+	if launchers[strings.ToLower(filepath.Ext(path))] {
+		return true
+	}
+	if fi.IsDir() {
+		_, err := os.Stat(filepath.Join(path, "Contents", "Info.plist"))
+		return err == nil
+	}
+	return fi.Mode()&0o111 != 0
 }
 
 // onPeer is why a peer's session's file can't open here.
@@ -151,7 +185,8 @@ func errNotFound(err error) bool {
 }
 
 // openFile says where a file's path opens: a file of text on the Code
-// card, at the line it names, and anything else in its own app. A path
+// card, at the line it names; an app, an installer or anything that would
+// run picked out in the file manager; and anything else in its own app. A path
 // is the session's folder's unless it is absolute or starts with ~ or
 // $HOME, and may end in :LINE, :LINE:COL, a range of lines, or a
 // sentence's last stop.
@@ -175,12 +210,13 @@ func openFile(name string, at linkPlace) (ipc.LinkResult, error) {
 	switch {
 	case err != nil:
 		return ipc.LinkResult{}, ipc.Errorf(ipc.CodeNotFound, "No file at %s.", shownPath(file, at))
-	case fi.IsDir():
-		return ipc.LinkResult{In: ipc.LinkInSystem, URL: fileURL(file)}, nil
-	case !fi.Mode().IsRegular():
+	case !fi.IsDir() && !fi.Mode().IsRegular():
 		return ipc.LinkResult{}, ipc.Errorf(ipc.CodeBadArgs, "%s is not a file or a folder.", shownPath(file, at))
-	case at.panes && fi.Size() <= ipc.CardFileMax && isText(file):
+	case at.panes && fi.Mode().IsRegular() && fi.Size() <= ipc.CardFileMax && isText(file):
+		// The code card shows a script's text and runs nothing.
 		return ipc.LinkResult{In: ipc.LinkInCard, Kind: "code", Path: file, Line: line, Col: col}, nil
+	case launches(file, fi):
+		return ipc.LinkResult{In: ipc.LinkInReveal, Path: file}, nil
 	}
 	return ipc.LinkResult{In: ipc.LinkInSystem, URL: fileURL(file)}, nil
 }
