@@ -103,6 +103,10 @@ function connect() {
   });
 }
 
+// LIMIT is how long a request may take before the panel gives up on it:
+// a model's answer longest, then a read that follows a page's links.
+const LIMIT = { "terms.ask": 240000, "terms.read": 150000 };
+
 function call(req, onPart) {
   return new Promise((resolve, reject) => {
     if (!irie.port) {
@@ -110,11 +114,19 @@ function call(req, onPart) {
       return;
     }
     const id = irie.next++;
-    irie.waiting.set(id, { resolve, reject, onPart });
+    const timer = setTimeout(() => {
+      if (irie.waiting.delete(id)) reject({ code: "slow", error: B.name + " took too long to answer. Try again." });
+    }, LIMIT[req.op] || 30000);
+    const done = (f) => (v) => {
+      clearTimeout(timer);
+      f(v);
+    };
+    irie.waiting.set(id, { resolve: done(resolve), reject: done(reject), onPart });
     try {
       irie.port.postMessage({ ...req, id });
     } catch (e) {
       irie.waiting.delete(id);
+      clearTimeout(timer);
       reject({ code: "gone-host", error: String((e && e.message) || e) });
     }
   });
@@ -145,16 +157,17 @@ const S = {
   view: "connecting", // connecting, missing, off, idle, reading, doc, notfound, error
   why: "",
   note: "",
-  updated: false,
+  update: false, // this extension isn't the one Irie has now
   reading: "",
   doc: null,
   suggest: [],
   others: [],
   error: "",
   retry: null,
+  reads: 0, // reads begun, so a newer one wins
   terms: null, // the terms read before their privacy policy, to go back to
   thread: [],
-  model: { name: "", on: false, why: "" },
+  model: { name: "", on: false, why: "", where: "" },
   pressedAt: 0,
   tabId: null,
   otherTab: false,
@@ -166,10 +179,12 @@ const S = {
 // grab runs in the page the button was pressed on: its address, title and
 // HTML as the browser shows it now, scripts' work included.
 function grab() {
-  const html = document.documentElement ? document.documentElement.outerHTML : "";
-  // 8 million characters: as UTF-8 and JSON, well inside the 64 MiB a
-  // browser sends a host at once.
-  return { url: location.href, title: document.title, html: html.length > 8000000 ? html.slice(0, 8000000) : html };
+  const html = document.documentElement ? String(document.documentElement.outerHTML) : "";
+  // A page can stand an element in for document.title, so only a string
+  // goes. 8 million characters: as UTF-8 and JSON, well inside the 64 MiB
+  // a browser sends a host at once.
+  const title = typeof document.title === "string" ? document.title.slice(0, 500) : "";
+  return { url: String(location.href).slice(0, 8000), title, html: html.length > 8000000 ? html.slice(0, 8000000) : html };
 }
 
 async function readPressed(pressed) {
@@ -199,6 +214,8 @@ async function readPressed(pressed) {
 }
 
 async function read(req) {
+  // A newer read wins: what an older, slower one finds is dropped.
+  const mine = ++S.reads;
   S.view = "reading";
   S.reading = hostOf(req.url);
   S.thread = [];
@@ -206,11 +223,13 @@ async function read(req) {
   render();
   try {
     const r = await ask({ op: "terms.read", url: req.url, title: req.title, html: req.html, want: req.want });
+    if (mine !== S.reads) return;
     S.doc = r.doc;
     S.suggest = r.ask || [];
     S.view = "doc";
     S.retry = req;
   } catch (r) {
+    if (mine !== S.reads) return;
     S.retry = req;
     if (r.code === "notfound") {
       S.view = "notfound";
@@ -296,10 +315,10 @@ function render() {
       break;
   }
   const top = [];
-  if (S.updated) {
+  if (S.update) {
     top.push(
-      h("div", { class: "card small" }, B.name + " has a newer version of this extension ready. ",
-        h("button", { class: "link-button", onclick: () => ext.runtime.reload() }, "Reload it")),
+      h("div", { class: "card small" }, "This extension isn't the one " + B.name + " has now. ",
+        h("button", { class: "link-button", onclick: update }, "Update it")),
     );
   }
   if (S.note) top.push(h("div", { class: "card small muted" }, S.note));
@@ -399,7 +418,7 @@ function docView(d) {
   if (d.updated) facts.push("updated " + d.updated);
   if (d.company) facts.push("with " + d.company);
   const other = [];
-  if (d.privacy && d.kind === "terms") {
+  if (d.privacy && d.kind === "terms" && d.privacy !== d.url) {
     other.push(h("button", { class: "button is-small", type: "button", onclick: () => {
       S.terms = S.retry;
       read({ url: d.privacy, want: "privacy" });
@@ -480,7 +499,7 @@ function renderThread(scroll) {
     if (!item.writing && a) {
       kids.push(h("div", { class: "msg-by" }, a.by === "code"
         ? "Found by " + B.name + "’s own code, on this computer."
-        : "Worded by " + a.by + ", a local model on this computer, from the passages quoted."));
+        : "Worded by " + a.by + ", a model on " + (S.model.where || "this computer") + ", from the passages quoted."));
     }
     if (!item.writing && item.note && a) kids.push(h("div", { class: "msg-by" }, item.note));
     return h("div", { class: "stack" },
@@ -489,6 +508,18 @@ function renderThread(scroll) {
   }));
   if (scroll) t.lastElementChild && t.lastElementChild.scrollIntoView({ block: "end", behavior: "smooth" });
   $("send").disabled = S.thread.some((i) => i.writing);
+}
+
+// update has Irie write its build of the extension into its folder, then
+// reloads the extension, which takes it.
+async function update() {
+  try {
+    await ask({ op: "update" });
+    ext.runtime.reload();
+  } catch (r) {
+    S.note = r.error || String(r);
+    render();
+  }
 }
 
 function renderSuggest() {
@@ -500,7 +531,7 @@ function renderModel() {
   const row = $("model-row");
   row.hidden = !S.model.name;
   $("model").checked = S.model.on;
-  $("model-label").textContent = "Word answers with " + S.model.name + ", a local model on this computer";
+  $("model-label").textContent = "Word answers with " + S.model.name + ", a model on " + (S.model.where || "this computer");
 }
 
 // ---- Wiring ----------------------------------------------------------------------------
@@ -565,7 +596,7 @@ async function start() {
     return;
   }
   irie.hello = c.hello;
-  S.updated = !!c.hello.updated;
+  S.update = !!c.hello.update;
   if (!c.hello.on) {
     S.view = "off";
     S.why = c.hello.why;
@@ -582,6 +613,7 @@ async function start() {
   ask({ op: "model" })
     .then((r) => {
       S.model.name = r.model || "";
+      S.model.where = r.where || "";
       if (S.view === "doc") renderModel();
     })
     .catch(() => {});

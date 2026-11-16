@@ -66,9 +66,12 @@ func extensionCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 		// The browser runs this with the extension's address (Chrome's)
 		// or its manifest and ID (Firefox's); stdin and stdout are the
 		// browser's, and nothing else may be written to stdout.
-		logf, err := os.OpenFile(filepath.Join(p.State, "extension.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		var log *slog.Logger
-		if err == nil {
+		var logf *os.File
+		if filepath.IsAbs(p.State) && os.MkdirAll(p.State, 0o700) == nil {
+			logf, err = os.OpenFile(filepath.Join(p.State, "extension.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		}
+		if logf != nil && err == nil {
 			defer logf.Close()
 			log = slog.New(slog.NewTextHandler(logf, nil)).With("pid", os.Getpid())
 			log.Info("host", "from", strings.Join(args, " "))

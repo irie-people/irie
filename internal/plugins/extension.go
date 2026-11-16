@@ -71,7 +71,7 @@ func checkExtension(e Env, _ bool) (bool, string) {
 	}
 	detail := "Ready in " + andList(s.Browsers) + "; last used in " + extension.Seen(s, time.Now()) + "."
 	if !s.Current {
-		detail += " Its folder holds an older build, which the extension takes when it next connects."
+		detail += " Its folder holds another build than this " + brand.Name + "'s: the panel offers to update it."
 	}
 	return true, strings.TrimSpace(detail)
 }

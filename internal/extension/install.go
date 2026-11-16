@@ -204,7 +204,15 @@ func Setup(p paths.Paths, home, bin string) ([]string, error) {
 		return nil, fmt.Errorf("writing the extension's files: %w", err)
 	}
 	host := HostFile(p)
-	script := "#!/bin/sh\n# " + brand.Name + "'s browser extension's way into " + brand.Name + " (docs/proposals/browser-extension.md).\n# " + brand.Slug + " setup extension wrote it; the browser runs it when the extension\n# asks, with the extension's address.\nexec " + shellQuote(bin) + " extension host \"$@\"\n"
+	script := "#!/bin/sh\n# " + brand.Name + "'s browser extension's way into " + brand.Name + " (docs/proposals/browser-extension.md).\n# " + brand.Slug + " setup extension wrote it; the browser runs it when the extension\n# asks, with the extension's address.\n"
+	// A browser starts it with its own environment: the folders setup
+	// was run with go with it, so the host reads the same config.
+	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"} {
+		if v := os.Getenv(k); filepath.IsAbs(v) {
+			script += "export " + k + "=" + shellQuote(v) + "\n"
+		}
+	}
+	script += "exec " + shellQuote(bin) + " extension host \"$@\"\n"
 	if err := os.MkdirAll(filepath.Dir(host), 0o755); err != nil {
 		return nil, err
 	}
@@ -258,11 +266,14 @@ func writeHost(b Browser, host string) error {
 func Remove(p paths.Paths, home string) error {
 	var errs []error
 	for _, b := range Browsers(home) {
-		if err := os.Remove(filepath.Join(b.Dir, HostName()+".json")); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			errs = append(errs, err)
+		file := filepath.Join(b.Dir, HostName()+".json")
+		for _, x := range []string{file, filetx.LockPath(file)} {
+			if err := os.Remove(x); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				errs = append(errs, err)
+			}
 		}
 	}
-	for _, x := range []string{HostFile(p), seenFile(p)} {
+	for _, x := range []string{HostFile(p), filetx.LockPath(HostFile(p)), seenFile(p), filetx.LockPath(seenFile(p)), filepath.Join(p.State, "extension.log")} {
 		if err := os.Remove(x); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			errs = append(errs, err)
 		}

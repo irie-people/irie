@@ -138,7 +138,12 @@ func termsDoc(ctx context.Context, src string, stdin io.Reader, local bool, want
 		return read("", b), nil
 	}
 	if st, err := os.Stat(src); err == nil && !st.IsDir() {
-		b, err := os.ReadFile(src)
+		f, err := os.Open(src)
+		if err != nil {
+			return nil, err
+		}
+		b, err := io.ReadAll(io.LimitReader(f, terms.MaxPage))
+		f.Close()
 		if err != nil {
 			return nil, err
 		}

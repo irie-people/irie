@@ -22,15 +22,24 @@ import (
 // MaxPage is the most of a page a fetch reads.
 const MaxPage = 8 << 20
 
+// MaxLinked is the most of a page a fetch reads when the page is only a
+// link's, or a guess at where a site keeps its terms: terms are rarely a
+// tenth of it.
+const MaxLinked = 2 << 20
+
 // Fetcher gets pages of terms over HTTP: the page a person asked for, and
 // the links on it to the terms.
 type Fetcher struct {
-	// Local lets it fetch from this computer and the local network, as a
-	// person typing an address may want; a page's own links never may,
-	// so a hostile page can't make it knock on a router or a local app.
+	// Local lets it fetch from this computer and the local network the
+	// host of the address it is asked for, as a person typing the address
+	// of an app of their own may want. Every other host, a redirect's
+	// included, must be on the public internet, so a hostile page can't
+	// make it knock on a router or a local app.
 	Local bool
 	// Timeout bounds each fetch; 0 = 20 s.
 	Timeout time.Duration
+	// Max is the most of a page it reads; 0 = MaxPage.
+	Max int64
 	// Client, when set, does the fetching instead, as tests do.
 	Client *http.Client
 }
@@ -66,7 +75,11 @@ func (f Fetcher) Get(ctx context.Context, address string) (Page, error) {
 	req.Header.Set("User-Agent", Agent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5")
 	req.Header.Set("Accept-Language", "en;q=1, *;q=0.5")
-	resp, err := f.client().Do(req)
+	local := ""
+	if f.Local {
+		local = u.Hostname()
+	}
+	resp, err := f.client(local).Do(req)
 	if err != nil {
 		var refused *refusedError
 		if errors.As(err, &refused) {
@@ -86,7 +99,11 @@ func (f Fetcher) Get(ctx context.Context, address string) (Page, error) {
 		}
 		return Page{}, fmt.Errorf("%w: %s is %s", ErrNotPage, resp.Request.URL, ct)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxPage))
+	max := f.Max
+	if max <= 0 {
+		max = MaxPage
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, max))
 	if err != nil {
 		return Page{}, fmt.Errorf("reading %s: %w", u.Host, err)
 	}
@@ -98,17 +115,24 @@ func Agent() string {
 	return brand.Slug + "-terms/" + version.String() + " (reads terms of service for a person; " + brand.Site + ")"
 }
 
-func (f Fetcher) client() *http.Client {
+// client is the HTTP client of a fetch that may reach the host named
+// local on this computer or its network; "" = none may.
+func (f Fetcher) client(local string) *http.Client {
 	if f.Client != nil {
 		return f.Client
 	}
-	d := &net.Dialer{Timeout: 10 * time.Second}
-	if !f.Local {
-		d.Control = public
-	}
+	open := &net.Dialer{Timeout: 10 * time.Second}
+	guarded := &net.Dialer{Timeout: 10 * time.Second, Control: public}
 	t := &http.Transport{
-		Proxy:                 nil,
-		DialContext:           d.DialContext,
+		Proxy: nil,
+		// The dial knows the host a connection is for, before it is
+		// looked up: only the one asked for may be local.
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if host, _, err := net.SplitHostPort(addr); err == nil && local != "" && strings.EqualFold(host, local) {
+				return open.DialContext(ctx, network, addr)
+			}
+			return guarded.DialContext(ctx, network, addr)
+		},
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
 		MaxIdleConns:          4,
@@ -135,22 +159,68 @@ func (e *refusedError) Error() string {
 	return "refused to fetch " + e.addr + ": it is on this computer or its local network, which a page's links may not reach"
 }
 
-// nonPublic are address ranges no page's link may reach: shared address
-// space (carrier-grade NAT, and Tailscale's), benchmarking and the
-// documentation ranges, besides what netip knows as private.
+// nonPublic are address ranges no page's link may reach, besides what
+// netip knows as private: shared address space (carrier-grade NAT, and
+// Tailscale's), the IETF's, benchmarking, the documentation ranges, the
+// reserved, IPv6's old site-local, 6to4 and Teredo, which carry an IPv4
+// address inside, and the local-use NAT64 prefix.
 var nonPublic = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),
 	netip.MustParsePrefix("100.64.0.0/10"),
 	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
 	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
 	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("2001::/32"),
+	netip.MustParsePrefix("2001:db8::/32"),
+	netip.MustParsePrefix("2002::/16"),
 	netip.MustParsePrefix("64:ff9b:1::/48"),
 	netip.MustParsePrefix("fc00::/7"),
+	netip.MustParsePrefix("fec0::/10"),
+}
+
+// nat64 is the well-known NAT64 prefix: its addresses carry a public IPv4
+// address in their last 32 bits, which is checked as itself.
+var nat64 = netip.MustParsePrefix("64:ff9b::/96")
+
+// interfaceNets are this computer's own addresses and the networks they
+// are on: global IPv6 addresses and their /64s too, which no fixed range
+// covers. A test may stand in for it.
+var interfaceNets = func() []netip.Prefix {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var out []netip.Prefix
+	for _, a := range addrs {
+		n, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip, ok := netip.AddrFromSlice(n.IP)
+		if !ok {
+			continue
+		}
+		ip = ip.Unmap()
+		ones, _ := n.Mask.Size()
+		if ip.Is4() && ones > 32 {
+			ones -= 96
+		}
+		if p, err := ip.Prefix(ones); err == nil {
+			out = append(out, p)
+		}
+		out = append(out, netip.PrefixFrom(ip, ip.BitLen()))
+	}
+	return out
 }
 
 // public refuses a connection to an address that isn't on the public
-// internet. It runs as each connection is made, redirects' too, so a name
-// that resolves to a local address is refused as well.
+// internet, or is this computer's or its network's. It runs as each
+// connection is made, redirects' too, so a name that resolves to a local
+// address is refused as well. One way round it stays: a public address of
+// this network's own router, which it may send back in (hairpin NAT).
 func public(network, address string, _ syscall.RawConn) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -160,16 +230,31 @@ func public(network, address string, _ syscall.RawConn) error {
 	if err != nil {
 		return &refusedError{address}
 	}
-	ip = ip.Unmap()
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() || ip.IsInterfaceLocalMulticast() {
+	if !publicAddr(ip.WithZone("").Unmap()) {
 		return &refusedError{address}
+	}
+	return nil
+}
+
+func publicAddr(ip netip.Addr) bool {
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() || ip.IsInterfaceLocalMulticast() {
+		return false
+	}
+	if nat64.Contains(ip) {
+		b := ip.As16()
+		return publicAddr(netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}))
 	}
 	for _, p := range nonPublic {
 		if p.Contains(ip) {
-			return &refusedError{address}
+			return false
 		}
 	}
-	return nil
+	for _, p := range interfaceNets() {
+		if p.Contains(ip) {
+			return false
+		}
+	}
+	return true
 }
 
 // cp1252 are Windows-1252's characters from 0x80 to 0x9f, where it

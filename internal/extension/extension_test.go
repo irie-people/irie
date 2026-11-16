@@ -155,12 +155,14 @@ func TestSetupLooksAndRemoves(t *testing.T) {
 	if _, err := Setup(p, home, "irie"); err == nil {
 		t.Error("set up with a bare command")
 	}
+	t.Setenv("XDG_STATE_HOME", "/home/alice/state")
+	t.Setenv("XDG_CONFIG_HOME", "relative/is/ignored")
 	done, err := Setup(p, home, "/opt/it's here/irie")
 	if err != nil || !slices.Equal(done, []string{"Chrome", "Firefox"}) {
 		t.Fatalf("Setup: %q, %v", done, err)
 	}
 	script, err := os.ReadFile(HostFile(p))
-	if err != nil || !strings.Contains(string(script), `exec '/opt/it'\''s here/irie' extension host "$@"`) {
+	if err != nil || !strings.Contains(string(script), `exec '/opt/it'\''s here/irie' extension host "$@"`) || !strings.Contains(string(script), "export XDG_STATE_HOME='/home/alice/state'\n") || strings.Contains(string(script), "XDG_CONFIG_HOME") {
 		t.Errorf("host program: %s, %v", script, err)
 	}
 	if st, _ := os.Stat(HostFile(p)); st.Mode()&0o111 == 0 {
@@ -311,11 +313,22 @@ func TestTheHostAnswersTheExtension(t *testing.T) {
 	h := startHost(t, o)
 
 	hello := h.call(t, Request{ID: 1, Op: "hello", Browser: "Chrome", Version: "0.1 old"})[0]
-	if hello.Hello == nil || !hello.Hello.On || hello.Hello.Name != brand.Name || !slices.Equal(hello.Hello.Tools, []string{"terms"}) || !hello.Hello.Updated {
+	if hello.Hello == nil || !hello.Hello.On || hello.Hello.Name != brand.Name || !slices.Equal(hello.Hello.Tools, []string{"terms"}) || !hello.Hello.Update {
 		t.Fatalf("hello: %+v", hello)
 	}
-	if s := Look(p, ""); s.Written != Version() || s.Seen["Chrome"].IsZero() {
+	// Hello writes nothing into a running extension's folder: only update
+	// does, as the panel asks just before it reloads.
+	if s := Look(p, ""); s.Written != "0.1 old" || s.Seen["Chrome"].IsZero() {
 		t.Errorf("after hello: %+v", s)
+	}
+	if r := h.call(t, Request{ID: 10, Op: "update"})[0]; !r.Updated || r.Error != "" {
+		t.Errorf("update: %+v", r)
+	}
+	if s := Look(p, ""); s.Written != Version() || !s.Current {
+		t.Errorf("after update: %+v", s)
+	}
+	if r := h.call(t, Request{ID: 11, Op: "hello", Version: Version()})[0]; r.Hello == nil || r.Hello.Update {
+		t.Errorf("hello from this build's extension: %+v", r)
 	}
 	read := h.call(t, Request{ID: 2, Op: "terms.read", URL: "https://example.com/terms", Title: "Terms of Service", HTML: page})[0]
 	if read.Doc == nil || read.Doc.Kind != terms.KindTerms || len(read.Doc.Points) < 3 || len(read.Ask) == 0 {
@@ -342,6 +355,25 @@ func TestTheHostAnswersTheExtension(t *testing.T) {
 	if msg, err := ReadMessage(h.out); err != nil || !strings.Contains(string(msg), `"code":"bad"`) {
 		t.Errorf("not JSON: %s, %v", msg, err)
 	}
+	// A field of the wrong type, as a page that stands an element in for
+	// its title sends: the reply still names the request.
+	if r := h.call(t, Request{ID: 12, Op: "terms.read"}); len(r) != 1 {
+		t.Fatal("no reply")
+	}
+	WriteMessage(h.in, []byte(`{"id":13,"op":"terms.read","url":"https://example.com/","title":{}}`))
+	if msg, err := ReadMessage(h.out); err != nil || !strings.Contains(string(msg), `"id":13`) || !strings.Contains(string(msg), `"code":"bad"`) {
+		t.Errorf("a field of the wrong type: %s, %v", msg, err)
+	}
+	// No terms: the links that may be them come back as the panel reads
+	// them, with their words and addresses.
+	nf := h.call(t, Request{ID: 14, Op: "terms.read", URL: "https://example.invalid/", HTML: `<html><body><p>Nothing here.</p><a href="https://example.invalid/legal">Legal stuff</a></body></html>`})[0]
+	if nf.Code != "notfound" || len(nf.Others) != 1 {
+		t.Fatalf("no terms: %+v", nf)
+	}
+	b, _ := json.Marshal(nf)
+	if !strings.Contains(string(b), `"others":[{"text":"Legal stuff","url":"https://example.invalid/legal"}]`) {
+		t.Errorf("others as JSON: %s", b)
+	}
 	on = false
 	if r := h.call(t, Request{ID: 8, Op: "terms.read", URL: "https://example.com/terms", HTML: page})[0]; r.Code != "off" || r.Error != "Terms in short is off." {
 		t.Errorf("off: %+v", r)
@@ -357,6 +389,16 @@ func TestTheHostAnswersTheExtension(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Error("Serve went on after the port closed")
+	}
+}
+
+// TestWhereAModelRuns: on this computer, or on a server of the person's
+// own, by its name.
+func TestWhereAModelRuns(t *testing.T) {
+	for u, want := range map[string]string{"http://127.0.0.1:11434": "this computer", "http://localhost:11434": "this computer", "http://[::1]:11434": "this computer", "http://gpu.example.com:11434": "gpu.example.com"} {
+		if got := where(terms.Model{URL: u}); got != want {
+			t.Errorf("where(%s) = %q, want %q", u, got, want)
+		}
 	}
 }
 

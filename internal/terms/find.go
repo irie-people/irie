@@ -1,7 +1,6 @@
 package terms
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"net/url"
@@ -13,7 +12,20 @@ import (
 )
 
 // Link is a link on a page: its words and address.
-type Link = htmltext.Link
+type Link struct {
+	Text string `json:"text"`
+	URL  string `json:"url"`
+}
+
+// linksOf are a page's links as the terms keep them: their words made
+// plain, as every text the terms show is.
+func linksOf(ls []htmltext.Link) []Link {
+	out := make([]Link, 0, len(ls))
+	for _, l := range ls {
+		out = append(out, Link{Text: squash(normalise(l.Text)), URL: l.URL})
+	}
+	return out
+}
 
 // Found are the legal pages a page links to.
 type Found struct {
@@ -125,35 +137,57 @@ func Locate(ctx context.Context, f Fetcher, address string, page *Page, want str
 		page.URL = address
 	}
 	here := docOf(*page)
-	if here.Kind != KindOther && (want == "" || here.Kind == want) && len(here.Points) > 0 {
-		return here, nil
+	legal := here.Kind != KindOther && len(here.Points) > 0
+	if legal && (want == "" || here.Kind == want) {
+		return done(here), nil
 	}
 	found := Find(page.URL, here.links)
 	next := found.Terms
-	if want == KindPrivacy || (here.Kind == KindTerms && want == "" && next == "") {
-		next = cmp.Or(found.Privacy, next)
+	switch {
+	case want == KindPrivacy:
+		// Only a privacy policy answers for one: never the terms again.
+		next = found.Privacy
+	case here.Kind == KindTerms && next == "":
+		next = found.Privacy
 	}
-	// Links on the page are the page's, not the person's: they never
-	// reach this computer or its network.
-	f.Local = false
 	if next != "" && next != page.URL {
-		if p, err := f.Get(ctx, next); err == nil {
+		if p, err := linked(f, address, next).Get(ctx, next); err == nil {
 			d := docOf(p)
 			if d.Kind != KindOther {
 				if d.Privacy == "" {
 					d.Privacy = found.Privacy
 				}
-				return d, nil
+				return done(d), nil
 			}
 		}
 	}
 	if here.Kind != KindOther {
-		return here, nil
+		return done(here), nil
 	}
-	if d := guess(ctx, f, page.URL); d != nil {
-		return d, nil
+	if want != KindPrivacy {
+		if d := guess(ctx, linked(f, address, page.URL), page.URL); d != nil {
+			return done(d), nil
+		}
 	}
 	return nil, &NotFoundError{Page: page.URL, Title: here.Title, Others: found.Others}
+}
+
+// done lets a document go of its page's links, which only finding the
+// terms needs.
+func done(d *Doc) *Doc {
+	d.links = nil
+	return d
+}
+
+// linked is the fetcher for a link of the page at address: smaller pages,
+// and this computer or its network only on the host the person asked for,
+// never at a page's word.
+func linked(f Fetcher, address, link string) Fetcher {
+	f.Max = MaxLinked
+	a, err1 := url.Parse(address)
+	b, err2 := url.Parse(link)
+	f.Local = f.Local && err1 == nil && err2 == nil && strings.EqualFold(a.Hostname(), b.Hostname())
+	return f
 }
 
 // NotFoundError says a page has no terms that Irie could find, with the
@@ -173,33 +207,42 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &e)
 }
 
-// guess tries the places sites usually keep their terms, all at once, and
-// takes the first, in wellKnown's order, that reads as terms.
+// guess tries the places sites usually keep their terms, three at a time
+// in wellKnown's order, and takes the first that reads as terms.
 func guess(ctx context.Context, f Fetcher, page string) *Doc {
 	u, err := url.Parse(page)
 	if err != nil {
 		return nil
 	}
-	docs := make([]*Doc, len(wellKnown))
-	var wg sync.WaitGroup
-	for i, p := range wellKnown {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			x := url.URL{Scheme: u.Scheme, Host: u.Host, Path: p}
-			pg, err := f.Get(ctx, x.String())
-			if err != nil {
-				return
+	for i := 0; i < len(wellKnown); i += 3 {
+		batch := wellKnown[i:min(i+3, len(wellKnown))]
+		docs := make([]*Doc, len(batch))
+		var wg sync.WaitGroup
+		for j, p := range batch {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				// A page that breaks the reading is no terms, and
+				// never takes the rest down with it.
+				defer func() { _ = recover() }()
+				x := url.URL{Scheme: u.Scheme, Host: u.Host, Path: p}
+				pg, err := f.Get(ctx, x.String())
+				if err != nil {
+					return
+				}
+				if d := docOf(pg); d.Kind == KindTerms && len(d.Points) > 0 {
+					docs[j] = d
+				}
+			}()
+		}
+		wg.Wait()
+		for _, d := range docs {
+			if d != nil {
+				return d
 			}
-			if d := docOf(pg); d.Kind == KindTerms && len(d.Points) > 0 {
-				docs[i] = d
-			}
-		}()
-	}
-	wg.Wait()
-	for _, d := range docs {
-		if d != nil {
-			return d
+		}
+		if ctx.Err() != nil {
+			return nil
 		}
 	}
 	return nil
