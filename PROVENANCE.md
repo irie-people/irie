@@ -707,6 +707,8 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-16 | https://support.apple.com/en-us/102650 | Mac keyboard shortcuts: the Fn letters macOS keeps for itself (Fn-A, C, D, E, H, N, Q) and Fn-F, which the key tree never uses (mac/Sources/Irie/KeyTree.swift) |
 | 2026-11-16 | https://www.gnu.org/software/emacs/manual/html_node/emacs/Keys.html | GNU Emacs manual, Keys: prefix keys and complete keys (C-x C-f), the model for the key tree's chords with fn (KeyTree.swift); no code taken |
 | 2026-11-16 | https://github.com/justbur/emacs-which-key | which-key's idea, a list of the keys that can come next shown a moment into a prefix, for the key tree's hint (KeyHint in KeyTree.swift); idea only, its code not read |
+| 2026-11-16 | https://github.com/JustVugg/colibri (README, docs/api.md, docs/metal.md, docs/cluster.md and, on the dev branch, docs/qwen36-metal.md; issues 1614 and 2785; read at 0a5504a and dev c7752bf) | Colibri's tiers, models, APIs and Apple silicon paths, the speeds measured on an M1 Pro, and why Irie runs no Colibri (DESIGN §6.5) |
+| 2026-11-16 | The owner's request of 2026-11-16, "it doesnt have the same set of sessions as my mac though - can you make sure they sync" ; the Mac app's own list (mac/Sources/Irie: Spaces.swift, Store.swift's drawnGroups, Groups.swift's listGroups) | The phone's list as the Mac's sidebar (docs/PHONE.md §4; js/list.js, TestThePhoneListsTheSessionsTheMacDoes): one space at a time under its chips, following the space the machine's screen shows, Pinned, your groups nested, Parked in the space, the sessions outside Irie; a task starts in the space shown; the preview's spaces, groups, show and space-aware input |
 
 ## Third-party code
 

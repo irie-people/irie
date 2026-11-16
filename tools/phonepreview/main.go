@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -48,7 +49,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	go ipc.Serve(l, newCore())
+	cc := newCore()
+	go ipc.Serve(l, cc)
 
 	opt := remote.Options{Socket: sock, Dir: tmp, Name: "Mac", Version: "1.4.0"}
 	if *dir != "" {
@@ -86,6 +88,15 @@ func main() {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write([]byte(boot))
 	})
+	// As the Mac shows a card: curl -X POST 'http://ADDR/preview/show?session=x4'
+	// takes the machine's screen to that card's space, which the phone follows.
+	mux.HandleFunc("POST /preview/show", func(w http.ResponseWriter, r *http.Request) {
+		if err := cc.show(r.URL.Query().Get("session")); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
 			app.ServeHTTP(w, r)
@@ -106,35 +117,44 @@ func main() {
 	log.Fatal(http.Serve(ln, mux))
 }
 
-// core is the Windows app's fake core, with more sessions, and with what a
-// phone reads of a session besides its row: its conversation and its
-// terminal.
+// core is the Windows app's fake core, with more sessions in two more
+// spaces, groups inside groups, and what a phone reads of a session besides
+// its row: its conversation and its terminal. Show, which the Mac app sends
+// for the card it shows, moves the machine's screen to that card's space.
 type core struct {
 	*fixture.Core
 	mu    sync.Mutex
 	extra []ipc.Session
+	subs  map[chan ipc.Frame]bool
 }
+
+// The spaces: the fixture's sessions are in the first, Shop.
+var (
+	spaces = []ipc.Space{{ID: "pshop", Name: "Shop"}, {ID: "pgames", Name: "Games"}, {ID: "presearch", Name: "Research"}}
+	groups = []ipc.Group{{ID: "gdreams", Name: "Dreams"}, {ID: "gnight", Name: "Night runs", Parent: "gdreams"}}
+)
 
 func newCore() *core {
 	now := time.Now()
 	ago := func(d time.Duration) time.Time { return now.Add(-d) }
-	c := &core{Core: fixture.NewCore()}
+	c := &core{Core: fixture.NewCore(), subs: map[chan ipc.Frame]bool{}}
 	names := []struct {
-		name, state, detail string
-		hue                 int
+		name, state, detail, space, group string
+		hue                               int
+		pinned                            bool
 	}{
-		{"Grant finding plugin for the tracker", "working", "Reading the grant feeds", 2},
-		{"Land the accounts page", "done", "", 5},
-		{"Market graph tree traversal and the keyboard", "working", "Editing tree.go", 4},
-		{"An interpolator for jot plus", "idle", "", 6},
-		{"Dreams: tuning the night run with the bench's numbers from last week", "paused", "Held back while you work", 3},
-		{"Written proposals", "needs_you", "Asks: which of the three openings?", 1},
-		{"Item generation scaling", "working", "Running the generator", 5},
-		{"SEO", "done", "", 2},
+		{"Grant finding plugin for the tracker", "working", "Reading the grant feeds", "presearch", "", 2, true},
+		{"Land the accounts page", "done", "", "", "", 5, false},
+		{"Market graph tree traversal and the keyboard", "working", "Editing tree.go", "presearch", "", 4, false},
+		{"An interpolator for jot plus", "idle", "", "pgames", "", 6, false},
+		{"Dreams: tuning the night run with the bench's numbers from last week", "paused", "Held back while you work", "pgames", "gnight", 3, false},
+		{"Written proposals", "needs_you", "Asks: which of the three openings?", "presearch", "", 1, false},
+		{"Item generation scaling", "working", "Running the generator", "pgames", "gdreams", 5, false},
+		{"SEO", "done", "", "presearch", "", 2, false},
 	}
 	for i, n := range names {
 		s := ipc.Session{ID: fmt.Sprintf("x%d", i+1), Name: n.name, State: n.state, Detail: n.detail, Created: ago(time.Duration(i+1) * 37 * time.Minute),
-			Repo: "/home/alice/src/shop", Profile: "claude", Hue: n.hue, Order: 100 + i}
+			Repo: "/home/alice/src/shop", Profile: "claude", Hue: n.hue, Order: 100 + i, Space: n.space, Group: n.group, Pinned: n.pinned}
 		if n.state == "needs_you" {
 			s.Reason = "question"
 		}
@@ -144,6 +164,30 @@ func newCore() *core {
 		c.extra = append(c.extra, s)
 	}
 	return c
+}
+
+// show marks the session the machine's screen shows, as the Mac app's show
+// does, among the fixture's rows and the extra ones alike.
+func (c *core) show(id string) error {
+	raw, _ := json.Marshal(map[string]string{"session": id})
+	if _, err := c.Core.Call(ipc.OpShow, raw); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.extra {
+		if was := c.extra[i].Shown; was != (c.extra[i].ID == id) {
+			c.extra[i].Shown = !was
+			s := c.extra[i]
+			for ch := range c.subs {
+				select {
+				case ch <- ipc.Frame{T: ipc.FrameUpsert, Session: &s}:
+				default:
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // row is a session's row as it is now: the fixture's, from the snapshot
@@ -196,6 +240,27 @@ func (c *core) Call(op string, raw json.RawMessage) (any, error) {
 		return ipc.ScreenResult{Lines: lines, Options: sc.Options}, nil
 	case ipc.OpKeys, ipc.OpSend:
 		return struct{}{}, nil
+	case ipc.OpInput:
+		// A task starts in the space the client shows, as the core's does.
+		var in ipc.InputArgs
+		json.Unmarshal(raw, &in)
+		t := strings.TrimSpace(in.Text)
+		if t == "" || strings.HasPrefix(t, ":") || strings.HasPrefix(strings.ToLower(t), "how") {
+			return c.Core.Call(op, raw)
+		}
+		name, _, _ := strings.Cut(t, "\n")
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		s := ipc.Session{ID: fmt.Sprintf("x%d", len(c.extra)+1), Name: name, State: "starting", Created: time.Now(), Order: 100 + len(c.extra),
+			Profile: "claude", Hue: len(c.extra)%6 + 1, Space: in.Space}
+		c.extra = append(c.extra, s)
+		for ch := range c.subs {
+			select {
+			case ch <- ipc.Frame{T: ipc.FrameUpsert, Session: &s}:
+			default:
+			}
+		}
+		return ipc.InputResult{Did: "spawned", Op: ipc.OpSpawn, Session: &s, Text: "Started “" + s.Name + "”."}, nil
 	}
 	return c.Core.Call(op, raw)
 }
@@ -211,9 +276,15 @@ func (c *core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 	}
 	out := make(chan ipc.Frame, 256)
 	done := make(chan struct{})
+	c.mu.Lock()
+	c.subs[out] = true
+	c.mu.Unlock()
 	var once sync.Once
 	cancel := func() {
 		once.Do(func() {
+			c.mu.Lock()
+			delete(c.subs, out)
+			c.mu.Unlock()
 			close(done)
 			stop()
 		})
@@ -227,6 +298,12 @@ func (c *core) Subscribe(raw json.RawMessage) (<-chan ipc.Frame, func(), error) 
 					c.mu.Lock()
 					f.Sessions = append(f.Sessions, c.extra...)
 					c.mu.Unlock()
+					if f.Header != nil {
+						h := *f.Header
+						h.Spaces = spaces
+						h.Groups = append(slices.Clone(h.Groups), groups...)
+						f.Header = &h
+					}
 				}
 				select {
 				case out <- f:
