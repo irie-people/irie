@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -410,3 +412,120 @@ func TestSeenSaysWhenEachBrowserTalked(t *testing.T) {
 		t.Errorf("Seen = %q", got)
 	}
 }
+
+// TestThePanelAsAPage: irie terms serve gives the panel's files with a
+// policy that runs only its own, keeps the extension's own files back,
+// answers its page's requests as JSON lines, and refuses a request from
+// another site, under another name or that isn't JSON.
+func TestThePanelAsAPage(t *testing.T) {
+	p, _ := testPaths(t)
+	o := Options{
+		Paths:   p,
+		Load:    func() (config.Config, error) { return config.Default(), nil },
+		Why:     func(config.Config, string) string { return "" },
+		Servers: func(config.Config) []string { return []string{"http://127.0.0.1:1"} },
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- ServeWeb(ctx, ln, o) }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("ServeWeb: %v", err)
+		}
+	}()
+	base := "http://" + ln.Addr().String()
+
+	get := func(path string) (*http.Response, string) {
+		t.Helper()
+		resp, err := http.Get(base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp, string(b)
+	}
+	resp, body := get("/")
+	if resp.StatusCode != 200 || !strings.Contains(body, `<script src="panel.js">`) || !strings.Contains(resp.Header.Get("Content-Security-Policy"), "script-src 'self'") || resp.Header.Get("Content-Type") != "text/html; charset=utf-8" {
+		t.Errorf("GET /: %d %v %.80s", resp.StatusCode, resp.Header, body)
+	}
+	if resp, body := get("/brand.js"); resp.StatusCode != 200 || !strings.Contains(body, "IRIE_BRAND") {
+		t.Errorf("GET /brand.js: %d", resp.StatusCode)
+	}
+	for _, path := range []string{"/manifest.json", "/background.js", "/../extension.go", "/nope.js"} {
+		if resp, _ := get(path); resp.StatusCode != 404 {
+			t.Errorf("GET %s: %d", path, resp.StatusCode)
+		}
+	}
+
+	post := func(body, origin, host, ctype string) (*http.Response, []Reply) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, base+"/api", strings.NewReader(body))
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if host != "" {
+			req.Host = host
+		}
+		req.Header.Set("Content-Type", ctype)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out []Reply
+		dec := json.NewDecoder(resp.Body)
+		for {
+			var r Reply
+			if dec.Decode(&r) != nil {
+				break
+			}
+			out = append(out, r)
+		}
+		return resp, out
+	}
+	resp, rs := post(`{"id":1,"op":"hello"}`, base, "", "application/json")
+	if resp.StatusCode != 200 || len(rs) != 1 || rs[0].Hello == nil || !rs[0].Hello.On || rs[0].Hello.Update || rs[0].ID != 1 {
+		t.Errorf("hello: %d %+v", resp.StatusCode, rs)
+	}
+	if _, err := os.Stat(seenFile(p)); err == nil {
+		t.Error("the page counted as a browser's extension")
+	}
+	b, _ := json.Marshal(Request{ID: 2, Op: "terms.read", URL: "https://example.com/terms", HTML: page})
+	if resp, rs := post(string(b), base, "", "application/json"); resp.StatusCode != 200 || len(rs) != 1 || rs[0].Doc == nil || len(rs[0].Doc.Points) < 3 {
+		t.Errorf("read: %d %+v", resp.StatusCode, rs)
+	} else {
+		b, _ = json.Marshal(Request{ID: 3, Op: "terms.ask", Doc: rs[0].Doc.ID, Question: "Can I get a refund?"})
+		if _, rs := post(string(b), base, "", "application/json"); len(rs) != 1 || rs[0].Answer == nil || !strings.Contains(rs[0].Answer.Says, "refunds") {
+			t.Errorf("ask: %+v", rs)
+		}
+	}
+	if resp, _ := post(`{"id":4,"op":"hello"}`, "https://evil.example", "", "application/json"); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("another site: %d", resp.StatusCode)
+	}
+	if resp, _ := post(`{"id":5,"op":"hello"}`, "", "", "application/json"); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("no origin: %d", resp.StatusCode)
+	}
+	if resp, _ := post(`{"id":6,"op":"hello"}`, base, "", "text/plain"); resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("not JSON: %d", resp.StatusCode)
+	}
+	if resp, _ := post(`{"id":7,"op":"hello"}`, "http://rebound.example:80", "rebound.example:"+strings.Split(ln.Addr().String(), ":")[1], "application/json"); resp.StatusCode != http.StatusMisdirectedRequest {
+		t.Errorf("another name: %d", resp.StatusCode)
+	}
+	if err := ServeWeb(ctx, farListener{}, o); err == nil {
+		t.Error("served on an address off the loopback")
+	}
+}
+
+// farListener says it listens on an address off the loopback, and never
+// does: no test opens a port beyond this computer.
+type farListener struct{}
+
+func (farListener) Accept() (net.Conn, error) { return nil, io.EOF }
+func (farListener) Close() error              { return nil }
+func (farListener) Addr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 7393} }
