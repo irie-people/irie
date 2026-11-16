@@ -28,8 +28,9 @@ struct TerminalArea: View {
         // A theme of yours that changed, or one being made, draws the
         // ground and the frame again too (Looks.swift).
         let _ = LookBook.shared.revision
-        // In zen the session shows with its own card and panes alone, in
-        // zen's layout, with no right sidebar or strip under it (Zen.swift).
+        // In zen the session shows with its own panes alone, its card a
+        // bubble over the terminal's corner, in zen's layout, with no right
+        // sidebar or strip under it (Zen.swift).
         // The same views stay in place throughout, only their sizes change,
         // so the terminal is never made again.
         let zen = self.zen
@@ -263,7 +264,8 @@ struct TerminalArea: View {
                 }
             }
             // The conversation needs only the core, not the terminal. In
-            // zen the card's column stands beside it, as beside the terminal.
+            // zen the card's bubble lies over its corner, as over the
+            // terminal's.
             if !store.showTerminal && (store.attach != nil || online) {
                 zenGroup(ConversationView(), margins: EdgeInsets())
             } else if store.attach == nil, !store.isFixture {
@@ -316,7 +318,7 @@ struct TerminalArea: View {
             if let note = zenNote, zen != nil {
                 ZenHint(text: note)
                     .padding(.top, 36)
-                    .padding(.leading, store.zen.cardColumn)
+                    .padding(.leading, zen == .watch ? store.zen.watchColumn : 0)
                     .transition(.opacity)
                     .id(note)
             }
@@ -350,31 +352,38 @@ struct TerminalArea: View {
     private var zen: ZenLayout? { store.zen.on ? store.zen.layout : nil }
 
     /// What of zen sizes the terminal, which every agent's window takes.
-    private var zenShape: String { zen.map { "\($0.rawValue) \(store.zen.columns) \(store.zen.cardColumn)" } ?? "" }
+    private var zenShape: String { zen.map { "\($0.rawValue) \(store.zen.columns) \(store.zen.watchColumn)" } ?? "" }
 
     /// Centred's column: zen's columns of text at the text size in use, and
     /// the frame's padding round them.
     private var zenColumn: CGFloat { CGFloat(store.zen.columns) * store.fontSize * store.cellRatio + 36 + 1 }
 
-    /// The session's part, the terminal's frame or the conversation, with
-    /// zen's card column beside it: its room at the leading edge, the column
-    /// drawn there, and in Centred the two kept together, at most the card,
-    /// the frame's margins and the reading column wide, in the middle of the
-    /// room. Outside zen it is only the margins round the frame, as ever:
-    /// no room, no column, no limit.
+    /// The session's part, the terminal's frame or the conversation, as zen
+    /// lays it out: the card's bubble over its top-left corner, Keep Watch's
+    /// list of the other sessions at the room's left edge, and in Centred at
+    /// most the margins and the reading column wide, in the middle of the
+    /// room. Outside zen it is only the margins round the frame, as ever: no
+    /// bubble, no list, no limit.
     private func zenGroup(_ part: some View, margins: EdgeInsets) -> some View {
         let zen = self.zen
-        let column = zen == nil ? 0 : store.zen.cardColumn
+        let column = zen == .watch ? store.zen.watchColumn : 0
         return part
+            .overlay(alignment: .topLeading) {
+                if zen != nil {
+                    ZenBubble()
+                        .padding(.top, 10)
+                        .padding(.leading, 12)
+                }
+            }
             .padding(margins)
             .padding(.leading, column)
             .overlay(alignment: .leading) {
-                if let zen {
-                    ZenCardColumn(layout: zen)
+                if zen == .watch {
+                    ZenWatchColumn()
                         .frame(width: column)
                 }
             }
-            .frame(maxWidth: zen == .centred ? column + margins.leading + margins.trailing + zenColumn : .infinity)
+            .frame(maxWidth: zen == .centred ? margins.leading + margins.trailing + zenColumn : .infinity)
             .padding(.vertical, zen == .centred ? 12 : 0)
             .frame(maxWidth: .infinity)
     }
@@ -438,8 +447,7 @@ struct TerminalArea: View {
                     .overlay(frame.strokeBorder(edge, lineWidth: TabLink.width))
                     .onTapGesture { store.focusTerminal += 1 }
             }
-            // Where the lines from the selected card end (TabLink.swift),
-            // zen's card's too.
+            // Where the lines from the selected card end (TabLink.swift).
             .background {
                 if shows {
                     TabLinkFrame(session: selected?.id, ground: Theme.terminalBackground)
@@ -447,8 +455,8 @@ struct TerminalArea: View {
                         .accessibilityHidden(true)
                 }
             }
-        // 12 points round it, Edge to Edge's narrower, and zen's card column
-        // beside it (zenGroup).
+        // 12 points round it, Edge to Edge's narrower, and zen's bubble over
+        // its corner (zenGroup).
         let margins = zen == .edge ? EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 6)
                                    : EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12)
         return zenGroup(inFrame, margins: margins)

@@ -366,27 +366,26 @@ private struct EndStrip: View {
     }
 }
 
-/// Zen's card (Zen.swift): the shown session's own card, as the list draws
-/// it, and its helpers under it, beside its terminal while the list is out of
-/// sight. It is the selected card, so the lines join it to the terminal's
-/// frame (TabLink.swift): the folded list's own copy makes no join.
+/// Zen's bubble (Zen.swift): the shown session's own card, as the list draws
+/// it, lifted over the top-left corner of its terminal as a header, on a
+/// shadow, since it lies over the work. Its buttons and menu are the card's.
+/// The lines never join it to the frame it lies in (TabLink.swift), and the
+/// folded list's own copy makes no join either.
 @MainActor
-struct ZenCard: View {
+struct ZenBubble: View {
     @Environment(Store.self) private var store
+    /// Wide enough for the card's two lines, narrow enough to cover little.
+    static let width: CGFloat = 280
 
     var body: some View {
         if let s = store.selectedRow, store.outsideSelection == nil {
             TimelineView(.periodic(from: .now, by: 30)) { ctx in
-                VStack(alignment: .leading, spacing: 4) {
-                    SessionCard(session: s, selected: true, picked: false, listFocused: false, now: ctx.date,
-                                first: true, last: true, inZen: true)
-                        .equatable()
-                    if HelperRows.has(s) {
-                        HelperRows(session: s)
-                            .equatable()
-                    }
-                }
+                SessionCard(session: s, selected: true, picked: false, listFocused: false, now: ctx.date,
+                            first: true, last: true, inZen: true)
+                    .equatable()
             }
+            .frame(width: Self.width)
+            .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
         }
     }
 }
@@ -424,7 +423,7 @@ private struct SessionCard: View, Equatable {
     /// First or last in its group: it can't move up, or down.
     let first: Bool
     let last: Bool
-    /// Zen's copy of the card beside the terminal (ZenCard), which neither
+    /// Zen's copy of the card over the terminal (ZenBubble), which neither
     /// drags nor opens its name on a double click: its list is out of
     /// sight, and Rename in its menu brings the list back first.
     var inZen = false

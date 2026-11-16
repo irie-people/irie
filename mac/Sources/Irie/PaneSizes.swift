@@ -82,15 +82,15 @@ extension Store {
         guard ResizeHold.shared.held == nil, !r.sliding, !r.folding, !sideSliding,
               let main = r.mainProbe, main.window != nil, t.window != nil, let now = t.grid else { return nil }
         // What the terminal frame takes of the room beside the panes, as it
-        // is laid out now (zen's card column too); the terminal has the
+        // is laid out now (Keep Watch's list too); the terminal has the
         // rest. Zen's Centred holds the terminal to its reading column, so
-        // there it has the rest only up to that, beside the card's column,
-        // the frame's margins (12 a side) and its padding (18 a side), as
-        // TerminalArea's zenGroup and framed lay them out (Zen.swift).
+        // there it has the rest only up to that, beside the frame's margins
+        // (12 a side) and its padding (18 a side), as TerminalArea's
+        // zenGroup and framed lay them out (Zen.swift).
         let inset = main.bounds.width - t.bounds.width
         let centred = zen.on && zen.layout == .centred
         let reading = CGFloat(zen.columns) * fontSize * cellRatio + 1
-        let beside = zen.cardColumn + 24 + 36
+        let beside: CGFloat = 24 + 36
         func size(_ kept: CGFloat) -> CellSize? {
             let width = centred ? min(reading, r.lastRoom - kept - beside) : r.lastRoom - kept - inset
             return t.grid(width: width).map { CellSize(w: $0.columns, h: $0.rows) }

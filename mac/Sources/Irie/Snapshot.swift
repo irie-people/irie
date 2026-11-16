@@ -359,9 +359,9 @@ enum Snapshot {
     }
 
     /// Zen (Zen.swift): each layout at a laptop screen's size, as Fn+Z
-    /// shows it, the list folded away and the toolbar gone, the session's own
-    /// card beside its terminal, and Keep Watch's other sessions with one
-    /// that needs you.
+    /// shows it, the list folded away and the toolbar gone, the session's
+    /// card a bubble over its terminal's corner, and Keep Watch's other
+    /// sessions with one that needs you.
     private static func zenShots(_ store: Store, into dir: String) throws {
         store.side = SideState()
         store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)

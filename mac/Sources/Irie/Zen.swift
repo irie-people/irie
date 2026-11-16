@@ -4,27 +4,27 @@ import SwiftUI
 
 // Zen (Fn+Z, View › Enter Zen Mode): the session on show and its own
 // parts alone, full screen, in a layout of zen's own, apart from View ›
-// Layout's. Its parts are its card, which the lines join to its terminal as
-// in the list, its terminal or conversation, and its panes, as it has them.
-// Zen hides the rest: the other cards and the sidebar round them (search,
-// details, notes, task bar), the title bar's toolbar, the right sidebar,
-// which is the same for every session, and the strip under the terminal. It
-// moves and closes nothing, so leaving it gives the window back as it was.
-// The terminal stays the same view all along, so its tmux client never
-// restarts (asked for on 2026-11-15, the card and the panes the same day).
+// Layout's. Its parts are its terminal or conversation; its card, which
+// becomes a header bubble over the terminal's top-left corner; and its
+// panes, as it has them. Zen hides the rest: the other cards and the
+// sidebar round them (search, details, notes, task bar), the title bar's
+// toolbar, the right sidebar, which is the same for every session, and the
+// strip under the terminal. It moves and closes nothing, so leaving it gives
+// the window back as it was. The terminal stays the same view all along, so
+// its tmux client never restarts (asked for on 2026-11-15; the card and the
+// panes, and the card as a bubble, the same day).
 //
 // The three layouts arrange those parts for three ways of working:
 //
-// - Centred, the first: the card, then the terminal in a column of easy
-//   reading width, together in the middle of the screen. A full screen's
-//   terminal is far wider than a line of text should be, and an agent's
-//   words wrap at the terminal's width; VS Code's zen centres its editor
-//   too (PROVENANCE.md).
-// - Edge to Edge: the card at the screen's left edge, on the sidebar's
-//   ground, and the terminal across the rest, for the widest diffs, logs
-//   and tables, and Claude Code's diff panel, which docks from 144 columns.
-// - Keep Watch: Edge to Edge, with the other sessions listed under the
-//   card, red when one needs you, so an agent waiting on a question is never
+// - Centred, the first: the terminal in a column of easy reading width in
+//   the middle of the screen. A full screen's terminal is far wider than a
+//   line of text should be, and an agent's words wrap at the terminal's
+//   width; VS Code's zen centres its editor too (PROVENANCE.md).
+// - Edge to Edge: the terminal across the screen, for the widest diffs,
+//   logs and tables, and Claude Code's diff panel, which docks from 144
+//   columns.
+// - Keep Watch: Edge to Edge, with the other sessions listed down the left
+//   edge, red when one needs you, so an agent waiting on a question is never
 //   lost behind the one you watch.
 //
 // Apple's guidance for full screen shapes the rest: the system's own full
@@ -51,11 +51,11 @@ enum ZenLayout: String, CaseIterable, Identifiable {
     var blurb: String {
         switch self {
         case .centred:
-            return "The session’s card and its terminal together in the middle of the screen, the terminal a column of easy reading width. For reading an agent’s work and writing to it."
+            return "The terminal in a column of easy reading width in the middle of the screen. For reading an agent’s work and writing to it."
         case .edge:
-            return "The session’s card at the screen’s edge and its terminal across the rest. The most room, for wide diffs, logs and tables."
+            return "The terminal across the whole screen. The most room, for wide diffs, logs and tables."
         case .watch:
-            return "The session’s card with your other sessions listed under it, red when one needs you. Stay on one without losing the rest; a click shows another."
+            return "Your other sessions listed down the left edge, red when one needs you. Stay on one without losing the rest; a click shows another."
         }
     }
 }
@@ -77,18 +77,19 @@ final class ZenModel {
     /// with.
     static let widths = [80, 100, 120]
     static let standardColumns = 100
-    /// The card's column: as wide as the sidebar zen found, within the
-    /// sidebar's own bounds, or the sidebar's first width.
-    static let standardCardColumn: CGFloat = 290
-    static func cardColumn(for sidebar: PaneLayout.Sidebar?) -> CGFloat {
-        guard let s = sidebar, s.shown, let w = s.width else { return standardCardColumn }
+    /// Keep Watch's list of the other sessions: a column as wide as the
+    /// sidebar zen found, within the sidebar's own bounds, or the sidebar's
+    /// first width.
+    static let standardWatchColumn: CGFloat = 290
+    static func watchColumn(for sidebar: PaneLayout.Sidebar?) -> CGFloat {
+        guard let s = sidebar, s.shown, let w = s.width else { return standardWatchColumn }
         return min(max(CGFloat(w), 260), 420)
     }
 
     /// Zen is on.
     fileprivate(set) var on = false
-    /// How wide the card's column is, while zen is on.
-    fileprivate(set) var cardColumn = ZenModel.standardCardColumn
+    /// How wide Keep Watch's list is, while zen is on.
+    fileprivate(set) var watchColumn = ZenModel.standardWatchColumn
     var layout = ZenLayout(rawValue: UserDefaults.standard.string(forKey: ZenModel.layoutKey) ?? "") ?? .centred {
         didSet { if layout != oldValue, !fixture { UserDefaults.standard.set(layout.rawValue, forKey: Self.layoutKey) } }
     }
@@ -227,7 +228,7 @@ extension Store {
         zen.found = ZenModel.Found(sidebar: WindowPanes.sidebar.map { PaneLayout.Sidebar(shown: $0.shown, width: $0.shown ? $0.width.rounded() : nil) },
                                    toolbar: window.toolbar?.isVisible ?? true)
         zen.keepFound()
-        zen.cardColumn = ZenModel.cardColumn(for: zen.found?.sidebar)
+        zen.watchColumn = ZenModel.watchColumn(for: zen.found?.sidebar)
         begin(in: window)
         if zen.fullScreen, !window.styleMask.contains(.fullScreen) {
             zen.tookScreen = true
@@ -241,7 +242,7 @@ extension Store {
     func resumeZen(in window: NSWindow) {
         guard !zen.on, !isFixture, UserDefaults.standard.bool(forKey: ZenModel.onKey) else { return }
         zen.found = ZenModel.savedFound()
-        zen.cardColumn = ZenModel.cardColumn(for: zen.found?.sidebar)
+        zen.watchColumn = ZenModel.watchColumn(for: zen.found?.sidebar)
         // How to leave it is said once the person is here to read it.
         begin(in: window, hint: NSApp.isActive)
         if zen.fullScreen, !window.styleMask.contains(.fullScreen) {
@@ -448,26 +449,15 @@ extension GhosttyTerminalView {
 
 // MARK: Views
 
-/// The column zen keeps of the sidebar: the session's card, which the lines
-/// join to its terminal, its helpers, and in Keep Watch the other sessions
-/// under it. Edge to Edge and Keep Watch stand it on the sidebar's ground at
-/// the screen's edge; Centred lets it float beside the terminal.
-struct ZenCardColumn: View {
-    let layout: ZenLayout
-
+/// Keep Watch's column at the screen's left edge, on the sidebar's ground:
+/// the other sessions, a line each.
+struct ZenWatchColumn: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ZenCard()
-            if layout == .watch {
-                ZenOthers()
-            }
-        }
-        .padding(.top, 24)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background {
-            if layout != .centred { Theme.sidebar.ignoresSafeArea() }
-        }
+        ZenOthers()
+            .padding(.top, 24)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Theme.sidebar.ignoresSafeArea())
     }
 }
 
@@ -662,43 +652,43 @@ private struct ZenSketch: View {
                 ctx.stroke(p, with: .color(Theme.agent(slot: 1)), lineWidth: 1.2)
                 text(in: r)
             }
-            // The session's card: a small rounded card with its mark and
-            // name, edged in the agent's colour as the selected card is, and
-            // the lines that join it to the terminal.
-            func card(_ r: CGRect) {
-                let p = Path(roundedRect: r, cornerRadius: 3)
+            // The session's card as a header bubble over the terminal's
+            // top-left corner: its mark and name, edged in the agent's
+            // colour as the selected card is.
+            func bubble(at x: CGFloat, _ y: CGFloat) {
+                let r = CGRect(x: x, y: y, width: 30, height: 12)
+                let p = Path(roundedRect: r, cornerRadius: 4)
                 ctx.fill(p, with: .color(Theme.selection))
-                ctx.stroke(p, with: .color(Theme.agent(slot: 1)), lineWidth: 1)
-                ctx.fill(Path(ellipseIn: CGRect(x: r.minX + 3, y: r.minY + 3.5, width: 3, height: 3)), with: .color(Theme.agent(slot: 1)))
-                ctx.fill(Path(roundedRect: CGRect(x: r.minX + 8, y: r.minY + 4, width: r.width * 0.5, height: 2), cornerRadius: 1),
+                ctx.stroke(p, with: .color(Theme.agent(slot: 1)), lineWidth: 0.9)
+                ctx.fill(Path(ellipseIn: CGRect(x: r.minX + 3, y: r.minY + 3, width: 3, height: 3)), with: .color(Theme.agent(slot: 1)))
+                ctx.fill(Path(roundedRect: CGRect(x: r.minX + 8, y: r.minY + 3.5, width: 15, height: 1.8), cornerRadius: 0.9),
                          with: .color(Theme.ink.opacity(0.7)))
-                ctx.fill(Path(roundedRect: CGRect(x: r.minX + 8, y: r.minY + 8, width: r.width * 0.35, height: 1.6), cornerRadius: 0.8),
+                ctx.fill(Path(roundedRect: CGRect(x: r.minX + 8, y: r.minY + 7, width: 10, height: 1.5), cornerRadius: 0.75),
                          with: .color(Theme.muted.opacity(0.7)))
-                ctx.fill(Path(CGRect(x: r.maxX, y: r.midY - 1.4, width: 6, height: 0.8)), with: .color(Theme.agent(slot: 1)))
-                ctx.fill(Path(CGRect(x: r.maxX, y: r.midY + 0.6, width: 6, height: 0.8)), with: .color(Theme.agent(slot: 1)))
             }
             switch layout {
             case .centred:
-                let cw = w * 0.42, cardW: CGFloat = 26
-                let x0 = (w - (cardW + 6 + cw)) / 2
-                card(CGRect(x: x0, y: 12, width: cardW, height: 13))
-                frame(CGRect(x: x0 + cardW + 6, y: 7, width: cw, height: h - 14))
+                let cw = w * 0.5
+                let f = CGRect(x: (w - cw) / 2, y: 7, width: cw, height: h - 14)
+                frame(f)
+                bubble(at: f.minX + 3, f.minY + 3)
             case .edge:
-                ctx.fill(Path(CGRect(x: 0, y: 0, width: 34, height: h)), with: .color(Theme.sidebar))
-                card(CGRect(x: 4, y: 8, width: 26, height: 13))
-                frame(CGRect(x: 36, y: 3, width: w - 39, height: h - 6))
+                let f = CGRect(x: 3, y: 3, width: w - 6, height: h - 6)
+                frame(f)
+                bubble(at: f.minX + 3, f.minY + 3)
             case .watch:
                 ctx.fill(Path(CGRect(x: 0, y: 0, width: 34, height: h)), with: .color(Theme.sidebar))
-                card(CGRect(x: 4, y: 8, width: 26, height: 13))
                 // The others, a line each: a mark, one of them red, and a name.
-                let marks: [Color] = [Theme.needs, Theme.agent(slot: 4), Look.doneColor, Theme.muted, Theme.agent(slot: 3)]
+                let marks: [Color] = [Theme.needs, Theme.agent(slot: 4), Look.doneColor, Theme.muted, Theme.agent(slot: 3), Theme.agent(slot: 2)]
                 for (i, c) in marks.enumerated() {
-                    let y = 30 + CGFloat(i) * 7
+                    let y = 9 + CGFloat(i) * 7
                     ctx.fill(Path(ellipseIn: CGRect(x: 6, y: y, width: 3, height: 3)), with: .color(c))
                     ctx.fill(Path(roundedRect: CGRect(x: 12, y: y + 0.6, width: i == 0 ? 16 : 12, height: 1.8), cornerRadius: 0.9),
                              with: .color(i == 0 ? Theme.needs.opacity(0.8) : Theme.ink.opacity(0.45)))
                 }
-                frame(CGRect(x: 36, y: 5, width: w - 41, height: h - 10))
+                let f = CGRect(x: 36, y: 4, width: w - 40, height: h - 8)
+                frame(f)
+                bubble(at: f.minX + 3, f.minY + 3)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
