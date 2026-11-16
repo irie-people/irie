@@ -73,7 +73,7 @@ type Doc struct {
 	secs    []section
 	clauses []clause
 	index   *index
-	links   []htmltext.Link
+	links   []Link
 	// scripted is Scripted's answer.
 	scripted bool
 	// head is the start of the page's whole text, menus and all, where
@@ -131,8 +131,8 @@ func FromHTML(address string, page []byte) *Doc {
 		full = full[:40000]
 	}
 	d.head = normalise(full)
-	d.links = p.Links
-	for _, l := range p.Links {
+	d.links = linksOf(p.Links)
+	for _, l := range d.links {
 		if privacyLink.MatchString(l.Text) && sameSite(l.URL, address) {
 			d.Privacy = l.URL
 			break
@@ -405,7 +405,12 @@ func fragment(address, quote string) string {
 	if address == "" {
 		return ""
 	}
-	base, _, _ := strings.Cut(address, "#")
+	// A page routed by its fragment, #/terms, keeps its route: the text
+	// directive goes after it.
+	base, frag, _ := strings.Cut(address, "#")
+	if frag, _, _ = strings.Cut(frag, ":~:"); frag != "" {
+		base += "#" + frag
+	}
 	// Only words of letters and digits: they read the same on the page
 	// as in the quote, whatever quotes and dashes the page draws.
 	var ws []string
@@ -421,7 +426,11 @@ func fragment(address, quote string) string {
 	if len(ws) < 3 {
 		return base
 	}
-	return base + "#:~:text=" + strings.ReplaceAll(url.PathEscape(strings.Join(ws, " ")), "-", "%2D")
+	sep := "#:~:text="
+	if strings.Contains(base, "#") {
+		sep = ":~:text="
+	}
+	return base + sep + strings.ReplaceAll(url.PathEscape(strings.Join(ws, " ")), "-", "%2D")
 }
 
 // readingSpeed is how many words a minute an adult reads, silently, in

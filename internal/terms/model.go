@@ -164,8 +164,18 @@ func (d *Doc) AskModel(ctx context.Context, m Model, question string, part func(
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	text, err := o.Chat(ctx, m.Name, []localmodel.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: b.String()}}, opt, part)
-	text = strings.TrimSpace(stripThinking(text))
+	// What a model writes is printed and shown as it comes: without
+	// control characters, as a page's words are.
+	clean := part
+	if part != nil {
+		clean = func(s string) {
+			if s = Clean(s); s != "" {
+				part(s)
+			}
+		}
+	}
+	text, err := o.Chat(ctx, m.Name, []localmodel.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: b.String()}}, opt, clean)
+	text = strings.TrimSpace(Clean(stripThinking(text)))
 	if err != nil || text == "" {
 		if err == nil {
 			err = errors.New(m.Name + " said nothing")

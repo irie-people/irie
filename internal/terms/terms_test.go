@@ -256,6 +256,26 @@ func TestAPageInManyLanguagesKeepsItsEnglish(t *testing.T) {
 	}
 }
 
+// TestAPagesHiddenCharactersGo: what a terminal would act on, an escape
+// or a bell, and the marks that reverse text, leave a page's words and its
+// links' words; line ends stay.
+func TestAPagesHiddenCharactersGo(t *testing.T) {
+	page := "<html><head><title>Terms\x1b]0;owned\x07</title></head><body><main><h1>Terms of Service</h1>" +
+		"<p>All fees are non-refundable.&#27;[2K&#27;[1A Fine print\u202ehidden\u202c here.</p>" +
+		`<a href="https://example.com/x">Legal&#27;]52;c;Zm9v&#7;</a></main></body></html>`
+	d := FromHTML("https://example.com/terms", []byte(page))
+	all := d.Title + d.Text()
+	for _, l := range d.links {
+		all += l.Text
+	}
+	if strings.ContainsAny(all, "\x1b\x07\u202e\u202c") {
+		t.Errorf("hidden characters stayed: %q", all)
+	}
+	if Clean("a\x1b[31mb\nc\u0085d") != "a[31mb\ncd" {
+		t.Errorf("Clean: %q", Clean("a\x1b[31mb\nc\u0085d"))
+	}
+}
+
 // TestAPageBuiltByScripts says so.
 func TestAPageBuiltByScripts(t *testing.T) {
 	d := FromHTML("https://example.com/terms", []byte(`<html><head><title>Terms</title><script src="a.js"></script><script src="b.js"></script></head><body><div id="root"></div></body></html>`))
@@ -269,26 +289,26 @@ func TestAPageBuiltByScripts(t *testing.T) {
 func TestFragmentPointsAtTheWords(t *testing.T) {
 	cases := map[string]string{
 		"Your use is at your own risk, and we are not liable.": "https://example.com/t#:~:text=Your%20use%20is%20at%20your%20own",
-		"... We may sell-off the data to anyone.":              "https://example.com/t#:~:text=We%20may%20sell%2Doff%20the%20data",
+		// sell-off holds a hyphen, which is no letter: the words stop
+		// before it, and two words are too few to point with.
+		"... We may sell-off the data to anyone.": "https://example.com/t",
 		`"Quoted" start`: "https://example.com/t",
 	}
 	for q, want := range cases {
-		got := fragment("https://example.com/t#old", q)
-		// sell-off holds a hyphen, which is no letter: the words stop
-		// before it, and a hyphen that is in them is escaped.
-		if q == "... We may sell-off the data to anyone." {
-			want = "https://example.com/t#:~:text=We%20may"
-			if got != "https://example.com/t" && got != want {
-				t.Errorf("fragment(%q) = %q", q, got)
-			}
-			continue
-		}
-		if got != want {
+		if got := fragment("https://example.com/t", q); got != want {
 			t.Errorf("fragment(%q) = %q, want %q", q, got, want)
 		}
 	}
 	if fragment("", "Some words here") != "" {
 		t.Error("a document without an address has no links")
+	}
+	// A page's own fragment stays, as a route or an anchor does, and an
+	// old text directive goes.
+	if got := fragment("https://example.com/#/legal/terms", "These are our terms of use."); got != "https://example.com/#/legal/terms:~:text=These%20are%20our%20terms%20of" {
+		t.Errorf("a routed page: %q", got)
+	}
+	if got := fragment("https://example.com/t#part-2:~:text=old", "Your use is at your own risk."); got != "https://example.com/t#part-2:~:text=Your%20use%20is%20at%20your%20own" {
+		t.Errorf("a page's anchor: %q", got)
 	}
 }
 

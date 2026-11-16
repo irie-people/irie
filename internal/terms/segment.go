@@ -46,8 +46,28 @@ var normaliser = strings.NewReplacer(
 )
 
 func normalise(s string) string {
-	return normaliser.Replace(strings.ToValidUTF8(s, ""))
+	return strings.Map(shown, normaliser.Replace(strings.ToValidUTF8(s, "")))
 }
+
+// shown drops what a page may hide in its text: control characters, which
+// a terminal acts on (an escape can rewrite a line, set the clipboard or
+// the window's title), and the marks that reverse the order text shows in.
+// Line ends stay.
+func shown(r rune) rune {
+	switch {
+	case r == '\n':
+		return r
+	case r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f:
+		return -1
+	case r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0x200e, r == 0x200f, r == 0x061c:
+		return -1
+	}
+	return r
+}
+
+// Clean is text a page or a model gave made safe to print: without
+// control characters or the marks that reverse text.
+func Clean(s string) string { return strings.Map(shown, strings.ToValidUTF8(s, "")) }
 
 var spaces = regexp.MustCompile(`[ ]{2,}`)
 
