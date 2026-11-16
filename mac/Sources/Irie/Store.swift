@@ -148,6 +148,11 @@ final class Store {
     private(set) var canUndo = false
     private(set) var undoLabel: String?
     private(set) var redoLabel: String?
+    /// The core asks before an undo or redo when told to (undo-confirm), so
+    /// ⌘Z takes only the step its question named; and that question is on
+    /// its way or on show, so another key waits for it.
+    private(set) var canConfirmUndo = false
+    @ObservationIgnored var undoAsking = false
     /// Where a task runs when its text names no @repo: a repo's name or a
     /// folder's path, or nil for a new scratch folder. Kept between runs.
     private(set) var taskRepo: String? = UserDefaults.standard.string(forKey: "taskRepo")
@@ -423,6 +428,7 @@ final class Store {
                 canVPN = hello.features.contains("vpn")
                 canArch = hello.features.contains("arch")
                 canUndo = hello.features.contains("undo")
+                canConfirmUndo = hello.features.contains("undo-confirm")
                 canPlugins = hello.features.contains("plugins")
                 canHelpers = hello.features.contains("helpers")
                 // A core that restarted, or a new one, hears them again.
@@ -822,6 +828,7 @@ final class Store {
                                  ArchSetting(key: "ui.freeze_dog", kind: "duration", label: "Restart the Mac app when it has not answered for", value: .string("10s"))]),
         ]
         canUndo = true
+        canConfirmUndo = true
         taskRepo = "\(Brand.slug)"
     }
 

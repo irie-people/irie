@@ -386,6 +386,7 @@ const (
 	FeatureSpawnModel  = ipc.FeatureSpawnModel
 	FeatureBoostAlways = ipc.FeatureBoostAlways
 	FeatureWatch       = ipc.FeatureWatch
+	FeatureUndoConfirm = ipc.FeatureUndoConfirm
 	ViewApp            = ipc.ViewApp
 	ViewWatch          = ipc.ViewWatch
 	CodeBadRequest     = ipc.CodeBadRequest

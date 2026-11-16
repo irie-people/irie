@@ -7,16 +7,23 @@ import Foundation
 // one session or all of them at once. The menu names the step each would
 // take, and the sessions it takes. When a step is uncertain, such as a session that is busy
 // or gone, the core changes nothing and asks; the app asks the same in an
-// alert and sends the answer back. While a text field has the keyboard and
-// has typing to take back, ⌘Z undoes the typing, as anywhere else.
+// alert and sends the answer back. A key shows nothing of the step it would
+// take, so ⌘Z and ⇧⌘Z ask first, as Undo Close “api-fix”?, unless Settings ›
+// Tabs turns that off (UndoConfirm): the core asks it, tied to the step, so
+// a step that comes in meanwhile is never the one taken. While a text field
+// has the keyboard and has typing to take back, ⌘Z undoes the typing, as
+// anywhere else.
 
 struct UndoArgs: Encodable {
     var choiceID: String?
     var choice: String?
+    /// Asks first even when the step is certain (UndoChoice.confirm).
+    var confirm: Bool?
 
     enum CodingKeys: String, CodingKey {
         case choiceID = "choice_id"
         case choice
+        case confirm
     }
 }
 
@@ -34,6 +41,9 @@ struct UndoChoice: Decodable {
     var id: String
     var question: String
     var options: [UndoOption]
+    /// The question UndoArgs.confirm asks of a step the core is sure of:
+    /// its apply option takes the step, and cancel leaves it.
+    var confirm: Bool?
 }
 
 struct UndoOption: Decodable {
@@ -93,6 +103,64 @@ private extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
+/// Settings › Tabs › Undo: ⌘Z and ⇧⌘Z ask before they take a step of the
+/// history, on until turned off there or with the question's Don’t ask
+/// again.
+@MainActor
+enum UndoConfirm {
+    static let defaultsKey = "confirmUndo"
+    static var on: Bool { UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true }
+
+    /// The menu's item was clicked, where it names the step, rather than
+    /// its key pressed: a key, or anything else, asks.
+    static var clicked: Bool {
+        switch NSApp.currentEvent?.type {
+        case .leftMouseDown?, .leftMouseUp?, .rightMouseDown?, .rightMouseUp?, .otherMouseDown?, .otherMouseUp?: return true
+        default: return false
+        }
+    }
+
+    /// What op would take, as its question heads it: Undo Close “api-fix”?
+    static func title(_ op: String, _ label: String) -> String {
+        "\(op == "redo" ? "Redo" : "Undo") \(UndoText.title(label))?"
+    }
+
+    /// The question's alert: what op would take, what the core says of it,
+    /// such as when it was taken, the button that goes ahead, which has
+    /// Return, then Cancel, which has Esc, and Don’t ask again.
+    static func alert(_ op: String, label: String, detail: String?, button: String) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = title(op, label)
+        alert.informativeText = detail ?? ""
+        alert.addButton(withTitle: button)
+        // Titled Cancel, it takes Esc.
+        alert.addButton(withTitle: "Cancel")
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = "Don’t ask again"
+        alert.alertStyle = .informational
+        return alert
+    }
+
+    /// While alert is on show, the key that asked, pressed again, goes
+    /// ahead as Return does: ⌘Z ⌘Z undoes, ⇧⌘Z ⇧⌘Z redoes. Remove the
+    /// monitor it gives back once the alert is answered.
+    static func again(_ alert: NSAlert, redo: Bool) -> Any? {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak alert] event in
+            MainActor.assumeIsolated {
+                guard let alert, event.window === alert.window, isKey(event, redo: redo) else { return event }
+                alert.buttons.first?.performClick(nil)
+                return nil
+            }
+        }
+    }
+
+    /// Whether event is the key that asks: ⌘Z, or ⇧⌘Z to redo.
+    nonisolated static func isKey(_ event: NSEvent, redo: Bool) -> Bool {
+        event.charactersIgnoringModifiers?.lowercased() == "z"
+            && event.modifierFlags.intersection([.command, .shift, .option, .control]) == (redo ? [.command, .shift] : .command)
+    }
+}
+
 extension Store {
     /// Undoes the history's latest step, or redoes the one undone last.
     func undo(redo: Bool = false) {
@@ -100,7 +168,9 @@ extension Store {
     }
 
     /// ⌘Z and ⇧⌘Z: typing to take back in the text field that has the
-    /// keyboard goes first, then the history.
+    /// keyboard goes first, then the history, which asks first unless
+    /// Settings › Tabs says not to. Edit › Undo, clicked, names its step, so
+    /// it takes it at once.
     func undoKey(redo: Bool = false) {
         if let text = NSApp.keyWindow?.firstResponder as? NSTextView, let um = text.undoManager,
            redo ? um.canRedo : um.canUndo {
@@ -113,30 +183,122 @@ extension Store {
             NSSound.beep()
             return
         }
-        guard canUndo, (redo ? redoLabel : undoLabel) != nil else {
+        guard canUndo, let label = redo ? redoLabel : undoLabel else {
             NSSound.beep()
             return
         }
-        undo(redo: redo)
+        guard UndoConfirm.on, !UndoConfirm.clicked else {
+            undo(redo: redo)
+            return
+        }
+        // One question at a time: a key pressed while one is on its way or
+        // on show changes nothing.
+        guard !undoAsking else { return }
+        undoAsking = true
+        Task { await askFirst(redo ? "redo" : "undo", label: label) }
     }
 
-    private func step(_ op: String, _ args: UndoArgs) async {
+    /// Asks before op takes the step labelled label, then takes it if told
+    /// to. The core asks, so the answer can only take the step it named;
+    /// one from before undo-confirm is asked by the label the menu has.
+    private func askFirst(_ op: String, label: String) async {
+        guard canConfirmUndo else {
+            let (go, off) = await confirm(op, label: label, detail: nil, button: op == "redo" ? "Redo" : "Undo")
+            undoAsking = false
+            if go { await step(op, UndoArgs(), also: off) } else { offNotice(off) }
+            return
+        }
+        do {
+            let r = try await client.call(op, UndoArgs(confirm: true), timeout: 60, as: UndoResult.self)
+            guard r.did == "asked", let c = r.choice else {
+                undoAsking = false
+                report(r)
+                return
+            }
+            // An uncertain step asks its own question instead, which asks
+            // as much.
+            guard c.confirm == true else {
+                let key = ask(c, about: UndoConfirm.title(op, r.label))
+                undoAsking = false
+                if let key { await step(op, UndoArgs(choiceID: c.id, choice: key)) }
+                return
+            }
+            let apply = c.options.first { $0.key == "apply" }
+            let (go, off) = await confirm(op, label: r.label, detail: apply?.detail, button: apply?.label ?? (op == "redo" ? "Redo" : "Undo"))
+            undoAsking = false
+            if go { await step(op, UndoArgs(choiceID: c.id, choice: "apply"), also: off) } else { offNotice(off) }
+        } catch {
+            undoAsking = false
+            say("Couldn’t \(op): \(error.localizedDescription)", error: true)
+        }
+    }
+
+    /// Takes op with args, answering the core's questions as they come.
+    /// also, when set, ends the notice that says what it did.
+    private func step(_ op: String, _ args: UndoArgs, also: String? = nil) async {
         do {
             let r = try await client.call(op, args, timeout: 60, as: UndoResult.self)
-            let what = UndoText.title(r.label)
-            switch r.did {
-            case "asked":
-                guard let c = r.choice, let key = ask(c) else { return }
-                await step(op, UndoArgs(choiceID: c.id, choice: key))
-            case "undone": say("Undid \(what).", error: false)
-            case "redone": say("Redid \(what).", error: false)
-            case "settled": say("\(what): it was that way already, so the history moved on.", error: false)
-            case "skipped": say("Took \(what) out of the history.", error: false)
-            default: break
+            if r.did == "asked" {
+                guard let c = r.choice, let key = ask(c, about: UndoConfirm.title(op, r.label)) else { return offNotice(also) }
+                await step(op, UndoArgs(choiceID: c.id, choice: key), also: also)
+                return
             }
+            report(r, also: also)
+        } catch let e as WireError where e.code == "stale" {
+            // A step came in while the question was on show, and the answer
+            // was about the one it named. The core's own words name the
+            // terminal sidebar's key.
+            let redo = op == "redo"
+            let stale = "Nothing was \(redo ? "redone" : "undone"): the history changed while you were asked. \(redo ? "⇧⌘Z" : "⌘Z") asks about the step it would take now."
+            say([stale, also].compactMap { $0 }.joined(separator: " "), error: true)
         } catch {
             say("Couldn’t \(op): \(error.localizedDescription)", error: true)
         }
+    }
+
+    /// Says what an undo or redo did.
+    private func report(_ r: UndoResult, also: String? = nil) {
+        let what = UndoText.title(r.label)
+        let text: String
+        switch r.did {
+        case "undone": text = "Undid \(what)."
+        case "redone": text = "Redid \(what)."
+        case "settled": text = "\(what): it was that way already, so the history moved on."
+        case "skipped": text = "Took \(what) out of the history."
+        default: return offNotice(also)
+        }
+        say([text, also].compactMap { $0 }.joined(separator: " "), error: false, seconds: also == nil ? 3 : 6)
+    }
+
+    /// Says that ⌘Z no longer asks, when the question was turned off.
+    private func offNotice(_ off: String?) {
+        if let off { say(off, error: false, seconds: 6) }
+    }
+
+    /// The question a key asks before op takes the step labelled label:
+    /// Undo Close “api-fix”?, with what the core says of it, such as when
+    /// it was taken, in a sheet on Irie's window while that has the
+    /// keyboard, else on its own. Return or the same key again takes it,
+    /// and Esc changes nothing. It gives back whether to go ahead, and the
+    /// words of a notice when Don’t ask again turned the question off.
+    private func confirm(_ op: String, label: String, detail: String?, button: String) async -> (Bool, String?) {
+        let alert = UndoConfirm.alert(op, label: label, detail: detail, button: button)
+        let again = UndoConfirm.again(alert, redo: op == "redo")
+        defer { if let again { NSEvent.removeMonitor(again) } }
+        let r: NSApplication.ModalResponse
+        if let w = WindowPanes.window, w.isKeyWindow, w.attachedSheet == nil {
+            r = await withCheckedContinuation { done in
+                alert.beginSheetModal(for: w) { done.resume(returning: $0) }
+            }
+        } else {
+            r = alert.runModal()
+        }
+        var off: String?
+        if alert.suppressionButton?.state == .on {
+            UserDefaults.standard.set(false, forKey: UndoConfirm.defaultsKey)
+            off = "⌘Z and ⇧⌘Z won’t ask again: Settings › Tabs › Undo brings the question back."
+        }
+        return (r == .alertFirstButtonReturn, off)
     }
 
     /// Answers a question the core asked about a step, as a typed :undo or
@@ -147,12 +309,13 @@ extension Store {
     }
 
     /// Asks the core's question in an alert: each option a button, the
-    /// recommended one first, so Return takes it, and Cancel on Esc. It
+    /// recommended one first, so Return takes it, and Cancel on Esc. Headed
+    /// by what it is about, as Undo Close “api-fix”?, when that is known. It
     /// returns the key picked, or nil to change nothing.
-    private func ask(_ c: UndoChoice) -> String? {
+    private func ask(_ c: UndoChoice, about: String? = nil) -> String? {
         let alert = NSAlert()
-        alert.messageText = c.question
-        alert.informativeText = c.options.map { "\($0.label): \($0.detail)" }.joined(separator: "\n\n")
+        alert.messageText = about ?? c.question
+        alert.informativeText = ((about == nil ? [] : [c.question]) + c.options.map { "\($0.label): \($0.detail)" }).joined(separator: "\n\n")
         let options = Array(c.options.prefix(4))
         for (i, o) in options.enumerated() {
             let b = alert.addButton(withTitle: o.label)
