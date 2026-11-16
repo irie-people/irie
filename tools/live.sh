@@ -306,11 +306,29 @@ if [ -n "$installed" ] && { [ -z "$corebin" ] || [ "$corebin" = "$bin" ]; } &&
 	git diff --quiet "$installed" HEAD -- go.mod go.sum cmd core internal ':(exclude)*_test.go' ':(exclude)internal/testutil' 2>/dev/null; then
 	gonew=
 fi
+# irie is signed with the identity Irie.app is (mac/build.sh), when one is
+# set. The phone app's gateway runs from it and listens on the network, so
+# macOS's firewall asks whether irie may accept incoming connections, and
+# keeps the answer for the code's signature. The linker signs each build ad
+# hoc, a new program to the firewall every time, so it asked again after
+# every install; under one identity every build is the same program to it,
+# and to the privacy settings. An installed build the identity did not sign
+# is built again, so a new identity takes hold at the next install.
+sign=${IRIE_SIGN_IDENTITY:-$(git config --get irie.sign 2>/dev/null || echo -)}
+if [ -z "$gonew" ] && [ "$sign" != - ] && ! codesign -dvv "$bin" 2>&1 | grep -qxF "Authority=$sign"; then
+	gonew=1
+fi
 # Built beside the install, not at $bin.new: other installs build at the same
 # time, and only the swap below holds the lock.
 if [ -n "$gonew" ]; then
 	tmpbin=$bin.new.$$
 	go build -tags "$BRAND_TAGS" -o "$tmpbin" ./cmd/irie
+	# For this Mac alone: no hardened runtime or timestamp, which only
+	# notarization wants (tools/release.sh). A signing that fails leaves
+	# the linker's ad hoc signature, and the install goes on.
+	if [ "$sign" != - ] && ! codesign --force --timestamp=none --sign "$sign" --identifier "$BRAND_SLUG" "$tmpbin" 2>"$work/sign.log"; then
+		say "$BRAND_SLUG stays signed ad hoc, so macOS's firewall may ask about it again: $(cat "$work/sign.log")"
+	fi
 fi
 if [ -n "$macpid" ]; then
 	if ! wait "$macpid"; then

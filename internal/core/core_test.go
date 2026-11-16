@@ -76,6 +76,11 @@ func (a agentConfig) toml(fake string) string {
 		local = "ollama = \"/nonexistent/ollama\"\nllama_server = \"/nonexistent/llama-server\"\n"
 	}
 	fmt.Fprintf(&b, "\n[local]\n%s\n[usage]\nstatus_line = %v\n", local, a.statusLine)
+	// A phone gateway a test turns on listens on this machine alone. On
+	// every address, as remote.listen's default has it, each new test
+	// build of irie had macOS's firewall ask the user whether it may
+	// accept incoming connections.
+	b.WriteString("\n[remote]\nlisten = \"127.0.0.1\"\n")
 	return b.String()
 }
 
