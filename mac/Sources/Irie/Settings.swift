@@ -170,7 +170,12 @@ struct CoreConfig: Decodable, Equatable {
         var newTabs: String
         /// What the strip under the terminal shows: cheer or tips.
         var bar: String
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs", bar }
+        /// Where a link clicked in a terminal opens: rolodex or browser.
+        var terminalLinks: String
+        enum CodingKeys: String, CodingKey {
+            case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs", bar
+            case terminalLinks = "terminal_links"
+        }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -181,6 +186,8 @@ struct CoreConfig: Decodable, Equatable {
             newTabs = try c.decodeIfPresent(String.self, forKey: .newTabs) ?? "last"
             // A core from before ui.bar shows the phrases.
             bar = try c.decodeIfPresent(String.self, forKey: .bar) ?? "cheer"
+            // A core from before terminal links leaves them to the Mac.
+            terminalLinks = try c.decodeIfPresent(String.self, forKey: .terminalLinks) ?? "browser"
         }
     }
 
@@ -892,6 +899,27 @@ private struct AppearanceSettings: View {
                     ? "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
                     : "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
                     + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
+            }
+            Section {
+                switch (store.link, model.config) {
+                case let (.online, c?):
+                    Picker("Open links in", selection: model.bind(c, \.ui.terminalLinks, "ui.terminal_links")) {
+                        Text("Panes").tag("rolodex")
+                        Text("Your Browser").tag("browser")
+                    }
+                    .pickerStyle(.segmented)
+                default:
+                    Picker("Open links in", selection: .constant(store.terminalLinks)) {
+                        Text("Panes").tag("rolodex")
+                        Text("Your Browser").tag("browser")
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(true)
+                }
+            } header: {
+                Text("Links in the Terminal")
+            } footer: {
+                footnote("⌘-click a link in a terminal to open it. In the panes, a page opens on a Browser card beside its session, or on the one that shows it already, and a file on the Code card at its line. ⇧⌘-click opens a link in the other place. A mail address, a folder or a picture opens in its own app either way.")
             }
             Section {
                 Picker("Code colours", selection: $codeTheme) {

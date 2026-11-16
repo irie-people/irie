@@ -157,6 +157,12 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
     /// with reporting on again first, so each goes on as before; this
     /// watches for the key and the wheel, which SwiftTerm keeps to itself.
     private var holding: Any?
+    /// The press is a ⌘-click on a link, which SwiftTerm opens as it comes
+    /// up (requestOpenLink), and tmux hears nothing of it.
+    private var onLink = false
+    /// The keys held at the last click: Shift as well asks for the other
+    /// place (TerminalLinks.swift).
+    private var linkFlags: NSEvent.ModifierFlags = []
 
     deinit {
         if let holding { NSEvent.removeMonitor(holding) }
@@ -166,7 +172,8 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
     /// With tmux's mouse mode on, SwiftTerm hands a click to tmux and never
     /// takes the keyboard, so a press claims it here. A second or third
     /// click selects a word or a line at once, and a Shift-click extends
-    /// the selection at once; a plain press waits.
+    /// the selection at once, but for a ⇧⌘-click on a link, which opens it
+    /// in the other place; a plain press waits.
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         pressed = nil
@@ -183,13 +190,31 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
             super.mouseDown(with: down)
             return
         }
-        if event.clickCount > 1 || event.modifierFlags.contains(.shift) {
+        onLink = event.clickCount == 1 && linkUnder(event)
+        if !onLink && (event.clickCount > 1 || event.modifierFlags.contains(.shift)) {
             selecting = true
             allowMouseReporting = false
             super.mouseDown(with: event)
         } else {
             pressed = event
         }
+    }
+
+    /// Whether a press with ⌘ held, or ⇧⌘, lands on a link: an address or
+    /// a path SwiftTerm finds in the text, or one a program wrote.
+    private func linkUnder(_ event: NSEvent) -> Bool {
+        guard event.modifierFlags.intersection([.command, .control, .option]) == .command,
+              let t = terminal, t.cols > 0, t.rows > 0, bounds.width > 0, bounds.height > 0 else { return false }
+        let p = convert(event.locationInWindow, from: nil)
+        let col = Int(p.x / (bounds.width / CGFloat(t.cols))), row = Int((bounds.height - p.y) / (bounds.height / CGFloat(t.rows)))
+        guard col >= 0, col < t.cols, row >= 0, row < t.rows else { return false }
+        return t.link(at: .screen(Position(col: col, row: row)), mode: .explicitAndImplicit) != nil
+    }
+
+    /// A link SwiftTerm opens at a ⌘-click goes where ui.terminal_links
+    /// says, not straight to the Mac's own app (TerminalLinks.swift).
+    override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        TerminalLinks.clicked(link, other: linkFlags.contains(.shift))
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -215,8 +240,18 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
     }
 
     override func mouseUp(with event: NSEvent) {
+        linkFlags = event.modifierFlags
         if passing {
             passing = false
+            super.mouseUp(with: event)
+        } else if let down = pressed, onLink {
+            // A ⌘-click on a link: SwiftTerm opens it as the button comes
+            // up, before tmux would hear of it, and the press never went to
+            // tmux, so nothing waits there for its release.
+            pressed = nil
+            onLink = false
+            linkFlags.formUnion(down.modifierFlags.intersection(.shift))
+            selection.active = false
             super.mouseUp(with: event)
         } else if let down = pressed {
             // A click: tmux has it where the button went down, and the

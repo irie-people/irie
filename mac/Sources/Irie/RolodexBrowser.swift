@@ -84,6 +84,10 @@ final class WebPool {
         pages[id] = nil
         used.removeAll { $0 == id }
     }
+
+    /// The page a card's view was last sent to, while the pool holds it:
+    /// the address a link opened it at, before any redirect.
+    func asked(_ id: String) -> String? { pages[id]?.requested?.absoluteString }
 }
 
 /// One card's web view and how it stands.
