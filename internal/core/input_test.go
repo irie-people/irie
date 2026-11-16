@@ -1,6 +1,9 @@
 package core
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -58,5 +61,34 @@ func TestInputRunsWhatWasTyped(t *testing.T) {
 	var h ipc.HelloResult
 	if err := c.call(ipc.OpHello, ipc.HelloArgs{Client: "test", API: ipc.API}, &h); err != nil || !strings.Contains(strings.Join(h.Features, " "), ipc.OpInput) {
 		t.Errorf("hello features %v, %v", h.Features, err)
+	}
+}
+
+// A + in what was typed picks a profile only where it names one of the
+// core's and stands apart from the task's words; any other + is the
+// task's, as typed (DESIGN §4.2, "Plus words"). A jot such as "bind fn+x +
+// fn+l" once came back refused, "+ needs a profile name", and never
+// started.
+func TestInputReadsPlusWordsAgainstTheProfiles(t *testing.T) {
+	fake := testutil.BuildFakeAgent(t)
+	c := setupWith(t, agentConfig{extra: fmt.Sprintf("[profiles.other]\ncommand = %q\n", fake)})
+	for _, k := range []struct{ text, task, profile string }{
+		{"bind fn+x + fn+l + fn+r,  as emacs does", "bind fn+x + fn+l + fn+r,  as emacs does", "fake"},
+		{"fix the login page +Other.", "fix the login page", "other"},
+		{"why does +other stall on long tasks", "why does +other stall on long tasks", "fake"},
+	} {
+		r, err := c.input(ipc.InputArgs{Text: k.text})
+		if err != nil || r.Did != ipc.InputSpawned || r.Session == nil {
+			t.Fatalf("%q: %+v, %v", k.text, r, err)
+		}
+		if r.Session.Profile != k.profile {
+			t.Errorf("%q runs on +%s, want +%s", k.text, r.Session.Profile, k.profile)
+		}
+		if b, err := os.ReadFile(filepath.Join(c.paths.Session(r.Session.ID), "task.md")); err != nil || string(b) != k.task {
+			t.Errorf("%q: task.md = %q, %v; want %q", k.text, b, err, k.task)
+		}
+	}
+	if _, err := c.input(ipc.InputArgs{Text: "+othre fix it"}); code(err) != ipc.CodeBadArgs || !strings.Contains(err.Error(), "Did you mean +other?") {
+		t.Errorf("a slip from +other: %v", err)
 	}
 }

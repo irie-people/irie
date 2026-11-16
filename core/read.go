@@ -20,7 +20,7 @@ import (
 const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :open FILE[:LINE]"
 
 // View is what the words are read against: the rows in the list's order,
-// the sessions outside Irie, and the folder that ~ means.
+// the sessions outside Irie, the folder that ~ means and the profiles.
 type View struct {
 	Sessions []Session
 	Outside  []OutsideSession
@@ -28,6 +28,14 @@ type View struct {
 	// Exists says whether a file is there, so that :open takes a name with
 	// a colon in it as it is; nil reads every name as not there.
 	Exists func(path string) bool
+	// Profiles are the names a + word picks a profile by: the profiles,
+	// auto, and, ending in a colon, the prefixes such as ollama: that take
+	// a model's name after them. A + word that names none of them, nor
+	// +explain, +teach, +anon or +tor, is the task's own text (DESIGN
+	// §4.2, "Plus words"). Nil takes every + name for a profile's, as a
+	// client that does not know them must, and leaves the core to say
+	// which it has.
+	Profiles []string
 }
 
 // A Step is what an input comes to: one op to run with its args, or, for a
@@ -62,7 +70,7 @@ func Read(in InputArgs, v View) (Step, error) {
 			return Step{Answer: Hows(*s), Session: s}, nil
 		}
 	}
-	a, err := ParseTask(in.Text, v.Home)
+	a, err := v.parseTask(in.Text)
 	if err != nil {
 		return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
 	}
@@ -198,7 +206,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		if task == "" {
 			return step(OpMarkets, MarketsArgs{}, nil)
 		}
-		a, err := ParseTask(task, v.Home)
+		a, err := v.parseTask(task)
 		if err != nil {
 			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
 		}
@@ -225,7 +233,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		// :bench [^HOST] [+PROFILE] [@REPO] TASK runs the task on several
 		// sessions of one profile, then judges them (DESIGN §6.6). The
 		// task may run on over more lines.
-		a, err := BenchTask(arg, in.Text, v.Home)
+		a, err := v.benchTask(arg, in.Text)
 		if err != nil {
 			return Step{}, Errorf(CodeBadArgs, "%s", sentence(err.Error()))
 		}
