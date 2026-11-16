@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/irie-people/irie/compare/v1.9.0...v1.9.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **core:** read a + word as a pick only where it names one ([ec92d76](https://github.com/irie-people/irie/commit/ec92d768386666ba0cb0dfe59286aab9d611e9f8))
+
 ## [1.9.0](https://github.com/irie-people/irie/compare/v1.8.0...v1.9.0) (2026-11-16)
 
 
