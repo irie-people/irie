@@ -176,6 +176,35 @@ func FreePort(t testing.TB) int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
+// FreePorts returns the first of n consecutive TCP ports on 127.0.0.1
+// that nothing listens on now, for a test whose code takes a port and the
+// ones after it, as the core's tunnels do (llama_port + 1, + 2, ...). With
+// tests running side by side (tools/test.sh), the port after a free one is
+// often another test's.
+func FreePorts(t testing.TB, n int) int {
+	t.Helper()
+	for range 100 {
+		first := FreePort(t)
+		var held []net.Listener
+		for i := 1; i < n; i++ {
+			l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", first+i))
+			if err != nil {
+				break
+			}
+			held = append(held, l)
+		}
+		ok := len(held) == n-1
+		for _, l := range held {
+			l.Close()
+		}
+		if ok {
+			return first
+		}
+	}
+	t.Fatalf("no %d free ports in a row on 127.0.0.1", n)
+	return 0
+}
+
 // ShortDir returns a new directory under /tmp. Its path stays short enough for
 // a unix socket inside it, which macOS caps at about 104 bytes. At cleanup
 // any tmux server in it ends, with everything it runs, and it is removed;

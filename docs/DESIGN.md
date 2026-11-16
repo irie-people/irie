@@ -852,7 +852,7 @@ Anything else starts a session, as before, and is the jot the next may add to: "
 
 | Reach | Ops |
 |---|---|
-| Read | `hello`, `list`, `subscribe`, `complete`, `attach-info`, `conversation`, `screen`, `dog`, `rebuilds`, `learn`, `perf`, `result`, `route`, `ready`, `arch` |
+| Read | `hello`, `list`, `subscribe`, `complete`, `attach-info`, `conversation`, `screen`, `dog`, `rebuilds`, `learn`, `perf`, `result`, `route`, `ready`, `arch`, `link` |
 | Inside: steps of the history | `rename`, `park`, `unpark`, `pin`, `unpin`, `reorder`, `priority`, `space`, `group` (a group's rename is no step), `freeze`, `close` (a landed worktree goes with it, and reopen adds it back, below) |
 | Inside: Irie's own settings, views and files | `spaces`, `notepad`, `config` (whose change an agent may not use to lower an arch agent's guard, §4.11), `theme`, `plugins`, `gabriel`, `local`, `preflight`, `rate`, `label` (the router's classes), `peers`, `context`, `show`, `flip`, `card`, `pane`, and the agents' own `hook` and `status` |
 | Inside, with outside effects | `thaw` and `reopen`, whose agent signs in again, and `undo` and `redo`, which take them |
@@ -1563,6 +1563,7 @@ red_on_done = false
 helper_style = "browser"      # browser | terminal: how a view draws a helper beside its session (§4.4)
 new_tabs = "last"             # last | first | next: where a new session goes in the list; next is just after the session that started it (§4.1)
 bar = "cheer"                 # cheer | tips: what the strip under the terminal shows, one at a time; the default is the brand's (§2.10)
+terminal_links = "rolodex"    # rolodex | browser: where a link ⌘-clicked in the Mac app's terminals opens: the session's panes (a page on a Browser card, a file of text on the Code card at its line) or the Mac's own apps; ⇧⌘-click opens it in the other (op link, docs/MAC.md)
 ghostty = "auto"              # auto | off  (M9: open/focus the Irie window in Ghostty)
 theme = "rosewater"           # rosewater | terracotta | lilac | evergreen: the Mac app's palettes, for the sidebar and the slot; light or dark follows the terminal (§5.3)
 freeze_dog = "10s"            # how long Irie's window or a sidebar may stop answering before Raphael force quits it and starts it again (§2.4, §4.11); "0s" = never, else at least 3s

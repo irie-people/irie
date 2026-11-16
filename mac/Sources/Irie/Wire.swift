@@ -286,6 +286,9 @@ struct Header: Decodable {
     /// ui.helper_style: a helper beside its session is drawn as cards
     /// ("browser") or as a terminal ("terminal").
     var helperStyle: String?
+    /// ui.terminal_links: where a link clicked in a terminal opens,
+    /// "rolodex" (the session's panes) or "browser" (the Mac's own apps).
+    var terminalLinks: String?
     /// The trod bot, while it is within its hours (DESIGN §4.10).
     var trod: TrodShift?
     /// The VPN, while vpn.on (DESIGN §4.18).
@@ -304,6 +307,7 @@ struct Header: Decodable {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
+        case terminalLinks = "terminal_links"
         case trod, vpn, boost, load, spaces, groups
     }
 }

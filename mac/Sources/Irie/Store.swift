@@ -162,6 +162,13 @@ final class Store {
     /// ui.helper_style, from the core: a helper beside its session is drawn
     /// as cards ("browser") or as a terminal ("terminal").
     private(set) var helperStyle = "browser"
+    /// ui.terminal_links, from the core: where a link clicked in a terminal
+    /// opens, "rolodex" (the session's panes) or "browser" (the Mac's own
+    /// apps). The core applies it (the link op); Settings shows it while it
+    /// can't read the config.
+    private(set) var terminalLinks = "rolodex"
+    /// Whether the core says where a terminal's link opens (op link).
+    private(set) var canLink = false
     /// The helper shown beside each session's conversation, as sub:<id>, by
     /// session (ConversationView, HelperPane.swift).
     private(set) var openHelpers: [String: String] = [:]
@@ -374,6 +381,12 @@ final class Store {
             MainActor.assumeIsolated { self?.loadPluginsSoon() }
         }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in Pace.shared.set(active: false) }
+        // A link clicked in a terminal (TerminalLinks.swift).
+        nc.addObserver(forName: .irieTerminalLink, object: nil, queue: .main) { [weak self] n in
+            guard let link = n.userInfo?["link"] as? String else { return }
+            let other = n.userInfo?["other"] as? Bool ?? false
+            MainActor.assumeIsolated { self?.openTerminalLink(link, other: other) }
+        }
         watchPopOut()
         Task { await run() }
     }
@@ -403,6 +416,7 @@ final class Store {
                 canLearn = hello.features.contains("learn")
                 canDock = hello.features.contains("dock")
                 rolodex.canShell = hello.features.contains("pane")
+                canLink = hello.features.contains("link")
                 canConfigure = hello.features.contains("config")
                 canContinue = hello.features.contains("continue")
                 canPark = hello.features.contains("park")
@@ -649,6 +663,9 @@ final class Store {
         }
         if let s = h.helperStyle, s != helperStyle {
             helperStyle = s
+        }
+        if let s = h.terminalLinks, s != terminalLinks {
+            terminalLinks = s
         }
         if h.trod != trod {
             trod = h.trod

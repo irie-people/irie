@@ -755,10 +755,15 @@ type Header struct {
 	CloseWhenDone bool `json:"close_when_done,omitempty"`
 	// HelperStyle is ui.helper_style: how a view draws a helper beside its
 	// session, as cards ("browser") or as a terminal ("terminal").
-	HelperStyle string  `json:"helper_style,omitempty"`
-	Plan        *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
-	Memory      *Memory `json:"memory,omitempty"` // the machine's memory
-	Load        *Load   `json:"load,omitempty"`   // how busy the machine is
+	HelperStyle string `json:"helper_style,omitempty"`
+	// TerminalLinks is ui.terminal_links: where a link clicked in a
+	// terminal opens, "rolodex" (the session's panes) or "browser" (the
+	// computer's own apps). The link op applies it; a settings window
+	// shows it while it can't read the config.
+	TerminalLinks string  `json:"terminal_links,omitempty"`
+	Plan          *Plan   `json:"plan,omitempty"`   // the Claude plan's use, from the newest status line
+	Memory        *Memory `json:"memory,omitempty"` // the machine's memory
+	Load          *Load   `json:"load,omitempty"`   // how busy the machine is
 	// Machine is what another core needs to know of this machine before
 	// it starts a task here.
 	Machine *Machine `json:"machine,omitempty"`

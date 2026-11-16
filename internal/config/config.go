@@ -502,6 +502,12 @@ type UI struct {
 	// time. Its default is the brand's (internal/brand), which a company's
 	// copy may set to tips.
 	Bar string `toml:"bar"`
+	// TerminalLinks is where a link ⌘-clicked in one of the Mac app's
+	// terminals opens (docs/MAC.md, Links in the terminal): rolodex, the
+	// session's own panes, a page on a Browser card and a file of text on
+	// its Code card; or browser, the Mac's default browser, and a file's
+	// own app. ⇧⌘-click opens it in the other.
+	TerminalLinks string `toml:"terminal_links"`
 }
 
 // NewTabs are the places ui.new_tabs puts a new session.
@@ -509,6 +515,10 @@ var NewTabs = []string{"last", "first", "next"}
 
 // Bars are what ui.bar may show.
 var Bars = []string{"cheer", "tips"}
+
+// TerminalLinks are the places ui.terminal_links opens a link in, the
+// default first.
+var TerminalLinks = []string{"rolodex", "browser"}
 
 // MinFreezeDog is the shortest ui.freeze_dog: a window busy for a moment,
 // as when the machine pages, is not frozen.
@@ -897,7 +907,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar, TerminalLinks: "rolodex"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -1323,6 +1333,9 @@ func (c Config) Validate() error {
 	}
 	if !slices.Contains(HelperStyles, c.UI.HelperStyle) {
 		bad("ui.helper_style = %q: must be browser or terminal", c.UI.HelperStyle)
+	}
+	if !slices.Contains(TerminalLinks, c.UI.TerminalLinks) {
+		bad("ui.terminal_links = %q: must be rolodex or browser", c.UI.TerminalLinks)
 	}
 	if !slices.Contains(Themes, c.UI.Theme) {
 		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))
