@@ -7,6 +7,10 @@
 "use strict";
 
 const ext = globalThis.browser ?? globalThis.chrome;
+// native: the panel runs in the extension, which reaches Irie over native
+// messaging; else it is a page Irie serves itself (irie terms serve), as a
+// browser card of Irie's panes shows it, and it asks Irie over HTTP.
+const native = !!(ext && ext.runtime && typeof ext.runtime.connectNative === "function");
 const B = globalThis.IRIE_BRAND || { name: "Irie", slug: "irie", host: "", site: "" };
 const $ = (id) => document.getElementById(id);
 
@@ -61,9 +65,14 @@ function thousands(n) {
 
 // ---- Irie, over native messaging -------------------------------------------
 
-const irie = { port: null, next: 1, waiting: new Map(), hello: null };
+const irie = { port: null, next: 1, waiting: new Map(), hello: null, web: !native };
 
 function connect() {
+  if (irie.web) {
+    return call({ op: "hello", browser: "", version: "" })
+      .then((r) => ({ hello: r.hello }))
+      .catch((r) => ({ missing: r.error || String(r) }));
+  }
   return new Promise((resolve) => {
     let port;
     try {
@@ -108,6 +117,7 @@ function connect() {
 const LIMIT = { "terms.ask": 240000, "terms.read": 150000 };
 
 function call(req, onPart) {
+  if (irie.web) return callWeb(req, onPart);
   return new Promise((resolve, reject) => {
     if (!irie.port) {
       reject({ code: "gone-host", error: B.name + " isn't connected." });
@@ -132,9 +142,55 @@ function call(req, onPart) {
   });
 }
 
+// callWeb asks the Irie that served this page: one POST a request, whose
+// answer comes as JSON lines, its pieces first.
+async function callWeb(req, onPart) {
+  const id = irie.next++;
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), LIMIT[req.op] || 30000);
+  try {
+    const res = await fetch("api", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...req, id }),
+      signal: stop.signal,
+      credentials: "omit",
+      cache: "no-store",
+    });
+    if (!res.ok || !res.body) throw { code: "gone-host", error: B.name + " answered " + res.status + "." };
+    const reader = res.body.getReader();
+    const text = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += text.decode(value, { stream: true });
+      for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        const r = JSON.parse(line);
+        if (!r.done) {
+          if (onPart && r.part) onPart(r.part);
+          continue;
+        }
+        if (r.hello || r.doc || r.answer || r.model || !r.error) return r;
+        throw r;
+      }
+    }
+    throw { code: "gone-host", error: B.name + " stopped answering." };
+  } catch (e) {
+    if (e && e.name === "AbortError") throw { code: "slow", error: B.name + " took too long to answer. Try again." };
+    if (e && (e.code || e.error)) throw e;
+    throw { code: "gone-host", error: String((e && e.message) || e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ask calls Irie, connecting again first when the connection went.
 async function ask(req, onPart) {
-  if (!irie.port) {
+  if (!irie.port && !irie.web) {
     const c = await connect();
     if (c.missing) throw { code: "gone-host", error: c.missing };
     irie.hello = c.hello;
@@ -348,6 +404,12 @@ function cmd(text) {
 }
 
 function missingView() {
+  if (!native) {
+    return h("div", { class: "card" },
+      h("p", { class: "lead" }, B.name + " isn't answering"),
+      h("p", { class: "muted" }, "This page is " + B.name + "'s own, and " + B.name + " stopped serving it. In a terminal, run it again:"),
+      cmd(B.slug + " terms serve"));
+  }
   return h("div", { class: "card" },
     h("p", { class: "lead" }, B.name + " isn't set up in this browser yet"),
     h("p", { class: "muted" }, "This panel reads terms with " + B.name + " on your computer, so nothing you read is sent anywhere."),
@@ -365,7 +427,9 @@ function offView() {
 }
 
 function addressForm(label) {
-  const input = h("input", { class: "field", type: "url", placeholder: "example.com or its terms’ address", "aria-label": label });
+  // Text, not a url field: a browser refuses "example.com" in one, and
+  // the form adds the https:// itself.
+  const input = h("input", { class: "field", type: "text", inputmode: "url", autocapitalize: "off", autocomplete: "off", spellcheck: "false", placeholder: "example.com or its terms’ address", "aria-label": label });
   const form = h("form", { class: "row" }, input, h("button", { class: "button is-prominent", type: "submit" }, "Read"));
   form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -380,17 +444,22 @@ function addressForm(label) {
 }
 
 function idleView() {
+  const how = native
+    ? "Press " + B.name + "’s button in the toolbar on any site, and it reads the site’s terms of service here"
+    : "Give the address of any site, or of its terms, and " + B.name + " reads its terms of service here";
   return h("div", { class: "card" },
     h("p", { class: "lead" }, "What are you agreeing to?"),
-    h("p", { class: "muted" }, "Press " + B.name + "’s button in the toolbar on any site, and it reads the site’s terms of service here: what they mean for you, in plain words, with the clause behind each point. Then ask it anything about them."),
-    h("p", { class: "small muted" }, "Or give an address:"),
+    h("p", { class: "muted" }, how + ": what they mean for you, in plain words, with the clause behind each point. Then ask it anything about them."),
+    native ? h("p", { class: "small muted" }, "Or give an address:") : null,
     addressForm("The address of a site or its terms"));
 }
 
 function notFoundView() {
   return h("div", { class: "card" },
     h("p", { class: "lead" }, "No terms of service found here"),
-    h("p", { class: "muted" }, "Open the site’s Terms of Service, often linked at the bottom of its pages, and press " + B.name + "’s button there, or give their address."),
+    h("p", { class: "muted" }, native
+      ? "Open the site’s Terms of Service, often linked at the bottom of its pages, and press " + B.name + "’s button there, or give their address."
+      : "Give the address of the site’s Terms of Service, often linked at the bottom of its pages."),
     S.others.length
       ? h("div", { class: "links" },
           h("div", { class: "small muted" }, "Links on this page that may be them:"),
@@ -458,7 +527,7 @@ function docView(d) {
   }
   const missing = (d.missing || []).length
     ? h("section", { class: "card" },
-        h("h2", { class: "group-head", style: "margin-top:0" }, "Not in these terms"),
+        h("h2", { class: "group-head flush" }, "Not in these terms"),
         h("div", { class: "missing" }, d.missing.map((g) => h("div", {}, h("span", { class: "mark", "aria-hidden": "true" }, "?"), h("span", {}, g.says)))))
     : null;
   const fine = h("p", { class: "fine" }, "Not legal advice: a reading of the text by " + B.name + "’s own code, on this computer. Check what matters to you in the words themselves.");
@@ -559,8 +628,14 @@ function wire() {
   });
   $("model").addEventListener("change", (e) => {
     S.model.on = e.target.checked;
-    ext.storage.local.set({ model: S.model.on }).catch(() => {});
+    if (native) ext.storage.local.set({ model: S.model.on }).catch(() => {});
+    else {
+      try {
+        localStorage.setItem("model", S.model.on ? "1" : "");
+      } catch {}
+    }
   });
+  if (!native) return;
   ext.runtime.onMessage.addListener((m) => {
     if (m && m.type === "pressed") readPressed(m.pressed);
   });
@@ -581,14 +656,20 @@ async function start() {
   document.title = B.name;
   wire();
   render();
-  try {
-    const w = await ext.windows.getCurrent();
-    S.windowId = w.id;
-  } catch {}
-  try {
-    const got = await ext.storage.local.get("model");
-    S.model.on = !!got.model;
-  } catch {}
+  if (native) {
+    try {
+      const w = await ext.windows.getCurrent();
+      S.windowId = w.id;
+    } catch {}
+    try {
+      const got = await ext.storage.local.get("model");
+      S.model.on = !!got.model;
+    } catch {}
+  } else {
+    try {
+      S.model.on = !!localStorage.getItem("model");
+    } catch {}
+  }
   const c = await connect();
   if (c.missing) {
     S.view = "missing";
@@ -605,11 +686,13 @@ async function start() {
   }
   S.view = "idle";
   render();
-  let pressed = null;
-  try {
-    pressed = (await ext.storage.session.get("pressed")).pressed;
-  } catch {}
-  readPressed(pressed);
+  if (native) {
+    let pressed = null;
+    try {
+      pressed = (await ext.storage.session.get("pressed")).pressed;
+    } catch {}
+    readPressed(pressed);
+  }
   ask({ op: "model" })
     .then((r) => {
       S.model.name = r.model || "";

@@ -170,7 +170,12 @@ struct CoreConfig: Decodable, Equatable {
         var newTabs: String
         /// What the strip under the terminal shows: cheer or tips.
         var bar: String
-        enum CodingKeys: String, CodingKey { case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs", bar }
+        /// Where a link clicked in a terminal opens: rolodex or browser.
+        var terminalLinks: String
+        enum CodingKeys: String, CodingKey {
+            case redOnDone = "red_on_done", helperStyle = "helper_style", newTabs = "new_tabs", bar
+            case terminalLinks = "terminal_links"
+        }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -181,6 +186,8 @@ struct CoreConfig: Decodable, Equatable {
             newTabs = try c.decodeIfPresent(String.self, forKey: .newTabs) ?? "last"
             // A core from before ui.bar shows the phrases.
             bar = try c.decodeIfPresent(String.self, forKey: .bar) ?? "cheer"
+            // A core from before terminal links leaves them to the Mac.
+            terminalLinks = try c.decodeIfPresent(String.self, forKey: .terminalLinks) ?? "browser"
         }
     }
 
@@ -892,6 +899,27 @@ private struct AppearanceSettings: View {
                     ? "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too. Ghostty draws the terminals with your own Ghostty config, and its split keys move between a session and its teammates."
                     : "View › Show Terminal (⌥⌘T) and ⌘+ and ⌘- change these too.")
                     + " In the terminal, drag to select, double-click for a word and triple-click for a line; a click still goes to the agent.")
+            }
+            Section {
+                switch (store.link, model.config) {
+                case let (.online, c?):
+                    Picker("Open links in", selection: model.bind(c, \.ui.terminalLinks, "ui.terminal_links")) {
+                        Text("Panes").tag("rolodex")
+                        Text("Your Browser").tag("browser")
+                    }
+                    .pickerStyle(.segmented)
+                default:
+                    Picker("Open links in", selection: .constant(store.terminalLinks)) {
+                        Text("Panes").tag("rolodex")
+                        Text("Your Browser").tag("browser")
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(true)
+                }
+            } header: {
+                Text("Links in the Terminal")
+            } footer: {
+                footnote("⌘-click a link in a terminal to open it. In the panes, a page opens on a Browser card beside its session, or on the one that shows it already, and a file on the Code card at its line. ⇧⌘-click opens a link in the other place. A mail address, a folder or a picture opens in its own app either way; an app or a script is shown in Finder, never run.")
             }
             Section {
                 Picker("Code colours", selection: $codeTheme) {
@@ -2055,13 +2083,14 @@ private struct PluginPartRow: View {
     }
 }
 
-/// Settings › Tabs: where new sessions go, and closing and moving the cards
-/// your way (Tabs.swift).
+/// Settings › Tabs: where new sessions go, closing and moving the cards
+/// your way (Tabs.swift), and whether ⌘Z asks first (Undo.swift).
 @MainActor
 private struct TabsSettings: View {
     @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     @AppStorage(CloseFromPointer.defaultsKey) private var closeFromPointer = true
+    @AppStorage(UndoConfirm.defaultsKey) private var confirmUndo = true
 
     var body: some View {
         SettingsForm(model: model) {
@@ -2102,6 +2131,13 @@ private struct TabsSettings: View {
                 Text("Closing")
             } footer: {
                 footnote("The card under the pointer shows a × in place of its mark, and a middle click closes it. ⌘W closes the selected card, or every card you picked with ⌘-click or ⇧-click. A card’s menu closes the others, those below it, or all finished, and a group’s header closes its group: ⌘Z brings back all that one close took. Pinned cards stay through all of these, and through close when done.")
+            }
+            Section {
+                Toggle("Ask before ⌘Z undoes or ⇧⌘Z redoes", isOn: $confirmUndo)
+            } header: {
+                Text("Undo")
+            } footer: {
+                footnote("The question names the step, as Undo Close “api-fix”?, and says when it was taken. Return or the same key again goes ahead, and Esc leaves everything as it is. Edit › Undo, clicked, and a notice’s Undo name their step already, so they take it at once.")
             }
             Section {
                 LabeledContent("Move up or down", value: "⌥⌘↑  ⌥⌘↓")

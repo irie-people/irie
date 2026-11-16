@@ -92,9 +92,12 @@ type Plugins struct {
 	// password and keeps the panes' logins in its own memory: the core
 	// never sees one.
 	Bitwarden bool `toml:"bitwarden"`
-	// Extension is Irie in your own browser: a browser extension with
-	// tools that run on this computer, the first of them Terms in short
-	// (docs/proposals/browser-extension.md).
+	// Terms is Terms in short: what a site's terms of service mean for
+	// you, read by Irie's own code, in the Mac app's Terms tab, irie terms
+	// and the browser extension (docs/proposals/browser-extension.md).
+	Terms bool `toml:"terms"`
+	// Extension is Irie in your own browser: a browser extension with the
+	// tools of Irie's plugins, the first of them Terms in short.
 	Extension bool `toml:"extension"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
@@ -139,6 +142,10 @@ func (c Config) BitwardenOn() bool { return BitwardenBuilt && c.Plugins.Bitwarde
 // ExtensionOn says whether the browser extension plugin runs:
 // plugins.extension, with the plugin built in.
 func (c Config) ExtensionOn() bool { return ExtensionBuilt && c.Plugins.Extension }
+
+// TermsOn says whether Terms in short runs: plugins.terms, with the
+// plugin built in.
+func (c Config) TermsOn() bool { return TermsBuilt && c.Plugins.Terms }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -502,6 +509,12 @@ type UI struct {
 	// time. Its default is the brand's (internal/brand), which a company's
 	// copy may set to tips.
 	Bar string `toml:"bar"`
+	// TerminalLinks is where a link ⌘-clicked in one of the Mac app's
+	// terminals opens (docs/MAC.md, Links in the terminal): rolodex, the
+	// session's own panes, a page on a Browser card and a file of text on
+	// its Code card; or browser, the Mac's default browser, and a file's
+	// own app. ⇧⌘-click opens it in the other.
+	TerminalLinks string `toml:"terminal_links"`
 }
 
 // NewTabs are the places ui.new_tabs puts a new session.
@@ -509,6 +522,10 @@ var NewTabs = []string{"last", "first", "next"}
 
 // Bars are what ui.bar may show.
 var Bars = []string{"cheer", "tips"}
+
+// TerminalLinks are the places ui.terminal_links opens a link in, the
+// default first.
+var TerminalLinks = []string{"rolodex", "browser"}
 
 // MinFreezeDog is the shortest ui.freeze_dog: a window busy for a moment,
 // as when the machine pages, is not frozen.
@@ -897,7 +914,7 @@ const (
 // but takes the machine's memory (DESIGN §6.4).
 func Default() Config {
 	return Config{
-		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar},
+		UI: UI{SidebarWidth: 34, FocusKey: "C-]", FlipKey: `C-\`, View: "conversation", MaxSubRows: 6, RedOnDone: false, Ghostty: "auto", HelperStyle: "browser", Theme: "rosewater", FreezeDog: 10 * time.Second, NewTabs: "last", Bar: brand.Bar, TerminalLinks: "rolodex"},
 		Spawn: Spawn{
 			DefaultProfile: Auto,
 			ReadyTimeout:   30 * time.Second,
@@ -1011,7 +1028,7 @@ func Default() Config {
 		Mail:     defaultMail(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Extension: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1323,6 +1340,9 @@ func (c Config) Validate() error {
 	}
 	if !slices.Contains(HelperStyles, c.UI.HelperStyle) {
 		bad("ui.helper_style = %q: must be browser or terminal", c.UI.HelperStyle)
+	}
+	if !slices.Contains(TerminalLinks, c.UI.TerminalLinks) {
+		bad("ui.terminal_links = %q: must be rolodex or browser", c.UI.TerminalLinks)
 	}
 	if !slices.Contains(Themes, c.UI.Theme) {
 		bad("ui.theme = %q: must be one of %s", c.UI.Theme, strings.Join(Themes, ", "))
@@ -1820,7 +1840,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && ExtensionBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1866,6 +1886,9 @@ func (c Config) Write(w io.Writer) error {
 	}
 	if !BitwardenBuilt {
 		delete(plugins, "bitwarden")
+	}
+	if !TermsBuilt {
+		delete(plugins, "terms")
 	}
 	if !ExtensionBuilt {
 		delete(m, "extension")

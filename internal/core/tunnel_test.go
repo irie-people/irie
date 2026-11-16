@@ -44,7 +44,9 @@ func TestTunnelPorts(t *testing.T) {
 func TestAModelOnAPeerRunsThroughATunnel(t *testing.T) {
 	g := peertest.Start(t)
 	g.Core.Start(nil, &ipc.Header{Version: "peer-v", Machine: &ipc.Machine{Name: "Asahi", Claude: "ok"}})
-	llamaPort := testutil.FreePort(t)
+	// The tunnel takes the port after llama_port (tunnelPort), so both
+	// must be free.
+	llamaPort := testutil.FreePorts(t, 2)
 	tunnel := llamaPort + 1
 	fake := testutil.BuildFakeAgent(t)
 	c := prepare(t, agentConfig{

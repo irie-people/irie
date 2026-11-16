@@ -1,4 +1,4 @@
-//go:build !noextension
+//go:build !noterms
 
 package main
 
@@ -63,10 +63,10 @@ func TestIrieTermsReadsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.MkdirAll(p.Config, 0o700)
-	if err := os.WriteFile(p.ConfigFile(), []byte("[plugins]\nextension = false\n"), 0o600); err != nil {
+	if err := os.WriteFile(p.ConfigFile(), []byte("[plugins]\nterms = false\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := run("", file); err == nil || !strings.Contains(err.Error(), "plugins on extension") {
+	if _, err := run("", file); err == nil || !strings.Contains(err.Error(), "plugins on terms") {
 		t.Errorf("off: %v", err)
 	}
 }

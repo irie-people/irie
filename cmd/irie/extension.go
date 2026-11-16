@@ -19,6 +19,7 @@ import (
 	"github.com/irie-people/irie/internal/extension"
 	"github.com/irie-people/irie/internal/plugins"
 	"github.com/irie-people/irie/internal/repo"
+	"github.com/irie-people/irie/internal/terms"
 )
 
 // The browser extension plugin's commands (docs/proposals/browser-
@@ -27,11 +28,7 @@ import (
 
 const (
 	// extensionUsage is the plugin's lines in the usage.
-	extensionUsage = `  ` + brand.Slug + ` terms [ask|chat] ADDRESS|FILE [QUESTION]
-                          a site's terms of service in plain words, and answers
-                          to questions about them, by ` + brand.Name + `'s own code
-                          (` + brand.Slug + ` terms help)
-  ` + brand.Slug + ` setup extension [--remove]
+	extensionUsage = `  ` + brand.Slug + ` setup extension [--remove]
                           ` + brand.Name + ` in your own browser: write the browser
                           extension, and let Chrome, Brave, Edge, Arc and
                           Firefox reach ` + brand.Name + ` from it
@@ -83,7 +80,7 @@ func extensionCmd(args []string, stdin io.Reader, stdout io.Writer) error {
 				return cfg, err
 			},
 			Why:     func(cfg config.Config, part string) string { return plugins.Why(cfg, part) },
-			Servers: modelServers,
+			Servers: terms.Servers,
 			Log:     log,
 		})
 	case "path":

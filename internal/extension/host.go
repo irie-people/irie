@@ -159,7 +159,7 @@ const maxDocs = 8
 // the replies to out.
 func Serve(ctx context.Context, in io.Reader, out io.Writer, o Options) error {
 	if o.Log == nil {
-		o.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
+		o.Log = discard()
 	}
 	h := &host{o: o, out: out, docs: map[string]*terms.Doc{}}
 	ctx, cancel := context.WithCancel(ctx)
@@ -194,10 +194,13 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, o Options) error {
 					h.send(Reply{ID: r.ID, Done: true, Code: "bad", Error: fmt.Sprintf("%s's host failed: %v", brand.Name, p)})
 				}
 			}()
-			h.send(h.handle(ctx, r))
+			h.send(h.handle(ctx, r, h.send))
 		}()
 	}
 }
+
+// discard is a log that keeps nothing.
+func discard() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 func (h *host) send(r Reply) {
 	b, err := json.Marshal(r)
@@ -217,7 +220,9 @@ func (h *host) send(r Reply) {
 	}
 }
 
-func (h *host) handle(ctx context.Context, r Request) Reply {
+// handle answers one request; part gets the pieces of an answer as they
+// come, before the answer itself.
+func (h *host) handle(ctx context.Context, r Request, part func(Reply)) Reply {
 	cfg, err := h.o.Load()
 	if err != nil {
 		return Reply{ID: r.ID, Done: true, Code: "bad", Error: err.Error()}
@@ -241,7 +246,7 @@ func (h *host) handle(ctx context.Context, r Request) Reply {
 	case "terms.read":
 		return h.read(ctx, r)
 	case "terms.ask":
-		return h.ask(ctx, cfg, r)
+		return h.ask(ctx, cfg, r, part)
 	}
 	return Reply{ID: r.ID, Done: true, Code: "bad", Error: fmt.Sprintf("no op %q", r.Op)}
 }
@@ -255,7 +260,10 @@ func (h *host) hello(r Request, why string) *Hello {
 	if _, err := os.Stat(filepath.Join(Folder(h.o.Paths), "manifest.json")); err == nil && r.Version != "" && r.Version != Version() {
 		x.Update = true
 	}
-	h.seen(r.Browser)
+	// A page of Irie's own (ServeWeb) is no browser's extension.
+	if r.Browser != "" {
+		h.seen(r.Browser)
+	}
 	return x
 }
 
@@ -356,7 +364,7 @@ func (h *host) keep(d *terms.Doc) {
 	}
 }
 
-func (h *host) ask(ctx context.Context, cfg config.Config, r Request) Reply {
+func (h *host) ask(ctx context.Context, cfg config.Config, r Request, part func(Reply)) Reply {
 	h.mu.Lock()
 	d := h.docs[r.Doc]
 	h.mu.Unlock()
@@ -372,7 +380,7 @@ func (h *host) ask(ctx context.Context, cfg config.Config, r Request) Reply {
 		a := d.Ask(r.Question)
 		return Reply{ID: r.ID, Done: true, Answer: &a, Code: "model", Error: err.Error()}
 	}
-	a, err := d.AskModel(ctx, m, r.Question, func(s string) { h.send(Reply{ID: r.ID, Part: s}) })
+	a, err := d.AskModel(ctx, m, r.Question, func(s string) { part(Reply{ID: r.ID, Part: s}) })
 	if err != nil {
 		h.mu.Lock()
 		h.model = nil
