@@ -27,10 +27,11 @@ import (
 
 const (
 	// extensionUsage is the plugin's lines in the usage.
-	extensionUsage = `  ` + brand.Slug + ` terms [ask|chat] ADDRESS|FILE [QUESTION]
+	extensionUsage = `  ` + brand.Slug + ` terms [ask|chat|serve] ADDRESS|FILE [QUESTION]
                           a site's terms of service in plain words, and answers
-                          to questions about them, by ` + brand.Name + `'s own code
-                          (` + brand.Slug + ` terms help)
+                          to questions about them, by ` + brand.Name + `'s own code;
+                          serve gives the panel as a page for the Mac app's
+                          panes (` + brand.Slug + ` terms help)
   ` + brand.Slug + ` setup extension [--remove]
                           ` + brand.Name + ` in your own browser: write the browser
                           extension, and let Chrome, Brave, Edge, Arc and

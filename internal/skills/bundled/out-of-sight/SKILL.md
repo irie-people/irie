@@ -45,6 +45,7 @@ It runs the command. Each window of a process the command starts, of an app it o
 - `open` without `-g`, which brings the app to the front, or `open -g` outside `irie away`, which opens it on the user's desktop, behind.
 - AppleScript that activates an app or types into one, `NSApp.activate`, `bringToFront`, a `--headed` run.
 - An app's executable started straight, short of a headless or out-of-sight flag such as `--headless` or `--snapshot`.
+- A server in a test or a scratch run that listens on every address, such as `:8080` or `0.0.0.0`. With the macOS firewall on, each new program that does brings up a dialog asking whether it may accept incoming connections, and every ad hoc build, such as each `go build`, is a new program to it. Listen on 127.0.0.1, which it asks nothing about.
 - Moving, hiding or closing the user's own windows. `irie away` leaves alone every window that was open before it ran, and an app the user has in front.
 
 If the user must see something, say so in one line and let them open it.
