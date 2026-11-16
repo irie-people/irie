@@ -152,7 +152,7 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		return step(OpTool, ToolArgs{Name: ToolSetup}, nil)
 	case name == "setup" && arg == "switch":
 		return step(OpTool, ToolArgs{Name: ToolSwitch}, nil)
-	case name == "setup" && (arg == ToolAnon || arg == ToolBrowser || arg == ToolPrivacy || arg == ToolVPN):
+	case name == "setup" && (arg == ToolAnon || arg == ToolBrowser || arg == ToolPrivacy || arg == ToolVPN || arg == ToolExtension):
 		return step(OpTool, ToolArgs{Name: arg}, nil)
 	case name == "plugins" && arg == "":
 		return step(OpPlugins, PluginsArgs{}, nil)
