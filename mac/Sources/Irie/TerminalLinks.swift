@@ -13,6 +13,13 @@ import AppKit
 /// else in the Mac's own apps, as before. ⇧⌘-click opens it in the other
 /// place (Store.openTerminalLink).
 enum TerminalLinks {
+    /// What the app's own tmux clients ask of tmux, before their command:
+    /// the links programs write (OSC 8), which tmux passes on only to a
+    /// client that says it takes them. Only these clients say so, so the
+    /// Windows app's terminal and a popped-out Ghostty window go on as
+    /// before. A tmux older than 3.4 knows no such feature, and ignores it.
+    static let tmuxFlags = ["-T", "hyperlinks"]
+
     /// Hands a clicked link to the store: other for a ⇧⌘-click.
     static func clicked(_ link: String, other: Bool) {
         NotificationCenter.default.post(name: .irieTerminalLink, object: nil, userInfo: ["link": link, "other": other])

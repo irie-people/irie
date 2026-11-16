@@ -365,7 +365,8 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
     private static func command(_ a: Attach) -> String {
         let q = { (s: String) in "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
         let attach = (["attach-session"] + Preview.clientFlags).joined(separator: " ")
-        let client = "sleep 0.1; exec \(q(a.tmux)) -S \(q(a.socket)) \(attach) -t \(q(a.target))"
+        let flags = TerminalLinks.tmuxFlags.joined(separator: " ")
+        let client = "sleep 0.1; exec \(q(a.tmux)) \(flags) -S \(q(a.socket)) \(attach) -t \(q(a.target))"
         return "/usr/bin/env -u TMUX -u TMUX_PANE /bin/sh -c \(q(client))"
     }
 

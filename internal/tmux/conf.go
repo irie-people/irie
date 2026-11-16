@@ -45,9 +45,6 @@ set -gw allow-passthrough on
 set -s focus-events on
 set -s extended-keys on
 set -s terminal-features[90] 'xterm*:extkeys'
-# Links a program writes (OSC 8) reach the app's terminals, which open them
-# at a ⌘-click where ui.terminal_links says.
-set -s terminal-features[91] 'xterm*:hyperlinks'
 
 # The terminal window title, used to find the `+brand.Name+` window.
 set -g set-titles on
@@ -89,7 +86,6 @@ set -gw allow-passthrough on
 set -s focus-events on
 set -s extended-keys on
 set -s terminal-features[90] 'xterm*:extkeys'
-set -s terminal-features[91] 'xterm*:hyperlinks'
 set -s escape-time 10
 set -s exit-empty off
 set -gw window-size latest
@@ -119,7 +115,6 @@ set -gw allow-passthrough on
 set -s focus-events on
 set -s extended-keys on
 set -s terminal-features[90] 'xterm*:extkeys'
-set -s terminal-features[91] 'xterm*:hyperlinks'
 set -s escape-time 10
 set -s exit-empty off
 set -gw window-size latest
