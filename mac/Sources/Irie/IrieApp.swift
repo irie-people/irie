@@ -116,6 +116,10 @@ struct IrieApp: App {
 final class KeyRouter {
     private var monitor: Any?
     private var middle: Any?
+    /// Modifiers going down and up, and clicks, for the look-ahead at keys
+    /// (KeyPeek.swift).
+    private var flags: Any?
+    private var clicks: Any?
     /// A double ↓ on an agent's empty prompt (ContinueKey.swift).
     private let continueKey = ContinueKey()
     /// Irie's own window, where the sessions are (WindowReader).
@@ -134,10 +138,34 @@ final class KeyRouter {
                 return nil
             }
         }
+        // A modifier held alone shows what it does (KeyPeek.swift); a click
+        // or leaving the app puts that away.
+        flags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self, weak store] event in
+            guard let self, let store else { return event }
+            MainActor.assumeIsolated {
+                if event.window != nil, event.window === self.window {
+                    KeyPeek.shared.flags(event, window: event.window, store: store)
+                } else {
+                    KeyPeek.shared.drop()
+                }
+            }
+            return event
+        }
+        clicks = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { event in
+            MainActor.assumeIsolated { KeyPeek.shared.drop() }
+            return event
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { KeyPeek.shared.drop() }
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak store] event in
             guard let self, let store else { return event }
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             let irie = MainActor.assumeIsolated { event.window != nil && event.window === self.window }
+            // The look-ahead sees every key first and takes none: a key ends
+            // what a held modifier showed, and Ctrl+X in Claude Code's
+            // terminal shows the keys of its chords (KeyPeek.swift).
+            if irie { MainActor.assumeIsolated { KeyPeek.shared.key(event, window: event.window, store: store) } }
             // First, so a ↓ it holds back goes ahead of any other key.
             if irie, MainActor.assumeIsolated({ self.continueKey.route(event, store: store) }) == nil {
                 return nil
@@ -302,6 +330,9 @@ struct ContentView: View {
         // reads left to right again inside. Zen folds the sidebar away and
         // lays out its own side, so the split view keeps to the layout's.
         .environment(\.layoutDirection, store.reversed ? .rightToLeft : .leftToRight)
+        // The look-ahead at keys, over everything, like an alert
+        // (KeyPeek.swift).
+        .overlay { KeyPeekView(peek: KeyPeek.shared) }
         // The lines from the selected card to the terminal draw over both
         // columns, from views in the card and the frame (TabLink.swift).
         .tint(Theme.accent)

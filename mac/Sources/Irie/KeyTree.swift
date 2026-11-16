@@ -5,10 +5,10 @@ import SwiftUI
 /// it, and each key after, fn still held, goes a level down, until one does
 /// something. Fn+X Fn+L Fn+R reverses the layout: X for execute, L for
 /// layout, R for reverse. Hold fn and tap the letters, as Ctrl is held for
-/// C-x C-s. A moment into a chord a hint over the terminal lists the keys
-/// that come next (KeyHint). Esc, a click or the app losing the focus drops
-/// the chord, and a key typed without fn drops it and types as it would
-/// have. Only KeyRouter sees fn on a letter (Roots' principles §4.8), so
+/// C-x C-s. A moment into a chord the look-ahead at keys lists those that
+/// come next (KeyPeek.swift). Esc, a click or the app losing the focus
+/// drops the chord, and a key typed without fn drops it and types as it
+/// would have. Only KeyRouter sees fn on a letter (Roots' principles §4.8), so
 /// the menus name these chords in their help.
 ///
 /// Your own chords go in keys.json beside your layouts (KeyFile), read
@@ -62,15 +62,25 @@ enum KeyAction: Equatable {
     case layout(String)
     /// Zen on or off (Zen.swift).
     case zen
+    /// The Settings window, as ⌘, opens it.
+    case settings
+    /// A new task, as ⌘N starts one: a session spawned.
+    case newTask
     /// A menu item, by its menu's name and its own, as "View › Layout ›
     /// Focus".
     case menu([String])
 
-    /// Read from a chord's "do": reverse, zen, layout:NAME or menu:PATH.
+    /// Read from a chord's "do": reverse, zen, settings, new-task,
+    /// layout:NAME or menu:PATH.
     init?(_ text: String) {
         let t = text.trimmingCharacters(in: .whitespaces)
-        if t.lowercased() == "reverse" { self = .reverse; return }
-        if t.lowercased() == "zen" { self = .zen; return }
+        switch t.lowercased() {
+        case "reverse": self = .reverse; return
+        case "zen": self = .zen; return
+        case "settings": self = .settings; return
+        case "new-task", "task", "spawn": self = .newTask; return
+        default: break
+        }
         if let colon = t.firstIndex(of: ":") {
             let kind = t[..<colon].lowercased(), rest = t[t.index(after: colon)...].trimmingCharacters(in: .whitespaces)
             guard !rest.isEmpty else { return nil }
@@ -91,6 +101,8 @@ enum KeyAction: Equatable {
         switch self {
         case .reverse: return "Reverse"
         case .zen: return "Zen"
+        case .settings: return "Settings"
+        case .newTask: return "New Task"
         case let .layout(l): return KeyTree.layout(l)?.name ?? l
         case let .menu(path): return path.last ?? "Menu"
         }
@@ -108,13 +120,19 @@ enum KeyTree {
     static let taken: Set<String> = ["a", "c", "d", "e", "f", "h", "n", "q"]
 
     /// Irie's own: X Execute › L Layout › R Reverse, and 1 to 9 for your
-    /// first nine layouts, as ⌃⌘1 to ⌃⌘9.
+    /// first nine layouts, as ⌃⌘1 to ⌃⌘9; at the root, Fn+, Settings as
+    /// ⌘, opens them, Fn+S a new task, spawned, and Fn+Z zen.
     static func builtIn(layouts: [PaneLayout]) -> KeyNode {
         var layout = KeyNode(key: "l", name: "Layout", children: [KeyNode(key: "r", name: "Reverse", action: .reverse)])
         for (i, l) in layouts.prefix(9).enumerated() {
             layout.children.append(KeyNode(key: String(i + 1), name: l.name, action: .layout(String(i + 1))))
         }
-        return KeyNode(key: "", name: "", children: [KeyNode(key: "x", name: "Execute", children: [layout])])
+        return KeyNode(key: "", name: "", children: [
+            KeyNode(key: "x", name: "Execute", children: [layout]),
+            KeyNode(key: "s", name: "New Task", action: .newTask),
+            KeyNode(key: ",", name: "Settings", action: .settings),
+            KeyNode(key: "z", name: "Zen", action: .zen),
+        ])
     }
 
     /// The root: Irie's keys with yours from keys.json put over them.
@@ -144,14 +162,16 @@ enum KeyTree {
 /// Your chords, from keys.json in the config folder ($XDG_CONFIG_HOME/irie):
 ///
 ///     {"chords": [
+///       {"keys": "x ,", "do": "settings"},
 ///       {"keys": "x l o", "do": "layout:focus"},
 ///       {"keys": "x s", "name": "Session"},
 ///       {"keys": "x s p", "do": "menu:Session › Park", "name": "Park"}
 ///     ]}
 ///
-/// keys are the letters or digits after fn, one per key; do is reverse,
-/// zen, layout:NAME or menu:PATH; a chord with no do names the keys it
-/// opens. Read again whenever the file changes.
+/// keys are the letters, digits or marks after fn, one per key, apart; do
+/// is reverse, zen, settings, new-task, layout:NAME or menu:PATH; a chord
+/// with no do names the keys it opens. Read again whenever the file
+/// changes.
 @MainActor
 final class KeyFile {
     static let shared = KeyFile()
@@ -210,8 +230,8 @@ final class KeyFile {
         for e in file.chords ?? [] {
             let keys = e.keys.lowercased().split(whereSeparator: { $0 == " " || $0 == "," || $0 == "+" })
                 .map(String.init).filter { $0 != "fn" }
-            if keys.isEmpty || keys.contains(where: { $0.count != 1 || !$0.first!.isASCII || !($0.first!.isLetter || $0.first!.isNumber) }) {
-                problems.append("“\(e.keys)” is not keys, one letter or digit each")
+            if keys.isEmpty || keys.contains(where: { !KeyChord.isKey($0) }) {
+                problems.append("“\(e.keys)” is not keys, one letter, digit or mark each")
                 continue
             }
             if let k = keys.first(where: { KeyTree.taken.contains($0) }) {
@@ -221,7 +241,7 @@ final class KeyFile {
             var action: KeyAction?
             if let d = e.do {
                 guard let a = KeyAction(d) else {
-                    problems.append("“\(e.keys)”: “\(d)” is not reverse, zen, layout:NAME or menu:PATH")
+                    problems.append("“\(e.keys)”: “\(d)” is not reverse, zen, settings, new-task, layout:NAME or menu:PATH")
                     continue
                 }
                 action = a
@@ -252,6 +272,12 @@ final class KeyChord {
 
     var pending: Bool { !path.isEmpty }
 
+    /// A key the tree can hold: one printable character, not a space.
+    nonisolated static func isKey(_ k: String) -> Bool {
+        guard k.count == 1, let s = k.unicodeScalars.first, k.unicodeScalars.count == 1 else { return false }
+        return s.isASCII && s.value > 0x20 && s.value < 0x7f
+    }
+
     /// The node the keys so far lead to.
     var node: KeyNode? { path.isEmpty ? nil : Self.walk(KeyTree.root, path) }
 
@@ -270,10 +296,10 @@ final class KeyChord {
         self.store = store
         let fn = event.modifierFlags.contains(.function)
         let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
-        // A letter or a digit. Arrows and F-keys carry the fn flag too, so
-        // only these count as keys with fn.
+        // A letter, a digit or a mark such as the comma. Arrows and F-keys
+        // carry the fn flag too, so only these count as keys with fn.
         let c = event.charactersIgnoringModifiers?.lowercased() ?? ""
-        let letter = c.count == 1 && (c.first!.isLetter || c.first!.isNumber) && c.first!.isASCII ? c : nil
+        let letter = Self.isKey(c) ? c : nil
         guard pending else {
             guard fn, mods.isEmpty, let k = letter else { return false }
             KeyFile.shared.refresh(store)
@@ -311,13 +337,17 @@ final class KeyChord {
         }
         if path.isEmpty { watch() }
         path.append(k)
-        if hintShown {
+        if hintShown || KeyPeek.shared.showedAtKey {
+            // Shown already, or what fn held alone showed was being read.
+            hintShown = true
+            KeyPeek.shared.chord(path, node: node)
             announce()
         } else if hintSoon == nil {
             let soon = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, self.pending else { return }
                     self.hintShown = true
+                    KeyPeek.shared.chord(self.path, node: self.node)
                     self.announce()
                 }
             }
@@ -331,7 +361,10 @@ final class KeyChord {
         hintSoon?.cancel()
         hintSoon = nil
         if !path.isEmpty { path = [] }
-        if hintShown { hintShown = false }
+        if hintShown {
+            hintShown = false
+            KeyPeek.shared.chord([], node: nil)
+        }
         if let c = clicks { NSEvent.removeMonitor(c) }
         if let a = away { NotificationCenter.default.removeObserver(a) }
         clicks = nil
@@ -363,6 +396,10 @@ final class KeyChord {
             store.toggleReversed()
         case .zen:
             store.toggleZen()
+        case .settings:
+            PluginCommands.openSettings()
+        case .newTask:
+            store.newTaskSheet = true
         case let .layout(name):
             if let l = KeyTree.layout(name) {
                 LookBook.shared.apply(l)
@@ -381,6 +418,7 @@ final class KeyChord {
         cancel()
         path = keys
         hintShown = !keys.isEmpty
+        KeyPeek.shared.chord(path, node: node)
     }
 }
 
@@ -414,79 +452,5 @@ enum MenuPath {
             menu = sub
         }
         return false
-    }
-}
-
-/// The hint over the terminal while a chord waits for its next key: the
-/// keys so far, then each key that comes next, with what it does or opens.
-@MainActor
-struct KeyHint: View {
-    let chord: KeyChord
-
-    var body: some View {
-        ZStack {
-            if chord.hintShown, let node = chord.node { panel(node) }
-        }
-        .animation(.easeOut(duration: 0.12), value: chord.hintShown)
-    }
-
-    private func panel(_ node: KeyNode) -> some View {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 4) {
-                    ForEach(Array(chord.path.enumerated()), id: \.offset) { i, k in
-                        if i > 0 {
-                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.muted)
-                        }
-                        KeyCap(key: k)
-                    }
-                    Text(node.name)
-                        .font(Theme.font(12, .semibold))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.leading, 4)
-                }
-                Rectangle().fill(Theme.edge).frame(height: 1)
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(node.children) { c in
-                        HStack(spacing: 8) {
-                            KeyCap(key: c.key)
-                            Text(c.name)
-                                .font(Theme.font(12))
-                                .foregroundStyle(Theme.ink)
-                                .lineLimit(1)
-                            if c.action == nil {
-                                Image(systemName: "ellipsis").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
-                            }
-                        }
-                    }
-                }
-                Text("Hold fn for each key. Esc drops it.")
-                    .font(Theme.font(10.5))
-                    .foregroundStyle(Theme.muted)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .frame(minWidth: 200, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.field).shadow(color: Theme.shadow, radius: 8, y: 2))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
-            .fixedSize()
-            .allowsHitTesting(false)
-            .transition(.opacity)
-            .accessibilityElement(children: .combine)
-    }
-}
-
-/// A key as its cap: fn and the letter.
-private struct KeyCap: View {
-    let key: String
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Text("fn").font(Theme.font(9.5, .medium)).foregroundStyle(Theme.muted)
-            Text(key.uppercased()).font(.system(size: 11.5, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.ink)
-        }
-        .padding(.horizontal, 6)
-        .frame(minWidth: 34, minHeight: 20)
-        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
     }
 }

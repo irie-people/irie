@@ -168,12 +168,6 @@ struct TerminalArea: View {
             }
             if zen == nil { PhraseBar() }
         }
-        // While a chord with fn waits for its next key, the keys that come
-        // next, over the terminal's foot (KeyTree.swift).
-        .overlay(alignment: .bottom) {
-            KeyHint(chord: KeyChord.shared)
-                .padding(.bottom, zen == nil ? 64 : 32)
-        }
         .background(Theme.ground.ignoresSafeArea())
         .toolbarBackground(Theme.ground, for: .windowToolbar)
         // The window's own title. The bar hides it (IrieApp.showsTitle),

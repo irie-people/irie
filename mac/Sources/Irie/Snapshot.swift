@@ -400,8 +400,9 @@ enum Snapshot {
     /// The layout reversed (Store.reversed): the sidebar on the right, the
     /// panes and the right sidebar on the left, the lines from the card
     /// running left into the terminal's frame; the panes folded, over the
-    /// terminal, under it, and a drag of their edge; then the key tree's
-    /// hint part way into Fn+X Fn+L (KeyTree.swift), not reversed.
+    /// terminal, under it, and a drag of their edge; then, not reversed,
+    /// the look-ahead at keys part way into Fn+X Fn+L (KeyTree.swift), and
+    /// for fn, Claude Code's Ctrl+X and ⌃, and ⌘ in a code card.
     private static func reversedShots(_ store: Store, into dir: String) throws {
         store.mode = .repo
         store.folded = []
@@ -411,6 +412,7 @@ enum Snapshot {
             store.side = SideState()
             store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
             KeyChord.shared.showFixture([])
+            KeyPeek.shared.showFixture(nil)
         }
         let shots: [(String, Bool, Bool, @MainActor () -> Void)] = [
             ("reversed", false, true, {
@@ -445,6 +447,21 @@ enum Snapshot {
             }),
             ("keys-hint-dark", true, false, {
                 KeyChord.shared.showFixture(["x"])
+            }),
+            // The look-ahead at keys (KeyPeek.swift): fn held alone, Ctrl+X
+            // in Claude Code's terminal, ⌃ held there, and ⌘ in a code card.
+            ("keys-peek-fn", false, false, {
+                KeyChord.shared.showFixture([])
+                KeyPeek.shared.showFixture(KeyCatalog.root())
+            }),
+            ("keys-peek-claude-x", true, false, {
+                KeyPeek.shared.showFixture(KeyCatalog.claudeChord(store: store))
+            }),
+            ("keys-peek-claude-control", false, false, {
+                KeyPeek.shared.showFixture(KeyCatalog.held(.control, place: .agent(claude: true), store: store))
+            }),
+            ("keys-peek-code", false, false, {
+                KeyPeek.shared.showFixture(KeyCatalog.held(.command, place: .code, store: store))
             }),
         ]
         for (base, dark, reversed, set) in shots {

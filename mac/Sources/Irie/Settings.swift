@@ -2120,6 +2120,7 @@ private struct TabsSettings: View {
     @ObservedObject var model: SettingsModel
     @AppStorage(CloseFromPointer.defaultsKey) private var closeFromPointer = true
     @AppStorage(UndoConfirm.defaultsKey) private var confirmUndo = true
+    @AppStorage(KeyPeek.holdKey) private var peekHold = true
 
     var body: some View {
         SettingsForm(model: model) {
@@ -2175,6 +2176,14 @@ private struct TabsSettings: View {
                 Text("Moving")
             } footer: {
                 footnote("Or drag a card. Dropped across Pinned’s edge it is pinned, and across Parked’s it is parked. Pin to the Top is in a card’s menu and in File; Boost gives a card the machine first and leaves it where it is.")
+            }
+            Section {
+                Toggle("Show what a key held alone does", isOn: $peekHold)
+                LabeledContent("The key tree", value: "Fn+X, then keys with fn")
+            } header: {
+                Text("Keys")
+            } footer: {
+                footnote("Hold fn, ⌘, ⌃ or ⌥ by itself a moment and the keys that go with it show, those of where you type first: Claude Code’s in its terminal, a code card’s in the card. A chord shows its next keys a moment in: Fn+X for \(Brand.name)’s tree, and Ctrl+X in Claude Code, whose S then sends at once. Fn+, opens these settings and Fn+S a new task. Your own chords go in keys.json, beside your layouts.")
             }
         }
     }
