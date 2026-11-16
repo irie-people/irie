@@ -139,6 +139,10 @@ const FeatureBoostAlways = "boost-always"
 // freeze dog watches the window that asks (DESIGN §2.4).
 const FeatureWatch = "watch"
 
+// FeatureUndoConfirm is in hello's features when undo and redo take
+// UndoArgs.Confirm.
+const FeatureUndoConfirm = "undo-confirm"
+
 // ViewApp is the SubscribeArgs.View of the Mac app. While one subscribes
 // with it, the slot fills irie:0 (docs/MAC.md).
 const ViewApp = "app"
@@ -894,9 +898,16 @@ type ReopenResult struct {
 // own they undo it, unless that is uncertain: then nothing changes and the
 // result asks a Choice. ChoiceID and Choice answer it: the question's id,
 // which the core checks against the history's head, and the key picked.
+//
+// Confirm asks first even when the step is certain: a Choice with Confirm
+// set that names the step and says when it was taken, so that a key that
+// shows nothing of what it would take, as the Mac app's ⌘Z, takes only the
+// step the person saw. An uncertain step asks its own question instead,
+// which asks as much.
 type UndoArgs struct {
 	ChoiceID string `json:"choice_id,omitempty"`
 	Choice   string `json:"choice,omitempty"`
+	Confirm  bool   `json:"confirm,omitempty"`
 }
 
 // What an undo or redo did (UndoResult.Did).
@@ -926,11 +937,14 @@ type UndoResult struct {
 
 // Choice is a question the core asks before an uncertain undo or redo:
 // two to four options in plain words, the recommended one first, and always
-// skip and cancel among them.
+// skip and cancel among them. With Confirm it is the question
+// UndoArgs.Confirm asks of a certain step: apply, which takes it and is
+// recommended, and cancel.
 type Choice struct {
 	ID       string         `json:"id"`
 	Question string         `json:"question"`
 	Options  []ChoiceOption `json:"options"`
+	Confirm  bool           `json:"confirm,omitempty"`
 }
 
 // ChoiceOption is one answer to a Choice: its key, what it says, and what

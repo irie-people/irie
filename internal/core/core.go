@@ -854,7 +854,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
 			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpResult, ipc.OpTool,
-			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureSpawnModel, ipc.OpTheme,
+			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
 			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes,
