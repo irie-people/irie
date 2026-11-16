@@ -138,6 +138,8 @@ struct PaneLayout: Codable, Equatable, Identifiable {
     var textSize: Double?
     /// A palette to change to with it.
     var theme: String?
+    /// The window reversed, the sidebar on the right (Store.reversed).
+    var reversed: Bool?
 
     struct Sidebar: Codable, Equatable {
         var shown: Bool
@@ -160,7 +162,7 @@ struct PaneLayout: Codable, Equatable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, view, sidebar, details, drawer, theme
+        case name, view, sidebar, details, drawer, theme, reversed
         case textSize = "text_size"
     }
 
@@ -191,6 +193,7 @@ struct PaneLayout: Codable, Equatable, Identifiable {
         l.drawer = .init(open: store.side.open, tab: store.side.tab.rawValue, width: store.side.width.rounded())
         l.textSize = Double(store.windowFontSize)
         l.theme = theme
+        l.reversed = store.reversed
         return l
     }
 
@@ -211,6 +214,7 @@ struct PaneLayout: Codable, Equatable, Identifiable {
             if r.open { store.openSide(tab) } else { store.closeSide() }
         }
         if let t = textSize { store.setWindowFontSize(CGFloat(t)) }
+        if let r = reversed { store.reversed = r }
     }
 
     /// What it sets, in a few words, for its row in Make a Theme.
@@ -224,6 +228,7 @@ struct PaneLayout: Codable, Equatable, Identifiable {
         }
         if details?.minimized == true { parts.append("details in a line") }
         if let t = textSize { parts.append("\(Int(t)) pt text") }
+        if reversed == true { parts.append("reversed") }
         if let t = theme { parts.append(Palette.named(t).name) }
         return parts.joined(separator: " · ")
     }
@@ -274,6 +279,19 @@ enum WindowPanes {
 
     /// The window's width, for the drawing of the layout.
     static var width: Double? { window.map { Double($0.frame.width) } }
+
+    /// The sidebar on the right, or back on the left: the split view laid
+    /// out right to left (Store.reversed). SwiftUI sets the split view's
+    /// direction from the environment only as it makes it, so a change
+    /// after that is made here; the columns keep their widths.
+    static func setReversed(_ on: Bool) {
+        guard let s = splitView else { return }
+        let d: NSUserInterfaceLayoutDirection = on ? .rightToLeft : .leftToRight
+        guard s.userInterfaceLayoutDirection != d else { return }
+        s.userInterfaceLayoutDirection = d
+        s.needsLayout = true
+        s.adjustSubviews()
+    }
 }
 
 /// Where your themes and layouts live: $XDG_CONFIG_HOME/irie, or
@@ -617,6 +635,17 @@ final class LookBook {
     func file(layout id: String) -> URL { LookFiles.layouts.appendingPathComponent(id + ".json") }
 }
 
+extension Store {
+    /// Fn+X Fn+L Fn+R and View › Layout › Reverse: the window as in a
+    /// mirror, the sidebar on the right, or back as it was. It is the
+    /// window's layout, not zen's, so zen ends first, as for a layout.
+    func toggleReversed() {
+        leaveZen()
+        reversed.toggle()
+        say(reversed ? "Layout reversed: the sidebar on the right." : "Layout as usual: the sidebar on the left.", error: false, seconds: 2)
+    }
+}
+
 extension Palette {
     /// Your own palettes (Looks.swift), after Irie's in View > Theme. They
     /// are read the first time a palette is looked up, and LookBook keeps
@@ -641,6 +670,8 @@ extension Palette {
 struct LookMenus: View {
     let store: Store
     @Binding var theme: String
+    /// The layout is reversed (MenuState.Facts).
+    var reversed = false
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -673,6 +704,12 @@ struct LookMenus: View {
             ForEach(PaneLayout.builtIns) { l in
                 Button(l.name) { looks.apply(l) }
             }
+            Divider()
+            // The window as in a mirror, ticked while it is. Its key is a
+            // chord with fn, which only KeyRouter catches (KeyTree.swift),
+            // so the help names it.
+            Toggle("Reverse", isOn: Binding(get: { reversed }, set: { _ in MainActor.assumeIsolated { store.toggleReversed() } }))
+                .help("Fn+X Fn+L Fn+R")
             Divider()
             Button("Save Layout…") { open(.layouts(saving: true)) }
             Button("Edit Layouts…") { open(.layouts(saving: false)) }

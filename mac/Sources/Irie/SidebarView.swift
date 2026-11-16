@@ -72,8 +72,18 @@ struct SidebarView: View {
             // .primaryAction one to the bar's leading edge. Short of room,
             // the bar moves its trailing item into the overflow menu first,
             // so the counts go before the name does.
-            ToolbarItem(placement: .automatic) { TitleName() }
-            ToolbarItem(placement: .automatic) { Counts() }
+            //
+            // Reversed (Store.reversed), the bar keeps its order while the
+            // columns swap sides, so its part before the sidebar's edge lies
+            // over the terminal: the terminal side's items go there, and
+            // these over the sidebar, in the terminal side's part
+            // (TerminalArea).
+            if store.reversed {
+                SessionBarItems.items(store: store, reversed: true)
+            } else {
+                ToolbarItem(placement: .automatic) { TitleName() }
+                ToolbarItem(placement: .automatic) { Counts() }
+            }
         }
         // The toggle would crowd them out of the title bar; View >
         // Hide Sidebar (SidebarCommands) still hides it.
@@ -1440,7 +1450,7 @@ private struct Actions: View {
 
 /// What the sidebar puts first in the title bar, beside the traffic lights
 /// and above the find field: the sun over the waves and the name Irie.
-private struct TitleName: View {
+struct TitleName: View {
     var body: some View {
         HStack(spacing: 3) {
             SunMark().frame(width: 14, height: 14)
@@ -1459,7 +1469,7 @@ private struct TitleName: View {
 /// first session, in list order, in that state. A parked session is out of
 /// the way, so To verify leaves it out; it still counts when it needs you.
 @MainActor
-private struct Counts: View {
+struct Counts: View {
     @Environment(Store.self) private var store
 
     var body: some View {

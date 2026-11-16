@@ -276,11 +276,15 @@ struct RightSidebar: View {
     /// which keeps the terminal some room.
     var drawn = SideState.startWidth
     var most = SideState.maxWidth
+    /// The layout is reversed (Store.reversed): it comes out of the
+    /// window's left edge, and faces the terminal with its right.
+    var flip = false
 
     /// Rounded where it faces the terminal, as the terminal's frame is, and
     /// square at the window's edge, which it comes out of.
     private var shape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, bottomLeadingRadius: Theme.frameRadius, style: .continuous)
+        flip ? UnevenRoundedRectangle(bottomTrailingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
+            : UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, bottomLeadingRadius: Theme.frameRadius, style: .continuous)
     }
 
     var body: some View {
@@ -293,11 +297,13 @@ struct RightSidebar: View {
         .clipShape(shape)
         // The shadow it casts on the terminal as it slides over its edge.
         .background(shape.fill(Theme.panel)
-            .shadow(color: .black.opacity(0.18), radius: 10, x: -2))
+            .shadow(color: .black.opacity(0.18), radius: 10, x: flip ? 2 : -2))
         // Its edge, on every side but the window's: that one lies just
         // past the window, out of sight.
-        .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1).padding(.trailing, -1))
-        .overlay(alignment: .leading) { SideEdge(guide: $guide, drawn: drawn, most: most).offset(x: -5) }
+        .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1).padding(flip ? .leading : .trailing, -1))
+        .overlay(alignment: flip ? .trailing : .leading) {
+            SideEdge(guide: $guide, drawn: drawn, most: most, flip: flip).offset(x: flip ? 5 : -5)
+        }
         // Esc hands the keyboard back; closing would resize every agent.
         .onExitCommand {
             if store.showTerminal { store.focusTerminal += 1 } else { store.focusMessage += 1 }
@@ -454,7 +460,7 @@ struct RightSidebar: View {
     }
 }
 
-/// The sidebar's leading edge, which a drag moves. A guide line shows where
+/// The sidebar's edge toward the terminal, which a drag moves. A guide line shows where
 /// it would go, and the width applies on release: one resize of the
 /// terminal, and of every agent, not one per frame. The drag starts from
 /// the width it is drawn at, which a narrow window can hold below the one
@@ -465,6 +471,8 @@ private struct SideEdge: View {
     @Binding var guide: Double?
     let drawn: Double
     let most: Double
+    /// Reversed, the edge is the sidebar's right one: a drag right widens it.
+    let flip: Bool
     /// The resize pointer is pushed. It is popped once, and also when the
     /// drawer closes under the pointer, which ends no hover: the pointer
     /// would stay a resize one over the terminal.
@@ -488,7 +496,10 @@ private struct SideEdge: View {
                 pushed = false
             }
             .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { g in guide = min(SideState.clamp(drawn - Double(g.translation.width)), max(most, SideState.minWidth)) }
+                .onChanged { g in
+                    let dx = Double(g.translation.width)
+                    guide = min(SideState.clamp(drawn + (flip ? dx : -dx)), max(most, SideState.minWidth))
+                }
                 .onEnded { _ in
                     if let g = guide { store.setSideWidth(g) }
                     guide = nil

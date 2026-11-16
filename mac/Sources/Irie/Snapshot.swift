@@ -305,6 +305,7 @@ enum Snapshot {
             store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
 
             try zenShots(store, into: dir)
+            try reversedShots(store, into: dir)
 
             // The new-task sheet, in the default palette.
             Theme.use(Palette.standard.id)
@@ -394,6 +395,69 @@ enum Snapshot {
         store.zen.showFixture(nil)
         store.zen.layout = .centred
         store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+    }
+
+    /// The layout reversed (Store.reversed): the sidebar on the right, the
+    /// panes and the right sidebar on the left, the lines from the card
+    /// running left into the terminal's frame; the panes folded, over the
+    /// terminal, under it, and a drag of their edge; then the key tree's
+    /// hint part way into Fn+X Fn+L (KeyTree.swift), not reversed.
+    private static func reversedShots(_ store: Store, into dir: String) throws {
+        store.mode = .repo
+        store.folded = []
+        store.parkedOpen = true
+        defer {
+            store.reversed = false
+            store.side = SideState()
+            store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+            KeyChord.shared.showFixture([])
+        }
+        let shots: [(String, Bool, Bool, @MainActor () -> Void)] = [
+            ("reversed", false, true, {
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .review)
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal)
+            }),
+            ("reversed-dark", true, true, {
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .review)
+                store.rolodex.loadFixture(session: Fixture.selected, front: .browser)
+            }),
+            ("reversed-folded", false, true, {
+                store.side = SideState()
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal, folded: true)
+            }),
+            ("reversed-over", false, true, {
+                store.side = SideState()
+                store.rolodex.loadFixture(session: Fixture.selected, front: .browser, over: true, share: 0.8)
+            }),
+            ("reversed-over-behind", false, true, {
+                store.side = SideState()
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal, over: true, share: 0.8, raised: false)
+            }),
+            ("reversed-over-drag", true, true, {
+                store.side = SideState()
+                store.rolodex.loadFixture(session: Fixture.selected, front: .terminal, over: true, share: 0.8, raised: false,
+                                          guide: RolodexAim(width: 860, place: .over))
+            }),
+            ("keys-hint", false, false, {
+                store.side = SideState()
+                store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+                KeyChord.shared.showFixture(["x", "l"])
+            }),
+            ("keys-hint-dark", true, false, {
+                KeyChord.shared.showFixture(["x"])
+            }),
+        ]
+        for (base, dark, reversed, set) in shots {
+            store.reversed = reversed
+            set()
+            UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                     DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+            Theme.use(Palette.standard.id)
+            let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+            let name = base + ".png"
+            try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+            print("\(name): sidebar \(WindowPanes.sidebar.map { $0.shown ? "shown" : "folded" } ?? "not found")")
+        }
     }
 
     /// The window as the app draws it, at 2x, and its title bar's height in

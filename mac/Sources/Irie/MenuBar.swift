@@ -53,6 +53,8 @@ final class MenuState {
         var redo: String?
         var helperShown = false
         var showTerminal = false
+        /// The layout is reversed, the sidebar on the right (Store.reversed).
+        var reversed = false
         /// The right sidebar's tab on show; nil while it is closed.
         var sideTab: SideTab?
         /// The right sidebar's tabs, each with its key (Store.sideTabs).
@@ -133,6 +135,7 @@ extension Store {
         f.redo = redoLabel
         f.helperShown = helperShown
         f.showTerminal = showTerminal
+        f.reversed = reversed
         f.sideTab = side.open ? side.tab : nil
         f.poppedOut = poppedOut != nil
         f.canPopOut = attach != nil
@@ -318,7 +321,7 @@ struct IrieCommands: Commands {
             // The palettes, yours after Irie's, Make a Theme, and the
             // window's layouts (Looks.swift). A section ends with a line of
             // its own.
-            LookMenus(store: store, theme: $theme)
+            LookMenus(store: store, theme: $theme, reversed: f.reversed)
             Divider()
             Button("Bigger Text", action: run { store.setFontSize(store.fontSize + 1) })
                 .keyboardShortcut("=")

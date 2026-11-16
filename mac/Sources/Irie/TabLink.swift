@@ -234,8 +234,18 @@ final class TabLinkView: NSView {
         let scale = window.backingScaleFactor
         for card in live where card.isCard && card.session == frame.session {
             let list = card.enclosingScrollView.map { box($0.contentView, in: host) } ?? box(host, in: host)
-            guard let join = Join(card: box(card, in: host), cardEdge: card.edgeWidth, list: list, frame: frameBox, scale: scale) else { continue }
-            return show(join, color: card.color, ground: card.ground, frameGround: frame.ground.first ?? .clear, in: host, scale: scale)
+            let cardBox = box(card, in: host)
+            // A reversed layout has the card right of the frame (Store.
+            // reversed): the join is worked out in a mirror, where the card
+            // is on the left, and turned back. The card's ground at its
+            // left edge is its fill alone: its wash and deep end start
+            // clear there.
+            let width = host.bounds.width
+            let flip = cardBox.midX > frameBox.midX
+            func turn(_ r: CGRect) -> CGRect { flip ? CGRect(x: width - r.maxX, y: r.minY, width: r.width, height: r.height) : r }
+            guard let join = Join(card: turn(cardBox), cardEdge: card.edgeWidth, list: turn(list), frame: turn(frameBox), scale: scale) else { continue }
+            return show(flip ? join.mirrored(across: width) : join, color: card.color, ground: flip ? Array(card.ground.prefix(1)) : card.ground,
+                        frameGround: frame.ground.first ?? .clear, in: host, scale: scale)
         }
         hide()
     }
@@ -378,6 +388,20 @@ struct Join {
         self.through = through
         fadeStart = card.maxX
         fadeEnd = frame.minX
+    }
+
+    private init(lines: Path, through: Path, fadeStart: CGFloat, fadeEnd: CGFloat) {
+        self.lines = lines
+        self.through = through
+        self.fadeStart = fadeStart
+        self.fadeEnd = fadeEnd
+    }
+
+    /// The join as a mirror shows it, across a width: for a reversed
+    /// layout, whose card is right of the frame.
+    func mirrored(across width: CGFloat) -> Join {
+        let t = CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: width, ty: 0)
+        return Join(lines: lines.applying(t), through: through.applying(t), fadeStart: width - fadeStart, fadeEnd: width - fadeEnd)
     }
 
     /// How far each line runs on along the edges that stay, so the two meet

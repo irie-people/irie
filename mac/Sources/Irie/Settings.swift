@@ -872,7 +872,7 @@ private struct AppearanceSettings: View {
             } header: {
                 Text("Layouts")
             } footer: {
-                footnote("A layout keeps how the window is arranged: what the right side shows, the sidebar, the details panel, the right sidebar and the text size. View › Layout puts one back, and ⌃⌘1 to ⌃⌘9 your first nine.")
+                footnote("A layout keeps how the window is arranged: what the right side shows, the sidebar and which side it is on, the details panel, the right sidebar and the text size. View › Layout puts one back, and ⌃⌘1 to ⌃⌘9 your first nine; Fn+X Fn+L Fn+R reverses the window.")
             }
             // Zen's own layout, apart from the window's (Zen.swift).
             Section {

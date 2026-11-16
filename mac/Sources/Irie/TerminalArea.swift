@@ -66,16 +66,23 @@ struct TerminalArea: View {
                 // before; the one with the keyboard comes up as it ends.
                 let behind = overlaps && !r.raised && !r.folding
                 let strip = RolodexModel.stripWidth
+                // Reversed, the parts run right to left: the right sidebar
+                // and the panes at the window's left, the terminal beside
+                // the sidebar (Store.reversed). Each reads left to right
+                // inside, and is told which way its edges face.
+                let flip = store.mirrored
                 ZStack(alignment: .trailing) {
                     main.modifier(FileDrop(session: selected))
                         .background { PlaceProbe { r.mainProbe = $0 } }
+                        .environment(\.layoutDirection, .leftToRight)
                         .padding(.trailing, side + r.kept(fit, behind: behind))
                         // Over the wheel while it has the keyboard, under the
                         // right sidebar still.
                         .zIndex(behind ? 0.5 : 0)
                     if r.open {
                         if r.folded {
-                            RolodexStrip()
+                            RolodexStrip(flip: flip)
+                                .environment(\.layoutDirection, .leftToRight)
                                 .padding(.leading, 4)
                                 .padding(.trailing, 10)
                                 .padding(.vertical, 12)
@@ -87,10 +94,11 @@ struct TerminalArea: View {
                             // Over the terminal its tabs start where the
                             // terminal ends, so they show whichever is on
                             // top, and on top it stands on a window's ground.
-                            RolodexView(lead: overlaps ? overlap : 0)
+                            RolodexView(lead: overlaps && !flip ? overlap : 0, trail: overlaps && flip ? overlap : 0)
+                                .environment(\.layoutDirection, .leftToRight)
                                 .padding(.leading, 4)
                                 .padding(.trailing, 12)
-                                .background { if overlaps, !behind { PanesGround() } }
+                                .background { if overlaps, !behind { PanesGround(flip: flip) } }
                                 .padding(.vertical, 12)
                                 .frame(width: deck)
                                 .background { PlaceProbe { r.wheelProbe = $0 } }
@@ -101,7 +109,7 @@ struct TerminalArea: View {
                         // the wheel's, or the terminal frame's while the
                         // terminal lies over the wheel.
                         let seam = r.folded ? strip : (behind ? fit + 11 : deck)
-                        RolodexEdge(room: room, from: seam, keep: keep)
+                        RolodexEdge(room: room, from: seam, keep: keep, flip: flip)
                             .padding(.trailing, side + seam - 6)
                             .zIndex(1.5)
                             .transition(.opacity)
@@ -112,7 +120,8 @@ struct TerminalArea: View {
                         // at its narrowest.
                         if g.place == .over {
                             let widest = RolodexModel.widest(in: room, keep: keep)
-                            OverBand(width: g.width - widest - 12)
+                            OverBand(width: g.width - widest - 12, flip: flip)
+                                .environment(\.layoutDirection, .leftToRight)
                                 .padding(.vertical, 12)
                                 .padding(.trailing, side + widest + 12)
                                 .allowsHitTesting(false)
@@ -128,7 +137,8 @@ struct TerminalArea: View {
                     }
                     if store.side.open, zen == nil {
                         RightSidebar(guide: $sideGuide, drawn: Double(width),
-                                     most: Double(max(CGFloat(SideState.minWidth), geo.size.width - minTerminal)))
+                                     most: Double(max(CGFloat(SideState.minWidth), geo.size.width - minTerminal)), flip: flip)
+                            .environment(\.layoutDirection, .leftToRight)
                             .frame(width: width)
                             .padding(.vertical, 12)
                             .transition(.move(edge: .trailing))
@@ -144,6 +154,7 @@ struct TerminalArea: View {
                             .zIndex(2)
                     }
                 }
+                .environment(\.layoutDirection, flip ? .rightToLeft : .leftToRight)
                 // Each session's terminal size, beside its panes or not, for
                 // the core to keep its agent's window at (PaneSizes.swift).
                 .onChange(of: [room, fit, geo.size.height, r.open ? 1 : 0, r.folded ? 1 : 0, store.fontSize], initial: true) {
@@ -157,70 +168,26 @@ struct TerminalArea: View {
             }
             if zen == nil { PhraseBar() }
         }
+        // While a chord with fn waits for its next key, the keys that come
+        // next, over the terminal's foot (KeyTree.swift).
+        .overlay(alignment: .bottom) {
+            KeyHint(chord: KeyChord.shared)
+                .padding(.bottom, zen == nil ? 64 : 32)
+        }
         .background(Theme.ground.ignoresSafeArea())
         .toolbarBackground(Theme.ground, for: .windowToolbar)
         // The window's own title. The bar hides it (IrieApp.showsTitle),
         // or the name would show twice.
         .navigationTitle(selected?.name ?? "\(Brand.name)")
         .toolbar {
-            // The bar's only title: the name and subtitle centre on its
-            // midline beside the button.
-            ToolbarItem(placement: .principal) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(selected?.name ?? "\(Brand.name)")
-                        .font(.system(size: 13, weight: .semibold))
-                    // Its state and the rest, in its agent's colour while it
-                    // works, as its card and the terminal's frame.
-                    Text(selected.map { Self.subtitle($0) } ?? "No session")
-                        .font(.system(size: 11))
-                        .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
-                }
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                // The session's helpers, in its Helpers card beside the
-                // terminal (Rolodex.swift), with that card's icon: the
-                // helpers never split the terminal.
-                Button {
-                    store.toggleHelpers()
-                } label: {
-                    Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: PaneKind.helpers.symbol)
-                }
-                .help(store.helperShown ? "Hide the panes (⇧⌘H)" : "Show the session’s helpers in the panes beside its terminal (⇧⌘H)")
-                .disabled(selected == nil)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                // The terminal out in a Ghostty window of its own, and back
-                // (PopOut.swift).
-                let out = store.poppedOut != nil
-                Button {
-                    store.togglePopOut()
-                } label: {
-                    Label(out ? "Pop Back In" : "Pop Out", systemImage: out ? "pip.exit" : "macwindow.on.rectangle")
-                }
-                .help(out ? "Bring the terminal back into this window (⌥⌘O)" : "Pop the terminal out into a Ghostty window of its own (⌥⌘O)")
-                .disabled(store.attach == nil)
-            }
-            // The panes beside the terminal, a rolodex of cards (Rolodex.swift).
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    store.togglePanes()
-                } label: {
-                    Label(store.rolodex.open ? "Hide Panes" : "Show Panes", systemImage: "rectangle.stack")
-                }
-                .help(store.rolodex.open ? "Hide the panes (⌥⌘P)" : "Show your panes beside the terminal: a shell, a browser, a plugin’s page (⌥⌘P; ⌥Tab walks them)")
-            }
-            // At the toolbar's trailing end, where the HIG puts a button that
-            // opens an inspector.
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    store.toggleSide()
-                } label: {
-                    Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: "sidebar.right")
-                }
-                .help(store.side.open ? "Hide the right sidebar (⌥⌘B)"
-                      : "Show the right sidebar: \(ListFormatter.localizedString(byJoining: store.sideTabs.map(\.title) + store.panes.map(\.title))) (⌥⌘B)")
+            // Reversed, the sidebar's name and counts take this side's part
+            // of the bar, which lies over the sidebar then, and the session's
+            // items go to the sidebar's part (SidebarView).
+            if store.reversed {
+                ToolbarItem(placement: .automatic) { TitleName() }
+                ToolbarItem(placement: .automatic) { Counts() }
+            } else {
+                SessionBarItems.items(store: store, reversed: false)
             }
         }
     }
@@ -508,5 +475,84 @@ private struct Placeholder: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The session side's items in the title bar: the session's name and
+/// subtitle, then its helpers, the pop out, the panes and the right sidebar.
+/// Normally the name centres in the terminal side's part of the bar and the
+/// buttons sit at its end. Reversed (Store.reversed), they go in the
+/// sidebar's part, which then lies over the terminal, one after another
+/// beside the traffic lights.
+/// A builder called from a view's body, on the main actor, as the store
+/// is: ToolbarContent's own body is not.
+@MainActor
+enum SessionBarItems {
+    @ToolbarContentBuilder
+    static func items(store: Store, reversed: Bool) -> some ToolbarContent {
+        let selected = store.selectedRow
+        // The bar's only title: the name and subtitle centre on its
+        // midline beside the button.
+        ToolbarItem(placement: reversed ? .automatic : .principal) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(selected?.name ?? "\(Brand.name)")
+                    .font(.system(size: 13, weight: .semibold))
+                // Its state and the rest, in its agent's colour while it
+                // works, as its card and the terminal's frame.
+                Text(selected.map { TerminalArea.subtitle($0) } ?? "No session")
+                    .font(.system(size: 11))
+                    .foregroundStyle(selected.flatMap(Look.agentInk).map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
+            }
+            .lineLimit(1)
+            // Beside the buttons rather than centred, it keeps to a width,
+            // so a long name never pushes them into the overflow menu.
+            .frame(idealWidth: reversed ? 300 : nil, maxWidth: reversed ? 360 : .infinity, maxHeight: .infinity, alignment: .leading)
+            .padding(.leading, reversed ? 6 : 0)
+        }
+        ToolbarItem(placement: reversed ? .automatic : .primaryAction) {
+            // The session's helpers, in its Helpers card beside the
+            // terminal (Rolodex.swift), with that card's icon: the
+            // helpers never split the terminal.
+            Button {
+                store.toggleHelpers()
+            } label: {
+                Label(store.helperShown ? "Hide Helpers" : "Show Helpers", systemImage: PaneKind.helpers.symbol)
+            }
+            .help(store.helperShown ? "Hide the panes (⇧⌘H)" : "Show the session’s helpers in the panes beside its terminal (⇧⌘H)")
+            .disabled(selected == nil)
+        }
+        ToolbarItem(placement: reversed ? .automatic : .primaryAction) {
+            // The terminal out in a Ghostty window of its own, and back
+            // (PopOut.swift).
+            let out = store.poppedOut != nil
+            Button {
+                store.togglePopOut()
+            } label: {
+                Label(out ? "Pop Back In" : "Pop Out", systemImage: out ? "pip.exit" : "macwindow.on.rectangle")
+            }
+            .help(out ? "Bring the terminal back into this window (⌥⌘O)" : "Pop the terminal out into a Ghostty window of its own (⌥⌘O)")
+            .disabled(store.attach == nil)
+        }
+        // The panes beside the terminal, a rolodex of cards (Rolodex.swift).
+        ToolbarItem(placement: reversed ? .automatic : .primaryAction) {
+            Button {
+                store.togglePanes()
+            } label: {
+                Label(store.rolodex.open ? "Hide Panes" : "Show Panes", systemImage: "rectangle.stack")
+            }
+            .help(store.rolodex.open ? "Hide the panes (⌥⌘P)" : "Show your panes beside the terminal: a shell, a browser, a plugin’s page (⌥⌘P; ⌥Tab walks them)")
+        }
+        // At the toolbar's trailing end, where the HIG puts a button that
+        // opens an inspector; reversed, the right sidebar comes out of the
+        // left edge, and its mark says so.
+        ToolbarItem(placement: reversed ? .automatic : .primaryAction) {
+            Button {
+                store.toggleSide()
+            } label: {
+                Label(store.side.open ? "Hide Right Sidebar" : "Show Right Sidebar", systemImage: reversed ? "sidebar.left" : "sidebar.right")
+            }
+            .help(store.side.open ? "Hide the right sidebar (⌥⌘B)"
+                  : "Show the right sidebar: \(ListFormatter.localizedString(byJoining: store.sideTabs.map(\.title) + store.panes.map(\.title))) (⌥⌘B)")
+        }
     }
 }

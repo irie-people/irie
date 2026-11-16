@@ -252,6 +252,18 @@ final class Store {
             keepSplit()
         }
     }
+    /// The layout reversed, the window as in a mirror: the sidebar on the
+    /// right, the terminal beside it, and the panes and the right sidebar
+    /// on the left (Fn+X Fn+L Fn+R, View › Layout › Reverse; KeyTree.swift).
+    /// Text still reads left to right. Remembered across launches; zen
+    /// keeps its own layout, so it never reverses.
+    var reversed = UserDefaults.standard.bool(forKey: Store.reversedKey) {
+        didSet { if reversed != oldValue, !isFixture { UserDefaults.standard.set(reversed, forKey: Store.reversedKey) } }
+    }
+    static let reversedKey = "layoutReversed"
+    /// The window's parts run right to left: the layout is reversed and zen,
+    /// which has a layout of its own, is off.
+    var mirrored: Bool { reversed && !zen.on }
     /// The right sidebar: whether it is open, its width and its
     /// tab, kept across launches but never by `--snapshot` (RightSidebar.swift).
     var side = SideState.saved() {
