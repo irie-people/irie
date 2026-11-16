@@ -359,6 +359,8 @@ final class Store {
     /// The mail plugin's accounts and list, which the Mail tab and window
     /// share (Mail.swift).
     let mail: MailModel
+    /// The Yoink plugin's downloads, which its tab draws (Yoink.swift).
+    let yoink: YoinkModel
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
     /// Zen: the session on show alone, full screen (Zen.swift).
@@ -369,6 +371,7 @@ final class Store {
         client = CoreClient(socketPath: socketPath)
         settings = SettingsModel(client: client)
         mail = MailModel(client: client)
+        yoink = YoinkModel(client: client)
         notes.store = self
         settings.changed = { [weak self] in
             self?.loadChoices()
@@ -1278,6 +1281,11 @@ final class Store {
             case "answered" where r.op == "markets":
                 // :markets: the Markets window says how the map stands.
                 NotificationCenter.default.post(name: .irieMarkets, object: nil)
+            case _ where r.op == "yoink" && yoinkPane != nil:
+                // :yoink opens the Yoink tab, where the download shows as it
+                // goes; a start says so too.
+                showYoink()
+                if r.did != "answered" { say(r.text, error: false, seconds: 5) }
             case "answered":
                 // :mail opens the Mail tab, which says more than words can.
                 if r.op == "mail", mailShown {

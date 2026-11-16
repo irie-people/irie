@@ -163,6 +163,7 @@ type Core struct {
 	vpn        vpnState              // Mullvad VPN, while vpn.on (vpn.go)
 	variorum   variorumState         // Variorum's door: the note each session named last (variorum.go)
 	mail       mailState             // the mail plugin's accounts and connections (mail.go)
+	yoink      yoinkState            // the yoink plugin's downloads (yoink.go)
 }
 
 // session is one registry entry. Its facts come from tmux pane options and
@@ -817,6 +818,12 @@ func (c *Core) CallFrom(peer int, op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.mailOp(peer, a)
+	case ipc.OpYoink:
+		var a ipc.YoinkArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.yoinkOp(peer, a)
 	case ipc.OpConfig:
 		var a ipc.ConfigArgs
 		if err := decode(raw, &a); err != nil {
@@ -860,7 +867,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
-			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
+			ipc.OpVPN, ipc.OpAnon, ipc.OpPeers, ipc.OpDock, ipc.OpPane, ipc.OpPlugins, ipc.OpHelpers, ipc.OpMarkets, ipc.OpMail, ipc.OpYoink, ipc.OpVariorum, ipc.OpCard, ipc.OpSizes, ipc.OpLink,
 			ipc.OpLearn, ipc.FeatureTutor, ipc.OpPerf, ipc.OpContext, ipc.OpFork, ipc.FeatureBoostAlways, ipc.OpBench, ipc.OpRebuilds, ipc.OpNotepad,
 			ipc.OpLock,
 			ipc.OpWorktrees,
@@ -1109,6 +1116,13 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.mailOp(0, a)
+	case ipc.OpYoink:
+		// A call with no process to it, such as one from within the core.
+		var a ipc.YoinkArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.yoinkOp(0, a)
 	case ipc.OpComplete:
 		var a ipc.CompleteArgs
 		if err := decode(raw, &a); err != nil {

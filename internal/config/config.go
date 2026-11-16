@@ -63,6 +63,7 @@ type Config struct {
 	Variorum  Variorum           `toml:"variorum"`
 	Mail      Mail               `toml:"mail"`
 	Extension Extension          `toml:"extension"`
+	Yoink     Yoink              `toml:"yoink"`
 	Plugins   Plugins            `toml:"plugins"`
 }
 
@@ -99,6 +100,10 @@ type Plugins struct {
 	// Extension is Irie in your own browser: a browser extension with the
 	// tools of Irie's plugins, the first of them Terms in short.
 	Extension bool `toml:"extension"`
+	// Yoink downloads a video, or its sound, from a link: yt-dlp, pinned,
+	// run by the core into yoink.folder. Off until asked, so a new Irie
+	// downloads from no site of its own accord.
+	Yoink bool `toml:"yoink"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -146,6 +151,10 @@ func (c Config) ExtensionOn() bool { return ExtensionBuilt && c.Plugins.Extensio
 // TermsOn says whether Terms in short runs: plugins.terms, with the
 // plugin built in.
 func (c Config) TermsOn() bool { return TermsBuilt && c.Plugins.Terms }
+
+// YoinkOn says whether the yoink plugin runs: plugins.yoink, with the
+// plugin built in.
+func (c Config) YoinkOn() bool { return YoinkBuilt && c.Plugins.Yoink }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -1026,6 +1035,7 @@ func Default() Config {
 		Browser:  Browser{Connector: "off", Headless: true, Idle: BrowserIdle, Search: BrowserSearch},
 		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Mail:     defaultMail(),
+		Yoink:    defaultYoink(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
 		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Manifests: map[string]bool{}},
@@ -1152,8 +1162,9 @@ func Parse(data []byte, path string) (Config, error) {
 		Variorum  *Variorum                 `toml:"variorum"`
 		Mail      *Mail                     `toml:"mail"`
 		Extension *Extension                `toml:"extension"`
+		Yoink     *Yoink                    `toml:"yoink"`
 		Plugins   *Plugins                  `toml:"plugins"`
-	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1834,13 +1845,14 @@ func (c Config) Validate() error {
 	}
 	checkMail(c.Mail, bad)
 	checkExtension(c.Extension, bad)
+	checkYoink(c.Yoink, bad)
 	return errors.Join(errs...)
 }
 
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1893,6 +1905,10 @@ func (c Config) Write(w io.Writer) error {
 	if !ExtensionBuilt {
 		delete(m, "extension")
 		delete(plugins, "extension")
+	}
+	if !YoinkBuilt {
+		delete(m, "yoink")
+		delete(plugins, "yoink")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

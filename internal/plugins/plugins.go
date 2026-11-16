@@ -109,12 +109,12 @@ type Live struct {
 
 // order is the order plugins show in; a plugin this build leaves out is
 // skipped.
-var order = []string{"vpn", "privacy", "writing", "markets", "mail", "bitwarden", "terms", "extension"}
+var order = []string{"vpn", "privacy", "writing", "markets", "mail", "bitwarden", "terms", "extension", "yoink"}
 
 // built are the plugins in this build, by name. Each plugin's file adds
 // itself, and a build tag leaves a plugin's file out with its parts' code:
-// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension builds
-// Irie without any of them (DESIGN §4.17).
+// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink
+// builds Irie without any of them (DESIGN §4.17).
 var built = map[string]func() Plugin{}
 
 // All are Irie's plugins in this build, in the order they show.

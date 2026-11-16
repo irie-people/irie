@@ -180,6 +180,26 @@ enum Snapshot {
             }
             PluginPaneFixture.down = []
             PluginPaneFixture.signIn = []
+            // Yoink's tab (YoinkViews.swift): its downloads as they go, in
+            // both modes, a link's sizes to pick from, and what it lacks
+            // while it lacks it.
+            let yoinkPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.yoinkPlugin.utf8))
+            for (base, picking, dark, needs) in [("side-yoink", false, false, false), ("side-yoink-dark", false, true, false),
+                                                 ("side-yoink-picking", true, false, false), ("side-yoink-needs", false, false, true)] {
+                var plugin = yoinkPlugin
+                if needs {
+                    plugin.parts[0].state = "needs"
+                    plugin.parts[0].detail = "It needs ffmpeg, to merge a video with its sound and to make mp3s: `brew install ffmpeg`."
+                }
+                store.plugins = withPanes.plugins + [plugin]
+                store.yoink.loadFixture(picking: picking)
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: "yoink.yoink")
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -696,6 +716,18 @@ enum Fixture {
         {"name": "bookings", "plugin": "bookings", "title": "Bookings", "on": true, "state": "needs", "detail": "Nothing answers at 127.0.0.1:8090 yet. Start it: cd ~/code/bookings && make serve"},
         {"name": "writing.variorum", "plugin": "writing", "part": "variorum", "title": "Writing in Variorum", "on": true, "state": "ready", "detail": "Ready: :write starts a writing session. It has no switch of its own: it is on while the Writing plugin is."}
       ]}]}
+    """#
+
+    /// The Yoink plugin, on and ready, with its tab.
+    static let yoinkPlugin = #"""
+    {"name": "yoink", "title": "Yoink", "on": true,
+     "summary": "Download a video, or its sound as an mp3, from a link to YouTube, Vimeo, Wikimedia Commons and the other sites yt-dlp knows, into your Downloads folder.",
+     "parts": [
+      {"name": "yoink", "title": "Video downloads", "on": true, "state": "ready",
+       "detail": "Ready: yt-dlp 2026.10.26 through uvx, with ffmpeg; downloads land in ~/Downloads.",
+       "summary": "Paste a link in the Yoink tab, or give it to :yoink in any task bar, and pick a size or the sound alone.",
+       "pane": {"id": "yoink.yoink", "title": "Yoink", "icon": "arrow.down.circle", "kind": "yoink"}}
+     ]}
     """#
 
     /// The config op's answer for a file with a profile, repos, the jot dog

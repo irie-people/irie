@@ -215,6 +215,11 @@ type (
 	WorktreesArgs    = ipc.WorktreesArgs
 	WorktreesResult  = ipc.WorktreesResult
 	ClosedTree       = ipc.ClosedTree
+	YoinkArgs        = ipc.YoinkArgs
+	YoinkResult      = ipc.YoinkResult
+	YoinkInfo        = ipc.YoinkInfo
+	YoinkChoice      = ipc.YoinkChoice
+	YoinkDownload    = ipc.YoinkDownload
 )
 
 // The wire's constants: the API version, the op and frame names, the
@@ -503,4 +508,18 @@ const (
 	VariorumNeeds      = ipc.VariorumNeeds
 	VariorumOff        = ipc.VariorumOff
 	OpWorktrees        = ipc.OpWorktrees
+	OpYoink            = ipc.OpYoink
+	YoinkList          = ipc.YoinkList
+	YoinkFormats       = ipc.YoinkFormats
+	YoinkStart         = ipc.YoinkStart
+	YoinkCancel        = ipc.YoinkCancel
+	YoinkClear         = ipc.YoinkClear
+	YoinkBest          = ipc.YoinkBest
+	YoinkAudio         = ipc.YoinkAudio
+	YoinkStarting      = ipc.YoinkStarting
+	YoinkDownloading   = ipc.YoinkDownloading
+	YoinkProcessing    = ipc.YoinkProcessing
+	YoinkDone          = ipc.YoinkDone
+	YoinkFailed        = ipc.YoinkFailed
+	YoinkCanceled      = ipc.YoinkCanceled
 )
