@@ -62,7 +62,6 @@ struct NotesPanel: View {
         .background(shape.fill(Theme.panel))
         .overlay(shape.strokeBorder(Theme.edge, lineWidth: 1))
         .clipShape(shape)
-        .background(shape.fill(Theme.panel).shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .padding(.horizontal, 10)
         .padding(.top, 6)
         .onChange(of: focus) { old, _ in left(old) }
@@ -81,9 +80,11 @@ struct NotesPanel: View {
                         .rotationEffect(.degrees(open ? 90 : 0))
                         .foregroundStyle(Theme.muted)
                         .frame(width: 10)
+                    // A section's head, as a group's in the list.
                     Text("Notes")
-                        .font(Theme.font(12, .heavy))
-                        .foregroundStyle(Theme.ink)
+                        .font(Theme.font(Theme.headSize, .heavy))
+                        .tracking(Theme.headTracking)
+                        .foregroundStyle(Theme.muted)
                     // Folded, the next note to do shows after the title.
                     if !open, let next = pad.notes.first(where: { !$0.isDone && !$0.text.isBlank }) {
                         Text(next.text.firstLine)
@@ -95,7 +96,7 @@ struct NotesPanel: View {
                     Spacer(minLength: 4)
                     if left > 0 {
                         Text("\(left)")
-                            .font(Theme.font(11.5, .bold))
+                            .font(Theme.font(Theme.headSize, .bold))
                             .monospacedDigit()
                             .foregroundStyle(Theme.muted)
                     }
