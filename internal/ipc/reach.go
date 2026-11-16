@@ -36,7 +36,7 @@ var reaches = map[string]Reach{
 	OpHello: ReachRead, OpList: ReachRead, OpSubscribe: ReachRead, OpComplete: ReachRead,
 	OpAttachInfo: ReachRead, OpConversation: ReachRead, OpScreen: ReachRead, OpDog: ReachRead,
 	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
-	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead,
+	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
 
 	// Steps of the history.
 	OpRename: ReachInside, OpPark: ReachInside, OpUnpark: ReachInside, OpPin: ReachInside,

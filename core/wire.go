@@ -45,6 +45,8 @@ type (
 	PeerCaller       = ipc.PeerCaller
 	Hearer           = ipc.Hearer
 	Client           = ipc.Client
+	LinkArgs         = ipc.LinkArgs
+	LinkResult       = ipc.LinkResult
 	Lock             = ipc.Lock
 	LockPart         = ipc.LockPart
 	LockPackage      = ipc.LockPackage
@@ -276,6 +278,10 @@ const (
 	InputRan           = ipc.InputRan
 	InputAsked         = ipc.InputAsked
 	MaxMessage         = ipc.MaxMessage
+	OpLink             = ipc.OpLink
+	LinkMax            = ipc.LinkMax
+	LinkInCard         = ipc.LinkInCard
+	LinkInSystem       = ipc.LinkInSystem
 	OpLock             = ipc.OpLock
 	LockSpawn          = ipc.LockSpawn
 	LockResume         = ipc.LockResume

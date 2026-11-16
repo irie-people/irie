@@ -351,7 +351,7 @@ func TestConfLoadsIntoTmux(t *testing.T) {
 			t.Errorf("%s = %q, want %q", c[0], got, c[1])
 		}
 	}
-	if got := run(t, r, "show-options", "-sv", "terminal-features"); !strings.Contains(got, "xterm*:extkeys") {
+	if got := run(t, r, "show-options", "-sv", "terminal-features"); !strings.Contains(got, "xterm*:extkeys") || !strings.Contains(got, "xterm*:hyperlinks") {
 		t.Errorf("terminal-features = %q", got)
 	}
 	var binding string
