@@ -2,26 +2,30 @@ import AppKit
 import Observation
 import SwiftUI
 
-// Zen (Fn+Z, View › Enter Zen Mode): the session on show alone, full
-// screen, in a layout of zen's own, apart from View › Layout's. Zen hides
-// the sidebar, the title bar's toolbar, the right sidebar, the panes and
-// the strip under the terminal. It moves and closes nothing, so leaving it
-// gives the window back as it was. The terminal stays the same view all
-// along, so its tmux client never restarts, and every agent's window takes
-// zen's size once (PaneSizes.swift).
+// Zen (Fn+Z, View › Enter Zen Mode): the session on show and its own
+// parts alone, full screen, in a layout of zen's own, apart from View ›
+// Layout's. Its parts are its card, which the lines join to its terminal as
+// in the list, its terminal or conversation, and its panes, as it has them.
+// Zen hides the rest: the other cards and the sidebar round them (search,
+// details, notes, task bar), the title bar's toolbar, the right sidebar,
+// which is the same for every session, and the strip under the terminal. It
+// moves and closes nothing, so leaving it gives the window back as it was.
+// The terminal stays the same view all along, so its tmux client never
+// restarts (asked for on 2026-11-15, the card and the panes the same day).
 //
-// The three layouts answer three ways of working with one agent:
+// The three layouts arrange those parts for three ways of working:
 //
-// - Centred, the first: a column of easy reading width in the middle of the
-//   screen. A full screen's terminal is far wider than a line of text should
-//   be, and an agent's words wrap at the terminal's width; VS Code's zen
-//   centres its editor too (PROVENANCE.md).
-// - Edge to Edge: the terminal across the whole screen, for the widest
-//   diffs, logs and tables, and Claude Code's diff panel, which docks from
-//   144 columns.
-// - Keep Watch: the other sessions as marks down the left edge, red when one
-//   needs you, so an agent waiting on a question is never lost behind the
-//   one you watch. They stand where the sidebar was.
+// - Centred, the first: the card, then the terminal in a column of easy
+//   reading width, together in the middle of the screen. A full screen's
+//   terminal is far wider than a line of text should be, and an agent's
+//   words wrap at the terminal's width; VS Code's zen centres its editor
+//   too (PROVENANCE.md).
+// - Edge to Edge: the card at the screen's left edge, on the sidebar's
+//   ground, and the terminal across the rest, for the widest diffs, logs
+//   and tables, and Claude Code's diff panel, which docks from 144 columns.
+// - Keep Watch: Edge to Edge, with the other sessions listed under the
+//   card, red when one needs you, so an agent waiting on a question is never
+//   lost behind the one you watch.
 //
 // Apple's guidance for full screen shapes the rest: the system's own full
 // screen, entered and left only by the person, with the menu bar a move of
@@ -47,11 +51,11 @@ enum ZenLayout: String, CaseIterable, Identifiable {
     var blurb: String {
         switch self {
         case .centred:
-            return "A column of easy reading width in the middle of the screen, the session’s name above it. For reading an agent’s work and writing to it."
+            return "The session’s card and its terminal together in the middle of the screen, the terminal a column of easy reading width. For reading an agent’s work and writing to it."
         case .edge:
-            return "The terminal across the whole screen, with nothing round it. The most room, for wide diffs, logs and tables."
+            return "The session’s card at the screen’s edge and its terminal across the rest. The most room, for wide diffs, logs and tables."
         case .watch:
-            return "Your other sessions as marks down the left edge, red when one needs you. Stay on one without losing the rest; a click shows another."
+            return "The session’s card with your other sessions listed under it, red when one needs you. Stay on one without losing the rest; a click shows another."
         }
     }
 }
@@ -73,12 +77,18 @@ final class ZenModel {
     /// with.
     static let widths = [80, 100, 120]
     static let standardColumns = 100
-    /// Keep Watch's rail, and the room over the terminal for the title.
-    static let railWidth: CGFloat = 40
-    static let titleRoom: CGFloat = 40
+    /// The card's column: as wide as the sidebar zen found, within the
+    /// sidebar's own bounds, or the sidebar's first width.
+    static let standardCardColumn: CGFloat = 290
+    static func cardColumn(for sidebar: PaneLayout.Sidebar?) -> CGFloat {
+        guard let s = sidebar, s.shown, let w = s.width else { return standardCardColumn }
+        return min(max(CGFloat(w), 260), 420)
+    }
 
     /// Zen is on.
     fileprivate(set) var on = false
+    /// How wide the card's column is, while zen is on.
+    fileprivate(set) var cardColumn = ZenModel.standardCardColumn
     var layout = ZenLayout(rawValue: UserDefaults.standard.string(forKey: ZenModel.layoutKey) ?? "") ?? .centred {
         didSet { if layout != oldValue, !fixture { UserDefaults.standard.set(layout.rawValue, forKey: Self.layoutKey) } }
     }
@@ -217,6 +227,7 @@ extension Store {
         zen.found = ZenModel.Found(sidebar: WindowPanes.sidebar.map { PaneLayout.Sidebar(shown: $0.shown, width: $0.shown ? $0.width.rounded() : nil) },
                                    toolbar: window.toolbar?.isVisible ?? true)
         zen.keepFound()
+        zen.cardColumn = ZenModel.cardColumn(for: zen.found?.sidebar)
         begin(in: window)
         if zen.fullScreen, !window.styleMask.contains(.fullScreen) {
             zen.tookScreen = true
@@ -230,6 +241,7 @@ extension Store {
     func resumeZen(in window: NSWindow) {
         guard !zen.on, !isFixture, UserDefaults.standard.bool(forKey: ZenModel.onKey) else { return }
         zen.found = ZenModel.savedFound()
+        zen.cardColumn = ZenModel.cardColumn(for: zen.found?.sidebar)
         // How to leave it is said once the person is here to read it.
         begin(in: window, hint: NSApp.isActive)
         if zen.fullScreen, !window.styleMask.contains(.fullScreen) {
@@ -281,10 +293,9 @@ extension Store {
     }
 
     /// Zen gives way to a part of the window it hides that the person asks
-    /// for, such as the right sidebar or the panes: zen ends, and the part
-    /// shows as asked. Whether zen was on. What an agent asks for, such as a
-    /// card of `irie ctl open`, waits behind zen instead and shows once zen
-    /// ends.
+    /// for, such as the right sidebar or the session list: zen ends, and the
+    /// part shows as asked. Whether zen was on. The session's own panes are
+    /// zen's too, so they never end it.
     @discardableResult
     func zenGivesWay() -> Bool {
         guard zen.on else { return false }
@@ -437,66 +448,89 @@ extension GhosttyTerminalView {
 
 // MARK: Views
 
-/// Keep Watch's rail: every session the sidebar draws, in its order, as its
-/// card's mark in its own colours, the one on show ringed in its frame's
-/// colour. A click shows one, still in zen. Over them, a count of those that
-/// need you goes to the first, as the title bar's does.
-struct ZenRail: View {
+/// The column zen keeps of the sidebar: the session's card, which the lines
+/// join to its terminal, its helpers, and in Keep Watch the other sessions
+/// under it. Edge to Edge and Keep Watch stand it on the sidebar's ground at
+/// the screen's edge; Centred lets it float beside the terminal.
+struct ZenCardColumn: View {
+    let layout: ZenLayout
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ZenCard()
+            if layout == .watch {
+                ZenOthers()
+            }
+        }
+        .padding(.top, 24)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            if layout != .centred { Theme.sidebar.ignoresSafeArea() }
+        }
+    }
+}
+
+/// Keep Watch's other sessions: each one the sidebar draws but the one on
+/// show, in its order, a line each, its mark and name, and in red what it
+/// needs while it needs you. A count over them goes to the first that needs
+/// you, as the title bar's does; a click shows one, still in zen.
+struct ZenOthers: View {
     @Environment(Store.self) private var store
 
     var body: some View {
         let shown = store.selection
-        let needs = store.counts.needs
-        VStack(spacing: 4) {
-            if needs.count > 0 {
-                Button {
-                    if let id = needs.first { store.show(id, focus: true) }
-                } label: {
-                    HStack(spacing: 2) {
-                        StateMark(look: .needs, size: 9)
-                        Text("\(needs.count)").font(Theme.font(10, .bold)).monospacedDigit()
+        let others = store.drawnOrder.filter { $0.id != shown }
+        let needing = others.filter { Look($0).loud }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Other sessions")
+                    .font(Theme.font(11, .semibold))
+                    .foregroundStyle(Theme.muted)
+                Spacer(minLength: 0)
+                if let first = needing.first {
+                    Button { store.show(first.id, focus: true) } label: {
+                        HStack(spacing: 3) {
+                            StateMark(look: .needs, size: 9)
+                            Text(needing.count == 1 ? "1 needs you" : "\(needing.count) need you")
+                                .font(Theme.font(10.5, .bold))
+                                .monospacedDigit()
+                        }
+                        .foregroundStyle(Theme.needs)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1.5)
+                        .background(Capsule().fill(Theme.needs.opacity(0.12)))
+                        .overlay(Capsule().strokeBorder(Theme.needs.opacity(0.4), lineWidth: 1))
+                        .contentShape(Capsule())
                     }
-                    .foregroundStyle(Theme.needs)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1.5)
-                    .background(Capsule().fill(Theme.needs.opacity(0.12)))
-                    .overlay(Capsule().strokeBorder(Theme.needs.opacity(0.4), lineWidth: 1))
-                    .contentShape(Capsule())
+                    .buttonStyle(.plain)
+                    .help("Show the first that needs you")
                 }
-                .buttonStyle(.plain)
-                .help(needs.count == 1 ? "1 needs you" : "\(needs.count) need you")
-                .accessibilityLabel(needs.count == 1 ? "1 needs you" : "\(needs.count) need you")
-                .padding(.top, 8)
             }
+            .padding(.horizontal, 6)
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 2) {
-                    ForEach(store.drawnOrder) { s in
-                        ZenRailMark(mark: .init(s), shown: s.id == shown) { store.show(s.id, focus: true) }
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(others) { s in
+                        ZenOtherRow(row: .init(s)) { store.show(s.id, focus: true) }
                             .equatable()
                     }
                 }
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity)
             }
         }
-        .frame(width: ZenModel.railWidth)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.sidebar))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.edge, lineWidth: 1))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Sessions")
+        .accessibilityLabel("Other sessions")
     }
 }
 
-/// One session on the rail. Its inputs are plain values, so a row's news
-/// redraws only the marks it changes.
-private struct ZenRailMark: View, Equatable {
-    struct Mark: Equatable {
+/// One of Keep Watch's other sessions. Its inputs are plain values, so a
+/// row's news redraws only the lines it changes.
+private struct ZenOtherRow: View, Equatable {
+    struct Row: Equatable {
         let name: String
         let look: Look
         let label: String
         let tint: Color?
-        let edge: Color
+        let quiet: Bool
 
         @MainActor
         init(_ s: Session) {
@@ -504,57 +538,43 @@ private struct ZenRailMark: View, Equatable {
             look = Look(s)
             label = Look.label(s)
             tint = Look.agentTint(s)
-            edge = Look.edge(s)
+            quiet = look.quiet || look == .done && s.isParked
         }
     }
 
-    let mark: Mark
-    let shown: Bool
+    let row: Row
     let action: () -> Void
+    @State private var hovering = false
 
-    static func == (a: Self, b: Self) -> Bool { a.mark == b.mark && a.shown == b.shown }
+    static func == (a: Self, b: Self) -> Bool { a.row == b.row }
 
     var body: some View {
-        let box = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         Button(action: action) {
-            StateMark(look: mark.look, size: 13, tint: mark.tint)
-                .frame(width: 30, height: 26)
-                .background {
-                    if shown {
-                        box.fill(Theme.selection)
-                            .overlay(box.strokeBorder(mark.edge, lineWidth: 1.5))
-                    }
+            HStack(spacing: 8) {
+                StateMark(look: row.look, size: 12, tint: row.tint)
+                Text(row.name)
+                    .font(Theme.font(12.5, row.quiet ? .regular : .medium))
+                    .foregroundStyle(row.quiet ? Theme.muted : Theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
+                if row.look.loud {
+                    Text(row.label)
+                        .font(Theme.font(11, .semibold))
+                        .foregroundStyle(Theme.needs)
+                        .lineLimit(1)
                 }
-                .opacity(mark.look.quiet && !shown ? 0.6 : 1)
-                .contentShape(box)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background { if hovering { shape.fill(Theme.hover) } }
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .help("\(mark.name) · \(mark.label)")
-        .accessibilityLabel("\(mark.name), \(mark.label)")
-        .accessibilityAddTraits(shown ? .isSelected : [])
-    }
-}
-
-/// The session's name and state over its terminal in Centred and Keep
-/// Watch, as the title bar has them outside zen, and quieter than what they
-/// head (Roots' principles §2.9).
-struct ZenTitle: View {
-    let session: Session?
-
-    var body: some View {
-        if let s = session {
-            HStack(spacing: 6) {
-                StateMark(look: Look(s), size: 11, tint: Look.agentTint(s))
-                Text(s.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                Text(TerminalArea.subtitle(s))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Look.agentInk(s) ?? Theme.muted)
-            }
-            .lineLimit(1)
-            .accessibilityElement(children: .combine)
-        }
+        .onHover { hovering = $0 }
+        .help("\(row.name) · \(row.label)")
+        .accessibilityLabel("\(row.name), \(row.label)")
     }
 }
 
@@ -642,36 +662,43 @@ private struct ZenSketch: View {
                 ctx.stroke(p, with: .color(Theme.agent(slot: 1)), lineWidth: 1.2)
                 text(in: r)
             }
-            // The name and state: a mark and two short lines.
-            func title(x: CGFloat, centred: Bool) {
-                let total: CGFloat = 4 + 3 + 18 + 3 + 26
-                let x0 = centred ? (w - total) / 2 : x
-                ctx.fill(Path(ellipseIn: CGRect(x: x0, y: 6, width: 4, height: 4)), with: .color(Theme.agent(slot: 1)))
-                ctx.fill(Path(roundedRect: CGRect(x: x0 + 7, y: 7, width: 18, height: 2), cornerRadius: 1), with: .color(Theme.ink.opacity(0.7)))
-                ctx.fill(Path(roundedRect: CGRect(x: x0 + 28, y: 7, width: 26, height: 2), cornerRadius: 1), with: .color(Theme.muted.opacity(0.7)))
+            // The session's card: a small rounded card with its mark and
+            // name, edged in the agent's colour as the selected card is, and
+            // the lines that join it to the terminal.
+            func card(_ r: CGRect) {
+                let p = Path(roundedRect: r, cornerRadius: 3)
+                ctx.fill(p, with: .color(Theme.selection))
+                ctx.stroke(p, with: .color(Theme.agent(slot: 1)), lineWidth: 1)
+                ctx.fill(Path(ellipseIn: CGRect(x: r.minX + 3, y: r.minY + 3.5, width: 3, height: 3)), with: .color(Theme.agent(slot: 1)))
+                ctx.fill(Path(roundedRect: CGRect(x: r.minX + 8, y: r.minY + 4, width: r.width * 0.5, height: 2), cornerRadius: 1),
+                         with: .color(Theme.ink.opacity(0.7)))
+                ctx.fill(Path(roundedRect: CGRect(x: r.minX + 8, y: r.minY + 8, width: r.width * 0.35, height: 1.6), cornerRadius: 0.8),
+                         with: .color(Theme.muted.opacity(0.7)))
+                ctx.fill(Path(CGRect(x: r.maxX, y: r.midY - 1.4, width: 6, height: 0.8)), with: .color(Theme.agent(slot: 1)))
+                ctx.fill(Path(CGRect(x: r.maxX, y: r.midY + 0.6, width: 6, height: 0.8)), with: .color(Theme.agent(slot: 1)))
             }
             switch layout {
             case .centred:
-                let cw = w * 0.5
-                title(x: 0, centred: true)
-                frame(CGRect(x: (w - cw) / 2, y: 15, width: cw, height: h - 22))
+                let cw = w * 0.42, cardW: CGFloat = 26
+                let x0 = (w - (cardW + 6 + cw)) / 2
+                card(CGRect(x: x0, y: 12, width: cardW, height: 13))
+                frame(CGRect(x: x0 + cardW + 6, y: 7, width: cw, height: h - 14))
             case .edge:
-                text(in: CGRect(x: 2, y: 2, width: w - 4, height: h - 4))
+                ctx.fill(Path(CGRect(x: 0, y: 0, width: 34, height: h)), with: .color(Theme.sidebar))
+                card(CGRect(x: 4, y: 8, width: 26, height: 13))
+                frame(CGRect(x: 36, y: 3, width: w - 39, height: h - 6))
             case .watch:
-                let rail = CGRect(x: 5, y: 5, width: 12, height: h - 10)
-                ctx.fill(Path(roundedRect: rail, cornerRadius: 4), with: .color(Theme.sidebar))
-                ctx.stroke(Path(roundedRect: rail, cornerRadius: 4), with: .color(Theme.edge), lineWidth: 0.8)
-                let marks: [Color] = [Theme.agent(slot: 1), Theme.needs, Theme.agent(slot: 4), Look.doneColor, Theme.muted]
+                ctx.fill(Path(CGRect(x: 0, y: 0, width: 34, height: h)), with: .color(Theme.sidebar))
+                card(CGRect(x: 4, y: 8, width: 26, height: 13))
+                // The others, a line each: a mark, one of them red, and a name.
+                let marks: [Color] = [Theme.needs, Theme.agent(slot: 4), Look.doneColor, Theme.muted, Theme.agent(slot: 3)]
                 for (i, c) in marks.enumerated() {
-                    let y = rail.minY + 6 + CGFloat(i) * 8
-                    if i == 0 {
-                        ctx.stroke(Path(roundedRect: CGRect(x: rail.minX + 1.5, y: y - 2.5, width: rail.width - 3, height: 8), cornerRadius: 2.5),
-                                   with: .color(Theme.agent(slot: 1)), lineWidth: 0.8)
-                    }
-                    ctx.fill(Path(ellipseIn: CGRect(x: rail.midX - 1.5, y: y, width: 3, height: 3)), with: .color(c))
+                    let y = 30 + CGFloat(i) * 7
+                    ctx.fill(Path(ellipseIn: CGRect(x: 6, y: y, width: 3, height: 3)), with: .color(c))
+                    ctx.fill(Path(roundedRect: CGRect(x: 12, y: y + 0.6, width: i == 0 ? 16 : 12, height: 1.8), cornerRadius: 0.9),
+                             with: .color(i == 0 ? Theme.needs.opacity(0.8) : Theme.ink.opacity(0.45)))
                 }
-                title(x: 22, centred: false)
-                frame(CGRect(x: 22, y: 15, width: w - 27, height: h - 20))
+                frame(CGRect(x: 36, y: 5, width: w - 41, height: h - 10))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))

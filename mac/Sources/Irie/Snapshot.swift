@@ -359,8 +359,9 @@ enum Snapshot {
     }
 
     /// Zen (Zen.swift): each layout at a laptop screen's size, as Fn+Z
-    /// shows it, the sidebar folded away and the toolbar gone, and Keep
-    /// Watch's rail with a card that needs you.
+    /// shows it, the list folded away and the toolbar gone, the session's own
+    /// card beside its terminal, and Keep Watch's other sessions with one
+    /// that needs you.
     private static func zenShots(_ store: Store, into dir: String) throws {
         store.side = SideState()
         store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
@@ -369,11 +370,18 @@ enum Snapshot {
         store.mode = .repo
         store.folded = []
         store.parkedOpen = true
-        let zens: [(String, ZenLayout, Bool)] = [
-            ("zen-centred", .centred, false), ("zen-centred-dark", .centred, true), ("zen-edge", .edge, false),
-            ("zen-edge-dark", .edge, true), ("zen-watch", .watch, false), ("zen-watch-dark", .watch, true),
+        // And with the session's panes open, which zen keeps as it has them.
+        let zens: [(String, ZenLayout, Bool, PaneKind?)] = [
+            ("zen-centred", .centred, false, nil), ("zen-centred-dark", .centred, true, nil), ("zen-edge", .edge, false, nil),
+            ("zen-edge-dark", .edge, true, nil), ("zen-watch", .watch, false, nil), ("zen-watch-dark", .watch, true, nil),
+            ("zen-centred-panes", .centred, false, .helpers), ("zen-edge-panes-dark", .edge, true, .helpers),
         ]
-        for (base, layout, dark) in zens {
+        for (base, layout, dark, panes) in zens {
+            if let panes {
+                store.rolodex.loadFixture(session: Fixture.selected, front: panes)
+            } else {
+                store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
+            }
             store.zen.showFixture(layout)
             UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
             Theme.use(Palette.standard.id)
@@ -385,6 +393,7 @@ enum Snapshot {
         // Off, and the first layout again for Settings' pictures.
         store.zen.showFixture(nil)
         store.zen.layout = .centred
+        store.rolodex.loadFixture(session: Fixture.selected, front: nil, open: false)
     }
 
     /// The window as the app draws it, at 2x, and its title bar's height in

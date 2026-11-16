@@ -1079,8 +1079,6 @@ final class Store {
     /// every session. The terminal never splits for a helper, which has no
     /// terminal of its own.
     func openHelper(_ agent: String, in session: String) {
-        // Zen hides the panes: it gives way (Zen.swift).
-        zenGivesWay()
         if selection != session || outsideSelection != nil { show(session) }
         openHelpers[session] = agent
         showCard(.helpers, in: session)
@@ -1121,9 +1119,6 @@ final class Store {
     /// panes when that card is in front.
     func toggleHelpers() {
         guard let id = selection, outsideSelection == nil, let s = sessions.first(where: { $0.id == id }) else { return }
-        // Zen hides the panes: it gives way, and the helpers show, if they
-        // were in front already (Zen.swift).
-        if zenGivesWay(), helperShown { return }
         if helperShown {
             togglePanes()
             return

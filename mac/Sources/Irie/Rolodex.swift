@@ -1027,11 +1027,6 @@ extension Store {
     /// View › Show Panes (⌥⌘P), and the toolbar's button. Closing hands the
     /// keyboard back to the terminal.
     func togglePanes() {
-        // Zen hides them: it gives way, and they show (Zen.swift).
-        if zenGivesWay() {
-            if !rolodex.open { rolodex.setOpen(true) }
-            return
-        }
         let opening = !rolodex.open
         rolodex.setOpen(opening)
         if !opening, rolodex.keys != nil { giveMainKeys() }
@@ -1042,7 +1037,6 @@ extension Store {
     /// window's edge, or unfolds. A fold hands the keyboard back to the
     /// terminal; hidden, the wheel slides in folded.
     func toggleFold() {
-        zenGivesWay()
         let r = rolodex
         guard r.open else {
             r.setOpen(true, folded: true)
@@ -1057,7 +1051,6 @@ extension Store {
     /// and the card takes the keyboard as it shows.
     func unfoldPanes(at id: String) {
         guard let s = paneSession else { return }
-        zenGivesWay()
         let r = rolodex
         r.stopSpin()
         r.bringFront(id, in: s.id)
@@ -1092,7 +1085,6 @@ extension Store {
     /// sliding in or unfolding first; or back beside it, where the terminal
     /// keeps the room it had, so nothing but the panes resizes.
     func togglePanesOver() {
-        zenGivesWay()
         let r = rolodex
         guard !r.over else {
             r.over = false
@@ -1138,8 +1130,6 @@ extension Store {
     /// one unfolds.
     func cyclePanes(_ delta: Int, in window: NSWindow?) {
         guard let s = paneSession, window == nil || window === WindowPanes.window else { return }
-        // The panes are out of sight in zen, which gives way (Zen.swift).
-        zenGivesWay()
         let r = rolodex
         let d = r.deck(s.id)
         let at = r.open && !r.folded ? r.keysNow(in: window, deck: d) : nil
@@ -1238,9 +1228,6 @@ extension Store {
             return
         }
         if r.in == "card", let s = session {
-            // A link clicked in zen opens beside its session, which zen
-            // gives back for it (Zen.swift).
-            zenGivesWay()
             switch r.kind {
             case "browser"?:
                 if let url = r.url, showLink(url, in: s) { return }
@@ -1294,7 +1281,6 @@ extension Store {
     /// card, the blank card flips away.
     func newPane(_ kind: PaneKind) {
         guard let s = paneSession else { return }
-        zenGivesWay()
         let r = rolodex
         r.reveal()
         let was = r.deck(s.id)
