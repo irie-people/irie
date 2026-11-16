@@ -499,6 +499,10 @@ func (c *coreEnv) supervised(target string) int {
 
 func kill(t *testing.T, pid int) {
 	t.Helper()
+	// kill(0) would reach the test's own process group: the whole run.
+	if pid <= 1 {
+		t.Fatalf("kill: no process to kill (pid %d)", pid)
+	}
 	if p, err := os.FindProcess(pid); err == nil {
 		p.Kill()
 	}
