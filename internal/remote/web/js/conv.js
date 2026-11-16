@@ -111,7 +111,14 @@ export class SessionView {
     // Stuck to the bottom while the person is there: new items and blocks
     // that settle their height keep it there, until they scroll up.
     this.stuck = true;
+    this.pinned = NaN; // where pin() last scrolled it to
     this.scrollEl.addEventListener('scroll', () => {
+      // A scroll event comes a frame late: one from pin(), by then under a
+      // foot that grew, would read as the person scrolling away.
+      if (Math.abs(this.scrollEl.scrollTop - this.pinned) < 1) {
+        this.pinned = NaN;
+        return;
+      }
       const near = this.nearBottom();
       this.stuck = near;
       if (near) this.pill.hidden = true;
@@ -179,10 +186,10 @@ export class SessionView {
   }
 
   renderZoom() {
-    const fit = this.term.zoom == null;
-    const label = fit ? 'Zoom' : 'Fit';
+    const whole = this.term.whole();
+    const label = whole ? 'Zoom' : 'Fit';
     if (this.zoomBtn.textContent !== label) this.zoomBtn.textContent = label;
-    this.zoomBtn.setAttribute('aria-label', fit ? 'Zoom in to read the terminal' : 'Fit the terminal’s width');
+    this.zoomBtn.setAttribute('aria-label', whole ? 'Zoom in to read the terminal, its lines wrapped' : 'Fit the terminal’s width, drawn whole');
   }
 
   /** Reconnects now, as when the app comes back to the front. */
@@ -437,11 +444,13 @@ export class SessionView {
     const key = title + '|' + text + '|' + term;
     if (this.emptyKey === key) return;
     this.emptyKey = key;
-    this.emptyEl.replaceChildren(
+    // replaceChildren would write a null as the word: h() leaves it out.
+    this.emptyEl.replaceChildren(...[
       h('div', { class: 'empty-mark', html: L.sun('sun big') }),
       h('h2', { class: 'empty-title', text: title }),
       text ? h('p', { class: 'empty-text', text }) : null,
-      term ? h('button', { class: 'btn', onclick: () => this.setView('term') }, h('span', { class: 'btn-ic', html: ICON.terminal }), 'See its terminal') : null);
+      term ? h('button', { class: 'btn', onclick: () => this.setView('term') }, h('span', { class: 'btn-ic', html: ICON.terminal }), 'See its terminal') : null,
+    ].filter(Boolean));
   }
 
   reconcile(blocks) {
@@ -592,6 +601,7 @@ export class SessionView {
   /** Holds the newest item in view. */
   pin() {
     this.scrollEl.scrollTop = this.scrollEl.scrollHeight;
+    this.pinned = this.scrollEl.scrollTop;
   }
 
   toBottom(smooth) {

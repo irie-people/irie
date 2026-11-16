@@ -702,9 +702,10 @@ function renderSection(sec, c, multi, now) {
   if (sec._pk !== pk) {
     sec._pk = pk;
     sec._parkedHead.setAttribute('aria-expanded', String(open));
-    sec._parkedHead.replaceChildren(h('span', { class: 'chev', html: ICON.chevron }), h('span', { class: 'dv-title' + (parkedLoud ? ' loud' : ''), text: 'Parked' }),
+    // replaceChildren would write a null as the word "null": left out instead.
+    sec._parkedHead.replaceChildren(...[h('span', { class: 'chev', html: ICON.chevron }), h('span', { class: 'dv-title' + (parkedLoud ? ' loud' : ''), text: 'Parked' }),
       parkedLoud && !open ? h('span', { class: 'dv-loud', text: `· ${parkedLoud} need${parkedLoud === 1 ? 's' : ''} you` }) : null,
-      h('span', { class: 'cnt', text: String(parkedShown.length) }));
+      h('span', { class: 'cnt', text: String(parkedShown.length) })].filter(Boolean));
   }
   // Closed: what reopen can bring back.
   const closed = S.filter || c.status === 'unpaired' ? [] : c.closed;
