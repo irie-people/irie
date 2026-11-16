@@ -306,6 +306,9 @@ svg { display: block; }
   font: 16px/22px var(--font);
 }
 .field textarea::placeholder { color: var(--muted); opacity: .9; }
+/* A long name stays on the field's one line, cut short, rather than wrapping under its edge. */
+.field textarea:placeholder-shown { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .send {
   position: relative; flex: none; width: 34px; height: 34px; border-radius: 17px; border: 0;
   display: grid; place-items: center; background: var(--accent); color: var(--card);
@@ -765,7 +768,8 @@ pre.needs-detail { background: var(--card); white-space: pre-wrap; }
 
 /* Term: the terminal as it shows it, cell for cell, on the terminal's ground. */
 .term-mode .feed-wrap { background: var(--term-bg); }
-.termview { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--term-bg); }
+/* Clear of a phone's rounded corners and its camera, on its side. */
+.termview { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 var(--sar) 0 var(--sal); background: var(--term-bg); }
 /* Shorter than its room, it sits at the bottom, by the keys and the prompt. */
 .tscroll {
   flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain;
@@ -780,6 +784,8 @@ pre.needs-detail { background: var(--card); white-space: pre-wrap; }
   -webkit-user-select: text; user-select: text; cursor: text;
 }
 .trow { height: 1.2em; }
+/* Wrapped to read, a row takes as many lines as its text needs. */
+.tgrid.wrap .trow { height: auto; min-height: 1.2em; }
 .tgrid .b { font-weight: 700; }
 .tgrid .d { opacity: .62; }
 .tgrid .i { font-style: italic; }
@@ -834,6 +840,15 @@ pre.needs-detail { background: var(--card); white-space: pre-wrap; }
   .term-mode .session-bottom:not(.needs-bottom) { display: flex; align-items: center; gap: 10px; }
   .term-mode .session-bottom:not(.needs-bottom) > .tkeys { flex: 1 1 0; min-width: 0; margin: 0; padding: 0; }
   .term-mode .session-bottom:not(.needs-bottom) > .composer { flex: 1 1 0; min-width: 0; }
+  /* What it asks, in three short lines under the terminal: the question on one, the choices side by side, the keys. */
+  .needs-bottom { padding-top: 8px; }
+  .needs-card.compact { padding: 9px 12px 10px; gap: 7px; }
+  .needs-card.compact .needs-title { font-size: 15.5px; }
+  .needs-card.compact .needs-title > :last-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .needs-card.compact .opts { flex-direction: row; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px; }
+  .needs-card.compact .opts::-webkit-scrollbar { display: none; }
+  .needs-card.compact .opt { flex: none; width: auto; max-width: 72%; min-height: 40px; }
+  .needs-card.compact .opt .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 
 /* ---- Increase Contrast and less motion ------------------------------------------- */
