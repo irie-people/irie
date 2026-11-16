@@ -54,7 +54,7 @@ struct TerminalArea: View {
                 // keyboard lies on top, and nothing changes size as they swap.
                 let fit = RolodexModel.width(share: r.share, in: room, keep: keep)
                 let deck = r.over ? RolodexModel.overWidth(share: r.share, in: room, fit: fit) : fit
-                let overlap = r.noteOverlap(deck - fit, room: room, keep: keep)
+                let overlap = r.noteOverlap(deck - fit, room: room, keep: keep, fit: fit)
                 let overlaps = overlap > 0 && !r.folded
                 // A fold or an unfold slides over the terminal's edge, as
                 // before; the one with the keyboard comes up as it ends.
@@ -138,6 +138,13 @@ struct TerminalArea: View {
                             .zIndex(2)
                     }
                 }
+                // Each session's terminal size, beside its panes or not, for
+                // the core to keep its agent's window at (PaneSizes.swift).
+                .onChange(of: [room, fit, geo.size.height, r.open ? 1 : 0, r.folded ? 1 : 0, store.fontSize], initial: true) {
+                    store.sizesSoon()
+                }
+                .onChange(of: r.shows) { store.sizesSoon() }
+                .onChange(of: store.poppedOut == nil) { store.sizesSoon() }
             }
             PhraseBar()
         }

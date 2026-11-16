@@ -74,6 +74,8 @@ type (
 	CardArgs         = ipc.CardArgs
 	PaneArgs         = ipc.PaneArgs
 	PaneResult       = ipc.PaneResult
+	SizesArgs        = ipc.SizesArgs
+	Size             = ipc.Size
 	PeersArgs        = ipc.PeersArgs
 	PeersResult      = ipc.PeersResult
 	PeerFetch        = ipc.PeerFetch
@@ -335,6 +337,8 @@ const (
 	OpPane             = ipc.OpPane
 	OpCard             = ipc.OpCard
 	CardFileMax        = ipc.CardFileMax
+	OpSizes            = ipc.OpSizes
+	SizeMax            = ipc.SizeMax
 	OpPeers            = ipc.OpPeers
 	CodePeerDown       = ipc.CodePeerDown
 	OpPerf             = ipc.OpPerf
@@ -442,6 +446,7 @@ const (
 	ToolPrivacy        = ipc.ToolPrivacy
 	ToolVPN            = ipc.ToolVPN
 	ToolWrite          = ipc.ToolWrite
+	ToolExtension      = ipc.ToolExtension
 	HelperItemsMax     = ipc.HelperItemsMax
 	PaneWeb            = ipc.PaneWeb
 	BundleOn           = ipc.BundleOn

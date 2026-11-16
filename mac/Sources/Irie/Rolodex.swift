@@ -19,11 +19,14 @@ import SwiftUI
 // card before up over it. A scroll over the tabs turns the wheel a card a
 // notch, with a tick on the trackpad.
 //
-// Each session has its own cards, kept across launches. Whether they show,
-// and how wide, is one choice for every session, so moving between sessions
-// never resizes the agents, whose windows all take the slot's size (DESIGN
-// §2.3); opening, closing or a release of the divider resizes them once, as
-// the right sidebar does.
+// Each session has its own cards, and shows them or not, folded or not, as
+// it last had them, kept across launches; the right sidebar is the same for
+// every session. How wide they are is one choice for every session. The
+// core keeps each agent's window at the size its own session's terminal
+// shows at, beside its cards or not (PaneSizes.swift), so moving to a
+// session whose cards show and from one whose cards don't resizes no other
+// agent, and the one coming in only if it must; opening, closing or a
+// release of the divider resizes the agents it changes once.
 //
 // Beside the terminal the wheel stops where the terminal would have less
 // than its narrowest, about 60 columns. A drag on past that point holds
@@ -154,6 +157,13 @@ struct Deck: Codable, Equatable {
     }
 }
 
+/// Whether a session's cards show beside its terminal, and folded to their
+/// strip: each session's own, as it last had them.
+struct PaneShow: Codable, Equatable {
+    var open = false
+    var folded = false
+}
+
 /// One notch of the wheel on show: the card that leaves the front, and the
 /// one that comes to it.
 struct Flip: Equatable, Identifiable {
@@ -226,24 +236,34 @@ final class RolodexModel {
     /// The folded wheel's width, its margins included.
     static let stripWidth: CGFloat = 46
 
+    /// Before each session had its own, whether the cards showed, and
+    /// folded, for every session: read once, to start each session that
+    /// has cards as they were.
     private static let openKey = "rolodexOpen"
     private static let foldedKey = "rolodexFolded"
+    private static let showsKey = "rolodexShows"
     private static let shareKey = "rolodexShare"
     private static let overKey = "rolodexOver"
     private static let decksKey = "rolodexDecks"
     private static let recentKey = "rolodexRecent"
 
-    /// Whether the cards show beside the terminal, for every session, and
-    /// their share of the room beside the right sidebar.
-    var open = UserDefaults.standard.bool(forKey: RolodexModel.openKey) {
-        didSet { if !fixture, open != oldValue { UserDefaults.standard.set(open, forKey: Self.openKey) } }
+    /// Whether the cards show beside the terminal of the session on show
+    /// (current), as that session last had them, and their share of the
+    /// room beside the right sidebar.
+    var open = false {
+        didSet { if open != oldValue { keep() } }
     }
     /// Folded down to a strip at the window's edge, the cards' tabs standing
-    /// along it, so the terminal takes nearly all the room: one choice for
-    /// every session, as whether they show is.
-    var folded = UserDefaults.standard.bool(forKey: RolodexModel.foldedKey) {
-        didSet { if !fixture, folded != oldValue { UserDefaults.standard.set(folded, forKey: Self.foldedKey) } }
+    /// along it, so the terminal takes nearly all the room: the session's
+    /// own choice too, as whether they show is.
+    var folded = false {
+        didSet { if folded != oldValue { keep() } }
     }
+    /// The session whose cards open and folded are, the one on show.
+    @ObservationIgnored private(set) var current: String?
+    /// Each session's choice, by session: one left out keeps its cards
+    /// hidden. Kept across launches.
+    private(set) var shows: [String: PaneShow] = RolodexModel.savedShows()
     var share = RolodexModel.savedShare() {
         didSet { if !fixture, share != oldValue { UserDefaults.standard.set(share, forKey: Self.shareKey) } }
     }
@@ -265,6 +285,7 @@ final class RolodexModel {
     @ObservationIgnored var overlap: CGFloat = 0
     @ObservationIgnored private(set) var lastRoom: CGFloat = 0
     @ObservationIgnored private(set) var lastKeep: CGFloat = 0
+    @ObservationIgnored private(set) var lastFit: CGFloat = 0
     /// Sliding in or out, over the terminal's edge: the terminal keeps no
     /// room for it meanwhile, so its width changes once.
     var sliding = false
@@ -331,6 +352,46 @@ final class RolodexModel {
         return folded || folding ? Self.stripWidth : fit
     }
 
+    /// The session on show changed: its cards show, or not, as it last had
+    /// them, at once, with no slide. Each agent's window already has the
+    /// size its session shows at (PaneSizes.swift), so the terminal's new
+    /// width resizes only the agent coming in, and only if it must.
+    func follow(_ session: String?) {
+        guard !fixture, session != current else { return }
+        current = nil
+        let s = session.flatMap { shows[$0] } ?? PaneShow()
+        slides += 1
+        folds += 1
+        quietly {
+            sliding = false
+            folding = false
+            open = s.open
+            folded = s.folded
+        }
+        current = session
+    }
+
+    /// Keeps the session's choice as open and folded change.
+    private func keep() {
+        guard let id = current else { return }
+        put(PaneShow(open: open, folded: folded), for: id)
+    }
+
+    /// Shows a session's cards, unfolded, the next time it shows, as for a
+    /// card asked for beside a session not on show.
+    func showLater(_ session: String) {
+        guard session != current else { return }
+        put(PaneShow(open: true), for: session)
+    }
+
+    private func put(_ s: PaneShow, for id: String) {
+        let kept = s.open ? s : nil
+        guard shows[id] != kept else { return }
+        shows[id] = kept
+        guard !fixture else { return }
+        if let data = try? JSONEncoder().encode(shows) { UserDefaults.standard.set(data, forKey: Self.showsKey) }
+    }
+
     /// Brings the wheel over the terminal where they overlap, or the
     /// terminal over the wheel.
     func setRaised(_ on: Bool) {
@@ -342,14 +403,22 @@ final class RolodexModel {
 
     /// Notes how far the wheel, unfolded, goes over the terminal as it is
     /// laid out, for clicks to tell which side they land on: none beside it;
-    /// and the room and what the terminal keeps, for View › Panes Over the
-    /// Terminal.
-    func noteOverlap(_ amount: CGFloat, room: CGFloat, keep: CGFloat) -> CGFloat {
+    /// the room and what the terminal keeps, for View › Panes Over the
+    /// Terminal; and the wheel's width beside the terminal, for the size
+    /// each session's terminal shows at (PaneSizes.swift).
+    func noteOverlap(_ amount: CGFloat, room: CGFloat, keep: CGFloat, fit: CGFloat) -> CGFloat {
         let o = amount > 0.5 ? amount : 0
         if overlap != o { overlap = o }
         lastRoom = room
         lastKeep = keep
+        lastFit = fit
         return o
+    }
+
+    /// The room the terminal gives the cards, settled, as it now shows them:
+    /// none hidden, the strip's folded, else their width beside it.
+    func room(open: Bool, folded: Bool) -> CGFloat {
+        !open ? 0 : folded ? Self.stripWidth : lastFit
     }
 
     var turning: Bool { !flips.isEmpty || spin != nil }
@@ -613,8 +682,9 @@ final class RolodexModel {
 
     /// Drops the wheels of sessions that are gone, once there are many.
     func prune(keeping live: Set<String>) {
-        guard decks.count > 120 else { return }
+        guard decks.count > 120 || shows.count > 120 else { return }
         decks = decks.filter { live.contains($0.key) }
+        for id in shows.keys where !live.contains(id) { put(PaneShow(), for: id) }
         saveSoon()
     }
 
@@ -814,6 +884,24 @@ final class RolodexModel {
             let kept = self.decks.filter { !$0.value.panes.isEmpty }
             if let data = try? JSONEncoder().encode(kept) { UserDefaults.standard.set(data, forKey: Self.decksKey) }
         }
+    }
+
+    /// Each session's choice; at first, from the one choice there was for
+    /// every session: each session with cards shows them as all did.
+    private static func savedShows() -> [String: PaneShow] {
+        let d = UserDefaults.standard
+        if let data = d.data(forKey: showsKey) {
+            return (try? JSONDecoder().decode([String: PaneShow].self, from: data)) ?? [:]
+        }
+        var out: [String: PaneShow] = [:]
+        if d.bool(forKey: openKey) {
+            let s = PaneShow(open: true, folded: d.bool(forKey: foldedKey))
+            for (id, deck) in savedDecks() where !deck.panes.isEmpty { out[id] = s }
+        }
+        if let data = try? JSONEncoder().encode(out) { d.set(data, forKey: showsKey) }
+        d.removeObject(forKey: openKey)
+        d.removeObject(forKey: foldedKey)
+        return out
     }
 
     private static func savedDecks() -> [String: Deck] {
@@ -1069,8 +1157,8 @@ extension Store {
     /// a new one; for `irie ctl open`, a code card with the file open on it
     /// at its line, the front card when that is a code card. Beside the
     /// session on show the cards slide in and turn to it; beside another it
-    /// waits in front of that session's cards. The keyboard stays where it
-    /// is.
+    /// waits in front of that session's cards, which show when it does. The
+    /// keyboard stays where it is.
     ///
     /// With keys, as for a file's link clicked in the terminal, the card
     /// takes the keyboard too, beside the session on show, as a window you
@@ -1084,7 +1172,7 @@ extension Store {
         if let file, kind == .code {
             let card = had ?? r.add(kind, to: session, avoiding: own)
             r.open(file.path, on: card.id, in: session, line: file.line ?? 1, column: file.column)
-            if paneSession?.id == session { r.reveal() }
+            if paneSession?.id == session { r.reveal() } else { r.showLater(session) }
             r.turn(to: card.id, in: session, keys: keys && paneSession?.id == session, layout: tabPlace(for: session))
             return
         }
@@ -1100,6 +1188,7 @@ extension Store {
             return
         }
         let p = had ?? r.add(kind, to: session, avoiding: own)
+        r.showLater(session)
         r.turn(to: p.id, in: session, keys: false, layout: tabPlace(for: session))
     }
 
@@ -1171,7 +1260,7 @@ extension Store {
             card = r.add(.browser, to: session, avoiding: row.hue.map { ($0 - 1) % Theme.agentSlots }, url: url)
         }
         let here = paneSession?.id == session
-        if here { r.reveal() }
+        if here { r.reveal() } else { r.showLater(session) }
         r.turn(to: card.id, in: session, keys: here, layout: tabPlace(for: session))
         return true
     }

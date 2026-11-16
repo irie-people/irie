@@ -781,3 +781,139 @@ func TestResizingAnAgentWindowKeepsTheZoom(t *testing.T) {
 		t.Errorf("after an agent window's resize irie:0 is zoomed %q", got)
 	}
 }
+
+// The Mac app shows each session's terminal at its own size: narrower
+// beside its panes. Every agent window keeps its session's size, and the
+// shown agent's way home the slot's.
+func TestPlanKeepsEachSessionsSize(t *testing.T) {
+	app := want
+	app.Zoom = true
+	app.Size, app.Sizes = Size{80, 24}, map[string]Size{"s1": {50, 24}}
+	if got, want := first(Plan(zoomedApp(), app)), "resize-window -t @3 -x 50 -y 24"; got != want {
+		t.Errorf("an agent whose session shows its panes: %q, want %q", got, want)
+	}
+	narrow := edit(zoomedApp(), "%3", func(p *Pane) { p.Width, p.WindowWidth = 50, 50 })
+	if cmds := Plan(narrow, app); cmds != nil {
+		t.Errorf("each window at its session's size needs %q", cmds)
+	}
+	// One not listed takes Size, whatever the slot's.
+	app.Sizes = nil
+	if cmds := Plan(edit(narrow, "%2", func(p *Pane) { p.Width, p.WindowWidth = 50, 50 }), app); first(cmds) != "resize-window -t @3 -x 80 -y 24" {
+		t.Errorf("an agent of no size of its own: %q", cmds)
+	}
+	// No sizes: every agent window at the slot's, as before.
+	if got := first(Plan(narrow, Want{Bin: want.Bin, SidebarWidth: 34, Version: "v1", Zoom: true})); got != "resize-window -t @3 -x 80 -y 24" {
+		t.Errorf("no sizes: %q", got)
+	}
+	// The window that holds the placeholder, the shown agent's way home,
+	// keeps the slot's size.
+	home := edit(shown(), "%2", func(p *Pane) { p.WindowWidth = 45 })
+	app.Zoom, app.Sizes = false, map[string]Size{"s1": {45, 24}}
+	if cmds := Plan(home, app); cmds != nil {
+		t.Errorf("the shown agent's home needs %q", cmds)
+	}
+}
+
+// A swap while the app is open gives the slot the size of the window coming
+// in first, as the placeholder fills it, so that agent comes in at its own
+// size; then irie:0 holds that size until it is let go of, and follows its
+// client again.
+func TestSwapInGivesTheSlotTheSizeOfTheSessionComingIn(t *testing.T) {
+	s := edit(zoomedApp(), "%3", func(p *Pane) { p.Width, p.WindowWidth = 50, 50 })
+	cmds, err := SwapIn(s, "%3", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := [][]string{
+		{"resize-window", "-t", MainSession + ":0", "-x", "50", "-y", "24"},
+		{"swap-pane", "-Z", "-d", "-s", "%3", "-t", Slot},
+	}; !slices.EqualFunc(cmds, want, slices.Equal) {
+		t.Errorf("show a narrower session = %q", cmds)
+	}
+	// Not zoomed, as for the terminal sidebar, nothing is sized.
+	if cmds, _ := SwapIn(edit(sound(), "%3", func(p *Pane) { p.WindowWidth = 50 }), "%3", false); len(cmds) != 1 {
+		t.Errorf("show without the app = %q", cmds)
+	}
+
+	held := edit(zoomedApp(), "%1", func(p *Pane) { p.WindowSize = "manual" })
+	app := want
+	app.Zoom = true
+	if got, want := first(Plan(held, app)), "set-option -w -t "+MainSession+":0 window-size latest"; got != want {
+		t.Errorf("let go of irie:0: %q, want %q", got, want)
+	}
+	app.Hold = true
+	if cmds := Plan(held, app); cmds != nil {
+		t.Errorf("held, irie:0 needs %q", cmds)
+	}
+}
+
+func TestEachSessionKeepsItsOwnSizeThroughSwaps(t *testing.T) {
+	r, w := startServer(t)
+	w.Zoom = true
+	s := settle(t, r, w)
+	slot := s.SlotPane()
+	if slot == nil || slot.Width < 40 {
+		t.Fatalf("slot = %+v", slot)
+	}
+	wide, narrow := Size{slot.Width, slot.Height}, Size{slot.Width - 20, slot.Height}
+	a := agentWindow(t, r, w, "sa")
+	b := agentWindow(t, r, w, "sb")
+	w.Size, w.Sizes = wide, map[string]Size{"sa": narrow}
+	s = settle(t, r, w)
+	size := func(s Snapshot, id string) Size { p := paneByID(s, id); return Size{p.Width, p.Height} }
+	if got := size(s, a); got != narrow {
+		t.Fatalf("A, beside its panes, is %v, want %v", got, narrow)
+	}
+	if got := size(s, b); got != wide {
+		t.Fatalf("B is %v, want %v", got, wide)
+	}
+	show := func(id string) Snapshot {
+		t.Helper()
+		s, err := r.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmds, err := SwapIn(s, id, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.RunList(cmds); err != nil {
+			t.Fatal(err)
+		}
+		if s, err = r.Snapshot(); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	w.Hold = true
+	for _, step := range []struct {
+		id   string
+		size Size
+	}{{a, narrow}, {b, wide}, {a, narrow}} {
+		s = show(step.id)
+		got := s.SlotPane()
+		if got == nil || got.ID != step.id || !got.Zoomed {
+			t.Fatalf("after showing %s the slot is %+v", step.id, got)
+		}
+		if g := (Size{got.Width, got.Height}); g != step.size {
+			t.Errorf("%s came in at %v, want its own %v", step.id, g, step.size)
+		}
+		// The layout is sound as it is: the other agent kept its size.
+		if cmds := Plan(s, w); cmds != nil {
+			t.Errorf("after showing %s the layout needs %q", step.id, cmds)
+		}
+	}
+	if got := size(s, b); got != wide {
+		t.Errorf("B at home is %v, want %v", got, wide)
+	}
+	// Let go of, irie:0 follows its client again; with none attached here
+	// it keeps the size it has.
+	w.Hold = false
+	s = settle(t, r, w)
+	if ui := s.Sidebar(); ui == nil || ui.WindowSize != "latest" {
+		t.Errorf("irie:0 after the hold: %+v", ui)
+	}
+	if got := size(s, a); got != narrow {
+		t.Errorf("A after the hold is %v, want %v", got, narrow)
+	}
+}

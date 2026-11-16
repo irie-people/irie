@@ -499,6 +499,10 @@ func (c *coreEnv) supervised(target string) int {
 
 func kill(t *testing.T, pid int) {
 	t.Helper()
+	// kill(0) would reach the test's own process group: the whole run.
+	if pid <= 1 {
+		t.Fatalf("kill: no process to kill (pid %d)", pid)
+	}
 	if p, err := os.FindProcess(pid); err == nil {
 		p.Kill()
 	}
@@ -509,16 +513,19 @@ func kill(t *testing.T, pid int) {
 
 func TestSidebarComesBackWithin2s(t *testing.T) {
 	c := setup(t)
-	old := c.supervised(tmux.Sidebar)
-	if old == 0 {
-		t.Fatal("no sidebar process under its supervisor")
-	}
 	// On a busy machine the scheduler, not the supervisor, sets how soon a
 	// new sidebar draws: the bound holds only while there is room.
 	bound := 2 * time.Second
 	if slow(t) {
 		bound = 20 * time.Second
 	}
+	// The core answers before its supervisor has started the first
+	// sidebar, so the test waits for that one: the bound is on the restart.
+	var old int
+	testutil.Eventually(t, 20*time.Second, "no sidebar process under its supervisor", func() bool {
+		old = c.supervised(tmux.Sidebar)
+		return old != 0
+	})
 	kill(t, old)
 	testutil.Eventually(t, bound, "the supervisor did not restart the sidebar", func() bool {
 		pid := c.supervised(tmux.Sidebar)

@@ -138,6 +138,7 @@ func (c *Core) keepView() {
 	if len(cmds) == 0 {
 		return
 	}
+	c.noteSwap()
 	if _, err := c.tmux.RunList(cmds); err != nil {
 		c.log.Warn("keep the view", "err", err)
 		return

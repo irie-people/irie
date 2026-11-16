@@ -427,6 +427,19 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
         return (Int(s.columns), Int(s.rows))
     }
 
+    /// The grid the terminal would have as wide as width, as high as it is:
+    /// Ghostty's cells across its pixels, with no padding (the config
+    /// above), as sizeDidChange hands it the pixels. What the panes beside
+    /// a session would leave it (PaneSizes.swift), which checks this
+    /// against the grid it has.
+    func grid(width: CGFloat) -> (columns: Int, rows: Int)? {
+        guard let surface, width > 0 else { return nil }
+        let s = ghostty_surface_size(surface)
+        guard s.cell_width_px > 0, s.rows > 0 else { return nil }
+        let px = UInt32(max(0, convertToBacking(NSSize(width: width, height: 1)).width))
+        return (max(1, Int(px / s.cell_width_px)), Int(s.rows))
+    }
+
     /// The lines the terminal shows, a row each, read as a block so that
     /// no wrapped line joins the next (TerminalScreen).
     func screenLines() -> [String]? {

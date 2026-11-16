@@ -1235,18 +1235,20 @@ type ToolArgs struct {
 }
 
 // Tools. Anon, browser and privacy run `irie setup NAME`, which sets up
-// that part of the privacy plugin, or each part of it in turn, and vpn
-// `irie setup vpn`, which sets up the VPN plugin (DESIGN §4.17).
+// that part of the privacy plugin, or each part of it in turn, vpn
+// `irie setup vpn`, which sets up the VPN plugin, and extension `irie setup
+// extension`, which sets up the browser extension plugin (DESIGN §4.17).
 const (
-	ToolSetup   = "setup"
-	ToolModels  = "models"
-	ToolReady   = "ready"
-	ToolSwitch  = "switch"
-	ToolAnon    = "anon"
-	ToolBrowser = "browser"
-	ToolPrivacy = "privacy"
-	ToolVPN     = "vpn"
-	ToolWrite   = "write"
+	ToolSetup     = "setup"
+	ToolModels    = "models"
+	ToolReady     = "ready"
+	ToolSwitch    = "switch"
+	ToolAnon      = "anon"
+	ToolBrowser   = "browser"
+	ToolPrivacy   = "privacy"
+	ToolVPN       = "vpn"
+	ToolWrite     = "write"
+	ToolExtension = "extension"
 )
 
 // PluginsArgs ask the plugins op for Irie's plugins, after turning a
