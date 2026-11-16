@@ -1,15 +1,6 @@
 package web
 
-import (
-	"context"
-	"io/fs"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-)
+import "testing"
 
 // wrapChecks runs in Node against js/term.js: how the Term view wraps a
 // terminal's lines to read them on a phone upright (docs/PHONE.md §4).
@@ -60,35 +51,5 @@ console.log('ok');
 `
 
 func TestTheTermViewWrapsLinesToReadThem(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("no node to run the app's scripts")
-	}
-	dir := t.TempDir()
-	// The app's modules, as ES modules Node takes from a folder of its own.
-	files := map[string]string{"package.json": `{"type":"module"}`, "check.js": wrapChecks}
-	for _, name := range []string{"js/term.js", "js/ui.js", "js/net.js"} {
-		b, err := fs.ReadFile(FS, name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		files[name] = string(b)
-	}
-	for name, body := range files {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, node, "check.js")
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil || strings.TrimSpace(string(out)) != "ok" {
-		t.Fatalf("node check.js: %v\n%s", err, out)
-	}
+	runInNode(t, wrapChecks)
 }
