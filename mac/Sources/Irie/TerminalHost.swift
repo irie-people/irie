@@ -157,9 +157,11 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
     /// with reporting on again first, so each goes on as before; this
     /// watches for the key and the wheel, which SwiftTerm keeps to itself.
     private var holding: Any?
-    /// The press is a ⌘-click on a link, which SwiftTerm opens as it comes
-    /// up (requestOpenLink), and tmux hears nothing of it.
-    private var onLink = false
+    /// The press is a ⌘-click, or ⇧⌘, at which SwiftTerm opens a link as it
+    /// comes up (requestOpenLink): only it knows where its cells lie.
+    private var commandClick = false
+    /// SwiftTerm opened a link as the click came up.
+    private var opened = false
     /// The keys held at the last click: Shift as well asks for the other
     /// place (TerminalLinks.swift).
     private var linkFlags: NSEvent.ModifierFlags = []
@@ -190,8 +192,8 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
             super.mouseDown(with: down)
             return
         }
-        onLink = event.clickCount == 1 && linkUnder(event)
-        if !onLink && (event.clickCount > 1 || event.modifierFlags.contains(.shift)) {
+        commandClick = event.clickCount == 1 && event.modifierFlags.intersection([.command, .control, .option]) == .command
+        if !commandClick && (event.clickCount > 1 || event.modifierFlags.contains(.shift)) {
             selecting = true
             allowMouseReporting = false
             super.mouseDown(with: event)
@@ -200,20 +202,11 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
         }
     }
 
-    /// Whether a press with ⌘ held, or ⇧⌘, lands on a link: an address or
-    /// a path SwiftTerm finds in the text, or one a program wrote.
-    private func linkUnder(_ event: NSEvent) -> Bool {
-        guard event.modifierFlags.intersection([.command, .control, .option]) == .command,
-              let t = terminal, t.cols > 0, t.rows > 0, bounds.width > 0, bounds.height > 0 else { return false }
-        let p = convert(event.locationInWindow, from: nil)
-        let col = Int(p.x / (bounds.width / CGFloat(t.cols))), row = Int((bounds.height - p.y) / (bounds.height / CGFloat(t.rows)))
-        guard col >= 0, col < t.cols, row >= 0, row < t.rows else { return false }
-        return t.link(at: .screen(Position(col: col, row: row)), mode: .explicitAndImplicit) != nil
-    }
-
-    /// A link SwiftTerm opens at a ⌘-click goes where ui.terminal_links
-    /// says, not straight to the Mac's own app (TerminalLinks.swift).
+    /// A link SwiftTerm opens at a ⌘-click, an address or a path it finds in
+    /// the text or one a program wrote, goes where ui.terminal_links says,
+    /// not straight to the Mac's own app (TerminalLinks.swift).
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        opened = true
         TerminalLinks.clicked(link, other: linkFlags.contains(.shift))
     }
 
@@ -244,15 +237,29 @@ final class IrieTerminalView: LocalProcessTerminalView, TerminalScreen {
         if passing {
             passing = false
             super.mouseUp(with: event)
-        } else if let down = pressed, onLink {
-            // A ⌘-click on a link: SwiftTerm opens it as the button comes
-            // up, before tmux would hear of it, and the press never went to
-            // tmux, so nothing waits there for its release.
+        } else if let down = pressed, commandClick {
+            // A ⌘-click: SwiftTerm opens a link under it as the button comes
+            // up, with tmux kept from the mouse meanwhile, so tmux hears
+            // nothing of a link's click. With no link there it goes on as a
+            // click, or a Shift-click, always did.
             pressed = nil
-            onLink = false
+            commandClick = false
             linkFlags.formUnion(down.modifierFlags.intersection(.shift))
-            selection.active = false
+            opened = false
+            allowMouseReporting = false
             super.mouseUp(with: event)
+            allowMouseReporting = true
+            if opened { return }
+            if down.modifierFlags.contains(.shift) {
+                selecting = true
+                allowMouseReporting = false
+                super.mouseDown(with: down)
+                finishSelecting(event)
+            } else {
+                selection.active = false
+                super.mouseDown(with: down)
+                super.mouseUp(with: event)
+            }
         } else if let down = pressed {
             // A click: tmux has it where the button went down, and the
             // program in the terminal too, if it asks. The selection goes,

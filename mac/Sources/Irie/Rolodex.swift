@@ -1219,9 +1219,14 @@ extension Store {
     }
 
     /// Opens a link where the link op said: a card of the session's
-    /// panes, or the Mac's own app for it, as for a card the app can't
+    /// panes; in Finder, picked out, for an app or anything that would run
+    /// if opened; or the Mac's own app for it, as for a card the app can't
     /// show here.
     func open(_ r: LinkReply, from session: String?) {
+        if r.in == "reveal", let path = r.path {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            return
+        }
         if r.in == "card", let s = session {
             switch r.kind {
             case "browser"?:

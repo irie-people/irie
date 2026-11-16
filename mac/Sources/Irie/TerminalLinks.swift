@@ -80,8 +80,8 @@ struct LinkArgs: Encodable {
 
 struct LinkReply: Decodable, Equatable {
     /// "card", a card of the session's panes: kind browser showing url, or
-    /// code with path open at line and col; or "system", the Mac's own app
-    /// for url.
+    /// code with path open at line and col; "system", the Mac's own app for
+    /// url; or "reveal", path picked out in Finder, never opened.
     var `in`: String
     var kind: String?
     var url: String?

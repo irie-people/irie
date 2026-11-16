@@ -919,7 +919,7 @@ private struct AppearanceSettings: View {
             } header: {
                 Text("Links in the Terminal")
             } footer: {
-                footnote("⌘-click a link in a terminal to open it. In the panes, a page opens on a Browser card beside its session, or on the one that shows it already, and a file on the Code card at its line. ⇧⌘-click opens a link in the other place. A mail address, a folder or a picture opens in its own app either way.")
+                footnote("⌘-click a link in a terminal to open it. In the panes, a page opens on a Browser card beside its session, or on the one that shows it already, and a file on the Code card at its line. ⇧⌘-click opens a link in the other place. A mail address, a folder or a picture opens in its own app either way; an app or a script is shown in Finder, never run.")
             }
             Section {
                 Picker("Code colours", selection: $codeTheme) {

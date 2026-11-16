@@ -593,6 +593,8 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
     private var onLink = false
     /// The keys held at the last click, which the engine opens a link at.
     private var linkFlags: NSEvent.ModifierFlags = []
+    /// The engine may hold a Shift it was told of only to find links.
+    private var shifted = false
 
     /// A link the engine found under a ⌘-click, or one a program wrote.
     func linkClicked(_ link: String) {
@@ -606,33 +608,54 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
     }
 
     /// Asks the engine whether a link lies under a point, with ⌘ held: it
-    /// is told the pointer went a point aside and back, since it takes no
-    /// news of a pointer that stays put, and its answer, the pointer's
-    /// shape, comes back at once.
+    /// is told the pointer left the view and came back there, since it
+    /// takes no news of a pointer that stays put and looks again only in a
+    /// cell other than the one it looked in last, which leaving forgets. A
+    /// pointer off the view reports nothing to tmux. Its answer, the
+    /// pointer's shape, comes back at once.
     private func lookForLink(at event: NSEvent, point: NSPoint? = nil) -> Bool {
         guard let surface, event.modifierFlags.intersection([.command, .control, .option]) == .command else { return false }
         let p = point ?? convert(event.locationInWindow, from: nil)
         let mods = Self.mods(Self.linkMods(event.modifierFlags))
         overLink = false
-        ghostty_surface_mouse_pos(surface, p.x + 1, frame.height - p.y, mods)
+        shifted = true
+        ghostty_surface_mouse_pos(surface, -1, -1, mods)
         ghostty_surface_mouse_pos(surface, p.x, frame.height - p.y, mods)
         return overLink
+    }
+
+    /// Tells the engine the keys really held, where it was told of a Shift
+    /// only to find links, so the wheel scrolls as before: Shift would turn
+    /// tmux's wheel into one it does nothing with.
+    private func unshift(_ event: NSEvent) {
+        guard shifted, let surface else { return }
+        shifted = false
+        let p = convert(event.locationInWindow, from: nil)
+        let mods = Self.mods(event.modifierFlags)
+        ghostty_surface_mouse_pos(surface, -1, -1, mods)
+        ghostty_surface_mouse_pos(surface, p.x, frame.height - p.y, mods)
     }
 
     /// Opens the link a ⌘-click came up on: the engine is given the click
     /// with mouse reporting off, so tmux hears nothing, and opens the link
     /// (OPEN_URL), which linkClicked hands on.
+    /// The release carries the press's keys, so a ⌘ let go a moment before
+    /// the button still opens the link.
     private func clickLink(_ down: NSEvent, _ up: NSEvent) {
         guard binding("toggle_mouse_reporting") else { return }
         _ = lookForLink(at: down)
-        button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, down, mods: down.modifierFlags.subtracting(.shift))
-        button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, up, mods: up.modifierFlags.subtracting(.shift))
+        let keys = down.modifierFlags.subtracting(.shift)
+        button(GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, down, mods: keys)
+        button(GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, up, mods: keys)
         _ = binding("toggle_mouse_reporting")
     }
 
     private func button(_ state: ghostty_input_mouse_state_e, _ button: ghostty_input_mouse_button_e, _ event: NSEvent,
                         mods flags: NSEvent.ModifierFlags? = nil) {
         guard let surface else { return }
+        // The engine takes these keys as the ones held, a Shift for links
+        // or not.
+        shifted = false
         _ = ghostty_surface_mouse_button(surface, state, button, Self.mods(flags ?? event.modifierFlags))
     }
 
@@ -647,7 +670,9 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
     /// down: with ⌘ held it shows the link under it, underlined, with a
     /// hand; once ⌘ is let go the hand goes.
     private func hover(_ event: NSEvent) {
-        position(event, mods: Self.linkMods(event.modifierFlags))
+        let keys = Self.linkMods(event.modifierFlags)
+        if keys != event.modifierFlags { shifted = true }
+        position(event, mods: keys)
         if overLink, !event.modifierFlags.contains(.command) { pointer(GHOSTTY_MOUSE_SHAPE_TEXT) }
     }
 
@@ -706,7 +731,8 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
             onLink = false
             linkFlags.formUnion(down.modifierFlags.intersection(.shift))
             clickLink(down, event)
-            counted = 0
+            // The engine counted this press itself, as tmux never had it.
+            counted = 1
         } else if let down = pressed {
             // A click: tmux has it where the button went down, and the
             // program in the terminal too, if it asks for the mouse.
@@ -821,6 +847,7 @@ final class GhosttyTerminalView: NSView, NSTextInputClient, TerminalScreen {
 
     override func scrollWheel(with event: NSEvent) {
         guard let surface else { return }
+        unshift(event)
         var x = event.scrollingDeltaX, y = event.scrollingDeltaY
         let precise = event.hasPreciseScrollingDeltas
         if precise {
