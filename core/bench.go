@@ -14,6 +14,14 @@ import (
 // that machine; the @ and + words say where they run and on what profile,
 // as for a task. The rest is the task.
 func BenchTask(line, text, home string) (BenchArgs, error) {
+	return View{Home: home}.benchTask(line, text)
+}
+
+// benchTask is BenchTask, with the + words read against v.Profiles; but a
+// bench on another machine runs on that machine's profiles, which may not
+// be this one's, so there every + name is taken for a profile's, and that
+// machine says when it has none.
+func (v View) benchTask(line, text string) (BenchArgs, error) {
 	var a BenchArgs
 	var words []string
 	for _, w := range strings.Fields(line) {
@@ -27,7 +35,10 @@ func BenchTask(line, text, home string) (BenchArgs, error) {
 	if _, more, ok := strings.Cut(text, "\n"); ok {
 		task += "\n" + more
 	}
-	s, err := ParseTask(task, home)
+	if a.Host != "" {
+		v.Profiles = nil
+	}
+	s, err := v.parseTask(task)
 	switch {
 	case err != nil:
 		return a, err
