@@ -1662,8 +1662,11 @@ private struct RolodexWheel: View {
         let ink = p.map { Theme.agent(slot: $0.slot) } ?? Theme.muted
         ZStack(alignment: .topLeading) {
             // The body takes its pane's ground, so the pane runs to its edge.
+            // Its shadow stays neutral (Roots' principles §1.10, no coloured
+            // shadows), a little deeper while it has the keyboard, which its
+            // edge in its colour shows.
             shape.fill(p.map { PaneGround.of($0.kind, dark: scheme == .dark, code: codeTheme) } ?? Theme.panel)
-                .shadow(color: keys ? ink.opacity(0.3) : .black.opacity(0.14), radius: keys ? 10 : 6, y: 2)
+                .shadow(color: .black.opacity(keys ? 0.22 : 0.14), radius: keys ? 10 : 6, y: 2)
                 .allowsHitTesting(false)
             // The tab, in the card's colour.
             Rectangle()

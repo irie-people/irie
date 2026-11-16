@@ -144,3 +144,92 @@ func TestNoMenuKeyTakesFn(t *testing.T) {
 		}
 	}
 }
+
+// shadowColour finds a SwiftUI shadow's colour: what follows `.shadow(color:`
+// on its line, up to the radius.
+var shadowColour = regexp.MustCompile(`\.shadow\(color:\s*([^\n]*?),\s*radius:`)
+
+var (
+	opacityCall = regexp.MustCompile(`\.opacity\([^()]*\)`)
+	whiteCall   = regexp.MustCompile(`Color\(white:[^()]*\)`)
+	anyCall     = regexp.MustCompile(`\(([^()]*)\)`)
+)
+
+// neutralShadow says whether a shadow's colour is a neutral one: the
+// palette's shadow, black or nothing, at any opacity, picked by a condition
+// or not. Anything else, such as an agent's colour or the accent, is a
+// coloured shadow.
+func neutralShadow(expr string) bool {
+	e := expr
+	for prev := ""; prev != e; {
+		prev = e
+		e = opacityCall.ReplaceAllString(e, "")
+	}
+	e = whiteCall.ReplaceAllString(e, "Color.black")
+	for prev := ""; prev != e; {
+		prev = e
+		e = anyCall.ReplaceAllString(e, "")
+	}
+	// The colours a chain of conditions picks among: after each ?, the
+	// colour up to its :, and both sides of the last :.
+	parts := strings.Split(e, "?")
+	var colours []string
+	if len(parts) == 1 {
+		colours = parts
+	}
+	for i := 1; i < len(parts); i++ {
+		sides := strings.Split(parts[i], ":")
+		if i < len(parts)-1 {
+			colours = append(colours, sides[0])
+		} else {
+			colours = append(colours, sides...)
+		}
+	}
+	for _, c := range colours {
+		switch strings.Trim(strings.TrimSpace(c), "()") {
+		case "Theme.shadow", ".black", "Color.black", ".clear", "Color.clear":
+		default:
+			return false
+		}
+	}
+	return len(colours) > 0
+}
+
+// TestShadowsAreNeutral: no shadow in the Mac app takes a colour (Roots'
+// principles §1.10): a shadow is the palette's shadow or black, at whatever
+// strength, so depth never doubles as a colour's glow. A shadow whose colour
+// runs onto another line is not seen.
+func TestShadowsAreNeutral(t *testing.T) {
+	for expr, want := range map[string]bool{
+		"Theme.shadow":                           true,
+		"selected ? Theme.shadow : .clear":       true,
+		"on ? Theme.shadow : Color.clear":        true,
+		".black.opacity(keys ? 0.22 : 0.14)":     true,
+		"Color(white: 0, opacity: 0.2)":          true,
+		"keys ? ink.opacity(0.3) : .black":       false,
+		"Theme.agent(slot: 2)":                   false,
+		"a ? Theme.accent : b ? .black : .clear": false,
+		"a ? .black : b ? .clear : Theme.shadow": true,
+	} {
+		if got := neutralShadow(expr); got != want {
+			t.Errorf("neutralShadow(%q) = %v, want %v", expr, got, want)
+		}
+	}
+	files, _ := filepath.Glob(filepath.Join(root, "mac", "Sources", "Irie", "*.swift"))
+	if len(files) == 0 {
+		t.Skip("no mac/Sources/Irie")
+	}
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range shadowColour.FindAllStringSubmatchIndex(string(src), -1) {
+			expr := string(src[m[2]:m[3]])
+			if !neutralShadow(expr) {
+				n := strings.Count(string(src[:m[0]]), "\n") + 1
+				t.Errorf("%s:%d: a shadow coloured %q: give it Theme.shadow or black, and show the state with an edge or a fill instead", filepath.Base(f), n, expr)
+			}
+		}
+	}
+}

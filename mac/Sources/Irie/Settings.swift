@@ -2112,13 +2112,14 @@ private struct PluginPartRow: View {
     }
 }
 
-/// Settings › Tabs: where new sessions go, and closing and moving the cards
-/// your way (Tabs.swift).
+/// Settings › Tabs: where new sessions go, closing and moving the cards
+/// your way (Tabs.swift), and whether ⌘Z asks first (Undo.swift).
 @MainActor
 private struct TabsSettings: View {
     @Environment(Store.self) private var store
     @ObservedObject var model: SettingsModel
     @AppStorage(CloseFromPointer.defaultsKey) private var closeFromPointer = true
+    @AppStorage(UndoConfirm.defaultsKey) private var confirmUndo = true
 
     var body: some View {
         SettingsForm(model: model) {
@@ -2159,6 +2160,13 @@ private struct TabsSettings: View {
                 Text("Closing")
             } footer: {
                 footnote("The card under the pointer shows a × in place of its mark, and a middle click closes it. ⌘W closes the selected card, or every card you picked with ⌘-click or ⇧-click. A card’s menu closes the others, those below it, or all finished, and a group’s header closes its group: ⌘Z brings back all that one close took. Pinned cards stay through all of these, and through close when done.")
+            }
+            Section {
+                Toggle("Ask before ⌘Z undoes or ⇧⌘Z redoes", isOn: $confirmUndo)
+            } header: {
+                Text("Undo")
+            } footer: {
+                footnote("The question names the step, as Undo Close “api-fix”?, and says when it was taken. Return or the same key again goes ahead, and Esc leaves everything as it is. Edit › Undo, clicked, and a notice’s Undo name their step already, so they take it at once.")
             }
             Section {
                 LabeledContent("Move up or down", value: "⌥⌘↑  ⌥⌘↓")

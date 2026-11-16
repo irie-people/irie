@@ -27,21 +27,18 @@ func extensionStatus(t *testing.T, e Env) ipc.Plugin {
 
 // TestTheBrowserExtensionStepByStep: on by default, the extension needs
 // setting up, then loading in a browser, and is ready once a browser has
-// talked to Irie; Terms in short is ready while the plugin is on; off,
-// both are, and Terms in short's words say how to turn it on.
+// talked to Irie; off, it is off with its plugin, and its words say how to
+// turn it on.
 func TestTheBrowserExtensionStepByStep(t *testing.T) {
 	e := env(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	p := extensionStatus(t, e)
-	if !p.On || p.Title != "Browser extension" || p.Setup != ":setup extension" || len(p.Parts) != 2 {
+	if !p.On || p.Title != "Browser extension" || p.Setup != ":setup extension" || len(p.Parts) != 1 {
 		t.Fatalf("extension = %+v", p)
 	}
 	if x := part(t, p, Extension); x.State != ipc.PartNeeds || !strings.Contains(x.Detail, "setup extension") {
 		t.Errorf("not set up: %+v", x)
-	}
-	if x := part(t, p, Terms); x.State != ipc.PartReady || !strings.Contains(x.Detail, "terms example.com") {
-		t.Errorf("terms: %+v", x)
 	}
 
 	var chrome extension.Browser
@@ -66,10 +63,10 @@ func TestTheBrowserExtensionStepByStep(t *testing.T) {
 
 	e.Config.Plugins.Extension = false
 	p = extensionStatus(t, e)
-	if p.On || part(t, p, Terms).State != ipc.PartPluginOff || part(t, p, Extension).State != ipc.PartPluginOff {
+	if p.On || part(t, p, Extension).State != ipc.PartPluginOff {
 		t.Errorf("off: %+v", p)
 	}
-	if why := Why(e.Config, Terms); !strings.Contains(why, "plugins on extension") {
+	if why := Why(e.Config, Extension); !strings.Contains(why, "plugins on extension") {
 		t.Errorf("Why = %q", why)
 	}
 	if ed, err := Edits("extension", "", true); err != nil || len(ed) != 1 || ed[0].Key != "plugins.extension" {

@@ -10,8 +10,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/localmodel"
 )
+
+// PagePort is the port the core serves Terms in short's page on, for the
+// Mac app's Terms tab: http://127.0.0.1:7393/.
+const PagePort = 7393
+
+// PageAddress is the page's address.
+var PageAddress = "http://127.0.0.1:" + strconv.Itoa(PagePort) + "/"
+
+// Servers are the Ollama servers a model may word answers on, the first
+// that answers taking it: local.url, else Irie's own, then Ollama's usual
+// port.
+func Servers(cfg config.Config) []string {
+	if cfg.Local.URL != "" {
+		return []string{cfg.Local.URL}
+	}
+	return []string{"http://127.0.0.1:" + strconv.Itoa(cfg.Local.Port), "http://127.0.0.1:11434"}
+}
 
 // Model is a local model that words answers: one on this computer, from
 // an Ollama server here, so no tokens are bought.

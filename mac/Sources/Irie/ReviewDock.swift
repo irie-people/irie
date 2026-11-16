@@ -62,12 +62,16 @@ struct ReviewDock: View {
         let fresh = rows.filter { isFresh($0, now) }.count
         return VStack(alignment: .leading, spacing: 0) {
             Button { withAnimation(.easeOut(duration: 0.15)) { open.toggle() } } label: {
+                // A section's head, as a group's in the list: its chevron
+                // turns as it folds, and its title is muted.
                 HStack(spacing: 6) {
-                    Image(systemName: open ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8.5, weight: .heavy))
+                        .rotationEffect(.degrees(open ? 90 : 0))
                         .frame(width: 10)
                     Text("Ready to review")
-                        .font(Theme.font(12, .bold))
+                        .font(Theme.font(Theme.headSize, .heavy))
+                        .tracking(Theme.headTracking)
                     Text("\(rows.count)")
                         .font(Theme.font(11, .bold))
                         .foregroundStyle(fresh > 0 ? Theme.onAccent : Theme.muted)
@@ -75,7 +79,7 @@ struct ReviewDock: View {
                         .background(Capsule().fill(fresh > 0 ? Look.doneColor : Theme.panel))
                     Spacer(minLength: 0)
                 }
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(Theme.muted)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -95,10 +99,11 @@ struct ReviewDock: View {
                 .frame(maxHeight: 136)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card)
-            .shadow(color: Theme.shadow, radius: 2, y: 0.5))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(fresh > 0 ? Look.doneColor.opacity(0.55) : Color.clear, lineWidth: 1))
+        // Flat, edged in a hairline, or in the done colour while something
+        // in it is new.
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.card))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+            .strokeBorder(fresh > 0 ? Look.doneColor.opacity(0.55) : Theme.edge, lineWidth: 1))
         .padding(.horizontal, 10)
         // Clear of the footer's panel under it.
         .padding(.vertical, 6)

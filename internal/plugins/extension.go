@@ -13,11 +13,8 @@ import (
 	"github.com/irie-people/irie/internal/repo"
 )
 
-// The browser extension plugin's parts, by name.
-const (
-	Extension = "extension"
-	Terms     = "terms"
-)
+// Extension is the browser extension plugin's one part, by name.
+const Extension = "extension"
 
 func init() { built["extension"] = extensionPlugin }
 
@@ -28,7 +25,7 @@ func extensionPlugin() Plugin {
 	return Plugin{
 		Name:    "extension",
 		Title:   "Browser extension",
-		Summary: brand.Name + " in your own browser: a side panel of tools that run on this computer, so what you read is never sent anywhere.",
+		Summary: brand.Name + " in your own browser: a side panel of the tools of " + brand.Name + "'s plugins, such as Terms in short, run on this computer, so what you read is never sent anywhere.",
 		Setup:   ":setup extension",
 		key:     "plugins.extension",
 		on:      func(c config.Config) bool { return c.Plugins.Extension },
@@ -41,16 +38,6 @@ func extensionPlugin() Plugin {
 				Brings:  []string{"the browser extension", brand.Slug + " setup extension", brand.Slug + " extension"},
 				own:     func(config.Config) bool { return true },
 				check:   checkExtension,
-			},
-			{
-				Name:    Terms,
-				Title:   "Terms in short",
-				Summary: "A site's terms of service or privacy policy in plain words: the points that matter, each with the clause behind it, and answers to your questions about them. " + brand.Name + "'s own code reads them, with no tokens spent; a local model words answers only when you ask.",
-				Brings:  []string{"the extension's Terms tool", brand.Slug + " terms ADDRESS", brand.Slug + " terms ask ADDRESS QUESTION"},
-				own:     func(config.Config) bool { return true },
-				check: func(e Env, on bool) (bool, string) {
-					return true, "Ready: press " + brand.Name + "'s button on a site in your browser, or run `" + brand.Slug + " terms example.com` in a terminal."
-				},
 			},
 		},
 	}

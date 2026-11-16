@@ -27,10 +27,9 @@ struct SidebarView: View {
         // counts sit in the title bar, beside the traffic lights.
         VStack(spacing: 0) {
             // The header sits lighter than the list, with rounded bottom
-            // corners, like the footer.
+            // corners and a hairline along them, like the footer.
             FindField()
-                .background(UnevenRoundedRectangle(bottomLeadingRadius: Theme.frameRadius, bottomTrailingRadius: Theme.frameRadius, style: .continuous)
-                    .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: 1))
+                .band(Theme.card, facing: .bottom)
                 .zIndex(1)
             // What keeps agents from starting, and a first task's steps
             // (Onboarding.swift).
@@ -42,8 +41,8 @@ struct SidebarView: View {
             if store.canSpaces { SpaceBar() }
             ReviewDock()
             // The footer sits lighter than the list, with rounded top
-            // corners: the switch between the views, the details and the
-            // task bar, on one panel.
+            // corners and a hairline along them: the switch between the
+            // views, the details and the task bar, on one panel.
             VStack(spacing: 0) {
                 if store.hasRows {
                     ModeSwitch()
@@ -60,8 +59,7 @@ struct SidebarView: View {
                 }
                 TaskBar()
             }
-            .background(UnevenRoundedRectangle(topLeadingRadius: Theme.frameRadius, topTrailingRadius: Theme.frameRadius, style: .continuous)
-                .fill(Theme.card).shadow(color: Theme.shadow, radius: 3, y: -1))
+            .band(Theme.card, facing: .top)
             // It takes its height before the cards, which keep their least.
             .layoutPriority(1)
         }
@@ -91,6 +89,9 @@ struct SidebarView: View {
 private struct SessionList: View {
     @Environment(Store.self) private var store
     @FocusState private var listFocused: Bool
+
+    /// How tall the fade at the list's foot is.
+    static let fade: CGFloat = 14
 
     var body: some View {
         let groups = store.drawnGroups
@@ -123,12 +124,15 @@ private struct SessionList: View {
                             let lastList = store.canGroup && store.mode == .list ? groups.last(where: { $0.bare || $0.userGroup != nil })?.id : nil
                             ForEach(groups) { g in
                                 // The List view's cards of no group of yours
-                                // need no header.
+                                // need no header. A header after cards keeps
+                                // more room above it than below, so it reads
+                                // as the start of its own cards.
                                 if !g.bare {
                                     GroupHeader(group: g)
+                                        .padding(.top, g.id == groups.first?.id ? 0 : Theme.headGap)
                                 } else if g.id == underPinned {
-                                    Capsule().fill(Theme.muted.opacity(0.25)).frame(height: 1)
-                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                    Capsule().fill(Theme.edge).frame(height: 1)
+                                        .padding(.horizontal, 6).padding(.vertical, 4)
                                         .accessibilityHidden(true)
                                 }
                                 if store.isOpen(g) {
@@ -148,12 +152,23 @@ private struct SessionList: View {
                         }
                         .padding(.horizontal, ListLayout.inset)
                         .padding(.top, 3)
-                        .padding(.bottom, 8)
+                        // Clear of the fade at the foot, scrolled to the end.
+                        .padding(.bottom, Self.fade)
                     }
                     // A drag held near the list's top or bottom edge
                     // scrolls it (DragScroll.swift).
                     .background(alignment: .topLeading) {
                         DragScrolling().frame(width: 1, height: 1).accessibilityHidden(true)
+                    }
+                    // The cards fade into the sidebar's ground as they go
+                    // under the footer, so one cut off there reads as more
+                    // below rather than as a card under a sheet (Roots'
+                    // principles §2.8).
+                    .overlay(alignment: .bottom) {
+                        LinearGradient(colors: [Theme.sidebar.opacity(0), Theme.sidebar], startPoint: .top, endPoint: .bottom)
+                            .frame(height: Self.fade)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
                     }
                     // What a drag holds lands anywhere in the list, and a
                     // line shows where (Drops.swift).
@@ -317,6 +332,7 @@ private struct GroupTree: View {
                 case let .group(sub):
                     let g = SessionGroup.of(sub)
                     GroupHeader(group: g)
+                        .padding(.top, item.id == node.items.first?.id ? 0 : Theme.headGap / 2)
                     if store.isOpen(g) {
                         GroupTree(node: sub, group: group, order: order, listFocused: listFocused, now: now)
                     }
@@ -324,9 +340,12 @@ private struct GroupTree: View {
             }
         }
         .padding(.leading, ListLayout.indent)
+        // The rail hangs from its header's chevron, from the header's foot
+        // down past the group's last card, so the header and what it holds
+        // read as one.
         .overlay(alignment: .leading) {
             Capsule().fill(lit ? Theme.accent : Theme.muted.opacity(0.3)).frame(width: 2)
-                .padding(.leading, 2).padding(.vertical, 3)
+                .padding(.leading, ListLayout.rail - 1).padding(.top, -6).padding(.bottom, 3)
                 .accessibilityHidden(true)
         }
         // Faded while its header drags it.
@@ -716,6 +735,7 @@ private struct RenameField: View {
 private struct GroupHeader: View {
     @Environment(Store.self) private var store
     let group: SessionGroup
+    @State private var hovering = false
 
     var body: some View {
         let open = store.isOpen(group)
@@ -731,29 +751,36 @@ private struct GroupHeader: View {
                 count
             }
             .padding(.horizontal, 4)
-            .padding(.top, 3)
+            .padding(.vertical, 2)
         } else {
             Button { store.fold(group) } label: {
+                // Quieter than the cards under it: muted, and ink only under
+                // the pointer, as Roots' group head is; red only while a
+                // parked session needs you.
                 HStack(spacing: 5) {
                     chevron(open)
                     if group.userGroup != nil { folder(open) }
                     Text(group.title)
-                        .font(Theme.font(12, .heavy))
-                        .foregroundStyle(group.id == SessionGroup.parked && needs > 0 ? Theme.needs : Theme.ink)
+                        .font(Theme.font(Theme.headSize, .heavy))
+                        .tracking(Theme.headTracking)
+                        .foregroundStyle(group.id == SessionGroup.parked && needs > 0 ? Theme.needs : hovering ? Theme.ink : Theme.muted)
                         .lineLimit(1)
                     if let note {
-                        Text("· " + note).font(Theme.font(11.5, .bold)).foregroundStyle(Theme.needs).lineLimit(1)
+                        Text("· " + note).font(Theme.font(Theme.headSize, .bold)).foregroundStyle(Theme.needs).lineLimit(1)
                     }
                     Spacer(minLength: 4)
                     count
                 }
+                // The chevron's middle is at ListLayout.rail, over the
+                // group's rail (GroupTree).
                 .padding(.horizontal, 4)
-                .padding(.top, 3)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(lit ? Theme.hover : .clear))
+                .padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(lit || hovering ? Theme.hover : .clear))
                 .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(lit ? Theme.accent : .clear, lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { hovering = $0 }
             .help(help)
             .contextMenu { GroupActions(group: group) }
             .modifier(HeaderDrag(store: store, group: group))
@@ -807,7 +834,7 @@ private struct GroupHeader: View {
     }
 
     private var count: some View {
-        Text("\(group.sessions.count)").font(Theme.font(11.5, .bold)).monospacedDigit().foregroundStyle(Theme.muted)
+        Text("\(group.sessions.count)").font(Theme.font(Theme.headSize, .bold)).monospacedDigit().foregroundStyle(Theme.muted)
     }
 
     private var help: String {
@@ -939,6 +966,9 @@ private struct HelperRows: View, Equatable {
             .padding(.leading, 28)
             .padding(.trailing, Theme.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Tucked under its card, nearer it than the next card is, so the
+            // card and its helpers read as one (Roots' principles §2.6).
+            .padding(.top, -4)
             .accessibilityElement(children: .contain)
         }
     }
@@ -1100,7 +1130,7 @@ struct DetailsPanel: View {
                     Spacer(minLength: 4)
                     DetailsFold()
                 }
-                .controlSize(.small)
+                .buttonStyle(IconButtonStyle())
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
@@ -1112,10 +1142,11 @@ struct DetailsPanel: View {
                 .onAppear { drawn = g.size.height }
                 .onChange(of: g.size.height) { drawn = g.size.height }
         })
+        // Flat on the footer, its edge in the selected session's colour:
+        // the colour, not a shadow, ties it to the selected card.
         .background(shape.fill(Theme.panel))
         .overlay(shape.strokeBorder(stateColor?.opacity(0.45) ?? Theme.edge, lineWidth: 1))
         .clipShape(shape)
-        .background(shape.fill(Theme.panel).shadow(color: Theme.shadow, radius: 3, y: 1.5))
         .overlay(alignment: .top) { edge }
         .padding(.horizontal, 10)
         .padding(.top, 6)
@@ -1210,7 +1241,7 @@ struct DetailsPanel: View {
             Spacer(minLength: 4)
             DetailsFold()
         }
-        .controlSize(.small)
+        .buttonStyle(IconButtonStyle())
     }
 
     /// While the session works, its state and every line about it but a
@@ -1227,7 +1258,8 @@ struct DetailsPanel: View {
                     .foregroundStyle(look.loud ? Theme.needs : own ?? Theme.ink)
                 Spacer(minLength: 4)
                 // Icons, so a narrow sidebar never cuts their words short; the
-                // words are on hover and for VoiceOver.
+                // words are on hover and for VoiceOver. Quiet ones, muted
+                // until the pointer is on them, so the panel's words lead.
                 Button { store.show(s.id, focus: true) } label: { Image(systemName: "keyboard") }
                     .help("Type to it")
                     .accessibilityLabel("Type to it")
@@ -1239,7 +1271,7 @@ struct DetailsPanel: View {
                 if store.canPark { ParkButton(session: s) }
                 DetailsFold()
             }
-            .controlSize(.small)
+            .buttonStyle(IconButtonStyle())
             line(s.detail, color: look.loud ? Theme.needs : own ?? Theme.ink)
             ControlLines(session: s)
             line(s.command, mono: true, color: meta)
@@ -1549,8 +1581,7 @@ private struct FindField: View {
         }
         .padding(.horizontal, Theme.inset)
         .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field)
-            .shadow(color: Theme.shadow, radius: 2, y: 1))
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).fill(Theme.field))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                 .strokeBorder(focused ? Theme.accent : Theme.edge, lineWidth: focused ? 1.5 : 1)
