@@ -38,7 +38,7 @@ fn main() {
         .map(|n| n.get())
         .unwrap_or(4);
     let goflags = std::env::var("GOFLAGS").unwrap_or_default();
-    let code = match opts::parse(&args, &goflags, cpus) {
+    let code = match opts::parse(&args, &goflags, default_workers(cpus)) {
         Ok(Parsed::Run(o)) => match run(&o) {
             Ok(code) => code,
             Err(e) => {
@@ -104,6 +104,20 @@ impl Active {
 impl Drop for Active {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.0);
+    }
+}
+
+/// The workers for a machine with `cpus` CPUs when -p does not say. A
+/// worker's test may run a whole test Irie, a core with its tmux server,
+/// sidebar and agents, which keep more than one CPU busy as they start: a
+/// 4-CPU CI runner with a worker per CPU had 9.6 CPUs' worth of work
+/// waiting, and tests with time bounds failed, while the 12-CPU Mac stayed
+/// under its CPUs. So small machines run half as many, never fewer than two.
+fn default_workers(cpus: usize) -> usize {
+    if cpus >= 8 {
+        cpus
+    } else {
+        (cpus / 2).max(2).min(cpus.max(1))
     }
 }
 
@@ -785,6 +799,16 @@ mod tests {
         assert_eq!(count(1, "process"), "1 process");
         assert_eq!(count(97, "process"), "97 processes");
         assert_eq!(count(0, "other run"), "0 other runs");
+    }
+
+    #[test]
+    fn small_machines_run_fewer_workers() {
+        assert_eq!(default_workers(12), 12);
+        assert_eq!(default_workers(8), 8);
+        assert_eq!(default_workers(6), 3);
+        assert_eq!(default_workers(4), 2);
+        assert_eq!(default_workers(3), 2);
+        assert_eq!(default_workers(1), 1);
     }
 
     #[test]
