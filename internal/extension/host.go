@@ -9,6 +9,8 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +104,12 @@ type Reply struct {
 	Answer *terms.Answer `json:"answer,omitempty"`
 	Others []terms.Link  `json:"others,omitempty"`
 	Model  string        `json:"model,omitempty"`
+	// Where is where the model runs: "this computer", or the host of a
+	// server of the person's own (local.url).
+	Where string `json:"where,omitempty"`
+	// Updated says update wrote this build's extension into its folder:
+	// the extension takes it as it reloads.
+	Updated bool `json:"updated,omitempty"`
 }
 
 // Hello is what the host says first: who it is, and what it can do.
@@ -112,9 +120,10 @@ type Hello struct {
 	On      bool     `json:"on"`
 	Why     string   `json:"why,omitempty"`
 	Tools   []string `json:"tools"`
-	// Updated says the host wrote this build's extension into its
-	// folder, which the browser takes when the extension reloads.
-	Updated bool `json:"updated,omitempty"`
+	// Update says this build's extension isn't the one running: the
+	// panel offers to update it, and the update op writes it into its
+	// folder just before the extension reloads, never while it runs.
+	Update bool `json:"update,omitempty"`
 }
 
 // Options are what the host needs from Irie.
@@ -154,14 +163,16 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, o Options) error {
 	}
 	h := &host{o: o, out: out, docs: map[string]*terms.Doc{}}
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	var wg sync.WaitGroup
-	defer wg.Wait()
+	// The work in hand stops with the connection, before it is waited for.
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
 	for {
 		b, err := ReadMessage(in)
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			// The browser closed the port: the panel went.
-			cancel()
 			return nil
 		}
 		if err != nil {
@@ -169,7 +180,9 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, o Options) error {
 		}
 		var r Request
 		if err := json.Unmarshal(b, &r); err != nil {
-			h.send(Reply{Done: true, Code: "bad", Error: "a request that isn't JSON: " + err.Error()})
+			// A field of the wrong type still leaves the id read, so the
+			// panel hears which request failed.
+			h.send(Reply{ID: r.ID, Done: true, Code: "bad", Error: "a request " + brand.Name + " can't read: " + err.Error()})
 			continue
 		}
 		wg.Add(1)
@@ -217,12 +230,14 @@ func (h *host) handle(ctx context.Context, r Request) Reply {
 		return Reply{ID: r.ID, Done: true, Code: "off", Error: why}
 	}
 	switch r.Op {
+	case "update":
+		return h.update(r)
 	case "model":
 		m, err := h.findModel(ctx, cfg)
 		if err != nil {
 			return Reply{ID: r.ID, Done: true, Code: "model", Error: err.Error()}
 		}
-		return Reply{ID: r.ID, Done: true, Model: m.Name}
+		return Reply{ID: r.ID, Done: true, Model: m.Name, Where: where(m)}
 	case "terms.read":
 		return h.read(ctx, r)
 	case "terms.ask":
@@ -231,20 +246,44 @@ func (h *host) handle(ctx context.Context, r Request) Reply {
 	return Reply{ID: r.ID, Done: true, Code: "bad", Error: fmt.Sprintf("no op %q", r.Op)}
 }
 
-// hello notes the browser that connected, and writes this build's
-// extension into its folder when the one there is older.
+// hello notes the browser that connected, and says whether this build's
+// extension is another than the one running, which the panel offers to
+// take: Irie writes its folder only then, so a running extension never
+// finds its files changed under it.
 func (h *host) hello(r Request, why string) *Hello {
 	x := &Hello{Name: brand.Name, Irie: version.String(), Version: Version(), On: why == "", Why: why, Tools: []string{"terms"}}
-	folder := Folder(h.o.Paths)
-	if _, err := os.Stat(filepath.Join(folder, "manifest.json")); err == nil && r.Version != Version() {
-		if changed, err := Write(folder); err != nil {
-			h.o.Log.Warn("write", "err", err)
-		} else {
-			x.Updated = changed || r.Version != Version()
-		}
+	if _, err := os.Stat(filepath.Join(Folder(h.o.Paths), "manifest.json")); err == nil && r.Version != "" && r.Version != Version() {
+		x.Update = true
 	}
 	h.seen(r.Browser)
 	return x
+}
+
+// update writes this build's extension into its folder, as the panel
+// asks just before it reloads the extension. A folder setup never wrote
+// is left alone: the extension then runs from somewhere else.
+func (h *host) update(r Request) Reply {
+	folder := Folder(h.o.Paths)
+	if _, err := os.Stat(filepath.Join(folder, "manifest.json")); err != nil {
+		return Reply{ID: r.ID, Done: true, Code: "bad", Error: "The extension isn't in " + brand.Name + "'s folder: `" + brand.Slug + " setup extension` writes it there."}
+	}
+	changed, err := Write(folder)
+	if err != nil {
+		return Reply{ID: r.ID, Done: true, Code: "bad", Error: err.Error()}
+	}
+	return Reply{ID: r.ID, Done: true, Updated: changed}
+}
+
+// where says where a model runs, for the panel's words.
+func where(m terms.Model) string {
+	u, err := url.Parse(m.URL)
+	if err != nil {
+		return ""
+	}
+	if ip, err := netip.ParseAddr(u.Hostname()); (err == nil && ip.IsLoopback()) || u.Hostname() == "localhost" {
+		return "this computer"
+	}
+	return u.Hostname()
 }
 
 // seen notes when a browser's extension last talked to Irie, for the
@@ -254,25 +293,25 @@ func (h *host) seen(browser string) {
 	if name == "" || len(name) > 40 {
 		name = "a browser"
 	}
-	p := seenFile(h.o.Paths)
-	seen := map[string]time.Time{}
-	if b, err := os.ReadFile(p); err == nil {
-		_ = json.Unmarshal(b, &seen)
-	}
-	seen[name] = time.Now().UTC().Truncate(time.Second)
-	// A few browsers at most: drop the oldest past that.
-	for len(seen) > 8 {
-		oldest := ""
-		for k, t := range seen {
-			if oldest == "" || t.Before(seen[oldest]) {
-				oldest = k
+	// Under the file's lock: two browsers' hosts may start at once.
+	err := filetx.Update(seenFile(h.o.Paths), 0o600, func(old []byte) ([]byte, error) {
+		seen := map[string]time.Time{}
+		_ = json.Unmarshal(old, &seen)
+		seen[name] = time.Now().UTC().Truncate(time.Second)
+		// A few browsers at most: drop the oldest past that.
+		for len(seen) > 8 {
+			oldest := ""
+			for k, t := range seen {
+				if oldest == "" || t.Before(seen[oldest]) {
+					oldest = k
+				}
 			}
+			delete(seen, oldest)
 		}
-		delete(seen, oldest)
-	}
-	b, _ := json.MarshalIndent(seen, "", "  ")
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err == nil {
-		_ = filetx.WriteFile(p, b, 0o600)
+		return json.MarshalIndent(seen, "", "  ")
+	})
+	if err != nil {
+		h.o.Log.Warn("seen", "err", err)
 	}
 }
 

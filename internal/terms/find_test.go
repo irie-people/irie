@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
@@ -144,13 +145,68 @@ func TestAPagesLinksNeverReachThisComputer(t *testing.T) {
 	if _, err := (Fetcher{Local: true}).Get(ctx, srv.URL+"/legal/terms"); err != nil {
 		t.Errorf("Local: %v", err)
 	}
-	for _, addr := range []string{"10.0.0.1:80", "192.168.1.1:443", "100.100.1.1:80", "[fd00::1]:80", "169.254.1.1:80", "[::1]:80", "0.0.0.0:80"} {
+	// This computer's own networks, as its interfaces have them: a global
+	// IPv6 /64 that no fixed range covers.
+	old := interfaceNets
+	interfaceNets = func() []netip.Prefix { return []netip.Prefix{netip.MustParsePrefix("2a01:4f8:1:2::/64")} }
+	t.Cleanup(func() { interfaceNets = old })
+	for _, addr := range []string{
+		"10.0.0.1:80", "192.168.1.1:443", "100.100.1.1:80", "[fd00::1]:80", "169.254.1.1:80", "[::1]:80", "0.0.0.0:80",
+		"192.0.2.1:80", "198.51.100.7:80", "203.0.113.9:80", "[2001:db8::1]:80", "[fec0::1]:80", "[2002:c0a8:101::1]:80",
+		"[64:ff9b::a00:1]:80", "[::ffff:192.168.1.1]:80", "[fe80::1%en0]:80", "[2a01:4f8:1:2::abcd]:8080",
+	} {
 		if public("tcp", addr, nil) == nil {
 			t.Errorf("%s counts as public", addr)
 		}
 	}
-	if err := public("tcp", "93.184.215.14:443", nil); err != nil {
-		t.Errorf("a public address refused: %v", err)
+	for _, addr := range []string{"93.184.215.14:443", "[2606:2800:21f:cb07:6820:80da:af6b:8b2c]:443", "[64:ff9b::5db8:d70e]:443"} {
+		if err := public("tcp", addr, nil); err != nil {
+			t.Errorf("a public address refused: %v", err)
+		}
+	}
+}
+
+// TestLocalIsOnlyTheHostAskedFor: an address typed on this computer is
+// fetched, but its redirect to another local name isn't, nor a link of
+// its page to another local host.
+func TestLocalIsOnlyTheHostAskedFor(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/away":
+			// Another name for this computer than the one asked for.
+			http.Redirect(w, r, strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)+"/terms", http.StatusFound)
+		default:
+			fmt.Fprint(w, `<html><body><p>Our terms.</p></body></html>`)
+		}
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	f := Fetcher{Local: true}
+	if _, err := f.Get(ctx, srv.URL+"/terms"); err != nil {
+		t.Errorf("the address asked for: %v", err)
+	}
+	var refused *refusedError
+	if _, err := f.Get(ctx, srv.URL+"/away"); !errors.As(err, &refused) {
+		t.Errorf("a redirect to another local name: %v", err)
+	}
+	if g := linked(f, srv.URL+"/", "http://localhost:1/terms"); g.Local || g.Max != MaxLinked {
+		t.Errorf("a link to another host: %+v", g)
+	}
+	if g := linked(f, srv.URL+"/", srv.URL+"/terms"); !g.Local {
+		t.Errorf("a link on the host asked for: %+v", g)
+	}
+}
+
+// TestAPrivacyRequestNeverGetsTheTermsAgain: a privacy policy is asked for
+// from terms that link to none: the terms come back, not their terms link
+// again and again.
+func TestAPrivacyRequestNeverGetsTheTermsAgain(t *testing.T) {
+	page := &Page{URL: "https://example.com/legal/terms", HTML: true, Body: mustRead(t, "testdata/terms.html")}
+	page.Body = []byte(strings.Replace(string(page.Body), `<a href="https://example.com/privacy">Privacy Policy</a>`, "", 1))
+	d, err := Locate(context.Background(), Fetcher{Client: &http.Client{Transport: refuseAll{}}}, page.URL, page, KindPrivacy)
+	if err != nil || d.URL != page.URL || d.links != nil {
+		t.Errorf("privacy from terms without a link to it: %v, %+v", err, d)
 	}
 }
 

@@ -91,6 +91,7 @@ type fakeOllama struct {
 	caps   map[string][]string
 	reply  string
 	asked  []string
+	cut    bool // the chat stops before its last word
 }
 
 func (f *fakeOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +116,9 @@ func (f *fakeOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			b, _ := json.Marshal(map[string]any{"message": map[string]string{"role": "assistant", "content": word}, "done": false})
 			fmt.Fprintf(w, "%s\n", b)
 		}
-		fmt.Fprint(w, `{"message":{"role":"assistant","content":""},"done":true}`+"\n")
+		if !f.cut {
+			fmt.Fprint(w, `{"message":{"role":"assistant","content":""},"done":true}`+"\n")
+		}
 	default:
 		http.NotFound(w, r)
 	}
@@ -177,5 +180,12 @@ func TestALocalModelWordsTheAnswer(t *testing.T) {
 	}
 	if got := stripThinking("<think>hmm</think>Yes."); got != "Yes." {
 		t.Errorf("stripThinking: %q", got)
+	}
+	// A reply that ends before its last word is no answer: Irie's code
+	// answers, and says why.
+	f.cut = true
+	a, err = d.AskModel(ctx, m, "Can I get a refund?", nil)
+	if err == nil || a.By != Code {
+		t.Errorf("a cut reply: %+v, %v", a, err)
 	}
 }

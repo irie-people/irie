@@ -432,7 +432,11 @@ func (o Ollama) Chat(ctx context.Context, model string, msgs []ChatMessage, opt 
 	if err := sc.Err(); err != nil {
 		return out.String(), err
 	}
-	return out.String(), ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return out.String(), err
+	}
+	// The stream ended without its last word.
+	return out.String(), io.ErrUnexpectedEOF
 }
 
 // Unload lets a loaded model go at once, freeing the memory it holds
