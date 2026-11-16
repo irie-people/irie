@@ -74,7 +74,7 @@ The gateway then serves `https://<this machine>.local:7390/`, and the same port 
 
 ## 4. The app
 
-- **Sessions**: a card per session in the core's order, each machine a section, parked last; a state change never moves a card. Red when it needs you.
+- **Sessions**: as the machine's own sidebar has them, each machine a section. One space at a time (the header's `spaces`), under chips of its spaces: the space its own screen shows, that of the session shown there (`shown`), unless you pick another on the phone, which holds until the screen goes to another space; the screen's space carries its mark. In it, as the Mac's List view: Pinned, then your groups (the header's `groups`) where the first of their cards is, the groups inside them within them and the cards of none between them, each in the core's order, then Parked; and the Claude Code sessions outside Irie. Pinned and each group fold on the phone. A state change never moves a card. Red when it needs you; the needs filter shows those of every space. A task started on the phone starts in the space it shows (`input`'s `space`).
 - **Its colours**: the palette the Mac app draws in, one of Irie's or one made with Make a Theme, which the first machine whose core says one sends in its header (`theme`), light or dark as the phone is, with the agents' own colours worked out in it; Evergreen until one comes. The native app (§4.1) takes it the same way.
 - **A session**, in either of two views, picked at its top under its name; the phone keeps the pick for every session:
   - **Browser**: its conversation, as the Mac app draws it; a message box (`send`); while it waits on you, a red card with what it asks and its choices as buttons (`screen`, `keys`), or a key pad.
@@ -87,7 +87,7 @@ It keeps the paired machines in the browser's storage on the phone, and a servic
 
 ### 4.1 The native app
 
-`ios/Irie.swiftpm` is the same app in SwiftUI, an Xcode app package ([ios/README.md](../ios/README.md) says how to build, sign and install it). It shows what the web app shows, but for the Term view, and sends the same calls (§2.1); it differs where a native app can do better:
+`ios/Irie.swiftpm` is the same app in SwiftUI, an Xcode app package ([ios/README.md](../ios/README.md) says how to build, sign and install it). It shows what the web app shows, but for the Term view and the spaces, pins and groups of the list, and sends the same calls (§2.1); it differs where a native app can do better:
 
 - **No profile.** It pins Irie's authority for each machine itself. A connection must present a chain that ends in that authority, and the machine's certificate must be valid for the name or address dialed under that authority alone; it trusts no other certificate on the phone, and needs none installed.
 - **Pairing by link.** `irie remote pair`, its `--open` page and the `pair` op also give `irie://pair?u=<gateway>&c=<code>&f=<SHA-256 of the authority>&n=<name>` and a QR code of it. Read from the machine's own screen, it carries the whole fingerprint by a channel the person trusts, so the app pins it at once; the phone's camera opens it in the app, or the app's own scanner reads it. With an address and code typed instead, the app shows the first eight bytes of the fingerprint the machine answered with, and sends the code only after the person says they match what `irie remote pair` printed. Either way the address must be one Irie's authority can vouch for (§3), so a link to anywhere else is refused.
@@ -119,6 +119,7 @@ They go through the phone's own push service (Apple's, for an iPhone on iOS 16.4
 | `internal/core/screen.go` | `screen` and `keys` |
 | `internal/core/screenfeed.go` | The live terminal: `subscribe` with `screen` |
 | `internal/remote/web/js/term.js` | The Term view: the screen frames drawn cell by cell, whole or wrapped to read, the zoom, the plain-text fallback |
+| `internal/remote/web/js/list.js` | The list as the Mac's sidebar draws it: the space shown, which follows the machine's screen, and Pinned and your groups in it |
 | `tools/phonepreview` | The app against a fake machine, for working on it and drawing it with no phone: the gateway on the Windows app's fake core (`internal/winapp/fixture`), with a conversation and a terminal for each session, already paired; `go run ./tools/phonepreview -dir internal/remote/web` |
 | `cmd/irie/remote.go` | `irie remote` |
 | `$XDG_STATE_HOME/irie/remote/` | `ca.pem`, `ca-key.pem` (0600), `devices.json`, `pairing.json`, `machine.json`; `remote.log` beside it |
