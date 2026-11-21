@@ -118,15 +118,18 @@ type Live struct {
 	VPN  *ipc.VPN          // the VPN's mark, while vpn.on
 	Mail []ipc.MailAccount // the mail accounts, by the core's last look at each
 	Chat []ipc.ChatAccount // the chat accounts, by the core's last look at each
+	// Jammin is the jammin plugin's sources, by the core's last look at
+	// each.
+	Jammin []ipc.JamSource
 }
 
 // order is the order plugins show in; a plugin this build leaves out is
 // skipped.
-var order = []string{"vpn", "privacy", "writing", "markets", "mail", "bitwarden", "terms", "extension", "yoink", "chat", "obsidian"}
+var order = []string{"vpn", "privacy", "writing", "markets", "mail", "bitwarden", "terms", "extension", "yoink", "chat", "obsidian", "jammin"}
 
 // built are the plugins in this build, by name. Each plugin's file adds
 // itself, and a build tag leaves a plugin's file out with its parts' code:
-// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat,noobsidian
+// go build -tags novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat,noobsidian,nojammin
 // builds Irie without any of them (DESIGN §4.17).
 var built = map[string]func() Plugin{}
 

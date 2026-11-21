@@ -65,6 +65,9 @@ var reaches = map[string]Reach{
 	OpYoink: ReachOutside,
 	// A post goes to a channel of people, under the person's bot.
 	OpChat: ReachOutside,
+	// A play sounds out of the speakers, and a look at Spotify asks a
+	// service off the machine.
+	OpJammin: ReachOutside,
 	// A check asks OSV.dev about the versions the locks name.
 	OpLock: ReachOutside,
 	// A sweep with drop removes closed sessions' worktrees: reopen adds

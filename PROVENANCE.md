@@ -748,6 +748,20 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-21 | https://quantumcomputingreport.com/openssh-10-0-introduces-default-post-quantum-key-exchange-algorithm/ | OpenSSH's post-quantum key exchange defaults, for the local chain proposal |
 | 2026-11-21 | https://code.visualstudio.com/docs/languages/markdown | ⇧⌘V toggles a Markdown file's pretty view in the code card, as VS Code's Markdown preview does |
 | 2026-11-21 | https://docs.slack.dev/reference/methods/users.info.md ; https://docs.slack.dev/reference/methods/conversations.info.md ; https://docs.slack.dev/reference/methods/chat.getPermalink.md ; https://docs.slack.dev/authentication/tokens.md ; https://docs.slack.dev/reference/scopes/chat.write.public.md ; https://docs.slack.dev/reference/scopes/connections.write.md ; https://docs.slack.dev/reference/events/message.md | The chat plugin's Slack connector (internal/chat/slack.go): GET with a query for reads and POST of JSON for changes, Bearer tokens of their kinds (xoxb-, xapp-, a person's xoxp- refused), cursor pages of conversations.list, history and replies with latest and inclusive, people's names from users.info, a DM by conversations.info, the permalink form chat.getPermalink answers, chat.postMessage with thread_ts, chat.update and chat.delete, errors such as missing_scope with needed, apps.connections.open to check the app-level token, and the manifest with its scopes and Socket Mode |
+| 2026-11-21 | https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow | Jammin's Spotify sign-in (internal/jammin/link.go): the Authorization Code flow with PKCE, the verifier's letters and length, the S256 challenge, the authorize and token requests and their words |
+| 2026-11-21 | https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens | Jammin's token refresh (internal/jammin/spotify.go): grant_type=refresh_token with the Client ID and no secret, and keeping the old refresh token when none comes back |
+| 2026-11-21 | https://developer.spotify.com/documentation/web-api/concepts/redirect_uri | Jammin's redirect URI: 127.0.0.1 as an IP literal, never localhost, HTTP allowed for loopback, and a port that may change at each sign-in |
+| 2026-11-21 | https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide | Jammin's Spotify facts (docs/proposals/jammin.md §3): development mode's Premium rule, five users, the dates, search's limit of 10, and playlists' tracks renamed items |
+| 2026-11-21 | https://developer.spotify.com/documentation/web-api/references/changes/february-2026 | Jammin's Spotify calls: the player, playlist, search and profile endpoints development mode still has |
+| 2026-11-21 | https://developer.spotify.com/blog/2026-07-23-web-api-quota-updates | Jammin: 25 Client IDs a developer, one quota for them all, and the QUOTA_EXCEEDED reason of a 429 |
+| 2026-11-21 | https://developer.spotify.com/documentation/web-api/reference/get-information-about-the-users-current-playback | Jammin's look at what plays: GET /me/player's fields (device, repeat_state, shuffle_state, context, progress_ms, item, currently_playing_type, actions) and its 204 |
+| 2026-11-21 | https://developer.spotify.com/documentation/web-api/concepts/api-calls | Jammin's reading of Spotify's refusals: the regular and authentication error objects, and the status codes |
+| 2026-11-21 | https://developer.spotify.com/policy | Jammin's rules (docs/proposals/jammin.md §3): no integration with another service's streams or content, no overlapping audio, no voice control, no AI, attribution and links back |
+| 2026-11-21 | https://developer.spotify.com/terms | Jammin: what may be stored or cached of Spotify's content, and the use of Spotify's marks |
+| 2026-11-21 | https://developer.spotify.com/documentation/design | The Jammin tab's Spotify attribution: the full logo's size and colours, artwork as given with its corner radii, names as given, and the words of a link back |
+| 2026-11-21 | com.apple.Music.sdef, the Music app's scripting dictionary in its bundle (/System/Applications/Music.app/Contents/Resources) | Jammin's Apple Music scripts (internal/jammin/music.go): player state, player position, current track, sound volume, shuffle enabled, song repeat, play, pause, playpause, next track, back track, search, user playlists, special kind, persistent ID, artwork's raw data |
+| 2026-11-21 | osascript(1), the macOS manual page | Jammin's script runner (internal/jammin/script.go): -l for the language, a script on standard input named -, and the arguments after it passed to the run handler |
+| 2026-11-21 | https://developer.spotify.com/images/guidelines/design/2024-spotify-full-logo.zip (linked from https://developer.spotify.com/documentation/design) | The Jammin tab's Spotify attribution: mac/Resources/Spotify_Full_Logo_RGB_Black.png and _White.png, Spotify's full logo files, unaltered, copied into the app by mac/build.sh |
 
 ## Third-party code
 
@@ -816,4 +830,12 @@ One file holds text written elsewhere. It keeps its own license and says so at i
 | File | Source | Version | License |
 |---|---|---|---|
 | `CODE_OF_CONDUCT.md` | Contributor Covenant, stewarded by the Organization for Ethical Source, https://www.contributor-covenant.org/version/3/0/ | 3.0, adapted | CC BY-SA 4.0 |
+
+## Third-party images
+
+The Mac app carries Spotify's full logo, which Spotify's design guidelines ask an app to show beside Spotify's content. The files are Spotify's own, unaltered, and Spotify's marks stay Spotify's: Irie shows them only beside Spotify's content, as its Developer Terms allow.
+
+| File | Source | Version | Terms |
+|---|---|---|---|
+| `mac/Resources/Spotify_Full_Logo_RGB_Black.png`, `mac/Resources/Spotify_Full_Logo_RGB_White.png` | https://developer.spotify.com/images/guidelines/design/2024-spotify-full-logo.zip, linked from https://developer.spotify.com/documentation/design | The 2024 logo files, byte for byte | Spotify's trademark, used under the Spotify Developer Terms (III.1.c) and its design guidelines |
 
