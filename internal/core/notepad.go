@@ -562,7 +562,7 @@ func (c *Core) notepadResult(left string) ipc.NotepadResult {
 func (c *Core) notepadView() ipc.Notepad {
 	p := &c.pad
 	v := ipc.Notepad{Notes: make([]ipc.Note, 0, len(p.notes)), Deleted: make([]ipc.Note, 0, len(p.deleted)),
-		Problem: p.problem, ReadOnly: p.readOnly, Path: c.paths.Notepad(), Rev: p.rev}
+		Problem: p.problem, ReadOnly: p.readOnly, Path: c.paths.Notepad(), Vault: c.vaultView(), Rev: p.rev}
 	for _, n := range p.notes {
 		v.Notes = append(v.Notes, n.Note)
 	}
@@ -609,8 +609,10 @@ func (c *Core) noteSent(id, text string, res ipc.InputResult) {
 }
 
 // publishNotepad tells every subscriber that sees the whole list that the
-// notepad changed. The caller holds neither lock.
+// notepad changed, and its note in the vault follows (obsidian.go). The
+// caller holds neither lock.
 func (c *Core) publishNotepad() {
+	c.kickVault()
 	c.mu.Lock()
 	subs := slices.Collect(maps.Keys(c.subs))
 	c.mu.Unlock()

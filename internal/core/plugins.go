@@ -47,6 +47,9 @@ func (c *Core) pluginsOp(a ipc.PluginsArgs) (ipc.PluginsResult, error) {
 	if c.cfg().MailOn() {
 		live.Mail = c.mailLive()
 	}
+	if c.cfg().ChatOn() {
+		live.Chat = c.chatLive()
+	}
 	all, bundles := plugins.Here(plugins.Env{Config: *c.cfg(), Paths: c.paths, Live: live})
 	return ipc.PluginsResult{Plugins: all, Bundles: bundles, Text: plugins.AllText(all, bundles)}, nil
 }

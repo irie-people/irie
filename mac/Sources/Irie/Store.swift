@@ -379,6 +379,8 @@ final class Store {
     let yoink: YoinkModel
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
+    /// The Obsidian vault, for its cards and the notepad (Vault.swift).
+    let vault = VaultModel()
     /// Zen: the session on show alone, full screen (Zen.swift).
     let zen = ZenModel()
     @ObservationIgnored private var started = false
@@ -389,6 +391,7 @@ final class Store {
         mail = MailModel(client: client)
         yoink = YoinkModel(client: client)
         notes.store = self
+        vault.store = self
         settings.changed = { [weak self] in
             self?.loadChoices()
             self?.loadPluginsSoon()
@@ -475,6 +478,7 @@ final class Store {
                 sizesSent = nil
                 sizesSoon()
                 notes.connected(serves: hello.features.contains("notepad"))
+                vault.served = hello.features.contains("obsidian")
                 canVariorum = hello.features.contains("variorum")
                 knowsFeatures = true
                 keepSideTab()

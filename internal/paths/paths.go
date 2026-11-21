@@ -122,6 +122,10 @@ func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
 func (p Paths) ZenState() string      { return filepath.Join(p.State, "zen.json") }
 func (p Paths) NotepadCopies() string { return filepath.Join(p.Data, "backups", "notepad") }
 
+// VaultNotes is what the core knew of the notepad's note in the Obsidian
+// vault when it and the notepad last agreed (DESIGN §4.17).
+func (p Paths) VaultNotes() string { return filepath.Join(p.Data, "obsidian-notes.json") }
+
 // ContextStore is the git repository of agents' contexts (DESIGN §4.13).
 func (p Paths) ContextStore() string          { return filepath.Join(p.State, "context.git") }
 func (p Paths) Remote() string                { return filepath.Join(p.State, "remote") }

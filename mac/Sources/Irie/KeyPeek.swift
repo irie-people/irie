@@ -51,6 +51,8 @@ enum PeekPlace: Equatable {
     case shell
     /// A code card's editor (CodeEditor.swift).
     case code
+    /// A Vault card's note, in the same editor.
+    case vault
     /// A field: the message box, the task bar, a name.
     case text
     case other
@@ -58,7 +60,7 @@ enum PeekPlace: Equatable {
     @MainActor
     static func of(_ window: NSWindow?, store: Store) -> PeekPlace {
         guard let r = window?.firstResponder else { return .other }
-        if r is CodeTextView { return .code }
+        if let t = r as? CodeTextView { return t.prose ? .vault : .code }
         if r is TerminalScreen {
             // A card with the keyboard is a pane's own shell; else the
             // agent's terminal, or a teammate's beside it.
@@ -75,6 +77,7 @@ enum PeekPlace: Equatable {
         case let .agent(claude): return claude ? "In the terminal, with Claude Code" : "In the terminal"
         case .shell: return "In a shell in the panes"
         case .code: return "In the code card"
+        case .vault: return "In the vault card"
         case .text: return "In a text field"
         case .other: return nil
         }
@@ -270,6 +273,8 @@ enum KeyCatalog {
             groups.append(PeekGroup(head: "Claude Code", rows: claude(mods).filter { !taken.contains($0.key) }))
         case .code:
             groups.append(PeekGroup(head: "This code card", rows: code(mods).filter { !taken.contains($0.key) }))
+        case .vault:
+            groups.append(PeekGroup(head: "This vault card", rows: code(mods).filter { !taken.contains($0.key) }))
         default:
             break
         }
