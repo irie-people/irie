@@ -899,3 +899,36 @@ pre.needs-detail { background: var(--card); white-space: pre-wrap; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .card.pressed, .call:active, .opt:active, .btn:active, .key:active, .mchip:active, .schip:active, .tkey:active, .seg-btn:active, .zoom-btn:active { transform: none; }
 }
+
+/* ---- Zen (docs/proposals/zen.md §10) -------------------------------------
+   The conversation alone, calm: no views to pick, no details, and what zen
+   offers over the message box, one thing at a time. Nothing in it is red
+   but the mark of a session that would like you (Roots §1.5); only the
+   breath's dot moves, and not under Reduce Motion (Roots §5.1, §5.3). */
+
+.session.zen .modes, .session.zen .details { display: none; }
+.zen-leave {
+  flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: 22px;
+  background: transparent; color: var(--ink); font: 600 15px/1 var(--round);
+}
+.zen-leave:active { background: rgba(127, 140, 130, .18); }
+.zen-calm { display: flex; flex-direction: column; gap: 8px; padding: 6px 12px 2px; }
+.zen-soft {
+  align-self: center; display: inline-flex; align-items: center; gap: 7px;
+  min-height: 34px; padding: 0 14px; border-radius: 17px;
+  background: var(--field); border: 1px solid var(--edge); color: var(--muted); font-size: 14px;
+}
+.zen-mark { width: 8px; height: 8px; border-radius: 4px; background: var(--needs); }
+.zen-card { padding: 14px 14px 12px; border-radius: 20px; background: var(--panel); border: 1px solid var(--edge); }
+.zen-text { margin: 0 0 12px; color: var(--ink); font-size: 16px; line-height: 1.4; }
+.zen-link { display: block; margin: -4px 0 12px; color: var(--accent-ink); font-size: 15px; overflow-wrap: anywhere; }
+.zen-answers { display: flex; flex-wrap: wrap; gap: 8px; }
+.zen-breath { position: relative; height: 72px; margin: 2px 0 12px; }
+.zen-dot {
+  position: absolute; left: 50%; bottom: 0; width: 16px; height: 16px; margin-left: -8px;
+  border-radius: 8px; background: var(--accent);
+  animation: zen-breath 10s ease-in-out infinite;
+}
+/* In for 4 seconds as it rises, out for 6 as it falls. */
+@keyframes zen-breath { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-56px); } }
+@media (prefers-reduced-motion: reduce) { .zen-dot { animation: none; bottom: 28px; } }

@@ -142,6 +142,10 @@ type Model struct {
 	undoLabel, redoLabel string      // what u and U would do next, from the history frame (undo.go)
 	menu                 *choiceMenu // a question about an undo or redo, while it waits for an answer
 
+	zen      bool      // this sidebar is in zen (zen.go)
+	zenShows string    // the session it said zen shows
+	zenSaid  time.Time // when it last said it was in zen
+
 	focus     focusArea
 	bar       textarea.Model
 	chips     []chip // pastes over chipMin, shown in the bar by their labels
@@ -347,14 +351,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.known = true
 		m.setDark(msg.IsDark())
 	case tickMsg:
+		renew := m.zenRenew()
 		if !m.known && m.asked < askBackground {
 			m.asked++
-			return m, andBackground(tick())
+			return m, tea.Batch(andBackground(tick()), renew)
 		}
-		return m, tick()
+		return m, tea.Batch(tick(), renew)
 	case FrameMsg:
 		m.conn = online
 		m.apply(msg.Frame)
+		m.zenFollow()
+	case zenMsg:
+		if msg.err != nil {
+			m.setStatus("zen: "+msg.err.Error(), true)
+		}
 	case OfflineMsg:
 		m.conn = offline
 	case inputMsg:
@@ -399,6 +409,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clamp()
 		return m, cmd
 	case tea.MouseWheelMsg:
+		if m.zen {
+			break // zen's one card doesn't scroll
+		}
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.scroll(-1)
@@ -407,6 +420,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.hover = m.hoverAt(msg.X, msg.Y)
 	case tea.MouseMotionMsg:
+		if m.zen {
+			break
+		}
 		// With the button held the pointer carries what it took hold of;
 		// else it lights what it is over.
 		if msg.Button == tea.MouseLeft && m.drag != nil {
@@ -420,6 +436,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hover = ""
 	case tea.MouseClickMsg:
 		if msg.Button != tea.MouseLeft || m.menu != nil {
+			break
+		}
+		if m.zen {
+			// In zen a click goes only to the command bar.
+			if msg.Y >= m.barTop()-b2i(m.tabbed()) {
+				m.setFocus(focusBar)
+			}
 			break
 		}
 		m.confirming, m.thawingAll = "", time.Time{}
@@ -438,6 +461,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setFocus(focusBar)
 		}
 	case tea.MouseReleaseMsg:
+		if m.zen {
+			break
+		}
 		return m.release(msg.Y)
 	case controlledMsg:
 		m.controlled(msg)
@@ -457,6 +483,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.setStatus("", false)
+	if m.zen {
+		return m.zenKeys(msg)
+	}
 	if msg.String() != "m" {
 		m.confirming = "" // any other key cancels a move
 	}
@@ -515,6 +544,8 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.rateCmd(ipc.Good)
 	case "-":
 		return m, m.rateCmd(ipc.Bad)
+	case "~":
+		return m.zenKey()
 	case "tab":
 		m.setFocus(focusBar)
 	case ":":

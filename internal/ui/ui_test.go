@@ -47,6 +47,7 @@ type fakeBackend struct {
 	undos     []string // dir choice_id choice, each Undo and Redo
 	undoReply func(dir string, a ipc.UndoArgs) (ipc.UndoResult, error)
 	inputs    []ipc.InputArgs // what the bar sent to Input
+	zens      []ipc.ZenArgs   // what the sidebar said of zen (zen_test.go)
 
 	// The core's view: the sidebar's own, as of each command it runs (run),
 	// and the Controls that freeze, promote and park, when the test has them.

@@ -51,7 +51,7 @@ The core keeps the texts on a chain of their own, in `$XDG_STATE_HOME/irie/chain
 
 ## Open questions
 
-- **Four marks still disagree.** The Archives' transcription and other careful copies differ on four points: "enumeration" or "Enumeration" (Art. I §9), "proper," or "proper;" (Art. II §2), "another State," or "another State;" (Art. III §2), and "In Suits" or "In suits" (Amendment VII). The parchments would settle them.
+- **Four marks, settled.** The Archives' transcription and other careful copies differed on four points. The Archives' high-resolution scans of the parchments settled each one, against the transcription: "Enumeration" (Art. I §9), "proper;" (Art. II §2), "another State;" (Art. III §2) and "In suits" (Amendment VII). The texts follow the parchments, and `verification.md` says how each reads. The chain kept the texts as first recorded, then the corrected ones as the next version.
 - **The House's online Code** was down for maintenance on 21 November 2026. Once it's back, check § 552 against it, current through Public Law 119-142 (November 10, 2026). Cornell follows it and matched.
 - **More documents.** The Articles of Confederation, other statutes, or other countries' founding documents would fit the same skill, tab and chain.
 

@@ -13,7 +13,7 @@ This skill holds Irie's verified copies of four documents, each in a file beside
 - **bill-of-rights.md**: the Bill of Rights, the first ten amendments, with the preamble of the 1789 joint resolution that proposed them, the two articles not ratified in 1791 and the attestation.
 - **freedom-of-information-act.md**: the Freedom of Information Act, 5 U.S.C. § 552, as the United States Code sets it out today, with its source credit, the laws that made and amended it.
 
-verification.md says where each text comes from, what it was checked against, the four marks still unsettled, and each file's SHA-512 fingerprint.
+verification.md says where each text comes from, what it was checked against, the four marks settled from the parchments themselves, and each file's SHA-512 fingerprint.
 
 ## Quote from the files, never from memory
 

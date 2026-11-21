@@ -677,6 +677,11 @@ const (
 	ZenShowHistory       = ipc.ZenShowHistory
 	ZenYes               = ipc.ZenYes
 	ZenNo                = ipc.ZenNo
+	ZenApp               = ipc.ZenApp
+	ZenSidebar           = ipc.ZenSidebar
+	ZenPhone             = ipc.ZenPhone
+	ZenRenew             = ipc.ZenRenew
+	ZenLapse             = ipc.ZenLapse
 	MaxZenWhy            = ipc.MaxZenWhy
 	MaxZenLog            = ipc.MaxZenLog
 )
