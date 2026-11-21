@@ -1,4 +1,4 @@
-package main
+package habits
 
 import (
 	"path"
@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-// family names a shell command by its first program and, for a program
+// Family names a shell command by its first program and, for a program
 // with subcommands, the subcommand: git log, sed -n, irie ctl list,
 // tools/live.sh. Assignments, cd, echo and the like before it are passed
 // over, and so are the bodies of heredocs, which hold scripts and text,
 // not commands.
-func family(cmd string) string {
+func Family(cmd string) string {
 	for _, seg := range segments(stripHeredocs(cmd)) {
 		if f := segFamily(seg); f != "" {
 			return f

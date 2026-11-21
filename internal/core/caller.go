@@ -13,33 +13,58 @@ import (
 // mullvad itself, which lockdown mode holds against. An unknown pid is not
 // an agent's.
 func (c *Core) fromAgent(pid int) bool {
-	if pid <= 0 {
-		return false
+	_, ok := c.agentPane(pid)
+	return ok
+}
+
+// peerAgent is the session whose agent's process tree process pid runs
+// in, as fromAgent walks it, and whether pid runs inside an agent at all:
+// a pane that is no session's is an agent's all the same.
+func (c *Core) peerAgent(pid int) (session string, inAgent bool) {
+	p, ok := c.agentPane(pid)
+	if !ok {
+		return "", false
 	}
 	c.mu.Lock()
-	hosts := map[int]bool{}
+	defer c.mu.Unlock()
+	for _, x := range c.sessions {
+		if x.pane == p.ID {
+			return x.id, true
+		}
+	}
+	return "", true
+}
+
+// agentPane is the agent pane whose host is among the parents of process
+// pid, and whether there is one.
+func (c *Core) agentPane(pid int) (tmux.Pane, bool) {
+	if pid <= 0 {
+		return tmux.Pane{}, false
+	}
+	c.mu.Lock()
+	hosts := map[int]tmux.Pane{}
 	for _, p := range c.snap.ByRole(tmux.RoleAgent) {
 		if p.PID > 0 {
-			hosts[p.PID] = true
+			hosts[p.PID] = p
 		}
 	}
 	c.mu.Unlock()
 	t, err := proc.Read()
 	if err != nil {
 		c.log.Warn("caller", "err", err)
-		return false
+		return tmux.Pane{}, false
 	}
 	for range 64 {
-		if hosts[pid] {
-			return true
+		if p, ok := hosts[pid]; ok {
+			return p, true
 		}
 		p, ok := t.Get(pid)
 		if !ok || p.PPID <= 1 || p.PPID == pid {
-			return false
+			return tmux.Pane{}, false
 		}
 		pid = p.PPID
 	}
-	return false
+	return tmux.Pane{}, false
 }
 
 // notBuilt is the refusal of a part that this build leaves out with its

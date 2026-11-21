@@ -28,6 +28,9 @@ type (
 	SendArgs          = ipc.SendArgs
 	ContinueArgs      = ipc.ContinueArgs
 	FlipResult        = ipc.FlipResult
+	CouncilArgs       = ipc.CouncilArgs
+	CouncilResult     = ipc.CouncilResult
+	CouncilJot        = ipc.CouncilJot
 	DockArgs          = ipc.DockArgs
 	DockResult        = ipc.DockResult
 	DockControl       = ipc.DockControl
@@ -265,6 +268,14 @@ const (
 	OpSend               = ipc.OpSend
 	OpContinue           = ipc.OpContinue
 	OpFlip               = ipc.OpFlip
+	OpCouncil            = ipc.OpCouncil
+	CouncilReport        = ipc.CouncilReport
+	CouncilTally         = ipc.CouncilTally
+	CouncilConvene       = ipc.CouncilConvene
+	CouncilPropose       = ipc.CouncilPropose
+	CouncilDone          = ipc.CouncilDone
+	CouncilYes           = ipc.CouncilYes
+	CouncilNo            = ipc.CouncilNo
 	OpDock               = ipc.OpDock
 	DockStateUntrusted   = ipc.DockStateUntrusted
 	DockStateStopped     = ipc.DockStateStopped
