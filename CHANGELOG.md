@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.10.0](https://github.com/irie-people/irie/compare/v1.9.1...v1.10.0) (2026-11-21)
+
+
+### Features
+
+* **bench:** start each run from a copy of a repo with --from ([0dadac6](https://github.com/irie-people/irie/commit/0dadac6254888ae452957ddcb67c2facafd9a7b7))
+* **chat:** :chat lists the newest mentions, a line each ([cbc712a](https://github.com/irie-people/irie/commit/cbc712aef23e564464b9f81b4d8b9d6ee3be6b20))
+* **chat:** Discord beside your sessions, through a bot of yours, with drafts agents write and you send ([c06db88](https://github.com/irie-people/irie/commit/c06db88c22d67eeb2aeca3687a20d5bc163a1a52))
+* **chat:** hear mentions and DMs as they come, through Discord's Gateway and Slack's Socket Mode ([60bcba9](https://github.com/irie-people/irie/commit/60bcba9d8b42007e0fc0ffb8089380a646d25c04))
+* **chat:** irie chat add takes a bot's token from a Keychain item you keep ([f9ba6dc](https://github.com/irie-people/irie/commit/f9ba6dcbc75bfa6cd6c38f4823096fb3454720ee))
+* **chat:** Slack, through an app of yours, with the same rules for agents ([55f9847](https://github.com/irie-people/irie/commit/55f9847418677ae6954215ae4c2ade6f0919f186))
+* **core:** send a task to the top, first in Pinned and boosted ([24f56fc](https://github.com/irie-people/irie/commit/24f56fc8bd2710e7ce6fdf70414a70055def14be))
+* **find:** look sessions up by what they did, by words and by meaning ([14dec99](https://github.com/irie-people/irie/commit/14dec992d07fae25ae2b677db35413fc173a019a))
+* **founding:** the founding documents, verified, as a skill and a Founding tab ([c099c0b](https://github.com/irie-people/irie/commit/c099c0b0607a848d30ba911dd527124f10571d7a))
+* **local:** start the llama-server again when its settings change ([6e3c923](https://github.com/irie-people/irie/commit/6e3c923781cd4e489ed1e03ac75f993ef3e66e5b))
+* **mac:** a look-ahead at keys, an alert-like pop-up of what each key does next ([8f5d243](https://github.com/irie-people/irie/commit/8f5d243cd348cce33eedec40407e4e78ae08ad20))
+* **mac:** a tree of fn keys, and Fn+X Fn+L Fn+R reverses the layout ([6803eb8](https://github.com/irie-people/irie/commit/6803eb853907f8e1c079454ef1f73550c8c269bd))
+* **mac:** a Vault card for the Obsidian vault, opened from the Notes panel ([1ca6afd](https://github.com/irie-people/irie/commit/1ca6afd450163c2dec25d48eb3fb3220f0ede181))
+* **mac:** make a Markdown file pretty beside its editor in the code card ([f7d0b23](https://github.com/irie-people/irie/commit/f7d0b23c201ccbef79218802d445e9f69960ead1))
+* **mac:** make zen calm, with one offer at a time and your zen's history ([ad88c35](https://github.com/irie-people/irie/commit/ad88c352f93891683192d96731b52197a0cea12e))
+* **mac:** send a jot to the top from the task bar ([aa092b8](https://github.com/irie-people/irie/commit/aa092b87d9cebff2330e749dd48e1abec5e345e8))
+* **mac:** the Chat tab: drafts to send, channels to read and post in, mentions as they come ([d288a4c](https://github.com/irie-people/irie/commit/d288a4c894865972cb5b49e810c0d723e6a05d09))
+* **materialize:** choose the local model that makes cards (materialize.model) ([d0a1640](https://github.com/irie-people/irie/commit/d0a1640e39c31c8b8b5cd49ebfc4abd3ff1fb0bc))
+* **materialize:** draw a session's card in a terminal with ctl materialize --session ([338a72d](https://github.com/irie-people/irie/commit/338a72d3b8784baf646bd40728a7c51900de7168))
+* **materialize:** keep the cards a model made, remade only when out of date ([87bf8bc](https://github.com/irie-people/irie/commit/87bf8bcef407aac21315ad73605f38fde26ba60c))
+* **materialize:** make cards on a local model, and ask with irie ctl materialize ([6a1fc01](https://github.com/irie-people/irie/commit/6a1fc011fcc0de9baddf721e777d747509b4dda2))
+* **materialize:** show where a session stands, in a card over its message box ([2992bb1](https://github.com/irie-people/irie/commit/2992bb1d827297f3e1cf832f164c78680a411d02))
+* **obsidian:** keep the notepad in an Obsidian vault too, both ways ([9bd3675](https://github.com/irie-people/irie/commit/9bd36754e80f0819beff00ceece582cdc5ea4e68))
+* **plugins:** a plugin of your own brings a word for the task bar ([94caff5](https://github.com/irie-people/irie/commit/94caff515ed0e9e5c24f9275f119ecfd2ab6289b))
+* **plugins:** give agents' sessions skills and tools of your own ([83d9517](https://github.com/irie-people/irie/commit/83d9517b6bfecdec4ffb8703e14dbcc3cbccc179))
+* **remote:** list the phone's sessions as the Mac's sidebar does, in the space it shows ([7de0bb7](https://github.com/irie-people/irie/commit/7de0bb74d14f9c9ba6e2eea9bb7692138556aa7f))
+* **tools:** find code by its declarations and rank agents' calls ([08fef63](https://github.com/irie-people/irie/commit/08fef638746b0e7373abfd524330ba7a12d299a6))
+* **tools:** read several sections of a doc in one tools/doc.sh call ([b4aac00](https://github.com/irie-people/irie/commit/b4aac00ab1f972b56a70afefbe64959ef1af0d66))
+* **yoink:** download a video, or its sound, from a link, from anywhere in Irie ([4794aab](https://github.com/irie-people/irie/commit/4794aabc93c2356c7dedc7ac6c2f4dde09d2ebf9))
+* **zen:** keep your zen as versions and offer one calm thing at a time ([a2b4780](https://github.com/irie-people/irie/commit/a2b47808fe898f3cbba1e2601f71ad3c911b6e78))
+* **zen:** offer a rest at a pause, sooner late at night ([7d85211](https://github.com/irie-people/irie/commit/7d852117be8262d00922b9ff532f3beb0b2e91be))
+
+
+### Bug Fixes
+
+* **bench:** name a bench's folders bench-5-run-2, not irie-bench-run-2-of-4 ([5718da4](https://github.com/irie-people/irie/commit/5718da46170e53c9a8598279e75bfe6a24df2d01))
+* **chat:** a mention is known by its channel as well as its ID ([98ff27c](https://github.com/irie-people/irie/commit/98ff27c59fbc4fe1dfecabd2a9b57a2b03d29b2a))
+* **core:** add the founding op to the public wire types ([564ef86](https://github.com/irie-people/irie/commit/564ef86f06d50bc5d320be292287ca2197c14760))
+* **ctl:** send and continue take a session's name, as close and park do ([aca2799](https://github.com/irie-people/irie/commit/aca2799ae22be6d070d22930a221092b32af94f5))
+* **find:** let the background read finish on a busy Mac ([0d5b2a4](https://github.com/irie-people/irie/commit/0d5b2a47f434c3915e358fc20553dc2a2a831661))
+* **mac:** give the soft button's capsule circular ends ([841bb53](https://github.com/irie-people/irie/commit/841bb531c0a92b25d446f5851bc3b2c1b477d83a))
+* **mac:** read open's combined flags in irie away, so -na names its app ([e032f42](https://github.com/irie-people/irie/commit/e032f420b974c48c8fbbbcbf20700c0f45d5d951))
+* **mac:** the Chat tab's count is a dot over its icon in a strip of icons ([689a7ff](https://github.com/irie-people/irie/commit/689a7fff242337bd53083875359655170a4c9a89))
+* **materialize:** find the card model in localmodel, not the Terms plugin ([48021d2](https://github.com/irie-people/irie/commit/48021d2bd0d03effa49ce73c86a9656d7947fbda))
+* **remote:** wrap the phone's Term view to read upright, and mend its small faults ([c8c8b98](https://github.com/irie-people/irie/commit/c8c8b98511334d4c8b97294a2b8e4ecf29150bf9))
+* **zen:** load your zen before the first zen op ([4902301](https://github.com/irie-people/irie/commit/4902301559d234df3614f555dfcc1ce0612dbb39))
+* **zen:** name the version format through brand ([53d5e24](https://github.com/irie-people/irie/commit/53d5e24ad21bdd526e1bb5c3390529d6f4de42a2))
+
 ## [1.9.1](https://github.com/irie-people/irie/compare/v1.9.0...v1.9.1) (2026-11-16)
 
 
