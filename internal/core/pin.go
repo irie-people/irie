@@ -78,6 +78,29 @@ func (c *Core) setPinned(id string, on bool) bool {
 	return true
 }
 
+// toTop sends session id, as a spawn with SpawnArgs.Top asks, to the top
+// (DESIGN §4.1): pinned, and first in Pinned, so first in the list of
+// whichever space it is in, over every card; and boosted (§4.3). Each is
+// recorded as the user's, as their own pin and boost are, so a restarted
+// core keeps both, and the boost lasts until they stop it. A session is
+// pinned or parked, never both, so a parked one is unparked. It records no
+// step of the history: the spawn's is the step, whose undo closes the
+// session, and the card's own Unpin and Stop Boosting undo the rest. The
+// caller holds c.mu.
+func (c *Core) toTop(id string) {
+	x := c.sessions[id]
+	if x == nil {
+		return
+	}
+	if x.track.parked {
+		c.setParked(id, false)
+	}
+	c.setPinned(id, true)
+	ids := slices.DeleteFunc(c.fullOrder(), func(s string) bool { return s == id })
+	c.setOrder(slices.Insert(ids, 0, id))
+	c.setLevel(x, 1, "sent to the top")
+}
+
 // toFirstUnpinned puts session id first among this machine's sessions that
 // are neither pinned nor parked: just under Pinned; one of a group of
 // yours, last in the innermost group around it that holds another card,
