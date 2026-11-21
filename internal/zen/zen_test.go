@@ -1,6 +1,7 @@
 package zen
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,6 +90,48 @@ func TestTheBookKeepsAChainOfYourZens(t *testing.T) {
 	}
 	if _, _, err := k.Commit(Apply(edge, ipc.ZenChange{Columns: ptr(7)}), "bad", t0); err == nil {
 		t.Error("a bad zen was kept")
+	}
+}
+
+// In its vault your zen's book keeps the names it had, and its export is
+// each version's exact bytes, oldest first, each the SHA-512 of its name.
+func TestTheBookInItsVaultExportsEachVersionsBytes(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "zen")
+	t0 := time.Date(2026, 11, 21, 18, 4, 5, 0, time.UTC)
+	first, _, err := Open(dir).Commit(Default(), "Your zen as it was", t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if docs, err := (Open(t.TempDir())).Export(); docs != nil || err != nil {
+		t.Errorf("an empty book's export: %q, %v", docs, err)
+	}
+	kek := bytes.Repeat([]byte{5}, 32)
+	k, err := OpenVault(dir, kek)
+	if err != nil || !k.Sealed() || Open(dir).Sealed() {
+		t.Fatalf("open: %v", err)
+	}
+	if n, err := k.Seal(); n != 1 || err != nil {
+		t.Fatalf("seal = %d, %v", n, err)
+	}
+	second, _, err := k.Commit(Apply(Default(), ipc.ZenChange{Layout: ptr("edge")}), "Edge to Edge", t0.Add(time.Hour))
+	if err != nil || second.Parent != first.Name {
+		t.Fatalf("second: %+v, %v", second, err)
+	}
+	docs, err := k.Export()
+	if err != nil || len(docs) != 2 || chain.Name([]byte(docs[0])) != first.Name || chain.Name([]byte(docs[1])) != second.Name {
+		t.Fatalf("export = %q, %v", docs, err)
+	}
+	if Format == "irie-zen/1" && chain.Name([]byte(docs[0])) != pinnedName {
+		t.Errorf("the first version's name moved in the vault: %s", chain.Name([]byte(docs[0])))
+	}
+	if _, _, err := Open(dir).Head(); !IsLocked(err) {
+		t.Errorf("a shut vault's head: %v", err)
+	}
+	if _, _, err := Open(dir).Commit(Default(), "plain", t0.Add(2*time.Hour)); !IsLocked(err) {
+		t.Errorf("a commit with the vault shut: %v", err)
+	}
+	if _, err := OpenVault(dir, bytes.Repeat([]byte{6}, 32)); !IsWrongKey(err) {
+		t.Errorf("another key: %v", err)
 	}
 }
 

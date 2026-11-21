@@ -167,3 +167,34 @@ func replace(path string, data []byte, perm fs.FileMode) error {
 	}
 	return err
 }
+
+// Create makes the file at path with data and perm, and refuses, with an
+// error that is fs.ErrExist, a file that is there already, so what it
+// writes is never replaced: a key, which the data it locks needs as it
+// was. The data goes whole to a temporary file beside it, synced, which is
+// then linked into place, so a reader finds the whole file or none. A
+// missing directory is made, with mode 0700.
+func Create(path string, data []byte, perm fs.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Chmod(perm)
+	}
+	if err == nil {
+		err = syscall.Fsync(int(f.Fd()))
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Link(f.Name(), path)
+}

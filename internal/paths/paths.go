@@ -99,7 +99,7 @@ func (p Paths) LocalFile() string             { return filepath.Join(p.State, "l
 func (p Paths) Benches() string               { return filepath.Join(p.State, "benches") }
 func (p Paths) Playbooks() string             { return filepath.Join(p.State, "playbooks") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
-func (p Paths) Chain() string                 { return filepath.Join(p.State, "chain") } // the sidebar's chain (DESIGN §4.23)
+func (p Paths) Chain() string                 { return filepath.Join(p.State, "chain", "sidebar") } // the sidebar's chain (DESIGN §4.23), beside the other chains
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 func (p Paths) Cards() string                 { return filepath.Join(p.State, "cards.json") } // materialized cards (internal/materialize)
 
@@ -121,6 +121,15 @@ func (p Paths) Notepad() string { return filepath.Join(p.Data, "notepad.json") }
 // Zen is your zen's versions (docs/proposals/zen.md §4): yours, as your
 // themes and layouts are, so it sits with them.
 func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
+
+// FoundingChain is the founding documents' local chain (internal/founding):
+// each version holds every text, and names the one before it.
+func (p Paths) FoundingChain() string { return filepath.Join(p.State, "chain", "founding") }
+
+// Keys holds the keys that open Irie's vaults where the system keeps no
+// keychain (internal/keyring): apart from the vaults, so that a copy of
+// your settings carries none.
+func (p Paths) Keys() string { return filepath.Join(p.State, "keys") }
 
 // ZenState is how far along zen's path you are, and what a restarted core
 // keeps of zen (internal/core/zen.go).

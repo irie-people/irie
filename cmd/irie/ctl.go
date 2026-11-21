@@ -184,7 +184,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          on its lock, frames sent, ticks, and its
                                          runs of claude agents. go run ./tools/perf
                                          reports one window of them
-` + controlUsage + contextUsage + psUsage + raceUsage + zenUsage
+` + controlUsage + contextUsage + psUsage + raceUsage + zenUsage + foundingUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -218,6 +218,8 @@ func ctl(args []string) error {
 		return ctlMaterialize(args[1:])
 	case "zen":
 		return ctlZen(args[1:])
+	case "founding":
+		return ctlFounding(args[1:])
 	case "trod":
 		return ctlTrod(args[1:])
 	case "gabriel":

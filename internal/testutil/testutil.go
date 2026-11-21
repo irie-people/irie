@@ -48,6 +48,9 @@ func Main(m *testing.M) {
 		os.Exit(code)
 	}
 	mainRan = true
+	// No test keeps a key in the user's Keychain (internal/keyring), even
+	// one that builds a core without a test Irie around it.
+	os.Setenv("IRIE_KEYCHAIN", "off")
 	sweep(filepath.Join("/tmp", shortPrefix+"*"), filepath.Join(os.TempDir(), buildPrefix+"*"))
 	code := m.Run()
 	if buildDir != "" {

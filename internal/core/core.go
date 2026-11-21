@@ -391,7 +391,7 @@ func Run(o Options) error {
 	c.loadTrodHand()
 	c.loadRaphael()
 	c.loadNotepad()
-	c.loadZen()
+	c.startZen()
 
 	// The freeze dog, Irie's one watchdog, runs first: the first tick
 	// waits for tmux, and a stopped server would hold it until the dog
@@ -448,6 +448,8 @@ func Run(o Options) error {
 	go c.watchVaultNotes()
 	// Terms in short's page, for the Mac app's Terms tab (terms.go).
 	go c.serveTerms(context.Background())
+	// The founding documents' texts, on their local chain (founding.go).
+	go c.recordFoundingAtStart()
 	// The chat plugin's mentions and DMs as they come (chat.go).
 	go c.chatListen(context.Background())
 	// Raphael's look at the core's own loop (watchCore) counts from here.
@@ -508,6 +510,9 @@ func Run(o Options) error {
 			// is gone; the next one keeps it awake again if there is work.
 			c.lidLetGo()
 			c.mailClose()
+			// What the sidebar's chain still has to write, as an install
+			// restarts the core (chain.go).
+			c.stopChain(chainStop)
 			return nil
 		}
 	}

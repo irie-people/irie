@@ -105,6 +105,8 @@ type ZenArgs struct {
 	Answer string `json:"answer,omitempty"`
 	// Log lists that many versions, newest first, up to MaxZenLog.
 	Log int `json:"log,omitempty"`
+	// Export gives every version's document, oldest first, in Docs.
+	Export bool `json:"export,omitempty"`
 	// Restore goes back to the zen of a version, named whole or by the
 	// start of its hash, as a new version.
 	Restore string `json:"restore,omitempty"`
@@ -116,6 +118,10 @@ type ZenResult struct {
 	Zen      Zen          `json:"zen"`
 	Version  *ZenVersion  `json:"version,omitempty"`
 	Versions []ZenVersion `json:"versions,omitempty"`
+	// Docs is each version's document, oldest first, as the exact
+	// canonical bytes its name is the SHA-512 of (zen.md §9), for
+	// another tool to check and keep.
+	Docs []string `json:"docs,omitempty"`
 }
 
 // ZenVersion is one version of your zen (zen.md §4).
