@@ -2,7 +2,11 @@
 
 package core
 
-import "github.com/irie-people/irie/internal/ipc"
+import (
+	"context"
+
+	"github.com/irie-people/irie/internal/ipc"
+)
 
 // This build leaves the chat plugin out (go build -tags nochat, DESIGN
 // §4.17): none of its code is in the binary, and these stand in for
@@ -13,6 +17,8 @@ const chatBuilt = false
 type chatState struct{}
 
 func (c *Core) chatLive() []ipc.ChatAccount { return nil }
+
+func (c *Core) chatListen(context.Context) {}
 
 func (c *Core) chatOp(int, ipc.ChatArgs) (ipc.ChatResult, error) {
 	return ipc.ChatResult{}, notBuilt("Chat")

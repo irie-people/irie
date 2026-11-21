@@ -128,6 +128,23 @@ func TestIrieChat(t *testing.T) {
 	if a := fake.last(); a.New.Token != "xoxb-2" || a.New.App != "" || a.New.Name != "team" {
 		t.Errorf("add slack without an app token asked %+v", a.New)
 	}
+	// A token from a Keychain item the person keeps already, never an
+	// argument; Slack's app token still asked for after it.
+	keychainToken = func(service string) (string, error) {
+		if service != "acme-bot" {
+			return "", errors.New("no such item")
+		}
+		return "kept.token", nil
+	}
+	if _, err := chat("", "add", "discord", "--keychain", "acme-bot"); err != nil || fake.last().New.Token != "kept.token" {
+		t.Errorf("add --keychain: %v %+v", err, fake.last().New)
+	}
+	if _, err := chat("xapp-9\n", "add", "slack", "--keychain", "acme-bot"); err != nil || fake.last().New.Token != "kept.token" || fake.last().New.App != "xapp-9" {
+		t.Errorf("add slack --keychain: %v %+v", err, fake.last().New)
+	}
+	if _, err := chat("", "add", "discord", "--keychain", "nothing"); err == nil {
+		t.Error("a Keychain item there is none of")
+	}
 	if _, err := chat("", "read", "#general", "--thread", "1700000003.000300"); err != nil || fake.last().Thread != "1700000003.000300" {
 		t.Errorf("read a thread: %v %+v", err, fake.last())
 	}

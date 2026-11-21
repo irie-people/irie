@@ -65,9 +65,42 @@ func Summary(r ipc.ChatResult) string {
 		b.WriteString("`" + brand.Slug + " chat send DRAFT` sends one, `" + brand.Slug + " chat discard DRAFT` drops it.\n")
 	}
 	if r.Unseen > 0 {
-		fmt.Fprintf(&b, "%d new mentions.\n", r.Unseen)
+		if r.Unseen == 1 {
+			b.WriteString("1 new mention:\n")
+		} else {
+			fmt.Fprintf(&b, "%d new mentions:\n", r.Unseen)
+		}
+		// The newest few, a line each, short enough for a phone.
+		for _, m := range r.Mentions[:min(r.Unseen, 3, len(r.Mentions))] {
+			if line := MentionLine(m); line != "" {
+				b.WriteString("  " + line + "\n")
+			}
+		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// MentionLine is a mention on one line, as :chat and irie chat list the
+// newest: read at a glance, on a phone too. Who comes first, then where,
+// and a DM or a mention of the person says so; then the start of its
+// words, or that the service hides them from the bot. No time: the list
+// holds only what came since the person last looked.
+func MentionLine(m ipc.ChatMention) string {
+	who := Line(m.Author, 30)
+	if who == "" {
+		who = "Someone"
+	}
+	line := who + " in #" + Line(m.ChannelName, 30)
+	switch {
+	case m.DM:
+		line = who + ", a DM"
+	case m.You:
+		line = who + " mentioned you in #" + Line(m.ChannelName, 30)
+	}
+	if m.Hidden || strings.TrimSpace(m.Text) == "" {
+		return line + " (its text is hidden from the bot)"
+	}
+	return line + ": “" + Line(m.Text, 50) + "”"
 }
 
 // DraftLine is a draft on one line: its ID, where it goes, who wrote it,

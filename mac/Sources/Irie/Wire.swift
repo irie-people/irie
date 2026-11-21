@@ -302,14 +302,132 @@ struct Header: Decodable {
     var spaces: [SpaceInfo]?
     /// Your groups, in the order they were made (Groups.swift).
     var groups: [GroupInfo]?
+    /// Your zen, whether an app shows it, and what it offers now, from a
+    /// core that keeps your zen (Zen.swift).
+    var zen: ZenState?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
         case terminalLinks = "terminal_links"
-        case trod, vpn, boost, load, spaces, groups
+        case trod, vpn, boost, load, spaces, groups, zen
     }
+}
+
+/// Your zen's settings, as the core keeps them (docs/proposals/zen.md §3).
+struct ZenProfile: Codable, Equatable {
+    var layout: String
+    var columns: Int
+    /// Zen's own text size in points; 0 keeps the window's.
+    var textSize: Int
+    var fullScreen: Bool
+    /// Zen asks the agent to be gentle.
+    var gentle: Bool
+    /// Minutes at the computer before zen offers a rest; 0 for none.
+    var breaks: Int
+    /// Late at night, zen says once that you can rest.
+    var night: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case layout, columns, gentle, breaks, night
+        case textSize = "text_size"
+        case fullScreen = "full_screen"
+    }
+}
+
+/// Zen as the header gives it: your zen, or a step's change on trial, the
+/// newest version, and the one thing zen offers now.
+struct ZenState: Decodable, Equatable {
+    var profile: ZenProfile
+    var head: String?
+    var on: Bool?
+    var trying: String?
+    var offer: ZenOffer?
+}
+
+/// The one thing zen offers at a time: a step of its path, a rest or a word
+/// at night. It stays until it is answered.
+struct ZenOffer: Decodable, Equatable, Identifiable {
+    var id: String
+    /// learn, try, keep, rest or night.
+    var kind: String
+    var text: String
+    var yes: String
+    var no: String?
+    /// What the first button also opens: "history".
+    var show: String?
+    /// A page the text names.
+    var link: String?
+}
+
+/// One version of your zen.
+struct ZenVersion: Decodable, Equatable, Identifiable {
+    /// "sha512:" and the hex of the SHA-512 of its canonical bytes.
+    var name: String
+    var parent: String?
+    var created: Date
+    var why: String
+    /// The name of its settings alone, which versions with the same
+    /// settings share.
+    var state: String
+    var zen: ZenProfile
+
+    var id: String { name }
+}
+
+/// Part of your zen to change: the keys set.
+struct ZenChange: Encodable, Equatable {
+    var layout: String?
+    var columns: Int?
+    var textSize: Int?
+    var fullScreen: Bool?
+    var gentle: Bool?
+    var breaks: Int?
+    var night: Bool?
+
+    var isEmpty: Bool { self == ZenChange() }
+
+    /// The keys other sets, on top of these.
+    mutating func merge(_ other: ZenChange) {
+        layout = other.layout ?? layout
+        columns = other.columns ?? columns
+        textSize = other.textSize ?? textSize
+        fullScreen = other.fullScreen ?? fullScreen
+        gentle = other.gentle ?? gentle
+        breaks = other.breaks ?? breaks
+        night = other.night ?? night
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case layout, columns, gentle, breaks, night
+        case textSize = "text_size"
+        case fullScreen = "full_screen"
+    }
+}
+
+/// The zen op's one ask at a time.
+struct ZenArgs: Encodable {
+    var on: Bool?
+    var session: String?
+    var windowText: Int?
+    var set: ZenChange?
+    var why: String?
+    var offer: String?
+    var answer: String?
+    var log: Int?
+    var restore: String?
+
+    enum CodingKeys: String, CodingKey {
+        case on, session, set, why, offer, answer, log, restore
+        case windowText = "window_text"
+    }
+}
+
+struct ZenResult: Decodable {
+    var zen: ZenState?
+    var version: ZenVersion?
+    var versions: [ZenVersion]?
 }
 
 /// Gabriel's boost: when one started by hand ends, and whether it is
