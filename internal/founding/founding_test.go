@@ -341,9 +341,12 @@ func TestTheTenAgree(t *testing.T) {
 func TestTheWordsAreTheOriginals(t *testing.T) {
 	d := docs(t)
 	for id, want := range map[string][]string{
-		"declaration":  {"unalienable Rights", "to compleat the works of death", "our Brittish brethren"},
-		"constitution": {"shall chuse their Speaker", "the Independance of the United States", "shall neither be encreased nor diminished", "A well regulated Militia, being necessary to the security of a free State, the right of the people to keep and bear Arms, shall not be infringed."},
-		"rights":       {"or of the press; or the right", "In Suits at common law"},
+		"declaration": {"unalienable Rights", "to compleat the works of death", "our Brittish brethren"},
+		"constitution": {"shall chuse their Speaker", "the Independance of the United States", "shall neither be encreased nor diminished", "A well regulated Militia, being necessary to the security of a free State, the right of the people to keep and bear Arms, shall not be infringed.",
+			// Where the Archives' transcription differs from the parchments, as
+			// their scans show: verification.md, "Settled from the parchments".
+			"the Census or Enumeration herein before", "as they think proper; in the President alone", "Citizens of another State;—between Citizens of different States", "In suits at common law"},
+		"rights": {"or of the press; or the right", "In suits at common law"},
 		// Where the Department of Justice's copy differs, the Code reads so.
 		"foia": {"unless the court otherwise directs for good cause shown", "compiled by criminal law enforcement authority", "This section does not authorize withholding of information", "provide copies of such index on request", "which shall be made available"},
 		// The printed page's words where Wikisource's transcription slipped.

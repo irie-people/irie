@@ -56,13 +56,15 @@ func TestMikaelKeepsTheDoor(t *testing.T) {
 	// through its program; those that stay inside, which undo takes back,
 	// are not (DESIGN §4.5).
 	for _, want := range []string{"Bash(* ctl spawn*)", "Bash(* ctl delegate*)", "Bash(* ctl fork*)", "Bash(* ctl bench*)",
-		"Bash(* ctl input*)", "Bash(* ctl send*)", "Bash(* ctl continue*)", "Bash(* ctl move*)", "Bash(* remote pair*)", "Bash(* peer add*)"} {
+		"Bash(* ctl input*)", "Bash(* ctl send*)", "Bash(* ctl continue*)", "Bash(* ctl move*)", "Bash(* remote pair*)", "Bash(* peer add*)",
+		"Bash(* ctl council convene*)", "Bash(* ctl council yes*)", "Bash(* ctl ragu* convene*)", "Bash(* ctl ragu* yes*)"} {
 		if !slices.Contains(d.Rules, want) {
 			t.Errorf("the door does not weigh %s", want)
 		}
 	}
 	for _, never := range []string{"Bash", "Read", "Edit", "Bash(go test *)", "Bash(git commit *)", "Bash(ls *)",
-		"Bash(* ctl close *)", "Bash(* ctl park *)", "Bash(* ctl freeze *)", "Bash(* ctl rename *)", "Bash(* ctl list *)"} {
+		"Bash(* ctl close *)", "Bash(* ctl park *)", "Bash(* ctl freeze *)", "Bash(* ctl rename *)", "Bash(* ctl list *)",
+		"Bash(* ctl council*)", "Bash(* ctl council tally*)", "Bash(* ctl council propose*)"} {
 		if slices.Contains(d.Rules, never) {
 			t.Errorf("the door weighs %s, which is ordinary work", never)
 		}
@@ -175,7 +177,9 @@ func TestGabrielWorksInTheCore(t *testing.T) {
 	if raw, err := Definitions([]string{"gabriel"}, nil); err != nil || raw != "" {
 		t.Errorf("Gabriel alone: %q, %v", raw, err)
 	}
-	if want := []string{"mikael"}; !slices.Equal(Callable(), want) {
+	// Raguel is callable so that a session may run as him (+raguel),
+	// though no agent need call on him.
+	if want := []string{"mikael", "raguel"}; !slices.Equal(Callable(), want) {
 		t.Errorf("callable = %v, want %v", Callable(), want)
 	}
 }

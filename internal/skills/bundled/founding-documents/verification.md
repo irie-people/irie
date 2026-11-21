@@ -1,6 +1,6 @@
 # How these copies were verified
 
-Checked on 21 November 2026. The three founding documents are the National Archives' transcriptions, and the Freedom of Information Act is the United States Code's text, each set in plain Markdown. Each was then checked against every other copy at hand: word for word, and for the Bill of Rights, the Constitution's articles and the Freedom of Information Act, mark for mark. Later that day six texts joined them, the ones those four grew from or into, each from the body that keeps it and checked the same way: Magna Carta, the English Bill of Rights, the Virginia Declaration of Rights, the Articles of Confederation, the Universal Declaration of Human Rights and the Privacy Act of 1974.
+Checked on 21 November 2026. The three founding documents are the National Archives' transcriptions, and the Freedom of Information Act is the United States Code's text, each set in plain Markdown. Each was then checked against every other copy at hand: word for word, and for the Bill of Rights, the Constitution's articles and the Freedom of Information Act, mark for mark. In four marks the Archives' transcription differs from its own parchments, and there these copies follow the parchments ("Settled from the parchments", below). Later that day six texts joined them, the ones those four grew from or into, each from the body that keeps it and checked the same way: Magna Carta, the English Bill of Rights, the Virginia Declaration of Rights, the Articles of Confederation, the Universal Declaration of Human Rights and the Privacy Act of 1974.
 
 ## The texts
 
@@ -51,12 +51,12 @@ Only the markup and the lines in italics are ours. The Code's footnotes, one in 
 
 **Amendments XI–XXVII.** The literal print and the government print match them word for word. The National Constitution Center's copy differs in nine small words: it drops "the" five times, adds it three times, and drops "elect" in Amendment XX and "any" in Amendment XXIV.
 
-**The Bill of Rights.** The ten amendments match the National Archives' handout and the government print mark for mark. In the other copies only commas and capitals differ:
+**The Bill of Rights.** The ten amendments match the National Archives' handout and the government print mark for mark, apart from the capital in Amendment VII's "In suits" (below). In the other copies only commas and capitals differ:
 
 - Amendment I: ConstitutionFacts and the Constitution Center have "of the press, or the right" for "of the press; or the right".
 - Amendment V: ConstitutionFacts has "life or limb, nor" for "life or limb; nor", and no comma after "for public use".
 - Amendment VI: ConstitutionFacts has "committed; which district" for "committed, which district", and "assistance of counsel" in lower case.
-- Amendment VII: the literal print, the Constitution Center and ConstitutionFacts have no comma after "tried by a jury". The Constitution Center has "In suits" for "In Suits".
+- Amendment VII: the literal print, the Constitution Center and ConstitutionFacts have no comma after "tried by a jury". Every copy but the Constitution Center's writes "In Suits"; the enrolled original has "In suits", as these copies do.
 - Amendment IX: ConstitutionFacts has no commas around "of certain rights".
 - Amendments II, III, IV, VIII and X are the same in every copy. The Second Amendment keeps all three of its commas in all of them.
 
@@ -73,16 +73,23 @@ Only the markup and the lines in italics are ours. The Code's footnotes, one in 
 - **The 2023 edition** is older than the latest amendment. It lacks (b)(11), the disclosure "to the Director of the Congressional Budget Office", which Pub. L. 118–104 (October 2, 2024) added, and so numbers the last two paragraphs of (b) as (11) and (12); its source credit ends at Pub. L. 113–295. Apart from that it holds the same § 552a.
 - The Code's notes after the credit are left out, as for § 552, among them section 7 of Pub. L. 93–579 on Social Security numbers, which the Code keeps as a note and not in the section's text.
 
+## Settled from the parchments
+
+Four marks where the Archives' transcription and other careful copies disagreed. Each was read on the parchment itself, in the Archives' high-resolution scans (https://www.archives.gov/founding-docs/downloads): pages 2 and 3 of the Constitution, and the Bill of Rights. Each was set beside marks the same hand made on the same line. These copies follow the parchments.
+
+| Where | The parchment, as these copies have it | The Archives' transcription | How it reads |
+|---|---|---|---|
+| Art. I §9 | "the Census or Enumeration herein before directed" | "enumeration" | The E is a capital, as large as the C of "Census". The literal print and the government print agree |
+| Art. II §2 | "as they think proper; in the President alone" | "proper," | A dot stands above the comma after "proper". The comma after "Officers" on the same line has none, and the dot of the next word's i stands apart. The literal print agrees |
+| Art. III §2 | "Citizens of another State;—between Citizens of different States,—" | "another State,—" | A dot stands above the comma after "another State". The comma after "different States" has none. The literal print and the government print agree |
+| Amendment VII | "In suits at common law" | "In Suits" | A small s, not the scribe's tall, flourished capital, as in "a free State". The Archives' own transcription of the joint resolution agrees |
+
 ## Not settled
 
-Marks and words where a text's source and other careful copies disagree. These copies follow their sources; the originals, or a literal print, would settle each one.
+Words and marks where a text's source and other careful copies disagree. These copies follow their sources; the originals, or a literal print, would settle each one, as the parchments settled the four above.
 
 | Where | These copies (the source) | The other reading |
 |---|---|---|
-| Constitution, Art. I §9 | "the Census or enumeration herein before directed" | "Enumeration": the literal print and the government print |
-| Constitution, Art. II §2 | "as they think proper, in the President alone" | "proper;": the literal print |
-| Constitution, Art. III §2 | "between a State and Citizens of another State,—between Citizens of different States" | "another State;": the literal print and the government print |
-| Amendment VII | "In Suits at common law" | "In suits": the Archives' own transcription of the 1789 joint resolution |
 | English Bill of Rights, the second right declared | "That the pretended Power of Suspending of Laws or the Execution of Laws by Regall Authority as it hath beene assumed and exercised of late is illegall.", which repeats the first right's words | "Dispensing with Laws … by Regall Authoritie": the 1819 print as read by text recognition, legislation.gov.uk's revised text, Avalon, and the right's own marginal note, "Late dispensing Power." |
 | English Bill of Rights, "Illegal Prosecutions" | "congizable onely in Parlyament" | "cognizable": the 1819 print and the revised text |
 | Virginia Declaration, Section 8 | "an impartial jury of twelve men of his vicinage" | no "of twelve men": Hening's adopted text and Avalon; the words are Mason's draft's |
@@ -107,8 +114,8 @@ The SHA-512 of each file's bytes: UTF-8, with a line feed ending each line. A co
 | virginia-declaration-of-rights.md | `6b7bd897c3f8a68d10bdb1dcb177284eb8830aea5f7dc5b71869cf0ed1f0c7bd43d48285608f23b07b210f725df3d50cb8c478cc964d970b436547b7caffec33` |
 | declaration.md | `7447f9380e888a68b2ca72b1452487dabae23325abc3442f78fe5f9dd7474d1e20ab1157d0364064acecdb5c7aa4d87902dfd97c73c0230d9442187b0600d2ad` |
 | articles-of-confederation.md | `294ede2d3df9deaa240693227e825bb05370560aaee93c771369a996dd8888d7283e41a1be83791b719ee04fefd669e069c72ed38ba9a01eb619a2a18c272f5e` |
-| constitution.md | `1e2a63f6de9bc5080a4f9d6aad9beb0146c5bf1bb9fc45a262b2f57dc52415342dcaf77fd2da3ffcfba8d505b8dc4c1ed736a73a46d42ed339e5c0be03f27cb5` |
-| bill-of-rights.md | `03a89a2272ca2bcc2c05abba58853c016433745cdb77a0a7e16e30ee705813bfea43de8cb655c9089dd46852dc978c69fe8949d74234f817a37d56b96331b957` |
+| constitution.md | `9041dcfa6fbecc37746b3f66b0149a214a67b9ee73b8226a91daf8364936bf17f8862c8e19fdef37fd853ad13b0ef4653818717f84dcf47b47aef8e695090c8f` |
+| bill-of-rights.md | `9fb03ede2e3a7d15ab209c3daf3671454df84ef78976da6bfbb641cad4d2691ab682d2d3e639280f39bfc858c2b9422a87f8b224e02bdbad8b64331ea8655b9c` |
 | universal-declaration-of-human-rights.md | `db1586868567df5191228fda8a527e3c13b47c9e030152cdcb2f5cd2ae1016e9f3bb052bd42c301fec287607b42900aecfbd1f9685bb208010a59e80947c0db0` |
 | freedom-of-information-act.md | `f18fc8dc626f921ab560f5480067a354ad3b894cc8c9f4092ed5a03d6100db8b5f9d091d892271530aefe36323cc1680212c67d93c8be6aef76cef50b359d299` |
 | privacy-act.md | `3380620d2adfede3abc3e6e99c43bf4bd5aff23ed500326aaa2cd227243f86b2eecb0c9fe0492da4a051dcd2f491a12f3c5c8f7b1e0e9253bd8d5f509575b7c8` |

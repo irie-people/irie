@@ -19,7 +19,7 @@ This skill holds Irie's verified copies of ten texts of rights, each in a file b
 - **freedom-of-information-act.md**: the Freedom of Information Act, 5 U.S.C. § 552, as the United States Code sets it out today, with its source credit, the laws that made and amended it.
 - **privacy-act.md**: the Privacy Act of 1974, 5 U.S.C. § 552a, as the Code sets it out, with its source credit.
 
-verification.md says where each text comes from, what it was checked against, the marks still unsettled, and each file's SHA-512 fingerprint.
+verification.md says where each text comes from, what it was checked against, the four marks of the Constitution and the Bill of Rights settled from the parchments themselves, the readings still unsettled in the other texts, and each file's SHA-512 fingerprint.
 
 ## Quote from the files, never from memory
 
