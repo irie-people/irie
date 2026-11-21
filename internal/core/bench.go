@@ -60,6 +60,8 @@ type benchFile struct {
 	Unread  string    `json:"unread,omitempty"`  // the last message of the judge's that did not parse
 	// Playbook is the profile's playbook as the runs on a peer got it.
 	Playbook []string `json:"playbook,omitempty"`
+	// Seq is the bench's number, which names its sessions' folders.
+	Seq int `json:"seq,omitempty"`
 }
 
 // benchState is the benches this core started. Its lock is taken before
@@ -73,6 +75,42 @@ type benchState struct {
 
 // newBenchID names a bench as newID names a session, with a b.
 func newBenchID(t time.Time) string { return "b" + newID(t)[1:] }
+
+// nextSeq is the next bench's number: one more than the highest a bench
+// has, or, while none has one, than the count of those that did not fail,
+// as the benches from before numbers were counted. The caller holds
+// c.benches.mu.
+func (c *Core) nextSeq() int {
+	high, kept := 0, 0
+	for _, b := range c.benches.all {
+		high = max(high, b.Seq)
+		if b.State != ipc.BenchFailed {
+			kept++
+		}
+	}
+	if high > 0 {
+		return high + 1
+	}
+	return kept + 1
+}
+
+// folder is what names a session of bench b, for one of its runs ("run
+// 2") or its judge, in a scratch folder or worktree: bench-5-run-2. An
+// agent copies its folder into each path it writes, so these are few, plain
+// words. A run on a peer once had its folder named from "[Irie bench] Run
+// 2 of 3.", which the fourth bench numbered irie-bench-run-2-of-4, under
+// irie/scratch. In two of that bench's three runs Dory, told it was run 1
+// or 2 of 3, wrote to irie-bench-run-1_of-4, irie-bench-run-2_of-4 or
+// irie-scratch, and lost most of an hour to the refused writes.
+func (b *benchFile) folder(what string) string {
+	if b.Seq == 0 {
+		return "Bench " + what
+	}
+	return fmt.Sprintf("Bench %d %s", b.Seq, what)
+}
+
+// runFolder is what names run i's folder.
+func (b *benchFile) runFolder(i int) string { return b.folder(fmt.Sprintf("run %d", i+1)) }
 
 // benchFor reads where a bench's runs go: the profile, the judge and the
 // peer, if any. A bench runs one profile, never auto: its point is to
@@ -161,10 +199,13 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	task := strings.TrimSpace(a.Task)
 	class, _ := c.classify(task)
 	now := time.Now()
+	c.benches.mu.Lock()
+	seq := c.nextSeq()
+	c.benches.mu.Unlock()
 	b := &benchFile{Bench: ipc.Bench{
 		ID: newBenchID(now), Task: task, Profile: profile, Class: class, Repo: a.Repo,
 		Judge: judge, State: ipc.BenchRunning, Runs: []ipc.BenchRun{}, Started: now,
-	}}
+	}, Seq: seq}
 	if p != nil {
 		b.Host = p.name
 		c.mu.Lock()
@@ -175,7 +216,7 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	// load a local model, which the others then share.
 	for i := range runs {
 		name := cleanText(fmt.Sprintf("bench %d/%d · %s", i+1, runs, title(task)), maxName)
-		s, err := c.benchStart(p, b, b.runTask(i, runs), profile, name)
+		s, err := c.benchStart(p, b.runTask(i, runs), profile, name, b.runFolder(i), b.Repo)
 		if err != nil {
 			b.State, b.Problem = ipc.BenchFailed, fmt.Sprintf("run %d of %d did not start: %v", i+1, runs, err)
 			t := time.Now()
@@ -194,14 +235,15 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 // runTask is what run i of n is given. Here it is the task as typed, and
 // the profile's playbook comes with the start of its session (startNote).
 // On a peer it goes as typed text, whose first line the peer reads for @
-// and + words, so that line is the run's number alone, and the playbook,
-// which names the +profile, starts on the next.
+// and + words and names the run's folder from, so that line is the run's
+// folder alone, and the playbook, which names the +profile, starts after
+// the line that says which run it is.
 func (b *benchFile) runTask(i, n int) string {
 	if b.Host == "" {
 		return b.Task
 	}
 	var t strings.Builder
-	fmt.Fprintf(&t, "[%s bench] Run %d of %d.\n", brand.Name, i+1, n)
+	fmt.Fprintf(&t, "%s.\n[%s bench] Run %d of %d: each run does the same task on its own.\n", b.runFolder(i), brand.Name, i+1, n)
 	if len(b.Playbook) > 0 {
 		t.WriteString(playbookIntro(b.Profile) + "\n")
 		for _, r := range b.Playbook {
@@ -212,15 +254,17 @@ func (b *benchFile) runTask(i, n int) string {
 	return t.String()
 }
 
-// benchStart starts one session of bench b: here, or on peer p as a typed
-// task, named there as here. No one watches a run or the judge, so each
-// is unattended: a tool call that would wait on a permission prompt is
-// refused and its turn goes on, rather than wait out bench.timeout.
-func (c *Core) benchStart(p *peerState, b *benchFile, task, profile, name string) (ipc.Session, error) {
+// benchStart starts one session of a bench: here, with its folder named
+// for folder, or on peer p as a typed task, whose first line names the
+// folder there; named there as here. No one watches a run or the judge,
+// so each is unattended: a tool call that would wait on a permission
+// prompt is refused and its turn goes on, rather than wait out
+// bench.timeout.
+func (c *Core) benchStart(p *peerState, task, profile, name, folder, repo string) (ipc.Session, error) {
 	if p == nil {
-		return c.spawn(ipc.SpawnArgs{Task: task, Profile: profile, Repo: b.Repo, Name: name, Unattended: true}, true)
+		return c.spawn(ipc.SpawnArgs{Task: task, Profile: profile, Repo: repo, Name: name, Folder: folder, Unattended: true}, true)
 	}
-	r, err := c.inputOn(p, ipc.InputArgs{Text: task, Profile: profile, Repo: b.Repo, Unattended: true})
+	r, err := c.inputOn(p, ipc.InputArgs{Text: task, Profile: profile, Repo: repo, Unattended: true})
 	if err != nil {
 		return ipc.Session{}, err
 	}
@@ -349,7 +393,7 @@ func (c *Core) stepRuns(b *benchFile, now time.Time) bool {
 		}
 	}
 	brief := c.judgeBrief(b)
-	s, err := c.benchStart(p, b, brief, b.Judge, cleanText("bench judge · "+title(b.Task), maxName))
+	s, err := c.benchStart(p, brief, b.Judge, cleanText("bench judge · "+title(b.Task), maxName), b.folder("judge"), b.Repo)
 	if err != nil {
 		b.State, b.Problem = ipc.BenchFailed, "the judge did not start: "+err.Error()
 		b.Ended = &now
@@ -570,11 +614,12 @@ func scores(runs []ipc.BenchRun) string {
 }
 
 // judgeBrief is the judge's task: what the runs were given, where each
-// worked and what it said last, and the four things to do.
+// worked and what it said last, and the four things to do. Its first line
+// names its folder, on a peer as a run's does.
 func (c *Core) judgeBrief(b *benchFile) string {
 	n := len(b.Runs)
 	var t strings.Builder
-	fmt.Fprintf(&t, "[%s bench] You judge a bench: %d runs of one task, each by its own agent on the same profile, each from the same start and on its own.\n\n", brand.Name, n)
+	fmt.Fprintf(&t, "%s.\n[%s bench] You judge a bench: %d runs of one task, each by its own agent on the same profile, each from the same start and on its own.\n\n", b.folder("judge"), brand.Name, n)
 	t.WriteString("The task each run was given:\n\n<task>\n" + b.Task + "\n</task>\n\nThe runs:\n")
 	for i, r := range b.Runs {
 		c.mu.Lock()
