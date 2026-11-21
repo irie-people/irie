@@ -1306,6 +1306,11 @@ func (c *Core) groupOp(a ipc.GroupArgs) (ipc.GroupResult, error) {
 		c.tidyOrder()
 		c.saveGroups()
 		c.log.Info("group", "do", a.Do, "group", cmp.Or(res.Group, a.Group), "steps", len(steps))
+		// A rename is no step, but a version of the sidebar's chain
+		// (chain.go); the steps are, once recorded.
+		if a.Do == ipc.GroupRename {
+			c.noteOrg(ipc.ChainWhat{Do: chainRenameGroup, Groups: []string{a.Group}})
+		}
 	}
 	res.Groups = slices.Clone(c.groups)
 	res.Sessions, res.Steps = stepIDs(steps), len(steps)

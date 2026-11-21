@@ -1,6 +1,6 @@
 # The sidebar as a local chain
 
-Date: 2026-11-21. Status: proposal. An agent (Claude Code) wrote it with the owner.
+Date: 2026-11-21. Status: step 1, the chain on disk, is built ([DESIGN §4.23](../DESIGN.md)): SHA-512 versions, `irie ctl chain log`, `show`, `restore` and `head`. Step 2, the vault, is next; steps 3 and 4 are proposals. An agent (Claude Code) wrote it with the owner.
 
 The owner asked for three things:
 
