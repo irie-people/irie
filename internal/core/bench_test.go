@@ -360,6 +360,77 @@ func TestARunOnAPeerGetsItsPlaybookWhole(t *testing.T) {
 	}
 }
 
+// A bench on existing code starts each run, and its judge, in a scratch
+// folder of its own holding a copy of the last commit of the repo it
+// names, so each starts from the same files; the copy is no git repo,
+// which Claude Code would ask about trusting.
+func TestABenchStartsFromACopy(t *testing.T) {
+	testutil.IsolateGit(t)
+	seed := testutil.NewRepo(t, filepath.Join(t.TempDir(), "tally"), map[string]string{"report.go": "package tally\n", "cmd/tally/main.go": "package main\n"})
+	// What is not committed is not copied.
+	if err := os.WriteFile(filepath.Join(seed, "scratch.txt"), []byte("not committed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	say := filepath.Join(t.TempDir(), "verdict.md")
+	verdict := "```json\n" + `{"runs": [{"run": 1, "score": 80}, {"run": 2, "score": 60}], "final": "run 1's fix, in my folder", "playbook": []}` + "\n```\n"
+	if err := os.WriteFile(say, []byte(verdict), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := setupWith(t, benching(t, say, "close = false"))
+
+	// It starts from a repo, or runs in worktrees of one, not both; and
+	// what it starts from must be a git repo.
+	for _, a := range []ipc.BenchArgs{
+		{Task: "x", Profile: "cheap", From: seed, Repo: seed},
+		{Task: "x", Profile: "cheap", From: t.TempDir()},
+		{Task: "x", Profile: "cheap", From: "tally"},
+	} {
+		if err := c.call("bench", a, nil); err == nil {
+			t.Errorf("bench %+v started", a)
+		}
+	}
+	if all := c.benches(); len(all) != 0 {
+		t.Fatalf("refused benches were kept: %+v", all)
+	}
+
+	var r ipc.BenchResult
+	if err := c.call("bench", ipc.BenchArgs{Task: "prompt,stop\nsay 1 file, not 1 files", Profile: "cheap", From: seed, Runs: 2}, &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Bench == nil || r.Bench.From != seed || len(r.Bench.Runs) != 2 {
+		t.Fatalf("bench = %+v", r.Bench)
+	}
+	copied := func(who, dir, folder string) {
+		t.Helper()
+		if filepath.Base(dir) != folder {
+			t.Errorf("%s works in %s, want a folder %s", who, dir, folder)
+		}
+		for name, want := range map[string]string{"report.go": "package tally\n", "cmd/tally/main.go": "package main\n"} {
+			if got, err := os.ReadFile(filepath.Join(dir, name)); err != nil || string(got) != want {
+				t.Errorf("%s's %s = %q, %v; want the repo's %q", who, name, got, err, want)
+			}
+		}
+		for _, name := range []string{".git", "scratch.txt"} {
+			if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
+				t.Errorf("%s's folder has %s, which the repo's last commit does not", who, name)
+			}
+		}
+	}
+	for i, run := range r.Bench.Runs {
+		s, _ := c.row(run.Session)
+		copied(fmt.Sprintf("run %d", i+1), s.Cwd, fmt.Sprintf("bench-1-run-%d", i+1))
+	}
+	done := c.waitBench(r.Bench.ID)
+	if done.State != ipc.BenchDone {
+		t.Fatalf("bench = %+v", done)
+	}
+	judge, _ := c.row(done.JudgeID)
+	copied("the judge", judge.Cwd, "bench-1-judge")
+	if task, err := os.ReadFile(c.paths.TaskFile(done.JudgeID)); err != nil || !strings.Contains(string(task), "a copy of the files of the git repo "+seed+" as of its last commit") || !strings.Contains(string(task), "diff -ru --exclude=.git "+seed+" <its folder>") {
+		t.Errorf("the judge's brief = %q, %v", task, err)
+	}
+}
+
 // A bench's number goes on from the highest one yet; before benches had
 // numbers, from the count of those that did not fail, as they were
 // counted then.

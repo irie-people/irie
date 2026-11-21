@@ -13,13 +13,17 @@ const OpBench = "bench"
 // BenchArgs start a bench of Task, or with no Task list the benches.
 // Profile is the runs' profile ("" = the first local one in
 // route.profiles); Repo the repo they run in, each in a worktree of its
-// own ("" = a scratch folder each); Host a peer to run them on ("" =
-// here); Runs how many (0 = bench.runs); and Judge the judge's profile
-// ("" = bench.judge).
+// own ("" = a scratch folder each); From a git repo each run, and the
+// judge, starts from instead, in a copy of its last commit in a scratch
+// folder of its own, on the machine they run on; Host a peer to run them
+// on ("" = here); Runs
+// how many (0 = bench.runs); and Judge the judge's profile ("" =
+// bench.judge).
 type BenchArgs struct {
 	Task    string `json:"task,omitempty"`
 	Profile string `json:"profile,omitempty"`
 	Repo    string `json:"repo,omitempty"`
+	From    string `json:"from,omitempty"`
 	Host    string `json:"host,omitempty"`
 	Runs    int    `json:"runs,omitempty"`
 	Judge   string `json:"judge,omitempty"`
@@ -51,7 +55,8 @@ type Bench struct {
 	Class   string     `json:"class"` // the task's class, which its ratings teach the router
 	Host    string     `json:"host,omitempty"`
 	Repo    string     `json:"repo,omitempty"`
-	Judge   string     `json:"judge"` // the judge's profile
+	From    string     `json:"from,omitempty"` // the git repo each session starts from, in a copy of its own
+	Judge   string     `json:"judge"`          // the judge's profile
 	State   string     `json:"state"`
 	Runs    []BenchRun `json:"runs"`
 	JudgeID string     `json:"judge_id,omitempty"` // the judge's session

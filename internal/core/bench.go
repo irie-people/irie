@@ -196,6 +196,17 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	if err != nil {
 		return ipc.BenchResult{}, err
 	}
+	if a.From != "" {
+		if a.Repo != "" {
+			return ipc.BenchResult{}, ipc.Errorf(ipc.CodeBadArgs, "a bench's runs start from a copy of --from, or each in a worktree of @%s, not both", a.Repo)
+		}
+		// A peer finds the repo on its own disk, when the first run starts.
+		if p == nil {
+			if _, err := fromRepo(a.From); err != nil {
+				return ipc.BenchResult{}, err
+			}
+		}
+	}
 	task := strings.TrimSpace(a.Task)
 	class, _ := c.classify(task)
 	now := time.Now()
@@ -203,7 +214,7 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	seq := c.nextSeq()
 	c.benches.mu.Unlock()
 	b := &benchFile{Bench: ipc.Bench{
-		ID: newBenchID(now), Task: task, Profile: profile, Class: class, Repo: a.Repo,
+		ID: newBenchID(now), Task: task, Profile: profile, Class: class, Repo: a.Repo, From: a.From,
 		Judge: judge, State: ipc.BenchRunning, Runs: []ipc.BenchRun{}, Started: now,
 	}, Seq: seq}
 	if p != nil {
@@ -216,7 +227,7 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	// load a local model, which the others then share.
 	for i := range runs {
 		name := cleanText(fmt.Sprintf("bench %d/%d · %s", i+1, runs, title(task)), maxName)
-		s, err := c.benchStart(p, b.runTask(i, runs), profile, name, b.runFolder(i), b.Repo)
+		s, err := c.benchStart(p, b, b.runTask(i, runs), profile, name, b.runFolder(i))
 		if err != nil {
 			b.State, b.Problem = ipc.BenchFailed, fmt.Sprintf("run %d of %d did not start: %v", i+1, runs, err)
 			t := time.Now()
@@ -254,17 +265,18 @@ func (b *benchFile) runTask(i, n int) string {
 	return t.String()
 }
 
-// benchStart starts one session of a bench: here, with its folder named
+// benchStart starts one session of bench b: here, with its folder named
 // for folder, or on peer p as a typed task, whose first line names the
-// folder there; named there as here. No one watches a run or the judge,
-// so each is unattended: a tool call that would wait on a permission
-// prompt is refused and its turn goes on, rather than wait out
-// bench.timeout.
-func (c *Core) benchStart(p *peerState, task, profile, name, folder, repo string) (ipc.Session, error) {
+// folder there; named there as here; in a worktree of b's repo, or in a
+// copy of the repo it starts from, else in a scratch folder. No one
+// watches a run or the judge, so each is unattended: a tool call that
+// would wait on a permission prompt is refused and its turn goes on,
+// rather than wait out bench.timeout.
+func (c *Core) benchStart(p *peerState, b *benchFile, task, profile, name, folder string) (ipc.Session, error) {
 	if p == nil {
-		return c.spawn(ipc.SpawnArgs{Task: task, Profile: profile, Repo: repo, Name: name, Folder: folder, Unattended: true}, true)
+		return c.spawn(ipc.SpawnArgs{Task: task, Profile: profile, Repo: b.Repo, From: b.From, Name: name, Folder: folder, Unattended: true}, true)
 	}
-	r, err := c.inputOn(p, ipc.InputArgs{Text: task, Profile: profile, Repo: repo, Unattended: true})
+	r, err := c.inputOn(p, ipc.InputArgs{Text: task, Profile: profile, Repo: b.Repo, From: b.From, Unattended: true})
 	if err != nil {
 		return ipc.Session{}, err
 	}
@@ -393,7 +405,7 @@ func (c *Core) stepRuns(b *benchFile, now time.Time) bool {
 		}
 	}
 	brief := c.judgeBrief(b)
-	s, err := c.benchStart(p, brief, b.Judge, cleanText("bench judge · "+title(b.Task), maxName), b.folder("judge"), b.Repo)
+	s, err := c.benchStart(p, b, brief, b.Judge, cleanText("bench judge · "+title(b.Task), maxName), b.folder("judge"))
 	if err != nil {
 		b.State, b.Problem = ipc.BenchFailed, "the judge did not start: "+err.Error()
 		b.Ended = &now
@@ -619,7 +631,11 @@ func scores(runs []ipc.BenchRun) string {
 func (c *Core) judgeBrief(b *benchFile) string {
 	n := len(b.Runs)
 	var t strings.Builder
-	fmt.Fprintf(&t, "%s.\n[%s bench] You judge a bench: %d runs of one task, each by its own agent on the same profile, each from the same start and on its own.\n\n", b.folder("judge"), brand.Name, n)
+	fmt.Fprintf(&t, "%s.\n[%s bench] You judge a bench: %d runs of one task, each by its own agent on the same profile, each from the same start and on its own.", b.folder("judge"), brand.Name, n)
+	if b.From != "" {
+		fmt.Fprintf(&t, " Each run, and you, started in a copy of the files of the git repo %s as of its last commit, with no git history of its own, so `diff -ru --exclude=.git %s <its folder>` shows what a run changed.", b.From, b.From)
+	}
+	t.WriteString("\n\n")
 	t.WriteString("The task each run was given:\n\n<task>\n" + b.Task + "\n</task>\n\nThe runs:\n")
 	for i, r := range b.Runs {
 		c.mu.Lock()
@@ -654,8 +670,11 @@ func (c *Core) judgeBrief(b *benchFile) string {
 	t.WriteString("\nDo these four things, in order.\n\n")
 	t.WriteString("1. Judge each run on its own. Read what it changed: in a git checkout, `git -C <its folder> status` and `git -C <its folder> diff` show what it did not commit, and `git -C <its folder> log` what it did; elsewhere read its folder. Run its tests or its build where there are any. Score it from 0 to 100 for how much of the task it got right, as a careful reviewer grades a pull request: 100 is complete and correct, 70 is right with small gaps, below 50 is wrong or far from done. Note what it missed or got wrong.\n\n")
 	where := "in the folder you start in"
-	if b.Repo != "" {
+	switch {
+	case b.Repo != "":
 		where = "in your own worktree, which starts where theirs did, and commit it on your branch"
+	case b.From != "":
+		where = "in the folder you start in, which starts as theirs did"
 	}
 	fmt.Fprintf(&t, "2. Make the final result %s: start from the best run, bring in what the others got right, and fill what all of them missed, until the task is done and checked as you checked theirs.\n\n", where)
 	fmt.Fprintf(&t, "3. Rewrite the playbook for their profile: short rules, one line each, that its agents read before every task, so that they stop making the mistakes you saw. Keep the rules that still help, drop any that did not, and add one for each mistake a rule would have prevented. Write rules about how to work, such as reading a file before editing it, running the tests or doing every part of the task, not about this one task. At most %d rules.", c.cfg().Bench.Rules)

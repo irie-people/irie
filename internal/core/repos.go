@@ -1,8 +1,14 @@
 package core
 
 import (
+	"archive/tar"
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -54,14 +60,22 @@ func (c *Core) worktreeOptions() worktree.Options {
 	}
 }
 
-// place finds where a task runs (DESIGN §4.2): with no repo, in a.Cwd, in
-// spawn.default_cwd or in a new scratch dir; with one, in a new worktree of
+// place finds where a task runs (DESIGN §4.2): from a repo (a.From), in a
+// new scratch dir holding a copy of its last commit; with no repo, in
+// a.Cwd, in spawn.default_cwd or in a new scratch dir; with one, in a new worktree of
 // it, or in the directory itself for in_place or a directory outside git.
 // A new scratch dir or worktree, and its branch, are named after base, the
 // first free of base, base-2 and so on. An @name that fits no repo or
 // several fails, and nothing is spawned. The place has no name yet: the
 // spawn gives it one. The caller holds c.spawnMu and not c.mu.
 func (c *Core) place(a ipc.SpawnArgs, base string) (place, error) {
+	if a.From != "" {
+		if a.Cwd != "" || a.Repo != "" {
+			return place{}, ipc.Errorf(ipc.CodeBadArgs, "a task starts from a copy of a repo, or runs in a directory or repo, not both")
+		}
+		cwd, err := c.copyFrom(a.From, base)
+		return place{cwd: cwd}, err
+	}
 	var dir string
 	if a.Repo != "" {
 		var err error
@@ -112,6 +126,120 @@ func (c *Core) place(a ipc.SpawnArgs, base string) (place, error) {
 		cwd: cwd, repo: r.Main, worktree: res.Dir, branch: res.Branch,
 		copied: res.Copied, warnings: res.Warnings,
 	}, nil
+}
+
+// copyTimeout bounds the copy of a repo a task starts from.
+const copyTimeout = 2 * time.Minute
+
+// fromRepo is the git repo a task starts from, from as given: an absolute
+// or ~/ path to a checkout, here.
+func fromRepo(from string) (string, error) {
+	if !repo.IsPath(from) {
+		return "", ipc.Errorf(ipc.CodeBadArgs, "start from a repo by its path, /… or ~/…, not %q", from)
+	}
+	dir := repo.Expand(from, home())
+	if out, err := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", "HEAD^{commit}").CombinedOutput(); err != nil {
+		why, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+		if why != "" {
+			why = ": " + why
+		}
+		return "", ipc.Errorf(ipc.CodeBadArgs, "%s is not a git repo with a commit to start from%s", repo.Tilde(dir, home()), why)
+	}
+	return dir, nil
+}
+
+// copyFrom makes a task's folder a copy of the files of the git repo
+// from, as of its last commit, in a new scratch folder named after base,
+// as a bench's runs start with --from (DESIGN §6.6): each starts from the
+// same files, and comparing its folder with the repo shows what it
+// changed. The copy is no git repo of its own. Claude Code asks before it
+// works in a git repo whose own folder it was not told to trust, which an
+// unattended run cannot answer, while a plain folder in a trusted one, as
+// the scratch folder may be, needs no answer. A copy that fails leaves no
+// folder behind.
+func (c *Core) copyFrom(from, base string) (string, error) {
+	src, err := fromRepo(from)
+	if err != nil {
+		return "", err
+	}
+	dir, err := c.newScratch(base)
+	if err != nil {
+		return "", err
+	}
+	if err := gitExport(src, dir); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("copying %s: %v", repo.Tilde(src, home()), err)
+	}
+	return dir, nil
+}
+
+// gitExport writes the files of the last commit of the git repo src into
+// dir, and nothing outside it.
+func gitExport(src, dir string) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), copyTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", src, "archive", "--format=tar", "HEAD")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	werr := untar(root, out)
+	if werr != nil {
+		cancel() // stops git, which may still be writing
+	}
+	if err := cmd.Wait(); err != nil && werr == nil {
+		werr = errors.New(firstNonEmpty(strings.TrimSpace(stderr.String()), err.Error()))
+	}
+	return werr
+}
+
+// untar writes the files, folders and links of the tar stream r into
+// root. The global header git archive starts with, naming the commit, is
+// no file.
+func untar(root *os.Root, r io.Reader) error {
+	tr := tar.NewReader(r)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		name := filepath.FromSlash(strings.TrimSuffix(h.Name, "/"))
+		if parent := filepath.Dir(name); parent != "." {
+			if err := root.MkdirAll(parent, 0o700); err != nil {
+				return err
+			}
+		}
+		switch h.Typeflag {
+		case tar.TypeDir:
+			err = root.MkdirAll(name, 0o700)
+		case tar.TypeReg:
+			var f *os.File
+			if f, err = root.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, h.FileInfo().Mode().Perm()|0o600); err == nil {
+				_, err = io.Copy(f, tr)
+				if cerr := f.Close(); err == nil {
+					err = cerr
+				}
+			}
+		case tar.TypeSymlink:
+			err = root.Symlink(h.Linkname, name)
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // loadRecent rebuilds the recently used repos from the journal's spawns, so

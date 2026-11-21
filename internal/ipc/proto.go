@@ -1082,6 +1082,12 @@ type SpawnArgs struct {
 	// Wait, which this spawn takes the subtask over from: Irie stops it,
 	// and auto passes over its profile.
 	Instead string `json:"instead,omitempty"`
+	// From is a git repo the task starts from: it runs in a new scratch
+	// folder that holds a copy of the files of its last commit, with no
+	// git history of its own, as a bench's runs do with --from (DESIGN
+	// §6.6), so that each starts from the same files. It takes no Cwd or
+	// Repo.
+	From string `json:"from,omitempty"`
 	// Folder names the session's scratch folder or worktree in its name's
 	// place, as a bench names its runs' (DESIGN §6.6). Only the core sets
 	// it, so it is not on the wire.

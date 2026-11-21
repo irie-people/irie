@@ -84,7 +84,7 @@ func Read(in InputArgs, v View) (Step, error) {
 	if a.Tutor == "" {
 		a.Tutor = in.Tutor
 	}
-	a.Model, a.Unattended = in.Model, in.Unattended
+	a.Model, a.Unattended, a.From = in.Model, in.Unattended, in.From
 	// A typed task is a jot: one that reads as more for the jot sent just
 	// before goes to that jot's agent instead (DESIGN §4.2). Apart starts
 	// one that went there on its own after all. An unattended task, such
