@@ -25,7 +25,7 @@ The last line of the definition, in quotes there. Used in: `README.md`, `site/in
 
 ## The tagline
 
-> If you could do anything, what would you do first?
+> You are your own best tool.
 
 Used in: `README.md`, in bold under the definition. `site/index.html`, under the definition and above the headline.
 

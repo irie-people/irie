@@ -164,6 +164,8 @@ struct PluginPaneContent: View {
         // kind, as the Writing plugin's Variorum tab will.
         case "yoink":
             YoinkTab()
+        case "chat":
+            ChatTab()
         case "founding":
             FoundingTab()
         default:

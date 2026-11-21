@@ -54,6 +54,10 @@ type Service struct {
 	// posting holds one agent's post in a channel at a time, so two at
 	// once can't both find room in its count.
 	posting map[string]*sync.Mutex
+	// listening are the accounts' listeners, by name, and heard what they
+	// heard (listen.go).
+	listening map[string]*listener
+	heard     heardList
 }
 
 // Caller is who asks: the person, or an agent and its session.
@@ -91,6 +95,7 @@ func (s *Service) init() {
 		}
 		s.conns = map[string]*conn{}
 		s.posting = map[string]*sync.Mutex{}
+		s.listening = map[string]*listener{}
 		s.drafts = &drafts{path: filepath.Join(s.Dir, "drafts.json"), now: s.Now}
 		s.log = &agentLog{path: filepath.Join(s.Dir, "log.jsonl"), now: s.Now}
 	})
@@ -156,6 +161,7 @@ func (s *Service) Do(ctx context.Context, who Caller, a ipc.ChatArgs) (ipc.ChatR
 		if who.Agent {
 			return ipc.ChatResult{}, refuse("Mentions are the person's.")
 		}
+		s.seen()
 		return s.result(who, cfg, ""), nil
 	case ipc.ChatAdd, ipc.ChatRemove, ipc.ChatTest:
 		if who.Agent {
@@ -180,6 +186,10 @@ func (s *Service) result(who Caller, cfg config.Chat, text string) ipc.ChatResul
 		session = who.Session
 	}
 	r := ipc.ChatResult{Accounts: s.Accounts(Accounts(cfg)), Drafts: s.drafts.all(session), Text: text}
+	if !who.Agent {
+		// People's words, heard as they came: the person's alone.
+		r.Mentions, r.Unseen = s.mentions()
+	}
 	if r.Text == "" {
 		r.Text = Summary(r)
 	}
@@ -211,6 +221,7 @@ func (s *Service) Accounts(all []Account) []ipc.ChatAccount {
 			w.Bot, w.BotID, w.Hidden, w.Fix = x.me.Name, x.me.ID, x.me.Hidden, x.me.Fix
 			x.mu.Unlock()
 		}
+		w.Listening, w.Deaf = s.hearing(a.Name)
 		out = append(out, w)
 	}
 	return out
@@ -222,6 +233,7 @@ func (s *Service) Forget(name string) {
 	s.init()
 	s.mu.Lock()
 	delete(s.conns, name)
+	s.stopListening(name)
 	s.mu.Unlock()
 }
 
@@ -961,6 +973,7 @@ func (s *Service) remove(all []Account, name string) (ipc.ChatResult, error) {
 	if err := s.drafts.forget(a.Name); err != nil {
 		problems = append(problems, Sentence(err))
 	}
+	s.forgetMentions(a.Name)
 	text := "Removed " + a.Name + "."
 	if len(problems) > 0 {
 		text += " " + strings.Join(problems, " ")
