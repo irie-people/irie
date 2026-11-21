@@ -17,3 +17,5 @@ func (c *Core) jamminOp(int, ipc.JamminArgs) (ipc.JamminResult, error) {
 }
 
 func (c *Core) jamminLive() []ipc.JamSource { return nil }
+
+func (c *Core) jamminResume() {}

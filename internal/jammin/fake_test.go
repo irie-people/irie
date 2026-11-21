@@ -260,7 +260,8 @@ type kit struct {
 	script  *fakeScript
 	clock   *clock
 	cfg     config.Jammin
-	running bool
+	running bool     // the Music app
+	spotApp bool     // the Spotify app
 	started []string // the apps Launch started
 	waited  []time.Duration
 	sets    []ipc.ConfigSet
@@ -272,19 +273,28 @@ func newKit(t *testing.T) *kit {
 	k.store.Set(tokenKey, "refresh-1")
 	k.sv = &Service{
 		Dir:    t.TempDir(),
+		Home:   t.TempDir(), // no Music folder: the files source needs one
 		Store:  k.store,
 		Config: func() config.Jammin { return k.cfg },
 		Configure: func(sets []ipc.ConfigSet) error {
 			k.sets = append(k.sets, sets...)
 			for _, s := range sets {
-				if s.Key == "jammin.spotify.client_id" {
+				switch s.Key {
+				case "jammin.spotify.client_id":
 					json.Unmarshal(s.Value, &k.cfg.Spotify.ClientID)
+				case "jammin.folder":
+					json.Unmarshal(s.Value, &k.cfg.Folder)
 				}
 			}
 			return nil
 		},
-		Script:  k.script,
-		Running: func(string) bool { return k.running },
+		Script: k.script,
+		Running: func(program string) bool {
+			if program == spotifyAppProgram {
+				return k.spotApp
+			}
+			return k.running
+		},
 		Launch: func(bundle string) error {
 			k.started = append(k.started, bundle)
 			k.running = true

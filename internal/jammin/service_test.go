@@ -115,7 +115,7 @@ func TestTheTextSaysEachSource(t *testing.T) {
 	k := musicKit(t, musicPlaying)
 	k.spotify.on("GET /v1/me/player", answer{status: 200, body: playing("Harbour Lights", "Kitchen", "Speaker", false)})
 	r := k.do(t, ipc.JamminArgs{})
-	want := "Spotify: paused on “Harbour Lights” by Night Owls, The Tide on Kitchen.\nApple Music: playing “Harbour Lights” by Night Owls."
+	want := "Spotify: paused on “Harbour Lights” by Night Owls, The Tide on Kitchen.\nApple Music: playing “Harbour Lights” by Night Owls.\nFiles: There's no folder at ~/Music: Choose Folder in the Jammin tab, or set jammin.folder, to play the music files you keep."
 	if r.Text != want {
 		t.Errorf("text = %q, want %q", r.Text, want)
 	}

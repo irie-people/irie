@@ -65,6 +65,13 @@ type Service struct {
 	// in the background, so no window of it comes forward; nil = open -g
 	// -j. Tests stand in for it.
 	Launch func(bundle string) error
+	// Player plays the files source's tracks; nil = afplay.
+	Player Player
+	// Command runs mdls and afinfo for what a track is; nil = the
+	// programs themselves.
+	Command func(bin string, args ...string) (string, error)
+	// Home is the home folder, for ~ in jammin.folder; "" = the user's.
+	Home string
 	// HTTP is the client for Spotify; nil = one with a timeout.
 	HTTP *http.Client
 	// API and Accounts are Spotify's addresses; "" = Spotify's own. Tests
@@ -83,7 +90,10 @@ type Service struct {
 	sources []Source
 	spotify *spotify
 	music   *music
+	files   *files
 	here    string
+	quit    chan struct{}
+	closed  sync.Once
 }
 
 // init makes the sources, once.
@@ -91,8 +101,38 @@ func (s *Service) init() {
 	s.once.Do(func() {
 		s.spotify = &spotify{sv: s}
 		s.music = &music{sv: s}
-		s.sources = []Source{s.spotify, s.music}
+		s.files = &files{sv: s}
+		s.sources = []Source{s.spotify, s.music, s.files}
+		s.quit = make(chan struct{})
 	})
+}
+
+// quitting is closed when the Service closes.
+func (s *Service) quitting() chan struct{} {
+	s.init()
+	return s.quit
+}
+
+// Close stops the Service's own goroutines; what plays plays on.
+func (s *Service) Close() {
+	s.init()
+	s.closed.Do(func() { close(s.quit) })
+}
+
+// Resume watches the files source's track that played on while the core
+// restarted, so the next starts when it ends. It asks nothing of any app
+// or service.
+func (s *Service) Resume() {
+	s.init()
+	s.files.Resume()
+}
+
+func (s *Service) home() string {
+	if s.Home != "" {
+		return s.Home
+	}
+	h, _ := os.UserHomeDir()
+	return h
 }
 
 func (s *Service) now() time.Time {
@@ -179,6 +219,14 @@ func (s *Service) Do(ctx context.Context, a ipc.JamminArgs) (ipc.JamminResult, e
 		r.Sources = s.look(ctx)
 		r.Text = "Sign in to Spotify at " + link.URL + " within 10 minutes. Your Spotify app must list the redirect URI " + link.Redirect + "."
 		return r, nil
+	case ipc.JamFolder:
+		if err := s.files.setFolder(a.Folder); err != nil {
+			return r, err
+		}
+		r.Source = ipc.JamFiles
+		r.Sources = s.look(ctx)
+		r.Text = "Your music files are " + stateOf(r.Sources, ipc.JamFiles).Folder + " now."
+		return r, nil
 	case ipc.JamCancel:
 		if a.Source != "" && a.Source != ipc.JamSpotify {
 			return r, errors.New("only Spotify has a sign-in to cancel")
@@ -242,7 +290,7 @@ func (s *Service) Do(ctx context.Context, a ipc.JamminArgs) (ipc.JamminResult, e
 		return r, nil
 	case ipc.JamPlay, ipc.JamPause, ipc.JamToggle, ipc.JamNext, ipc.JamPrevious, ipc.JamSeek, ipc.JamVolume, ipc.JamShuffle, ipc.JamRepeat, ipc.JamMove:
 	default:
-		return r, fmt.Errorf("the jammin op takes play, pause, toggle, next, previous, seek, volume, shuffle, repeat, lists, search, devices, move, link, cancel or unlink, or nothing for a look, not %q", a.Do)
+		return r, fmt.Errorf("the jammin op takes play, pause, toggle, next, previous, seek, volume, shuffle, repeat, lists, search, devices, move, folder, link, cancel or unlink, or nothing for a look, not %q", a.Do)
 	}
 	if err := checkControl(a); err != nil {
 		return r, err

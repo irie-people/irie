@@ -135,6 +135,16 @@ private struct JamminPage: View {
                 }
                 .padding(.horizontal, 4)
                 .padding(.top, 2)
+                if s.throughApp {
+                    Text("Through the Spotify app on this Mac")
+                        .font(Theme.font(11))
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 4)
+                        .padding(.top, -6)
+                }
+            }
+            if s.isFiles, s.ready {
+                JamminFolderLine(source: s)
             }
             if s.ready {
                 JamminNowPlaying(source: s)
@@ -156,6 +166,9 @@ private struct JamminPage: View {
                 } else if s.does("lists") {
                     JamminLists(source: s)
                 }
+            }
+            if s.isSpotify, s.ready, s.throughApp {
+                JamminLinkAccount()
             }
         }
     }
@@ -189,6 +202,11 @@ private struct JamminSetUp: View {
                     Button("Open Music") { j.openMusic() }
                         .buttonStyle(SoftButton(prominent: true))
                         .help("Opens the Music app hidden, behind what you work in")
+                }
+                if s.isFiles, s.state == "needs" {
+                    Button("Choose Folder…") { j.chooseFolder() }
+                        .buttonStyle(SoftButton(prominent: true))
+                        .help("Pick the folder that holds your music files")
                 }
             }
         }
@@ -298,7 +316,7 @@ private struct JamminNowPlaying: View {
                         JamminVolume(volume: v)
                     }
                     if s.isSpotify {
-                        JamminDeviceLine(device: n.device, canMove: s.does("devices"), link: n.link)
+                        JamminDeviceLine(device: n.device, canMove: s.does("devices"), link: n.link, viaApp: s.via == "app")
                     }
                 }
             } else {
@@ -328,6 +346,7 @@ private struct JamminNowPlaying: View {
     }
 
     private var hint: String {
+        if source.isFiles { return "Start a folder below, or search your music." }
         if source.isMusic {
             return store.jammin.musicOpen ? "Start a playlist below, or search your library." : "The Music app isn’t open."
         }
@@ -344,6 +363,8 @@ struct JamminArtwork: View {
     let address: String?
     let side: CGFloat
     let corner: CGFloat
+    /// What the quiet square shows until there is artwork, or with none.
+    var symbol = "music.note"
 
     var body: some View {
         let j = store.jammin
@@ -358,7 +379,7 @@ struct JamminArtwork: View {
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .fill(Theme.field)
                     .overlay(
-                        Image(systemName: "music.note")
+                        Image(systemName: symbol)
                             .font(.system(size: max(10, side * 0.28)))
                             .foregroundStyle(Theme.muted.opacity(0.7))
                     )
@@ -587,6 +608,8 @@ private struct JamminDeviceLine: View {
     let device: JamDevice?
     let canMove: Bool
     let link: String?
+    /// Spotify plays through its app on this Mac, so the app is here.
+    var viaApp = false
     @State private var picking = false
 
     var body: some View {
@@ -625,7 +648,7 @@ private struct JamminDeviceLine: View {
                 }
             }
             if let link, !link.isEmpty {
-                Button(JamminModel.spotifyInstalled ? "Play on Spotify" : "Get Spotify free") { j.open(link) }
+                Button(viaApp || JamminModel.spotifyInstalled ? "Play on Spotify" : "Get Spotify free") { j.open(link) }
                     .buttonStyle(SoftButton())
                     .help("Opens what plays in Spotify")
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -756,10 +779,10 @@ private struct JamminLists: View {
     var body: some View {
         let j = store.jammin
         VStack(alignment: .leading, spacing: 4) {
-            JamminHead(title: "Your playlists")
+            JamminHead(title: source.isFiles ? "Your folders" : "Your playlists")
             if let items = j.lists[source.name] {
                 if items.isEmpty {
-                    Text("No playlists in \(source.title) yet.")
+                    Text(source.isFiles ? "No folders of music in \(source.folder ?? "your folder") yet." : "No playlists in \(source.title) yet.")
                         .font(Theme.font(11.5))
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 4)
@@ -773,14 +796,14 @@ private struct JamminLists: View {
             } else if j.listing == source.name {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini)
-                    Text("Reading your playlists…")
+                    Text(source.isFiles ? "Reading your folders…" : "Reading your playlists…")
                 }
                 .font(Theme.font(11.5))
                 .foregroundStyle(Theme.muted)
                 .padding(.horizontal, 4)
             }
         }
-        .task(id: source.name + source.state) { await j.loadLists(source.name) }
+        .task(id: source.name + source.state + (source.folder ?? "")) { await j.loadLists(source.name) }
     }
 }
 
@@ -816,6 +839,58 @@ private struct JamminResults: View {
     }
 }
 
+/// The files' folder, under the strip, with Change Folder….
+@MainActor
+private struct JamminFolderLine: View {
+    @Environment(Store.self) private var store
+    let source: JamSource
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "folder")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted)
+                .accessibilityHidden(true)
+            Text(source.folder ?? "")
+                .font(Theme.font(11.5))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(source.folder ?? "")
+            Spacer(minLength: 6)
+            Button("Change Folder…") { store.jammin.chooseFolder() }
+                .buttonStyle(.plain)
+                .font(Theme.font(11.5, .semibold))
+                .foregroundStyle(Theme.accentInk)
+                .disabled(store.jammin.busy == "folder")
+                .help("Pick another folder of music files")
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
+    }
+}
+
+/// Spotify through its app on this Mac: linking an account adds
+/// playlists and search. Quiet, since it plays already.
+@MainActor
+private struct JamminLinkAccount: View {
+    @Environment(Store.self) private var store
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Link your account for playlists and search.")
+                .font(Theme.font(11.5))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            Button("Link Spotify…") { store.jammin.linking = true }
+                .buttonStyle(SoftButton())
+                .help("Make your Spotify app, or use the one you made, and sign in")
+        }
+        .padding(.horizontal, 4)
+    }
+}
+
 /// A section's head, quieter than its rows.
 private struct JamminHead: View {
     let title: String
@@ -845,7 +920,7 @@ private struct JamminItemRow: View {
         HStack(spacing: 2) {
             Button { j.play(item) } label: {
                 HStack(spacing: 8) {
-                    JamminArtwork(address: item.art, side: 36, corner: 4)
+                    JamminArtwork(address: item.art, side: 36, corner: 4, symbol: item.kind == "folder" ? "folder" : "music.note")
                     VStack(alignment: .leading, spacing: 1) {
                         Text(item.title)
                             .font(Theme.font(12.5, .medium))

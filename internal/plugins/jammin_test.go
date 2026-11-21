@@ -17,7 +17,7 @@ import (
 func TestJamminIsOnByDefaultWithItsTab(t *testing.T) {
 	cfg := config.Default()
 	p, ok := Find("jammin")
-	if !ok || !p.IsOn(cfg) || p.Key() != "plugins.jammin" || len(p.Parts) != 2 {
+	if !ok || !p.IsOn(cfg) || p.Key() != "plugins.jammin" || len(p.Parts) != 3 {
 		t.Fatalf("plugin = %+v, on %v", p, ok && p.IsOn(cfg))
 	}
 	if pane := p.Parts[0].Pane; pane == nil || pane.ID != "jammin.tab" || pane.Kind != PaneJammin {
@@ -73,5 +73,19 @@ func TestJamminMusicIsReadyWhereTheMusicAppIs(t *testing.T) {
 	musicApp = "/nowhere/Music.app"
 	if ok, _ := checkMusic(Env{Config: config.Default()}, true); ok {
 		t.Error("ready with no Music app")
+	}
+}
+
+// TestJamminFilesAreReadyWhereTheirFolderIs: the folder of music files
+// readies the part, and one that isn't there says how to pick another.
+func TestJamminFilesAreReadyWhereTheirFolderIs(t *testing.T) {
+	e := Env{Config: config.Default()}
+	e.Config.Jammin.Folder = t.TempDir()
+	if ok, text := checkFiles(e, true); !ok || !strings.Contains(text, "Ready: the music files in") {
+		t.Errorf("a folder: %v %q", ok, text)
+	}
+	e.Config.Jammin.Folder = "/nowhere/Music"
+	if ok, text := checkFiles(e, true); ok || !strings.Contains(text, "jammin folder PATH") {
+		t.Errorf("no folder: %v %q", ok, text)
 	}
 }

@@ -259,7 +259,8 @@ enum Snapshot {
             let jamminPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.jamminPlugin.utf8))
             for (base, scene, dark) in [("side-jammin", "spotify", false), ("side-jammin-dark", "spotify", true),
                                         ("side-jammin-music", "music", false), ("side-jammin-music-dark", "music", true),
-                                        ("side-jammin-link", "spotify-link", false), ("side-jammin-link-dark", "spotify-link", true)] {
+                                        ("side-jammin-link", "spotify-link", false), ("side-jammin-link-dark", "spotify-link", true),
+                                        ("side-jammin-files", "files", false), ("side-jammin-spotify-app-dark", "spotify-app", true)] {
                 var plugin = jamminPlugin
                 if scene == "spotify-link" {
                     plugin.parts[0].state = "needs"

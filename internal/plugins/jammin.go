@@ -10,12 +10,14 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/config"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/repo"
 )
 
 // The jammin plugin's parts, by name: its sources.
 const (
 	JamminSpotify = "spotify"
 	JamminMusic   = "music"
+	JamminFiles   = "files"
 )
 
 // PaneJammin is the kind of the Jammin tab's pane: a view of the Mac app's
@@ -42,14 +44,14 @@ func jamminPlugin() Plugin {
 	return Plugin{
 		Name:    "jammin",
 		Title:   "Jammin",
-		Summary: "Your jam box: the music you play, beside your sessions, from Spotify through an app of yours and from the Music app on this Mac, one source at a time. What it reads stays in memory, and agents can't reach it.",
+		Summary: "Your jam box: the music you play, beside your sessions, from Spotify, the Music app on this Mac and your own music files, one source at a time. What it reads stays in memory, and agents can't reach it.",
 		key:     "plugins.jammin",
 		on:      func(c config.Config) bool { return c.Plugins.Jammin },
 		Parts: []Part{
 			{
 				Name:    JamminSpotify,
 				Title:   "Spotify",
-				Summary: "Your Spotify account, through a Spotify app of yours: what plays on any device of yours, with play, pause, skip, seek, volume and devices, your playlists and a search. Spotify lets apps control playback only for Premium accounts.",
+				Summary: "Your Spotify account, through a Spotify app of yours: what plays on any device of yours, with play, pause, skip, seek, volume and devices, your playlists and a search; Spotify lets apps control playback only for Premium accounts. Without one, the Spotify app on this Mac, played from here.",
 				Setup:   ":jammin",
 				Brings:  brings,
 				own:     always,
@@ -67,8 +69,31 @@ func jamminPlugin() Plugin {
 				own:     always,
 				check:   checkMusic,
 			},
+			{
+				Name:    JamminFiles,
+				Title:   "Music files",
+				Summary: "The music files in a folder of yours, ~/Music unless you choose another: played on this Mac by afplay, folder by folder, with shuffle and repeat, on through " + brand.Name + "'s restarts.",
+				Setup:   ":jammin",
+				Brings:  brings,
+				own:     always,
+				check:   checkFiles,
+			},
 		},
 	}
+}
+
+// checkFiles says whether the folder of music files is there: from the
+// config and the file system, with no walk of it.
+func checkFiles(e Env, _ bool) (bool, string) {
+	name := e.Config.Jammin.Folder
+	if name == "" {
+		name = "~/Music"
+	}
+	h, _ := os.UserHomeDir()
+	if info, err := os.Stat(repo.Expand(name, h)); err != nil || !info.IsDir() {
+		return false, "There's no folder at " + name + ": Choose Folder in the Jammin tab, or `" + brand.Slug + " jammin folder PATH`, picks the one that holds your music files."
+	}
+	return true, "Ready: the music files in " + name + ", played on this Mac. The Jammin tab, :jammin files or `" + brand.Slug + " jammin --source files` plays them."
 }
 
 // live is the named source by the core's last look, or nil before one.
@@ -86,7 +111,7 @@ func live(e Env, name string) *ipc.JamSource {
 // asks Spotify nothing.
 func checkSpotify(e Env, _ bool) (bool, string) {
 	if _, ok := config.SpotifyClientID(e.Config.Jammin.Spotify.ClientID); !ok {
-		return false, "No Spotify app yet: make one at " + spotifyDashboard + " with the redirect URI " + spotifyRedirect + ", then Link Spotify in the Jammin tab, or `" + brand.Slug + " jammin link spotify`, takes its Client ID. Spotify lets apps in development mode work only for Premium accounts."
+		return false, "No Spotify app yet: make one at " + spotifyDashboard + " with the redirect URI " + spotifyRedirect + ", then Link Spotify in the Jammin tab, or `" + brand.Slug + " jammin link spotify`, takes its Client ID. Spotify lets apps in development mode work only for Premium accounts. Or open the Spotify app on this Mac, and Jammin plays it from there."
 	}
 	st := live(e, JamminSpotify)
 	switch {

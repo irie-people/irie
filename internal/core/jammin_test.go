@@ -35,6 +35,7 @@ func jamminCore(t *testing.T, cfg config.Config) *Core {
 			Config:   func() config.Jammin { return c.cfg().Jammin },
 			Script:   noScripts{t},
 			Running:  func(string) bool { return false },
+			Home:     t.TempDir(),
 			API:      "http://127.0.0.1:9/v1",
 			Accounts: "http://127.0.0.1:9",
 		}
@@ -48,7 +49,7 @@ func jamminCore(t *testing.T, cfg config.Config) *Core {
 func TestTheJamminOp(t *testing.T) {
 	c := jamminCore(t, config.Default())
 	r, err := c.jamminOp(0, ipc.JamminArgs{})
-	if err != nil || len(r.Sources) != 2 || r.Sources[0].Name != ipc.JamSpotify || r.Sources[0].State != ipc.JamNeeds || r.Sources[1].Name != ipc.JamMusic || r.Sources[1].State != ipc.JamNeeds {
+	if err != nil || len(r.Sources) != 3 || r.Sources[0].Name != ipc.JamSpotify || r.Sources[0].State != ipc.JamNeeds || r.Sources[1].Name != ipc.JamMusic || r.Sources[1].State != ipc.JamNeeds || r.Sources[2].Name != ipc.JamFiles {
 		t.Fatalf("look: %+v, %v", r, err)
 	}
 	if !strings.Contains(r.Text, "No Spotify app yet") || !strings.Contains(r.Text, "Apple Music: The Music app isn't open") {
@@ -69,7 +70,7 @@ func TestTheJamminOp(t *testing.T) {
 		if pl.Name != "jammin" {
 			continue
 		}
-		if !pl.On || len(pl.Parts) != 2 || pl.Parts[0].State != "needs" || !strings.Contains(pl.Parts[0].Detail, "developer.spotify.com") {
+		if !pl.On || len(pl.Parts) != 3 || pl.Parts[0].State != "needs" || !strings.Contains(pl.Parts[0].Detail, "developer.spotify.com") {
 			t.Errorf("jammin plugin = %+v", pl)
 		}
 		return
