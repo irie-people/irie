@@ -100,6 +100,7 @@ func (p Paths) Benches() string               { return filepath.Join(p.State, "b
 func (p Paths) Playbooks() string             { return filepath.Join(p.State, "playbooks") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
+func (p Paths) Cards() string                 { return filepath.Join(p.State, "cards.json") } // materialized cards (internal/materialize)
 
 // RouteLabels holds the tasks given a class, one JSON object a line, and
 // RouteVectors their embeddings, so that a restarted core need not embed
