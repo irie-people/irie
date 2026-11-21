@@ -2,6 +2,7 @@ package founding
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,7 +46,7 @@ func items(d ipc.FoundingDoc) int {
 // amendments in order and 39 signers; the Bill of Rights its ten.
 func TestTheDocuments(t *testing.T) {
 	d := docs(t)
-	dec, con, bor := d["declaration"], d["constitution"], d["rights"]
+	dec, con, bor, foia := d["declaration"], d["constitution"], d["rights"], d["foia"]
 	if dec.Title != "The Declaration of Independence" || con.Title != "The Constitution of the United States" || bor.Title != "The Bill of Rights" {
 		t.Fatalf("titles: %q, %q, %q", dec.Title, con.Title, bor.Title)
 	}
@@ -53,6 +54,9 @@ func TestTheDocuments(t *testing.T) {
 		if !strings.Contains(x.About, "National Archives") {
 			t.Errorf("%s: About = %q, want its source", x.ID, x.About)
 		}
+	}
+	if foia.Title != "The Freedom of Information Act" || !strings.Contains(foia.About, "Government Publishing Office's 2024 edition") {
+		t.Errorf("FOIA: %q, %q", foia.Title, foia.About)
 	}
 	grievances := count(dec, "text", func(s string) bool { return strings.HasPrefix(s, "He ") || strings.HasPrefix(s, "For ") })
 	if grievances != 27 {
@@ -82,6 +86,23 @@ func TestTheDocuments(t *testing.T) {
 	}
 	if n := count(bor, "h3", func(s string) bool { return strings.HasPrefix(s, "Amendment ") }); n != 10 {
 		t.Errorf("Bill of Rights: %d amendments, want 10", n)
+	}
+	// FOIA: § 552's thirteen subsections in order, (a) to (m), each starting
+	// a paragraph, and the Code's source credit at its foot.
+	if len(foia.Blocks) == 0 || foia.Blocks[0].Kind != "h2" || foia.Blocks[0].Text != "§ 552. Public information; agency rules, opinions, orders, records, and proceedings" {
+		t.Fatalf("FOIA's heading: %+v", foia.Blocks[:1])
+	}
+	at := 0
+	for _, start := range []string{"(a) ", "(b) ", "(c)(1) ", "(d) ", "(e)(1) ", "(f) ", "(g) ", "(h)(1) ", "(i) The Government Accountability Office", "(j)(1) ", "(k)(1) ", "(l) ", "(m)(1) "} {
+		i := slices.IndexFunc(foia.Blocks[at:], func(b ipc.FoundingBlock) bool { return b.Kind == "text" && strings.HasPrefix(b.Text, start) })
+		if i < 0 {
+			t.Errorf("FOIA: no subsection %q after block %d", start, at)
+			continue
+		}
+		at += i
+	}
+	if last := foia.Blocks[len(foia.Blocks)-1]; last.Kind != "note" || !strings.HasPrefix(last.Text, "The Code's source credit") {
+		t.Errorf("FOIA's foot: %+v", last)
 	}
 }
 
@@ -124,6 +145,8 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		"declaration":  {"unalienable Rights", "to compleat the works of death", "our Brittish brethren"},
 		"constitution": {"shall chuse their Speaker", "the Independance of the United States", "shall neither be encreased nor diminished", "A well regulated Militia, being necessary to the security of a free State, the right of the people to keep and bear Arms, shall not be infringed."},
 		"rights":       {"or of the press; or the right", "In Suits at common law"},
+		// Where the Department of Justice's copy differs, the Code reads so.
+		"foia": {"unless the court otherwise directs for good cause shown", "compiled by criminal law enforcement authority", "This section does not authorize withholding of information", "provide copies of such index on request", "which shall be made available"},
 	} {
 		var all strings.Builder
 		for _, b := range d[id].Blocks {
@@ -211,6 +234,7 @@ func TestFindAnySpelling(t *testing.T) {
 		"unreasonable searches":       "rights: Amendments › Amendment IV",
 		"vice president elect":        "constitution: Amendments › Amendment XX › Section 3.",
 		"the Vice President":          "constitution: Amendments › Amendment XII",
+		"chief FOIA officer":          "foia: § 552. Public information; agency rules, opinions, orders, records, and proceedings",
 	} {
 		if got := find(q); !got[want] {
 			t.Errorf("Find(%q) = %v, want %q among them", q, got, want)

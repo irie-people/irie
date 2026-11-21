@@ -119,8 +119,10 @@ type Plugins struct {
 	Obsidian bool `toml:"obsidian"`
 	// Founding is the founding documents: the Declaration of
 	// Independence, the Constitution and the Bill of Rights as the
-	// National Archives transcribes them, in the Mac app's Founding tab and
-	// the founding-documents skill. Off until asked.
+	// National Archives transcribes them, and the Freedom of Information
+	// Act as the United States Code sets it out, in the Mac app's Founding
+	// tab and the founding-documents skill, kept on a local chain. Off
+	// until asked.
 	Founding bool `toml:"founding"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name

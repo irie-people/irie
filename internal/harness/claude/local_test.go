@@ -188,6 +188,60 @@ func TestALocalModelTakesEditsAndRunsTheSafeCommands(t *testing.T) {
 	}
 }
 
+// A local model's session, in any mode, is refused the tools that start
+// subagents, each a conversation of its own on the few slots of the
+// model's server: one bench run on Dory that started three left all three
+// runs with nothing written in two hours. A Claude model's session keeps
+// them.
+func TestALocalModelStartsNoSubagents(t *testing.T) {
+	local := config.Default().Profiles["big"]
+	local.Model = "dory-4b"
+	denied := func(files map[string][]byte) []string {
+		var s struct {
+			Permissions *struct {
+				Deny []string `json:"deny"`
+			} `json:"permissions"`
+		}
+		if err := json.Unmarshal(files[SettingsFile], &s); err != nil {
+			t.Fatal(err)
+		}
+		if s.Permissions == nil {
+			return nil
+		}
+		return s.Permissions.Deny
+	}
+	for _, mode := range []string{"", "acceptEdits", "bypassPermissions", "plan"} {
+		p := local
+		p.PermissionMode = mode
+		_, _, files := launch(t, p, "fix the tests")
+		if got := denied(files); !reflect.DeepEqual(got, []string{"Agent", "Task", "Workflow"}) {
+			t.Errorf("mode %q: denied %q", mode, got)
+		}
+	}
+	// The spawn's own rules, such as an anonymous session's, come first.
+	s := spawnOf("fix the tests")
+	s.Deny = []string{"WebFetch"}
+	_, _, files := launchSpawn(t, local, s)
+	if got := denied(files); !reflect.DeepEqual(got, []string{"WebFetch", "Agent", "Task", "Workflow"}) {
+		t.Errorf("with the spawn's own rules: denied %q", got)
+	}
+	if !reflect.DeepEqual(s.Deny, []string{"WebFetch"}) {
+		t.Errorf("the spawn's rules changed: %q", s.Deny)
+	}
+	// So does a resumed one.
+	r := spawnOf("")
+	if _, _, files, err := (Harness{}).Resume(local, r); err != nil {
+		t.Fatal(err)
+	} else if got := denied(files); !slices.Contains(got, "Agent") {
+		t.Errorf("resumed: denied %q", got)
+	}
+	// A Claude model's session keeps its subagents.
+	_, _, files = launch(t, defaultProfile(), "fix the tests")
+	if got := denied(files); got != nil {
+		t.Errorf("Opus: denied %q", got)
+	}
+}
+
 // A session no one watches, such as a bench's run on Dory, refuses what
 // would wait on a permission prompt: the first bench's runs each asked
 // for go version and waited out bench.timeout. A Claude Code too old for
