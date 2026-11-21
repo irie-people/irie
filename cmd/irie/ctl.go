@@ -218,7 +218,7 @@ func ctl(args []string) error {
 		return ctlMaterialize(args[1:])
 	case "zen":
 		return ctlZen(args[1:])
-	case "founding":
+	case "charters", "founding":
 		return ctlFounding(args[1:])
 	case "trod":
 		return ctlTrod(args[1:])

@@ -59,6 +59,7 @@ type (
 	FoundingDoc       = ipc.FoundingDoc
 	FoundingBlock     = ipc.FoundingBlock
 	FoundingHit       = ipc.FoundingHit
+	FoundingLink      = ipc.FoundingLink
 	Group             = ipc.Group
 	GroupArgs         = ipc.GroupArgs
 	GroupResult       = ipc.GroupResult

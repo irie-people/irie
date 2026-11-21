@@ -14,33 +14,34 @@ import (
 // Founding is the founding plugin's one part, by name.
 const Founding = "founding"
 
-// PaneFounding is the kind of the Founding tab's pane: a view of the Mac
+// PaneFounding is the kind of the Charters tab's pane: a view of the Mac
 // app's own (docs/proposals/plugin-panes.md).
 const PaneFounding = "founding"
 
 func init() { built["founding"] = foundingPlugin }
 
-// foundingPlugin is the founding documents (docs/proposals/founding-documents.md):
-// the Declaration of Independence, the Constitution, the Bill of Rights and
-// the Freedom of Information Act, word for word from the National Archives
-// and the United States Code, checked against other copies, to read in the
-// Founding tab and for agents to quote, and kept on a local chain. Off
-// until asked.
+// foundingPlugin is the charters (docs/proposals/founding-documents.md):
+// texts of rights kept word for word from the bodies that keep them, each
+// checked against other copies, from Magna Carta through the Declaration of
+// Independence, the Constitution and the Bill of Rights to the Freedom of
+// Information Act and the Privacy Act, to read in the Charters tab and for
+// agents to quote, and kept on a local chain with the links that say how
+// they bear on one another. Off until asked.
 func foundingPlugin() Plugin {
 	return Plugin{
 		Name:    "founding",
-		Title:   "Founding documents",
-		Summary: "The Declaration of Independence, the Constitution, the Bill of Rights and the Freedom of Information Act, word for word from the National Archives and the United States Code and checked against other copies: to read and search in the Founding tab, for agents to quote exactly, and kept on a local chain.",
+		Title:   "Charters",
+		Summary: "Texts of rights, word for word from the bodies that keep them and checked against other copies: Magna Carta, the English Bill of Rights, the Virginia Declaration of Rights, the Declaration of Independence, the Articles of Confederation, the Constitution, the Bill of Rights, the Universal Declaration of Human Rights, the Freedom of Information Act and the Privacy Act. To read and search in the Charters tab, for agents to quote exactly, and kept on a local chain with how each bears on the others.",
 		key:     "plugins.founding",
 		on:      func(c config.Config) bool { return c.Plugins.Founding },
 		Parts: []Part{
 			{
 				Name:    Founding,
-				Title:   "The founding documents",
-				Summary: "Read the four in the Founding tab and search them whatever the spelling. Agents quote them from the founding-documents skill's files, never from memory. Each file's SHA-512 shows a copy is this one, and a chain on this computer keeps every version of them.",
-				Brings:  []string{"the Founding tab in the right sidebar", "/" + brand.Slug + ":" + founding.Skill, brand.Slug + " ctl founding"},
+				Title:   "The charters",
+				Summary: "Read the ten in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it. Agents quote them from the founding-documents skill's files, never from memory. Each file's SHA-512 shows a copy is this one, and a chain on this computer keeps every version of the texts and their links.",
+				Brings:  []string{"the Charters tab in the right sidebar", "/" + brand.Slug + ":" + founding.Skill, brand.Slug + " ctl charters"},
 				Skills:  []string{founding.Skill},
-				Pane:    &ipc.PluginPane{Title: "Founding", Icon: "building.columns", Kind: PaneFounding},
+				Pane:    &ipc.PluginPane{Title: "Charters", Icon: "building.columns", Kind: PaneFounding},
 				own:     always,
 				check:   checkFounding,
 			},
@@ -52,11 +53,11 @@ func foundingPlugin() Plugin {
 // into this binary, so it reads no file.
 func checkFounding(e Env, on bool) (bool, string) {
 	if !on {
-		return true, "Off: the Founding tab and the " + founding.Skill + " skill go with it."
+		return true, "Off: the Charters tab and the " + founding.Skill + " skill go with it."
 	}
 	docs, err := founding.Load()
 	if err != nil {
-		return false, "The documents don't read: " + err.Error() + "."
+		return false, "The texts don't read: " + err.Error() + "."
 	}
-	return true, "Ready: " + strconv.Itoa(len(docs)) + " documents in the Founding tab, and the " + founding.Skill + " skill in every session."
+	return true, "Ready: " + strconv.Itoa(len(docs)) + " texts in the Charters tab, and the " + founding.Skill + " skill in every session."
 }

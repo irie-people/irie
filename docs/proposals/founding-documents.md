@@ -1,59 +1,67 @@
-# The founding documents
+# The charters
 
-On 2026-11-21 the owner compared copies of the Constitution and the Bill of Rights, then asked for an official, verified copy in Irie's skills, and a plugin for the Bill of Rights and the Declaration of Independence. The owner added that a chain would start from it. Later that day they asked for the texts to be on a chain locally, and for the Freedom of Information Act too.
+On 2026-11-21 the owner compared copies of the Constitution and the Bill of Rights, then asked for an official, verified copy in Irie's skills, and a plugin for the Bill of Rights and the Declaration of Independence. The owner added that a chain would start from it. Later that day they asked for the texts to be on a chain locally, and for the Freedom of Information Act too. Then: "extend all of the declaration of independance and bill of rights and rights to information act, i want you to put them all on the same chain, and i think i want to call it something meaningful", "or like same blockchain graph", and "bring in constitution and start on other official documents that are similar and adding to graph and connecting inferences". So the chain grew to ten texts, carries the links that say how each bears on the others, and is the Charters chain.
 
 ## What it is
 
-- **A skill**, `/irie:founding-documents`. Its files hold four documents word for word:
-  - the Declaration of Independence, the Constitution with all 27 amendments, and the Bill of Rights, as the National Archives transcribes them;
-  - the Freedom of Information Act, 5 U.S.C. § 552, as the United States Code sets it out.
-
-  Agents quote from these files, never from memory, and say so when a quotation isn't there.
-- **A plugin**, Founding documents, with one part. It brings the skill and the Founding tab in the Mac app's right sidebar, which shows the four. Its search finds a passage whatever its spelling, so "choose" finds the parchment's "chuse". The tab also shows each text's SHA-512 and how the local chain checked.
-- **A local chain** of the texts, which the core keeps. `irie ctl founding` checks it, and `irie ctl founding log` lists its versions.
-- **A record**, `verification.md`, beside the texts. It says what each text was checked against and what was found, and lists the marks that careful copies still disagree on.
+- **A skill**, `/irie:founding-documents`. Its files hold ten texts word for word, the oldest first: Magna Carta (1215, in McKechnie's translation), the English Bill of Rights (1689), the Virginia Declaration of Rights (1776), the Declaration of Independence, the Articles of Confederation, the Constitution with all 27 amendments, the Bill of Rights, the Universal Declaration of Human Rights (1948), the Freedom of Information Act (5 U.S.C. § 552) and the Privacy Act of 1974 (§ 552a). Agents quote from these files, never from memory, and say so when a quotation isn't there.
+- **A plugin**, Charters, with one part. It brings the skill and the Charters tab in the Mac app's right sidebar, which shows the ten. Its search finds a passage whatever its spelling, so "choose" finds the parchment's "chuse" and "cruel and unusual" the 1689 Act's "cruell and unusuall". Under each text's title the tab lists the links: what it drew on, and which later texts drew on it, each a sentence away. The tab also shows each text's SHA-512 and how the local chain checked.
+- **A graph.** Each link runs from a later text back to an earlier one it grew from, with one of five plain words for how (drew on, amends, replaced, beside, follows) and a sentence for why that quotes both texts. The texts are the graph's nodes and the links its edges, and the chain carries both.
+- **A local chain** of the texts and links, the Charters chain, which the core keeps. `irie ctl charters` checks it and lists the links, `irie ctl charters log` lists its versions, and `irie ctl charters export` prints every version's bytes for another tool to read.
+- **A record**, `verification.md`, beside the texts. It says what each text was checked against and what was found, and lists the words and marks that careful copies still disagree on.
 
 ## The texts
 
-The National Archives' transcriptions are the founding documents' source: the Declaration's engrossed parchment, the Constitution as it was inscribed on parchment, the Bill of Rights' enrolled original, and Amendments XI–XXVII. The Freedom of Information Act comes from the United States Code, in the Government Publishing Office's 2024 edition. Title 5 is positive law, so the Code's text is legal evidence of the law (1 U.S.C. § 204). The words, spelling, capitals and punctuation are kept. Only the markup and the lines in italics are Irie's: headings, dates and notes.
+The National Archives' transcriptions are the founding documents' source: the Declaration's engrossed parchment, the Constitution as it was inscribed on parchment, the Bill of Rights' enrolled original, Amendments XI–XXVII, the Articles of Confederation, and the Virginia Declaration of Rights, which the Archives gives in modern spelling and the file says so. The Freedom of Information Act and the Privacy Act come from the United States Code, in the Government Publishing Office's 2024 edition; Title 5 is positive law, so the Code's text is legal evidence of the law (1 U.S.C. § 204). The English Bill of Rights is legislation.gov.uk's "original (as enacted)" text, the Statutes of the Realm's, under the Open Government Licence. The Universal Declaration is the United Nations' English text, following the 1948 official record where the web text strays from it; UN documents issued under a document symbol are in the public domain (ST/AI/189/Add.9/Rev.2). Magna Carta is the 1215 charter in William Sharp McKechnie's translation of 1914, as a 1915 edition printed it, from Wikisource's transcription checked against the scan: the National Archives' own translation of the 1297 charter is under copyright, so it is not used. The words, spelling, capitals and punctuation are kept. Only the markup and the lines in italics are Irie's: headings, dates and notes.
 
-Each text was then checked against every other copy at hand:
+Each text was then checked against every other copy at hand, word for word and, where the copies allow, mark for mark: the Avalon Project's copies, the Archives' own second copies, other government prints, Cornell's Code, the 1819 and 1821 prints as text recognition reads them, the UN's official record. Every difference found is in `verification.md`, and the readings still unsettled are in its table.
 
-- **The Declaration**: the Avalon Project's copy.
-- **The Constitution**: a literal print, a government print, the National Constitution Center's copy and a 19th-century printing.
-- **The Bill of Rights**: the Archives' handout, ConstitutionFacts.com's copy, the amendments in each copy of the Constitution, and the Archives' own transcription of the 1789 joint resolution.
-- **The Freedom of Information Act**:
-  - the Code's 2023 edition, which is the same;
-  - Cornell's Legal Information Institute, whose copy hashed the same word for word and mark for mark;
-  - the Department of Justice's copy, whose eight differences are each its own slip.
+## The graph
 
-The checks went word for word, and mark for mark for the Constitution's articles, the Bill of Rights and the Freedom of Information Act. Every difference found is in `verification.md`.
+The links are Irie's reading of the texts, each defensible from the texts themselves, and most of them quote both ends:
+
+- The Virginia Declaration drew on Magna Carta ("except by the law of the land or the judgment of his peers", Section 8, after chapter 39) and on the English Bill of Rights (Section 9 is the Act's "excessive Baile … cruell and unusuall Punishments" in Virginia's spelling).
+- The Declaration of Independence drew on the Virginia Declaration ("all men are created equal" after "all men are by nature equally free and independent").
+- The Articles of Confederation follow the Declaration. The Constitution follows the Declaration, dating itself "of the Independance of the United States of America the Twelfth", and replaced the Articles, whose Article XIII had made "the union shall be perpetual".
+- The Bill of Rights amends the Constitution and drew on Magna Carta (due process), the English Bill of Rights (the Eighth Amendment is its words; petition; arms) and the Virginia Declaration.
+- The Universal Declaration drew on the Declaration of Independence ("born free and equal in dignity and rights") and the Bill of Rights (Articles 5, 9 to 11 and 18 to 20).
+- The Freedom of Information Act and the Privacy Act follow the Constitution, as Acts of Congress, and the Universal Declaration (Article 19's right "to seek, receive and impart information", Article 12's privacy); the Privacy Act stands beside FOIA in the Code and names it.
+
+`internal/founding/links.go` holds them. A quotation in a link's why, in curly double quotes, is in one of the two texts word for word: the tests check each, and that each link runs from a later text to an earlier one, by a known kind, once, and that every text is in the graph. Irie never copies another tool's code, so a graph viewer that reads the chain reads Irie's format; the export is for that.
 
 ## Fingerprints and the local chain
 
 Each text's file is pinned by its SHA-512. The hash covers the file's bytes, UTF-8 with a line feed ending each line, so anyone can check a copy with `shasum -a 512`. The tests fail when a file's SHA-512 isn't the one `verification.md` gives, so no text changes without its record changing with it.
 
-The core keeps the texts on a chain of their own, in `$XDG_STATE_HOME/irie/chain/founding`, on the same `internal/chain` that keeps zen's versions. It is the first piece of the local chain [local-chain.md](local-chain.md) plans for the sidebar.
+The core keeps the texts on a chain of their own, the Charters chain, in `$XDG_STATE_HOME/irie/chain/charters`, on the same `internal/chain` that keeps zen's versions. It is the first piece of the local chain [local-chain.md](local-chain.md) plans for the sidebar.
 
-- **A version** is canonical JSON (RFC 8785) holding every text whole, each with its SHA-512 as `sha512:` and 128 hex digits. It is named by the SHA-512 of its own bytes, and names the version before it the same way, so the newest names the whole history.
-- **When.** The core adds a version when it starts and at each look, and only when a text has changed. A new build whose texts are unchanged adds nothing.
-- **Checking.** Each look reads every version back. The store checks each against its name, so a version changed on disk after it was written fails. The check also hashes each text against its own SHA-512.
+- **A version** is canonical JSON (RFC 8785), of the form `irie.charters/2`, holding every text whole, each with its SHA-512 as `sha512:` and 128 hex digits, its date (`when`) and its kind (charter, declaration, articles, constitution, amendments or statute), and the links (`from`, `to`, `how`, `why`). It is named by the SHA-512 of its own bytes, and names the version before it the same way, so the newest names the whole history.
+- **When.** The core adds a version when it starts and at each look, and only when a text or a link has changed. A new build whose texts and links are unchanged adds nothing.
+- **Checking.** Each look reads every version back. The store checks each against its name, so a version changed on disk after it was written fails. The check also hashes each text against its own SHA-512, and sees that each link names two texts the version holds.
+- **The first build's chain.** The first build kept the four first texts as `chain/founding`, in the form `irie.founding/1`, with no dates, kinds or links. The core moves that folder into `chain/charters` once, when the new folder has nothing yet, reads its versions as they are, and puts the next version on after them, so the history stays one and the first version's name still stands. A version of any other form fails the check.
+- **Export.** `irie ctl charters export` prints every version's bytes, oldest first, one a line (canonical JSON has no line break), so another tool can read the chain whole and `shasum -a 512` of a line is its version's name.
 - **Only public standards** shape a version, so any tool with a JSON canonicalizer and SHA-512 can check one without Irie.
 - **Like the local chain**, it carries no tokens, no money and no identity, and nothing on it leaves the computer. Anchoring a version's name on a public chain would be the local chain's opt-in hand-off, made by another tool.
+
+## The name
+
+The owner asked for a meaningful name. The chain is **Charters**: the National Archives calls the Declaration, the Constitution and the Bill of Rights the Charters of Freedom, Magna Carta is the Great Charter, and a charter is a grant of rights set down to be kept, which is what every text on it is and what the chain does with them. Other names weighed, each from the texts: Posterity (the Preamble secures liberty "to ourselves and our Posterity", which is what a chain that keeps the texts unchanged is for), Unalienable (the Declaration's word for rights that can't be taken away, as a hash chain's texts can't be altered), Liberties (what every text secures) and Lineage (what the links trace). The name shows in the chain's folder and form, the command, the plugin's title and the tab; the plugin's config key stays `plugins.founding`, the skill stays `founding-documents`, and the Go package `founding`, so a config and an agent's habits go on working, and `irie ctl founding` still answers.
 
 ## How it is built
 
 - The texts are the skill's own files (`internal/skills/bundled/founding-documents`), embedded by `bundled_founding.go`, so an agent and the tab read the same bytes.
-- `internal/founding` reads them into headings, the documents' words, notes and lists of names, finds passages in them, and keeps their chain (`chain.go`).
-- The core's `founding` op gives the tab the documents, their chain as it just checked it, and, with `find`, the passages that hold some words, or, with `log`, the chain's versions. Anyone may ask, an agent too: the texts are public, and the op only reads them and keeps their chain.
+- `internal/founding` holds the table of texts (`Documents`: id, file, short name, date, kind), the links (`links.go`), the parser that reads a file into headings, the document's words, notes and lists of names, the finder, and the chain (`chain.go`).
+- The core's `founding` op gives the tab the documents, the links, their chain as it just checked it, and, with `find`, the passages that hold some words, with `log`, the chain's versions, or with `export`, every version's bytes. Anyone may ask, an agent too: the texts are public, and the op only reads them and keeps their chain.
 - `-tags nofounding` leaves the plugin out, texts and all. A company's copy leaves it out with the other personal plugins.
 - It is off by default: the documents are a person's own reading, and a skill that is on costs every session a line of context.
 
 ## Open questions
 
-- **Four marks still disagree.** The Archives' transcription and other careful copies differ on four points: "enumeration" or "Enumeration" (Art. I §9), "proper," or "proper;" (Art. II §2), "another State," or "another State;" (Art. III §2), and "In Suits" or "In suits" (Amendment VII). The parchments would settle them.
-- **The House's online Code** was down for maintenance on 21 November 2026. Once it's back, check § 552 against it, current through Public Law 119-142 (November 10, 2026). Cornell follows it and matched.
-- **More documents.** The Articles of Confederation, other statutes, or other countries' founding documents would fit the same skill, tab and chain.
+- **Readings still unsettled.** `verification.md`'s table lists them: four marks of the Constitution and the Bill of Rights where careful copies differ; the English Bill of Rights' second declared right, where legislation.gov.uk's transcription repeats the first right's "Suspending of Laws" and the 1819 print, the revised text, Avalon and the marginal note all read "Dispensing with", and its "congizable"; the Virginia Declaration's "of twelve men" and "nor being descendible", the Archives' own words against the adopted text; the Articles' "con-firmed"; the Universal Declaration's comma. The files follow their sources; the originals would settle each.
+- **The Virginia Declaration in the original's spelling** would need a literal transcription of the 1776 text; the Archives gives a modern rendering, and Hening's 1821 print is only text recognition.
+- **The 1297 Magna Carta**, the charter the Archives displays, has no public-domain translation online as a whole; the Statutes of the Realm (1810) prints one, as a scan.
+- **The House's online Code** was down for maintenance on 21 November 2026. Once it's back, check §§ 552 and 552a against it, current through Public Law 119-142 (November 10, 2026). Cornell follows it and matched.
+- **More documents.** The same skill, tab, chain and graph would take the Northwest Ordinance, the Federalist Papers, the Emancipation Proclamation, Sweden's Freedom of the Press Act of 1766 (the first right to information in law) and India's Right to Information Act of 2005, each with its links.
 
 ## Sources
 
@@ -61,8 +69,16 @@ The core keeps the texts on a chain of their own, in `$XDG_STATE_HOME/irie/chain
 - National Archives, The Constitution of the United States: A Transcription: https://www.archives.gov/founding-docs/constitution-transcript
 - National Archives, The Bill of Rights: A Transcription: https://www.archives.gov/founding-docs/bill-of-rights-transcript
 - National Archives, The Constitution: Amendments 11-27: https://www.archives.gov/founding-docs/amendments-11-27
-- The Avalon Project, Yale Law School, The Declaration of Independence: https://avalon.law.yale.edu/18th_century/declare.asp
-- 5 U.S.C. § 552, United States Code, 2024 edition (GPO): https://www.govinfo.gov/content/pkg/USCODE-2024-title5/html/USCODE-2024-title5-partI-chap5-subchapII-sec552.htm, and its 2023 edition
-- 5 U.S. Code § 552, Legal Information Institute, Cornell Law School: https://www.law.cornell.edu/uscode/text/5/552
+- National Archives, Articles of Confederation (1777): https://www.archives.gov/milestone-documents/articles-of-confederation
+- National Archives, The Virginia Declaration of Rights: https://www.archives.gov/founding-docs/virginia-declaration-of-rights
+- National Archives, The Charters of Freedom: https://www.archives.gov/founding-docs
+- legislation.gov.uk, The Bill of Rights 1688, original (as enacted): https://www.legislation.gov.uk/aep/WillandMarSess2/1/2/enacted
+- British History Online, Statutes of the Realm vol. 6: https://www.british-history.ac.uk/statutes-realm/vol6/pp142-145
+- Wikisource, Source Problems in English History, Appendix, Magna Carta 1215 (McKechnie's translation): https://en.wikisource.org/wiki/Source_Problems_in_English_History/Appendix/Magna_Carta._1215
+- United Nations, Universal Declaration of Human Rights: https://www.un.org/en/about-us/universal-declaration-of-human-rights, and the official record A/RES/217(III)
+- United Nations, ST/AI/189/Add.9/Rev.2, Copyright in United Nations publications
+- The Avalon Project, Yale Law School: the Declaration (https://avalon.law.yale.edu/18th_century/declare.asp), the Articles (artconf.asp), the Virginia Declaration (virginia.asp), the English Bill of Rights (17th_century/england.asp) and Magna Carta (medieval/magframe.asp)
+- 5 U.S.C. §§ 552 and 552a, United States Code, 2024 edition (GPO): https://www.govinfo.gov/content/pkg/USCODE-2024-title5/html/USCODE-2024-title5-partI-chap5-subchapII-sec552.htm and sec552a.htm, and their 2023 editions
+- 5 U.S. Code §§ 552 and 552a, Legal Information Institute, Cornell Law School: https://www.law.cornell.edu/uscode/text/5/552 and /552a
 - Department of Justice, Office of Information Policy, Freedom of Information Act, 5 U.S.C. § 552: https://www.justice.gov/oip/freedom-information-act-5-usc-552
 - RFC 8785, the JSON Canonicalization Scheme, which `internal/chain` follows: https://www.rfc-editor.org/rfc/rfc8785

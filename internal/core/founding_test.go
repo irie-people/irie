@@ -3,17 +3,20 @@
 package core
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/config"
+	"github.com/irie-people/irie/internal/founding"
 	"github.com/irie-people/irie/internal/ipc"
 )
 
 // TestFoundingOpWaitsForItsPlugin: while the founding plugin is off, the op
-// says which switch turns it on; on, it gives the four documents, their
-// local chain, checked, and a search's passages, to anyone, an agent too.
+// says which switch turns it on; on, it gives the ten texts, the links
+// between them, their local chain, checked, and a search's passages, to
+// anyone, an agent too.
 func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
 	cfg := config.Default()
 	c := bareCore(t, cfg)
@@ -34,18 +37,18 @@ func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
 			t.Errorf("%s: %d blocks, SHA512 %q", d.ID, len(d.Blocks), d.SHA512)
 		}
 	}
-	if strings.Join(ids, ",") != "declaration,constitution,rights,foia" || r.Found != nil {
-		t.Errorf("docs %v, found %v", ids, r.Found)
+	if strings.Join(ids, ",") != "magna-carta,english-rights,virginia,declaration,articles,constitution,rights,udhr,foia,privacy" || r.Found != nil || len(r.Links) != len(founding.Links) {
+		t.Errorf("docs %v, found %v, %d links", ids, r.Found, len(r.Links))
 	}
 	// The texts are on the local chain, checked: one version, made by the
 	// first look, and no other by the next.
-	if ch := r.Chain; ch == nil || !ch.Verified || ch.Versions != 1 || !chain.Valid(ch.Head) || ch.Folder != c.paths.FoundingChain() {
+	if ch := r.Chain; ch == nil || !ch.Verified || ch.Versions != 1 || !chain.Valid(ch.Head) || ch.Folder != c.paths.Charters() || ch.Texts != 10 || ch.Links != len(founding.Links) {
 		t.Fatalf("chain: %+v", r.Chain)
 	}
 	head := r.Chain.Head
-	r, err = c.foundingOp(0, ipc.FoundingArgs{Log: 5})
-	if err != nil || r.Chain == nil || r.Chain.Head != head || len(r.Versions) != 1 || len(r.Versions[0].Files) != 4 {
-		t.Fatalf("again, with the log: %+v, %v", r.Versions, err)
+	r, err = c.foundingOp(0, ipc.FoundingArgs{Log: 5, Export: true})
+	if err != nil || r.Chain == nil || r.Chain.Head != head || len(r.Versions) != 1 || len(r.Versions[0].Files) != 10 || len(r.Export) != 1 || chain.Name([]byte(r.Export[0])) != head {
+		t.Fatalf("again, with the log and the export: %+v, %d exported, %v", r.Versions, len(r.Export), err)
 	}
 	r, err = c.foundingOp(0, ipc.FoundingArgs{Find: "  unreasonable searches and seizures  "})
 	if err != nil {
@@ -55,7 +58,45 @@ func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
 	for _, h := range r.Found {
 		where[h.Doc+": "+h.Where] = true
 	}
-	if !where["constitution: Amendments › Amendment IV"] || !where["rights: Amendments › Amendment IV"] || len(r.Found) != 2 || r.Chain != nil {
+	if !where["constitution: Amendments › Amendment IV"] || !where["rights: Amendments › Amendment IV"] || len(r.Found) != 2 || r.Chain != nil || r.Links != nil {
 		t.Errorf("found %v", r.Found)
+	}
+}
+
+// TestTheFirstBuildsFoundingChainMovesIn: a chain the first build kept at
+// chain/founding, in its first form, moves into chain/charters as the core
+// first looks, and the texts this build carries go on after its version.
+func TestTheFirstBuildsFoundingChainMovesIn(t *testing.T) {
+	cfg := config.Default()
+	cfg.Plugins.Founding = true
+	c := bareCore(t, cfg)
+	ts, err := founding.Texts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := founding.Version{Created: "2026-11-21T16:35:39Z", Format: founding.FormatFirst}
+	for _, x := range ts {
+		if x.ID == "declaration" || x.ID == "constitution" || x.ID == "rights" || x.ID == "foia" {
+			v.Documents = append(v.Documents, founding.Recorded{File: x.File, ID: x.ID, SHA512: chain.Name(x.Bytes), Text: string(x.Bytes), Title: x.Title})
+		}
+	}
+	b, err := chain.Canonical(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := chain.Store{Dir: c.paths.FoundingChainFirst()}
+	old, err := s.Put(b)
+	if err != nil || s.SetHead(old) != nil {
+		t.Fatal(err)
+	}
+	r, err := c.foundingOp(0, ipc.FoundingArgs{Log: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ch := r.Chain; !ch.Verified || ch.Versions != 2 || ch.Folder != c.paths.Charters() || len(r.Versions) != 2 || r.Versions[1].Name != old || r.Versions[0].Parent != old {
+		t.Errorf("chain %+v, versions %+v", r.Chain, r.Versions)
+	}
+	if _, err := os.Lstat(c.paths.FoundingChainFirst()); err == nil {
+		t.Error("the first build's folder stayed")
 	}
 }
