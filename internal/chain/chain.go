@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -198,43 +199,72 @@ func Parent(b []byte) (string, error) {
 // ErrNone says that no version has the name asked for.
 var ErrNone = errors.New("chain: no such version")
 
-// Store keeps versions in its folder: objects/<hex>.json, each a version's
-// canonical bytes, and HEAD, the newest's name. One process writes it, the
-// core; each file is put in place whole, so a reader never sees half of
-// one.
+// Store keeps versions in its folder: objects/<hex>.sealed, each a
+// version's canonical bytes sealed in the store's vault (vault.go), or
+// objects/<hex>.json, plain, in a store with no vault; and HEAD, the
+// newest's name. One process writes it, the core; each file is put in
+// place whole, so a reader never sees half of one.
 type Store struct {
 	Dir string
+	// Vault seals the versions Put keeps and opens the sealed ones Get
+	// reads (vault.go). A store with none reads plain versions only, and
+	// refuses to write where a vault is, so that nothing goes in plain
+	// beside sealed versions.
+	Vault *Vault
 }
 
-func (s Store) object(name string) string {
-	return filepath.Join(s.Dir, "objects", strings.TrimPrefix(name, Prefix)+".json")
+func (s Store) object(name, ext string) string {
+	return filepath.Join(s.Dir, "objects", strings.TrimPrefix(name, Prefix)+ext)
 }
 
-// Put keeps canonical bytes under their name and returns it. A version
-// that is there already is left as it is.
+// Put keeps canonical bytes under their name and returns it, sealed when
+// the store has its vault open. A version that is there already is left
+// as it is.
 func (s Store) Put(b []byte) (string, error) {
 	name := Name(b)
-	path := s.object(name)
-	if _, err := os.Stat(path); err == nil {
-		return name, nil
+	if s.Vault == nil {
+		if s.HasVault() {
+			return "", fmt.Errorf("%w: open it to keep a version", ErrLocked)
+		}
+		path := s.object(name, plainExt)
+		if _, err := os.Stat(path); err == nil {
+			return name, nil
+		}
+		return name, filetx.WriteFile(path, b, 0o600)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", err
+	// A sealed version is never replaced: one there already holds the
+	// same bytes, under another nonce.
+	err := filetx.Create(s.object(name, sealedExt), seal(s.Vault.aead, b, name), 0o600)
+	if errors.Is(err, fs.ErrExist) {
+		err = nil
 	}
-	return name, filetx.WriteFile(path, b, 0o600)
+	return name, err
 }
 
-// Get reads the version named, and refuses bytes that its name does not
-// match, as when a file was changed by hand.
+// Get reads the version named, opening it when it is sealed, and refuses
+// bytes that its name does not match, as when a file was changed by hand.
 func (s Store) Get(name string) ([]byte, error) {
 	if !Valid(name) {
 		return nil, fmt.Errorf("chain: %q is not a version's name", name)
 	}
-	b, err := os.ReadFile(s.object(name))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("%w: %s", ErrNone, Short(name))
-	}
-	if err != nil {
+	b, err := os.ReadFile(s.object(name, sealedExt))
+	switch {
+	case err == nil:
+		if s.Vault == nil {
+			return nil, fmt.Errorf("%w: version %s is sealed", ErrLocked, Short(name))
+		}
+		if b, err = unseal(s.Vault.aead, b, name); err != nil {
+			return nil, fmt.Errorf("chain: version %s doesn't open: it was changed after it was sealed, or sealed under another key", Short(name))
+		}
+	case errors.Is(err, fs.ErrNotExist):
+		b, err = os.ReadFile(s.object(name, plainExt))
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s", ErrNone, Short(name))
+		}
+		if err != nil {
+			return nil, err
+		}
+	default:
 		return nil, err
 	}
 	if Name(b) != name {
@@ -308,10 +338,12 @@ func (s Store) Find(prefix string) (string, error) {
 		return "", fmt.Errorf("chain: %q: give at least six hex digits of a version's name", prefix)
 	}
 	if len(h) == 2*sha512.Size {
-		if _, err := os.Stat(s.object(Prefix + h)); err != nil {
-			return "", fmt.Errorf("%w: %s", ErrNone, Short(h))
+		for _, ext := range []string{sealedExt, plainExt} {
+			if _, err := os.Stat(s.object(Prefix+h, ext)); err == nil {
+				return Prefix + h, nil
+			}
 		}
-		return Prefix + h, nil
+		return "", fmt.Errorf("%w: %s", ErrNone, Short(h))
 	}
 	files, err := os.ReadDir(filepath.Join(s.Dir, "objects"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -319,8 +351,12 @@ func (s Store) Find(prefix string) (string, error) {
 	}
 	var found []string
 	for _, f := range files {
-		name, ok := strings.CutSuffix(f.Name(), ".json")
-		if ok && strings.HasPrefix(name, h) && Valid(Prefix+name) {
+		name, ok := strings.CutSuffix(f.Name(), sealedExt)
+		if !ok {
+			name, ok = strings.CutSuffix(f.Name(), plainExt)
+		}
+		// A version half moved into the vault is there twice.
+		if ok && strings.HasPrefix(name, h) && Valid(Prefix+name) && !slices.Contains(found, Prefix+name) {
 			found = append(found, Prefix+name)
 		}
 	}

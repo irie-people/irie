@@ -188,8 +188,49 @@ type Book struct {
 	store chain.Store
 }
 
-// Open is the book kept in dir, which the first version makes.
+// Open is the book kept in dir, which the first version makes, with its
+// vault shut: it reads versions kept plain, as before the vault, and
+// writes only where there is no vault (OpenVault).
 func Open(dir string) Book { return Book{store: chain.Store{Dir: dir}} }
+
+// OpenVault is the book kept in dir with its vault open under kek, the
+// key the system keeps for it (chain.OpenVault): it seals each version it
+// keeps, and opens each it reads. Seal moves in the versions kept before
+// the vault.
+func OpenVault(dir string, kek []byte) (Book, error) {
+	v, err := chain.OpenVault(dir, kek)
+	if err != nil {
+		return Book{}, err
+	}
+	return Book{store: chain.Store{Dir: dir, Vault: v}}, nil
+}
+
+// Sealed says whether the book has its vault open.
+func (k Book) Sealed() bool { return k.store.Vault != nil }
+
+// Seal moves the versions kept plain, before the vault, into it, and says
+// how many it moved.
+func (k Book) Seal() (int, error) { return k.store.Seal() }
+
+// Export is every version's document, oldest first, as the exact
+// canonical bytes its name is the SHA-512 of (zen.md §9): what another
+// tool, such as Mycylic, reads to keep your zen's history, checking each
+// name as it goes.
+func (k Book) Export() ([]string, error) {
+	head, err := k.store.Head()
+	if err != nil || head == "" {
+		return nil, err
+	}
+	entries, err := k.store.Log(head, 0)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[len(entries)-1-i] = string(e.Bytes)
+	}
+	return out, nil
+}
 
 // Head is the newest version, and false before the first.
 func (k Book) Head() (ipc.ZenVersion, bool, error) {
@@ -296,3 +337,10 @@ var ErrNone = chain.ErrNone
 
 // IsNone says whether err is that no version was found.
 func IsNone(err error) bool { return errors.Is(err, chain.ErrNone) }
+
+// IsLocked says whether err is that the vault isn't open.
+func IsLocked(err error) bool { return errors.Is(err, chain.ErrLocked) }
+
+// IsWrongKey says whether err is that the key given doesn't open the
+// vault.
+func IsWrongKey(err error) bool { return errors.Is(err, chain.ErrWrongKey) }

@@ -15,6 +15,7 @@ import (
 	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/chain"
 	"github.com/irie-people/irie/internal/ipc"
+	"github.com/irie-people/irie/internal/keyring"
 )
 
 // chainUsage is the part of ctlUsage for the sidebar's chain (DESIGN
@@ -22,9 +23,10 @@ import (
 const chainUsage = `  ` + brand.Slug + ` ctl chain [--json]                the sidebar's chain: every change to how
                                          your sessions are organised, kept as a
                                          version named by its SHA-512, on this
-                                         computer only. Says where it is kept, how
-                                         many versions, the newest, and anything
-                                         wrong, such as a version that was changed
+                                         computer only, encrypted. Says where
+                                         it is kept, how many versions, the newest,
+                                         where its key is, and anything wrong, such
+                                         as a version changed or a wrong key
   ` + brand.Slug + ` ctl chain log [--json] [-n N]     the newest N versions (20), newest first:
                                          each one's name, when, what changed and
                                          its cards, groups and spaces
@@ -116,6 +118,9 @@ func printChainStatus(w io.Writer, r ipc.ChainResult) error {
 		fmt.Fprintf(w, "The sidebar's chain: %s in %s.\nNewest: %s\n", plural(r.Count, "version"), r.Dir, r.Head)
 	}
 	fmt.Fprintln(w, "It stays on this computer, and holds no one's name, account or machine: only ids and the names you gave.")
+	if words := vaultWords(r.Vault); words != "" {
+		fmt.Fprintln(w, words)
+	}
 	if r.Problem != "" {
 		fmt.Fprintf(w, "Problem: %s.\n", strings.TrimSuffix(r.Problem, "."))
 	}
@@ -296,4 +301,19 @@ func printChainRestore(w io.Writer, r ipc.ChainResult) error {
 		fmt.Fprintf(w, "Problem: %s.\n", strings.TrimSuffix(r.Problem, "."))
 	}
 	return nil
+}
+
+// vaultWords says how the chain is kept at rest, in plain words.
+func vaultWords(kept string) string {
+	const sealed = "Its versions are encrypted on disk (AES-256-GCM), under a key "
+	switch kept {
+	case keyring.KindKeychain:
+		return sealed + "sealed in turn by a key in your login Keychain (" + brand.Name + " vault: sidebar)."
+	case keyring.KindSecrets:
+		return sealed + "sealed in turn by a key in the Secret Service, your desktop's keyring."
+	case keyring.KindFile:
+		return sealed + "sealed in turn by a key in a file only you can read (keys/sidebar.key in " + brand.Name + "'s state folder, mode 0600), " +
+			"as this computer has no key store: anyone who can read your files can read the chain. A passphrase (Argon2id) is to come."
+	}
+	return ""
 }

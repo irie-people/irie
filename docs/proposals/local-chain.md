@@ -1,6 +1,6 @@
 # The sidebar as a local chain
 
-Date: 2026-11-21. Status: step 1, the chain on disk, is built ([DESIGN §4.23](../DESIGN.md)): SHA-512 versions, `irie ctl chain log`, `show`, `restore` and `head`. Step 2, the vault, is next; steps 3 and 4 are proposals. An agent (Claude Code) wrote it with the owner.
+Date: 2026-11-21. Status: steps 1 and 2 are built ([DESIGN §4.23](../DESIGN.md)): SHA-512 versions, `irie ctl chain log`, `show`, `restore` and `head`, sealed at rest with AES-256-GCM under a key the login Keychain or the Secret Service wraps (a file of yours alone where there is neither, until a passphrase step). Steps 3 and 4 are proposals. An agent (Claude Code) wrote it with the owner.
 
 The owner asked for three things:
 
@@ -61,7 +61,7 @@ The choices follow the strictest public suite, the NSA's CNSA 2.0, as of Novembe
 ## Steps
 
 1. **The chain on disk.** SHA-512 ids, `ctl chain log`, `show` and `restore`. Tests: one version per action, restore, and a tampered record caught.
-2. **The vault.** AES-256-GCM, with the key in the Keychain or the Secret Service, and an existing chain moved in. A test that nothing on disk reads without the key.
+2. **The vault.** AES-256-GCM, with the key in the Keychain or the Secret Service, and an existing chain moved in. A test that nothing on disk reads without the key. Built first for zen's versions (zen.md §4): `internal/chain`'s vault and `internal/keyring`, with the key in the Keychain on macOS and a file of the user's alone elsewhere. The Secret Service and a passphrase through Argon2id are still to come.
 3. **Peers.** Sealed versions (X25519 + ML-KEM-1024), ML-DSA-87 signatures, and heads compared and merged.
 4. **The anchoring hand-off,** off by default.
 
