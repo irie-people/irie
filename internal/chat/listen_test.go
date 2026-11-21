@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -72,18 +73,34 @@ func (s *srvConn) send(v any) {
 	s.frame(opText, b)
 }
 
+// close sends a close with code, then waits for the client's answer before
+// it hangs up, as a server should: a hang-up with the client's words still
+// unread ends the connection with a reset, which can lose the close on its
+// way.
 func (s *srvConn) close(code int) {
 	s.frame(opClose, binary.BigEndian.AppendUint16(nil, uint16(code)))
+	for {
+		if _, err := s.ws.ReadMessage(); err != nil {
+			return
+		}
+	}
+}
+
+// next is the client's next message, as JSON, or why none came: a *Closed
+// for the client's own close.
+func (s *srvConn) next() (map[string]any, error) {
+	b, err := s.ws.ReadMessage()
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	json.Unmarshal(b, &m)
+	return m, nil
 }
 
 // read is the client's next message, as JSON.
 func (s *srvConn) read() map[string]any {
-	b, err := s.ws.ReadMessage()
-	if err != nil {
-		return nil
-	}
-	var m map[string]any
-	json.Unmarshal(b, &m)
+	m, _ := s.next()
 	return m
 }
 
@@ -93,9 +110,12 @@ func dispatch(t string, s int, d any) map[string]any {
 
 // discordGateway is a stand-in for Discord's Gateway: the first connection
 // identifies, hears five messages, three of them for the bot or the
-// person, is beaten and closed resumably; the second resumes, hears a
-// mention it heard already, and closes with 4004, as for a token Discord
-// no longer takes.
+// person, asks for a heartbeat, which should carry the last sequence, and
+// closes resumably; the second resumes, hears a mention it heard already,
+// and closes with 4004, as for a token Discord no longer takes. Its
+// heartbeat interval is an hour, so the client's own beats neither come
+// during the test nor make it close the connection as a zombie, however
+// busy the machine; a zombie is TestDiscordZombie's.
 func discordGateway(t *testing.T, f *fakeDiscord) (got chan map[string]any) {
 	t.Helper()
 	got = make(chan map[string]any, 20)
@@ -103,7 +123,7 @@ func discordGateway(t *testing.T, f *fakeDiscord) (got chan map[string]any) {
 	var url string
 	gw := wsServer(t, func(s *srvConn) {
 		n := conns.Add(1)
-		s.send(map[string]any{"op": 10, "d": map[string]any{"heartbeat_interval": 40}})
+		s.send(map[string]any{"op": 10, "d": map[string]any{"heartbeat_interval": 3_600_000}})
 		got <- s.read()
 		mention := map[string]any{"id": "701", "channel_id": "201", "guild_id": guildID, "type": 0, "author": user("1", "alice", "Alice"),
 			"content": "Hi <@900>", "timestamp": "2026-11-21T12:00:00Z", "mentions": []any{user(botID, "acme-bot", "Acme Bot")}}
@@ -115,21 +135,36 @@ func discordGateway(t *testing.T, f *fakeDiscord) (got chan map[string]any) {
 			s.send(dispatch("MESSAGE_CREATE", 5, map[string]any{"id": "703", "channel_id": "600", "type": 0, "author": user("1", "alice", "Alice"), "content": "psst", "timestamp": "2026-11-21T12:02:00Z", "mentions": []any{}}))
 			s.send(dispatch("MESSAGE_CREATE", 6, map[string]any{"id": "704", "channel_id": "201", "guild_id": guildID, "type": 0, "author": user("2", "bob", ""), "content": "", "timestamp": "2026-11-21T12:03:00Z", "mentions": []any{user("7", "you", "You")}}))
 			s.send(dispatch("MESSAGE_CREATE", 7, map[string]any{"id": "705", "channel_id": "201", "guild_id": guildID, "type": 0, "author": user(botID, "acme-bot", "Acme Bot"), "content": "<@900> me", "timestamp": "2026-11-21T12:04:00Z", "mentions": []any{user(botID, "acme-bot", "Acme Bot")}}))
-			// The client's heartbeat carries the last sequence.
-			hb := s.read()
-			got <- hb
+			// Asked for, a heartbeat comes at once with the last sequence,
+			// since the client reads in order.
+			s.send(map[string]any{"op": 1})
+			s.c.SetReadDeadline(time.Now().Add(5 * time.Second))
+			got <- s.read()
+			s.c.SetReadDeadline(time.Time{})
 			s.send(map[string]any{"op": 11})
 			s.close(4000)
 			return
 		}
+		// No pause before the close: the client takes the messages in order.
 		s.send(dispatch("RESUMED", 8, nil))
 		s.send(dispatch("MESSAGE_CREATE", 9, mention))
-		time.Sleep(50 * time.Millisecond)
 		s.close(4004)
 	})
 	url = "ws://" + gw.Listener.Addr().String()
 	f.gateway = url
 	return got
+}
+
+// next is what the client said next, as a stand-in passed it on.
+func next(t *testing.T, got chan map[string]any) map[string]any {
+	t.Helper()
+	select {
+	case m := <-got:
+		return m
+	case <-time.After(5 * time.Second):
+		t.Fatal("the client said nothing more")
+		return nil
+	}
 }
 
 func TestDiscordGateway(t *testing.T) {
@@ -148,7 +183,7 @@ func TestDiscordGateway(t *testing.T) {
 	if !Auth(err) || !strings.Contains(err.Error(), "Reset Token") {
 		t.Fatalf("Listen = %v", err)
 	}
-	identify := <-got
+	identify := next(t, got)
 	if identify["op"] != float64(gwIdentify) {
 		t.Fatalf("first = %v", identify)
 	}
@@ -156,10 +191,10 @@ func TestDiscordGateway(t *testing.T) {
 	if d["token"] != fakeToken || d["intents"] != float64(intentGuilds|intentGuildMessages|intentDirectMessages) {
 		t.Errorf("identify = %v", d)
 	}
-	if hb := <-got; hb["op"] != float64(gwHeartbeat) || hb["d"] != float64(7) {
+	if hb := next(t, got); hb["op"] != float64(gwHeartbeat) || hb["d"] != float64(7) {
 		t.Errorf("heartbeat = %v", hb)
 	}
-	resume := <-got
+	resume := next(t, got)
 	if r, _ := resume["d"].(map[string]any); resume["op"] != float64(gwResume) || r["session_id"] != "sess1" || r["seq"] != float64(7) {
 		t.Errorf("resume = %v", resume)
 	}
@@ -179,6 +214,87 @@ func TestDiscordGateway(t *testing.T) {
 	// intent.
 	if !you.You || !you.Message.Hidden {
 		t.Errorf("the person's mention = %+v", you)
+	}
+}
+
+// TestDiscordZombie: an acknowledged heartbeat keeps the connection, and
+// one not acknowledged before the next is due means it's a zombie, as
+// Discord's documentation says; the client closes it with 4000, which keeps
+// the session, and resumes on a new one.
+func TestDiscordZombie(t *testing.T) {
+	listenWait = 10 * time.Millisecond
+	f := newFakeDiscord(t)
+	got := make(chan map[string]any, 20)
+	first := make(chan struct{})
+	var conns atomic.Int32
+	var url string
+	gw := wsServer(t, func(s *srvConn) {
+		if conns.Add(1) > 1 {
+			// What the first connection heard, its close too, goes first.
+			select {
+			case <-first:
+			case <-time.After(5 * time.Second):
+			}
+			s.send(map[string]any{"op": 10, "d": map[string]any{"heartbeat_interval": 3_600_000}})
+			got <- s.read()
+			s.close(4004)
+			return
+		}
+		defer close(first)
+		// READY goes with the hello, before the client identifies, so the
+		// session is the client's however slowly it reads.
+		s.send(map[string]any{"op": 10, "d": map[string]any{"heartbeat_interval": 100}})
+		s.send(dispatch("READY", 1, map[string]any{"session_id": "sess1", "resume_gateway_url": url}))
+		// The first heartbeat is answered, the second isn't: the client
+		// beats twice and closes when the third is due. One that beats on
+		// regardless is let go after its third.
+		beats := 0
+		for range 4 {
+			m, err := s.next()
+			var c *Closed
+			if errors.As(err, &c) {
+				m = map[string]any{"closed": c.Code}
+			}
+			got <- m
+			if err != nil {
+				return
+			}
+			if m["op"] == float64(1) {
+				if beats++; beats == 1 {
+					s.send(map[string]any{"op": 11})
+				}
+			}
+		}
+		s.close(4000)
+	})
+	url = "ws://" + gw.Listener.Addr().String()
+	f.gateway = url
+	if err := connect(t, f, fakeToken).(Listener).Listen(context.Background(), "7", func(Event) {}); !Auth(err) {
+		t.Fatalf("Listen = %v", err)
+	}
+	what := func(m map[string]any) string {
+		if c, ok := m["closed"]; ok {
+			return fmt.Sprint("close ", c)
+		}
+		switch m["op"] {
+		case float64(gwIdentify):
+			return "identify"
+		case float64(gwHeartbeat):
+			return "heartbeat"
+		case float64(gwResume):
+			d, _ := m["d"].(map[string]any)
+			return fmt.Sprint("resume ", d["session_id"], " at ", d["seq"])
+		}
+		return fmt.Sprint(m)
+	}
+	// Each connection passed on all it heard before it closed, and Listen
+	// ended at the last close.
+	var said []string
+	for len(got) > 0 {
+		said = append(said, what(<-got))
+	}
+	if s := strings.Join(said, ", "); s != "identify, heartbeat, heartbeat, close 4000, resume sess1 at 1" {
+		t.Errorf("the client said: %s", s)
 	}
 }
 

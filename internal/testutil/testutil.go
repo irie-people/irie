@@ -48,6 +48,9 @@ func Main(m *testing.M) {
 		os.Exit(code)
 	}
 	mainRan = true
+	// No test keeps a key in the user's Keychain (internal/keyring), even
+	// one that builds a core without a test Irie around it.
+	os.Setenv("IRIE_KEYCHAIN", "off")
 	sweep(filepath.Join("/tmp", shortPrefix+"*"), filepath.Join(os.TempDir(), buildPrefix+"*"))
 	code := m.Run()
 	if buildDir != "" {
@@ -289,6 +292,9 @@ func NewEnv(t *testing.T) *Env {
 	// Nor does it look over the machine, or restart itself, for Raphael
 	// (DESIGN §4.11): the user's own core does that once.
 	t.Setenv("IRIE_RAPHAEL", "off")
+	// Nor does it hold Raguel's council by itself (DESIGN §4.11): that
+	// starts a real Claude Code session.
+	t.Setenv("IRIE_RAGUEL", "off")
 	// Nor does it turn the Mac's sleep off and on for a closed lid (DESIGN
 	// §4.12): that would be the user's own Mac, and its lid.
 	t.Setenv("IRIE_LID", "off")

@@ -134,7 +134,7 @@ func TestStoreKeepsAChain(t *testing.T) {
 	if _, err := s.Find("000000"); !errors.Is(err, ErrNone) {
 		t.Errorf("a missing one: %v", err)
 	}
-	info, err := os.Stat(s.object(a))
+	info, err := os.Stat(s.object(a, plainExt))
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Errorf("mode %v %v", info, err)
 	}
@@ -146,7 +146,7 @@ func TestStoreRefusesAChangedVersion(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	a := put(t, s, map[string]any{"n": 1})
 	b := put(t, s, map[string]any{"n": 2, "parent": a})
-	if err := os.WriteFile(s.object(a), []byte(`{"n":9}`), 0o600); err != nil {
+	if err := os.WriteFile(s.object(a, plainExt), []byte(`{"n":9}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Get(a); err == nil || !strings.Contains(err.Error(), "changed after it was written") {

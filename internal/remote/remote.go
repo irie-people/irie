@@ -47,7 +47,7 @@ var Ops = []string{
 	ipc.OpHello, ipc.OpList, ipc.OpInput, ipc.OpComplete, ipc.OpConversation, ipc.OpSend,
 	ipc.OpPark, ipc.OpUnpark, ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.OpRename,
 	ipc.OpPriority, ipc.OpFreeze, ipc.OpThaw, ipc.OpRate, ipc.OpResult, ipc.OpRoute, ipc.OpDog,
-	ipc.OpReorder, ipc.OpScreen, ipc.OpKeys,
+	ipc.OpReorder, ipc.OpScreen, ipc.OpKeys, ipc.OpZen,
 }
 
 // Features are the features of hello, besides Ops, that a phone may use:

@@ -42,8 +42,11 @@ type Zen struct {
 	Profile ZenProfile `json:"profile"`
 	// Head names the newest version; "" before the first.
 	Head string `json:"head,omitempty"`
-	// On says an app shows zen now.
+	// On says a client shows zen now.
 	On bool `json:"on,omitempty"`
+	// Clients are the clients in zen now, as ZenArgs.Client names them,
+	// so one that restarts comes back into zen.
+	Clients []string `json:"clients,omitempty"`
 	// Trying names the step whose change is on trial.
 	Trying string `json:"trying,omitempty"`
 	// Offer is what zen offers now, if anything: one thing at a time,
@@ -87,11 +90,31 @@ const (
 	ZenNo  = "no"
 )
 
+// The clients that hold zen, ZenArgs' Client: each holds its own, and zen
+// is on while any does.
+const (
+	ZenApp     = "app"     // the Mac app, the default
+	ZenSidebar = "sidebar" // the terminal sidebar
+	ZenPhone   = "phone"   // the phone app
+)
+
+// ZenRenew is how often a client other than the app says again that it is
+// in zen. Its zen lapses ZenLapse after the last time it said so.
+const (
+	ZenRenew = time.Minute
+	ZenLapse = 2 * time.Minute
+)
+
 // ZenArgs ask for one thing; with none, the answer is zen as it is.
 type ZenArgs struct {
-	// On says zen started (true) or ended (false) in an app, showing
+	// On says zen started (true) or ended (false) in a client, showing
 	// Session, which it also says when zen goes on to another session.
+	// Client names the client: ZenApp, the Mac app, when empty;
+	// ZenSidebar; or ZenPhone. A client's off ends only its own zen. A
+	// client other than the app says on again, at least every
+	// ZenRenew, while it is in zen.
 	On      *bool  `json:"on,omitempty"`
+	Client  string `json:"client,omitempty"`
 	Session string `json:"session,omitempty"`
 	// WindowText is the window's text size in points, which a step that
 	// makes zen's text larger starts from while zen keeps the window's.
@@ -105,6 +128,8 @@ type ZenArgs struct {
 	Answer string `json:"answer,omitempty"`
 	// Log lists that many versions, newest first, up to MaxZenLog.
 	Log int `json:"log,omitempty"`
+	// Export gives every version's document, oldest first, in Docs.
+	Export bool `json:"export,omitempty"`
 	// Restore goes back to the zen of a version, named whole or by the
 	// start of its hash, as a new version.
 	Restore string `json:"restore,omitempty"`
@@ -116,6 +141,10 @@ type ZenResult struct {
 	Zen      Zen          `json:"zen"`
 	Version  *ZenVersion  `json:"version,omitempty"`
 	Versions []ZenVersion `json:"versions,omitempty"`
+	// Docs is each version's document, oldest first, as the exact
+	// canonical bytes its name is the SHA-512 of (zen.md §9), for
+	// another tool to check and keep.
+	Docs []string `json:"docs,omitempty"`
 }
 
 // ZenVersion is one version of your zen (zen.md §4).

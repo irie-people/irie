@@ -36,6 +36,7 @@ struct FoundingDoc: Decodable, Equatable, Identifiable {
         case "declaration": return "Declaration"
         case "constitution": return "Constitution"
         case "rights": return "Bill of Rights"
+        case "foia": return "FOIA"
         default: return title
         }
     }
@@ -50,6 +51,18 @@ struct FoundingHit: Decodable, Equatable {
 struct FoundingResult: Decodable {
     var docs: [FoundingDoc]?
     var found: [FoundingHit]?
+    var chain: FoundingChainInfo?
+}
+
+/// The documents' local chain, as the core checked it: each version holds
+/// every text and names the one before it.
+struct FoundingChainInfo: Decodable, Equatable {
+    var folder: String
+    var head: String?
+    var created: String?
+    var versions: Int
+    var verified: Bool
+    var problem: String?
 }
 
 // MARK: The model
@@ -77,6 +90,8 @@ final class FoundingModel {
     /// Why the last call failed, under the box.
     var problem: String?
     private(set) var loaded = false
+    /// The local chain, as the core checked it when the tab loaded.
+    private(set) var chain: FoundingChainInfo?
 
     @ObservationIgnored private var isFixture = false
     @ObservationIgnored private var asked = ""
@@ -100,11 +115,14 @@ final class FoundingModel {
         }
     }
 
-    /// Reads the documents: once, for they never change while Irie runs.
+    /// Reads the documents, and how their chain checks: once, for they
+    /// never change while Irie runs.
     func load() async {
         guard !isFixture, !loaded else { return }
         do {
-            docs = try await call(nil).docs ?? []
+            let r = try await call(nil)
+            docs = r.docs ?? []
+            chain = r.chain
             loaded = true
             problem = nil
         } catch {
@@ -170,6 +188,12 @@ final class FoundingModel {
                         blocks: [FoundingBlock(kind: "h3", text: "Amendment I"),
                                  FoundingBlock(kind: "text", text: "Congress shall make no law respecting an establishment of religion, or prohibiting the free exercise thereof; or abridging the freedom of speech, or of the press; or the right of the people peaceably to assemble, and to petition the Government for a redress of grievances.")]),
         ]
+        docs.append(FoundingDoc(id: "foia", title: "The Freedom of Information Act",
+                                about: "5 U.S.C. § 552, word for word as the United States Code sets it out.", sha512: String(repeating: "f18fc8dc", count: 16),
+                                blocks: [FoundingBlock(kind: "h2", text: "§ 552. Public information; agency rules, opinions, orders, records, and proceedings"),
+                                         FoundingBlock(kind: "text", text: "(a) Each agency shall make available to the public information as follows:")]))
+        chain = FoundingChainInfo(folder: "~/.local/state/\(Brand.slug)/chain/founding", head: "sha512:" + String(repeating: "9c1e40b7", count: 16),
+                                  created: "2026-11-21T12:00:00Z", versions: 1, verified: true, problem: nil)
         showing = "constitution"
         query = "choose"
         asked = "choose"
@@ -306,7 +330,7 @@ private struct FoundingPage: View {
                         FoundingBlockView(block: b, found: found.contains(i), current: f.target == i)
                             .id(i)
                     }
-                    FoundingPrint(doc: doc)
+                    FoundingPrint(doc: doc, chain: f.chain)
                         .padding(.top, 12)
                 }
                 .textSelection(.enabled)
@@ -374,13 +398,43 @@ private struct FoundingBlockView: View {
     }
 }
 
-/// The document's SHA-512, which shows a copy is this one, to copy whole.
+/// The document's SHA-512, which shows a copy is this one, to copy whole,
+/// and how the local chain that keeps every version of the texts checked.
 @MainActor
 private struct FoundingPrint: View {
     let doc: FoundingDoc
+    let chain: FoundingChainInfo?
     @State private var copied = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            fingerprint
+            if let c = chain {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: c.verified ? "link" : "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.verified ? Theme.muted : Theme.needs)
+                        .accessibilityHidden(true)
+                    Text(verbatim: Self.line(c))
+                        .font(Theme.font(11))
+                        .foregroundStyle(c.verified ? Theme.muted : Theme.needs)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .help(c.head ?? c.folder)
+                }
+            }
+        }
+    }
+
+    /// How the chain checked, in words.
+    static func line(_ c: FoundingChainInfo) -> String {
+        guard c.verified, let head = c.head else {
+            return "The local chain doesn’t check: " + (c.problem ?? "it can’t be read.")
+        }
+        let versions = c.versions == 1 ? "1 version" : "\(c.versions) versions"
+        return "On your local chain: \(versions), each checked; the newest is " + String(head.dropFirst("sha512:".count).prefix(12)) + "."
+    }
+
+    private var fingerprint: some View {
         HStack(spacing: 6) {
             Image(systemName: "checkmark.seal")
                 .font(.system(size: 11))

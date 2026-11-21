@@ -145,10 +145,16 @@ func (c *Core) spacesOp(a ipc.SpacesArgs) (ipc.SpacesResult, error) {
 	if a.Do != ipc.SpacesList {
 		c.saveSpaces()
 		c.log.Info("spaces", "do", a.Do, "space", cmp.Or(res.Space, a.Space))
+		// A version of the sidebar's chain, though no step (chain.go).
+		c.noteOrg(ipc.ChainWhat{Do: spacesDo[a.Do], Spaces: []string{cmp.Or(res.Space, a.Space)}})
 	}
 	res.Spaces = slices.Clone(c.spaces)
 	return res, nil
 }
+
+// spacesDo is what each change of the spaces is in the sidebar's chain.
+var spacesDo = map[string]string{ipc.SpacesNew: chainNewSpace, ipc.SpacesRename: chainRenameSpace,
+	ipc.SpacesMove: chainMoveSpace, ipc.SpacesRemove: chainRemoveSpace}
 
 // spaceName makes name fit to name a space other than id: one line, cut
 // to maxSpaceName, and numbered when another space has it in any case; a

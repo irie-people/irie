@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/irie-people/irie/internal/config"
@@ -25,7 +26,11 @@ func TestLocalEnvPinsEveryModel(t *testing.T) {
 		"CLAUDE_CODE_SUBAGENT_MODEL":               "qwen3.5:9b",
 		"CLAUDE_CODE_AUTO_MODE_SERVER":             "0",
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+		"CLAUDE_CODE_DISABLE_AUTO_MEMORY":          "1",
 		"CLAUDE_CODE_MAX_CONTEXT_TOKENS":           "65536",
+	}
+	if n := maxOutput(65536); n > 0 {
+		want["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = strconv.Itoa(n)
 	}
 	if !reflect.DeepEqual(env, want) {
 		t.Errorf("env = %v\nwant %v", env, want)
@@ -34,9 +39,25 @@ func TestLocalEnvPinsEveryModel(t *testing.T) {
 	if w := LocalEnv("m", "u", 131072)["CLAUDE_CODE_AUTO_COMPACT_WINDOW"]; w != "131072" {
 		t.Errorf("auto-compact window at 128k = %q", w)
 	}
-	// An unknown context sets neither.
-	if e := LocalEnv("m", "u", 0); e["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] != "" || e["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] != "" {
+	// An unknown context sets none of them.
+	if e := LocalEnv("m", "u", 0); e["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] != "" || e["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] != "" || e["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] != "" {
 		t.Errorf("unknown context: %v", e)
+	}
+}
+
+func TestALocalSessionKeepsRoomToWork(t *testing.T) {
+	// At min_context's 64k, Claude Code's own 32,000-token reply makes it
+	// keep 33k of the window free, half of it (DESIGN §6.1). Only a cap
+	// below what it counts of a reply leaves more room.
+	if n := maxOutput(65536); n <= 0 || n >= replyCounted {
+		t.Errorf("maxOutput(65536) = %d, want 1 to %d: Claude Code keeps %d free, as with no cap", n, replyCounted-1, replyCounted+keptFree)
+	}
+	// A cap never asks for more than Claude Code's own default, which
+	// would leave less room than none.
+	for _, context := range []int{8192, 32768, 65536, 131072, 262144, 1 << 20} {
+		if n := maxOutput(context); n > defaultReply {
+			t.Errorf("maxOutput(%d) = %d, above Claude Code's own %d", context, n, defaultReply)
+		}
 	}
 }
 
@@ -185,6 +206,60 @@ func TestALocalModelTakesEditsAndRunsTheSafeCommands(t *testing.T) {
 	argv, _, files := launch(t, defaultProfile(), "fix the tests")
 	if mode(argv) != "auto" || allow(files) != nil {
 		t.Errorf("Opus: --permission-mode %q, allowed %q", mode(argv), allow(files))
+	}
+}
+
+// A local model's session, in any mode, is refused the tools that start
+// subagents, each a conversation of its own on the few slots of the
+// model's server: one bench run on Dory that started three left all three
+// runs with nothing written in two hours. A Claude model's session keeps
+// them.
+func TestALocalModelStartsNoSubagents(t *testing.T) {
+	local := config.Default().Profiles["big"]
+	local.Model = "dory-4b"
+	denied := func(files map[string][]byte) []string {
+		var s struct {
+			Permissions *struct {
+				Deny []string `json:"deny"`
+			} `json:"permissions"`
+		}
+		if err := json.Unmarshal(files[SettingsFile], &s); err != nil {
+			t.Fatal(err)
+		}
+		if s.Permissions == nil {
+			return nil
+		}
+		return s.Permissions.Deny
+	}
+	for _, mode := range []string{"", "acceptEdits", "bypassPermissions", "plan"} {
+		p := local
+		p.PermissionMode = mode
+		_, _, files := launch(t, p, "fix the tests")
+		if got := denied(files); !reflect.DeepEqual(got, []string{"Agent", "Task", "Workflow"}) {
+			t.Errorf("mode %q: denied %q", mode, got)
+		}
+	}
+	// The spawn's own rules, such as an anonymous session's, come first.
+	s := spawnOf("fix the tests")
+	s.Deny = []string{"WebFetch"}
+	_, _, files := launchSpawn(t, local, s)
+	if got := denied(files); !reflect.DeepEqual(got, []string{"WebFetch", "Agent", "Task", "Workflow"}) {
+		t.Errorf("with the spawn's own rules: denied %q", got)
+	}
+	if !reflect.DeepEqual(s.Deny, []string{"WebFetch"}) {
+		t.Errorf("the spawn's rules changed: %q", s.Deny)
+	}
+	// So does a resumed one.
+	r := spawnOf("")
+	if _, _, files, err := (Harness{}).Resume(local, r); err != nil {
+		t.Fatal(err)
+	} else if got := denied(files); !slices.Contains(got, "Agent") {
+		t.Errorf("resumed: denied %q", got)
+	}
+	// A Claude model's session keeps its subagents.
+	_, _, files = launch(t, defaultProfile(), "fix the tests")
+	if got := denied(files); got != nil {
+		t.Errorf("Opus: denied %q", got)
 	}
 }
 

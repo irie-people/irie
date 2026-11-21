@@ -86,8 +86,12 @@ func TestDefaultsMatchDesign(t *testing.T) {
 	if got := c.Profiles["chaos"]; !reflect.DeepEqual(got, wantChaos) {
 		t.Errorf("profiles.chaos = %+v, want %+v", got, wantChaos)
 	}
-	if len(c.Profiles) != 7 {
-		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local, big, mikael and chaos", c.Profiles)
+	wantRaguel := Profile{Harness: "claude-code", Command: "claude", Model: "claude-opus-5-5", Effort: "high", PermissionMode: "auto", Args: []string{}, Env: map[string]string{}, Arch: "raguel"}
+	if got := c.Profiles["raguel"]; !reflect.DeepEqual(got, wantRaguel) {
+		t.Errorf("profiles.raguel = %+v, want %+v", got, wantRaguel)
+	}
+	if len(c.Profiles) != 8 {
+		t.Errorf("default profiles = %v, want claude, sonnet, haiku, local, big, mikael, raguel and chaos", c.Profiles)
 	}
 	r := c.Route
 	if !reflect.DeepEqual(r.Profiles, []string{"local", "haiku", "sonnet", "claude"}) || r.MinAccuracy != 0.85 || r.LocalMinAccuracy != 0.6 || r.PriorWeight != 10 ||
@@ -149,6 +153,7 @@ func TestDefaultsMatchDesign(t *testing.T) {
 		Mikael:  Mikael{On: true, Door: true, Good: []string{}},
 		Gabriel: Gabriel{On: true, Outside: true, Away: 5 * time.Minute, Word: 10 * time.Minute, Heavy: 50, Spare: GabrielSpare(), Boost: time.Hour, Guard: true},
 		Raphael: Raphael{On: true, Core: 2 * time.Minute, Every: 6 * time.Hour, Known: []string{}},
+		Raguel:  Raguel{On: true, Every: 0, Plans: 5, Folder: ""},
 	}); !reflect.DeepEqual(c.Arch, want) {
 		t.Errorf("arch = %+v, want %+v", c.Arch, want)
 	}
@@ -935,6 +940,34 @@ func TestArchGabrielFromTheFile(t *testing.T) {
 		"[arch.gabriel]\nspare = [\"\"]\n":  "arch.gabriel.spare[0]: is empty",
 		"[arch.gabriel]\nboost = \"13h\"\n": "arch.gabriel.boost = 13h0m0s: must be from 1m to 12h0m0s",
 		"[arch.gabriel]\nboost = \"10s\"\n": "arch.gabriel.boost = 10s",
+	} {
+		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want %q", body, err, want)
+		}
+	}
+}
+
+func TestArchRaguelFromTheFile(t *testing.T) {
+	c, err := Load(writeFile(t, "[arch.raguel]\nevery = \"168h\"\nplans = 3\nfolder = \"~/Notes/Council\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Raguel{On: true, Every: 168 * time.Hour, Plans: 3, Folder: "~/Notes/Council"}); c.Arch.Raguel != want {
+		t.Errorf("arch.raguel = %+v, want %+v", c.Arch.Raguel, want)
+	}
+	// +raguel runs as him, on Opus at high effort.
+	if p := c.Profiles["raguel"]; p.Arch != "raguel" || p.Model != "claude-opus-5-5" || p.Effort != "high" || p.PermissionMode != "auto" || p.Harness != "claude-code" {
+		t.Errorf("+raguel = %+v", p)
+	}
+	if _, err := Load(writeFile(t, "[arch.raguel]\nfolder = \"/home/alice/Council\"\nplans = 10\n")); err != nil {
+		t.Errorf("an absolute folder and 10 plans: %v", err)
+	}
+	for body, want := range map[string]string{
+		"[arch.raguel]\nplans = 0\n":             "arch.raguel.plans = 0: must be from 1 to 10",
+		"[arch.raguel]\nplans = 11\n":            "arch.raguel.plans = 11",
+		"[arch.raguel]\nevery = \"-1h\"\n":       "arch.raguel.every = -1h0m0s: must not be negative",
+		"[arch.raguel]\nfolder = \"Council\"\n":  `arch.raguel.folder = "Council": must be an absolute path`,
+		"[arch.raguel]\nfolder = \"~alice/x\"\n": `arch.raguel.folder = "~alice/x"`,
 	} {
 		if _, err := Load(writeFile(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: err = %v, want %q", body, err, want)

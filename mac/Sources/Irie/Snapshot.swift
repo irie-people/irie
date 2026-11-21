@@ -228,6 +228,35 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // Jammin's tab (JamminViews.swift): Spotify playing and Apple
+            // Music paused, then Spotify waiting to be linked, each in both
+            // modes; then the sheet that links Spotify, with a plain page
+            // for Spotify's. Every name is made up, the artwork a gradient.
+            let jamminPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.jamminPlugin.utf8))
+            for (base, scene, dark) in [("side-jammin", "spotify", false), ("side-jammin-dark", "spotify", true),
+                                        ("side-jammin-music", "music", false), ("side-jammin-music-dark", "music", true),
+                                        ("side-jammin-link", "spotify-link", false), ("side-jammin-link-dark", "spotify-link", true)] {
+                var plugin = jamminPlugin
+                if scene == "spotify-link" {
+                    plugin.parts[0].state = "needs"
+                    plugin.parts[0].detail = "No Spotify app yet: make one at Spotify's dashboard, then Link Spotify in the Jammin tab takes its Client ID."
+                }
+                store.plugins = withPanes.plugins + [plugin]
+                store.jammin.loadFixture(scene)
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: "jammin.tab")
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 1000)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
+            for (base, step, dark) in [("jammin-link-app", 1, false), ("jammin-link-app-dark", 1, true), ("jammin-link-signin", 2, false)] {
+                let sheet = JamminSignInSheet(fixture: true, step: step, clientID: step == 1 ? "0123456789abcdef0123456789abcdef" : "")
+                let (rep, _) = window(sheet.environment(store), dark: dark, width: 840, height: 700)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -1041,6 +1070,21 @@ enum Fixture {
        "detail": "Ready: 3 documents in the Founding tab, and the founding-documents skill in every session.",
        "summary": "Read the three in the Founding tab and search them whatever the spelling.",
        "pane": {"id": "founding.founding", "title": "Founding", "icon": "building.columns", "kind": "founding"}}
+     ]}
+    """#
+
+    /// The Jammin plugin, on, its Spotify part ready, with its tab.
+    static let jamminPlugin = #"""
+    {"name": "jammin", "title": "Jammin", "on": true,
+     "summary": "Your music beside your sessions: what plays on Spotify or in the Music app, its controls, your playlists and a search.",
+     "parts": [
+      {"name": "spotify", "title": "Spotify", "on": true, "state": "ready",
+       "detail": "Ready: signed in to Spotify as alice, through your Spotify app.",
+       "summary": "Spotify, through a Spotify app of yours.",
+       "pane": {"id": "jammin.tab", "title": "Jammin", "icon": "radio", "kind": "jammin"}},
+      {"name": "music", "title": "Apple Music", "on": true, "state": "ready",
+       "detail": "Ready: the Music app on this Mac.",
+       "summary": "The Music app on this Mac."}
      ]}
     """#
 

@@ -18,7 +18,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :open FILE[:LINE]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :jammin [play|pause|next|previous], :open FILE[:LINE]"
 
 // commandName finds each command's name in Commands.
 var commandName = regexp.MustCompile(`(?:^|, ):([a-z]+)`)
@@ -229,6 +229,16 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 			return Step{}, err
 		}
 		return step(OpYoink, a, nil)
+	case name == "jammin":
+		// :jammin says what plays on each source of the jam box; the Mac
+		// app opens its Jammin tab. :jammin play, pause, next or previous
+		// acts on the source playing, else the one on show, or on the
+		// source named first (docs/proposals/jammin.md).
+		a, err := jamminArgs(arg)
+		if err != nil {
+			return Step{}, err
+		}
+		return step(OpJammin, a, nil)
 	case name == "write":
 		// :write [TASK] starts a writing session in Variorum
 		// (docs/proposals/writers.md). The task may run on over more
@@ -629,6 +639,13 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[MailResult](result).Text, "\n")
 	case OpChat:
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[ChatResult](result).Text, "\n")
+	case OpJammin:
+		// A look answers; a control ran. The Mac app shows its Jammin tab
+		// for either.
+		r.Text = strings.TrimRight(as[JamminResult](result).Text, "\n")
+		if as[JamminArgs](st.Args).Do == JamLook {
+			r.Did = InputAnswered
+		}
 	case OpYoink:
 		// A download started ran; the rest answer. The Mac app shows its
 		// Yoink tab for either.
@@ -692,6 +709,43 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Text = "Done."
 	}
 	return r, nil
+}
+
+// jamminArgs reads :jammin's words: a control, play, pause, next or
+// previous, perhaps after the source it is for, spotify or music.
+func jamminArgs(arg string) (JamminArgs, error) {
+	var a JamminArgs
+	usage := ":jammin takes play, pause, next or previous, perhaps after spotify or music: :jammin pause, :jammin music next."
+	for _, w := range strings.Fields(strings.ToLower(arg)) {
+		src, do := "", ""
+		switch w {
+		case "spotify":
+			src = JamSpotify
+		case "music", "apple":
+			src = JamMusic
+		case "play", "resume":
+			do = JamPlay
+		case "pause", "stop":
+			do = JamPause
+		case "next", "skip":
+			do = JamNext
+		case "previous", "prev", "back":
+			do = JamPrevious
+		default:
+			return JamminArgs{}, Errorf(CodeBadArgs, "%s", usage)
+		}
+		switch {
+		case src != "" && (a.Do != "" || (a.Source != "" && a.Source != src)):
+			return JamminArgs{}, Errorf(CodeBadArgs, "%s", usage)
+		case src != "":
+			a.Source = src
+		case a.Do != "":
+			return JamminArgs{}, Errorf(CodeBadArgs, ":jammin takes one control at a time.")
+		default:
+			a.Do = do
+		}
+	}
+	return a, nil
 }
 
 // yoinkArgs reads :yoink's words: a link, and what to download of it,
