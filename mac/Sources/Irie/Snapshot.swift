@@ -287,6 +287,22 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // A Markdown file made pretty (CodePane.swift): its editor and its
+            // pretty view side by side, in both modes.
+            for (base, dark) in [("panes-code-pretty", false), ("panes-code-pretty-dark", true)] {
+                store.rolodex.loadFixture(session: Fixture.selected, front: .code)
+                _ = CodeDocs.shared.fixture(Fixture.codeOther, text: Fixture.readme, theme: CodeThemes.theme(CodeThemes.standard, dark: dark),
+                                            font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                store.rolodex.show(file: Fixture.codeOther, on: "fixturecode", in: Fixture.selected)
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact,
+                                                         DetailsPanel.minimizedKey: false, CodeThemes.defaultsKey: CodeThemes.standard, "codeTree": false,
+                                                         "codePretty": Fixture.codeOther],
+                                                        forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             // A Vault card (VaultPane.swift): the notepad's note as the vault
             // keeps it, with the vault's notes beside it, in both modes, the
             // Notes panel marking it kept there; and the card with no vault.
@@ -642,6 +658,38 @@ enum Fixture {
     static let codeFiles = ["README.md", "go.mod", "main.go", "internal/session/store.go", "internal/session/store_test.go",
                             "internal/session/cookie.go", "internal/login/login.go", "internal/login/login_test.go",
                             "web/index.html", "web/app.js", "web/style.css", "docs/setup.md"]
+    /// The fixture folder's README.md, made pretty in the code card's
+    /// snapshots.
+    static let readme = """
+    # docs-guide
+
+    Keeps a team's docs next to the code they describe, and says which ones fell behind.
+
+    ## What it does
+
+    - Finds the docs that name a function you changed
+    - Opens each one beside the code, at the line
+      - in the session's own code card
+    - Marks the ones left behind, so **nothing goes stale**
+
+    ## Try it
+
+    ```sh
+    go run . check ./...
+    ```
+
+    | Command | What it does |
+    |---|---|
+    | `check` | Lists the docs out of step with the code |
+    | `open` | Shows a doc beside the code it names |
+
+    > A doc that drifts is worse than none.
+
+    ---
+
+    Written for the fixture, about a made-up tool.
+    """
+
     static let code = """
     package session
 
