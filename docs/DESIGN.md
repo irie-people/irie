@@ -1355,7 +1355,7 @@ The notepad's frame names its note while the notepad is kept in the vault (`vaul
 - `irie plugins` prints each plugin and a line for each part, with ● ready, ! needs, · off and ○ held, so colour never carries the state alone. `irie plugins on|off PLUGIN [PART]` turns a plugin or a part on or off, through the core when it runs, which keeps the file's comments, else in the file.
 - `:plugins` in any task bar answers with the same lines.
 - `:markets` opens the Mac app's Markets window, as Window › Markets (⇧⌘M) does while the markets plugin is on; a client without the window says where the page is.
-- `:chat` says how the chat accounts stand and which drafts wait; the Mac app shows its Chat tab instead.
+- `:chat` says how the chat accounts stand, which drafts wait and the newest mentions not yet seen, a line each; the Mac app shows its Chat tab instead.
 - `:yoink [audio|720p] LINK` starts a download, and `:yoink` alone says how the downloads stand; the Mac app shows its Yoink tab for either, and a client without it says the text.
 - `:setup anon`, `:setup browser`, `:setup privacy` and `:setup extension` start a tool session that runs `irie setup NAME`, as `:setup local` does: the person answers each yes or no in its terminal. `irie setup privacy` turns the plugin on if it is off, then offers each part that isn't ready, one at a time, and starts the dead man's switch guide when asked.
 - The Mac app's menu bar has a Plugins menu: each plugin's switch, each part by name and state with a submenu of its sentence, its switch and Set Up…, and Plugin Settings…, which opens the tab below.
