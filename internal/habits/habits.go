@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irie-people/irie/internal/brand"
 	"github.com/irie-people/irie/internal/event"
 )
 
@@ -303,7 +304,7 @@ func (e *examples) list() []string {
 
 // Print writes the report for a person or an agent to read at a glance.
 func Print(w io.Writer, r Report) {
-	fmt.Fprintf(w, "Irie's journal, %s to %s: %d tool calls by %d sessions.\n", r.From, r.To, r.Calls, r.Sessions)
+	fmt.Fprintf(w, "%s's journal, %s to %s: %d tool calls by %d sessions.\n", brand.Name, r.From, r.To, r.Calls, r.Sessions)
 	fmt.Fprintln(w, "Each call is a round trip that reads the agent's whole context again, so calls are the cost.")
 	fmt.Fprintln(w, "\nCalls by kind (calls, sessions, minutes):")
 	for _, f := range r.Families {

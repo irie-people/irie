@@ -4,6 +4,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/irie-people/irie/internal/brand"
 )
 
 // Family names a shell command by its first program and, for a program
@@ -182,7 +184,7 @@ func segFamily(ws []string) string {
 		return "sed"
 	}
 	n := subs[p]
-	if p == "irie" {
+	if p == brand.Slug {
 		n = 1
 		if len(ws) > 1 && ws[1] == "ctl" {
 			n = 2
@@ -208,8 +210,9 @@ func segFamily(ws []string) string {
 // prog names a program: irie however it is reached, a repository tool
 // by its path in the repository, anything else by its base name.
 func prog(w string) string {
-	if w == "$IRIE_BIN" || w == "${IRIE_BIN}" || w == "irie" || strings.HasSuffix(w, "/bin/irie") {
-		return "irie"
+	bin := brand.Env("BIN")
+	if w == "$"+bin || w == "${"+bin+"}" || w == brand.Slug || strings.HasSuffix(w, "/bin/"+brand.Slug) {
+		return brand.Slug
 	}
 	if m := toolRE.FindStringSubmatch(w); m != nil {
 		return m[1]
