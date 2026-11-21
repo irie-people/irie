@@ -29,8 +29,8 @@ func TestNamesAreWellFormed(t *testing.T) {
 		t.Errorf("Bar = %q: want cheer or tips", Bar)
 	}
 	for _, tag := range strings.Split(Tags, ",") {
-		if tag != "" && tag != "novpn" && tag != "noprivacy" && tag != "nowriting" && tag != "nomarkets" && tag != "nomail" && tag != "nobitwarden" && tag != "noterms" && tag != "noextension" && tag != "noyoink" && tag != "nochat" && tag != "noobsidian" {
-			t.Errorf("Tags = %q: %q is no tag of Irie's; they are novpn, noprivacy, nowriting, nomarkets, nomail, nobitwarden, noterms, noextension, noyoink, nochat and noobsidian", Tags, tag)
+		if tag != "" && tag != "novpn" && tag != "noprivacy" && tag != "nowriting" && tag != "nomarkets" && tag != "nomail" && tag != "nobitwarden" && tag != "noterms" && tag != "noextension" && tag != "noyoink" && tag != "nochat" && tag != "noobsidian" && tag != "nofounding" {
+			t.Errorf("Tags = %q: %q is no tag of Irie's; they are novpn, noprivacy, nowriting, nomarkets, nomail, nobitwarden, noterms, noextension, noyoink, nochat, noobsidian and nofounding", Tags, tag)
 		}
 	}
 	if want := strings.ToUpper(strings.ReplaceAll(Slug, "-", "_")); EnvPrefix != want {

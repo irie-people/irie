@@ -37,7 +37,9 @@ var reaches = map[string]Reach{
 	OpAttachInfo: ReachRead, OpConversation: ReachRead, OpScreen: ReachRead, OpDog: ReachRead,
 	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
 	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
-	OpObsidian: ReachRead,
+	OpObsidian: ReachRead, OpFind: ReachRead,
+	// The founding documents' texts, built into the binary.
+	OpFounding: ReachRead,
 
 	// Steps of the history.
 	OpRename: ReachInside, OpPark: ReachInside, OpUnpark: ReachInside, OpPin: ReachInside,
@@ -53,7 +55,7 @@ var reaches = map[string]Reach{
 	OpPlugins: ReachInside, OpHelpers: ReachInside, OpGabriel: ReachInside, OpLocal: ReachInside, OpPreflight: ReachInside,
 	OpRate: ReachInside, OpLabel: ReachInside, OpPeers: ReachInside, OpContext: ReachInside, OpShow: ReachInside,
 	OpFlip: ReachInside, OpCard: ReachInside, OpPane: ReachInside, OpSizes: ReachInside, OpHook: ReachInside,
-	OpStatus: ReachInside, OpMaterialize: ReachInside,
+	OpStatus: ReachInside, OpMaterialize: ReachInside, OpZen: ReachInside,
 
 	// What leaves Irie.
 	OpSpawn: ReachOutside, OpFork: ReachOutside, OpBench: ReachOutside, OpTool: ReachOutside,
