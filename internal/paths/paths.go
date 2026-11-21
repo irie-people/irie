@@ -108,10 +108,22 @@ func (p Paths) Cards() string                 { return filepath.Join(p.State, "c
 func (p Paths) RouteLabels() string  { return filepath.Join(p.State, "route-labels.jsonl") }
 func (p Paths) RouteVectors() string { return filepath.Join(p.State, "route-vectors.json") }
 
+// FindVectors holds the embeddings of the sessions' tasks and of what their
+// agents said, which irie ctl find ranks them by (DESIGN §4.5).
+func (p Paths) FindVectors() string { return filepath.Join(p.State, "find-vectors.json") }
+
 // Notepad is the person's notes for later, and NotepadCopies the folder of
 // its copies, one a day (DESIGN §4.20). They are the person's own words, so
 // they go with the data, not the state.
-func (p Paths) Notepad() string       { return filepath.Join(p.Data, "notepad.json") }
+func (p Paths) Notepad() string { return filepath.Join(p.Data, "notepad.json") }
+
+// Zen is your zen's versions (docs/proposals/zen.md §4): yours, as your
+// themes and layouts are, so it sits with them.
+func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
+
+// ZenState is how far along zen's path you are, and what a restarted core
+// keeps of zen (internal/core/zen.go).
+func (p Paths) ZenState() string      { return filepath.Join(p.State, "zen.json") }
 func (p Paths) NotepadCopies() string { return filepath.Join(p.Data, "backups", "notepad") }
 
 // VaultNotes is what the core knew of the notepad's note in the Obsidian

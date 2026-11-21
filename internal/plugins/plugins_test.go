@@ -135,8 +135,10 @@ func TestPrivacyOffTurnsEveryPartOff(t *testing.T) {
 		if c.Name == "dead-mans-switch" && (c.On || !strings.Contains(c.Why, "privacy plugin is off")) {
 			t.Errorf("the guide's skill = %+v", c)
 		}
-		// The chat plugin's skill waits for an account to write for.
-		if c.Name != "dead-mans-switch" && !c.On && c.Why != "no chat account yet" {
+		// Another plugin's skill may be out for its own reason: the chat
+		// plugin's waits for an account to write for, and the founding
+		// documents' plugin is off by default.
+		if c.Name != "dead-mans-switch" && !c.On && c.Why != "no chat account yet" && !strings.Contains(c.Why, "founding plugin is off") {
 			t.Errorf("%s left out: %s", c.Name, c.Why)
 		}
 	}
