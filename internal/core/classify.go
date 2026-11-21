@@ -277,7 +277,7 @@ func (c *Core) fillLabels() {
 						l.list[j].Vec = route.Unit(vs[i])
 					}
 				}
-				if err := writeVectors(c.paths.RouteVectors(), l.model, l.list); err != nil {
+				if err := writeVectors(c.paths.RouteVectors(), l.model, l.vectors()); err != nil {
 					c.log.Warn("labels", "err", err)
 				}
 			}
@@ -365,8 +365,8 @@ func appendLabels(path string, ls []ipc.Label) error {
 	return f.Close()
 }
 
-// vectorFile keeps the labelled tasks' embeddings by one model, by the
-// task's fingerprint: little-endian float32s, in base64.
+// vectorFile keeps embeddings by one model, by their texts' keys, as the
+// labelled tasks' fingerprints: little-endian float32s, in base64.
 type vectorFile struct {
 	Model   string            `json:"model"`
 	Vectors map[string]string `json:"vectors"`
@@ -397,18 +397,26 @@ func readVectors(path, model string) map[string][]float32 {
 	return out
 }
 
-// writeVectors keeps the embeddings of the labelled tasks that have one.
-func writeVectors(path, model string, ls []route.Labelled) error {
-	f := vectorFile{Model: model, Vectors: map[string]string{}}
-	for _, x := range ls {
-		if x.Vec == nil {
-			continue
+// vectors are the labelled tasks' embeddings, by the task's fingerprint.
+func (l *routeLabels) vectors() map[string][]float32 {
+	out := map[string][]float32{}
+	for _, x := range l.list {
+		if x.Vec != nil {
+			out[route.Fingerprint(x.Text)] = x.Vec
 		}
-		raw := make([]byte, 4*len(x.Vec))
-		for i, v := range x.Vec {
+	}
+	return out
+}
+
+// writeVectors keeps embeddings by model, by their texts' keys.
+func writeVectors(path, model string, vs map[string][]float32) error {
+	f := vectorFile{Model: model, Vectors: make(map[string]string, len(vs))}
+	for k, vec := range vs {
+		raw := make([]byte, 4*len(vec))
+		for i, v := range vec {
 			binary.LittleEndian.PutUint32(raw[4*i:], math.Float32bits(v))
 		}
-		f.Vectors[route.Fingerprint(x.Text)] = base64.StdEncoding.EncodeToString(raw)
+		f.Vectors[k] = base64.StdEncoding.EncodeToString(raw)
 	}
 	b, err := json.Marshal(f)
 	if err != nil {

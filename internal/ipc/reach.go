@@ -37,7 +37,7 @@ var reaches = map[string]Reach{
 	OpAttachInfo: ReachRead, OpConversation: ReachRead, OpScreen: ReachRead, OpDog: ReachRead,
 	OpRebuilds: ReachRead, OpLearn: ReachRead, OpPerf: ReachRead, OpResult: ReachRead,
 	OpRoute: ReachRead, OpReady: ReachRead, OpArch: ReachRead, OpLink: ReachRead,
-	OpObsidian: ReachRead,
+	OpObsidian: ReachRead, OpFind: ReachRead,
 	// The founding documents' texts, built into the binary.
 	OpFounding: ReachRead,
 

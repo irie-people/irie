@@ -135,6 +135,7 @@ type Core struct {
 
 	outcomes   map[string]*outcome   // every session's route and outcome, those gone included
 	labels     routeLabels           // the tasks given a class, which the router sorts by (classify.go); its own lock
+	finds      findIndex             // the sessions' embeddings, which find ranks them by (find.go); its own lock
 	limits     map[string]time.Time  // when each model family's own usage limit last stopped a turn, such as fable's (fallback.go)
 	order      []string              // the list's order from the top, which the user sets (order.go)
 	spaces     []ipc.Space           // the spaces, the first first (spaces.go)
@@ -888,7 +889,7 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 		return ipc.HelloResult{Version: c.version, API: ipc.API, Features: builtFeatures([]string{
 			ipc.OpHello, ipc.OpList, ipc.OpSubscribe, ipc.OpSpawn, ipc.OpShow, ipc.OpHook, ipc.OpComplete,
 			ipc.OpAttachInfo, ipc.OpMove, ipc.OpConversation, ipc.OpSend, ipc.OpContinue, ipc.OpRename, ipc.OpFlip,
-			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpResult, ipc.OpTool,
+			ipc.OpPreflight, ipc.OpLocal, ipc.OpStatus, ipc.OpRate, ipc.OpRoute, ipc.OpLabel, ipc.OpFind, ipc.OpResult, ipc.OpTool,
 			ipc.OpClose, ipc.OpReopen, ipc.OpUndo, ipc.OpRedo, ipc.FeatureUndoConfirm, ipc.FeatureSpawnModel, ipc.FeatureSpawnTop, ipc.OpTheme,
 			ipc.OpFreeze, ipc.OpThaw, ipc.OpPriority, ipc.OpReorder, ipc.OpDog, ipc.OpConfig,
 			ipc.OpPark, ipc.OpUnpark, ipc.OpPin, ipc.OpUnpin, ipc.OpStopSub, ipc.OpSpaces, ipc.OpSpace, ipc.OpGroup, ipc.OpInput, ipc.OpTrod, ipc.OpGabriel, ipc.OpArch, ipc.OpRaphael, ipc.FeatureWatch, ipc.OpScreen, ipc.FeatureScreenLive, ipc.OpKeys, ipc.OpPair, ipc.OpReady,
@@ -1303,6 +1304,12 @@ func (c *Core) Call(op string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return c.label(a)
+	case ipc.OpFind:
+		var a ipc.FindArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return c.find(a)
 	case ipc.OpResult:
 		var a ipc.ResultArgs
 		if err := decode(raw, &a); err != nil {

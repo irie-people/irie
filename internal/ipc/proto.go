@@ -51,6 +51,9 @@ const (
 	// OpLabel gives tasks their classes, which the router sorts new tasks
 	// by (DESIGN §6.4).
 	OpLabel = "label"
+	// OpFind looks sessions up by what they did: their names, their tasks
+	// and what their agents said (DESIGN §4.5).
+	OpFind = "find"
 	// OpClose ends a session's agent and removes its row; OpReopen, its
 	// undo, carries the session on again (DESIGN §2.4, §4.5).
 	OpClose  = "close"
@@ -1252,6 +1255,50 @@ type LabelResult struct {
 	Sorting  bool   `json:"sorting"`
 	Model    string `json:"model,omitempty"`
 	Note     string `json:"note,omitempty"` // why it does not sort by them yet
+}
+
+// FindArgs look sessions up by what they did (DESIGN §4.5).
+type FindArgs struct {
+	Query string `json:"query"`
+	Limit int    `json:"limit,omitempty"` // how many to show; 5 when 0
+	// From is the session that asks, which is left out: its own task has
+	// the words it looks up.
+	From string `json:"from,omitempty"`
+}
+
+// FindResult is the sessions most like what was looked up, the likeliest
+// first.
+type FindResult struct {
+	Found []Found `json:"found"`
+	// Close says some session is close to what was looked up; else Found
+	// holds the nearest few.
+	Close bool `json:"close"`
+	// Meaning says they were ranked by their meaning, by route.embed's
+	// model, as well as by their words.
+	Meaning bool `json:"meaning"`
+	// Reading counts the sessions the model has yet to read, which rank by
+	// their words alone until it has.
+	Reading int    `json:"reading,omitempty"`
+	Note    string `json:"note,omitempty"` // why meaning did not rank them, when it did not, and words alone did
+}
+
+// Found is a session find found.
+type Found struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// State is open, closed, lost (closed with Irie's tmux server, as in
+	// a restart), or old: closed past what reopen reaches.
+	State  string    `json:"state"`
+	Closed time.Time `json:"closed,omitzero"`
+	Reopen bool      `json:"reopen"` // irie ctl reopen can bring it back
+	// Close says it is near what was looked up: by meaning, or by having
+	// every word.
+	Close  bool    `json:"close"`
+	Cosine float64 `json:"cosine,omitempty"` // that of its nearer text, its task or what its agent said
+	Words  int     `json:"words"`            // the words looked up that it has
+	Task   string  `json:"task"`             // its task, cut
+	Said   string  `json:"said,omitempty"`   // the start of what its agent said at the end of its last turn
+	File   string  `json:"file,omitempty"`   // where all of that is kept
 }
 
 // ResultArgs ask for what a session's agent said at the end of its last
