@@ -13,3 +13,5 @@ const foundingBuilt = false
 func (c *Core) foundingOp(int, ipc.FoundingArgs) (ipc.FoundingResult, error) {
 	return ipc.FoundingResult{}, notBuilt("The founding documents plugin")
 }
+
+func (c *Core) recordFoundingAtStart() {}

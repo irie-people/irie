@@ -443,6 +443,8 @@ func Run(o Options) error {
 	go c.watchVaultNotes()
 	// Terms in short's page, for the Mac app's Terms tab (terms.go).
 	go c.serveTerms(context.Background())
+	// The founding documents' texts, on their local chain (founding.go).
+	go c.recordFoundingAtStart()
 	// The chat plugin's mentions and DMs as they come (chat.go).
 	go c.chatListen(context.Background())
 	// Raphael's look at the core's own loop (watchCore) counts from here.
