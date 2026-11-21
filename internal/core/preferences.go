@@ -37,7 +37,7 @@ func codeNote(x *session) string {
 // along. The caller holds c.mu.
 func (c *Core) startNote(x *session) string {
 	var notes []string
-	for _, n := range []string{c.delegateHint(x), codeNote(x), anonNote(x), c.playbookNote(x), preferencesNote(c.cfg().Spawn.Preferences)} {
+	for _, n := range []string{c.delegateHint(x), codeNote(x), anonNote(x), c.playbookNote(x), preferencesNote(c.cfg().Spawn.Preferences), c.zenStartNote(x)} {
 		if n != "" {
 			notes = append(notes, n)
 		}

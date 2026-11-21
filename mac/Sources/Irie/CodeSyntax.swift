@@ -871,6 +871,7 @@ private enum Lex {
         static let fence: UInt8 = 11     // Markdown's ``` or ~~~; kind: 1 or 2; data: its length
         static let front: UInt8 = 12     // Markdown's front matter
         static let scalar: UInt8 = 13    // YAML's | and >; data: the indent its lines pass
+        static let remark: UInt8 = 14    // Obsidian's %% comment over lines
     }
 
     /// String kinds, in SyntaxState.kind.
@@ -2703,7 +2704,10 @@ private enum Lex {
     // MARK: Markdown
 
     /// Markdown: headings, emphasis, code, links, lists and quotes, fenced
-    /// code, HTML comments and front matter.
+    /// code, HTML comments and front matter; and what Obsidian adds to it
+    /// (Obsidian Flavored Markdown): [[links]] and ![[embeds]], #tags,
+    /// ==highlights==, %%comments%%, a ^block identifier at a line's end
+    /// and a callout's > [!kind].
     static func markdown(_ s: UnsafePointer<UInt16>, _ n: Int, _ st: inout SyntaxState, _ out: inout SyntaxSink) {
         let first = st.outer == 0
         st.outer = 1
@@ -2733,6 +2737,17 @@ private enum Lex {
             out.add(0, e + 3, .comment)
             st.mode = 0
             inline(s, e + 3, n, &st, &out)
+            return
+        }
+        if st.mode == Mode.remark {
+            let e = find(s, 0, n, "%%")
+            if e < 0 {
+                out.add(0, n, .comment)
+                return
+            }
+            out.add(0, e + 2, .comment)
+            st.mode = 0
+            inline(s, e + 2, n, &st, &out)
             return
         }
         if st.mode == Mode.front {
@@ -2791,10 +2806,23 @@ private enum Lex {
             }
         }
         var i = ind
+        var quoted = false
         while i < n && s[i] == 62 {
             out.add(i, i + 1, .keyword)
             i += 1
+            quoted = true
             while i < n && isSpace(s[i]) { i += 1 }
+        }
+        // A callout's head: > [!note], folding with + or -.
+        if quoted && i + 2 < n && s[i] == 91 && s[i + 1] == 33 {
+            var e = i + 2
+            while e < n && s[e] != 93 && !isSpace(s[e]) { e += 1 }
+            if e < n && s[e] == 93 && e > i + 2 {
+                e += 1
+                if e < n && (s[e] == 43 || s[e] == 45) { e += 1 }
+                out.add(i, e, .keyword)
+                i = e
+            }
         }
         if i < n {
             let d = s[i]
@@ -2910,6 +2938,68 @@ private enum Lex {
                 out.add(i, found, .emphasis)
                 i = found
                 continue
+            }
+            // Obsidian's [[link]] and ![[embed]], to its ]] on the line.
+            let w = c == 33 ? i + 1 : i
+            if (c == 91 || c == 33) && w + 1 < n && s[w] == 91 && s[w + 1] == 91 && none & (1 << 19) == 0 {
+                let e = find(s, w + 2, n, "]]")
+                if e > w + 2 {
+                    out.add(i, e + 2, .link)
+                    i = e + 2
+                    continue
+                }
+                if e < 0 { none |= 1 << 19 }
+            }
+            // ==highlighted==, and %%a comment%%, which may go on over lines.
+            if (c == 61 || c == 37) && i + 1 < n && s[i + 1] == c {
+                let bit: UInt32 = c == 61 ? 1 << 20 : 1 << 21
+                let e = none & bit != 0 ? -1 : find(s, i + 2, n, c == 61 ? "==" : "%%")
+                if c == 37 {
+                    if e < 0 {
+                        out.add(i, n, .comment)
+                        st.mode = Mode.remark
+                        return
+                    }
+                    out.add(i, e + 2, .comment)
+                    i = e + 2
+                    continue
+                }
+                if e > i + 2 && !isSpace(s[i + 2]) {
+                    out.add(i, e + 2, .emphasis)
+                    i = e + 2
+                    continue
+                }
+                if e < 0 { none |= bit }
+                i += 2
+                continue
+            }
+            // A #tag: letters, digits, _ - and /, at least one of them no
+            // digit, after a space or at the line's start.
+            if c == 35 && (i == 0 || isSpace(s[i - 1])) {
+                var e = i + 1, word = false
+                while e < n {
+                    let d = s[e]
+                    guard isAlnum(d) || d == 95 || d == 45 || d == 47 || d > 127 else { break }
+                    if !isDigit(d) { word = true }
+                    e += 1
+                }
+                if word {
+                    out.add(i, e, .tag)
+                    i = e
+                    continue
+                }
+            }
+            // A ^block identifier, the last word of the line.
+            if c == 94 && i > 0 && isSpace(s[i - 1]) && i + 1 < n {
+                var e = i + 1
+                while e < n && (isAlnum(s[e]) || s[e] == 45) { e += 1 }
+                var t = e
+                while t < n && isSpace(s[t]) { t += 1 }
+                if e > i + 1 && t == n {
+                    out.add(i, e, .comment)
+                    i = n
+                    continue
+                }
             }
             if c == 91 || (c == 33 && i + 1 < n && s[i + 1] == 91) {
                 let e = link(s, c == 33 ? i + 1 : i, n, &none)

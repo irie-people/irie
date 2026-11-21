@@ -267,12 +267,23 @@ struct TerminalArea: View {
         // The notice on show (Notices.swift): here, at the top of the
         // working area, and never over the task bar.
         .overlay(alignment: .topTrailing) {
-            NoticeToast()
-                .padding(.top, 20)
-                .padding(.trailing, 24)
-                .padding(.leading, 48)
+            VStack(alignment: .trailing, spacing: 10) {
+                NoticeToast()
+                // What zen offers, one thing at a time, under any notice
+                // and over the terminal's oldest lines, never its prompt
+                // (ZenCalm.swift).
+                if zen != nil, let o = store.zen.offer {
+                    ZenOfferBubble(offer: o)
+                        .transition(.opacity)
+                        .id("\(o.id) \(o.kind)")
+                }
+            }
+            .padding(.top, 20)
+            .padding(.trailing, 24)
+            .padding(.leading, 48)
         }
         .animation(.easeOut(duration: 0.15), value: store.notice)
+        .animation(.easeOut(duration: 0.2), value: store.zen.offer)
         // For a moment as zen starts, how to leave it (Zen.swift), over the
         // terminal's top.
         .overlay(alignment: .top) {
@@ -331,9 +342,16 @@ struct TerminalArea: View {
         return part
             .overlay(alignment: .topLeading) {
                 if zen != nil {
-                    ZenBubble()
-                        .padding(.top, 10)
-                        .padding(.leading, 12)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ZenBubble()
+                        // Another session that would like you, softly
+                        // (ZenCalm.swift); Keep Watch lists them.
+                        if zen != .watch {
+                            ZenOthersLine()
+                        }
+                    }
+                    .padding(.top, 10)
+                    .padding(.leading, 12)
                 }
             }
             .padding(margins)

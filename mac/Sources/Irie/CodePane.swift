@@ -26,6 +26,9 @@ struct CodePane: View {
     @State private var hovered: String?
     /// The session's folder as a tree beside the file, for every code card.
     @AppStorage("codeTree") private var tree = false
+    /// The Markdown files made pretty beside their editor, by path, one a
+    /// line: the newest 200.
+    @AppStorage("codePretty") private var prettyPaths = ""
 
     private var theme: CodeTheme { CodeThemes.theme(themeID, dark: scheme == .dark) }
     private var font: NSFont { NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular) }
@@ -120,12 +123,26 @@ struct CodePane: View {
         case .loading:
             ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready, .missing:
-            // An editor of its own for each file, so another file never
-            // shows in one bound to the last.
-            CodeEditorView(doc: doc, theme: t, fontSize: fontSize, mark: NSColor(Theme.agent(slot: pane.slot)),
-                           focusToken: token, takesKeysOnStart: shows && keys, shows: shows,
-                           goTo: store.rolodex.goTo[pane.id], caret: caret, actions: actions(doc))
-                .id(ObjectIdentifier(doc))
+            if doc.language == .markdown {
+                // A Markdown file keeps its editor in one place whether it is
+                // made pretty or not, so turning that on or off never starts
+                // the editor over: the pretty view beside it when the card
+                // is wide, under it when narrow, and the typing goes on.
+                GeometryReader { geo in
+                    let wide = geo.size.width >= 620
+                    let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                    layout {
+                        editor(doc, t).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if isPretty(doc.path) {
+                            Rectangle().fill(Color(nsColor: t.gutterInk).opacity(0.22))
+                                .frame(width: wide ? 1 : nil, height: wide ? nil : 1)
+                            MarkdownPreview(doc: doc, theme: t).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                }
+            } else {
+                editor(doc, t)
+            }
         case .notText:
             note("\(doc.name) isn’t text this card can edit.", t, finder: doc.path)
         case .tooBig:
@@ -135,8 +152,35 @@ struct CodePane: View {
         }
     }
 
+    /// An editor of its own for each file, so another file never shows in one
+    /// bound to the last.
+    private func editor(_ doc: CodeDocument, _ t: CodeTheme) -> some View {
+        CodeEditorView(doc: doc, theme: t, fontSize: fontSize, mark: NSColor(Theme.agent(slot: pane.slot)),
+                       focusToken: token, takesKeysOnStart: shows && keys, shows: shows,
+                       goTo: store.rolodex.goTo[pane.id], caret: caret, actions: actions(doc))
+            .id(ObjectIdentifier(doc))
+    }
+
+    private func isPretty(_ path: String) -> Bool {
+        prettyPaths.split(separator: "\n").contains { $0 == path }
+    }
+
+    /// Makes a Markdown file pretty beside its editor, or plain again; each
+    /// file keeps its choice, the newest 200 of them.
+    private func togglePretty(_ path: String) {
+        var paths = prettyPaths.split(separator: "\n").map(String.init)
+        if let i = paths.firstIndex(of: path) {
+            paths.remove(at: i)
+        } else {
+            paths.append(path)
+            if paths.count > 200 { paths.removeFirst(paths.count - 200) }
+        }
+        prettyPaths = paths.joined(separator: "\n")
+    }
+
     private func actions(_ doc: CodeDocument) -> CodeActions {
         var a = CodeActions()
+        if doc.language == .markdown { a.pretty = { togglePretty(doc.path) } }
         a.save = { Task { await doc.save() } }
         a.quickOpen = { finding = true }
         a.goToLine = { going = true }
@@ -236,6 +280,12 @@ struct CodePane: View {
             Button("Go to Line…") { going = true }.disabled(pane.file == nil)
             if let p = pane.file {
                 Divider()
+                if CodeDocs.shared.existing(p)?.language == .markdown {
+                    // The file drawn as the conversation draws Markdown,
+                    // beside its editor; ⇧⌘V in the editor too.
+                    Toggle("Make It Pretty", isOn: Binding(get: { isPretty(p) }, set: { _ in togglePretty(p) }))
+                    Divider()
+                }
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)]) }
                 Button("Copy Path") {
                     NSPasteboard.general.clearContents()
@@ -257,7 +307,7 @@ struct CodePane: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .foregroundStyle(Color(nsColor: t.gutterActiveInk))
-        .help("Open, go to a line, code colours")
+        .help("Open, go to a line, make Markdown pretty, code colours")
     }
 
     /// Where the file is, what came from outside lately, the caret's place,
@@ -383,6 +433,48 @@ struct CodePane: View {
 }
 
 /// A dot in a colour before a label's words.
+/// A Markdown file made pretty: drawn as the conversation draws Markdown
+/// (Markdown.swift), in the card's own colours, a beat behind the typing so
+/// typing stays quick. It reads the document, so it shows what is typed
+/// before it is saved.
+private struct MarkdownPreview: View {
+    let doc: CodeDocument
+    let theme: CodeTheme
+    @State private var source: String?
+
+    private var scheme: ColorScheme {
+        let c = theme.background.usingColorSpace(.sRGB) ?? theme.background
+        let light = 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
+        return light < 0.5 ? .dark : .light
+    }
+
+    var body: some View {
+        ScrollView {
+            MarkdownText(source: source ?? doc.storage.string)
+                .foregroundStyle(Color(nsColor: theme.foreground))
+                .frame(maxWidth: 720, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color(nsColor: theme.background))
+        // The card's colours decide light or dark, not the window's: the
+        // app's own code colours are the terminal's, dark in a light window,
+        // and the conversation's panels and lines must match them.
+        .environment(\.colorScheme, scheme)
+        .task(id: doc.revision) {
+            guard source != nil else {
+                source = doc.storage.string
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(150))
+            if !Task.isCancelled { source = doc.storage.string }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(doc.name), made pretty")
+    }
+}
+
 private struct DotLabel: LabelStyle {
     let ink: Color
 
@@ -463,6 +555,10 @@ struct QuickOpen: View {
     let open: @MainActor (String) -> Void
     /// Closes it; none for the card's own when no file is open.
     var close: (@MainActor () -> Void)?
+    /// The files it offers, by their paths from the folder; nil = all.
+    var only: ((String) -> Bool)?
+    /// What its field asks; nil = to open a file of the folder.
+    var prompt: String?
     @State private var query = ""
     @State private var files: [String] = []
     /// What matches the query, worked out off the main thread as it changes.
@@ -476,7 +572,7 @@ struct QuickOpen: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(Color(nsColor: theme.gutterInk))
-                TextField("Open a file in \(folder.map { ($0 as NSString).lastPathComponent } ?? "this folder")", text: $query)
+                TextField(prompt ?? "Open a file in \(folder.map { ($0 as NSString).lastPathComponent } ?? "this folder")", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .foregroundStyle(Color(nsColor: theme.foreground))
@@ -522,7 +618,8 @@ struct QuickOpen: View {
         .task(id: folder) {
             guard let folder else { return }
             loading = true
-            files = await CodeFiles.shared.list(folder)
+            let all = await CodeFiles.shared.list(folder)
+            files = only.map { all.filter($0) } ?? all
             loading = false
         }
         .task(id: "\(files.count) \(query)") {
@@ -583,6 +680,12 @@ final class CodeFiles {
 
     /// `--snapshot`'s files for a folder, kept for good.
     func fixture(_ folder: String, files: [String]) { cache[folder] = (.distantFuture, files) }
+
+    /// Reads a folder's files again next time, as after a file was made
+    /// there; a fixture's stay.
+    func forget(_ folder: String) {
+        if let c = cache[folder], c.at != .distantFuture { cache[folder] = nil }
+    }
 
     func list(_ folder: String) async -> [String] {
         if let c = cache[folder], Date().timeIntervalSince(c.at) < 15 { return c.files }
@@ -765,6 +868,12 @@ struct CodeTree: View {
     let theme: CodeTheme
     let shown: String?
     let open: @MainActor (String) -> Void
+    /// The files it shows, by their paths from the folder; nil = all.
+    var only: ((String) -> Bool)?
+    /// Names shown without .md, as notes of a vault.
+    var bare = false
+    /// Bumped to read the folder again.
+    var refresh = 0
     @State private var root = Folder(name: "")
     @State private var expanded: Set<String> = []
     @State private var loading = true
@@ -835,10 +944,10 @@ struct CodeTree: View {
             if loading { ProgressView().controlSize(.small) }
         }
         .background(Color(nsColor: theme.currentLine).opacity(0.5))
-        .task(id: folder) {
-            loading = true
-            let files = await CodeFiles.shared.list(folder)
-            root = Folder.of(files)
+        .task(id: "\(folder)/\(refresh)") {
+            if root.folders.isEmpty, root.files.isEmpty { loading = true }
+            let all = await CodeFiles.shared.list(folder)
+            root = Folder.of(only.map { all.filter($0) } ?? all)
             loading = false
             openDown()
         }
@@ -856,7 +965,7 @@ struct CodeTree: View {
                 .font(.system(size: row.folder ? 8 : 9.5, weight: .semibold))
                 .frame(width: 10)
                 .foregroundStyle(Color(nsColor: theme.gutterInk))
-            Text(row.name)
+            Text(bare && !row.folder && row.name.lowercased().hasSuffix(".md") ? String(row.name.dropLast(3)) : row.name)
                 .font(.system(size: 11.5, weight: on ? .semibold : .regular))
                 .foregroundStyle(Color(nsColor: on || row.folder ? theme.foreground : theme.gutterActiveInk))
                 .lineLimit(1)

@@ -1039,3 +1039,42 @@ func TestRemotePanes(t *testing.T) {
 		}
 	}
 }
+
+// The obsidian plugin is on, with no vault until one is chosen, and keeps
+// the notepad in it as Irie Notes.md once there is one; obsidian.note must
+// be a Markdown note's path inside the vault.
+func TestObsidianSection(t *testing.T) {
+	d := Default()
+	if !d.Plugins.Obsidian || d.Obsidian.Vault != "" || !d.Obsidian.Notes || d.Obsidian.Note != brand.Name+" Notes.md" || d.ObsidianOn() != ObsidianBuilt {
+		t.Errorf("default = %+v, plugin %v", d.Obsidian, d.Plugins.Obsidian)
+	}
+	c, err := Parse([]byte("[obsidian]\nvault = \"~/Notes\"\nnotes = false\nnote = \"Inbox/To do.md\"\n"), "config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Obsidian != (Obsidian{Vault: "~/Notes", Notes: false, Note: "Inbox/To do.md"}) {
+		t.Errorf("from the file: %+v", c.Obsidian)
+	}
+	if v, err := ParseValue("obsidian.vault", []byte(`"/home/alice/Notes"`)); err != nil || v != "/home/alice/Notes" {
+		t.Errorf("ParseValue = %v, %v", v, err)
+	}
+	for _, body := range []string{
+		"[obsidian]\nvault = \"Notes\"\n",
+		"[obsidian]\nnote = \"\"\n",
+		"[obsidian]\nnote = \"/home/alice/Notes/x.md\"\n",
+		"[obsidian]\nnote = \"../x.md\"\n",
+		"[obsidian]\nnote = \"a/../../x.md\"\n",
+		"[obsidian]\nnote = \".obsidian/x.md\"\n",
+		"[obsidian]\nnote = \"Notes.txt\"\n",
+		"[obsidian]\nnote = \"a//b.md\"\n",
+	} {
+		if _, err := Parse([]byte(body), "config.toml"); err == nil || !strings.Contains(err.Error(), "obsidian.") {
+			t.Errorf("%q: %v", body, err)
+		}
+	}
+	for _, ok := range []string{"Irie Notes.md", "Inbox/To do.md", "notes.MD", "Ünïcode/ノート.md"} {
+		if !NoteInVault(ok) {
+			t.Errorf("NoteInVault(%q) = false", ok)
+		}
+	}
+}

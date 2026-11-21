@@ -898,10 +898,29 @@ private struct AppearanceSettings: View {
                     }
                 }
                 Toggle("Fill the screen", isOn: Binding(get: { store.zen.fullScreen }, set: { store.setZenFullScreen($0) }))
+                // The calm settings, which the core keeps (Zen.swift).
+                Toggle("Ask the agent to be gentle", isOn: Binding(get: { store.zen.gentle }, set: { store.setZenCalm(gentle: $0) }))
+                    .help("Zen asks each agent it shows to keep its words short, plain and kind, one question at a time")
+                Picker("Rests", selection: Binding(get: { store.zen.breaks }, set: { store.setZenCalm(breaks: $0) })) {
+                    Text("Off").tag(0)
+                    Text("Every 25 minutes").tag(25)
+                    Text("Every 50 minutes").tag(50)
+                    Text("Every 90 minutes").tag(90)
+                    if ![0, 25, 50, 90].contains(store.zen.breaks) {
+                        Text("Every \(store.zen.breaks) minutes").tag(store.zen.breaks)
+                    }
+                }
+                .help("After this long at the computer, zen offers a rest with a breath to follow; five minutes away counts as one")
+                Toggle("A word late at night", isOn: Binding(get: { store.zen.night }, set: { store.setZenCalm(night: $0) }))
+                    .help("Between 23:00 and 05:00, zen says once that your agents can carry on without you")
+                LabeledContent("History") {
+                    Button("Your Zen…") { store.zen.historyShown = true }
+                        .help("Each zen you’ve had, and the way back to any of them")
+                }
             } header: {
                 Text("Zen")
             } footer: {
-                footnote("Fn+Z, or View › Enter Zen Mode, shows the session on show with only its own panes, its card a bubble over the terminal: no other sessions, toolbar or right sidebar, full screen unless you turn that off. Fn+Z again gives the window back as it was. Zen keeps this layout and its own text size, apart from the window’s: ⌘+ and ⌘- in zen change zen’s. ⌃Tab and ⌘1 to ⌘9 still go to another session; asking for something zen hides, such as the right sidebar or the session list, ends zen.")
+                footnote("Zen is a calm place, where you come before the work. Fn+Z, or View › Enter Zen Mode, shows the session on show with only its own panes, its card a bubble over the terminal, full screen unless you turn that off; Fn+Z again gives the window back as it was. Another session that would like you shows as one soft line. Zen teaches one small thing at a time, only when the moment is calm, and each change you keep becomes a version of your zen, kept on this Mac: Your Zen… shows them all, and the way back to any. ⌘+ and ⌘- in zen change zen’s own text size. Zen is no treatment: if things feel heavy, findahelpline.com lists free, confidential helplines near you.")
             }
             Section {
                 Picker("On the right", selection: Bindable(store).showTerminal) {
@@ -2048,7 +2067,8 @@ private struct ManifestNote: View {
 }
 
 /// One part of a plugin: its state as a glyph and a sentence, its switch,
-/// and Set Up… when words set it up.
+/// and a button for its words: Set Up… when they set it up, Start <part>…
+/// when they start a session.
 @MainActor
 private struct PluginPartRow: View {
     let plugin: PluginInfo
@@ -2073,8 +2093,10 @@ private struct PluginPartRow: View {
                     .textSelection(.enabled)
             }
             Spacer(minLength: 8)
+            // Set Up… for :setup words, and Start <part>… for a word that
+            // starts a session, as the Plugins menu has them.
             if let setup = part.setup, plugin.on {
-                Button("Set Up…") { run(setup) }
+                Button(PluginCommands.setupTitle(part, setup)) { run(setup) }
                     .help("Starts \(setup)")
             }
             // Bitwarden unlocks here too, as in a pane's key.

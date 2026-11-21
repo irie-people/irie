@@ -302,14 +302,132 @@ struct Header: Decodable {
     var spaces: [SpaceInfo]?
     /// Your groups, in the order they were made (Groups.swift).
     var groups: [GroupInfo]?
+    /// Your zen, whether an app shows it, and what it offers now, from a
+    /// core that keeps your zen (Zen.swift).
+    var zen: ZenState?
 
     enum CodingKeys: String, CodingKey {
         case redOnDone = "red_on_done"
         case closeWhenDone = "close_when_done"
         case helperStyle = "helper_style"
         case terminalLinks = "terminal_links"
-        case trod, vpn, boost, load, spaces, groups
+        case trod, vpn, boost, load, spaces, groups, zen
     }
+}
+
+/// Your zen's settings, as the core keeps them (docs/proposals/zen.md §3).
+struct ZenProfile: Codable, Equatable {
+    var layout: String
+    var columns: Int
+    /// Zen's own text size in points; 0 keeps the window's.
+    var textSize: Int
+    var fullScreen: Bool
+    /// Zen asks the agent to be gentle.
+    var gentle: Bool
+    /// Minutes at the computer before zen offers a rest; 0 for none.
+    var breaks: Int
+    /// Late at night, zen says once that you can rest.
+    var night: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case layout, columns, gentle, breaks, night
+        case textSize = "text_size"
+        case fullScreen = "full_screen"
+    }
+}
+
+/// Zen as the header gives it: your zen, or a step's change on trial, the
+/// newest version, and the one thing zen offers now.
+struct ZenState: Decodable, Equatable {
+    var profile: ZenProfile
+    var head: String?
+    var on: Bool?
+    var trying: String?
+    var offer: ZenOffer?
+}
+
+/// The one thing zen offers at a time: a step of its path, a rest or a word
+/// at night. It stays until it is answered.
+struct ZenOffer: Decodable, Equatable, Identifiable {
+    var id: String
+    /// learn, try, keep, rest or night.
+    var kind: String
+    var text: String
+    var yes: String
+    var no: String?
+    /// What the first button also opens: "history".
+    var show: String?
+    /// A page the text names.
+    var link: String?
+}
+
+/// One version of your zen.
+struct ZenVersion: Decodable, Equatable, Identifiable {
+    /// "sha512:" and the hex of the SHA-512 of its canonical bytes.
+    var name: String
+    var parent: String?
+    var created: Date
+    var why: String
+    /// The name of its settings alone, which versions with the same
+    /// settings share.
+    var state: String
+    var zen: ZenProfile
+
+    var id: String { name }
+}
+
+/// Part of your zen to change: the keys set.
+struct ZenChange: Encodable, Equatable {
+    var layout: String?
+    var columns: Int?
+    var textSize: Int?
+    var fullScreen: Bool?
+    var gentle: Bool?
+    var breaks: Int?
+    var night: Bool?
+
+    var isEmpty: Bool { self == ZenChange() }
+
+    /// The keys other sets, on top of these.
+    mutating func merge(_ other: ZenChange) {
+        layout = other.layout ?? layout
+        columns = other.columns ?? columns
+        textSize = other.textSize ?? textSize
+        fullScreen = other.fullScreen ?? fullScreen
+        gentle = other.gentle ?? gentle
+        breaks = other.breaks ?? breaks
+        night = other.night ?? night
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case layout, columns, gentle, breaks, night
+        case textSize = "text_size"
+        case fullScreen = "full_screen"
+    }
+}
+
+/// The zen op's one ask at a time.
+struct ZenArgs: Encodable {
+    var on: Bool?
+    var session: String?
+    var windowText: Int?
+    var set: ZenChange?
+    var why: String?
+    var offer: String?
+    var answer: String?
+    var log: Int?
+    var restore: String?
+
+    enum CodingKeys: String, CodingKey {
+        case on, session, set, why, offer, answer, log, restore
+        case windowText = "window_text"
+    }
+}
+
+struct ZenResult: Decodable {
+    var zen: ZenState?
+    var version: ZenVersion?
+    var versions: [ZenVersion]?
 }
 
 /// Gabriel's boost: when one started by hand ends, and whether it is
@@ -591,9 +709,12 @@ struct InputArgs: Encodable, Equatable {
     /// The note of the notepad the text came from: the core ticks it off
     /// once the input goes through (Notes.swift).
     var note: String?
+    /// Send to Top: a task goes first in Pinned, boosted (DESIGN §4.1).
+    /// Only a core whose hello lists spawn-top takes it.
+    var top: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case text, session, outside, repo, profile, model, apart, tutor, space, note
+        case text, session, outside, repo, profile, model, apart, tutor, space, note, top
         case inPlace = "in_place"
     }
 }
@@ -627,9 +748,12 @@ struct Notepad: Codable, Equatable {
     var readOnly: Bool?
     var path: String?
     var rev: UInt64?
+    /// The note the notepad is kept as in the Obsidian vault too, while it
+    /// is (Vault.swift).
+    var vault: NotepadVault?
 
     enum CodingKeys: String, CodingKey {
-        case notes, deleted, problem, path, rev
+        case notes, deleted, problem, path, rev, vault
         case readOnly = "read_only"
     }
 
@@ -643,6 +767,7 @@ struct Notepad: Codable, Equatable {
         readOnly = try c.decodeIfPresent(Bool.self, forKey: .readOnly)
         path = try c.decodeIfPresent(String.self, forKey: .path)
         rev = try c.decodeIfPresent(UInt64.self, forKey: .rev)
+        vault = try? c.decodeIfPresent(NotepadVault.self, forKey: .vault)
     }
 }
 
@@ -901,5 +1026,118 @@ enum Wire {
         if let d = f.date(from: text) { return d }
         f.formatOptions = [.withInternetDateTime]
         return f.date(from: text)
+    }
+}
+
+/// An ask for a materialized card (docs/proposals/materialized-cards.md,
+/// internal/ipc/materialize.go): here a session's own card, where it
+/// stands, which the core makes from its conversation.
+struct MaterializeArgs: Encodable {
+    var session: String
+    /// How long the core waits for a remake under way, in nanoseconds, as
+    /// Go writes a time.Duration; nil answers at once.
+    var wait: Int64? = nil
+}
+
+/// A materialized card as it stands. `state` is cold, fresh, stale or
+/// refreshing; `spec` the card, none while cold, or when it is from a
+/// catalog this app cannot read; `err` why the last remake failed.
+struct MaterializeResult: Decodable, Equatable {
+    var id: String
+    var state: String
+    var spec: GenCard?
+    var made: Date?
+    var by: String?
+    var err: String?
+    var began: Bool?
+
+    private enum CodingKeys: String, CodingKey { case id, state, spec, made, by, err, began }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        state = try c.decode(String.self, forKey: .state)
+        // A card this app cannot read is no card, not a failed answer.
+        spec = try? c.decodeIfPresent(GenCard.self, forKey: .spec)
+        made = try c.decodeIfPresent(Date.self, forKey: .made)
+        by = try c.decodeIfPresent(String.self, forKey: .by)
+        err = try c.decodeIfPresent(String.self, forKey: .err)
+        began = try c.decodeIfPresent(Bool.self, forKey: .began)
+    }
+}
+
+/// A card of Irie's catalog (internal/genui): a title over its parts, which
+/// the app draws in its own look. A part of a kind it does not know is
+/// skipped.
+struct GenCard: Decodable, Equatable {
+    var title: String
+    var body: [GenPart]
+}
+
+struct GenPart: Decodable, Equatable {
+    var type: String
+    var text: String?
+    var style: String?
+    var items: [GenItem]?
+    var facts: [GenFact]?
+    var columns: [GenCell]?
+    var rows: [[GenCell]]?
+    var label: String?
+    var value: GenNumber?
+    var total: GenNumber?
+}
+
+struct GenItem: Decodable, Equatable {
+    var title: String
+    var detail: String?
+    var status: String?
+}
+
+struct GenFact: Decodable, Equatable {
+    var label: String
+    var value: GenCell
+}
+
+/// A table's cell or a fact's value: words, though a model may write a
+/// number or true for one, which reads as it was written.
+struct GenCell: Decodable, Hashable {
+    var text: String
+
+    init(_ text: String) { self.text = text }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() {
+            text = ""
+        } else if let s = try? c.decode(String.self) {
+            text = s
+        } else if let n = try? c.decode(Double.self) {
+            text = GenNumber.words(n)
+        } else if let b = try? c.decode(Bool.self) {
+            text = b ? "true" : "false"
+        } else {
+            text = ""
+        }
+    }
+}
+
+/// A progress figure, which a model may write as "3" as well as 3.
+struct GenNumber: Decodable, Hashable {
+    var value: Double
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let n = try? c.decode(Double.self) {
+            value = n
+        } else if let s = try? c.decode(String.self), let n = Double(s.trimmingCharacters(in: .whitespaces)) {
+            value = n
+        } else {
+            value = 0
+        }
+    }
+
+    /// A figure as briefly as it reads: 3, 2.5.
+    static func words(_ n: Double) -> String {
+        n == n.rounded() && abs(n) < 1e15 ? String(Int64(n)) : String(n)
     }
 }

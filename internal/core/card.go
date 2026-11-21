@@ -32,6 +32,8 @@ func (c *Core) cardOp(a ipc.CardArgs) error {
 		return ipc.Errorf(ipc.CodeBadArgs, "Mail is off, as its plugin is: `%s plugins on mail` turns it on.", brand.Slug)
 	case a.Kind == "markets" && !cfg.MarketsOn():
 		return ipc.Errorf(ipc.CodeBadArgs, "Markets is off, as its plugin is: `%s plugins on markets` turns it on.", brand.Slug)
+	case a.Kind == "vault" && !cfg.ObsidianOn():
+		return ipc.Errorf(ipc.CodeBadArgs, "The vault is off, as the obsidian plugin is: `%s plugins on obsidian` turns it on.", brand.Slug)
 	}
 	c.mu.Lock()
 	x := c.sessions[a.Session]

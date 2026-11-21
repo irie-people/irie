@@ -51,6 +51,9 @@ const (
 	// OpLabel gives tasks their classes, which the router sorts new tasks
 	// by (DESIGN §6.4).
 	OpLabel = "label"
+	// OpFind looks sessions up by what they did: their names, their tasks
+	// and what their agents said (DESIGN §4.5).
+	OpFind = "find"
 	// OpClose ends a session's agent and removes its row; OpReopen, its
 	// undo, carries the session on again (DESIGN §2.4, §4.5).
 	OpClose  = "close"
@@ -129,6 +132,10 @@ const FeatureTutor = "spawn-tutor"
 
 // FeatureSpawnModel is in hello's features when spawn takes SpawnArgs.Model.
 const FeatureSpawnModel = "spawn-model"
+
+// FeatureSpawnTop is in hello's features when spawn takes SpawnArgs.Top
+// and input InputArgs.Top: a task sent to the top.
+const FeatureSpawnTop = "spawn-top"
 
 // FeatureBoostAlways is in hello's features when the core boosts the
 // user's focus always with arch.gabriel.always, and its header says how
@@ -785,6 +792,9 @@ type Header struct {
 	// theme op), so the terminal sidebar, the slot and the phone app draw
 	// in it too; until then each keeps its own (ui.theme, Evergreen).
 	Theme *Theme `json:"theme,omitempty"`
+	// Zen is your zen, whether an app shows it, and what it offers now
+	// (docs/proposals/zen.md), so every client draws zen's calm alike.
+	Zen *Zen `json:"zen,omitempty"`
 }
 
 // Boost is Gabriel's boost as the header gives it: the user's focus gets
@@ -1018,6 +1028,11 @@ type SpawnArgs struct {
 	// Claude Code's titles and passed to it with --name. Without one the
 	// task's first line names the session until Claude Code titles it.
 	Name string `json:"name,omitempty"`
+	// Skill is a skill the session starts on, as a profile's skill starts
+	// +chaos (DESIGN §4.19): one of Irie's or a plugin's of yours, which a
+	// word of the plugin's names, as :grants does (DESIGN §4.17). The task
+	// goes to the skill, and names the session.
+	Skill string `json:"skill,omitempty"`
 	// Force spawns a local profile even when its model's context or the
 	// machine's memory falls short, with a warning (M10).
 	Force bool `json:"force,omitempty"`
@@ -1050,6 +1065,11 @@ type SpawnArgs struct {
 	// Continues), or, for a jot with ui.new_tabs = "next", the group of the
 	// session it goes beside; else in none.
 	Group string `json:"group,omitempty"`
+	// Top sends the new session to the top (DESIGN §4.1, "Pinned"): first
+	// in Pinned, over every card, and boosted (§4.3), as the user's own pin
+	// and boost would, wherever ui.new_tabs puts the rest. A jot sent to the
+	// top is a task of its own: it never adds to the jot before it.
+	Top bool `json:"top,omitempty"`
 	// Jot is a task the user typed in a task bar or the command bar. One
 	// that reads as more for the jot sent just before it, in the same place
 	// and for the same agent, within spawn.follow_up_window, goes to that
@@ -1235,6 +1255,50 @@ type LabelResult struct {
 	Sorting  bool   `json:"sorting"`
 	Model    string `json:"model,omitempty"`
 	Note     string `json:"note,omitempty"` // why it does not sort by them yet
+}
+
+// FindArgs look sessions up by what they did (DESIGN §4.5).
+type FindArgs struct {
+	Query string `json:"query"`
+	Limit int    `json:"limit,omitempty"` // how many to show; 5 when 0
+	// From is the session that asks, which is left out: its own task has
+	// the words it looks up.
+	From string `json:"from,omitempty"`
+}
+
+// FindResult is the sessions most like what was looked up, the likeliest
+// first.
+type FindResult struct {
+	Found []Found `json:"found"`
+	// Close says some session is close to what was looked up; else Found
+	// holds the nearest few.
+	Close bool `json:"close"`
+	// Meaning says they were ranked by their meaning, by route.embed's
+	// model, as well as by their words.
+	Meaning bool `json:"meaning"`
+	// Reading counts the sessions the model has yet to read, which rank by
+	// their words alone until it has.
+	Reading int    `json:"reading,omitempty"`
+	Note    string `json:"note,omitempty"` // why meaning did not rank them, when it did not, and words alone did
+}
+
+// Found is a session find found.
+type Found struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// State is open, closed, lost (closed with Irie's tmux server, as in
+	// a restart), or old: closed past what reopen reaches.
+	State  string    `json:"state"`
+	Closed time.Time `json:"closed,omitzero"`
+	Reopen bool      `json:"reopen"` // irie ctl reopen can bring it back
+	// Close says it is near what was looked up: by meaning, or by having
+	// every word.
+	Close  bool    `json:"close"`
+	Cosine float64 `json:"cosine,omitempty"` // that of its nearer text, its task or what its agent said
+	Words  int     `json:"words"`            // the words looked up that it has
+	Task   string  `json:"task"`             // its task, cut
+	Said   string  `json:"said,omitempty"`   // the start of what its agent said at the end of its last turn
+	File   string  `json:"file,omitempty"`   // where all of that is kept
 }
 
 // ResultArgs ask for what a session's agent said at the end of its last

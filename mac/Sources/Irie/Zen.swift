@@ -2,6 +2,17 @@ import AppKit
 import Observation
 import SwiftUI
 
+// Zen is a calm place, where the person comes before the work
+// (docs/proposals/zen.md, asked for on 2026-11-21). The core keeps your zen,
+// the settings below and the calm ones (a gentle agent, rests, a word late
+// at night), as versions: each change shows at once and becomes a new
+// version a moment later, and any earlier zen can come back (View › Your
+// Zen…, ZenHistory.swift). Zen tells the core when it starts, ends or shows
+// another session, so the core can ask each agent zen shows to be gentle,
+// and draws the one thing the core offers at a time: a step of its path, a
+// rest with a breath to follow, or a word at night (ZenCalm.swift). Other
+// sessions that need you come as one soft line.
+//
 // Zen (Fn+Z, View › Enter Zen Mode): the session on show and its own
 // parts alone, full screen, in a layout of zen's own, apart from View ›
 // Layout's. Its parts are its terminal or conversation; its card, which
@@ -72,6 +83,11 @@ final class ZenModel {
     static let textKey = "zenTextSize"
     static let screenKey = "zenFullScreen"
     static let windowKey = "zenWindow"
+    static let movedKey = "zenMoved"
+
+    /// How long the app waits after a change before it sends it, so three
+    /// presses of ⌘+ make one version, not three.
+    static let gather: TimeInterval = 1.2
 
     /// The widths Centred offers, in columns of text, and the one it starts
     /// with.
@@ -91,16 +107,28 @@ final class ZenModel {
     /// How wide Keep Watch's list is, while zen is on.
     fileprivate(set) var watchColumn = ZenModel.standardWatchColumn
     var layout = ZenLayout(rawValue: UserDefaults.standard.string(forKey: ZenModel.layoutKey) ?? "") ?? .centred {
-        didSet { if layout != oldValue, !fixture { UserDefaults.standard.set(layout.rawValue, forKey: Self.layoutKey) } }
+        didSet {
+            guard layout != oldValue, !fixture else { return }
+            UserDefaults.standard.set(layout.rawValue, forKey: Self.layoutKey)
+            keep(ZenChange(layout: layout.rawValue))
+        }
     }
     /// How many columns of text wide Centred's column is.
     var columns = ZenModel.savedColumns() {
-        didSet { if columns != oldValue, !fixture { UserDefaults.standard.set(columns, forKey: Self.columnsKey) } }
+        didSet {
+            guard columns != oldValue, !fixture else { return }
+            UserDefaults.standard.set(columns, forKey: Self.columnsKey)
+            keep(ZenChange(columns: columns))
+        }
     }
     /// Zen takes the window full screen, onto a desktop of its own; off, it
     /// stays in the window.
     var fullScreen = UserDefaults.standard.object(forKey: ZenModel.screenKey) as? Bool ?? true {
-        didSet { if fullScreen != oldValue, !fixture { UserDefaults.standard.set(fullScreen, forKey: Self.screenKey) } }
+        didSet {
+            guard fullScreen != oldValue, !fixture else { return }
+            UserDefaults.standard.set(fullScreen, forKey: Self.screenKey)
+            keep(ZenChange(fullScreen: fullScreen))
+        }
     }
     /// Zen's own text size, which ⌘+ and ⌘- change while zen is on; nil
     /// keeps the window's.
@@ -108,8 +136,40 @@ final class ZenModel {
         didSet {
             guard textSize != oldValue, !fixture else { return }
             if let t = textSize { UserDefaults.standard.set(t, forKey: Self.textKey) } else { UserDefaults.standard.removeObject(forKey: Self.textKey) }
+            keep(ZenChange(textSize: textSize.map { Int($0.rounded()) } ?? 0))
         }
     }
+    /// The calm settings, which only the core keeps: whether zen asks the
+    /// agent to be gentle, the minutes before a rest (0 for none), and the
+    /// word late at night.
+    fileprivate(set) var gentle = true
+    fileprivate(set) var breaks = 0
+    fileprivate(set) var night = true
+    /// Your zen's newest version, nil before the first.
+    fileprivate(set) var head: String?
+    /// The one thing zen offers now, until it is answered.
+    var offer: ZenOffer?
+    /// The step whose change is on trial: what shows is your zen with it.
+    fileprivate(set) var trying: String?
+    /// View › Your Zen…, the graph explorer of your zen's versions.
+    var historyShown = false
+    /// The core keeps your zen: it lists the zen op.
+    @ObservationIgnored var kept = false
+    /// The app's own zen settings went to the core as its first version.
+    @ObservationIgnored var moved = UserDefaults.standard.bool(forKey: ZenModel.movedKey) {
+        didSet { if moved, !fixture { UserDefaults.standard.set(true, forKey: Self.movedKey) } }
+    }
+    /// Sends a change to the core (Store.changeZen).
+    @ObservationIgnored var send: (@MainActor (ZenChange) -> Void)?
+    /// Changes not sent yet, and calls still on their way: until both are
+    /// done, the header's zen is older than what shows.
+    @ObservationIgnored fileprivate var pending = ZenChange()
+    @ObservationIgnored fileprivate var pendingGen = 0
+    @ObservationIgnored var sending = 0
+    /// Taking the core's zen, which is no change to send back.
+    @ObservationIgnored fileprivate var taking = false
+    /// `--snapshot`'s versions for Your Zen.
+    @ObservationIgnored var fixtureVersions: [ZenVersion] = []
     /// Bumped each time zen starts: the window says for a moment how to
     /// leave it.
     fileprivate(set) var started = 0
@@ -171,6 +231,58 @@ final class ZenModel {
         guard let d = UserDefaults.standard.dictionary(forKey: windowKey) else { return Found() }
         let sidebar = (d["shown"] as? Bool).map { PaneLayout.Sidebar(shown: $0, width: d["width"] as? Double) }
         return Found(sidebar: sidebar, toolbar: d["toolbar"] as? Bool ?? true)
+    }
+
+    /// Keeps a change for the core, sent a moment after the last one.
+    fileprivate func keep(_ change: ZenChange) {
+        guard kept, !taking, send != nil else { return }
+        pending.merge(change)
+        pendingGen += 1
+        let gen = pendingGen
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.gather) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.pendingGen == gen, !self.pending.isEmpty else { return }
+                let ch = self.pending
+                self.pending = ZenChange()
+                self.send?(ch)
+            }
+        }
+    }
+
+    /// Your zen as the app shows it, whole, as a change.
+    var current: ZenChange {
+        ZenChange(layout: layout.rawValue, columns: columns, textSize: textSize.map { Int($0.rounded()) } ?? 0,
+                  fullScreen: fullScreen, gentle: gentle, breaks: breaks, night: night)
+    }
+
+    /// The app's zen settings from before the core kept them, if any were
+    /// ever changed.
+    static var hadSettings: Bool {
+        [layoutKey, columnsKey, textKey, screenKey].contains { UserDefaults.standard.object(forKey: $0) != nil }
+    }
+
+    /// Zen was on when the app last ran, and comes back once it has
+    /// launched (ZenResume): until then, zen is not over.
+    var resuming: Bool { !on && !fixture && UserDefaults.standard.bool(forKey: Self.onKey) }
+
+    /// Takes the core's zen: what it offers and its newest version, and the
+    /// settings, unless a change of the person's is still on its way.
+    fileprivate func take(_ z: ZenState) {
+        if offer != z.offer { offer = z.offer }
+        if head != z.head { head = z.head }
+        if trying != z.trying { trying = z.trying }
+        guard pending.isEmpty, sending == 0 else { return }
+        taking = true
+        defer { taking = false }
+        let p = z.profile
+        if let l = ZenLayout(rawValue: p.layout), l != layout { layout = l }
+        if Self.widths.contains(p.columns), p.columns != columns { columns = p.columns }
+        let text: Double? = p.textSize >= 9 && p.textSize <= 28 ? Double(p.textSize) : nil
+        if text != textSize { textSize = text }
+        if p.fullScreen != fullScreen { fullScreen = p.fullScreen }
+        if p.gentle != gentle { gentle = p.gentle }
+        if p.breaks != breaks { breaks = p.breaks }
+        if p.night != night { night = p.night }
     }
 
     /// Draws a layout for `--snapshot`, or none, with no window to change.
@@ -266,6 +378,7 @@ extension Store {
         // A field in the sidebar or a pane that had the keyboard is out of
         // sight now.
         giveMainKeys()
+        sayZen()
     }
 
     /// Zen ends: the sidebar comes back at its width and the toolbar with
@@ -281,7 +394,9 @@ extension Store {
         zen.keepOn()
         zen.screenOnReturn = false
         zen.hintOnReturn = false
+        zen.historyShown = false
         useZenText(false)
+        sayZen()
         let found = zen.found
         zen.found = nil
         zen.keepFound()
@@ -316,6 +431,12 @@ extension Store {
     /// while zen is on.
     func setZenFullScreen(_ on: Bool) {
         zen.fullScreen = on
+        zenScreen(on)
+    }
+
+    /// The window into full screen or out of it, as zen's setting says,
+    /// while zen is on.
+    private func zenScreen(_ on: Bool) {
         guard zen.on, !zen.moving, let w = WindowPanes.window else { return }
         let full = w.styleMask.contains(.fullScreen)
         if on, !full {
@@ -332,6 +453,89 @@ extension Store {
     func setZenText(_ size: Double?) {
         zen.textSize = size.map { min(max($0, 9), 28) }
         if zen.on { useZenText(true) }
+    }
+
+    /// Tells the core whether zen shows, and which session: it asks each
+    /// agent zen shows to be gentle, and offers what is due. A preview, a
+    /// snapshot or a film leave that to the installed app, whose sessions
+    /// they share.
+    func sayZen() {
+        guard zen.kept, !isFixture, !Preview.isOn, !zen.resuming else { return }
+        callZen(ZenArgs(on: zen.on, session: zen.on ? selection : nil, windowText: Int(windowFontSize.rounded())), what: nil)
+    }
+
+    /// Changes your zen: it shows at once, and the core keeps it as a new
+    /// version.
+    func changeZen(_ change: ZenChange, why: String? = nil) {
+        guard zen.kept, !isFixture, !Preview.isOn, !change.isEmpty else { return }
+        callZen(ZenArgs(set: change, why: why), what: "change your zen")
+    }
+
+    /// Settings › Zen's calm settings, shown at once.
+    func setZenCalm(gentle: Bool? = nil, breaks: Int? = nil, night: Bool? = nil) {
+        if let gentle { zen.gentle = gentle }
+        if let breaks { zen.breaks = breaks }
+        if let night { zen.night = night }
+        changeZen(ZenChange(gentle: gentle, breaks: breaks, night: night))
+    }
+
+    /// Answers what zen offers: its first button or its second. A step
+    /// that shows your zen's history opens it.
+    func answerZen(_ offer: ZenOffer, yes: Bool) {
+        if yes, offer.show == "history" { zen.historyShown = true }
+        guard !isFixture, !Preview.isOn else {
+            zen.offer = nil
+            return
+        }
+        zen.offer = nil
+        callZen(ZenArgs(offer: offer.id, answer: yes ? "yes" : "no"), what: nil)
+    }
+
+    /// Back to an earlier zen, as a new version: history is never rewritten.
+    func restoreZen(_ version: ZenVersion) {
+        guard !isFixture, !Preview.isOn else { return }
+        callZen(ZenArgs(restore: version.name), what: "go back to that zen")
+    }
+
+    /// Your zen's versions, newest first.
+    func zenVersions() async -> [ZenVersion] {
+        guard zen.kept, !isFixture else { return zen.fixtureVersions }
+        let r = try? await client.call("zen", ZenArgs(log: 1000), timeout: 5, as: ZenResult.self)
+        return r?.versions ?? []
+    }
+
+    /// One call of the zen op. Until it answers, the header's zen may be
+    /// older than what shows, so the model leaves the settings alone; the
+    /// answer's zen is taken after.
+    private func callZen(_ args: ZenArgs, what: String?) {
+        zen.sending += 1
+        Task {
+            var answer: ZenResult?
+            do {
+                answer = try await client.call("zen", args, timeout: 5, as: ZenResult.self)
+            } catch {
+                if let what { say("Couldn’t \(what): \(error.localizedDescription)", error: true) }
+            }
+            zen.sending -= 1
+            if let z = answer?.zen { takeZen(z) }
+        }
+    }
+
+    /// Takes zen from the core's header or an answer. The app's own zen
+    /// settings from before the core kept them become its first version,
+    /// once; a change from the core, such as a step tried or an agent's
+    /// `irie ctl zen set`, shows at once.
+    func takeZen(_ z: ZenState) {
+        if z.head != nil, !zen.moved { zen.moved = true }
+        if z.head == nil, zen.kept, !zen.moved, !isFixture, !Preview.isOn, ZenModel.hadSettings {
+            zen.moved = true
+            changeZen(zen.current, why: "Your zen as it was")
+            return
+        }
+        let text = zen.textSize, full = zen.fullScreen
+        zen.take(z)
+        if zen.on, zen.textSize != text { useZenText(true) }
+        if zen.fullScreen != full { zenScreen(zen.fullScreen) }
     }
 
     /// Points a column of the terminal takes for each point of text:
@@ -479,22 +683,23 @@ struct ZenOthers: View {
                     .foregroundStyle(Theme.muted)
                 Spacer(minLength: 0)
                 if let first = needing.first {
+                    // Calm, as zen is: the red mark says it needs you
+                    // (Roots §1.5), the words say it softly.
                     Button { store.show(first.id, focus: true) } label: {
-                        HStack(spacing: 3) {
-                            StateMark(look: .needs, size: 9)
-                            Text(needing.count == 1 ? "1 needs you" : "\(needing.count) need you")
-                                .font(Theme.font(10.5, .bold))
+                        HStack(spacing: 4) {
+                            StateMark(look: .needs, size: 8)
+                            Text(needing.count == 1 ? "1 would like you" : "\(needing.count) would like you")
+                                .font(Theme.font(10.5, .medium))
                                 .monospacedDigit()
                         }
-                        .foregroundStyle(Theme.needs)
-                        .padding(.horizontal, 6)
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 7)
                         .padding(.vertical, 1.5)
-                        .background(Capsule().fill(Theme.needs.opacity(0.12)))
-                        .overlay(Capsule().strokeBorder(Theme.needs.opacity(0.4), lineWidth: 1))
+                        .background(Capsule().fill(Theme.hover))
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .help("Show the first that needs you")
+                    .help("Show the first that would like you, when you’re ready")
                 }
             }
             .padding(.horizontal, 6)
@@ -550,9 +755,10 @@ private struct ZenOtherRow: View, Equatable {
                     .truncationMode(.tail)
                 Spacer(minLength: 4)
                 if row.look.loud {
+                    // Zen's calm: the mark is red, the words plain.
                     Text(row.label)
-                        .font(Theme.font(11, .semibold))
-                        .foregroundStyle(Theme.needs)
+                        .font(Theme.font(11))
+                        .foregroundStyle(Theme.muted)
                         .lineLimit(1)
                 }
             }
@@ -712,5 +918,7 @@ struct ZenMenus: View {
                 Toggle(l.title, isOn: Binding(get: { f.zenLayout == l }, set: { if $0 { store.zen.layout = l } }))
             }
         }
+        Button("Your Zen…") { store.zen.historyShown = true }
+            .help("Each zen you’ve had, and the way back to any of them")
     }
 }
