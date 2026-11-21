@@ -24,10 +24,11 @@ struct JamminArgs: Encodable {
     var `repeat`: String?
     var device: String?
     var clientID: String?
+    var folder: String?
     var all: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case `do`, source, uri, context, query, position, volume, on, `repeat`, device, all
+        case `do`, source, uri, context, query, position, volume, on, `repeat`, device, folder, all
         case clientID = "client_id"
     }
 }
@@ -59,9 +60,14 @@ struct JamSource: Decodable, Equatable, Identifiable {
     /// The Client ID of the person's Spotify app, once the core keeps one:
     /// a sign-in again needs no new one. No secret: PKCE has none.
     var clientID: String?
+    /// How it reaches its music: account, through the service's API, or
+    /// app, through the service's app on this Mac; nil for the files.
+    var via: String?
+    /// The files' folder, as config.toml names it, ~ and all.
+    var folder: String?
 
     enum CodingKeys: String, CodingKey {
-        case name, title, state, problem, account, can, now, link
+        case name, title, state, problem, account, can, now, link, via, folder
         case clientID = "client_id"
     }
 
@@ -70,9 +76,13 @@ struct JamSource: Decodable, Equatable, Identifiable {
     var playing: Bool { now?.playing == true }
     var isSpotify: Bool { name == JamSource.spotify }
     var isMusic: Bool { name == JamSource.music }
+    var isFiles: Bool { name == JamSource.files }
+    /// Spotify through its app on this Mac, with no account linked.
+    var throughApp: Bool { via == "app" }
 
     static let spotify = "spotify"
     static let music = "music"
+    static let files = "files"
 
     func does(_ what: String) -> Bool { can?.contains(what) == true }
 
@@ -81,6 +91,7 @@ struct JamSource: Decodable, Equatable, Identifiable {
         switch name {
         case JamSource.spotify: return "dot.radiowaves.left.and.right"
         case JamSource.music: return "music.note"
+        case JamSource.files: return "folder"
         default: return "music.quarternote.3"
         }
     }
@@ -523,6 +534,46 @@ final class JamminModel {
         }
     }
 
+    /// Asks for the folder of music files in an open panel, and gives it to
+    /// the core with the home folder written as ~, as config.toml keeps it.
+    func chooseFolder() {
+        guard !isFixture else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Choose the folder that holds your music files."
+        if let f = sources.first(where: { $0.isFiles })?.folder, !f.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: (f as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let folder = Self.tilde(url.path)
+        busy = "folder"
+        problem = nil
+        Task {
+            defer { if busy == "folder" { busy = nil } }
+            do {
+                let r = try await call(JamminArgs(do: "folder", source: JamSource.files, folder: folder))
+                // Another folder's folders and finds are gone.
+                lists[JamSource.files] = nil
+                found[JamSource.files] = nil
+                if shown == JamSource.files { query = "" }
+                take(r)
+            } catch {
+                problem = error.localizedDescription
+            }
+        }
+    }
+
+    /// A path with the home folder written as ~.
+    nonisolated static func tilde(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        if path == home { return "~" }
+        if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
+        return path
+    }
+
     // MARK: Artwork
 
     /// Loads the artwork at address, an https address or a file on this
@@ -606,6 +657,34 @@ extension JamminModel {
                 JamSource(name: "spotify", title: "Spotify", state: "needs",
                           problem: "No Spotify app yet: make one at https://developer.spotify.com/dashboard with the redirect URI http://127.0.0.1/jammin/spotify, then Link Spotify takes its Client ID. Spotify lets apps in development mode work only for Premium accounts."),
                 JamSource(name: "music", title: "Apple Music", state: "ready", can: musicCan),
+            ]
+            shown = JamSource.spotify
+            lists = [:]
+        case "files":
+            sources = [
+                JamSource(name: "spotify", title: "Spotify", state: "ready", account: "alice", can: spotifyCan, via: "account"),
+                JamSource(name: "music", title: "Apple Music", state: "ready", can: musicCan),
+                JamSource(name: "files", title: "Files", state: "ready", can: ["play", "skip", "shuffle", "repeat", "lists", "search"],
+                          now: JamNow(playing: true, title: "Kettle on the Stove", artists: ["The Copper Moths"], album: "Small Rooms", kind: "track",
+                                      uri: "/Users/alice/Music/Demos/Kettle on the Stove.m4a", duration: 187_000, position: 41_000, at: at,
+                                      shuffle: false, repeat: "all"),
+                          folder: "~/Music"),
+            ]
+            shown = JamSource.files
+            lists = [JamSource.files: [
+                JamItem(kind: "folder", title: "Demos", uri: "/Users/alice/Music/Demos", tracks: 23),
+                JamItem(kind: "folder", title: "Field Recordings", uri: "/Users/alice/Music/Field Recordings", art: "fixture:garden", tracks: 12),
+                JamItem(kind: "folder", title: "Live Sets", uri: "/Users/alice/Music/Live Sets", tracks: 8),
+            ]]
+        case "spotify-app":
+            sources = [
+                JamSource(name: "spotify", title: "Spotify", state: "ready", can: ["play", "skip", "seek", "volume", "shuffle", "repeat"],
+                          now: JamNow(playing: true, title: "Harbour Lights", artists: ["Night Owls"], album: "Low Tide", kind: "track",
+                                      uri: "spotify:track:0000000000000000000001", link: "https://open.spotify.com/track/0000000000000000000001",
+                                      art: "fixture:harbour", duration: 214_000, position: 83_000, at: at, volume: 48, shuffle: false, repeat: "all"),
+                          via: "app"),
+                JamSource(name: "music", title: "Apple Music", state: "ready", can: musicCan),
+                JamSource(name: "files", title: "Files", state: "needs", problem: "No folder of music yet: Choose Folder… picks one."),
             ]
             shown = JamSource.spotify
             lists = [:]
