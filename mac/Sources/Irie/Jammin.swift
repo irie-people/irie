@@ -666,15 +666,15 @@ extension JamminModel {
                 JamSource(name: "music", title: "Apple Music", state: "ready", can: musicCan),
                 JamSource(name: "files", title: "Files", state: "ready", can: ["play", "skip", "shuffle", "repeat", "lists", "search"],
                           now: JamNow(playing: true, title: "Kettle on the Stove", artists: ["The Copper Moths"], album: "Small Rooms", kind: "track",
-                                      uri: "/Users/alice/Music/Demos/Kettle on the Stove.m4a", duration: 187_000, position: 41_000, at: at,
+                                      uri: "files:Demos/Kettle on the Stove.m4a", duration: 187_000, position: 41_000, at: at,
                                       shuffle: false, repeat: "all"),
                           folder: "~/Music"),
             ]
             shown = JamSource.files
             lists = [JamSource.files: [
-                JamItem(kind: "folder", title: "Demos", uri: "/Users/alice/Music/Demos", tracks: 23),
-                JamItem(kind: "folder", title: "Field Recordings", uri: "/Users/alice/Music/Field Recordings", art: "fixture:garden", tracks: 12),
-                JamItem(kind: "folder", title: "Live Sets", uri: "/Users/alice/Music/Live Sets", tracks: 8),
+                JamItem(kind: "folder", title: "Demos", uri: "files:Demos/", tracks: 23),
+                JamItem(kind: "folder", title: "Field Recordings", uri: "files:Field Recordings/", art: "fixture:garden", tracks: 12),
+                JamItem(kind: "folder", title: "Live Sets", uri: "files:Live Sets/", tracks: 8),
             ]]
         case "spotify-app":
             sources = [

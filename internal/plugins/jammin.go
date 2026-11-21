@@ -72,7 +72,7 @@ func jamminPlugin() Plugin {
 			{
 				Name:    JamminFiles,
 				Title:   "Music files",
-				Summary: "The music files in a folder of yours, ~/Music unless you choose another: played on this Mac by afplay, folder by folder, with shuffle and repeat, on through Irie's restarts.",
+				Summary: "The music files in a folder of yours, ~/Music unless you choose another: played on this Mac by afplay, folder by folder, with shuffle and repeat, on through " + brand.Name + "'s restarts.",
 				Setup:   ":jammin",
 				Brings:  brings,
 				own:     always,
