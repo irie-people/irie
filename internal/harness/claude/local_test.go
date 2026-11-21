@@ -26,6 +26,7 @@ func TestLocalEnvPinsEveryModel(t *testing.T) {
 		"CLAUDE_CODE_SUBAGENT_MODEL":               "qwen3.5:9b",
 		"CLAUDE_CODE_AUTO_MODE_SERVER":             "0",
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+		"CLAUDE_CODE_DISABLE_AUTO_MEMORY":          "1",
 		"CLAUDE_CODE_MAX_CONTEXT_TOKENS":           "65536",
 	}
 	if n := maxOutput(65536); n > 0 {
