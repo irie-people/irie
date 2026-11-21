@@ -345,17 +345,24 @@ struct RightSidebar: View {
         return Button { store.openPane(p.id) } label: {
             HStack(spacing: 4) {
                 if tight {
+                    // A dot over the icon, which takes no room: a strip of
+                    // icons is drawn only when names don't fit.
                     Self.steady(Text(Image(systemName: p.symbol)), on: on) { $0.font(.system(size: 12, weight: $1 ? .bold : .medium)) }
+                        .overlay(alignment: .topTrailing) {
+                            if n > 0 {
+                                Circle().fill(Theme.accent).frame(width: 6, height: 6).offset(x: 4, y: -2)
+                            }
+                        }
                 } else {
                     Self.steady(Text(p.title), on: on) { $0.font(Theme.font(12, $1 ? .bold : .medium)) }
-                }
-                if n > 0 {
-                    Text("\(n)")
-                        .font(Theme.font(10, .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(on ? Theme.ink : Theme.muted)
-                        .padding(.horizontal, 5)
-                        .background(Capsule().fill(Theme.edge))
+                    if n > 0 {
+                        Text("\(n)")
+                            .font(Theme.font(10, .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(on ? Theme.ink : Theme.muted)
+                            .padding(.horizontal, 5)
+                            .background(Capsule().fill(Theme.edge))
+                    }
                 }
             }
             .foregroundStyle(on ? Theme.ink : Theme.muted)
