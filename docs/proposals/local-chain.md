@@ -1,6 +1,6 @@
 # The sidebar as a local chain
 
-Date: 2026-11-21. Status: proposal. An agent (Claude Code) wrote it with the owner.
+Date: 2026-11-21. Status: step 1, the chain on disk, is built ([DESIGN §4.23](../DESIGN.md)): SHA-512 versions, `irie ctl chain log`, `show`, `restore` and `head`. Step 2, the vault, is next; steps 3 and 4 are proposals. An agent (Claude Code) wrote it with the owner.
 
 The owner asked for three things:
 
@@ -47,6 +47,7 @@ The choices follow the strictest public suite, the NSA's CNSA 2.0, as of Novembe
 ## How it would work
 
 - **Where.** In `$XDG_STATE_HOME/irie/chain/`: `objects/` holds one encrypted record per version, named by its hash, next to `HEAD` and the wrapped key. `state.json` stays the core's fast snapshot (§5.4), and the chain is its history. Session contexts already live in git (§4.13). The chain sits beside them and holds the organisation only, never a conversation.
+- **Chains already kept.** Two chains already run on `internal/chain`, each in a folder of its own: your zen's versions (zen.md §4), and since 2026-11-21 the founding documents' texts ([founding-documents.md](founding-documents.md)), in `$XDG_STATE_HOME/irie/chain/founding`.
 - **When.** Each action that changes the organisation appends a version once it has applied: move, pin, park, group, space and rename, the actions §4.5 can undo. Undo and redo append versions too, so history is never rewritten.
 - **The canonical form.** JSON with sorted keys, no whitespace and integers only, so the same organisation always gives the same hash.
 - **Ops:**

@@ -48,8 +48,8 @@ const (
 	Bar = "cheer"
 	// Tags are the go build tags the scripts build it with (tools/live.sh,
 	// tools/release.sh), comma-separated: novpn, noprivacy, nowriting,
-	// nomarkets, nomail, nobitwarden, noterms, noextension, noyoink, nochat
-	// and noobsidian leave those plugins' code out (DESIGN §4.17), as a
+	// nomarkets, nomail, nobitwarden, noterms, noextension, noyoink, nochat,
+	// noobsidian and nofounding leave those plugins' code out (DESIGN §4.17), as a
 	// company's copy may want.
 	// A build by hand passes them itself: go build -tags "$(tools/brand.sh
 	// --tags)" ./cmd/irie.

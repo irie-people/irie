@@ -99,6 +99,7 @@ func (p Paths) LocalFile() string             { return filepath.Join(p.State, "l
 func (p Paths) Benches() string               { return filepath.Join(p.State, "benches") }
 func (p Paths) Playbooks() string             { return filepath.Join(p.State, "playbooks") }
 func (p Paths) StateFile() string             { return filepath.Join(p.State, "state.json") }
+func (p Paths) Chain() string                 { return filepath.Join(p.State, "chain") } // the sidebar's chain (DESIGN §4.23)
 func (p Paths) LidFile() string               { return filepath.Join(p.State, "lid.json") }
 func (p Paths) Cards() string                 { return filepath.Join(p.State, "cards.json") } // materialized cards (internal/materialize)
 
@@ -108,6 +109,10 @@ func (p Paths) Cards() string                 { return filepath.Join(p.State, "c
 func (p Paths) RouteLabels() string  { return filepath.Join(p.State, "route-labels.jsonl") }
 func (p Paths) RouteVectors() string { return filepath.Join(p.State, "route-vectors.json") }
 
+// FindVectors holds the embeddings of the sessions' tasks and of what their
+// agents said, which irie ctl find ranks them by (DESIGN §4.5).
+func (p Paths) FindVectors() string { return filepath.Join(p.State, "find-vectors.json") }
+
 // Notepad is the person's notes for later, and NotepadCopies the folder of
 // its copies, one a day (DESIGN §4.20). They are the person's own words, so
 // they go with the data, not the state.
@@ -116,6 +121,10 @@ func (p Paths) Notepad() string { return filepath.Join(p.Data, "notepad.json") }
 // Zen is your zen's versions (docs/proposals/zen.md §4): yours, as your
 // themes and layouts are, so it sits with them.
 func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
+
+// FoundingChain is the founding documents' local chain (internal/founding):
+// each version holds every text, and names the one before it.
+func (p Paths) FoundingChain() string { return filepath.Join(p.State, "chain", "founding") }
 
 // Keys holds the keys that open Irie's vaults where the system keeps no
 // keychain (internal/keyring): apart from the vaults, so that a copy of

@@ -380,6 +380,8 @@ final class Store {
     /// The chat plugin's accounts, drafts and channels, which its tab
     /// draws (Chat.swift).
     let chat: ChatModel
+    /// The founding documents, which the Founding tab draws (Founding.swift).
+    let founding: FoundingModel
     /// The notepad, the person's notes for later (Notes.swift).
     let notes = NotesModel()
     /// The Obsidian vault, for its cards and the notepad (Vault.swift).
@@ -394,6 +396,7 @@ final class Store {
         mail = MailModel(client: client)
         yoink = YoinkModel(client: client)
         chat = ChatModel(client: client)
+        founding = FoundingModel(client: client)
         notes.store = self
         vault.store = self
         settings.changed = { [weak self] in
@@ -861,6 +864,7 @@ final class Store {
         knowsFeatures = true
         canMail = true
         mail.loadFixture()
+        founding.loadFixture()
         archAgents = [
             ArchAgent(name: "mikael", icon: "⚔️🛡️", title: "a helper against evil",
                       about: "Mikael, the first of \(Brand.name)'s arch agents, stands with the user against evil and for the good they want to see in the world.",

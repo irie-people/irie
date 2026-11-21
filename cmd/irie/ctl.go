@@ -51,13 +51,19 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          spawn.close_when_done a finished session
                                          closes itself, so the sidebar has no
                                          To verify group: look here instead
+  ` + brand.Slug + ` ctl find [--json] [-n N] WORDS...   the sessions, open or closed, most like
+                                         WORDS by their names, their tasks and what
+                                         their agents said last, by words and by
+                                         meaning (route.embed's model): each with
+                                         whether reopen can bring it back and the
+                                         start of what its agent said
   ` + brand.Slug + ` ctl dog [--json]                  the jots that are not through: those whose
                                          turn is over but whose work is not committed,
                                          or not yet in their repo's land branch
                                          (dog.land), with those that closed on their
                                          own in the last day. A jot you close is
                                          done, so it is never listed
-` + rebuildsUsage + materializeUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
+` + rebuildsUsage + materializeUsage + chainUsage + `  ` + brand.Slug + ` ctl arch [--json]                 ` + brand.Name + `'s arch agents: each one's icon, name
                                          and work, what he does now, and what you
                                          can do with him
   ` + brand.Slug + ` ctl gabriel [on|off|boost [--for 30m]|boost always|boost off] [--json]
@@ -178,7 +184,7 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          on its lock, frames sent, ticks, and its
                                          runs of claude agents. go run ./tools/perf
                                          reports one window of them
-` + controlUsage + contextUsage + psUsage + raceUsage + zenUsage
+` + controlUsage + contextUsage + psUsage + raceUsage + zenUsage + foundingUsage
 
 // ctl is `irie ctl`: Irie from scripts, through the core's socket.
 func ctl(args []string) error {
@@ -194,6 +200,10 @@ func ctl(args []string) error {
 		return ctlInput(args[1:])
 	case "history":
 		return ctlHistory(args[1:])
+	case "find":
+		return ctlFind(args[1:])
+	case "chain":
+		return ctlChain(args[1:])
 	case "close":
 		return ctlClose(args[1:])
 	case "reopen":
@@ -208,6 +218,8 @@ func ctl(args []string) error {
 		return ctlMaterialize(args[1:])
 	case "zen":
 		return ctlZen(args[1:])
+	case "founding":
+		return ctlFounding(args[1:])
 	case "trod":
 		return ctlTrod(args[1:])
 	case "gabriel":

@@ -51,6 +51,10 @@ type closes struct {
 	list   []closedRecord     // newest first
 	done   map[string]bool    // every session closed now, past maxClosed too, by id
 	ending map[string]*ending // closing panes whose agents are still ending, by pane id
+	// past are every session closed now, past maxClosed too, by id: its
+	// name, when it closed and whether it was lost, which find shows
+	// (find.go).
+	past map[string]pastClose
 	// dropped are the worktrees Irie dropped that no reopen has added back,
 	// and dropping those whose files go now, which a reopen waits for, by
 	// path (drop.go).
@@ -88,6 +92,13 @@ type closedRecord struct {
 	// its context when it closed, and when its cache runs out (DESIGN
 	// §6.3). Zero when Irie did not know.
 	Wake rebuild.Wake
+}
+
+// pastClose is what find shows of a closed session.
+type pastClose struct {
+	name   string
+	closed time.Time
+	lost   bool
 }
 
 // ending is a closing pane's agent on its way out.
@@ -169,6 +180,10 @@ func (c *Core) addClosed(r closedRecord) {
 		c.closes.done = map[string]bool{}
 	}
 	c.closes.done[r.ID] = true
+	if c.closes.past == nil {
+		c.closes.past = map[string]pastClose{}
+	}
+	c.closes.past[r.ID] = pastClose{name: r.Name, closed: r.Closed, lost: r.Lost}
 	c.closes.list = slices.Insert(c.closes.list, 0, r)
 	if len(c.closes.list) > maxClosed {
 		c.closes.list = c.closes.list[:maxClosed]
@@ -178,6 +193,7 @@ func (c *Core) addClosed(r closedRecord) {
 // dropClosed forgets that a session is closed. The caller holds c.mu.
 func (c *Core) dropClosed(id string) {
 	delete(c.closes.done, id)
+	delete(c.closes.past, id)
 	c.closes.list = slices.DeleteFunc(c.closes.list, func(r closedRecord) bool { return r.ID == id })
 }
 

@@ -117,6 +117,13 @@ type Plugins struct {
 	// notepad kept as a note in it, both ways. It does nothing until
 	// obsidian.vault names the vault.
 	Obsidian bool `toml:"obsidian"`
+	// Founding is the founding documents: the Declaration of
+	// Independence, the Constitution and the Bill of Rights as the
+	// National Archives transcribes them, and the Freedom of Information
+	// Act as the United States Code sets it out, in the Mac app's Founding
+	// tab and the founding-documents skill, kept on a local chain. Off
+	// until asked.
+	Founding bool `toml:"founding"`
 	// Manifests are the switches of your own plugins, those from the
 	// manifests in the plugins folder, by the manifest's name
 	// (docs/proposals/plugin-panes.md). One the table doesn't name is on.
@@ -176,6 +183,10 @@ func (c Config) ChatOn() bool { return ChatBuilt && c.Plugins.Chat }
 // ChatAgentsOn says whether agents may use the chat: chat.agents, with the
 // plugin on.
 func (c Config) ChatAgentsOn() bool { return c.ChatOn() && c.Chat.Agents }
+
+// FoundingOn says whether the founding plugin runs: plugins.founding, with
+// the plugin built in.
+func (c Config) FoundingOn() bool { return FoundingBuilt && c.Plugins.Founding }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -1882,7 +1893,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt && FoundingBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1947,6 +1958,9 @@ func (c Config) Write(w io.Writer) error {
 	if !ObsidianBuilt {
 		delete(m, "obsidian")
 		delete(plugins, "obsidian")
+	}
+	if !FoundingBuilt {
+		delete(plugins, "founding")
 	}
 	if len(plugins) == 0 {
 		delete(m, "plugins")

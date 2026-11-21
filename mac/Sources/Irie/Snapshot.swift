@@ -215,6 +215,19 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
+            // The Founding tab (Founding.swift): a search's passage in the
+            // Constitution, found whatever its spelling, in both modes.
+            let foundingPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.foundingPlugin.utf8))
+            for (base, dark) in [("side-founding", false), ("side-founding-dark", true)] {
+                store.plugins = withPanes.plugins + [foundingPlugin]
+                store.founding.loadFixture()
+                store.side = SideState(open: true, width: SideState.startWidth, tab: .plugin, pane: "founding.founding")
+                UserDefaults.standard.setVolatileDomain([Palette.defaultsKey: Palette.standard.id, "showTerminal": true, DetailsPanel.heightKey: DetailsPanel.compact, DetailsPanel.minimizedKey: false], forName: UserDefaults.argumentDomain)
+                let (rep, _) = window(ContentView().environment(store), dark: dark, width: 1500, height: 720)
+                let name = base + ".png"
+                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+                print(name)
+            }
             store.plugins = []
             store.bundles = []
             store.side = SideState()
@@ -926,6 +939,18 @@ enum Fixture {
        "pane": {"id": "chat.tab", "title": "Chat", "icon": "bubble.left.and.bubble.right", "kind": "chat"}},
       {"name": "slack", "title": "Slack", "on": true, "state": "ready", "detail": "Ready: 1 account (team).", "summary": "Your Slack workspace, through an app of yours."},
       {"name": "agents", "title": "Chat for agents", "on": true, "state": "ready", "switch": "chat.agents", "detail": "Ready: agents write drafts that wait for you to send.", "summary": "Agents write drafts that wait for you to send."}
+     ]}
+    """#
+
+    /// The founding plugin, on and ready, with its tab.
+    static let foundingPlugin = #"""
+    {"name": "founding", "title": "Founding documents", "on": true,
+     "summary": "The Declaration of Independence, the Constitution and the Bill of Rights, word for word as the National Archives transcribes them.",
+     "parts": [
+      {"name": "founding", "title": "The founding documents", "on": true, "state": "ready",
+       "detail": "Ready: 3 documents in the Founding tab, and the founding-documents skill in every session.",
+       "summary": "Read the three in the Founding tab and search them whatever the spelling.",
+       "pane": {"id": "founding.founding", "title": "Founding", "icon": "building.columns", "kind": "founding"}}
      ]}
     """#
 
