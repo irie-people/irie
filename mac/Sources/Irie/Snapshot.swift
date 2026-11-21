@@ -239,7 +239,7 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
-            // The Founding tab (Founding.swift): a search's passage in the
+            // The Charters tab (Founding.swift): a search's passage in the
             // Constitution, found whatever its spelling, in both modes.
             let foundingPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.foundingPlugin.utf8))
             for (base, dark) in [("side-founding", false), ("side-founding-dark", true)] {
@@ -1102,13 +1102,13 @@ enum Fixture {
 
     /// The founding plugin, on and ready, with its tab.
     static let foundingPlugin = #"""
-    {"name": "founding", "title": "Founding documents", "on": true,
-     "summary": "The Declaration of Independence, the Constitution and the Bill of Rights, word for word as the National Archives transcribes them.",
+    {"name": "founding", "title": "Charters", "on": true,
+     "summary": "Texts of rights, word for word from the bodies that keep them and checked against other copies, from Magna Carta to the Privacy Act.",
      "parts": [
-      {"name": "founding", "title": "The founding documents", "on": true, "state": "ready",
-       "detail": "Ready: 3 documents in the Founding tab, and the founding-documents skill in every session.",
-       "summary": "Read the three in the Founding tab and search them whatever the spelling.",
-       "pane": {"id": "founding.founding", "title": "Founding", "icon": "building.columns", "kind": "founding"}}
+      {"name": "founding", "title": "The charters", "on": true, "state": "ready",
+       "detail": "Ready: 10 texts in the Charters tab, and the founding-documents skill in every session.",
+       "summary": "Read the ten in the Charters tab, search them whatever the spelling, and follow how each drew on the ones before it.",
+       "pane": {"id": "founding.founding", "title": "Charters", "icon": "building.columns", "kind": "founding"}}
      ]}
     """#
 

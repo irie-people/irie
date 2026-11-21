@@ -11,7 +11,7 @@ import "github.com/irie-people/irie/internal/ipc"
 const foundingBuilt = false
 
 func (c *Core) foundingOp(int, ipc.FoundingArgs) (ipc.FoundingResult, error) {
-	return ipc.FoundingResult{}, notBuilt("The founding documents plugin")
+	return ipc.FoundingResult{}, notBuilt("The Charters plugin")
 }
 
 func (c *Core) recordFoundingAtStart() {}

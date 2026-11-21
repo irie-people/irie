@@ -192,6 +192,16 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	if runs < 1 || runs > config.MaxBenchRuns {
 		return ipc.BenchResult{}, ipc.Errorf(ipc.CodeBadArgs, "a bench runs from 1 to %d sessions, not %d", config.MaxBenchRuns, runs)
 	}
+	// A local model's runs can need hours where Opus's need minutes, so a
+	// bench may name its own; it keeps the one it got, which its results
+	// are read by.
+	limit := a.Timeout
+	if limit == 0 {
+		limit = c.cfg().Bench.Timeout
+	}
+	if limit < time.Minute {
+		return ipc.BenchResult{}, ipc.Errorf(ipc.CodeBadArgs, "a bench's runs get a minute or more to work, not %v", limit)
+	}
 	profile, judge, p, err := c.benchFor(a)
 	if err != nil {
 		return ipc.BenchResult{}, err
@@ -215,7 +225,7 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 	c.benches.mu.Unlock()
 	b := &benchFile{Bench: ipc.Bench{
 		ID: newBenchID(now), Task: task, Profile: profile, Class: class, Repo: a.Repo, From: a.From,
-		Judge: judge, State: ipc.BenchRunning, Runs: []ipc.BenchRun{}, Started: now,
+		Judge: judge, State: ipc.BenchRunning, Runs: []ipc.BenchRun{}, Started: now, Timeout: limit,
 	}, Seq: seq}
 	if p != nil {
 		b.Host = p.name
@@ -238,7 +248,7 @@ func (c *Core) benchOp(a ipc.BenchArgs) (ipc.BenchResult, error) {
 		b.Runs = append(b.Runs, ipc.BenchRun{Session: s.ID})
 	}
 	c.keepBench(b)
-	c.log.Info("bench started", "bench", b.ID, "profile", profile, "class", class, "runs", runs, "host", b.Host)
+	c.log.Info("bench started", "bench", b.ID, "profile", profile, "class", class, "runs", runs, "host", b.Host, "timeout", limit)
 	out := b.Bench
 	return ipc.BenchResult{Bench: &out}, nil
 }
@@ -373,8 +383,17 @@ func (c *Core) stepBench(b *benchFile, now time.Time) bool {
 	return false
 }
 
-// stepRuns starts the judge once every run is through, or once
-// bench.timeout has passed, when the runs still at work are stopped
+// benchLimit is how long b's runs may work: its own timeout, or bench.timeout
+// for a bench kept before benches had one.
+func (c *Core) benchLimit(b *benchFile) time.Duration {
+	if b.Timeout > 0 {
+		return b.Timeout
+	}
+	return c.cfg().Bench.Timeout
+}
+
+// stepRuns starts the judge once every run is through, or once the
+// bench's timeout has passed, when the runs still at work are stopped
 // (Escape ends a turn) and judged as they stand.
 func (c *Core) stepRuns(b *benchFile, now time.Time) bool {
 	c.mu.Lock()
@@ -385,7 +404,7 @@ func (c *Core) stepRuns(b *benchFile, now time.Time) bool {
 		}
 	}
 	c.mu.Unlock()
-	if len(atWork) > 0 && now.Sub(b.Started) < c.cfg().Bench.Timeout {
+	if len(atWork) > 0 && now.Sub(b.Started) < c.benchLimit(b) {
 		return false
 	}
 	for _, i := range atWork {
@@ -652,7 +671,7 @@ func (c *Core) judgeBrief(b *benchFile) string {
 			fmt.Fprintf(&t, " worked in %s.", s.Cwd)
 		}
 		if r.Stopped {
-			fmt.Fprintf(&t, " It was still at work after %s, so it was stopped: judge it as it stands.", c.cfg().Bench.Timeout)
+			fmt.Fprintf(&t, " It was still at work after %s, so it was stopped: judge it as it stands.", c.benchLimit(b))
 		} else {
 			fmt.Fprintf(&t, " Its turn ended (%s).", s.State)
 		}

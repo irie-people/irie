@@ -17,16 +17,18 @@ const OpBench = "bench"
 // judge, starts from instead, in a copy of its last commit in a scratch
 // folder of its own, on the machine they run on; Host a peer to run them
 // on ("" = here); Runs
-// how many (0 = bench.runs); and Judge the judge's profile ("" =
-// bench.judge).
+// how many (0 = bench.runs); Judge the judge's profile ("" =
+// bench.judge); and Timeout how long the runs may work before the ones
+// still at work are stopped and judged as they stand (0 = bench.timeout).
 type BenchArgs struct {
-	Task    string `json:"task,omitempty"`
-	Profile string `json:"profile,omitempty"`
-	Repo    string `json:"repo,omitempty"`
-	From    string `json:"from,omitempty"`
-	Host    string `json:"host,omitempty"`
-	Runs    int    `json:"runs,omitempty"`
-	Judge   string `json:"judge,omitempty"`
+	Task    string        `json:"task,omitempty"`
+	Profile string        `json:"profile,omitempty"`
+	Repo    string        `json:"repo,omitempty"`
+	From    string        `json:"from,omitempty"`
+	Host    string        `json:"host,omitempty"`
+	Runs    int           `json:"runs,omitempty"`
+	Judge   string        `json:"judge,omitempty"`
+	Timeout time.Duration `json:"timeout,omitempty"`
 }
 
 // BenchResult is the bench started, or every bench, the newest first.
@@ -66,6 +68,10 @@ type Bench struct {
 	Started time.Time  `json:"started"`
 	Judged  *time.Time `json:"judged,omitempty"` // when the judge started
 	Ended   *time.Time `json:"ended,omitempty"`
+	// Timeout is how long its runs had: a run still at work after it was
+	// stopped. A bench kept before benches had their own has none, and
+	// went by bench.timeout.
+	Timeout time.Duration `json:"timeout,omitempty"`
 }
 
 // BenchRun is one run of a bench: its session and how the judge scored it.
@@ -74,5 +80,5 @@ type BenchRun struct {
 	Score   *int   `json:"score,omitempty"` // 0 to 100
 	Missed  string `json:"missed,omitempty"`
 	Verdict string `json:"verdict,omitempty"` // good or bad, from the score
-	Stopped bool   `json:"stopped,omitempty"` // still at work at bench.timeout, so stopped and judged as it stood
+	Stopped bool   `json:"stopped,omitempty"` // still at work at the bench's timeout, so stopped and judged as it stood
 }

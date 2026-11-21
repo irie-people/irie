@@ -342,7 +342,7 @@ func (c *Core) openChain(again bool) {
 
 // settleFolder moves the chain kept at the top of the chains' folder, as
 // the first build of it kept it, into dir, its folder of its own beside
-// the other chains (chain/founding): objects, HEAD, HEAD.bad and the key
+// the other chains (chain/charters): objects, HEAD, HEAD.bad and the key
 // file, each once. What dir has already stays, and so does what would
 // clash with it, which an error says.
 func settleFolder(dir string) error {

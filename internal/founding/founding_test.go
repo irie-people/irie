@@ -3,6 +3,7 @@ package founding
 import (
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -43,9 +44,22 @@ func items(d ipc.FoundingDoc) int {
 
 // TestTheDocuments: each document is whole. The Declaration has its 27
 // grievances and 56 signers; the Constitution its seven articles, 27
-// amendments in order and 39 signers; the Bill of Rights its ten.
+// amendments in order and 39 signers; the Bill of Rights its ten; Magna
+// Carta its 63 chapters; the English Bill of Rights its title and the
+// rights it declares; the Virginia Declaration its sixteen sections; the
+// Articles their thirteen; the Universal Declaration its preamble and
+// thirty articles; the Privacy Act its subsections (a) to (w).
 func TestTheDocuments(t *testing.T) {
 	d := docs(t)
+	if len(d) != len(Documents) {
+		t.Fatalf("%d documents, want %d", len(d), len(Documents))
+	}
+	for _, x := range Documents {
+		got := d[x.ID]
+		if got.Short != x.Short || got.When != x.When || got.Kind != x.Kind || len(got.When) < 4 {
+			t.Errorf("%s: short %q, when %q, kind %q", x.ID, got.Short, got.When, got.Kind)
+		}
+	}
 	dec, con, bor, foia := d["declaration"], d["constitution"], d["rights"], d["foia"]
 	if dec.Title != "The Declaration of Independence" || con.Title != "The Constitution of the United States" || bor.Title != "The Bill of Rights" {
 		t.Fatalf("titles: %q, %q, %q", dec.Title, con.Title, bor.Title)
@@ -104,6 +118,191 @@ func TestTheDocuments(t *testing.T) {
 	if last := foia.Blocks[len(foia.Blocks)-1]; last.Kind != "note" || !strings.HasPrefix(last.Text, "The Code's source credit") {
 		t.Errorf("FOIA's foot: %+v", last)
 	}
+
+	// Magna Carta: a preamble, then 63 chapters, each a paragraph starting
+	// with its number, in order.
+	mc := d["magna-carta"]
+	if mc.Title != "Magna Carta" || !strings.Contains(mc.About, "McKechnie") || !strings.Contains(mc.About, "1215") {
+		t.Errorf("Magna Carta: %q, %q", mc.Title, mc.About)
+	}
+	chapters := 0
+	for _, b := range mc.Blocks {
+		if b.Kind == "text" && strings.HasPrefix(b.Text, strconv.Itoa(chapters+1)+". ") {
+			chapters++
+		}
+	}
+	if chapters != 63 || len(mc.Blocks) != 64 || !strings.HasPrefix(mc.Blocks[0].Text, "John, by the grace of God") {
+		t.Errorf("Magna Carta: %d chapters in order, %d blocks", chapters, len(mc.Blocks))
+	}
+
+	// The English Bill of Rights: the Act's title first, then its words
+	// under the Statutes of the Realm's marginal titles; the rights it
+	// declares each start "That", twelve of them, and one "And that".
+	ebr := d["english-rights"]
+	if ebr.Title != "The English Bill of Rights" || !strings.Contains(ebr.About, "legislation.gov.uk") || !strings.Contains(ebr.About, "1 Will. & Mar. sess. 2 c. 2") {
+		t.Errorf("the English Bill of Rights: %q, %q", ebr.Title, ebr.About)
+	}
+	if len(ebr.Blocks) == 0 || ebr.Blocks[0].Kind != "text" || ebr.Blocks[0].Text != "An Act declareing the Rights and Liberties of the Subject and Setleing the Succession of the Crowne." {
+		t.Errorf("the English Bill of Rights' title: %+v", ebr.Blocks[:1])
+	}
+	if n := count(ebr, "text", func(s string) bool { return strings.HasPrefix(s, "That ") }); n != 12 {
+		t.Errorf("the English Bill of Rights: %d rights starting \"That\", want 12", n)
+	}
+	if n := count(ebr, "h2", func(string) bool { return true }); n != 35 {
+		t.Errorf("the English Bill of Rights: %d marginal titles, want 35", n)
+	}
+
+	// The Virginia Declaration: its opening, then Sections 1 to 16 in order.
+	va := d["virginia"]
+	if va.Title != "The Virginia Declaration of Rights" || !strings.Contains(va.About, "National Archives") || !strings.Contains(va.About, "modern spelling") {
+		t.Errorf("Virginia: %q, %q", va.Title, va.About)
+	}
+	var secs []string
+	for _, b := range va.Blocks {
+		if b.Kind == "h2" && strings.HasPrefix(b.Text, "Section ") {
+			secs = append(secs, strings.TrimPrefix(b.Text, "Section "))
+		}
+	}
+	opening := slices.IndexFunc(va.Blocks, func(b ipc.FoundingBlock) bool { return b.Kind == "h2" && b.Text == "A Declaration of Rights" })
+	if strings.Join(secs, " ") != "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" || opening < 0 || opening > 1 {
+		t.Errorf("Virginia's sections: %v, the opening at %d", secs, opening)
+	}
+
+	// The Articles: Article I. to Article XIII., in order.
+	art := d["articles"]
+	if art.Title != "The Articles of Confederation" || !strings.Contains(art.About, "National Archives") {
+		t.Errorf("the Articles: %q, %q", art.Title, art.About)
+	}
+	var arts []string
+	for _, b := range art.Blocks {
+		if b.Kind == "h2" && strings.HasPrefix(b.Text, "Article ") {
+			arts = append(arts, strings.TrimSuffix(strings.TrimPrefix(b.Text, "Article "), "."))
+		}
+	}
+	if strings.Join(arts, " ") != strings.Join(romans[:13], " ") {
+		t.Errorf("the Articles: %v", arts)
+	}
+
+	// The Universal Declaration: its preamble, then Articles 1 to 30 in order.
+	ud := d["udhr"]
+	if ud.Title != "The Universal Declaration of Human Rights" || !strings.Contains(ud.About, "10 December 1948") || !strings.Contains(ud.About, "A/RES/217(III)") {
+		t.Errorf("the Universal Declaration: %q, %q", ud.Title, ud.About)
+	}
+	var h2s []string
+	for _, b := range ud.Blocks {
+		if b.Kind == "h2" {
+			h2s = append(h2s, b.Text)
+		}
+	}
+	want := []string{"Preamble"}
+	for i := 1; i <= 30; i++ {
+		want = append(want, "Article "+strconv.Itoa(i))
+	}
+	if !slices.Equal(h2s, want) {
+		t.Errorf("the Universal Declaration's parts: %v", h2s)
+	}
+
+	// The Privacy Act: § 552a's 23 subsections, (a) to (w), each starting a
+	// paragraph with its catchline, in order, and the Code's source credit
+	// at its foot.
+	pa := d["privacy"]
+	if pa.Title != "The Privacy Act of 1974" || !strings.Contains(pa.About, "Government Publishing Office's 2024 edition") {
+		t.Errorf("the Privacy Act: %q, %q", pa.Title, pa.About)
+	}
+	if len(pa.Blocks) == 0 || pa.Blocks[0].Kind != "h2" || pa.Blocks[0].Text != "§ 552a. Records maintained on individuals" {
+		t.Fatalf("the Privacy Act's heading: %+v", pa.Blocks[:1])
+	}
+	at = 0
+	for _, start := range []string{"(a) Definitions.—", "(b) Conditions of Disclosure.—", "(c) Accounting of Certain Disclosures.—", "(d) Access to Records.—",
+		"(e) Agency Requirements.—", "(f) Agency Rules.—", "(g)(1) Civil Remedies.—", "(h) Rights of Legal Guardians.—", "(i)(1) Criminal Penalties.—",
+		"(j) General Exemptions.—", "(k) Specific Exemptions.—", "(l)(1) Archival Records.—", "(m)(1) Government Contractors.—", "(n) Mailing Lists.—",
+		"(o) Matching Agreements.—", "(p) Verification and Opportunity to Contest Findings.—", "(q) Sanctions.—", "(r) Report on New Systems and Matching Programs.—",
+		"(s) Biennial Report.—", "(t)(1) Effect of Other Laws.—", "(u) Data Integrity Boards.—", "(v) Office of Management and Budget Responsibilities.—",
+		"(w) Applicability to Bureau of Consumer Financial Protection.—"} {
+		i := slices.IndexFunc(pa.Blocks[at:], func(b ipc.FoundingBlock) bool { return b.Kind == "text" && strings.HasPrefix(b.Text, start) })
+		if i < 0 {
+			t.Errorf("the Privacy Act: no subsection %q after block %d", start, at)
+			continue
+		}
+		at += i
+	}
+	if last := pa.Blocks[len(pa.Blocks)-1]; last.Kind != "note" || !strings.HasPrefix(last.Text, "The Code's source credit") {
+		t.Errorf("the Privacy Act's foot: %+v", last)
+	}
+}
+
+// TestTheLinksAreInTheTexts: each link joins two of the texts, the later to
+// the earlier, by one of the known kinds, once; every text is in the graph;
+// and every quotation in a link's why, in curly double quotes, is in one of
+// its two texts word for word, so the inference can be checked against the
+// chain itself.
+func TestTheLinksAreInTheTexts(t *testing.T) {
+	var files map[string][]byte
+	for _, s := range skills.Bundled() {
+		if s.Name == Skill {
+			files = s.Files
+		}
+	}
+	year := func(d Document) int {
+		y, err := strconv.Atoi(d.When[:4])
+		if err != nil {
+			t.Fatalf("%s: when %q", d.ID, d.When)
+		}
+		return y
+	}
+	seen := map[string]bool{}
+	inGraph := map[string]bool{}
+	for _, l := range Links {
+		from, okFrom := ByID(l.From)
+		to, okTo := ByID(l.To)
+		if !okFrom || !okTo {
+			t.Errorf("%s → %s: not both texts", l.From, l.To)
+			continue
+		}
+		inGraph[l.From], inGraph[l.To] = true, true
+		if year(from) < year(to) || (year(from) == year(to) && from.When <= to.When) {
+			t.Errorf("%s → %s: the link runs forward in time, %s to %s", l.From, l.To, from.When, to.When)
+		}
+		if !slices.Contains(Hows, l.How) {
+			t.Errorf("%s → %s: how %q", l.From, l.To, l.How)
+		}
+		if seen[l.From+">"+l.To] {
+			t.Errorf("%s → %s: linked twice", l.From, l.To)
+		}
+		seen[l.From+">"+l.To] = true
+		if !strings.HasSuffix(l.Why, ".") || strings.Contains(l.Why, "'") && !strings.Contains(l.Why, "'s") && !strings.Contains(l.Why, "s' ") {
+			t.Errorf("%s → %s: why %q", l.From, l.To, l.Why)
+		}
+		both := string(files[from.File]) + "\n" + string(files[to.File])
+		for _, q := range quoted(l.Why) {
+			if !strings.Contains(both, q) {
+				t.Errorf("%s → %s: %q isn't in either text", l.From, l.To, q)
+			}
+		}
+	}
+	for _, d := range Documents {
+		if !inGraph[d.ID] {
+			t.Errorf("%s is in no link", d.ID)
+		}
+	}
+}
+
+// quoted gives the quotations in s, the spans in curly double quotes.
+func quoted(s string) []string {
+	var out []string
+	for {
+		i := strings.Index(s, "“")
+		if i < 0 {
+			return out
+		}
+		s = s[i+len("“"):]
+		j := strings.Index(s, "”")
+		if j < 0 {
+			return out
+		}
+		out = append(out, s[:j])
+		s = s[j+len("”"):]
+	}
 }
 
 // TestTheTenAgree: the Bill of Rights' ten amendments are the
@@ -150,6 +349,14 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		"rights": {"or of the press; or the right", "In suits at common law"},
 		// Where the Department of Justice's copy differs, the Code reads so.
 		"foia": {"unless the court otherwise directs for good cause shown", "compiled by criminal law enforcement authority", "This section does not authorize withholding of information", "provide copies of such index on request", "which shall be made available"},
+		// The printed page's words where Wikisource's transcription slipped.
+		"magna-carta":    {"No freeman shall be taken or imprisoned", "one measure of corn", "both clergy and laymen"},
+		"english-rights": {"cruell and unusuall Punishments inflicted", "excessive Baile ought not to be required", "Setleing the Succession of the Crowne"},
+		"virginia":       {"nor can he be compelled to give evidence against himself", "the free exercise of religion"},
+		"articles":       {"The Stile of this confederacy shall be", "a firm league of friendship", "con-firmed by the legislatures of every state"},
+		// The official record's readings where the UN's web text differs.
+		"udhr":    {"life, liberty and the security of person", "the borders of each State", "in co-operation with the United Nations"},
+		"privacy": {"to the Director of the Congressional Budget Office", "required under section 552 of this title"},
 	} {
 		var all strings.Builder
 		for _, b := range d[id].Blocks {
@@ -178,7 +385,7 @@ func TestTheFingerprints(t *testing.T) {
 	for _, m := range row.FindAllStringSubmatch(record, -1) {
 		listed[m[1]] = m[2]
 	}
-	for _, f := range Files {
+	for _, f := range Documents {
 		got := Digest(files[f.File])
 		if listed[f.File] != got {
 			t.Errorf("%s: SHA-512 %s, but verification.md gives %q", f.File, got, listed[f.File])
@@ -229,15 +436,21 @@ func TestFindAnySpelling(t *testing.T) {
 		return out
 	}
 	for q, want := range map[string]string{
-		"choose their Speaker":        "constitution: Article. I. › Section. 2.",
-		"the common defense":          "constitution: Preamble",
-		"THE UNANIMOUS DECLARATION":   "declaration: ",
-		"complete the works of death": "declaration: ",
-		"our British brethren":        "declaration: ",
-		"unreasonable searches":       "rights: Amendments › Amendment IV",
-		"vice president elect":        "constitution: Amendments › Amendment XX › Section 3.",
-		"the Vice President":          "constitution: Amendments › Amendment XII",
-		"chief FOIA officer":          "foia: § 552. Public information; agency rules, opinions, orders, records, and proceedings",
+		"choose their Speaker":                "constitution: Article. I. › Section. 2.",
+		"the common defense":                  "constitution: Preamble",
+		"THE UNANIMOUS DECLARATION":           "declaration: ",
+		"complete the works of death":         "declaration: ",
+		"our British brethren":                "declaration: ",
+		"unreasonable searches":               "rights: Amendments › Amendment IV",
+		"vice president elect":                "constitution: Amendments › Amendment XX › Section 3.",
+		"the Vice President":                  "constitution: Amendments › Amendment XII",
+		"chief FOIA officer":                  "foia: § 552. Public information; agency rules, opinions, orders, records, and proceedings",
+		"cruel and unusual punishments":       "english-rights: Excessive Bail.",
+		"freedom of speech and debates":       "english-rights: Freedom of Speech.",
+		"law of the land":                     "magna-carta: ",
+		"style of this confederacy":           "articles: Article I.",
+		"cooperation with the United Nations": "udhr: Preamble",
+		"records maintained on individuals":   "privacy: § 552a. Records maintained on individuals",
 	} {
 		if got := find(q); !got[want] {
 			t.Errorf("Find(%q) = %v, want %q among them", q, got, want)
@@ -251,7 +464,9 @@ func TestFindAnySpelling(t *testing.T) {
 	if got := Find(all, "  ,.;  "); got != nil {
 		t.Errorf("punctuation alone found %v", got)
 	}
-	if got := find("arm"); len(got) != 0 {
+	// Whole words only: "arm" is a word of the Articles ("cloath, arm and
+	// equip"), and nowhere else, where "Arms" and "Armies" are.
+	if got := find("arm"); len(got) != 1 || !got["articles: Article IX."] {
 		t.Errorf(`"arm" found %v: whole words only`, got)
 	}
 }

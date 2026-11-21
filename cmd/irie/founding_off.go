@@ -14,5 +14,5 @@ import (
 const foundingUsage = ""
 
 func ctlFounding([]string) error {
-	return errors.New("the founding documents plugin isn't in this build of " + brand.Name)
+	return errors.New("the Charters plugin isn't in this build of " + brand.Name)
 }

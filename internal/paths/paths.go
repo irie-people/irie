@@ -122,9 +122,13 @@ func (p Paths) Notepad() string { return filepath.Join(p.Data, "notepad.json") }
 // themes and layouts are, so it sits with them.
 func (p Paths) Zen() string { return filepath.Join(p.Config, "zen") }
 
-// FoundingChain is the founding documents' local chain (internal/founding):
-// each version holds every text, and names the one before it.
-func (p Paths) FoundingChain() string { return filepath.Join(p.State, "chain", "founding") }
+// Charters is the charters' local chain (internal/founding): the texts of
+// rights, each version holding every text and the links between them, and
+// naming the one before it. FoundingChainFirst is where the first build
+// kept it, as the founding documents' chain, which the core moves into
+// Charters as it starts.
+func (p Paths) Charters() string           { return filepath.Join(p.State, "chain", "charters") }
+func (p Paths) FoundingChainFirst() string { return filepath.Join(p.State, "chain", "founding") }
 
 // Keys holds the keys that open Irie's vaults where the system keeps no
 // keychain (internal/keyring): apart from the vaults, so that a copy of
