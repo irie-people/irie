@@ -73,6 +73,40 @@ func helperPath(raw string) (string, bool) {
 	return filepath.Clean(raw), true
 }
 
+// runWords reads a run's words, a helper's or a server's: the program, a
+// name on the PATH or a full path, then its arguments, with ~/ for the home
+// folder. What is wrong is in a sentence, with example as the way to write
+// one, or "".
+func runWords(run []string, example string) ([]string, string) {
+	if len(run) > maxHelperArgs {
+		return nil, "run has more than " + strconv.Itoa(maxHelperArgs) + " words."
+	}
+	var out []string
+	for i, w := range run {
+		if strings.ContainsAny(w, "\x00\n\r") {
+			return nil, "run's word " + strconv.Itoa(i+1) + " holds a line break or a NUL."
+		}
+		if i == 0 {
+			w = strings.TrimSpace(w)
+			if w == "" {
+				return nil, "run starts with an empty word: its first is the program, such as " + example + "."
+			}
+			if strings.Contains(w, "/") || strings.HasPrefix(w, "~") {
+				abs, ok := helperPath(w)
+				if !ok {
+					return nil, "run's program " + strconv.Quote(w) + " isn't a name on your PATH or a full path: name it as python3, or as /usr/bin/python3 or ~/bin/listen."
+				}
+				w = abs
+			}
+		} else if strings.HasPrefix(w, "~/") {
+			// A path to a file of yours, as the program takes it.
+			w, _ = helperPath(w)
+		}
+		out = append(out, w)
+	}
+	return out, ""
+}
+
 // helperPart is the part a [helpers.<id>] table makes.
 func helperPart(p Plugin, id string, f helperFile) Part {
 	title := line(f.Title, 40)
@@ -93,31 +127,11 @@ func helperPart(p Plugin, id string, f helperFile) Part {
 	if icon := strings.TrimSpace(f.Icon); symbolName.MatchString(icon) {
 		h.Icon = icon
 	}
-	if len(f.Run) > maxHelperArgs {
-		return fails("run has more than " + strconv.Itoa(maxHelperArgs) + " words.")
+	run, why := runWords(f.Run, `run = ["python3", "~/inbox/listen.py"]`)
+	if why != "" {
+		return fails(why)
 	}
-	for i, w := range f.Run {
-		if strings.ContainsAny(w, "\x00\n\r") {
-			return fails("run's word " + strconv.Itoa(i+1) + " holds a line break or a NUL.")
-		}
-		if i == 0 {
-			w = strings.TrimSpace(w)
-			if w == "" {
-				return fails("run starts with an empty word: its first is the program, such as run = [\"python3\", \"~/inbox/listen.py\"].")
-			}
-			if strings.Contains(w, "/") || strings.HasPrefix(w, "~") {
-				abs, ok := helperPath(w)
-				if !ok {
-					return fails("run's program " + strconv.Quote(w) + " isn't a name on your PATH or a full path: name it as python3, or as /usr/bin/python3 or ~/bin/listen.")
-				}
-				w = abs
-			}
-		} else if strings.HasPrefix(w, "~/") {
-			// A path to a file of yours, as the program takes it.
-			w, _ = helperPath(w)
-		}
-		h.Run = append(h.Run, w)
-	}
+	h.Run = run
 	var ok bool
 	if h.Dir, ok = helperPath(f.Dir); !ok {
 		return fails("dir = " + strconv.Quote(f.Dir) + " isn't a full path: name it as ~/inbox or /Users/alice/inbox.")

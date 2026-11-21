@@ -116,6 +116,24 @@ func unique(name string, taken map[string]bool) string {
 	}
 }
 
+// newScratch makes a new scratch folder named after base: the first free
+// of base, base-2 and so on.
+func (c *Core) newScratch(base string) (string, error) {
+	if err := os.MkdirAll(c.paths.Scratch(), 0o700); err != nil {
+		return "", err
+	}
+	for n := 1; ; n++ {
+		d := c.paths.ScratchDir(numbered(base, n))
+		err := os.Mkdir(d, 0o700)
+		if err == nil {
+			return d, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return "", err
+		}
+	}
+}
+
 // workdir resolves where a task runs: the requested directory in place,
 // else spawn.default_cwd, else a new scratch dir named after base, so an
 // untargeted task never runs in $HOME.
@@ -125,19 +143,7 @@ func (c *Core) workdir(requested, base string) (string, error) {
 		dir = c.cfg().Spawn.DefaultCwd
 	}
 	if dir == "" {
-		if err := os.MkdirAll(c.paths.Scratch(), 0o700); err != nil {
-			return "", err
-		}
-		for n := 1; ; n++ {
-			d := c.paths.ScratchDir(numbered(base, n))
-			err := os.Mkdir(d, 0o700)
-			if err == nil {
-				return d, nil
-			}
-			if !errors.Is(err, fs.ErrExist) {
-				return "", err
-			}
-		}
+		return c.newScratch(base)
 	}
 	if dir == "~" || strings.HasPrefix(dir, "~/") {
 		home, err := os.UserHomeDir()
@@ -314,6 +320,9 @@ func (c *Core) spawnProfile(a ipc.SpawnArgs, named bool, profileName string, pro
 	name, base := cleanText(a.Name, maxName), slug(a.Name)
 	if name == "" {
 		name, named, base = title(a.Task), false, slug(a.Task)
+	}
+	if a.Folder != "" {
+		base = slug(a.Folder)
 	}
 	// Anonymous research takes its compartment first, and work that an
 	// anonymous session hands on, or a failover carries on, stays in its
@@ -517,6 +526,8 @@ func (c *Core) launch(j job) (*session, error) {
 			}
 			s.MCP[name] = srv
 		}
+		// Your plugins' tools, after Irie's own (DESIGN §4.17).
+		s.MCP = c.ownToolsMCP(x, s.MCP)
 	}
 	launch := h.Launch
 	if j.resume != "" {

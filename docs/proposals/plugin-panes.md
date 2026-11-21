@@ -36,7 +36,19 @@ icon = "doc.text"                     # an SF Symbols name; a globe when left ou
 start = "cd ~/code/invoices && make serve"   # shown when nothing answers; never run
 ```
 
-A manifest is data: Irie reads it and runs nothing from it, but a helper's program once you turn its plugin on: a `[helpers.<id>]` table names a program of yours that Irie keeps running in a window of its own, a status file it keeps and a file to open, and the right sidebar's Helpers tab shows it (DESIGN §4.17). `[schedules.<id>]` tables are kept for the schedules another session is adding: until a build reads them, each shows as a part that is held, so a manifest written today keeps working. A manifest that doesn't read shows as its plugin with a part that says what is wrong.
+A manifest is data: Irie reads it and runs nothing from it, but a helper's program once you turn its plugin on: a `[helpers.<id>]` table names a program of yours that Irie keeps running in a window of its own, a status file it keeps and a file to open, and the right sidebar's Helpers tab shows it (DESIGN §4.17).
+
+A plugin of yours can also give agents' sessions what they need to work with its app (added 2026-11-21):
+
+```toml
+[skills.invoices]
+path = "~/code/invoices/skills/invoices"   # a folder holding its SKILL.md; sessions run it as /irie:invoices
+
+[tools.invoices]
+run = ["~/code/invoices/target/release/invoices", "mcp"]   # an MCP server; its tools are mcp__invoices__…
+```
+
+While the plugin is on, each session that starts gets the skill with Irie's own and the server with Irie's own servers, never an anonymous research session. Both go to every agent, so a manifest with either is off until you turn it on (DESIGN §4.17). `[schedules.<id>]` tables are kept for the schedules another session is adding: until a build reads them, each shows as a part that is held, so a manifest written today keeps working. A manifest that doesn't read shows as its plugin with a part that says what is wrong.
 
 ## 3. Bundles
 
@@ -87,4 +99,5 @@ Each line is a plugin's name or a part of one, `PLUGIN.PART`. The bundle's switc
 - A pane's own window, or a zoom over the terminal, for an app that wants more room than the sidebar has.
 - Forget a pane's logins from Settings (`WKWebsiteDataStore.remove(forIdentifier:)`).
 - Plugins from a repository of their own, pinned to a commit (DESIGN §4.17, Later).
+- A word of a plugin's own in the task bar, such as `:invoices TASK`, that starts a session for its app: until then a task names the app, and its skill tells the agent how to work with it.
 - The terminal sidebar and the phone list plugins and bundles but draw no panes. The phone reaches the web panes that `remote.panes` names instead, each at an address of its own, in Safari or on its Home Screen ([PHONE.md](../PHONE.md) §2.2), not inside Irie's app.

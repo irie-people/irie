@@ -49,6 +49,11 @@ type manifestFile struct {
 	Panes   map[string]paneFile `toml:"panes"`
 	// Helpers are programs of yours that Irie keeps running (helpers.go).
 	Helpers map[string]helperFile `toml:"helpers"`
+	// Skills and Tools are what agents' sessions get from the plugin: a
+	// skill of yours, and an MCP server of yours (ownskills.go,
+	// owntools.go).
+	Skills map[string]skillFile `toml:"skills"`
+	Tools  map[string]toolsFile `toml:"tools"`
 	// Schedules are kept for a later build, which reads them: until then
 	// each shows as a part that is held.
 	Schedules map[string]toml.Primitive `toml:"schedules"`
@@ -104,6 +109,7 @@ func Mine(dir string) ([]Plugin, []Bundle) {
 			ps = append(ps, p)
 		}
 	}
+	firstNames(ps)
 	return ps, bs
 }
 
@@ -134,7 +140,7 @@ func readManifest(path string) (Plugin, *Bundle) {
 		return broken("It doesn't read as TOML: " + err.Error())
 	}
 	if keys := undecoded(md); len(keys) > 0 {
-		return broken("It has keys " + brand.Name + " doesn't know: " + strings.Join(keys, ", ") + ". A plugin has title, summary, [panes.NAME] and [helpers.NAME] tables; a bundle has title, summary and plugins.")
+		return broken("It has keys " + brand.Name + " doesn't know: " + strings.Join(keys, ", ") + ". A plugin has title, summary, and [panes.NAME], [helpers.NAME], [skills.NAME] and [tools.NAME] tables; a bundle has title, summary and plugins.")
 	}
 	title, summary := line(mf.Title, 60), line(mf.Summary, 300)
 	if title == "" {
@@ -142,8 +148,8 @@ func readManifest(path string) (Plugin, *Bundle) {
 	}
 	if md.IsDefined("plugins") {
 		b := &Bundle{Name: name, Title: title, Summary: summary, Manifest: path}
-		if len(mf.Panes) > 0 || len(mf.Helpers) > 0 || len(mf.Schedules) > 0 {
-			b.Problem = "A bundle names plugins and has no parts of its own: put its panes, helpers or schedules in a manifest of their own, and name that in the bundle's plugins."
+		if len(mf.Panes) > 0 || len(mf.Helpers) > 0 || len(mf.Skills) > 0 || len(mf.Tools) > 0 || len(mf.Schedules) > 0 {
+			b.Problem = "A bundle names plugins and has no parts of its own: put its panes, helpers, skills, tools or schedules in a manifest of their own, and name that in the bundle's plugins."
 			return Plugin{}, b
 		}
 		for _, ref := range mf.Plugins {
@@ -164,6 +170,11 @@ func readManifest(path string) (Plugin, *Bundle) {
 		key: "plugins.manifests." + name,
 		on:  func(c config.Config) bool { return c.Plugins.ManifestOn(name) },
 	}
+	// gated is the switch of a plugin that shows a page off this computer,
+	// runs a program of yours or speaks to agents: it is on only once the
+	// owner has said so, so a manifest dropped in the folder, by an agent
+	// say, can do none of it by itself.
+	gated := func(c config.Config) bool { on, set := c.Plugins.Manifests[name]; return set && on }
 	if p.Summary == "" {
 		p.Summary = "A plugin of your own, from " + file + " in the plugins folder."
 	}
@@ -171,10 +182,8 @@ func readManifest(path string) (Plugin, *Bundle) {
 		x := panePart(p, id, mf.Panes[id])
 		if x.Pane != nil && x.Pane.Remote {
 			// A page off this computer shows only once the owner has said
-			// so, with the plugin's switch: a manifest dropped in the
-			// folder, by an agent say, can't bring one by itself.
-			p.on = func(c config.Config) bool { on, set := c.Plugins.Manifests[name]; return set && on }
-			p.remote = true
+			// so, with the plugin's switch.
+			p.on, p.remote = gated, true
 		}
 		p.Parts = append(p.Parts, x)
 	}
@@ -183,10 +192,19 @@ func readManifest(path string) (Plugin, *Bundle) {
 		if len(x.Helper.Run) > 0 {
 			// A program of yours runs only once the owner has said so,
 			// with the plugin's switch, as a page off this computer.
-			p.on = func(c config.Config) bool { on, set := c.Plugins.Manifests[name]; return set && on }
-			p.runs = true
+			p.on, p.runs = gated, true
 		}
 		p.Parts = append(p.Parts, x)
+	}
+	// A skill's words and a server's tools go to every agent's session, so
+	// they too wait for the owner's switch.
+	for _, id := range slices.Sorted(maps.Keys(mf.Skills)) {
+		p.on = gated
+		p.Parts = append(p.Parts, skillPart(p, id, mf.Skills[id]))
+	}
+	for _, id := range slices.Sorted(maps.Keys(mf.Tools)) {
+		p.on = gated
+		p.Parts = append(p.Parts, toolsPart(p, id, mf.Tools[id]))
 	}
 	for _, id := range slices.Sorted(maps.Keys(mf.Schedules)) {
 		var s struct {
