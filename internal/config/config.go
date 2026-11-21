@@ -64,6 +64,7 @@ type Config struct {
 	Mail      Mail               `toml:"mail"`
 	Extension Extension          `toml:"extension"`
 	Yoink     Yoink              `toml:"yoink"`
+	Chat      Chat               `toml:"chat"`
 	Obsidian  Obsidian           `toml:"obsidian"`
 	Plugins   Plugins            `toml:"plugins"`
 
@@ -107,6 +108,10 @@ type Plugins struct {
 	// run by the core into yoink.folder. Off until asked, so a new Irie
 	// downloads from no site of its own accord.
 	Yoink bool `toml:"yoink"`
+	// Chat is team and community chat beside the sessions: Discord and
+	// Slack through bots of the person's own, and agents' drafts the person
+	// sends (docs/proposals/chat.md).
+	Chat bool `toml:"chat"`
 	// Obsidian is an Obsidian vault beside the sessions: its notes in the
 	// Mac app's Vault cards, read and written by Irie itself, and the
 	// notepad kept as a note in it, both ways. It does nothing until
@@ -163,6 +168,14 @@ func (c Config) TermsOn() bool { return TermsBuilt && c.Plugins.Terms }
 // YoinkOn says whether the yoink plugin runs: plugins.yoink, with the
 // plugin built in.
 func (c Config) YoinkOn() bool { return YoinkBuilt && c.Plugins.Yoink }
+
+// ChatOn says whether the chat plugin runs: plugins.chat, with the plugin
+// built in.
+func (c Config) ChatOn() bool { return ChatBuilt && c.Plugins.Chat }
+
+// ChatAgentsOn says whether agents may use the chat: chat.agents, with the
+// plugin on.
+func (c Config) ChatAgentsOn() bool { return c.ChatOn() && c.Chat.Agents }
 
 // VPNOn says whether VPN control runs: vpn.on, with the VPN plugin built
 // in and on.
@@ -1044,10 +1057,11 @@ func Default() Config {
 		Anon:     Anon{Route: AnonMullvad, Countries: []string{}, Owned: true, Search: true, SearchPort: 8888, SearchRoute: AnonMullvad, Browser: true, TorPort: 9150},
 		Mail:     defaultMail(),
 		Yoink:    defaultYoink(),
+		Chat:     defaultChat(),
 		Obsidian: defaultObsidian(),
 		Variorum: Variorum{Tab: true},
 		VPN:      VPN{On: brand.VPNs != "", Provider: VPNOffered()[0], Server: brand.VPNServer},
-		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Obsidian: true, Manifests: map[string]bool{}},
+		Plugins:  Plugins{VPN: true, Privacy: true, Writing: true, Mail: true, Bitwarden: true, Terms: true, Extension: true, Chat: true, Obsidian: true, Manifests: map[string]bool{}},
 	}
 }
 
@@ -1172,11 +1186,12 @@ func Parse(data []byte, path string) (Config, error) {
 		Mail      *Mail                     `toml:"mail"`
 		Extension *Extension                `toml:"extension"`
 		Yoink     *Yoink                    `toml:"yoink"`
+		Chat      *Chat                     `toml:"chat"`
 		Obsidian  *Obsidian                 `toml:"obsidian"`
 		Plugins   *Plugins                  `toml:"plugins"`
 
 		Materialize *Materialize `toml:"materialize"`
-	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Obsidian: &c.Obsidian, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
+	}{Materialize: &c.Materialize, Plugins: &c.Plugins, Markets: &c.Markets, Variorum: &c.Variorum, Mail: &c.Mail, Extension: &c.Extension, Yoink: &c.Yoink, Chat: &c.Chat, Obsidian: &c.Obsidian, Browser: &c.Browser, Anon: &c.Anon, UI: &c.UI, Spawn: &c.Spawn, Local: &c.Local, Route: &c.Route, Bench: &c.Bench, Repos: &c.Repos, Worktree: &c.Worktree, Tmux: &c.Tmux, Journal: &c.Journal, Context: &c.Context, Hold: &c.Hold, Usage: &c.Usage, Lock: &c.Lock, Skills: &c.Skills, Dog: &c.Dog, Trod: &c.Trod, Lid: &c.Lid, Arch: &c.Arch, Remote: &c.Remote, Place: &c.Place, Env: &c.Env, VPN: &c.VPN, Learn: &c.Learn}
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
 		return c, fmt.Errorf("config %s: %w", path, err)
@@ -1859,6 +1874,7 @@ func (c Config) Validate() error {
 	checkExtension(c.Extension, bad)
 	checkMaterialize(c.Materialize, bad)
 	checkYoink(c.Yoink, bad)
+	checkChat(c.Chat, bad)
 	checkObsidian(c.Obsidian, bad)
 	return errors.Join(errs...)
 }
@@ -1866,7 +1882,7 @@ func (c Config) Validate() error {
 // Write prints c as TOML.
 func (c Config) Write(w io.Writer) error {
 	mullvad := PrivacyBuilt || slices.Contains(VPNOffered(), "mullvad")
-	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ObsidianBuilt {
+	if VPNBuilt && PrivacyBuilt && WritingBuilt && MarketsBuilt && MailBuilt && BitwardenBuilt && TermsBuilt && ExtensionBuilt && YoinkBuilt && ChatBuilt && ObsidianBuilt {
 		return toml.NewEncoder(w).Encode(c)
 	}
 	// A build without a plugin (DESIGN §4.17) prints none of its keys:
@@ -1923,6 +1939,10 @@ func (c Config) Write(w io.Writer) error {
 	if !YoinkBuilt {
 		delete(m, "yoink")
 		delete(plugins, "yoink")
+	}
+	if !ChatBuilt {
+		delete(m, "chat")
+		delete(plugins, "chat")
 	}
 	if !ObsidianBuilt {
 		delete(m, "obsidian")
