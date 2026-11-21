@@ -380,7 +380,7 @@ final class Store {
     /// The chat plugin's accounts, drafts and channels, which its tab
     /// draws (Chat.swift).
     let chat: ChatModel
-    /// The founding documents, which the Founding tab draws (Founding.swift).
+    /// The charters, which the Charters tab draws (Founding.swift).
     let founding: FoundingModel
     /// The Jammin plugin's music, which its tab draws (Jammin.swift).
     let jammin: JamminModel

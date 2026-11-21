@@ -215,7 +215,7 @@ enum Snapshot {
                 try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
                 print(name)
             }
-            // The Founding tab (Founding.swift): a search's passage in the
+            // The Charters tab (Founding.swift): a search's passage in the
             // Constitution, found whatever its spelling, in both modes.
             let foundingPlugin = try Wire.decoder.decode(PluginInfo.self, from: Data(Fixture.foundingPlugin.utf8))
             for (base, dark) in [("side-founding", false), ("side-founding-dark", true)] {

@@ -79,7 +79,7 @@ struct FoundingChainInfo: Decodable, Equatable {
 
 // MARK: The model
 
-/// The Founding tab's state: the documents, read once, the one on show,
+/// The Charters tab's state: the documents, read once, the one on show,
 /// and what the search box found, which the core works out.
 @MainActor
 @Observable
