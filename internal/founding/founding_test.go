@@ -135,6 +135,25 @@ func TestTheDocuments(t *testing.T) {
 		t.Errorf("Magna Carta: %d chapters in order, %d blocks", chapters, len(mc.Blocks))
 	}
 
+	// Magna Carta (1297), Ruffhead's edition of the statute book's
+	// translation: 37 chapters under their headings, CAP. I. to CAP.
+	// XXXVII., the confirmation under the edition's margin note, and the
+	// edition's notes on the translation as notes.
+	mc97 := d["magna-carta-1297"]
+	if mc97.Title != "Magna Carta (1297)" || !strings.Contains(mc97.About, "Ruffhead") || !strings.Contains(mc97.About, "1763") {
+		t.Errorf("Magna Carta (1297): %q, %q", mc97.Title, mc97.About)
+	}
+	var caps []string
+	for _, b := range mc97.Blocks {
+		if b.Kind == "h2" && strings.HasPrefix(b.Text, "CAP. ") {
+			caps = append(caps, strings.TrimSuffix(strings.Fields(b.Text)[1], "."))
+		}
+	}
+	romans37 := append(slices.Clone(romans), "XXVIII", "XXIX", "XXX", "XXXI", "XXXII", "XXXIII", "XXXIV", "XXXV", "XXXVI", "XXXVII")
+	if !slices.Equal(caps, romans37) || count(mc97, "h2", func(string) bool { return true }) != 38 || count(mc97, "note", func(string) bool { return true }) != 30 {
+		t.Errorf("Magna Carta (1297): chapters %v, %d notes", caps, count(mc97, "note", func(string) bool { return true }))
+	}
+
 	// The English Bill of Rights: the Act's title first, then its words
 	// under the Statutes of the Realm's marginal titles; the rights it
 	// declares each start "That", twelve of them, and one "And that".
@@ -150,6 +169,27 @@ func TestTheDocuments(t *testing.T) {
 	}
 	if n := count(ebr, "h2", func(string) bool { return true }); n != 35 {
 		t.Errorf("the English Bill of Rights: %d marginal titles, want 35", n)
+	}
+
+	// Sweden's Freedom of the Press Act of 1766, in its 2016 translation:
+	// the title lines and preamble, sections 1 to 15 in order, and the
+	// signatures.
+	sw := d["sweden"]
+	if sw.Title != "The Freedom of the Press Act of 1766" || !strings.Contains(sw.About, "Giles") || !strings.Contains(sw.About, "Attribution 4.0") {
+		t.Errorf("the Press Act: %q, %q", sw.Title, sw.About)
+	}
+	at = 0
+	for n := 1; n <= 15; n++ {
+		start := strconv.Itoa(n) + ". "
+		i := slices.IndexFunc(sw.Blocks[at:], func(b ipc.FoundingBlock) bool { return b.Kind == "text" && strings.HasPrefix(b.Text, start) })
+		if i < 0 {
+			t.Errorf("the Press Act: no section %d after block %d", n, at)
+			continue
+		}
+		at += i
+	}
+	if count(sw, "text", func(s string) bool { return s == "ADOLPH FRIEDRICH" }) != 1 || count(sw, "h2", func(string) bool { return true }) != 0 {
+		t.Errorf("the Press Act: %d blocks", len(sw.Blocks))
 	}
 
 	// The Virginia Declaration: its opening, then Sections 1 to 16 in order.
@@ -198,6 +238,16 @@ func TestTheDocuments(t *testing.T) {
 		t.Errorf("the Petition of Right: %d numbered sections of %d headings, %d notes", numbered, h2, count(pr, "note", func(string) bool { return true }))
 	}
 
+	// The Virginia Statute for Religious Freedom: the Act's title, then its
+	// three sections, I. to III., as Hening prints them.
+	vs := d["virginia-statute"]
+	if vs.Title != "The Virginia Statute for Religious Freedom" || !strings.Contains(vs.About, "Hening") || !strings.Contains(vs.About, "January 16, 1786") {
+		t.Errorf("the Virginia Statute: %q, %q", vs.Title, vs.About)
+	}
+	if len(vs.Blocks) != 4 || vs.Blocks[0].Text != "An act for establishing religious freedom." || !strings.HasPrefix(vs.Blocks[1].Text, "I. ") || !strings.HasPrefix(vs.Blocks[2].Text, "II. ") || !strings.HasPrefix(vs.Blocks[3].Text, "III. ") {
+		t.Errorf("the Virginia Statute: %d blocks, %+v", len(vs.Blocks), vs.Blocks)
+	}
+
 	// The Habeas Corpus Act: its long title first, its sections under the
 	// Statutes of the Realm's marginal titles, numbered II to XX after the
 	// first, and the edition's footnotes as notes, one a mark.
@@ -226,6 +276,22 @@ func TestTheDocuments(t *testing.T) {
 	compact := count(nw, "text", func(s string) bool { return strings.HasPrefix(s, "**Art. ") })
 	if sections != 14 || compact != 6 || len(nw.Blocks) != 23 || count(nw, "h2", func(string) bool { return true }) != 0 || !strings.HasPrefix(nw.Blocks[0].Text, "**An Ordinance for the government of the Territory") {
 		t.Errorf("the Northwest Ordinance: %d sections, %d articles, %d blocks", sections, compact, len(nw.Blocks))
+	}
+
+	// The Declaration of the Rights of Man: two paragraphs of preamble, then
+	// the seventeen articles, I. to XVII., each under its heading.
+	fr := d["french"]
+	if fr.Title != "The Declaration of the Rights of Man and of the Citizen" || !strings.Contains(fr.About, "Paine") || !strings.Contains(fr.About, "1894") {
+		t.Errorf("the Rights of Man: %q, %q", fr.Title, fr.About)
+	}
+	var frHeads []string
+	for _, b := range fr.Blocks {
+		if b.Kind == "h2" {
+			frHeads = append(frHeads, strings.TrimSuffix(b.Text, "."))
+		}
+	}
+	if strings.Join(frHeads, " ") != strings.Join(romans[:17], " ") || len(fr.Blocks) != 36 || count(fr, "text", func(string) bool { return true }) != 19 || !strings.HasPrefix(fr.Blocks[0].Text, "The Representatives of the people of France") {
+		t.Errorf("the Rights of Man: headings %v, %d blocks", frHeads, len(fr.Blocks))
 	}
 
 	// The Declaration of Sentiments: the declaration with its grievances,
@@ -316,6 +382,72 @@ func TestTheDocuments(t *testing.T) {
 	}
 	if last := pa.Blocks[len(pa.Blocks)-1]; last.Kind != "note" || !strings.HasPrefix(last.Text, "The Code's source credit") {
 		t.Errorf("the Privacy Act's foot: %+v", last)
+	}
+}
+
+// TestTheCovenant: the International Covenant on Civil and Political
+// Rights, the UN's text: its preamble of seven paragraphs, then Parts I to
+// VI with Articles 1 to 53 in order under them.
+func TestTheCovenant(t *testing.T) {
+	c := docs(t)["iccpr"]
+	if c.Title != "The International Covenant on Civil and Political Rights" || !strings.Contains(c.About, "2200 A (XXI)") || !strings.Contains(c.About, "23 March 1976") {
+		t.Errorf("the Covenant: %q, %q", c.Title, c.About)
+	}
+	var parts, articles []string
+	preamble := 0
+	for _, b := range c.Blocks {
+		switch b.Kind {
+		case "h2":
+			parts = append(parts, b.Text)
+		case "h3":
+			articles = append(articles, strings.TrimPrefix(b.Text, "Article "))
+		case "text":
+			if len(parts) == 1 {
+				preamble++
+			}
+		}
+	}
+	var want []string
+	for i := 1; i <= 53; i++ {
+		want = append(want, strconv.Itoa(i))
+	}
+	if strings.Join(parts, "|") != "Preamble|Part I|Part II|Part III|Part IV|Part V|Part VI" || !slices.Equal(articles, want) || preamble != 7 {
+		t.Errorf("the Covenant: parts %v, %d articles, %d preamble paragraphs", parts, len(articles), preamble)
+	}
+}
+
+// TestTheUKAct: the Freedom of Information Act 2000, as enacted: its long
+// title first, Parts I to VIII and Schedules 1 to 8 in order, sections 1
+// to 88 in order, and Schedule 1's lists of public authorities.
+func TestTheUKAct(t *testing.T) {
+	a := docs(t)["uk-foia"]
+	if a.Title != "The Freedom of Information Act 2000" || !strings.Contains(a.About, "legislation.gov.uk") || !strings.Contains(a.About, "30 November 2000") || !strings.Contains(a.About, "Open Government Licence") {
+		t.Errorf("the UK Act: %q, %q", a.Title, a.About)
+	}
+	if len(a.Blocks) == 0 || !strings.HasPrefix(a.Blocks[0].Text, "An Act to make provision for the disclosure of information held by public authorities") {
+		t.Errorf("the UK Act's long title: %+v", a.Blocks[:1])
+	}
+	var h2 []string
+	for _, b := range a.Blocks {
+		if b.Kind == "h2" {
+			h2 = append(h2, strings.SplitN(b.Text, ".", 2)[0])
+		}
+	}
+	if strings.Join(h2, "|") != "Part I|Part II|Part III|Part IV|Part V|Part VI|Part VII|Part VIII|Schedule 1|Schedule 2|Schedule 3|Schedule 4|Schedule 5|Schedule 6|Schedule 7|Schedule 8" {
+		t.Errorf("the UK Act's parts: %v", h2)
+	}
+	at := 0
+	for n := 1; n <= 88; n++ {
+		start := strconv.Itoa(n) + ". "
+		i := slices.IndexFunc(a.Blocks[at:], func(b ipc.FoundingBlock) bool { return b.Kind == "text" && strings.HasPrefix(b.Text, start) })
+		if i < 0 {
+			t.Errorf("the UK Act: no section %d after block %d", n, at)
+			continue
+		}
+		at += i
+	}
+	if n := items(a); n != 455 {
+		t.Errorf("the UK Act: %d names in Schedule 1's lists, want 455", n)
 	}
 }
 
@@ -476,15 +608,22 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		// Where the Department of Justice's copy differs, the Code reads so.
 		"foia": {"unless the court otherwise directs for good cause shown", "compiled by criminal law enforcement authority", "This section does not authorize withholding of information", "provide copies of such index on request", "which shall be made available"},
 		// The printed page's words where Wikisource's transcription slipped.
-		"magna-carta":    {"No freeman shall be taken or imprisoned", "one measure of corn", "both clergy and laymen"},
-		"english-rights": {"cruell and unusuall Punishments inflicted", "excessive Baile ought not to be required", "Setleing the Succession of the Crowne"},
-		"petition":       {"by due p[ro]cesse of Lawe", "The great Charter of the Liberties of England", "Soit droit fait come est desire"},
+		"magna-carta": {"No freeman shall be taken or imprisoned", "one measure of corn", "both clergy and laymen"},
+		// The printed page's words where Wikisource's transcription slipped.
+		"magna-carta-1297": {"nor will we not pass upon him, nor condemn him, but by lawful Judgment of his Peers, or by the Law of the Land", "shall not be taken but in the shires", "she may honestly dwell"},
+		"english-rights":   {"cruell and unusuall Punishments inflicted", "excessive Baile ought not to be required", "Setleing the Succession of the Crowne"},
+		"petition":         {"by due p[ro]cesse of Lawe", "The great Charter of the Liberties of England", "Soit droit fait come est desire"},
 		// The edition's readings as British History Online keys them.
 		"habeas":   {"Writts of Habeas Corpus", "better secureing the Liberty of the Subject", "by standingh out an Alias and Pluries"},
 		"virginia": {"nor can he be compelled to give evidence against himself", "the free exercise of religion"},
-		"articles": {"The Stile of this confederacy shall be", "a firm league of friendship", "con-firmed by the legislatures of every state"},
+		// Hening's print's slips, kept.
+		"virginia-statute": {"no man shall be compelled to frequent or support any religious worship", "chose not to to propagate", "wordly honours", "time enongh"},
+		"sweden":           {"free access to all archives shall be permitted", "Adolf Fredrik, by the Grace of God", "All those whom this concern must obediently abide by it."},
+		"articles":         {"The Stile of this confederacy shall be", "a firm league of friendship", "con-firmed by the legislatures of every state"},
 		// The transcription's own readings, kept: "descent" where the journal has "descend".
 		"northwest": {"shall descent to, and be distributed among their children", "There shall be neither slavery nor involuntary servitude in the said territory"},
+		// The 1894 edition's readings, where Project Gutenberg's copy differs.
+		"french": {"Men are born, and always continue, free and equal in respect of their rights", "incontestible", "recognise"},
 		// The Park Service's readings, where the 1848 printing differs.
 		"seneca": {"self-evident; that all men and women are created equal", "not their ignorance", "Resolved, Therefore, That"},
 		// The Archives' transcription's own readings, where the 1863 print differs.
@@ -494,6 +633,10 @@ func TestTheWordsAreTheOriginals(t *testing.T) {
 		// The official record's readings where the UN's web text differs.
 		"udhr":    {"life, liberty and the security of person", "the borders of each State", "in co-operation with the United Nations"},
 		"privacy": {"to the Director of the Congressional Budget Office", "required under section 552 of this title"},
+		// The enacted XML's readings, where the Queen's Printer's print differs.
+		"uk-foia": {"Any person making a request for information to a public authority is entitled", "seven days' notice"},
+		// The certified true copy's readings, where OHCHR's text differs.
+		"iccpr": {"such legislative or other measures", "a lighter penalty", "sub-paragraph", "in accordance with the Universal Declaration of Human Rights"},
 		// India Code's own readings, where the 2005 Gazette differs.
 		"rti": {"all citizens shall have the right to information", "it is expendient", "suomotu", "information which relates to personal information;"},
 	} {
@@ -519,7 +662,7 @@ func TestTheFingerprints(t *testing.T) {
 		}
 	}
 	record := string(files["verification.md"])
-	row := regexp.MustCompile("(?m)^\\| ([a-z-]+\\.md) \\| `([0-9a-f]{128})` \\|$")
+	row := regexp.MustCompile("(?m)^\\| ([a-z0-9-]+\\.md) \\| `([0-9a-f]{128})` \\|$")
 	listed := map[string]string{}
 	for _, m := range row.FindAllStringSubmatch(record, -1) {
 		listed[m[1]] = m[2]
@@ -575,25 +718,30 @@ func TestFindAnySpelling(t *testing.T) {
 		return out
 	}
 	for q, want := range map[string]string{
-		"choose their Speaker":                "constitution: Article. I. › Section. 2.",
-		"the common defense":                  "constitution: Preamble",
-		"THE UNANIMOUS DECLARATION":           "declaration: ",
-		"complete the works of death":         "declaration: ",
-		"our British brethren":                "declaration: ",
-		"unreasonable searches":               "rights: Amendments › Amendment IV",
-		"vice president elect":                "constitution: Amendments › Amendment XX › Section 3.",
-		"the Vice President":                  "constitution: Amendments › Amendment XII",
-		"chief FOIA officer":                  "foia: § 552. Public information; agency rules, opinions, orders, records, and proceedings",
-		"cruel and unusual punishments":       "english-rights: Excessive Bail.",
-		"freedom of speech and debates":       "english-rights: Freedom of Speech.",
-		"law of the land":                     "magna-carta: ",
-		"style of this confederacy":           "articles: Article I.",
-		"cooperation with the United Nations": "udhr: Preamble",
-		"records maintained on individuals":   "privacy: § 552a. Records maintained on individuals",
-		"lawful judgment of his peers":        "petition: III. Reciting 9 Hen. III. M.C. c. 29.",
-		"securing the liberty of the subject": "habeas: ",
-		"all men and women are created equal": "seneca: ",
-		"right to information":                "rti: Chapter II. Right to information and obligations of public authorities",
+		"choose their Speaker":                                 "constitution: Article. I. › Section. 2.",
+		"the common defense":                                   "constitution: Preamble",
+		"THE UNANIMOUS DECLARATION":                            "declaration: ",
+		"complete the works of death":                          "declaration: ",
+		"our British brethren":                                 "declaration: ",
+		"unreasonable searches":                                "rights: Amendments › Amendment IV",
+		"vice president elect":                                 "constitution: Amendments › Amendment XX › Section 3.",
+		"the Vice President":                                   "constitution: Amendments › Amendment XII",
+		"chief FOIA officer":                                   "foia: § 552. Public information; agency rules, opinions, orders, records, and proceedings",
+		"cruel and unusual punishments":                        "english-rights: Excessive Bail.",
+		"freedom of speech and debates":                        "english-rights: Freedom of Speech.",
+		"law of the land":                                      "magna-carta: ",
+		"style of this confederacy":                            "articles: Article I.",
+		"cooperation with the United Nations":                  "udhr: Preamble",
+		"records maintained on individuals":                    "privacy: § 552a. Records maintained on individuals",
+		"lawful judgment of his peers":                         "petition: III. Reciting 9 Hen. III. M.C. c. 29.",
+		"securing the liberty of the subject":                  "habeas: ",
+		"all men and women are created equal":                  "seneca: ",
+		"disclosure of information held by public authorities": "uk-foia: ",
+		"freedom of expression":                                "iccpr: Part III › Article 19",
+		"establishing religious freedom":                       "virginia-statute: ",
+		"free access to all archives":                          "sweden: ",
+		"resistance of oppression":                             "french: II.",
+		"right to information":                                 "rti: Chapter II. Right to information and obligations of public authorities",
 	} {
 		if got := find(q); !got[want] {
 			t.Errorf("Find(%q) = %v, want %q among them", q, got, want)

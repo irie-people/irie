@@ -37,7 +37,11 @@ func TestFoundingOpWaitsForItsPlugin(t *testing.T) {
 			t.Errorf("%s: %d blocks, SHA512 %q", d.ID, len(d.Blocks), d.SHA512)
 		}
 	}
-	if strings.Join(ids, ",") != "magna-carta,petition,habeas,english-rights,virginia,declaration,articles,northwest,constitution,rights,seneca,emancipation,gettysburg,udhr,foia,privacy,rti" || r.Found != nil || len(r.Links) != len(founding.Links) {
+	var want []string
+	for _, d := range founding.Documents {
+		want = append(want, d.ID)
+	}
+	if strings.Join(ids, ",") != strings.Join(want, ",") || r.Found != nil || len(r.Links) != len(founding.Links) {
 		t.Errorf("docs %v, found %v, %d links", ids, r.Found, len(r.Links))
 	}
 	// The texts are on the local chain, checked: one version, made by the

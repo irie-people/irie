@@ -48,13 +48,13 @@ func TestFoundingIsOffByDefault(t *testing.T) {
 	}
 }
 
-// TestFoundingOnIsReady: on, the seventeen texts read, and the skill goes
-// to sessions.
+// TestFoundingOnIsReady: on, the texts read, and the skill goes to
+// sessions.
 func TestFoundingOnIsReady(t *testing.T) {
 	e := env(t)
 	e.Config.Plugins.Founding = true
 	x := part(t, foundingStatus(t, e), Founding)
-	if x.State != ipc.PartReady || !strings.Contains(x.Detail, "17 texts") {
+	if x.State != ipc.PartReady || !strings.Contains(x.Detail, "23 texts") {
 		t.Errorf("part = %+v", x)
 	}
 	if why := Why(e.Config, Founding); why != "" {

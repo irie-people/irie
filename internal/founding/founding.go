@@ -35,8 +35,8 @@ type Document struct {
 	// year alone where the day isn't the point.
 	When string
 	// Kind is charter, statute, declaration, articles, ordinance,
-	// constitution, amendments, proclamation or address: for a graph to
-	// tell its nodes apart by.
+	// constitution, amendments, proclamation, address or covenant: for a
+	// graph to tell its nodes apart by.
 	Kind string
 }
 
@@ -44,21 +44,27 @@ type Document struct {
 // as the lineage the links trace, the oldest first.
 var Documents = []Document{
 	{ID: "magna-carta", File: "magna-carta.md", Short: "Magna Carta", When: "1215-06-15", Kind: "charter"},
+	{ID: "magna-carta-1297", File: "magna-carta-1297.md", Short: "Magna Carta 1297", When: "1297-10-12", Kind: "charter"},
 	{ID: "petition", File: "petition-of-right.md", Short: "Petition of Right", When: "1628-06-07", Kind: "statute"},
 	{ID: "habeas", File: "habeas-corpus-act.md", Short: "Habeas Corpus Act", When: "1679-05-27", Kind: "statute"},
 	{ID: "english-rights", File: "english-bill-of-rights.md", Short: "English Bill of Rights", When: "1689-12-16", Kind: "statute"},
+	{ID: "sweden", File: "freedom-of-the-press-act-1766.md", Short: "Press Act of 1766", When: "1766-12-02", Kind: "ordinance"},
 	{ID: "virginia", File: "virginia-declaration-of-rights.md", Short: "Virginia Declaration", When: "1776-06-12", Kind: "declaration"},
 	{ID: "declaration", File: "declaration.md", Short: "Declaration", When: "1776-07-04", Kind: "declaration"},
 	{ID: "articles", File: "articles-of-confederation.md", Short: "Articles", When: "1777-11-15", Kind: "articles"},
+	{ID: "virginia-statute", File: "virginia-statute-for-religious-freedom.md", Short: "Virginia Statute", When: "1786-01-16", Kind: "statute"},
 	{ID: "northwest", File: "northwest-ordinance.md", Short: "Northwest Ordinance", When: "1787-07-13", Kind: "ordinance"},
 	{ID: "constitution", File: "constitution.md", Short: "Constitution", When: "1787-09-17", Kind: "constitution"},
+	{ID: "french", File: "declaration-of-the-rights-of-man.md", Short: "Rights of Man", When: "1789-08-26", Kind: "declaration"},
 	{ID: "rights", File: "bill-of-rights.md", Short: "Bill of Rights", When: "1791-12-15", Kind: "amendments"},
 	{ID: "seneca", File: "declaration-of-sentiments.md", Short: "Declaration of Sentiments", When: "1848-07-20", Kind: "declaration"},
 	{ID: "emancipation", File: "emancipation-proclamation.md", Short: "Emancipation Proclamation", When: "1863-01-01", Kind: "proclamation"},
 	{ID: "gettysburg", File: "gettysburg-address.md", Short: "Gettysburg Address", When: "1863-11-19", Kind: "address"},
 	{ID: "udhr", File: "universal-declaration-of-human-rights.md", Short: "Universal Declaration", When: "1948-12-10", Kind: "declaration"},
 	{ID: "foia", File: "freedom-of-information-act.md", Short: "FOIA", When: "1966-07-04", Kind: "statute"},
+	{ID: "iccpr", File: "international-covenant-on-civil-and-political-rights.md", Short: "Civil and Political Rights Covenant", When: "1966-12-16", Kind: "covenant"},
 	{ID: "privacy", File: "privacy-act.md", Short: "Privacy Act", When: "1974-12-31", Kind: "statute"},
+	{ID: "uk-foia", File: "freedom-of-information-act-2000.md", Short: "UK Freedom of Information Act", When: "2000-11-30", Kind: "statute"},
 	{ID: "rti", File: "right-to-information-act.md", Short: "Right to Information Act", When: "2005-06-15", Kind: "statute"},
 }
 
