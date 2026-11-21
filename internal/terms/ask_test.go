@@ -150,7 +150,7 @@ func TestALocalModelWordsTheAnswer(t *testing.T) {
 	defer srv.Close()
 	ctx := context.Background()
 	m, err := FindModel(ctx, []string{"http://127.0.0.1:1", srv.URL}, "")
-	if err != nil || m.Name != "qwen-mid:9b" || !m.think {
+	if err != nil || m.Name != "qwen-mid:9b" || !m.Thinks() {
 		t.Fatalf("FindModel: %+v, %v", m, err)
 	}
 	if m, err := FindModel(ctx, []string{srv.URL}, "qwen-small:4b"); err != nil || m.Name != "qwen-small:4b" {
@@ -178,8 +178,8 @@ func TestALocalModelWordsTheAnswer(t *testing.T) {
 	if len(f.asked) != 1 || !strings.Contains(f.asked[0], "[1]") || !strings.Contains(f.asked[0], "Question: Can I get a refund?") || !strings.Contains(f.asked[0], "non-refundable") {
 		t.Errorf("the model was asked %q", f.asked)
 	}
-	if got := stripThinking("<think>hmm</think>Yes."); got != "Yes." {
-		t.Errorf("stripThinking: %q", got)
+	if got := StripThinking("<think>hmm</think>Yes."); got != "Yes." {
+		t.Errorf("StripThinking: %q", got)
 	}
 	// A reply that ends before its last word is no answer: Irie's code
 	// answers, and says why.

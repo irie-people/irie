@@ -380,6 +380,9 @@ type ChatOptions struct {
 	Temperature float64
 	Context     int    // its context in tokens (num_ctx); 0 = the server's
 	Keep        string // how long the server keeps the model loaded afterwards (keep_alive); "" = its default
+	// JSON asks for a reply that is one well-formed JSON object (format
+	// "json"); the messages must ask for JSON too, as Ollama's docs say.
+	JSON bool
 }
 
 // Chat is POST /api/chat, streamed: part, when set, gets each piece of the
@@ -396,6 +399,9 @@ func (o Ollama) Chat(ctx context.Context, model string, msgs []ChatMessage, opt 
 	}
 	if opt.Keep != "" {
 		body["keep_alive"] = opt.Keep
+	}
+	if opt.JSON {
+		body["format"] = "json"
 	}
 	resp, err := o.do(ctx, http.MethodPost, "/api/chat", body)
 	if err != nil {
