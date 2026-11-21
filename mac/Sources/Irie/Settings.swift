@@ -2048,7 +2048,8 @@ private struct ManifestNote: View {
 }
 
 /// One part of a plugin: its state as a glyph and a sentence, its switch,
-/// and Set Up… when words set it up.
+/// and a button for its words: Set Up… when they set it up, Start <part>…
+/// when they start a session.
 @MainActor
 private struct PluginPartRow: View {
     let plugin: PluginInfo
@@ -2073,8 +2074,10 @@ private struct PluginPartRow: View {
                     .textSelection(.enabled)
             }
             Spacer(minLength: 8)
+            // Set Up… for :setup words, and Start <part>… for a word that
+            // starts a session, as the Plugins menu has them.
             if let setup = part.setup, plugin.on {
-                Button("Set Up…") { run(setup) }
+                Button(PluginCommands.setupTitle(part, setup)) { run(setup) }
                     .help("Starts \(setup)")
             }
             // Bitwarden unlocks here too, as in a pane's key.

@@ -54,6 +54,9 @@ type manifestFile struct {
 	// owntools.go).
 	Skills map[string]skillFile `toml:"skills"`
 	Tools  map[string]toolsFile `toml:"tools"`
+	// Words are :<id> in a task bar, which start a session for the
+	// plugin's app (ownwords.go).
+	Words map[string]wordFile `toml:"words"`
 	// Schedules are kept for a later build, which reads them: until then
 	// each shows as a part that is held.
 	Schedules map[string]toml.Primitive `toml:"schedules"`
@@ -140,7 +143,7 @@ func readManifest(path string) (Plugin, *Bundle) {
 		return broken("It doesn't read as TOML: " + err.Error())
 	}
 	if keys := undecoded(md); len(keys) > 0 {
-		return broken("It has keys " + brand.Name + " doesn't know: " + strings.Join(keys, ", ") + ". A plugin has title, summary, and [panes.NAME], [helpers.NAME], [skills.NAME] and [tools.NAME] tables; a bundle has title, summary and plugins.")
+		return broken("It has keys " + brand.Name + " doesn't know: " + strings.Join(keys, ", ") + ". A plugin has title, summary, and [panes.NAME], [helpers.NAME], [skills.NAME], [tools.NAME] and [words.NAME] tables; a bundle has title, summary and plugins.")
 	}
 	title, summary := line(mf.Title, 60), line(mf.Summary, 300)
 	if title == "" {
@@ -148,8 +151,8 @@ func readManifest(path string) (Plugin, *Bundle) {
 	}
 	if md.IsDefined("plugins") {
 		b := &Bundle{Name: name, Title: title, Summary: summary, Manifest: path}
-		if len(mf.Panes) > 0 || len(mf.Helpers) > 0 || len(mf.Skills) > 0 || len(mf.Tools) > 0 || len(mf.Schedules) > 0 {
-			b.Problem = "A bundle names plugins and has no parts of its own: put its panes, helpers, skills, tools or schedules in a manifest of their own, and name that in the bundle's plugins."
+		if len(mf.Panes) > 0 || len(mf.Helpers) > 0 || len(mf.Skills) > 0 || len(mf.Tools) > 0 || len(mf.Words) > 0 || len(mf.Schedules) > 0 {
+			b.Problem = "A bundle names plugins and has no parts of its own: put its panes, helpers, skills, tools, words or schedules in a manifest of their own, and name that in the bundle's plugins."
 			return Plugin{}, b
 		}
 		for _, ref := range mf.Plugins {
@@ -205,6 +208,11 @@ func readManifest(path string) (Plugin, *Bundle) {
 	for _, id := range slices.Sorted(maps.Keys(mf.Tools)) {
 		p.on = gated
 		p.Parts = append(p.Parts, toolsPart(p, id, mf.Tools[id]))
+	}
+	// A word runs nothing until you type it, so it waits for no switch.
+	skillIDs := slices.Sorted(maps.Keys(mf.Skills))
+	for _, id := range slices.Sorted(maps.Keys(mf.Words)) {
+		p.Parts = append(p.Parts, wordPart(p, id, mf.Words[id], skillIDs))
 	}
 	for _, id := range slices.Sorted(maps.Keys(mf.Schedules)) {
 		var s struct {
