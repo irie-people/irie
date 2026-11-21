@@ -65,11 +65,22 @@ func NightDue(p ipc.ZenProfile, m Moment, saidOn string) bool {
 // RestDue says whether zen offers a rest at the moment m, with your zen p:
 // a breath to follow, Back to It or In 10 Minutes (zen.md §7). The caller
 // holds back a rest put off with In 10 Minutes until Snooze is up.
+//
+// A rest comes once the person has been at the computer as long as
+// p.Breaks says, and only at a pause, never mid-sentence: while the agent
+// works, or once their hands have rested a moment. A question waiting on
+// them is no reason to wait, since the bubble takes no keys and a breath
+// before a decision helps it. Late at night rests come at half the time,
+// though never sooner than MinBreaks.
 func RestDue(p ipc.ZenProfile, m Moment) bool {
-	// TODO(human): when is a rest due? p.Breaks is the minutes chosen (0
-	// for none), and m says how long they've been at the computer and what
-	// the session on show is doing.
-	return false
+	if p.Breaks <= 0 {
+		return false
+	}
+	due := time.Duration(p.Breaks) * time.Minute
+	if Night(m.Now) {
+		due = max(due/2, MinBreaks*time.Minute)
+	}
+	return m.AtDesk >= due && (m.Working || m.Idle >= Typing)
 }
 
 // RestOffer is the rest zen offers.

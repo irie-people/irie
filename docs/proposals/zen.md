@@ -108,7 +108,7 @@ Zen teaches one small thing at a time, only when the moment is calm, so a newcom
 ## 7. Rest and night
 
 - **At the computer.** The core reads how long the keyboard and mouse have been still, as Gabriel does (DESIGN §4.11). Five minutes away counts as a rest, so the count starts again when you come back.
-- **A rest.** Once you've been at the computer for `breaks` minutes, the rest bubble offers a breath. A dot rises as you breathe in for 4 seconds and falls as you breathe out for 6, about six breaths a minute. It moves only in position and opacity, and holds still under Reduce Motion (Roots §5.1, §5.3). Back to It starts the count again; In 10 Minutes waits.
+- **A rest.** Once you've been at the computer for `breaks` minutes, or half that late at night (never under 15), the rest bubble offers a breath at the next pause: while the agent works, or once your hands have rested 20 seconds, never mid-sentence. A question waiting on you doesn't hold it back: the bubble takes no keys, and a breath before a decision helps it. A dot rises as you breathe in for 4 seconds and falls as you breathe out for 6, about six breaths a minute. It moves only in position and opacity, and holds still under Reduce Motion (Roots §5.1, §5.3). Back to It starts the count again; In 10 Minutes waits.
 - **Night.** Between 23:00 and 05:00, once a night, zen says the agents can carry on without you and that rest is part of the work.
 - **Nothing is recorded.** Whether you rested isn't recorded.
 

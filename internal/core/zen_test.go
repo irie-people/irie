@@ -256,6 +256,29 @@ func TestARestOfferedGoesWhenThePersonIsAway(t *testing.T) {
 	}
 }
 
+// With rests on, zen offers one once the person has been at the computer
+// that long, and Back to It starts the count again.
+func TestZenOffersARestAndBackToItStartsTheCountAgain(t *testing.T) {
+	c := zenCore(t, t.TempDir())
+	c.appViews = 1
+	fifty := 50
+	c.zenDo(t, ipc.ZenArgs{Set: &ipc.ZenChange{Breaks: &fifty}})
+	now := time.Now()
+	c.zenDo(t, ipc.ZenArgs{On: on(true)})
+	c.mu.Lock()
+	c.zen.desk = now.Add(-51 * time.Minute)
+	c.zen.answered = now // no step crowds in
+	c.mu.Unlock()
+	o := c.moment(now, zen.Typing)
+	if o == nil || o.ID != ipc.ZenRest || o.Kind != ipc.ZenKindRest {
+		t.Fatalf("no rest after 51 minutes: %+v", o)
+	}
+	c.zenDo(t, ipc.ZenArgs{Offer: ipc.ZenRest, Answer: ipc.ZenYes})
+	if o := c.moment(now.Add(time.Minute), zen.Typing); o != nil && o.ID == ipc.ZenRest {
+		t.Errorf("a rest again a minute after Back to It: %+v", o)
+	}
+}
+
 func TestZenEndsOnceTheAppIsGoneAWhile(t *testing.T) {
 	c := zenCore(t, t.TempDir())
 	x := agentSession(c, "s1")

@@ -240,6 +240,43 @@ func with(m Moment, f func(*Moment)) Moment {
 	return m
 }
 
+func TestARestComesAtAPauseOnceTheMinutesChosenHavePassed(t *testing.T) {
+	noon := time.Date(2026, 11, 21, 12, 0, 0, 0, time.Local)
+	fifty := Apply(Default(), ipc.ZenChange{Breaks: ptr(50)})
+	paused := Moment{Now: noon, AtDesk: 50 * time.Minute, Idle: Typing}
+	if !RestDue(fifty, paused) {
+		t.Fatal("no rest after 50 minutes, at a pause")
+	}
+	for name, c := range map[string]struct {
+		p ipc.ZenProfile
+		m Moment
+	}{
+		"rests off":         {Default(), with(paused, func(m *Moment) { m.AtDesk = 5 * time.Hour })},
+		"too soon":          {fifty, with(paused, func(m *Moment) { m.AtDesk = 49 * time.Minute })},
+		"mid-sentence":      {fifty, with(paused, func(m *Moment) { m.Idle = 2 * time.Second })},
+		"night, still soon": {fifty, with(paused, func(m *Moment) { m.Now = noon.Add(11 * time.Hour); m.AtDesk = 24 * time.Minute })},
+	} {
+		if RestDue(c.p, c.m) {
+			t.Errorf("%s: a rest came", name)
+		}
+	}
+	for name, m := range map[string]Moment{
+		"the agent works, hands busy": with(paused, func(m *Moment) { m.Working = true; m.Idle = time.Second }),
+		"a question waits on you":     with(paused, func(m *Moment) { m.NeedsYou = true }),
+		"at night, at half the time":  with(paused, func(m *Moment) { m.Now = noon.Add(11 * time.Hour); m.AtDesk = 25 * time.Minute }),
+	} {
+		if !RestDue(fifty, m) {
+			t.Errorf("%s: no rest", name)
+		}
+	}
+	// At night never sooner than the least there may be between rests.
+	fifteen := Apply(Default(), ipc.ZenChange{Breaks: ptr(MinBreaks)})
+	late := with(paused, func(m *Moment) { m.Now = noon.Add(11 * time.Hour); m.AtDesk = 10 * time.Minute })
+	if RestDue(fifteen, late) || !RestDue(fifteen, with(late, func(m *Moment) { m.AtDesk = 15 * time.Minute })) {
+		t.Error("a rest at night came sooner than 15 minutes, or not at 15")
+	}
+}
+
 func TestTheNightWordComesOnceANight(t *testing.T) {
 	late := time.Date(2026, 11, 21, 23, 30, 0, 0, time.Local)
 	m := Moment{Now: late, On: time.Hour}
