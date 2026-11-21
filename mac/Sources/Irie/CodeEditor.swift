@@ -36,6 +36,9 @@ struct CodeActions {
     /// Ask the session's agent about these lines, 1-based.
     var ask: ((ClosedRange<Int>) -> Void)?
     var copyReference: (ClosedRange<Int>) -> Void = { _ in }
+    /// Turn a Markdown file's pretty view on or off (⇧⌘V); nil for any
+    /// other file, so the key goes on as it would.
+    var pretty: (() -> Void)?
 }
 
 /// The text view, with the keys and touches a code editor has.
@@ -51,7 +54,8 @@ final class CodeTextView: NSTextView {
     /// before the menus see them, while it has the keyboard: ⌘F find, ⌥⌘F
     /// replace, ⌘G and ⇧⌘G the next and last match, ⌘E find the selection,
     /// ⌘S save now, ⌘P open a file, ⌘L go to a line, ⌘/ comment lines, ⌘]
-    /// and ⌘[ indent and outdent, and ⌘W close the file.
+    /// and ⌘[ indent and outdent, ⌘W close the file, and in a Markdown file
+    /// ⇧⌘V its pretty view, as VS Code has it.
     func command(_ event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
         guard mods.contains(.command), let c = event.charactersIgnoringModifiers?.lowercased() else { return false }
@@ -68,6 +72,9 @@ final class CodeTextView: NSTextView {
         case (.command, "]"): shift(right: true)
         case (.command, "["): shift(right: false)
         case (.command, "w"): actions.closeFile()
+        case ([.command, .shift], "v"):
+            guard let pretty = actions.pretty else { return false }
+            pretty()
         default: return false
         }
         return true

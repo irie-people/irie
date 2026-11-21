@@ -735,6 +735,7 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-21 | https://pkg.go.dev/crypto/mldsa | ML-DSA in Go 1.27's standard library, for the local chain proposal |
 | 2026-11-21 | https://pkg.go.dev/filippo.io/mldsa | ML-DSA for Go before 1.27, same API, for the local chain proposal |
 | 2026-11-21 | https://quantumcomputingreport.com/openssh-10-0-introduces-default-post-quantum-key-exchange-algorithm/ | OpenSSH's post-quantum key exchange defaults, for the local chain proposal |
+| 2026-11-21 | https://code.visualstudio.com/docs/languages/markdown | ⇧⌘V toggles a Markdown file's pretty view in the code card, as VS Code's Markdown preview does |
 
 ## Third-party code
 
