@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/irie-people/irie/internal/brand"
+	"github.com/irie-people/irie/internal/search"
 	"math"
 	"net/url"
 	"regexp"
@@ -72,7 +73,7 @@ type Doc struct {
 
 	secs    []section
 	clauses []clause
-	index   *index
+	index   *search.Index
 	links   []Link
 	// scripted is Scripted's answer.
 	scripted bool
@@ -199,7 +200,11 @@ func (d *Doc) analyse() {
 	}
 	d.Updated = cmp.Or(updated(d.head), updated(body))
 	d.Company = company(d.clauses, body)
-	d.index = newIndex(d.clauses)
+	clauseTokens := make([][]string, len(d.clauses))
+	for i, c := range d.clauses {
+		clauseTokens[i] = tokens(c.text)
+	}
+	d.index = search.NewIndex(clauseTokens)
 	d.Points = []Point{}
 
 	for _, t := range catalog {

@@ -183,6 +183,9 @@ type (
 	LabelArgs         = ipc.LabelArgs
 	Label             = ipc.Label
 	LabelResult       = ipc.LabelResult
+	FindArgs          = ipc.FindArgs
+	FindResult        = ipc.FindResult
+	Found             = ipc.Found
 	ResultArgs        = ipc.ResultArgs
 	ResultResult      = ipc.ResultResult
 	ToolArgs          = ipc.ToolArgs
@@ -449,6 +452,7 @@ const (
 	OpResult             = ipc.OpResult
 	OpTool               = ipc.OpTool
 	OpLabel              = ipc.OpLabel
+	OpFind               = ipc.OpFind
 	OpClose              = ipc.OpClose
 	OpReopen             = ipc.OpReopen
 	OpUndo               = ipc.OpUndo

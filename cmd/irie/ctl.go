@@ -51,6 +51,12 @@ const ctlUsage = `usage: ` + brand.Slug + ` ctl <command>
                                          spawn.close_when_done a finished session
                                          closes itself, so the sidebar has no
                                          To verify group: look here instead
+  ` + brand.Slug + ` ctl find [--json] [-n N] WORDS...   the sessions, open or closed, most like
+                                         WORDS by their names, their tasks and what
+                                         their agents said last, by words and by
+                                         meaning (route.embed's model): each with
+                                         whether reopen can bring it back and the
+                                         start of what its agent said
   ` + brand.Slug + ` ctl dog [--json]                  the jots that are not through: those whose
                                          turn is over but whose work is not committed,
                                          or not yet in their repo's land branch
@@ -194,6 +200,8 @@ func ctl(args []string) error {
 		return ctlInput(args[1:])
 	case "history":
 		return ctlHistory(args[1:])
+	case "find":
+		return ctlFind(args[1:])
 	case "chain":
 		return ctlChain(args[1:])
 	case "close":
