@@ -1,4 +1,4 @@
-//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !nobitwarden && !noterms && !noextension && !noyoink
+//go:build !novpn && !noprivacy && !nowriting && !nomarkets && !nomail && !nobitwarden && !noterms && !noextension && !noyoink && !nochat
 
 package plugins
 
@@ -11,7 +11,7 @@ import (
 )
 
 // TestABuildWithoutPlugins: go build -tags novpn,noprivacy,nowriting,
-// nomarkets,nomail,nobitwarden,noterms,noextension,noyoink builds every package, and its irie
+// nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat builds every package, and its irie
 // links none of the plugins' code (DESIGN §4.17); and a company's copy, which
 // keeps the VPN plugin to drive the VPN it approves (§4.18) and leaves the rest out,
 // builds and links the VPN's code and none of the others'.
@@ -25,7 +25,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	if err != nil {
 		goBin = filepath.Join(runtime.GOROOT(), "bin", "go")
 	}
-	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink"
+	tags := "-tags=novpn,noprivacy,nowriting,nomarkets,nomail,nobitwarden,noterms,noextension,noyoink,nochat"
 	build := exec.Command(goBin, "build", tags, "./...")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
@@ -39,7 +39,7 @@ func TestABuildWithoutPlugins(t *testing.T) {
 		t.Fatalf("go list -deps %s: %v", tags, err)
 	}
 	deps := strings.Fields(string(out))
-	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink"} {
+	for _, pkg := range []string{"vpn", "anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink", "chat"} {
 		for _, d := range deps {
 			if d == "github.com/irie-people/irie/internal/"+pkg {
 				t.Errorf("a build without plugins links internal/%s", pkg)
@@ -74,6 +74,10 @@ func TestABuildWithoutPlugins(t *testing.T) {
 	}
 	if !links["vpn"] {
 		t.Error("a company's copy lacks internal/vpn, so it can't drive its VPN")
+	}
+	// It keeps the chat plugin: a company's people talk in Slack too.
+	if !links["chat"] {
+		t.Error("a company's copy lacks internal/chat")
 	}
 	for _, pkg := range []string{"anon", "browser", "dms", "htmltext", "mcp", "mail", "variorum", "extension", "terms", "yoink"} {
 		if links[pkg] {

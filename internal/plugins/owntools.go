@@ -120,11 +120,12 @@ func Tools(e Env) []OwnTools {
 	return out
 }
 
-// firstNames gives each skill's name, and each server's, to the first of
-// your plugins that has it, in the order of their files: a later one with
-// the same name can't go to sessions, and its part says why.
+// firstNames gives each skill's name, each server's and each word's to the
+// first of your plugins that has it, in the order of their files: a later
+// one with the same name can't go to sessions, or start one, and its part
+// says why.
 func firstNames(ps []Plugin) {
-	skillsBy, toolsBy := map[string]string{}, map[string]string{}
+	skillsBy, toolsBy, wordsBy := map[string]string{}, map[string]string{}, map[string]string{}
 	for i := range ps {
 		for j := range ps[i].Parts {
 			x := &ps[i].Parts[j]
@@ -149,6 +150,16 @@ func firstNames(ps []Plugin) {
 					continue
 				}
 				toolsBy[x.Tools.Name] = ps[i].Name
+			case x.Word != nil && x.Word.Problem == "":
+				if first, taken := wordsBy[x.Word.Name]; taken {
+					why := "Your plugin " + first + " has the word :" + x.Word.Name + " first: give [words." + x.Word.Name + "] another name."
+					w := *x.Word
+					w.Problem = why
+					x.Word = &w
+					x.check = func(Env, bool) (bool, string) { return false, why }
+					continue
+				}
+				wordsBy[x.Word.Name] = ps[i].Name
 			}
 		}
 	}

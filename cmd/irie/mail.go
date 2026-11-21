@@ -3,13 +3,11 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -160,7 +158,7 @@ func mailAdd(args []string, stdin io.Reader, stdout io.Writer) error {
 	default:
 		return fmt.Errorf("%q is no kind of account: gmail, proton or imap", kind)
 	}
-	password, err := readMailPassword(stdin, stdout, "Password for "+address)
+	password, err := readHidden(stdin, stdout, "Password for "+address)
 	if err != nil {
 		return err
 	}
@@ -172,32 +170,6 @@ func mailAdd(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	fmt.Fprintln(stdout, r.Text)
 	return nil
-}
-
-// readMailPassword reads a password from the input: from a terminal without
-// showing it, after a prompt.
-func readMailPassword(stdin io.Reader, stdout io.Writer, prompt string) (string, error) {
-	f, _ := stdin.(*os.File)
-	if isTerminal(stdin) {
-		fmt.Fprintf(stdout, "%s (it won't show): ", prompt)
-		if err := mailStty(f, "-echo"); err == nil {
-			defer func() {
-				mailStty(f, "echo")
-				fmt.Fprintln(stdout)
-			}()
-		}
-	}
-	line, err := bufio.NewReader(stdin).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return "", err
-	}
-	return strings.TrimRight(line, "\r\n"), nil
-}
-
-func mailStty(tty *os.File, arg string) error {
-	cmd := exec.Command("stty", arg)
-	cmd.Stdin = tty
-	return cmd.Run()
 }
 
 // writeMessage prints a message whole, headers first.
