@@ -62,6 +62,8 @@ var reaches = map[string]Reach{
 	OpRaphael: ReachOutside, OpDock: ReachOutside, OpTrod: ReachOutside,
 	// A download fetches from a site and writes to the person's folder.
 	OpYoink: ReachOutside,
+	// A post goes to a channel of people, under the person's bot.
+	OpChat: ReachOutside,
 	// A check asks OSV.dev about the versions the locks name.
 	OpLock: ReachOutside,
 	// A sweep with drop removes closed sessions' worktrees: reopen adds

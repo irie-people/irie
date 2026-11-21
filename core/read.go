@@ -17,7 +17,7 @@ import (
 
 // Commands are what a task bar takes after a colon (DESIGN §4.2), as the
 // error for an unknown one lists them.
-const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :yoink [audio|720p] LINK, :open FILE[:LINE]"
+const Commands = ":rename NAME, :move [NAME], :close, :reopen, :undo, :redo, :setup [local|switch|anon|browser|privacy|vpn], :plugins, :models, :vpn [on|off|use VPN|lockdown on|off|time|PLACE], :rate good|bad, :route TASK, :bench [^HOST] [+PROFILE] [@REPO] TASK, :freeze [all], :thaw [all], :prio [REASON], :park, :unpark, :pin, :unpin, :group [NAME], :ungroup, :nest [NAME], :close others|below|finished, :fork [@TURN] [TASK], :write [TASK], :markets [TASK], :mail, :chat, :yoink [audio|720p] LINK, :open FILE[:LINE]"
 
 // View is what the words are read against: the rows in the list's order,
 // the sessions outside Irie, the folder that ~ means and the profiles.
@@ -185,6 +185,10 @@ func command(name, arg string, in InputArgs, v View) (Step, error) {
 		// :mail says how the mail accounts stand; the Mac app also opens
 		// its Mail (docs/proposals/mail.md).
 		return step(OpMail, MailArgs{}, nil)
+	case name == "chat" && arg == "":
+		// :chat says how the chat accounts stand and which drafts wait;
+		// the Mac app also opens its Chat tab (docs/proposals/chat.md).
+		return step(OpChat, ChatArgs{}, nil)
 	case name == "yoink":
 		// :yoink [audio|720p] LINK downloads a video, or its sound, from a
 		// link (DESIGN §4.17); :yoink alone says how the downloads stand,
@@ -535,6 +539,8 @@ func Said(st Step, result any, err error) (InputResult, error) {
 		r.Did, r.Text = InputAnswered, m.Text
 	case OpMail:
 		r.Did, r.Text = InputAnswered, strings.TrimRight(as[MailResult](result).Text, "\n")
+	case OpChat:
+		r.Did, r.Text = InputAnswered, strings.TrimRight(as[ChatResult](result).Text, "\n")
 	case OpYoink:
 		// A download started ran; the rest answer. The Mac app shows its
 		// Yoink tab for either.

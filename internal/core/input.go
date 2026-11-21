@@ -75,6 +75,10 @@ func (c *Core) input(a ipc.InputArgs, peer int) (out ipc.InputResult, err error)
 		res, err := c.yoinkOp(peer, st.Args.(ipc.YoinkArgs))
 		return irie.Said(st, res, err)
 	}
+	if st.Op == ipc.OpChat {
+		res, err := c.chatOp(peer, st.Args.(ipc.ChatArgs))
+		return irie.Said(st, res, err)
+	}
 	// With place.mode = auto, a new task may go to a peer with more room.
 	if sa, ok := st.Args.(ipc.SpawnArgs); ok && st.Op == ipc.OpSpawn {
 		if r, placed, err := c.placeTask(a, sa); placed {
