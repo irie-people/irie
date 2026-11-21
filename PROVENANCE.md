@@ -731,6 +731,10 @@ Irie is written from public documentation and public open-source projects. Every
 | 2026-11-21 | https://code.claude.com/docs/en/prompt-caching.md | `tools/code` and `tools/habits` count calls as an agent's cost: each request reads the conversation's cached prefix again, so a call saved saves a read of the whole context |
 | 2026-11-21 | macro-inc/macro (AGPL-3.0, ideas only, no code), its AI projections in crates/ai_projections and apps/web/src/lib/queries/ai/projection.ts at 93d23f9: https://github.com/macro-inc/macro | Materialized cards: an AI-made view kept under a name; a recipe hash that leaves kept copies cold; one claimed remake at a time, a dead claim taken over; only the newest remake kept; the old card shown while a new one is made; results pushed, never polled (docs/proposals/materialized-cards.md, internal/materialize) |
 | 2026-11-21 | https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md (Generate a chat completion: the format parameter, JSON mode) | localmodel.ChatOptions.JSON: format "json" holds a reply to one well-formed JSON object, with the messages asking for JSON too; genui.Make, the maker of materialized cards (docs/proposals/materialized-cards.md) |
+| 2026-11-21 | https://en.wikipedia.org/wiki/Commercial_National_Security_Algorithm_Suite | CNSA 2.0's algorithm picks for the local chain proposal (docs/proposals/local-chain.md) |
+| 2026-11-21 | https://pkg.go.dev/crypto/mldsa | ML-DSA in Go 1.27's standard library, for the local chain proposal |
+| 2026-11-21 | https://pkg.go.dev/filippo.io/mldsa | ML-DSA for Go before 1.27, same API, for the local chain proposal |
+| 2026-11-21 | https://quantumcomputingreport.com/openssh-10-0-introduces-default-post-quantum-key-exchange-algorithm/ | OpenSSH's post-quantum key exchange defaults, for the local chain proposal |
 
 ## Third-party code
 
