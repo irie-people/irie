@@ -33,7 +33,7 @@ Half the lookups reuse a word of the session's, and half say it another way. Wor
 
 ## Costs and limits
 
-- **The first find reads every session.** About 1,000 texts, which took 2 to 6 minutes on a busy Mac. They are read in the background, a batch at a time, so a find answers at once, by words where meaning is not ready, and says how many it is still reading. Later finds read only what is new.
+- **The first find reads every session.** About 1,000 texts, which took 2 to 6 minutes on a busy Mac. They are read in the background, four at a time so that nothing else queues long behind them, so a find answers at once, by words where meaning is not ready, and says how many it is still reading. Later finds read only what is new. A find waits up to 15 s for the meaning of its own words, since the model may have to load first.
 - **Nothing new to run or install.** The model is the router's, on the user's own machine; with no server or no model, find ranks by words alone and says why.
 - **The vectors are as private as the text.** An embedding can be turned back into much of its text, so they are kept like the tasks: `find-vectors.json` in Irie's state, readable only by the user.
 - **It reads, and changes nothing** (reach: read), so an agent may run it without asking.
